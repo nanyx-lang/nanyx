@@ -1,24 +1,20 @@
 /// What the recursive-descent parser reads with: a cursor over the layout pass's tokens, the spans of what it has read,
-/// and the side state the FParsec parser keeps (`ParseState`). It is stage 3 of the move to a lexer, a layout pass and a
-/// recursive-descent parser (see the Work in progress page "The parser"). The new parser reads only part of the grammar
-/// so far; at anything else, and at any mistake, it gives up, and the FParsec parser reads the file instead, so that
-/// what a user sees doesn't change until stage 4.
+/// and the side state kept beside the tree (`ParseState`).
 module Parser.Program.DescentCursor
 
 open System
 open Parser.Program.Lexer
 open Parser.Program.Layout
 
-/// The new parser can't read what is here, because it doesn't read that part of the grammar yet or because it is a
-/// mistake: the FParsec parser reads the file instead. `reason` says which, for the corpus test's report.
+/// A mistake no reading of the text gets past: it is reported as what was expected where the furthest reading failed
+/// (see `Cursor.Unexpected`). `reason` says what the mistake is, for whoever reads the code.
 exception GiveUp of reason: string
 
-/// One way of reading the text doesn't fit what is there, and the cursor goes back to try the next, as FParsec's
-/// `attempt` and `<|>` do. Only the parsers that list the alternatives catch it (see `Cursor.Attempt`).
+/// One way of reading the text doesn't fit what is there, and the cursor goes back to try the next. Only the parsers
+/// that list the alternatives catch it (see `Cursor.Attempt`).
 exception NoMatch
 
-/// A mistake in the text, reported where it is, with the message the FParsec parser gives for it: reading stops there,
-/// as it does at the FParsec parser's `reportFocused`.
+/// A mistake in the text the parser has a message of its own for, reported where it is: reading stops there.
 exception Reported of ParseError
 
 /// How a token reads in a message: its text in backticks, or the end of the file.
@@ -58,18 +54,18 @@ type Cursor(file: string, source: string, laid: Laid array) =
     // The names the nodes declare and where documentable constructs start, as `ParseState` keeps them.
     let mutable declared: DeclaredNames = Map.empty
     let mutable documentable: Map<int, int> = Map.empty
-    // The names noted for a construct not built yet, most recent first, as `ParseState.PendingNames` keeps them.
+    // The names noted for a construct not built yet, most recent first.
     let mutable pending: (Identifier * SourceSpan) list = []
     // Where the text of each string literal read so far is, most recent first, as `ParseState.StringTexts` keeps it.
     let mutable stringTexts: (int * int) list = []
-    // Where the argument a shorthand lambda's body leaves out is made up, as `ParseState.ImplicitArgumentNext` keeps it.
+    // Where the argument a shorthand lambda's body leaves out is made up (see `ImplicitArgumentNext`).
     let mutable implicitArgumentNext: SourceSpan option = None
     // The `module name =` blocks read so far, each with its text, as `ParseState.ModuleBlocks` keeps them.
     let mutable moduleBlocks: (ModuleName * SourceSpan) list = []
     // The furthest item any reading reached or failed at, and what the readings that failed there expected, for the
-    // message when no reading of the text matches, as FParsec merges its errors at the furthest position.
+    // message when no reading of the text matches.
     let mutable furthest = 0
-    // How many lambdas the cursor is inside, as `ParseState.LambdaDepth` keeps it.
+    // How many lambdas the cursor is inside.
     let mutable lambdaDepth = 0
     let mutable expected: string list = []
 
@@ -176,8 +172,8 @@ type Cursor(file: string, source: string, laid: Laid array) =
         else
             false
 
-    /// Skips the `Newline` and `Indent` tokens at the cursor when a code token `fits` comes after them, as FParsec's `ws`
-    /// goes across line breaks to what comes next, and says whether that token is next now.
+    /// Skips the `Newline` and `Indent` tokens at the cursor when a code token `fits` comes after them, going across line
+    /// breaks to what comes next, and says whether that token is next now.
     member this.Across(fits: Cursor -> bool) =
         let start = index
         while (match this.At 0 with Newline _ | Indent _ -> true | _ -> false) do
@@ -217,7 +213,7 @@ type Cursor(file: string, source: string, laid: Laid array) =
         | Some token -> token.Start
         | None -> raise NoMatch
 
-    /// Runs `read`, and if it doesn't match, puts the cursor back and gives `None`, as FParsec's `attempt` does.
+    /// Runs `read`, and if it doesn't match, puts the cursor back and gives `None`.
     member _.Attempt(read: unit -> 'a) : 'a option =
         let start = index
         let declaredBefore, documentableBefore, pendingBefore, stringTextsBefore = declared, documentable, pending, stringTexts
@@ -246,8 +242,8 @@ type Cursor(file: string, source: string, laid: Laid array) =
     /// Notes the `module name =` block `name`, whose text is at `span`.
     member _.NoteModuleBlock (name: ModuleName) (span: SourceSpan) = moduleBlocks <- moduleBlocks @ [ name, span ]
 
-    /// The comments of the text, most recent first, as the FParsec parser notes them (`ParseState.Comments`): each `--`
-    /// comment, block comment and doc comment, from the trivia of the tokens.
+    /// The comments of the text, most recent first, as `ParseState.Comments` keeps them: each `--` comment, block comment
+    /// and doc comment, from the trivia of the tokens.
     member _.Comments : NotedComment list =
         laid
         |> Seq.collect (function Code token -> Seq.append token.Leading token.Trailing | _ -> Seq.empty)
@@ -263,21 +259,21 @@ type Cursor(file: string, source: string, laid: Laid array) =
         |> Seq.rev
         |> List.ofSeq
 
-    /// Where the argument a shorthand lambda's body leaves out is made up, until its first operand takes it (see
-    /// `Expressions.implicitArgumentOperand`): the operator or `.` written in its place.
+    /// Where the argument a shorthand lambda's body leaves out is made up, until its first operand takes it: the operator
+    /// or `.` written in its place.
     member _.ImplicitArgumentNext
         with get () = implicitArgumentNext
         and set value = implicitArgumentNext <- value
     member _.StringTexts = stringTexts
 
-    /// Notes `name`, written at `span`, as declared by the construct being read (see `ParseState.noteName`).
+    /// Notes `name`, written at `span`, as declared by the construct being read (see `Collecting`).
     member _.NoteName (name: Identifier) (span: SourceSpan) = pending <- (name, span) :: pending
 
-    /// Notes that the text of a string literal is from `start` to `finish` (see `ParseState.stringText`).
+    /// Notes that the text of a string literal is from `start` to `finish` (see `ParseState.StringTexts`).
     member _.NoteStringText (start: int) (finish: int) = stringTexts <- (start, finish) :: stringTexts
 
     /// Runs `read`, and gives with what it read the names noted while it ran, in the order they are written, which are
-    /// no longer pending (see `ParseState.collectingNames`).
+    /// no longer pending.
     member _.Collecting(read: unit -> 'a) : 'a * (Identifier * SourceSpan) list =
         let before = pending
         let value = read ()
@@ -297,11 +293,10 @@ type Cursor(file: string, source: string, laid: Laid array) =
     /// `ParseState.noteDocumentable`).
     member _.NoteDocumentable (start: int) (target: int) = documentable <- documentable |> Map.add start target
 
-    /// Gives up on the file (see `GiveUp`).
+    /// Stops at a mistake (see `GiveUp`).
     member _.GiveUp(reason: string) : 'a = raise (GiveUp reason)
 
-/// An identifier as the FParsec parser's `identifierNoWs` reads one, with its span: a name, or a keyword, since `#match`
-/// is a tag and a field may be called `type`.
+/// An identifier, with its span: a name, or a keyword, since `#match` is a tag and a field may be called `type`.
 let identifierWithSpan (c: Cursor) : Identifier * SourceSpan =
     match c.Token with
     | Some token when token.Kind = Name || token.Kind = Keyword ->
@@ -309,8 +304,7 @@ let identifierWithSpan (c: Cursor) : Identifier * SourceSpan =
         c.Text token, c.SpanOf token
     | _ -> raise NoMatch
 
-/// A name as the FParsec parser's `nameNoWs` reads one, with the span of what is written: an identifier, or a name in
-/// backticks, which is the text inside them.
+/// A name, with the span of what is written: an identifier, or a name in backticks, which is the text inside them.
 let name (c: Cursor) : Identifier * SourceSpan =
     match c.Token with
     | Some token when token.Kind = BacktickedName ->
@@ -323,12 +317,12 @@ let name (c: Cursor) : Identifier * SourceSpan =
     | _ -> identifierWithSpan c
 
 /// The parts of the grammar a file reads before the file that reads them, filled by `DescentControl.fill` before anything
-/// is read, as the FParsec parser's forward refs are (`Refs.fs`). Each gives up until it is filled.
+/// is read. Each gives up until it is filled.
 module Forward =
     let private unfilled (what: string) (c: Cursor) : 'a = c.GiveUp $"{what}, before the descent parser is filled"
     /// `{ ... }` (`DescentBlocks.lambda`).
     let lambda: (Cursor -> Expression) ref = ref (unfilled "a lambda")
-    /// An expression as `Expressions.expression` reads it (`DescentExpressions.expression Crossing`).
+    /// An expression (`DescentExpressions.expression Crossing`).
     let expression: (Cursor -> Expression) ref = ref (unfilled "an expression")
     /// A match's arms, from the first `|` (`DescentBlocks.arms`).
     let arms: (Cursor -> MatchArm list) ref = ref (unfilled "match arms")
@@ -345,7 +339,7 @@ module Forward =
     let keywordExpression: (Cursor -> Expression) ref = ref (unfilled "a keyword's expression")
 
 /// Reports the first backslash in `text`, a double-quoted string's text that starts at `offset`, that isn't an escape,
-/// with the message the FParsec parser gives for it (`Lexical.escapeSequence`).
+/// with what the escapes are.
 let reportBadEscape (c: Cursor) (offset: int) (text: string) : 'a =
     let mutable i = 0
     let mutable found = None
@@ -387,8 +381,8 @@ let noDollar (c: Cursor) =
                 $"A type's name is written without a `$`: write `{name}`, and declare a nominal type with `protected` after its `=`, as in `type {name} = protected string`"
         | _ -> ()
 
-/// Takes `item`s separated by what `separator` takes, at least one, as FParsec's `sepBy1` with an `attempt` around the
-/// separator and the item after it.
+/// Takes `item`s separated by what `separator` takes, at least one, going back to before the separator when the item
+/// after it doesn't match.
 let sepBy1 (cursor: Cursor) (item: unit -> 'a) (separator: unit -> unit) : 'a list =
     let first = item ()
     let rest = ResizeArray<'a>()
@@ -399,7 +393,7 @@ let sepBy1 (cursor: Cursor) (item: unit -> 'a) (separator: unit -> unit) : 'a li
         | None -> going <- false
     first :: List.ofSeq rest
 
-/// Takes as many `item`s as there are, as FParsec's `many` with an `attempt` around each.
+/// Takes as many `item`s as there are, going back to before each one that doesn't match.
 let many (cursor: Cursor) (item: unit -> 'a) : 'a list =
     let items = ResizeArray<'a>()
     let mutable going = true
@@ -415,12 +409,6 @@ let cursorOf (file: string) (source: string) =
     if not lexed.Errors.IsEmpty then raise (Reported lexed.Errors.Head)
     Cursor(file, source, Layout.layout source lexed.Tokens)
 
-/// Puts `cursor` at the code token that starts at `offset`, if there is one.
-let seek (cursor: Cursor) (offset: int) =
-    cursor.Index <- 0
-    let mutable found = false
-    while not found && (match cursor.At 0 with Code token -> token.Kind <> EndOfFile | _ -> true) do
-        match cursor.At 0 with
-        | Code token when token.Start = offset -> found <- true
-        | _ -> cursor.Index <- cursor.Index + 1
-    found
+/// `span`, ending no later than `last` does when `last` has a span of its own.
+let internal endingAt (last: SourceSpan) (span: SourceSpan) =
+    if not (SourceSpan.isNone last) && last.End < span.End then { span with End = last.End } else span

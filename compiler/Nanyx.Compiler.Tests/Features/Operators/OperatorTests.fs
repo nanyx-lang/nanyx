@@ -6,14 +6,14 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// The one diagnostic `source` has: its code, its message with FParsec's line breaks taken out, and the text from
-/// where it is reported to the end of its line.
+/// The one diagnostic `source` has: its code, its message, and the text from where it is reported to the end of its
+/// line.
 let private onlyDiagnostic (source: string) =
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         let rest = source.Substring(diagnostic.Span.Value.Start)
         let lineEnd = rest.IndexOf '\n'
-        diagnostic.Code, diagnostic.Message.ReplaceLineEndings(" "), (if lineEnd < 0 then rest else rest.Substring(0, lineEnd))
+        diagnostic.Code, diagnostic.Message, (if lineEnd < 0 then rest else rest.Substring(0, lineEnd))
     | other -> failwith $"Expected one diagnostic, got %A{other}"
 
 [<Theory>]

@@ -60,8 +60,7 @@ b" """, "A backslash on its own is not an escape")>]
 let ``An unknown escape is an error at its backslash`` (source: string, expected: string) =
     match parseModuleWithTrivia "t.nyx" source with
     | Result.Error error ->
-        // FParsec wraps the message across lines.
-        let message = error.Message.Replace("\r\n", " ").Replace("\n", " ")
+        let message = error.Message
         Assert.Contains(expected, message)
         Assert.Contains("the escapes in a double-quoted string are", message)
         Assert.Equal(source.IndexOf '\\', error.Span.Start)

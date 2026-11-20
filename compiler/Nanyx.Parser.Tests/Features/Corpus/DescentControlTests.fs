@@ -1,19 +1,12 @@
-/// The recursive-descent parser's expressions that start with a keyword, at the places where reading them takes care:
-/// each is read as the FParsec parser reads it, with the same spans (see `DescentCheck.checkExpressions`).
+/// The expressions that start with a keyword, at the places where reading them takes care: each is read with no
+/// mistake.
 module Nanyx.Parser.Tests.DescentControlTests
 
 open Xunit
 open Parser.Program
-open Nanyx.Parser
+open ParserTestHelpers
 
-/// Each def's value and statement of `source` reads to the FParsec parser's tree.
-let private allSame (source: string) =
-    match parseModuleWithTriviaByFParsec "t.nyx" source with
-    | Result.Ok parsed ->
-        let outcomes = DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
-        Assert.NotEmpty(outcomes)
-        Assert.Equal<DescentCheck.Outcome list>(List.replicate outcomes.Length DescentCheck.Same, outcomes)
-    | Result.Error error -> failwith error.Message
+let private allSame (source: string) = readsWhole source
 
 /// `body`, indented, as the statements of a lambda.
 let private inLambda (body: string) =
@@ -32,7 +25,7 @@ let private inLambda (body: string) =
 [<InlineData("x \\match\n  | 0 -> 1\n  | _ -> 2")>]
 [<InlineData("xs \\find(p)\n  except #notFound -> #none")>]
 [<InlineData("parse(s) except\n  | #error(_) -> 0")>]
-let ``A match is read as the FParsec parser reads it`` (body: string) =
+let ``A match is read`` (body: string) =
     allSame (inLambda body)
 
 [<Theory>]
@@ -45,7 +38,7 @@ let ``A match is read as the FParsec parser reads it`` (body: string) =
 [<InlineData("if\n  | a -> 1\n  | x is #some(v) -> v\n  | else -> 3")>]
 [<InlineData("if | a -> 1 | b -> 2")>]
 [<InlineData("if inst == #match\n  then 1\n  else 2")>]
-let ``An if is read as the FParsec parser reads it`` (body: string) =
+let ``An if is read`` (body: string) =
     allSame (inLambda body)
 
 [<Theory>]
@@ -64,5 +57,5 @@ let ``An if is read as the FParsec parser reads it`` (body: string) =
 [<InlineData("def y = try! f(x)\ny")>]
 [<InlineData("update(mut cell, 1)")>]
 [<InlineData("sizeOf(type Point)")>]
-let ``A loop, a use, a workflow keyword and the rest are read as the FParsec parser reads them`` (body: string) =
+let ``A loop, a use, a workflow keyword and the rest are read`` (body: string) =
     allSame (inLambda body)

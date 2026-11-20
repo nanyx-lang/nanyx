@@ -25,20 +25,27 @@ let ``A type signature is read before anything else has been parsed`` () =
     finally
         context.Unload()
 
-[<Fact>]
-let ``A type signature reads the same with the recursive-descent parser as with the FParsec one`` () =
-    let written = [ "bool -> string"; "list(a), (a -> bool) -> list(a)"; "[Eq(a)] a, a -> bool"; "#some(a) | #none"; "(x: int, y: int)"; "map(k, v).key"; "mut int" ]
-    for text in written do
-        let descent = DescentTypes.readTypeSignature text
-        Assert.True(descent.IsSome, $"The recursive-descent parser gave up on {text}")
-        match FParsec.CharParsers.runParserOnString typeSignatureParser (ParseState.empty ()) "" text with
-        | FParsec.CharParsers.ParserResult.Success(expected, _, _) ->
-            Assert.Equal(Nanyx.Parser.SyntaxDump.dump expected, Nanyx.Parser.SyntaxDump.dump descent.Value)
-        | FParsec.CharParsers.ParserResult.Failure(message, _, _) -> Assert.Fail message
+[<Theory>]
+[<InlineData("bool -> string")>]
+[<InlineData("list(a), (a -> bool) -> list(a)")>]
+[<InlineData("[Eq(a)] a, a -> bool")>]
+[<InlineData("#some(a) | #none")>]
+[<InlineData("(x: int, y: int)")>]
+[<InlineData("map(k, v).key")>]
+[<InlineData("mut int")>]
+let ``A type signature is read whole`` (written: string) =
+    match parseTypeSignature written with
+    | Result.Ok _ -> ()
+    | Result.Error message -> Assert.Fail message
 
 [<Fact>]
-let ``A mistake in a type signature is still reported by the FParsec parser`` () =
-    Assert.Equal(None, DescentTypes.readTypeSignature "int ->")
+let ``A mistake in a type signature is reported`` () =
     match parseTypeSignature "int ->" with
-    | Result.Error message -> Assert.Contains("Error in Ln: 1", message)
+    | Result.Error message -> Assert.EndsWith("found the end of the file", message)
+    | Result.Ok typeExpr -> Assert.Fail $"%A{typeExpr}"
+
+[<Fact>]
+let ``A type signature with something after it is a mistake`` () =
+    match parseTypeSignature "int int" with
+    | Result.Error message -> Assert.StartsWith("Expected", message)
     | Result.Ok typeExpr -> Assert.Fail $"%A{typeExpr}"

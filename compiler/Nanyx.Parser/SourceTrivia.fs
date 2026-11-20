@@ -50,7 +50,6 @@ let internal collectTrivia (filePath: string) (source: string) (comments: NotedC
 
     let commentTrivia =
         comments
-        // FParsec restores the state when it backtracks, so a comment is noted once; this is only a safety net.
         |> List.distinct
         |> List.map (fun comment ->
             let text = source.Substring(comment.Start, comment.End - comment.Start)

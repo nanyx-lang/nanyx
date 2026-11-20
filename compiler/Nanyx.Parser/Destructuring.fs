@@ -2,14 +2,13 @@
 [<AutoOpen>]
 module Parser.Program.Destructuring
 
-open FParsec
 open Parser.Program
 
 // `def (x, y) = value`, or `def x, y = value` without the brackets, binds each element of a tuple. It is desugared
 // in the parser into a binding of the whole value plus one `def` per element (`def x = __tuple.0`), so the rest of
 // the compiler only ever sees plain defs. This form takes only names, `_` and nested tuples, which cannot fail to
 // match; any other pattern is bound through a match instead (see `matchingBindings`). The whole value is bound to
-// `temp`, a made-up name (see `DestructuringSyntax.temp`). The recursive-descent parser builds them too.
+// `temp`, a made-up name (see `DestructuringSyntax.temp`).
 let internal destructuringBindings (temp: Identifier) (pattern: Pattern) (value: Expression) : (Identifier * Expression) list option =
     let rec bind (pattern: Pattern) (source: Expression) =
         match pattern.Kind with
@@ -44,39 +43,3 @@ let internal matchingBindings (temp: Identifier) (pattern: Pattern) (names: Iden
         | [ single ] -> [ single, made (IdentifierExpr temp) ]
         | several -> several |> List.mapi (fun index name -> name, made (MemberAccess(made (IdentifierExpr temp), string index, None)))
     body, (temp, matched) :: bindings
-
-/// `[export] def pattern = value`, written from `lineStart`, as the export flag and the bindings it stands for. A bare
-/// name is not a pattern here: that is an ordinary def.
-let destructuringDefWith (lineStart: Position) (exprParser: Parser<Expression, ParseState>) : Parser<bool * (Identifier * Expression) list, ParseState> =
-    let lineStartCol = lineStart.Column
-    // `def x, y = value` is `def (x, y) = value`: patterns separated by commas are the elements of a tuple.
-    let patterns =
-        withSpan (sepBy1 pattern (pstring "," .>> ws))
-        |>> fun (elements, span) ->
-            match elements with
-            | [ single ] -> single
-            | several -> Pattern.at span (TuplePattern several)
-    pipe3
-        (opt (attempt (pstring "export" >>. ws)))
-        (getPosition .>>. (pstring "def" >>. ws >>. collectingNames patterns .>> wsInline))
-        (defEqualsContinuation lineStartCol >>. pstring "=" >>. wsInline >>. exprParser)
-        (fun exportOpt (position, pattern) value -> exportOpt.IsSome, position, pattern, value)
-    >>= fun (isExport, position, (pattern, names), value) ->
-        // Each name is declared by the value of the def it becomes.
-        // A doc comment before it documents the first name it binds.
-        let declareBindings (bindings: (Identifier * Expression) list) =
-            bindings
-            |> List.map (fun (name, bound) -> declare DefValue bound.Id (names |> List.filter (fun (declared, _) -> declared = name)))
-            |> List.fold (>>.) (preturn ())
-            >>. (match names with (_, first) :: _ -> noteDocumentable lineStart first.Start | [] -> preturn ())
-        match pattern.Kind with
-        | IdentifierPattern _ -> fail "A destructuring def takes a pattern, not a name"
-        | _ ->
-            let temp = DestructuringSyntax.temp position.Line position.Column
-            match destructuringBindings temp pattern value with
-            | Some bindings -> declareBindings bindings >>% (isExport, bindings)
-            | None ->
-                let boundNames = names |> List.map fst |> List.distinct
-                let body, bindings = matchingBindings temp pattern boundNames value
-                // The arm's body declares the names the pattern binds, as any match arm's does.
-                declare ArmBody body.Id names >>. declareBindings bindings >>% (isExport, bindings)

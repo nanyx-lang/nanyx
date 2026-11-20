@@ -1,4 +1,4 @@
-/// The recursive-descent parser's top level: a module's items (`TopLevel.fs`), its declaration and its `module name =`
+/// The recursive-descent parser's top level: a module's items, its declaration and its `module name =`
 /// blocks, imports and re-exports, attributes, type and context definitions, pattern definitions, defs and
 /// declarations, destructuring defs and a script's expressions, read from the layout pass's tokens of the text with
 /// its directives blanked. It reads a whole file, and gives up on the file at anything it doesn't read.
@@ -11,8 +11,7 @@ open Parser.Program.DescentCursor
 open Parser.Program.DescentExpressions
 open Parser.Program.DescentBlocks
 
-/// A name of a module path, `collections.list` or `./util/strings`, as `Lexical.modulePath` reads it: names joined by
-/// `.` or `/` written with no spaces.
+/// A name of a module path, `collections.list` or `./util/strings`: names joined by `.` or `/` written with no spaces.
 let private modulePath (c: Cursor) : string =
     let head, _ = identifierWithSpan c
     let parts = Text.StringBuilder(head)
@@ -28,7 +27,7 @@ let private modulePath (c: Cursor) : string =
 /// (`followedBy (newline <|> eof)`).
 let private lineEnds (c: Cursor) = c.Is EndOfFile || not c.OnSameLine
 
-/// Where an import comes from: a string, a file's path, or a module's path (`Lexical.importSource`).
+/// Where an import comes from: a string, a file's path, or a module's path.
 let private importSource (c: Cursor) : ImportSource =
     match c.Token with
     | Some token when token.Kind = StringLiteral ->
@@ -46,7 +45,7 @@ let private qualified (c: Cursor) : Identifier * SourceSpan =
         parts.Add(fst (name c))
     String.concat "." parts, c.SpanFrom start
 
-/// The names an import selects, in brackets, separated by commas or line breaks (`Lexical.importSelection`).
+/// The names an import selects, in brackets, separated by commas or line breaks.
 let private importSelection (c: Cursor) : (Identifier * SourceSpan) list =
     c.Expect LeftParen |> ignore
     let names = ResizeArray [ qualified c ]
@@ -56,7 +55,7 @@ let private importSelection (c: Cursor) : (Identifier * SourceSpan) list =
     c.Expect RightParen |> ignore
     List.ofSeq names
 
-/// One import: its source, then `as` and an alias, a selection, or both (`Lexical.importItem`).
+/// One import: its source, then `as` and an alias, a selection, or both.
 let private importItem (c: Cursor) : ImportItem =
     let start = c.Start
     let source = importSource c
@@ -75,7 +74,7 @@ let private importItem (c: Cursor) : ImportItem =
         else None, None
     { Source = source; Alias = alias; Selection = selection; Span = c.SpanFrom start }
 
-/// What follows `import`: one item, or several in brackets, each on its own (`Lexical.importItems`).
+/// What follows `import`: one item, or several in brackets, each on its own.
 let importItems (c: Cursor) : ImportItem list =
     let several () =
         c.Expect LeftParen |> ignore
@@ -89,7 +88,7 @@ let importItems (c: Cursor) : ImportItem list =
     | None -> [ importItem c ]
 
 /// What follows `export` in a re-export: a module, and the names it exports that are exported again, on its line, or
-/// the module alone on its line (`Lexical.reExportItem`).
+/// the module alone on its line.
 let private reExportItem (c: Cursor) : ImportItem =
     let start = c.Start
     let source = importSource c
@@ -100,7 +99,7 @@ let private reExportItem (c: Cursor) : ImportItem =
     { Source = source; Alias = None; Selection = selection; Span = c.SpanFrom start }
 
 /// A type's or a context's parameter, a single lowercase letter, with a bound after `::` if it has one
-/// (`Types.typeParam`).
+///.
 let private typeParameter (c: Cursor) : Identifier * TypeExpr option =
     let parameter, span = identifierWithSpan c
     if not (Names.isTypeVariable parameter) then
@@ -122,7 +121,7 @@ let private typeParameters (c: Cursor) : (Identifier * TypeExpr option) list =
         parameters
     else []
 
-/// `private` or `protected` after a type's `=`, with where it is written (`Expressions.typeDefCore`'s `kindModifier`).
+/// `private` or `protected` after a type's `=`, with where it is written.
 let private kindModifier (c: Cursor) : TypeDefModifier list =
     let kindOf text = match text with "private" -> Some Private | "protected" -> Some Protected | _ -> None
     match c.Token with
@@ -150,7 +149,7 @@ let private afterEquals (c: Cursor) =
     c.Across(fun c -> c.Token.IsSome) |> ignore
 
 /// A type's or a context's definition: `scoped export context Name(a) = protected ...` or
-/// `export type Name(a) = [Tx] private ...` (`Expressions.typeDefCore`). Its body declares its name.
+/// `export type Name(a) = [Tx] private ...`. Its body declares its name.
 let typeDefinition (c: Cursor) : Definition =
     let defStart = c.Start
     let declaring (name: Identifier) (nameSpan: SourceSpan) (definition: Definition) =
@@ -223,7 +222,7 @@ let private columnAt (source: string) (offset: int) =
     offset - lineStart, source.Substring(lineStart, offset - lineStart).Trim() = ""
 
 /// A module's item, as the items it stands for: one, or the defs a destructuring def desugars into. In a module block
-/// (`inBlock`) there is no module declaration, pattern or destructuring def (`TopLevel`'s `moduleBlockItem`).
+/// (`inBlock`) there is no module declaration, pattern or destructuring def.
 let rec private items (c: Cursor) (inBlock: bool) : TopLevelItem list =
     let start = c.Start
     let token = c.Token.Value
@@ -254,8 +253,8 @@ and private moduleItem (c: Cursor) (start: int) (inBlock: bool) : TopLevelItem l
     if c.Is Equals && c.OnSameLine && not isExport then
         c.Take() |> ignore
         match c.At 0 with
-        // The block's items are the lines at its first item's column, as the FParsec parser reads them: a line at
-        // another column ends it, whatever layout tokens come before it.
+        // The block's items are the lines at its first item's column: a line at another column ends it, whatever layout
+        // tokens come before it.
         | Indent _ ->
             c.Index <- c.Index + 1
             let column, _ = columnAt c.Source c.Start
@@ -293,7 +292,7 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
         if not c.OnSameLine then raise NoMatch
         ReExport(reExportItem c)
     let isDef = c.IsKeyword "def" || (c.IsKeyword "export" && nextText = "def")
-    // A destructuring def is tried before any other item (`TopLevel.topLevelItems`): `export def (a, b)` is no
+    // A destructuring def is tried before any other item: `export def (a, b)` is no
     // re-export of a module called `def`.
     let destructured = if isDef && not inBlock then c.Attempt(fun () -> destructuringDefinition c start) else None
     match destructured with
@@ -359,7 +358,7 @@ and private valueDefinition (c: Cursor) (start: int) : TopLevelItem list =
         | Some typeExpr when not (c.Is Equals) ->
             if not (lineEnds c) then raise NoMatch
             Expression.at { c.SpanFrom start with End = typeExpr.Span.End } (FunctionCall(ExternSyntax.builtIn, None, []))
-        // With no type either, it spans to the end of the spaces after its name, as the FParsec parser's does.
+        // With no type either, it spans to the end of the spaces after its name.
         | None when not (c.Is Equals) && lineEnds c ->
             let mutable finish = c.LastEnd
             while finish < c.Source.Length && (c.Source[finish] = ' ' || c.Source[finish] = '\t') do
@@ -368,8 +367,8 @@ and private valueDefinition (c: Cursor) (start: int) : TopLevelItem list =
         | _ -> defValue c
     c.Declare DefValue value.Id [ name, nameSpan ]
     c.NoteDocumentable start nameSpan.Start
-    // The FParsec parser takes the comment after a block's last expression statement as the statement's tail, so the
-    // def it is the value of spans it too, though the statement and the block end before it.
+    // The comment after a block's last expression statement is the statement's tail, so the def it is the value of
+    // spans it too, though the statement and the block end before it.
     let span =
         match value.Kind, c.TrailingCommentEnd with
         | Block statements, Some commentEnd when indented && (match List.last statements with { Kind = ExprStatement _ } -> true | _ -> false) ->
@@ -392,13 +391,9 @@ let private directiveAfterCode (source: string) (error: ParseError) =
         { error with Message = "A directive (a `::` line) must come before the first line of code" }
     else error
 
-/// Why the descent parser doesn't read a file: the reason, for the corpus check's report, and the error a user is
-/// shown, which is the mistake reported where it is (`Reported`) or what was found where no reading matched.
-type DescentFailure = { Reason: string; Error: ParseError }
-
-/// The items of `source`, the text of the file at `file`, and what the FParsec parser would keep beside them
-/// (`ParseState`), if the descent parser reads all of it (`TopLevel.moduleParser`), or why it doesn't.
-let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem list * ParseState, DescentFailure> =
+/// The items of `source`, the text of the file at `file`, and what is kept beside them (`ParseState`), or its first
+/// mistake: reported where it is (`Reported`), or what was found where no reading matched.
+let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem list * ParseState, ParseError> =
     fill ()
     let blanked = Header.Directives.blank source
     let mutable cursor = None
@@ -419,9 +414,9 @@ let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem
                 ModuleBlocks = c.ModuleBlocks }
         Ok(List.ofSeq all, state)
     with
-    | Reported error -> Error { Reason = error.Message; Error = error }
-    | GiveUp reason -> Error { Reason = reason; Error = directiveAfterCode blanked (cursor.Value.Unexpected()) }
-    | NoMatch -> Error { Reason = "no reading matched"; Error = directiveAfterCode blanked (cursor.Value.Unexpected()) }
+    | Reported error -> Error error
+    | GiveUp _
+    | NoMatch -> Error(directiveAfterCode blanked (cursor.Value.Unexpected()))
 
 /// The offset in `source` of the start of the line `offset` is on.
 let private lineStartOf (source: string) (offset: int) =
@@ -491,11 +486,3 @@ let readModuleRecovering (file: string) (source: string) : TopLevelItem list * P
             Comments = c.Comments
             ModuleBlocks = c.ModuleBlocks }
     List.ofSeq all, state, errors |> Seq.sortBy _.Span.Start |> List.ofSeq
-
-/// The items of `source`, the text of the file at `file`, if the descent parser reads all of it, or why it doesn't.
-let tryReadModule (file: string) (source: string) : Result<TopLevelItem list, string> =
-    tryReadModuleWithState file source |> Result.map fst |> Result.mapError _.Reason
-
-/// The items of `source`, the text of the file at `file`, if the descent parser reads all of it: `None` when it doesn't.
-let readModule (file: string) (source: string) : TopLevelItem list option =
-    tryReadModule file source |> Result.toOption

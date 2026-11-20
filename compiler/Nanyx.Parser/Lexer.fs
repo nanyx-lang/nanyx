@@ -1,8 +1,6 @@
 /// The lexer: source text in, tokens out, each with the comments, whitespace and line breaks around it. It is
 /// lossless: the tokens and their trivia, in order, are the source exactly, whatever the source is, so a mistake in it
-/// is a token too (`Unknown`, or a string or comment that runs to the end) with an error beside it. The FParsec parser
-/// does not use it yet: it is stage 1 of the move to a lexer, a layout pass and a recursive-descent parser (see the
-/// Work in progress page "The parser").
+/// is a token too (`Unknown`, or a string or comment that runs to the end) with an error beside it.
 module Parser.Program.Lexer
 
 open System

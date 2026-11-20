@@ -1,5 +1,4 @@
-/// The recursive-descent parser's expressions: the operator expressions of `Expressions.fs` and what they are made of,
-/// read from the layout pass's tokens. It reads literals, strings with holes, names, calls, tags, member access,
+/// The recursive-descent parser's expressions: the operator expressions and what they are made of, read from the layout pass's tokens. It reads literals, strings with holes, names, calls, tags, member access,
 /// tuples, records, lists and maps, the prefix `not` and `-`, pipes and the binary operators, with the precedence and
 /// grouping of `Operators.binaryOperators`. Lambdas, arms and what starts with a keyword (`if`, `match`, `for`, `use`,
 /// ...) come with blocks and statements, in later files, and are read through `Forward`.
@@ -12,15 +11,15 @@ open Parser.Program.DescentCursor
 open Parser.Program.DescentLiterals
 
 /// An operand and the span of all the text it was written as, which is wider than the expression's own span when it is
-/// in brackets (see `Expressions.Operand`).
+/// in brackets.
 type private Operand = Expression * SourceSpan
 
-/// Where an expression stops. The FParsec parser has two operator tables (see `Expressions.opp` and `oppInline`).
+/// Where an expression stops.
 type Lines =
-    /// `expression`: a def's value, an argument, an item. An operator may end its line, and the operand after it start
+    /// A def's value, an argument, an item. An operator may end its line, and the operand after it start
     /// the next, and a pipe may start any line after it.
     | Crossing
-    /// `exprWithoutCrossingNewlines`: a statement, or a match arm's body. The operand after an operator is on its line,
+    /// A statement, or a match arm's body. The operand after an operator is on its line,
     /// a pipe continues it only on a line indented more than its first, and there is no range.
     | Inline
 
@@ -38,16 +37,15 @@ let private startsLine (c: Cursor) =
     let column, indent = columnAndIndent c.Source c.Start
     column = indent
 
-/// Skips the layout tokens at the cursor when what comes after them is a code token `fits` takes, as FParsec's `ws`
-/// goes across lines; a line indented less than the one before (a `Dedent`) is somewhere the descent parser doesn't
-/// follow it yet.
+/// Skips the layout tokens at the cursor when what comes after them is a code token `fits` takes, going across lines; a
+/// line indented less than the one before (a `Dedent`) is a mistake there.
 let internal across (c: Cursor) (fits: Cursor -> bool) =
     let start = c.Index
     let mutable dedented = false
     while (match c.At 0 with Code _ -> false | Dedent _ -> dedented <- true; true | _ -> true) do
         c.Index <- c.Index + 1
     if fits c then
-        if dedented && c.Index <> start then c.GiveUp "a line indented less than the one before, which FParsec's `ws` crosses"
+        if dedented && c.Index <> start then c.GiveUp "a line indented less than the one before"
         true
     else
         c.Index <- start
@@ -55,14 +53,14 @@ let internal across (c: Cursor) (fits: Cursor -> bool) =
 
 /// The arguments of `f(fields) { ... }`: the trailing lambda is the last positional argument, as in a pipe, so
 /// `f(a, b) { ... }` is `f(a, b, { ... })`, and `f(a, y = 1) { ... }` is `f(a, { ... }, y = 1)`
-/// (`Expressions.withTrailingLambda`).
+///.
 let private withTrailingLambda (fields: RecordField list) (span: SourceSpan) (lambda: Expression) =
     let positional, named = fields |> List.partition (function PositionalField _ -> true | NamedField _ -> false)
     match named with
     | [] -> (positional |> List.choose (function PositionalField e -> Some e | NamedField _ -> None)) @ [ lambda ]
     | _ -> [ Expression.at span (RecordExpr(positional @ [ PositionalField lambda ] @ named)) ]
 
-/// The keywords that start a primary expression of their own, before the FParsec parser would read them as names.
+/// The keywords that start a primary expression of their own, before they would be read as names.
 let private constructKeywords =
     set [ "return"; "try"; "yield"; "mut"; "use"; "if"; "do"; "for"; "while"; "match"; "type" ]
 
@@ -81,14 +79,13 @@ let private qualifiedName (c: Cursor) : Identifier * SourceSpan =
         parts.Add(fst (name c))
     String.concat "." parts, c.SpanFrom start
 
-/// Skips the layout tokens at the cursor: in brackets, where the FParsec parser's `ws` skips everything, the only ones
-/// are those of a block opened inside them, a lambda's or arms', which may close after a `,` or before the bracket.
+/// Skips the layout tokens at the cursor: in brackets, which have no layout of their own, the only ones are those of a
+/// block opened inside them, a lambda's or arms', which may close after a `,` or before the bracket.
 let private skipLayoutTokens (c: Cursor) =
     while (match c.At 0 with Code _ -> false | _ -> true) do
         c.Index <- c.Index + 1
 
-/// One expression, or several separated by commas written one per line when the first starts its line (see
-/// `Expressions.byCommaOrLine`).
+/// One expression, or several separated by commas written one per line when the first starts its line.
 let private byCommaOrLine (c: Cursor) (item: unit -> 'a) : 'a list =
     let firstStart = c.Start
     let firstColumn, _ = columnAndIndent c.Source firstStart
@@ -128,14 +125,14 @@ let rec private doubleQuoted (c: Cursor) : Expression =
         | Some value -> value
         | None -> reportBadEscape c offset text
     let parts = ResizeArray<StringPart>()
-    // Each run of text is noted, as `Expressions.interpolatedStringExprNoWs` notes it: only one that isn't empty.
+    // Each run of text that isn't empty is noted.
     let addText (token: Token) =
         let written = c.Text token
         let text = written.Substring(1, written.Length - 2)
         if text <> "" then
             c.NoteStringText (token.Start + 1) (token.End - 1)
             parts.Add(StringText(decoded (token.Start + 1) text))
-    // A string with no holes is read the same way, the FParsec parser's first reading of a double-quoted string.
+    // A string with no holes is read the same way.
     if c.Is StringLiteral then
         addText (c.Take())
         let text = parts |> Seq.choose (function StringText text -> Some text | StringExpr _ -> None) |> String.concat ""
@@ -144,10 +141,9 @@ let rec private doubleQuoted (c: Cursor) : Expression =
     addText (c.Expect StringStart)
     let mutable going = true
     while going do
-        // A hole that doesn't read makes the FParsec parser read the string as text, `{` and all.
-        let hole = try expression Crossing c with NoMatch -> c.GiveUp "a hole that doesn't read, which the FParsec parser reads as text"
+        let hole = try expression Crossing c with NoMatch -> c.GiveUp "a hole that doesn't read, which is a mistake"
         parts.Add(StringExpr hole)
-        if not (c.Is StringMiddle || c.Is StringEnd) then c.GiveUp "a hole that doesn't read, which the FParsec parser reads as text"
+        if not (c.Is StringMiddle || c.Is StringEnd) then c.GiveUp "a hole that doesn't read, which is a mistake"
         if c.Is StringMiddle then addText (c.Take())
         else
             addText (c.Expect StringEnd)
@@ -257,7 +253,7 @@ and private tag (c: Cursor) : Expression =
     Expression.at (c.SpanFrom start) (TagExpr(tagName, payload))
 
 /// The items in `[` and `]`, with the span of the brackets: runs of items and spreads, or a map's entries as tuples,
-/// when every item is `key => value` (`Expressions.bracketItems`).
+/// when every item is `key => value`.
 and private bracketItems (c: Cursor) : Choice<Choice<Expression list, Expression> list, Expression list> * SourceSpan =
     let start = c.Start
     c.Expect LeftBracket |> ignore
@@ -290,7 +286,7 @@ and private bracketItems (c: Cursor) : Choice<Choice<Expression list, Expression
     else c.Report start "A map literal has an item that is not an entry: write each item as `key => value`"
 
 /// `[| a | b |` and then rows of cells, a table: the list of a record for each row, with the header's fields
-/// (`Expressions.tableExpr`). Each row is on a line of its own, and spans its `|`s.
+///. Each row is on a line of its own, and spans its `|`s.
 and private table (c: Cursor) : Expression =
     let start = c.Start
     c.Expect LeftBracket |> ignore
@@ -361,8 +357,8 @@ and private bracketed (c: Cursor) : Expression =
         let parts = parts |> List.map (function Choice1Of2 field -> field | Choice2Of2 spread -> PositionalField spread)
         Expression.at span (FunctionCall(SpreadSyntax.builtIn, None, [ Expression.at span (RecordExpr parts) ]))
 
-/// A primary expression, `Expressions.primaryExprNoWs`, with its alternatives in that order. A keyword that doesn't start
-/// one of them is read as a name, as the FParsec parser's `identifierNoWs` reads it: `pattern = pattern`.
+/// A primary expression, with its alternatives in order. A keyword that doesn't start one of them is read as a name:
+/// `pattern = pattern`.
 and private primary (c: Cursor) : Expression =
     let start = c.Start
     let token = c.Token.Value
@@ -396,7 +392,7 @@ and private primary (c: Cursor) : Expression =
                 Expression.at span (LiteralExpr literal)
             | None ->
                 // A name applied to a value without brackets, in a lambda, as only a workflow keyword is
-                // (`Expressions.workflowKeywordApplication`).
+                //.
                 match c.At 1 with
                 | Code next when c.LambdaDepth > 0 && token.Kind = Name && Char.IsLower((c.Text token)[0]) && not (Keywords.reserved.Contains(c.Text token))
                                  && next.Start > token.End && c.Source.Substring(token.End, next.Start - token.End) |> Seq.forall (fun ch -> ch = ' ' || ch = '\t')
@@ -419,15 +415,15 @@ and private primary (c: Cursor) : Expression =
     | Operator when c.Text token = coalesceOperator && nextAdjacent && next |> Option.exists (fun next -> c.Text next = "?") ->
         c.Take() |> ignore
         c.Take() |> ignore
-        Expression.at (c.SpanFrom start) (IdentifierExpr "???")
+        Expression.at (c.SpanFrom start) (IdentifierExpr notImplemented)
     | LeftBracket -> list c
     | LeftParen -> bracketed c
     | _ -> c.Fail "an expression"
 
-/// A primary expression and the `.field`s after it, with the span of its text (`Expressions.memberAccessChain`).
+/// A primary expression and the `.field`s after it, with the span of its text.
 and private accessed (c: Cursor) : Operand =
     // In a shorthand lambda's body, the first operand is the argument it leaves out, made up at the operator or `.`
-    // written in its place, which takes up no text (`Expressions.implicitArgumentOperand`).
+    // written in its place, which takes up no text.
     let madeUp = c.ImplicitArgumentNext
     let mutable expr, text =
         match madeUp with
@@ -512,7 +508,7 @@ and private pipeTarget (c: Cursor) : Choice<Identifier * SourceSpan * Expression
     let args = if lambdaFollows c then args @ [ Forward.lambda.Value c ] else args
     Choice1Of2(callee, calleeSpan, args), c.SpanFrom start
 
-/// `value` and then each `\` step after it (`Expressions.withPipes`): on the line, or for `Crossing` on any line after
+/// `value` and then each `\` step after it: on the line, or for `Crossing` on any line after
 /// it, or for `Inline` on a line indented more than its first, which has no layout token before it.
 and private withPipes (lines: Lines) (c: Cursor) (value: Operand) : Operand =
     let pipeNext () =
@@ -533,7 +529,7 @@ and private withPipes (lines: Lines) (c: Cursor) (value: Operand) : Operand =
         result <- Expression.at span kind, span
     result
 
-/// An operand: a primary expression after any `not` and `-` before it, and the pipes after it (`Expressions.operand`).
+/// An operand: a primary expression after any `not` and `-` before it, and the pipes after it.
 and private operand (lines: Lines) (c: Cursor) : Operand =
     let prefixes = ResizeArray()
     let mutable going = true
@@ -560,7 +556,7 @@ and private operand (lines: Lines) (c: Cursor) : Operand =
             let span = SourceSpan.between prefixSpan innerText
             Expression.at span (FunctionCall(builtIn, None, [ inner ])), span) (accessed c)
     let piped = withPipes lines c term
-    // `&&` and `||` are not operators: Boolean operations are the keywords `and` and `or` (`OperatorTables.symbolicBoolean`).
+    // `&&` and `||` are not operators: Boolean operations are the keywords `and` and `or`.
     match c.Token with
     | Some token when c.OnSameLine && (token.Kind = Ampersand || token.Kind = Bar) ->
         match c.At 1 with
@@ -597,8 +593,8 @@ and private operatorAt (lines: Lines) (c: Cursor) : BinaryOperator option =
                 else None
         | _ -> None
 
-/// Operands joined by operators that bind at least as tightly as `minimum`, after `parent`, the operator before them
-/// (see FParsec's `OperatorPrecedenceParser`). Two operators of one precedence that don't group the same way, or don't
+/// Operands joined by operators that bind at least as tightly as `minimum`, after `parent`, the operator before them,
+/// by precedence climbing. Two operators of one precedence that don't group the same way, or don't
 /// group, can't be written side by side.
 and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOperator option) : Operand =
     let mutable left = operand lines c
@@ -638,7 +634,7 @@ and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOpera
         | _ -> going <- false
     left
 
-/// An expression as `Expressions.expression` reads it (`Crossing`), or `exprWithoutCrossingNewlines` (`Inline`).
+/// An expression, which may go on across lines (`Crossing`) or ends at the end of its line (`Inline`).
 and expression (lines: Lines) (c: Cursor) : Expression =
     if c.IsKeyword "match" then Forward.keywordExpression.Value c else
     let start = c.Start
@@ -686,7 +682,7 @@ let defValue (c: Cursor) : Expression =
     | several -> Expression.at (c.SpanFrom start) (TupleExpr several)
 
 /// An attribute's argument, written straight after its name as a tag's payload is: linter rules, `(default/unused)`,
-/// whose `/` has no spaces round it, `()`, or arguments as a call's (`TopLevel`'s `attributeArgumentRef`).
+/// whose `/` has no spaces round it, `()`, or arguments as a call's.
 let attributeArgument (c: Cursor) : Expression =
     let linterRules () =
         let start = c.Start

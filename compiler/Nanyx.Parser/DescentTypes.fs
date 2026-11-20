@@ -1,11 +1,21 @@
-/// The recursive-descent parser's type expressions: the grammar of `Types.fs`, read from the layout pass's tokens. It
-/// gives up at a type that holds an expression (a field's default, a `where` constraint), which the expression parser
-/// will read once it is written (see the Work in progress page "The parser").
+/// The recursive-descent parser's type expressions, read from the layout pass's tokens. A type that holds an expression
+/// (a field's default, a `where` constraint) reads it through `Forward`.
 module Parser.Program.DescentTypes
 
 open Parser.Program.Lexer
 open Parser.Program.Layout
 open Parser.Program.DescentCursor
+
+/// What types separated by commas mean, with the result they go to when an arrow follows them, spanning `span`:
+/// `a, b -> c` is a function of two parameters, since `,` binds tighter than `->`. The parameters' tuple spans the
+/// parameters.
+let private typeListToType ((items: TypeExpr list, resultOpt: TypeExpr option), span: SourceSpan) : TypeExpr =
+    let tuple () = TypeExpr.at (SourceSpan.between (List.head items).Span (List.last items).Span) (TypeTuple items)
+    match items, resultOpt with
+    | [ single ], None -> single
+    | _, None -> TypeExpr.at span (TypeTuple items)
+    | [ single ], Some result -> TypeExpr.at span (TypeFunc(single, result))
+    | _, Some result -> TypeExpr.at span (TypeFunc(tuple (), result))
 
 /// One type, or several made into the type `combine` builds from them, spanning from `start`.
 let private singleOrCombined (c: Cursor) (start: int) (combine: TypeExpr list -> TypeExprKind) (items: TypeExpr list) =
@@ -13,7 +23,7 @@ let private singleOrCombined (c: Cursor) (start: int) (combine: TypeExpr list ->
     | [ single ] -> single
     | multiple -> TypeExpr.at (c.SpanFrom start) (combine multiple)
 
-/// An identifier as the FParsec parser reads one, which may be a keyword: `#match` is a tag.
+/// An identifier, which may be a keyword: `#match` is a tag.
 let private identifier (c: Cursor) = fst (identifierWithSpan c)
 
 /// `.name`, written straight after what is before it.
@@ -39,7 +49,7 @@ let private noOptionalMarker (c: Cursor) (message: string) =
 let private optionalField (name: Identifier) =
     $"A field can't be marked optional with `?`: write one that may be absent as `{Names.written name}: #some(T) | #none`"
 
-/// Whether the code token at the cursor, after any line breaks FParsec's `ws` would cross, is `kind` (with `text`).
+/// Whether the code token at the cursor, after any line breaks, is `kind` (with `text`).
 let private across (c: Cursor) (kind: TokenKind) (text: string option) =
     c.Across(fun c -> c.Is(kind, ?text = text))
 
@@ -345,7 +355,7 @@ and private typeArrow (c: Cursor) =
     | Some right -> TypeExpr.at (c.SpanFrom start) (TypeFunc(left, right))
     | None -> left
 
-/// A type expression: `Types.fs`'s `typeExpr`.
+/// A type expression.
 and typeExpr (c: Cursor) : TypeExpr =
     let withContext () =
         let start = c.Start
@@ -366,7 +376,7 @@ and private typeList (c: Cursor) : (TypeExpr list * TypeExpr option) * SourceSpa
     let result = c.Attempt(fun () -> (if not (across c Arrow None) then raise NoMatch); c.Take() |> ignore; typeExpr c)
     (items, result), c.SpanFrom start
 
-/// A def's annotation: a type list, after the contexts it needs if it has any (`Types.fs`'s `typeSignature`).
+/// A def's annotation: a type list, after the contexts it needs if it has any.
 and typeSignature (c: Cursor) : TypeExpr =
     let withContext () =
         let start = c.Start
@@ -382,16 +392,18 @@ and typeSignature (c: Cursor) : TypeExpr =
     | Some t -> t
     | None -> typeListToType (typeList c)
 
-/// `source`, the whole of it, read as a def's annotation is, if the new parser reads it: `None` when it gives up or
-/// something follows the type, for the FParsec parser to read it instead.
-let readTypeSignature (source: string) : TypeExpr option =
+/// `source` read as the type in a def's annotation is written: `bool -> string`, `list(a), (a -> bool) -> list(a)`, or
+/// the mistake in it.
+let readTypeSignature (source: string) : Result<TypeExpr, ParseError> =
+    let mutable cursor = None
     try
         let c = cursorOf "" source
+        cursor <- Some c
         let read = typeSignature c
         while (match c.At 0 with Code _ -> false | _ -> true) do
             c.Index <- c.Index + 1
-        if c.Is EndOfFile then Some read else None
+        if c.Is EndOfFile then Ok read else c.Fail "the end of the type"
     with
+    | Reported error -> Error error
     | GiveUp _
-    | Reported _
-    | NoMatch -> None
+    | NoMatch -> Error(cursor.Value.Unexpected())

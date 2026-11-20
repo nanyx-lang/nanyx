@@ -28,6 +28,5 @@ let ``A list literal without entries is still a list`` () =
 [<Fact>]
 let ``A literal of entries and elements together does not parse`` () =
     match parseModule """def m = ["a" => 1, 2]""" with
-    // FParsec wraps a long message onto several lines.
-    | Result.Error err -> Assert.Contains("A map literal has an item that is not an entry: write each item as `key => value`", err.ReplaceLineEndings " ")
+    | Result.Error err -> Assert.Contains("A map literal has an item that is not an entry: write each item as `key => value`", err)
     | Result.Ok other -> failwith $"Expected a parse error, got %A{other}"

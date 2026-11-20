@@ -1,6 +1,5 @@
-/// The recursive-descent parser's patterns: the grammar of `Patterns.fs`, read from the layout pass's tokens, trying the
-/// alternatives in the order `fillPatternRef` lists them. A guard's lambda and a custom pattern's arguments are
-/// expressions, read through `Forward`. It gives up at text the FParsec parser reads only to fail later.
+/// The recursive-descent parser's patterns, read from the layout pass's tokens, trying the alternatives in order. A
+/// guard's lambda and a custom pattern's arguments are expressions, read through `Forward`.
 module Parser.Program.DescentPatterns
 
 open Parser.Program.Lexer
@@ -11,7 +10,7 @@ open Parser.Program.DescentLiterals
 /// A name a pattern binds, noted as declared by the construct being read (see `Cursor.NoteName`).
 let private boundName (c: Cursor) : Identifier * SourceSpan =
     let name, span = identifierWithSpan c
-    // The FParsec parser reads `m.x` as the name `m`, and then fails at the `.`.
+    // A qualified name, `m.x`, isn't a pattern.
     if c.Adjacent && (c.Is Dot || c.Is DotDot || c.Is Ellipsis) then c.GiveUp "a pattern's name with a `.` straight after it"
     c.NoteName name span
     name, span
@@ -38,7 +37,7 @@ let private wildcardPattern (c: Cursor) =
 
 let private identifierPattern (c: Cursor) =
     match c.Token with
-    // The FParsec parser reads `else` straight off the front of a longer name, `elsewhere`, and then fails.
+    // `else` is read straight off the front of a longer name, `elsewhere`, which is a mistake.
     | Some token when token.Kind = Name && (c.Text token).StartsWith "else" -> c.GiveUp "a name that starts with `else`"
     | _ ->
         let name, span = boundName c
@@ -57,7 +56,7 @@ let private literalOrRangePattern (c: Cursor) =
     match c.Attempt integerOrRange with
     | Some pattern -> pattern
     | None ->
-        if c.Is StringStart then c.GiveUp "a string with holes in a pattern, which the FParsec parser reads as text"
+        if c.Is StringStart then c.GiveUp "a string with holes in a pattern"
         let literal, _ = literal c
         Pattern.at (c.SpanFrom start) (LiteralPattern literal)
 
@@ -196,7 +195,7 @@ and private tagPattern (c: Cursor) =
         else TagPattern(tagName, payload ())
     Pattern.at (c.SpanFrom start) kind
 
-/// One pattern, not an and-pattern (`Patterns.fs`'s `singlePattern`).
+/// One pattern, not an and-pattern.
 and singlePattern (c: Cursor) : Pattern =
     first
         c
@@ -213,7 +212,7 @@ and singlePattern (c: Cursor) : Pattern =
           fun () -> identifierPattern c
           fun () -> c.Fail "a pattern" ]
 
-/// A pattern: single patterns joined by `&`, an and-pattern (`Patterns.fs`'s `pattern`).
+/// A pattern: single patterns joined by `&`, an and-pattern.
 and pattern (c: Cursor) : Pattern =
     let ampersand () = if c.Across(fun c -> c.Is Ampersand) then c.Take() |> ignore else raise NoMatch
     match sepBy1 c (fun () -> singlePattern c) ampersand with

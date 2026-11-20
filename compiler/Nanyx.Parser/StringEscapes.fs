@@ -4,8 +4,7 @@ open System
 open System.Text
 
 /// The backslash escapes of double-quoted strings: `\n`, `\t`, `\r`, `\\`, `\"`, `\{`, `\}`, and `\u{...}` for any code
-/// point, written in hex. Single-quoted strings are raw and have none. The parser decodes them (see
-/// `Lexical.escapeSequence`), so the text in the syntax tree is what the string holds; the formatter writes the text
+/// point, written in hex. Single-quoted strings are raw and have none. The parser decodes them, so the text in the syntax tree is what the string holds; the formatter writes the text
 /// back as it was written, checking it with `decode`.
 module StringEscapes =
     /// Each character that stands for another after a backslash, with the character it stands for.

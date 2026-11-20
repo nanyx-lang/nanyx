@@ -75,8 +75,7 @@ let ``use C(T) = expr does not parse, and the error says to write the call form 
         let source = $"def main = {{\n{line}\n  1\n}}"
         match parseModuleFileWithNames "t.nyx" source with
         | Result.Error err ->
-            // FParsec wraps a long message onto several lines.
-            let message = err.Message.Replace("\r\n", " ").Replace("\n", " ")
+            let message = err.Message
             Assert.Contains($"`use {head} = ...` is not a way to load an instance: write `use {head}(...)`,", message)
             Assert.Contains($"or define the instance with `def name: {head} = (...)` and load it with `use name`", message)
             Assert.Equal(source.IndexOf head, err.Span.Start)
@@ -97,8 +96,7 @@ let ``A context's or a type's parameter is a single lowercase letter, and a long
     for source, name, reason in cases do
         match parseModuleFileWithNames "t.nyx" source with
         | Result.Error err ->
-            // FParsec wraps a long message onto several lines.
-            let message = err.Message.Replace("\r\n", " ").Replace("\n", " ")
+            let message = err.Message
             Assert.Contains($"A type parameter is a single lowercase letter, such as 'a', so '{name}' cannot be one", message)
             match reason with
             | Some reason -> Assert.Contains(reason, message)

@@ -17,6 +17,12 @@ let normalized (source: string) = source.ReplaceLineEndings "\n"
 /// The text `span` covers in `source`.
 let textOf (source: string) (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
 
+/// Asserts that the parser reads the whole of `source` with no mistake, showing the mistake when it doesn't.
+let readsWhole (source: string) =
+    match parseModuleWithTrivia "t.nyx" source with
+    | Result.Ok _ -> ()
+    | Result.Error error -> Xunit.Assert.Fail $"{error.Message} at {error.Span.StartLine + 1}:{error.Span.StartColumn + 1}"
+
 // Helper to check if Result is Ok
 let isOk result =
     match result with
@@ -29,14 +35,13 @@ let isError result =
     | Result.Ok _ -> false
     | Result.Error _ -> true
 
-// The error `source` fails to parse with: its message, its lines (which FParsec wraps) joined into one, and the text
-// from where it is reported to the end of that line.
+// The error `source` fails to parse with: its message, and the text from where it is reported to the end of that line.
 let parseErrorOf (source: string) =
     match parseModuleFileWithNames "t.nyx" source with
     | Result.Error error ->
         let rest = source.Substring(error.Span.Start)
         let lineEnd = rest.IndexOf '\n'
-        String.Join(" ", error.Message.Split([| ' '; '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)),
+        error.Message,
         (if lineEnd < 0 then rest else rest.Substring(0, lineEnd))
     | Result.Ok parsed -> failwith $"Expected a parse error, got %A{parsed}"
 

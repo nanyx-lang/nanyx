@@ -1,21 +1,14 @@
-/// The recursive-descent parser's patterns, at the places where reading them takes care: each is read as the FParsec
-/// parser reads it, with the same spans (see `DescentCheck.checkPatterns`).
+/// Patterns, at the places where reading them takes care: each is read with no mistake.
 module Nanyx.Parser.Tests.DescentPatternTests
 
 open Xunit
 open Parser.Program
-open Nanyx.Parser
+open ParserTestHelpers
 
-/// How the new parser reads each pattern of the arms of `match x` with an arm for each of `patterns`.
-let private outcomesOf (patterns: string list) =
+/// Asserts that `match x` with an arm for each of `patterns` is read with no mistake.
+let private readsArms (patterns: string list) =
     let arms = patterns |> List.map (fun pattern -> $"  | {pattern} -> 1") |> String.concat "\n"
-    let source = $"def f = {{ x ->\n  match x\n{arms}\n}}\n"
-    match parseModuleWithTriviaByFParsec "t.nyx" source with
-    | Result.Ok parsed ->
-        let roots = DescentCheck.patternRoots parsed
-        Assert.Equal(patterns.Length, roots.Length)
-        DescentCheck.checkPatterns "t.nyx" parsed roots
-    | Result.Error error -> failwith error.Message
+    readsWhole $"def f = {{ x ->\n  match x\n{arms}\n}}\n"
 
 [<Theory>]
 [<InlineData("-1")>]
@@ -53,17 +46,13 @@ let private outcomesOf (patterns: string list) =
 [<InlineData("> 5")>]
 [<InlineData(">= -1")>]
 [<InlineData("#some(v) & whole")>]
-let ``A pattern is read as the FParsec parser reads it`` (pattern: string) =
-    Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], outcomesOf [ pattern ])
+let ``A pattern is read`` (pattern: string) =
+    readsArms [ pattern ]
 
 [<Fact>]
 let ``An and-pattern may go on after a line break`` () =
     let source = "def f = { x ->\n  match x\n    | #some(v)\n      & whole -> 1\n    | _ -> 0\n}\n"
-    match parseModuleWithTriviaByFParsec "t.nyx" source with
-    | Result.Ok parsed ->
-        let roots = DescentCheck.patternRoots parsed
-        Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same; DescentCheck.Same ], DescentCheck.checkPatterns "t.nyx" parsed roots)
-    | Result.Error error -> failwith error.Message
+    readsWhole source
 
 [<Theory>]
 [<InlineData("{ < 0 }")>]
@@ -71,5 +60,5 @@ let ``An and-pattern may go on after a line break`` () =
 [<InlineData("#DivisibleBy(3)")>]
 [<InlineData("#DivisibleBy(3)(n)")>]
 [<InlineData("#Between(1, 10)")>]
-let ``A pattern that holds an expression is read as the FParsec parser reads it`` (pattern: string) =
-    Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], outcomesOf [ pattern ])
+let ``A pattern that holds an expression is read`` (pattern: string) =
+    readsArms [ pattern ]

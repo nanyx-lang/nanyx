@@ -10,7 +10,7 @@ comes next in the [Work in progress](https://nanyx.dev/docs/work-in-progress/wor
 
 ```
 compiler/
-├── Nanyx.Parser/              # Parser library (F#, FParsec)
+├── Nanyx.Parser/              # Parser library (F#)
 │   ├── Ast.fs                 # The syntax tree
 │   ├── ParseState.fs, …       # Parse state, lexical rules, patterns, types (see the .fsproj)
 │   ├── Expressions.fs         # Expressions: blocks, match, operators, pipes, lambdas, calls

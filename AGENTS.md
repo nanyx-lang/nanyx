@@ -28,6 +28,11 @@ those files workable. Problems with the code's structure are tracked as GitHub i
   `__with`, `__range`, `__rec`, `dbg`, `not`). Don't add new string matches on these names. Use or extend
   the shared constants and active patterns, the `...Syntax` modules in the parser's `Ast.fs`
   ([#367](https://github.com/nanyx-lang/nanyx/issues/367)).
+- **Layout and reserved words live in one place each.** Where a block, a match or a pipeline ends is decided by the
+  layout pass (`Layout.fs`), whose rules are numbered on the
+  [parser's Compiler internals page](docs/src/content/compiler-internals/parser.md#the-layout-rules); the parser reads
+  its `Indent`, `Newline` and `Dedent` tokens and never measures indentation itself. The reserved words are
+  `Keywords.reserved`, which the lexer reads. Change a rule there, not in the parser.
 - **Report user errors as diagnostics, with a span.** A bare `failwith` is never the way to tell users
   something. In the backend, a feature that isn't supported yet and a broken compiler invariant are
   different things, so report them differently
@@ -137,8 +142,8 @@ those files workable. Problems with the code's structure are tracked as GitHub i
   around it into earlier or later files, and shorten the chain by turning its long match arms into `and` functions
   of their own, or by passing the recursive function in as a parameter, as `Loops.fs` takes `inferExpr`.
 - **Order is behaviour in places.** Keep these orders exactly as they are:
-  - FParsec choice order and where `attempt` is placed
-  - the order in which the forward refs are filled
+  - the order in which the parser tries the alternatives of a construct (`Cursor.Attempt` calls)
+  - the order in which the parser's `Forward` references are filled
   - the order of `addConstraint` calls (constraints are solved newest first)
   - the order in which runtime helpers are emitted
 
