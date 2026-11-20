@@ -94,6 +94,7 @@ module internal AttachedOperators =
                 let error (from: string) =
                     Diagnostics.at DiagnosticCodes.AttachedDefinitionInScope span
                         $"'{name}' is already in scope for '{typeName}'{from}, and an attached definition can extend a type but not redefine what it has: give it another name"
+                    |> Diagnostics.about name
                 match ownerModules state name, TypeEnv.tryFind name imported |> Option.bind _.Symbol |> Option.bind (fun symbol -> state.Symbols |> Map.tryFind symbol) with
                 | owner :: _, _ -> Some (error $", from {owner}")
                 // The prelude is in files of its own, `nanyx/prelude-lists.nyx`, which every module imports.

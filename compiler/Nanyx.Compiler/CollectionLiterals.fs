@@ -14,6 +14,7 @@ type private Infer = TypeEnv -> InferState -> Expression -> Result<TypedExpr * I
 let noFromArray (span: SourceSpan) (typeName: string) =
     Diagnostics.at DiagnosticCodes.NoFromArray span
         $"'{typeName}' has no `fromArray`, so a square-bracket literal can't build one: attach one to it, as in `def {typeName}.fromArray: Array(a) -> {typeName}`"
+    |> Diagnostics.about typeName
 
 /// The prelude's function a spread of a value of type `ty` is read as, to make a list of its elements: `__spreadList`
 /// for a list, or a type nothing has settled, `__spreadArray` for an array, `__spreadSeq` for a sequence, which may

@@ -68,7 +68,8 @@ let internal read
         | Lambda(parameters, _, _) when Names.isOperator last && parameters.Length <> 2 ->
             let takes = match parameters.Length with 0 -> "none" | 1 -> "one" | n -> string n
             Error [ Diagnostics.at DiagnosticCodes.OperatorArity span
-                        $"'{Names.written last}' is an operator, so it takes exactly two arguments, its left and right operands, but the lambda that defines it takes {takes}" ]
+                        $"An operator takes exactly two arguments, its left and right operands, but the lambda that defines it takes {takes}"
+                    |> Diagnostics.about (Names.written last) ]
         | _ -> Ok ()
     let contextsExist =
         onlyContextsOnValue

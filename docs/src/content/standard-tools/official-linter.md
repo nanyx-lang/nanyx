@@ -45,7 +45,7 @@ The style linter helps teams keep APIs predictable and readable by flagging patt
 ## Exported annotations
 
 ```nanyx
--- Linter warning: `add` is exported but does not write its type: [Add(a)] a, a -> a
+-- Linter warning: Exported definition without a type annotation 'add': write `: [Add(a)] a, a -> a` after its name
 export def add = { a, b -> a + b }
 ```
 
@@ -55,7 +55,7 @@ The rule (`unannotatedExports`) reports an exported top-level def that does not 
 
 ```nanyx
 def total =
-  def taxRate = 0.2 -- Linter warning: `taxRate` is never used
+  def taxRate = 0.2 -- Linter warning: Unused binding 'taxRate'
   100
 ```
 
@@ -64,7 +64,7 @@ The rule (`unusedBindings`) reports a local def, a lambda's argument or a variab
 ## Unused function argument
 
 ```nanyx
--- Linter warning: argument `title` is never used
+-- Linter warning: Unused binding 'title': the parameter is never used
 def greet: string, string -> string = { name, title ->
   "Hello, {name}!"
 }
@@ -74,8 +74,8 @@ def greet: string, string -> string = { name, title ->
 
 ```nanyx
 match response
-  | #some(value) -> "Success" -- Linter warning: `value` is introduced by pattern but never used
-  | #error(msg) -> "Error" -- Linter warning: `msg` is introduced by pattern but never used
+  | #some(value) -> "Success" -- Linter warning: Unused binding 'value'
+  | #error(msg) -> "Error" -- Linter warning: Unused binding 'msg'
 ```
 
 ## Unused import
@@ -83,7 +83,7 @@ match response
 ```nanyx
 import (
   nanyx/math as m
-  nanyx/text as t -- Linter warning: `t` is imported but never used
+  nanyx/text as t -- Linter warning: Unused import 't'
 )
 
 def x = m.sqrt(16.0)
@@ -96,8 +96,8 @@ The rule (`unusedImports`) reports an import that nothing in the module uses. A 
 ```nanyx
 module shapes
 
-def scale = 2 -- Linter warning: `scale` is never used
-type Corner = (x: int) -- Linter warning: type `Corner` is never used
+def scale = 2 -- Linter warning: Unused private definition 'scale'
+type Corner = (x: int) -- Linter warning: Unused private definition 'Corner'
 export def area = { w, h -> w * h }
 ```
 
@@ -201,10 +201,10 @@ The rule (`uselessExpressions`) reports a statement that `unusedResults` would, 
 ## Name that hides a prelude member
 
 ```nanyx
-def pow = { (x: int) -> x * x } -- Linter warning: `pow` hides the prelude's `pow`, which can't be named where it is in scope
+def pow = { (x: int) -> x * x } -- Linter warning: Definition hides a prelude member 'pow': the prelude's 'pow' can't be named where it is in scope
 
 def total: list(int) -> int = { xs ->
-  def ignore = 0 -- Linter warning: `ignore` hides the prelude's `ignore`, which can't be named where it is in scope
+  def ignore = 0 -- Linter warning: Definition hides a prelude member 'ignore': the prelude's 'ignore' can't be named where it is in scope
   list.sum(xs) + ignore
 }
 ```
@@ -231,7 +231,7 @@ linters = [(package = "nanyx.lint", version = "0.28.0", settings = (rules = (sem
 
 ```nanyx
 module noms =
-  -- Linter error: 'UserId' is private, and nothing 'noms' exports returns one, so no code outside 'noms' can get a 'UserId'.
+  -- Linter error: 'UserId' is private, and nothing 'noms' exports returns one, so no code outside 'noms' can get a 'UserId'
   export type UserId = private int
 
   export def UserId.toString: UserId -> string = { id -> "user" }

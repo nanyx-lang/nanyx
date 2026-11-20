@@ -141,7 +141,7 @@ let ``Fixing a member that is not a type is an error`` () =
     let diagnostic = Assert.Single result.Diagnostics
     Assert.Equal(DiagnosticCodes.UnknownAssociatedType.Code, diagnostic.Code)
     Assert.Equal(
-        "'next' is a member of 'Iter', not one of its associated types: only an associated type is fixed by name in a context's arguments",
+        "It is a member of 'Iter', not one of its associated types: only an associated type is fixed by name in a context's arguments",
         diagnostic.Message)
 
 [<Fact>]

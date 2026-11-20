@@ -34,10 +34,10 @@ def describe: #some(int) | #error(string) -> string = { response ->
 }
 """
     Assert.Equal<(string * string) list>(
-        [ "`taxRate` is never used", "taxRate"
-          "Argument `title` is never used", "title"
-          "`value` is introduced by a pattern but never used", "value"
-          "`msg` is introduced by a pattern but never used", "msg" ],
+        [ "It is never used", "taxRate"
+          "The parameter is never used", "title"
+          "A pattern introduces it, but it is never used", "value"
+          "A pattern introduces it, but it is never used", "msg" ],
         unusedIn source)
 
 [<Fact>]

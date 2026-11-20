@@ -20,7 +20,7 @@ let private everyDef =
             model.Syntax
             |> List.choose (function
                 | Kind (Def (ValueDef(_, name, _, _))) as item ->
-                    Some { Rule = "everyDef"; Span = item.Span; Message = $"def {name}"; Related = []; Fixes = [] }
+                    Some { Rule = "everyDef"; Span = item.Span; Message = $"def {name}"; Related = []; Fixes = []; Subject = None }
                 | _ -> None) }
 
 let private throwing =

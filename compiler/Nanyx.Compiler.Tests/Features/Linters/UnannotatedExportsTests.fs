@@ -38,7 +38,7 @@ let ``An exported def without a type is reported at its name`` () =
     match reported "export def add = { a: int, b: int -> a + b }\n" with
     | [ diagnostic, text ] ->
         Assert.Equal("add", text)
-        Assert.Equal("`add` is exported but does not write its type: int, int -> int", diagnostic.Message)
+        Assert.Equal("Its type isn't written: write `: int, int -> int` after its name", diagnostic.Message)
     | other -> failwith $"Expected one report, got %A{other}"
 
 [<Fact>]

@@ -83,7 +83,7 @@ def depth: Nest(int) -> int = { t ->
 """
     let source = written.ReplaceLineEndings "\n"
     let message, line, column = backendFailure source
-    Assert.Equal("The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet", message)
+    Assert.Equal("It can't compile a recursive type that holds itself at other type arguments yet", message)
     Assert.Equal(placeOf "{ t ->" source, (line, column))
 
 [<Fact>]

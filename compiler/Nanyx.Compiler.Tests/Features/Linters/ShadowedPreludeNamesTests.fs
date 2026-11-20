@@ -41,7 +41,7 @@ let ``A top-level def is reported at its name, saying what it hides`` () =
 export def nine: int = pow(3)
 """
     Assert.Equal<(string * string) list>(
-        [ "pow", "`pow` hides the prelude's `pow`, which can't be named where it is in scope" ],
+        [ "pow", "The prelude's 'pow' can't be named where it is in scope" ],
         reported source)
 
 [<Fact>]

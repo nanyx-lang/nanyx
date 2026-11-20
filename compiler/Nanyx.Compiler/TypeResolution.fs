@@ -716,6 +716,7 @@ let internal undeclaredHeldScopes (state: InferState) (name: Identifier) (modifi
             let diagnostic =
                 Diagnostics.at DiagnosticCodes.UndeclaredTypeScope body.Span
                     $"'{name}' holds a value of type '{held}', which belongs to a '{context}' scope: declare it `type {Names.written name}{parameters} = [{context}] {kind} ...`"
+                |> Diagnostics.about name
             match TypeDefModifier.kindSpan modifiers with
             | Some kindSpan when declared.IsEmpty ->
                 { diagnostic with Fixes = [ { Title = $"Declare `[{context}]`"; Edits = [ { Span = { kindSpan with End = kindSpan.Start }; NewText = $"[{context}] " } ] } ] }

@@ -108,7 +108,7 @@ let ``A built-in type can't name a type parameter`` () =
 [<Fact>]
 let ``A type parameter has no default`` () =
     let error = onlyError DiagnosticCodes.InvalidTypeParameter (withDecode "\ndef f: (string, into: type = 1) -> int = { text, into -> 1 }\n")
-    Assert.StartsWith("The type parameter 'into' can't have a default", error.Message)
+    Assert.StartsWith("A type parameter can't have a default", error.Message)
 
 [<Fact>]
 let ``type names a type that exists`` () =

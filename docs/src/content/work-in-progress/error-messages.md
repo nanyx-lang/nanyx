@@ -13,15 +13,9 @@ Every compiler error has a code and title from the table in `Diagnostics.fs` (`D
 it is about, and a message in the house style. The CLI shows it with the line of source and an underline, and the
 common errors offer fixes. What is left:
 
-- **Rewriting the messages** ([#2098](https://github.com/nanyx-lang/nanyx/issues/2098)). Every error is shown as a
-  headline, its code's fixed title plus at most one name in single quotes (`Missing context 'Console'`), kept as the
-  diagnostic's `Subject`, and a body that doesn't repeat it. The editor shows the headline, then the body on the next
-  line; the terminal shows the code and headline, then the underlined source line, then the body. The codes for
-  reading a module (NYX00xx), resolving names (NYX01xx) and types up to NYX0249 are written this way. The rest, the
-  types from NYX0250 on, the backend and the linters, are rewritten to it next
-  ([#2135](https://github.com/nanyx-lang/nanyx/issues/2135)). Until then, many bodies still start with their headline.
-  A syntax error's headline has no name yet: the parser's errors carry only a message, so the token it found isn't
-  known apart from it.
+- **A syntax error's headline.** Every error's headline is its code's title plus at most one name
+  ([#2098](https://github.com/nanyx-lang/nanyx/issues/2098)), but a syntax error's has no name yet: the parser's errors
+  carry only a message, so the token it found isn't known apart from it.
 - **Related locations.** Few errors use them yet. An error should point, where it helps, at the code that explains it
   as well: "expected because of this annotation", "first defined here". The CLI shows a related location as one line,
   with no excerpt.
