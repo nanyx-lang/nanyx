@@ -69,6 +69,41 @@ module internal BinaryData =
     let private primitives =
         HashSet<Type> [ typeof<bool>; typeof<byte>; typeof<char>; typeof<int>; typeof<int64>; typeof<uint32>; typeof<uint64>; typeof<float>; typeof<string>; typeof<bigint>; typeof<unit> ]
 
+    let private everyInstance = BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance
+    let private everyStatic = BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Static
+
+    let private parameterTypes (method: MethodBase) = method.GetParameters() |> Array.map _.ParameterType
+
+    /// The kind of F# type `ty` is (`RecordType`, `SumType`), from the attribute F# compiles onto it.
+    let private kindOf (ty: Type) =
+        match ty.GetCustomAttribute(typeof<CompilationMappingAttribute>) with
+        | :? CompilationMappingAttribute as mapping -> mapping.SourceConstructFlags &&& SourceConstructFlags.KindMask
+        | _ -> SourceConstructFlags.None
+
+    /// A union's cases in the order of their tags, each with the types of its fields and the method that makes one, from
+    /// what F# compiles a union to: an option's `None` and `Some`; otherwise a `Tags` class with each case's tag, and a
+    /// static `New<Case>` method for each case with fields, or a static property for one without. `None` for a union
+    /// not compiled so (one of a single case has no `Tags`), whose cases F#'s reflection gives. Plain reflection is
+    /// used where it can be, since F#'s takes long the first time, and a read meets every type in the file.
+    let private compiledCases (ty: Type) : (Type[] * MethodInfo)[] option =
+        if generic typedefof<option<_>> ty then
+            Some [| [||], ty.GetProperty("None", everyStatic).GetMethod; ty.GetGenericArguments(), ty.GetMethod("Some", everyStatic) |]
+        else
+            match ty.GetNestedType("Tags", BindingFlags.Public ||| BindingFlags.NonPublic) with
+            | null -> None
+            | tags ->
+                let cases =
+                    tags.GetFields everyStatic
+                    |> Array.sortBy (fun tag -> tag.GetRawConstantValue() :?> int)
+                    |> Array.map (fun tag ->
+                        match ty.GetMethod("New" + tag.Name, everyStatic) with
+                        | null ->
+                            match ty.GetProperty(tag.Name, everyStatic) with
+                            | null -> None
+                            | property -> Some([||], property.GetMethod)
+                        | make -> Some(parameterTypes make, make))
+                if Array.forall Option.isSome cases then Some(Array.map Option.get cases) else None
+
     let private shapeOf (ty: Type) : Shape =
         if primitives.Contains ty then Primitive
         elif ty.IsEnum then Enum (Enum.GetUnderlyingType ty)
@@ -76,20 +111,27 @@ module internal BinaryData =
         elif generic typedefof<Set<_>> ty then Elements (ty.GetGenericArguments(), instance typedefof<SetCollection<_>> ty)
         elif generic typedefof<Map<_, _>> ty then Elements (ty.GetGenericArguments(), instance typedefof<MapCollection<_, _>> ty)
         elif generic typedefof<Lazy<_>> ty then Later (ty.GetGenericArguments()[0], instance typedefof<LazyValue<_>> ty)
-        elif FSharpType.IsTuple ty then
-            match FSharpValue.PreComputeTupleConstructorInfo ty with
-            | make, None -> Tuple (FSharpType.GetTupleElements ty, lazy (FSharpValue.PreComputeTupleReader ty), make)
-            | _, Some _ -> failwith $"BinaryData cannot write a tuple of more than seven items: {ty.FullName}"
-        elif FSharpType.IsRecord(ty, flags) then
-            let fields = FSharpType.GetRecordFields(ty, flags) |> Array.map _.PropertyType
-            Record (fields, lazy (FSharpValue.PreComputeRecordReader(ty, flags)), FSharpValue.PreComputeRecordConstructorInfo(ty, flags))
-        elif FSharpType.IsUnion(ty, flags) then
+        elif ty.IsGenericType && ty.FullName.StartsWith "System.Tuple`" then
+            if ty.GetGenericArguments().Length > 7 then failwith $"BinaryData cannot write a tuple of more than seven items: {ty.FullName}"
+            let make = ty.GetConstructors() |> Array.exactlyOne
+            Tuple (parameterTypes make, lazy (FSharpValue.PreComputeTupleReader ty), make)
+        elif kindOf ty = SourceConstructFlags.RecordType then
+            // A record's constructor takes each of its fields, in order (a `[<CLIMutable>]` one has an empty one too).
+            let make = ty.GetConstructors everyInstance |> Array.maxBy _.GetParameters().Length
+            Record (parameterTypes make, lazy (FSharpValue.PreComputeRecordReader(ty, flags)), make)
+        elif kindOf ty = SourceConstructFlags.SumType then
             let cases =
-                FSharpType.GetUnionCases(ty, flags)
-                |> Array.map (fun case ->
-                    case.GetFields() |> Array.map _.PropertyType,
-                    lazy (FSharpValue.PreComputeUnionReader(case, flags)),
-                    FSharpValue.PreComputeUnionConstructorInfo(case, flags))
+                match compiledCases ty with
+                | Some cases ->
+                    cases
+                    |> Array.mapi (fun tag (fields, make) ->
+                        fields, lazy (FSharpValue.PreComputeUnionReader(FSharpType.GetUnionCases(ty, flags)[tag], flags)), make)
+                | None ->
+                    FSharpType.GetUnionCases(ty, flags)
+                    |> Array.map (fun case ->
+                        case.GetFields() |> Array.map _.PropertyType,
+                        lazy (FSharpValue.PreComputeUnionReader(case, flags)),
+                        FSharpValue.PreComputeUnionConstructorInfo(case, flags))
             Union (lazy (FSharpValue.PreComputeUnionTagReader(ty, flags)), cases)
         else
             failwith $"BinaryData cannot write a value of type {ty.FullName}: it is not F# data"
@@ -213,8 +255,6 @@ module internal BinaryData =
         let method = DynamicMethod(name, result, parameters, typeof<Shape>.Module, true)
         emit (method.GetILGenerator())
         method.CreateDelegate typeof<'D> :?> 'D
-
-    let private everyInstance = BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance
 
     /// One of FSharp.Core's types, which it keeps internal: a map's or set's tree.
     let private collectionType (name: string) (args: Type[]) =
@@ -447,8 +487,7 @@ module internal BinaryData =
         [<DefaultValue>]
         static val mutable private reader: Func<ReadState, 'T>
 
-    let private instanceMember = flags ||| BindingFlags.Instance
-    let private stateMethod (name: string) = typeof<ReadState>.GetMethod(name, instanceMember)
+    let private stateMethod (name: string) = typeof<ReadState>.GetMethod(name, everyInstance)
     // F# names the field as it likes (`reader@`), so it is found as the type's only one.
     let private readerField (ty: Type) = typedefof<ReaderOf<_>>.MakeGenericType(ty).GetFields(flags ||| BindingFlags.Static) |> Array.exactlyOne
     let private readerType (ty: Type) = typedefof<Func<_, _>>.MakeGenericType(typeof<ReadState>, ty)
