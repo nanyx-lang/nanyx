@@ -1,7 +1,7 @@
-/// The recursive-descent parser's lambdas, blocks, match arms and statements: the lambda forms of `Expressions.fs`, a
-/// def's value written as an indented block, a match's arms, and the statements of a block (`def`, `rec`, `mut`, `use`
-/// and expression statements, several on a line after `;`), read from the layout pass's tokens. It gives up at an
-/// `import`, a local type and an attribute in a block, which come with the top level.
+/// The recursive-descent parser's lambdas, blocks, match arms and statements: the forms of a lambda, a def's value
+/// written as an indented block, a match's arms, and the statements of a block (`def`, `rec`, `mut`, `use` and
+/// expression statements, several on a line after `;`), read from the layout pass's tokens. A block's `import`s, local
+/// types and attributes are read by the top level, through `Forward`.
 module Parser.Program.DescentBlocks
 
 open Parser.Program.Lexer
@@ -9,8 +9,8 @@ open Parser.Program.Layout
 open Parser.Program.DescentCursor
 open Parser.Program.DescentExpressions
 
-/// Skips the layout tokens at the cursor, as FParsec's `ws` skips the line breaks and indentation between a lambda's
-/// statements, which may be at any column until its `}`.
+/// Skips the layout tokens at the cursor: the line breaks and indentation between a lambda's statements, which may be at
+/// any column until its `}`.
 let internal skipLayout (c: Cursor) =
     while (match c.At 0 with Code _ -> false | _ -> true) do
         c.Index <- c.Index + 1
@@ -31,13 +31,12 @@ let internal nextCodeStart (c: Cursor) =
     c.Index <- index
     start
 
-/// That no comment comes between the last token taken and the next code token, where the FParsec parser skips only
-/// spaces and line breaks: before a lambda's `}`, but after a body of statements on lines of their own. A comment there
-/// is a mistake it reports.
+/// That no comment comes between the last token taken and the next code token, where only spaces and line breaks may
+/// be: before a lambda's `}`, but after a body of statements on lines of their own. A comment there is a mistake.
 let internal noCommentBefore (c: Cursor) =
     let next = nextCodeStart c
     if c.Source.Substring(c.LastEnd, max 0 (next - c.LastEnd)).Contains "--" then
-        c.GiveUp "a comment before a lambda's `}` that the FParsec parser doesn't skip, which is a mistake"
+        c.GiveUp "a comment before a lambda's `}`, which is a mistake"
 
 /// Whether the cursor is at a closing bracket or brace, which ends whatever block is open inside it.
 let private atClose (c: Cursor) = c.Is RightParen || c.Is RightBracket || c.Is RightBrace
@@ -62,14 +61,14 @@ let private blockOf (c: Cursor) (start: int) (statements: Statement list) =
     Expression.at span (Block statements)
 
 /// `:` and a def's type, after its name on its line or at the start of a line indented further than the def's
-/// (`Types.defNameAndType`).
+///.
 let private defType (c: Cursor) : TypeExpr option =
     if c.Is Colon && c.Token.IsSome then
         c.Take() |> ignore
         Some(DescentTypes.typeSignature c)
     else None
 
-/// A statement: `def`, `export def`, `rec`, `mut`, or an expression (`TopLevel`'s `statementRef`).
+/// A statement: `def`, `export def`, `rec`, `mut`, or an expression.
 let rec statement (c: Cursor) : Statement =
     let start = c.Start
     match c.Token with
@@ -115,8 +114,7 @@ and private typeDefinitionStatement (c: Cursor) (start: int) =
     | TypeDef(name, modifiers, parameters, body) -> statementFrom c start (TypeDefStatement(name, modifiers, parameters, body))
     | ValueDef _ -> raise NoMatch
 
-/// One line's statement as the statements it stands for: one, or the defs a destructuring def desugars into
-/// (`TopLevel`'s `statementItemsRef`).
+/// One line's statement as the statements it stands for: one, or the defs a destructuring def desugars into.
 and private statementItems (c: Cursor) : Statement list =
     let start = c.Start
     let isDef = c.IsKeyword "def" || (c.IsKeyword "export" && (match c.At 1 with Code next -> c.Text next = "def" | _ -> false))
@@ -167,7 +165,7 @@ and internal destructuringDefinition (c: Cursor) (start: int) : Statement list =
     let span = endingAt (snd bindings.Head).Span (c.SpanFrom start)
     bindings |> List.mapi (fun index (name, bound) -> Statement.at span (DefStatement(isExport && index > 0, name, None, bound)))
 
-/// An expression on a line of its own (`TopLevel`'s `exprStatement`).
+/// An expression on a line of its own.
 and private expressionStatement (c: Cursor) (start: int) =
     statementFrom c start (ExprStatement(expression Inline c))
 
@@ -242,7 +240,7 @@ and internal useValue (c: Cursor) : Expression =
 
 /// Arms read by `arm`, each from its `|`, run as the layout pass lays them out: on the line, or each starting a line of
 /// the block of arms the first opens. A first arm on the line after, at the column of the arms of an enclosing match,
-/// takes the arms after it at that column, as the FParsec parser's `firstArmIndent` does. An arm `isLast` picks ends
+/// takes the arms after it at that column. An arm `isLast` picks ends
 /// them, as an `if`'s `else` arm does. The `Dedent` that closes each block of arms they open is theirs.
 and internal armsWith (c: Cursor) (isLast: 'a -> bool) (arm: unit -> 'a list) : 'a list =
     let mutable opened = 0
@@ -273,7 +271,7 @@ and internal armsWith (c: Cursor) (isLast: 'a -> bool) (arm: unit -> 'a list) : 
     List.ofSeq arms
 
 /// One arm: its alternatives, each patterns separated by commas, and the body they share after `->`, which declares
-/// the names they bind (`Expressions.armAlternativesAfter`). Each alternative is an arm of its own.
+/// the names they bind. Each alternative is an arm of its own.
 and private arm (c: Cursor) : MatchArm list =
     let alternatives, names =
         c.Collecting(fun () ->
@@ -297,7 +295,7 @@ and private arm (c: Cursor) : MatchArm list =
     c.Declare ArmBody body.Id names
     alternatives |> List.map (fun patterns -> patterns, body)
 
-/// An arm's body after its `->`: a block on the lines after it, or a body on the line (`Expressions.matchArmBody`).
+/// An arm's body after its `->`: a block on the lines after it, or a body on the line.
 and internal armBody (c: Cursor) : Expression =
     match c.At 0 with
     | Indent _ ->
@@ -306,13 +304,13 @@ and internal armBody (c: Cursor) : Expression =
     | Code _ when c.OnSameLine -> sameLineBody c (expression Inline)
     | _ -> c.GiveUp "an arm's body the layout pass doesn't open"
 
-/// A match's arms, each from its `|` (`Expressions.matchArms`).
+/// A match's arms, each from its `|`.
 and arms (c: Cursor) : MatchArm list =
     armsWith c (fun _ -> false) (fun () ->
         c.Expect Bar |> ignore
         arm c)
 
-/// What follows `except`: arms, or one arm without its `|` (`Expressions.exceptArms`).
+/// What follows `except`: arms, or one arm without its `|`.
 and exceptArms (c: Cursor) : MatchArm list =
     if nextCodeIs c Bar then arms c
     else
@@ -358,7 +356,7 @@ and internal nameAndType (c: Cursor) : Identifier * SourceSpan * TypeExpr option
     // A def with nothing after its name on the line is a declaration with no type, which the type checker reports.
     let lineEnds = c.Is EndOfFile || (c.Token.IsNone || not c.OnSameLine) && not (c.Is Colon || c.Is Equals)
     if not (c.Is Colon || c.Is Equals || lineEnds) then c.GiveUp "a destructuring def"
-    // An operator Nanyx doesn't have, or `??`, which is syntax, can't be defined (`Types.definableName`).
+    // An operator Nanyx doesn't have, or `??`, which is syntax, can't be defined.
     let last = parts[parts.Count - 1]
     let full = String.concat "." parts
     let operatorAt = start + (Names.written full).Length - (Names.written last).Length
@@ -380,9 +378,8 @@ and internal defValue (c: Cursor) : Expression =
     | Code _ when c.OnSameLine -> DescentExpressions.defValue c
     | _ -> c.GiveUp "a def's value on the next line, not indented further than the block it is in"
 
-/// The statements of a block opened by an `Indent`, from its first, to the `Dedent` that closes it
-/// (`Expressions.blockExpr`). A line indented further than the block that its statement before didn't take is a
-/// statement of its own, as the FParsec parser reads it.
+/// The statements of a block opened by an `Indent`, from its first, to the `Dedent` that closes it. A line indented
+/// further than the block that its statement before didn't take is a statement of its own.
 and indentedBlock (c: Cursor) : Expression =
     let start = c.Start
     let statements = ResizeArray(statementsOnLine c)
@@ -400,14 +397,14 @@ and indentedBlock (c: Cursor) : Expression =
     blockOf c start (List.ofSeq statements)
 
 /// Takes the `;` at the cursor, between two statements on a line, and reports one with no statement after it
-/// (`Expressions.statementSeparator`).
+///.
 and private separator (c: Cursor) =
     let semicolon = c.Take()
     if c.Is Semicolon && c.OnSameLine then c.Report c.Start "Two `;` in a row: a `;` separates two statements, so write one between them"
     if not c.OnSameLine || c.Is EndOfFile || c.Is RightBrace || c.Is RightParen || c.Is RightBracket then
         c.Report semicolon.Start "A `;` must have a statement after it: it separates statements, so leave out the one at the end"
 
-/// The statements on one line: one, and then each after a `;` (`Expressions.statementsOnLine`).
+/// The statements on one line: one, and then each after a `;`.
 and private statementsOnLine (c: Cursor) : Statement list =
     let statements = ResizeArray(statementItems c)
     while c.Is Semicolon && c.OnSameLine do
@@ -416,7 +413,7 @@ and private statementsOnLine (c: Cursor) : Statement list =
     List.ofSeq statements
 
 /// A body on the line it starts on: what `value` reads, or a statement that defines a name, and then each statement
-/// after a `;`, which make it a block of them all (`Expressions.sameLineBody`).
+/// after a `;`, which make it a block of them all.
 and internal sameLineBody (c: Cursor) (value: Cursor -> Expression) : Expression =
     let start = c.Start
     let defines = c.IsKeyword "def" || c.IsKeyword "rec" || c.IsKeyword "mut"
@@ -437,7 +434,7 @@ and internal sameLineBody (c: Cursor) (value: Cursor -> Expression) : Expression
         Expression.at (endingAt (List.last statements).Span span) (Block statements)
 
 /// A lambda's body after its `->`, or after its `{` when it has no parameters: statements on the lines after it, any
-/// number at any column until the `}`, or a body on the line (`Expressions.blockBody`).
+/// number at any column until the `}`, or a body on the line.
 and private lambdaBody (c: Cursor) : Expression =
     if c.Is RightBrace then raise NoMatch
     if c.OnSameLine then
@@ -450,13 +447,13 @@ and private lambdaBody (c: Cursor) : Expression =
         let statements = ResizeArray()
         while not (c.Is RightBrace) do
             statements.AddRange(statementsOnLine c)
-            // A statement after another on its line, with no `;` between them, is a mistake the FParsec parser
-            // reports (a name applied to a value, as only a workflow keyword is).
+            // A statement after another on its line, with no `;` between them, is a mistake (a name applied to a
+            // value, as only a workflow keyword is).
             if c.OnSameLine && not (c.Is RightBrace) then c.Fail "a line break or a `;` between statements"
             skipLayout c
         blockOf c start (List.ofSeq statements)
 
-/// A lambda parameter: a name and its type if written, `x` or `x: int` (`Types.typedIdentifier`), noted as declared by
+/// A lambda parameter: a name and its type if written, `x` or `x: int`, noted as declared by
 /// the lambda.
 and private parameter (c: Cursor) (annotation: Cursor -> TypeExpr) : Identifier * TypeExpr option =
     let name, span = identifierWithSpan c
@@ -489,8 +486,8 @@ and private parameters (c: Cursor) : Choice<Identifier * TypeExpr option, Patter
             match c.Attempt(fun () -> bracketedParameter c) with
             | Some named -> Choice1Of2 named
             | None ->
-                // A pattern the descent parser gives up at is no pattern parameter here: the FParsec parser tries the
-                // next reading, a name, as it does after any pattern that fails.
+                // A pattern the parser stops at is no pattern parameter here: the next reading, a name, is tried, as it
+                // is after any pattern that fails.
                 let patternParameter () =
                     let pattern, names =
                         try c.Collecting(fun () -> DescentPatterns.pattern c)
@@ -506,8 +503,8 @@ and private parameters (c: Cursor) : Choice<Identifier * TypeExpr option, Patter
                 | None -> Choice1Of2(parameter c DescentTypes.typeUnion)
     if c.Is Arrow then [] else sepBy1 c one (fun () -> c.Expect Comma |> ignore)
 
-/// What follows `{` and its spaces, as a function of the lambda's span: the forms of `Expressions.lambdaRef`, in its
-/// order.
+/// What follows `{` and its spaces, as a function of the lambda's span: the forms of a lambda, in the order they are
+/// tried.
 and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
     let shorthandOperator () =
         match c.Token with
@@ -647,7 +644,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
                 | Some kind -> kind
                 | None -> withoutParameters ()
 
-/// A lambda, `{ ... }`, with the names its parameters declare (`Expressions.lambdaRef`).
+/// A lambda, `{ ... }`, with the names its parameters declare.
 and lambda (c: Cursor) : Expression =
     let start = c.Start
     let kind, names =

@@ -61,7 +61,7 @@ compiles it.
 1. **In the browser.** .NET compiles to WebAssembly (the `browser-wasm` runtime), so the compiler can run in the same
    worker as the program, or a second one. The site stays static, so Vercel serves it as it serves the docs today.
    It works offline, costs nothing per compile, and has no server to abuse. Diagnostics as you type need no round
-   trip. The cost is the download: the .NET runtime, FSharp.Core, FParsec and the compiler, trimmed, and a slow first
+   trip. The cost is the download: the .NET runtime, FSharp.Core and the compiler, trimmed, and a slow first
    compile. Both are measured below.
 2. **On a server.** A small compile service returns the `.wasm` and the diagnostics. The page stays light, but the
    service needs hosting that runs .NET (Vercel's functions don't), limits on time, memory and request rate, and

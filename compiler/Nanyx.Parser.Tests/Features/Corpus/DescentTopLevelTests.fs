@@ -1,16 +1,9 @@
-/// The recursive-descent parser's top level, at the places where reading it takes care: each file is read as the
-/// FParsec parser reads it, with the same spans (see `DescentCheck.checkModule`).
+/// The top level, at the places where reading it takes care: each file is read with no mistake.
 module Nanyx.Parser.Tests.DescentTopLevelTests
 
 open Xunit
 open Parser.Program
-open Nanyx.Parser
-
-/// How the new parser reads the whole of `source`.
-let private outcomeOf (source: string) =
-    match parseModuleWithTriviaByFParsec "t.nyx" source with
-    | Result.Ok parsed -> DescentCheck.checkModule "t.nyx" parsed
-    | Result.Error error -> failwith error.Message
+open ParserTestHelpers
 
 [<Theory>]
 [<InlineData("module collections.list\n\ndef x = 1\n")>]
@@ -32,14 +25,16 @@ let private outcomeOf (source: string) =
 [<InlineData("module shapes =\n  export type Shape = #circle | #square\n  def area = { s -> 0 }\n\n  module inner =\n    def x = 1\n\ndef y = 2\n")>]
 [<InlineData("::host nanyx.console\n\nprintln(\"hi\")\n")>]
 [<InlineData("use Log(log = { m -> () }) in greet()\n")>]
-let ``A file is read as the FParsec parser reads it`` (source: string) =
-    Assert.Equal(DescentCheck.Same, outcomeOf source)
+let ``A file is read`` (source: string) =
+    readsWhole source
 
 [<Fact>]
 let ``Local types and imports in a block are read`` () =
     let source = "def main = {\n  import math\n  type Pair = (a: int, b: int)\n  def p = Pair(a = 1, b = 2)\n  p.a\n}\n"
-    Assert.Equal(DescentCheck.Same, outcomeOf source)
+    readsWhole source
 
 [<Fact>]
-let ``A match with no arms, which the FParsec parser reads as a name, is left to it`` () =
-    Assert.Equal(DescentCheck.GaveUp "a `match` with no arms, which is a mistake", outcomeOf "def f = { x ->\n  match x\n}\n")
+let ``A match with no arms is a mistake`` () =
+    match parseModuleWithTrivia "t.nyx" "def f = { x ->\n  match x\n}\n" with
+    | Result.Error error -> Assert.Equal(3, error.Span.StartLine + 1)
+    | Result.Ok parsed -> Assert.Fail $"%A{parsed.Items}"

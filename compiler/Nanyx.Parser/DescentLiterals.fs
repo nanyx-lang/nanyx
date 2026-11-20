@@ -1,6 +1,5 @@
-/// The recursive-descent parser's literals: the grammar of `Lexical.fs`'s literals, read from the layout pass's tokens.
-/// The lexer reads a number without its sign, and the FParsec parser reads a sign as part of a literal, so a `+` or `-`
-/// written straight before a number is read with it here.
+/// The recursive-descent parser's literals, read from the layout pass's tokens. The lexer reads a number without its
+/// sign, and a sign is part of a literal, so a `+` or `-` written straight before a number is read with it here.
 module Parser.Program.DescentLiterals
 
 open System
@@ -9,7 +8,7 @@ open Parser.Program.Lexer
 open Parser.Program.Layout
 open Parser.Program.DescentCursor
 
-/// Whether `digits`, a number's digits, have each `_` between two digits, as the FParsec parser requires.
+/// Whether `digits`, a number's digits, have each `_` between two digits.
 let private wellGrouped (digits: string) =
     not (digits.StartsWith "_" || digits.EndsWith "_" || digits.Contains "__")
 
@@ -24,8 +23,8 @@ let private isInteger (text: string) =
     let lower = text.ToLowerInvariant()
     lower.StartsWith "0x" || lower.StartsWith "0o" || lower.StartsWith "0b" || not (text.Contains '.' || lower.Contains 'e')
 
-/// Reports the first run of digits and `_`s in `token`, a number, whose `_` isn't between two digits, as the FParsec
-/// parser's `digitGroups` does: the whole number's digits, then its fraction's, then its exponent's.
+/// Reports the first run of digits and `_`s in `token`, a number, whose `_` isn't between two digits: the whole number's
+/// digits, then its fraction's, then its exponent's.
 let private reportBadGroups (c: Cursor) (token: Token) =
     let text = c.Text token
     let groups =
@@ -86,7 +85,7 @@ let private floatLiteral (c: Cursor) : Literal * SourceSpan =
             // `1.`: the lexer reads the `.` apart, since no digit follows it.
             if not (c.Adjacent && c.Is Dot) then raise NoMatch
             c.Take() |> ignore
-            // `1._5`: the lexer reads `_5` as a name, where the FParsec parser reads the fraction's digits.
+            // `1._5`: the lexer reads `_5` as a name, which is the fraction's digits here.
             match c.Token with
             | Some next when c.Adjacent && next.Kind = Name && (c.Text next).StartsWith "_" ->
                 let written = c.Text next
@@ -115,7 +114,7 @@ let stringLiteral (c: Cursor) : Literal * SourceSpan =
             | None -> reportBadEscape c (token.Start + 1) inner
     StringLit value, c.SpanOf token
 
-/// A literal: an integer, a float, `true` or `false`, or a string with no holes (`Lexical.literalNoWs`).
+/// A literal: an integer, a float, `true` or `false`, or a string with no holes.
 let literal (c: Cursor) : Literal * SourceSpan =
     match c.Attempt(fun () -> intLiteral c) with
     | Some literal -> literal

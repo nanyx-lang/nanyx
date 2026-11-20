@@ -1,4 +1,4 @@
-/// The block structure of a piece of Nanyx, read two ways so that they can be compared: from the FParsec parser's
+/// The block structure of a piece of Nanyx, read two ways so that they can be compared: from the parser's
 /// tree, and from the layout pass's tokens (see `Layout`). Each is a list of groups, a group being the items of one
 /// block written one per line: the offsets they start at. It is how stage 2 of the parser's rewrite is checked (see
 /// the Work in progress page "The parser").
@@ -77,7 +77,7 @@ let private multiBranchArms (source: string) (expr: Expression) =
         | _ -> []
     if isAt expr.Span.Start "if" && isAt (skipSpaces (expr.Span.Start + 2)) "|" then Some(arms expr) else None
 
-/// The groups in the FParsec parser's tree of `parsed`: the top level's items, a module block's, a block's
+/// The groups in the parser's tree of `parsed`: the top level's items, a module block's, a block's
 /// statements, a match's or an `except`'s arms (each where its first pattern starts), a multi-branch `if`'s arms
 /// and a union type's cases.
 let ofTree (parsed: SourceModule) : int list list =

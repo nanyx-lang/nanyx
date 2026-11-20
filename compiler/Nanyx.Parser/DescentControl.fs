@@ -1,6 +1,6 @@
 /// The recursive-descent parser's expressions that start with a keyword: `match`, `if` (with `is`, and with arms),
 /// `for`, `while`, `do`, `use ... in`, the workflow keywords `return`, `try`, `yield` and `name!`, a cell passed as
-/// `mut x`, and a type passed as `type T` (`Expressions.fs`). It fills the forward references the files before it read
+/// `mut x`, and a type passed as `type T`. It fills the forward references the files before it read
 /// through (`Forward`), and has the entry points the corpus check reads with.
 module Parser.Program.DescentControl
 
@@ -37,11 +37,10 @@ let private matchExpression (c: Cursor) =
             [ block ]
         | Code _ when c.OnSameLine -> sepBy1 c (fun () -> expression Crossing c) (fun () -> c.Expect Comma |> ignore)
         | _ -> c.GiveUp "a match's scrutinee the layout pass doesn't open"
-    // With no arms, the FParsec parser reads `match` as a name, and fails after it.
     let written = try arms c with NoMatch -> c.GiveUp "a `match` with no arms, which is a mistake"
     Expression.at (c.SpanFrom start) (Match(scrutinees, written))
 
-/// A branch after `then` or `else`: a block on the lines after it, or a body (`Expressions.ifExpr`'s `branch`).
+/// A branch after `then` or `else`: a block on the lines after it, or a body.
 let private branch (c: Cursor) =
     match c.At 0 with
     | Indent _ ->
@@ -74,7 +73,7 @@ let private desugarIf (span: SourceSpan) head (thenExpr: Expression) (elseOpt: E
     | Choice2Of2(pattern, value) ->
         Expression.at span (Match([ value ], [ [ pattern ], thenExpr; [ Pattern.at elseExpr.Span WildcardPattern ], elseExpr ]))
 
-/// `if head then a else b`, or with arms, `if | head -> a | else -> b`, nested ifs (`Expressions.ifExpr`).
+/// `if head then a else b`, or with arms, `if | head -> a | else -> b`, nested ifs.
 let private ifExpression (c: Cursor) =
     let start = c.Start
     c.Expect(Keyword, "if") |> ignore
@@ -240,14 +239,7 @@ let fill () =
     Forward.keywordExpression.Value <- keywordExpression
     Forward.attributeArgument.Value <- attributeArgument
 
-/// A def's value, read from after its `=`: what is on its line, or the block on the lines after it.
-let defValueAfterEquals (c: Cursor) : Expression =
-    fill ()
-    match c.At -1 with
-    | Indent _ -> indentedBlock c
-    | _ -> DescentExpressions.defValue c
-
-/// A statement's expression, read as `exprWithoutCrossingNewlines` reads it.
+/// A statement's expression, which ends at the end of its line (`Inline`).
 let statementValue (c: Cursor) : Expression =
     fill ()
     expression Inline c

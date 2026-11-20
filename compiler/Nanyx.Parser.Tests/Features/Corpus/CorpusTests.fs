@@ -7,13 +7,12 @@ open Parser.Program
 open Nanyx.Parser
 open Nanyx.Parser.Corpus
 
-/// Each piece of the corpus with its parse by the FParsec parser, the reference the recursive-descent parser is held
-/// to while both exist, parsed once, in parallel, for every test that reads it.
+/// Each piece of the corpus with its parse, parsed once, in parallel, for every test that reads it.
 let private parses =
     lazy
         (Corpus.all.Value
          |> Array.ofList
-         |> Array.Parallel.map (fun piece -> piece, parseModuleWithTriviaByFParsec piece.Name piece.Source)
+         |> Array.Parallel.map (fun piece -> piece, parseModuleWithTrivia piece.Name piece.Source)
          |> List.ofArray)
 
 [<Fact>]
@@ -100,9 +99,8 @@ let ``The parser reads the whole corpus the same way every time`` () =
     let found = Differential.differences parseModuleWithTrivia parseModuleWithTrivia pieces
     Assert.True(found.IsEmpty, Differential.report 10 pieces.Length found)
 
-/// The pieces whose block structure the layout pass reads differently from the FParsec parser on purpose, each named
-/// by its file and its first line, with why. None is a program: the FParsec parser takes their lines in a way the
-/// layout rules don't (see the Work in progress page "The parser").
+/// The pieces whose block structure the layout pass reads differently from the tree on purpose, each named by its file
+/// and its first line, with why. None is a program.
 let private layoutDifferences =
     [ "SelectionRangeTests.fs", "def side = max(s, 2)", "a fragment whose top-level items are at different columns"
       "SelectionRangeTests.fs", "def side = s", "a fragment whose top-level items are at different columns"
@@ -137,104 +135,3 @@ let ``The layout pass gives every piece that parses the block structure the pars
     let stillDiffering =
         compared |> Array.choose (fun (piece, same, _) -> if same then None else knownLayoutDifference piece) |> Set.ofArray
     Assert.Equal<string list>([], layoutDifferences |> List.filter (stillDiffering.Contains >> not) |> List.map (fun (file, first, _) -> $"{file}: {first}"))
-
-[<Fact>]
-let ``The recursive-descent parser reads every type it reads as the FParsec parser does`` () =
-    let outcomes =
-        parses.Value
-        |> Array.ofList
-        |> Array.Parallel.collect (fun (piece, parse) ->
-            match parse with
-            | Result.Error _ -> [||]
-            | Result.Ok parsed ->
-                let roots = DescentCheck.typeRoots parsed
-                DescentCheck.checkTypes piece.Name parsed roots |> List.map (fun outcome -> piece.Name, outcome) |> Array.ofList)
-    let differing =
-        outcomes |> Array.choose (function
-            | name, DescentCheck.Differs(fparsec, descent) -> Some $"{name}:\n--- FParsec\n{fparsec}--- descent\n{descent}"
-            | _ -> None)
-    Assert.True(outcomes.Length > 5000, $"Only {outcomes.Length} types are compared")
-    Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} types differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
-    let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
-    Assert.Equal<string array>([||], gaveUp)
-
-[<Fact>]
-let ``The recursive-descent parser reads every pattern it reads as the FParsec parser does`` () =
-    let outcomes =
-        parses.Value
-        |> Array.ofList
-        |> Array.Parallel.collect (fun (piece, parse) ->
-            match parse with
-            | Result.Error _ -> [||]
-            | Result.Ok parsed ->
-                let roots = DescentCheck.patternRoots parsed
-                DescentCheck.checkPatterns piece.Name parsed roots |> List.map (fun outcome -> piece.Name, outcome) |> Array.ofList)
-    let differing =
-        outcomes |> Array.choose (function
-            | name, DescentCheck.Differs(fparsec, descent) -> Some $"{name}:\n--- FParsec\n{fparsec}--- descent\n{descent}"
-            | _ -> None)
-    Assert.True(outcomes.Length > 3500, $"Only {outcomes.Length} patterns are compared")
-    Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} patterns differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
-    let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
-    Assert.Equal<string array>([||], gaveUp)
-
-[<Fact>]
-let ``The recursive-descent parser reads every expression it reads as the FParsec parser does`` () =
-    let outcomes =
-        parses.Value
-        |> Array.ofList
-        |> Array.Parallel.collect (fun (piece, parse) ->
-            match parse with
-            | Result.Error _ -> [||]
-            | Result.Ok parsed ->
-                let roots = DescentCheck.expressionRoots parsed
-                DescentCheck.checkExpressions piece.Name parsed roots |> List.map (fun outcome -> piece.Name, outcome) |> Array.ofList)
-    let differing =
-        outcomes |> Array.choose (function
-            | name, DescentCheck.Differs(fparsec, descent) -> Some $"{name}:\n--- FParsec\n{fparsec}--- descent\n{descent}"
-            | _ -> None)
-    Assert.True(outcomes.Length > 15000, $"Only {outcomes.Length} expressions are compared")
-    Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} expressions differ:\n\n" + (differing |> Array.truncate 5 |> String.concat "\n\n"))
-    // It gives up only at what the FParsec parser reads only to report it, or reads leniently.
-    let laterParts =
-        set [ "a `match` with no arms, which is a mistake"; "a hole that doesn't read, which the FParsec parser reads as text" ]
-    let isLater (reason: string) = laterParts.Contains reason
-    let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
-    Assert.Equal<string array>([||], gaveUp |> Array.filter (isLater >> not))
-
-[<Fact>]
-let ``The recursive-descent parser reads every file it reads as the FParsec parser does, with the same side state`` () =
-    // The items, and what each parser keeps beside them, which `parse` returns: the names nodes declare, where
-    // documentable constructs start, module blocks, comments and string texts.
-    let outcomes =
-        Corpus.all.Value
-        |> Array.ofList
-        |> Array.Parallel.choose (fun piece ->
-            DescentCheck.checkModuleWithState piece.Name piece.Source |> Option.map (fun outcome -> piece.Name, outcome))
-    let differing =
-        outcomes |> Array.choose (function
-            | name, DescentCheck.Differs(fparsec, descent) -> Some $"{name}:\n--- FParsec\n{fparsec}--- descent\n{descent}"
-            | _ -> None)
-    Assert.True(differing.Length = 0, $"{differing.Length} of {outcomes.Length} files differ:\n\n" + (differing |> Array.truncate 3 |> String.concat "\n\n"))
-    // It gives up only at what the FParsec parser reads only by reading a keyword as a name or a string's hole as text,
-    // in fixtures written to be mistakes.
-    let gaveUp = outcomes |> Array.choose (function _, DescentCheck.GaveUp reason -> Some reason | _ -> None) |> Array.distinct |> Array.sort
-    Assert.Equal<string array>(
-        [| "a `match` with no arms, which is a mistake"; "a hole that doesn't read, which the FParsec parser reads as text" |],
-        gaveUp)
-    let same = outcomes |> Array.filter (snd >> (=) DescentCheck.Same) |> Array.length
-    Assert.True(same > outcomes.Length - 10, $"Only {same} of {outcomes.Length} files are read with no fallback")
-
-[<Fact>]
-let ``The recursive-descent parser gives up wherever the FParsec parser reports a mistake`` () =
-    // `parse` reads with the recursive-descent parser and falls back to the FParsec parser where it gives up, so that a
-    // mistake is still reported, as the FParsec parser reports it. A piece the FParsec parser rejects and the new
-    // parser reads would lose its error.
-    let lenient =
-        Corpus.all.Value
-        |> Array.ofList
-        |> Array.Parallel.choose (fun piece ->
-            match readWithBothParsers piece.Name piece.Source with
-            | Result.Error _, Result.Ok _ -> Some piece.Name
-            | _ -> None)
-    Assert.Equal<string array>([||], lenient)

@@ -1,87 +1,45 @@
 ---
 title: "The parser"
-description: "The parser corpus, the differential test, the lexer, the layout pass and the recursive-descent parser so far"
+description: "The lexer, the layout pass and the recursive-descent parser, how they report mistakes and read past them, and the corpus they are tested on"
 order: 12
 ---
 
-The parser (`compiler/Nanyx.Parser`) is written with [FParsec](https://www.quanttec.com/fparsec/) combinators. It is to
-move to a lexer and a hand-written recursive-descent parser, in the stages [The parser](../work-in-progress/parser) in
-Work in progress describes. This page says what stages 0 to 2 built, and what stage 3 has built so far:
+The parser (`compiler/Nanyx.Parser`) reads a file in three steps: a lexer turns the text into tokens, a layout pass
+makes the block structure that indentation gives them explicit, and a hand-written recursive-descent parser reads the
+tokens into the syntax tree (`Ast.fs`). [The parser](../work-in-progress/parser) in Work in progress says what is still
+open.
 
-- **The corpus** (`Corpus.fs` in `compiler/Nanyx.Parser.Corpus`, a library only the test projects reference): every
-  `.nyx` file in the repository, every ` ```nanyx ` block in the docs, and every triple-quoted string in the test
-  projects' sources. The formatter's corpus tests read it too. Listing it never enters `bin`, `obj`, `node_modules`,
-  `.git` or `.claude`, so a checkout's worktrees cost nothing. Each test project parses the corpus once, in parallel,
-  in a value its tests share, and the formatter's tests format and re-parse each piece once the same way.
-- **The differential test** (`Differential.fs`, with `CorpusTests.fs` in the parser's tests). It parses each piece with
-  two parsers, in parallel, writes each result out with every span and without node ids (`SyntaxDump.fs`, which walks the tree by
-  reflection), and reports the pieces whose trees, comments, blank lines or errors differ, each at its first
-  differing line. Until there is a second parser it runs today's parser against itself. Every later stage is checked
-  by it.
 - **The lexer** (`Lexer.fs`): text in, tokens out, each with its offsets and its leading and trailing trivia, lossless
   whatever the text. A string with holes is a `StringStart`, the hole's tokens, a `StringMiddle` between holes and a
-  `StringEnd`. Operators come from `Operators.binaryOperators`, and keywords from `Keywords.reserved`. The FParsec
-  parser doesn't use it yet. `CorpusTests.fs` checks that every piece of the corpus is written back exactly from its
-  tokens, and that every piece the parser reads lexes with no error and has exactly the comments the parser finds.
+  `StringEnd`. Operators come from `Operators.binaryOperators`, and keywords from `Keywords.reserved`, the one list of
+  reserved words, so a keyword is never read as part of a longer name.
 - **The layout pass** (`Layout.fs`): the lexer's tokens in, the same tokens out with `Indent`, `Newline` and `Dedent`
-  among them, each at the offset of the code token after it, by the rules below. The FParsec parser doesn't use it
-  yet. `CorpusTests.fs` checks that it gives every piece of the corpus that parses the block structure the parser
-  gives it (`BlockStructure.fs` in the corpus project): from the tree, the items of each block, module block, match,
-  `except`, multi-branch `if` and union type, and from the layout tokens, the items of each block they make, each as
-  the offset it starts at, keeping only the items that start their line and the groups of two items or more. A few
-  pieces differ on purpose, each listed with why in the test: where the two read text differently is listed in
-  [The parser](../work-in-progress/parser) in Work in progress.
-- **The recursive-descent parser** (`DescentCursor.fs` and a file per part of the grammar, so far `DescentTypes.fs`,
+  among them, each at the offset of the code token after it, by the rules below. The parser never measures
+  indentation itself.
+- **The recursive-descent parser** (`DescentCursor.fs` and a file per part of the grammar: `DescentTypes.fs`,
   `DescentLiterals.fs`, `DescentPatterns.fs`, `DescentExpressions.fs`, `DescentBlocks.fs`, `DescentControl.fs` and
-  `DescentTopLevel.fs`):
-  the FParsec parser's grammar read from the layout pass's tokens. `DescentCursor` has the cursor, which reads the
-  tokens and goes back for an alternative (`NoMatch`, which `Cursor.Attempt` catches, as FParsec's `attempt` and `<|>`
-  do), and the names and documentable starts the FParsec parser keeps in `ParseState`. At anything it doesn't read yet,
-  and at any mistake, it gives up (`GiveUp`) and the FParsec parser reads the text instead, so that errors are still
-  reported as they were. It reads types, with a field's default and attribute read as expressions, and gives up at a
-  `where` constraint. `parseTypeSignature`, which `nanyx search` reads a query's type with, uses it. `CorpusTests.fs`
-  checks it against the FParsec parser on every def's annotation and type definition's body in the corpus
-  (`DescentCheck.fs` in the corpus project): each must read to the same tree with the same spans, or give up at an
-  expression. It reads literals as the FParsec parser does, with a `+` or `-` written straight before a number as its
-  sign and `1.` as a float, though the lexer reads both apart. It reads patterns, trying the alternatives in the
-  FParsec parser's order, with a guard's lambda and a custom pattern's arguments read as expressions. `CorpusTests.fs`
-  checks it on every pattern of every match arm in the corpus, and
-  `DescentPatternTests.fs` on the places where reading one takes care. It reads expressions: literals, strings with
-  holes, names (a keyword that doesn't start a construct of its own is a name, as `identifierNoWs` reads it), calls,
-  tags, member access, `with`, tuples, records, lists and maps, the prefix `not` and `-`, pipes, `:=`, and the binary
-  operators and ranges by precedence climbing over `binaryOperators`, giving up where two operators can't be written
-  side by side. It reads as either of the FParsec parser's operator tables does (`Lines`): `Crossing` goes on after an
-  operator at the end of a line, and `Inline`, for a statement, doesn't. `DescentBlocks.fs` reads lambdas, a def's
-  value written as an indented block, a match's arms, and the statements of a block: `def`, `export def`, `rec`, `mut`,
-  `use`, attributes, destructuring defs (desugared by `Destructuring.fs`'s helpers, which both parsers share) and
-  expressions, several on a line after `;`. A lambda's statements are any number at any column until its
-  `}`, as the FParsec parser reads them, and a block's run from the `Indent` that opens it to the `Dedent` that closes
-  it, with a line indented further that its statement before didn't take as a statement of its own. Arms run as the
-  layout pass lays them out, but a first arm on the line after, at the column of an enclosing match's arms, takes the
-  arms after it at that column, as the FParsec parser's `firstArmIndent` does. `DescentControl.fs` reads what starts
-  with a keyword: `match`, `if` (with `is`, and with arms), `for`, `while`, `do`, `use ... in`, `return`, `try`,
-  `yield` and `name!`, `mut x` as an argument and `type T`. The files before it read lambdas, expressions, arms and
-  these through forward references (`DescentCursor.Forward`), which `DescentControl.fill` fills, as the FParsec parser's
-  `Refs.fs` are. A type's field defaults and attributes, and a table literal, are read too. `DescentTopLevel.fs` reads
-  a whole file (`readModule`), with its directives blanked as the FParsec parser has them: a module declaration and
-  `module name =` blocks (whose items are the lines at the first item's column, as the FParsec parser reads them),
-  imports and re-exports, attributes, type and context definitions with their modifiers, parameters and `where`, pattern
-  definitions, defs and foreign declarations, destructuring defs, which are tried before any other item as they are in
-  the FParsec parser, and a script's expressions; and a block's `import`s and local types, through `Forward`.
-  `CorpusTests.fs` checks every file of the corpus whole against the FParsec parser's items, and it checks it on
-  every def's value and every statement in the corpus, and `DescentExpressionTests.fs`, `DescentBlockTests.fs` and
-  `DescentControlTests.fs` and `DescentTopLevelTests.fs` on the places where reading one takes care.
-  `Api.runModuleParser`, which every parse goes through, reads with it (`DescentTopLevel.tryReadModuleWithState`, which
-  gives the items and the `ParseState` the FParsec parser would keep beside them: the names nodes declare from the
-  cursor, comments from the lexer's trivia), and reports what it gives up at as the syntax error.
-- **Its errors.** A mistake the FParsec parser has a message of its own for is reported with that message where it
-  is (`Reported`, raised by `Cursor.Report`, as the FParsec parser's `reportFocused` is): an operator that isn't
-  spaced, `&&`, a prefix `!`, two operators that can't be written side by side, a `$` before a type's name, an escape
-  that isn't one, a `_` not between two digits, and the rest. The lexer's own mistakes (a string or a block comment
-  never closed) are reported as the lexer words them. Anything else is reported where the furthest reading failed,
-  as what was expected there and what was found (`Cursor.Unexpected`): each reading notes what it expected when it
-  fails (`Cursor.Fail`, and `Cursor.Expect` for a token), and those at the furthest token are listed, as FParsec
-  merges its errors at the furthest position.
+  `DescentTopLevel.fs`). `DescentCursor` has the cursor, which reads the layout pass's tokens and goes back for an
+  alternative (`NoMatch`, which `Cursor.Attempt` catches), and the side state kept beside the tree (`ParseState`): the
+  names nodes declare, where documentable constructs start, `module name =` blocks, comments from the lexer's trivia,
+  and string texts. The files read, in order: types, with a field's default and a `where` constraint read as
+  expressions; literals, with a `+` or `-` written straight before a number as its sign and `1.` as a float, though the
+  lexer reads both apart; patterns, with a guard's lambda and a custom pattern's arguments read as expressions;
+  expressions, with the binary operators and ranges read by precedence climbing over `binaryOperators`, either going
+  on after an operator at the end of a line (`Crossing`) or, for a statement, not (`Inline`); lambdas, a def's value
+  written as an indented block, a match's arms and the statements of a block, with destructuring defs desugared by
+  `Destructuring.fs`; what starts with a keyword (`match`, `if`, `for`, `while`, `do`, `use ... in`, `return`, `try`,
+  `yield`, `name!`, `mut x` as an argument and `type T`); and the top level, with its directives blanked
+  (`Directives.fs`). The files before `DescentControl.fs` read lambdas, expressions, arms and what starts with a keyword
+  through forward references (`DescentCursor.Forward`), which `DescentTopLevel.fill` fills before anything is read.
+  `Api.runModuleParser` reads a whole file (`DescentTopLevel.tryReadModuleWithState`), and `parseTypeSignature`, which
+  `nanyx search` reads a query's type with, reads a type alone (`DescentTypes.readTypeSignature`).
+- **Its errors.** A mistake the parser has a message of its own for is reported with that message where it is
+  (`Reported`, raised by `Cursor.Report`): an operator that isn't spaced, `&&`, a prefix `!`, two operators that can't
+  be written side by side, a `$` before a type's name, an escape that isn't one, a `_` not between two digits, and the
+  rest. The lexer's own mistakes (a string or a block comment never closed) are reported as the lexer words them.
+  Anything else is reported where the furthest reading failed, as what was expected there and what was found
+  (`Cursor.Unexpected`): each reading notes what it expected when it fails (`Cursor.Fail`, and `Cursor.Expect` for a
+  token), and those at the furthest token are listed.
 - **Reading past mistakes.** The compiler reads a file with `Api.parseModuleFileWithDocsRecovering`
   (`DescentTopLevel.readModuleRecovering`), which goes on after a mistake: the top-level item it is in is left out,
   the error is noted, and reading goes on at the first line after the item's start, from the error's line on, that
@@ -91,14 +49,23 @@ Work in progress describes. This page says what stages 0 to 2 built, and what st
   hover, completion and the outline around the mistake, but only the syntax errors are reported (`compileChecked`), as
   the errors that come of the items left out aren't the user's to fix, and the module can't be run or imported. The
   language server reads such a compile only when no earlier text of the file parsed (`OpenDocument.LastGood`): while
-  the user is typing, the item being typed is the one left out, and the last text that parsed still has it.
-- **The FParsec parser behind a switch.** With the environment variable `NANYX_PARSER` set to `fparsec`, every parse
-  reads with the FParsec parser instead, as before the new one, for a release, so that a regression can be checked
-  against it; stage 6 of [The parser](../work-in-progress/parser) removes it, and the switch with it. The corpus
-  check reads with it whatever the switch says (`Api.parseModuleWithTriviaByFParsec`): `CorpusTests.fs` checks the
-  two read every piece the same, side state included (`DescentCheck.checkModuleWithState`, through
-  `Api.readWithBothParsers`), and that the new parser fails on every piece the FParsec parser rejects, so that no
-  mistake it reported reads without one.
+  the user is typing, the item being typed is the one left out, and the last text that parsed still has it. The
+  formatter reads with `parseModuleWithTrivia`, which stops at the first mistake, and leaves a file with one alone.
+- **The corpus** (`Corpus.fs` in `compiler/Nanyx.Parser.Corpus`, a library only the test projects reference): every
+  `.nyx` file in the repository, every ` ```nanyx ` block in the docs, and every triple-quoted string in the test
+  projects' sources. The formatter's corpus tests read it too. Listing it never enters `bin`, `obj`, `node_modules`,
+  `.git` or `.claude`, so a checkout's worktrees cost nothing. Each test project parses the corpus once, in parallel,
+  in a value its tests share, and the formatter's tests format and re-parse each piece once the same way.
+  `CorpusTests.fs` checks that every piece is written back exactly from its tokens, that every piece that parses lexes
+  with no error, and that the layout pass gives every piece that parses the block structure its tree has
+  (`BlockStructure.fs`: the items of each block, module block, match, `except`, multi-branch `if` and union type, each
+  as the offset it starts at, keeping only the items that start their line and the groups of two items or more). A
+  few pieces differ on purpose, each listed with why in the test.
+- **The differential test** (`Differential.fs`, with `CorpusTests.fs` in the parser's tests). It parses each piece with
+  two parsers, in parallel, writes each result out with every span and without node ids (`SyntaxDump.fs`, which walks
+  the tree by reflection), and reports the pieces whose trees, comments, blank lines or errors differ, each at its
+  first differing line. It runs the parser against itself, so that a parse that depends on anything but its text
+  shows up, and is there for a change to the parser to be checked against the parser before it.
 
 # The layout rules
 

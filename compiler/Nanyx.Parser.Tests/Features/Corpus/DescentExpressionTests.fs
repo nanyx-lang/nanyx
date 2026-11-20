@@ -1,16 +1,9 @@
-/// The recursive-descent parser's expressions, at the places where reading them takes care: each is read as the FParsec
-/// parser reads it, with the same spans (see `DescentCheck.checkExpressions`).
+/// Expressions, at the places where reading them takes care: each is read with no mistake.
 module Nanyx.Parser.Tests.DescentExpressionTests
 
 open Xunit
 open Parser.Program
-open Nanyx.Parser
-
-/// How the new parser reads each def's value and each statement of `source`.
-let private outcomesIn (source: string) =
-    match parseModuleWithTriviaByFParsec "t.nyx" source with
-    | Result.Ok parsed -> DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
-    | Result.Error error -> failwith error.Message
+open ParserTestHelpers
 
 [<Theory>]
 [<InlineData("1 + 2 * 3 ** 2 ** 2")>]
@@ -55,39 +48,31 @@ let private outcomesIn (source: string) =
 [<InlineData("pattern(with, in)")>]
 [<InlineData("???")>]
 [<InlineData("1, 2")>]
-let ``A def's value is read as the FParsec parser reads it`` (value: string) =
-    Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], outcomesIn $"def v = {value}\n")
+let ``A def's value is read`` (value: string) =
+    readsWhole $"def v = {value}\n"
 
 [<Fact>]
 let ``A def's value may go on after an operator at the end of its line, and a pipe on any line after`` () =
     let source = "def v = a +\n  b *\n  c\n  \\f\n"
-    Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], outcomesIn source)
+    readsWhole source
 
 [<Fact>]
 let ``A statement stops at the end of its line, but for a pipe or an assignment`` () =
     let source = "def f = { x ->\n  g(x)\n    \\h\n  total := total + 1\n  a + b\n}\n"
-    Assert.Equal<DescentCheck.Outcome list>(List.replicate 3 DescentCheck.Same, outcomesIn source |> List.skip 1)
+    readsWhole source
 
 [<Fact>]
 let ``Fields written one per line need no commas`` () =
     let source = "def v = Point(\n  x = 1\n  y = 2\n)\n"
-    Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], outcomesIn source)
+    readsWhole source
 
-[<Theory>]
-[<InlineData("a < b < c", "two operators that can't be written side by side, which is a mistake")>]
-let ``An expression the descent parser doesn't read is left to the FParsec parser`` (value: string, reason: string) =
-    let source = $"def v = {value}\n"
-    match parseModuleWithTriviaByFParsec "t.nyx" source with
-    | Result.Ok parsed ->
-        let outcomes = DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
-        Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.GaveUp reason ], outcomes)
-    | Result.Error _ -> Assert.Equal("a < b < c", value)
+[<Fact>]
+let ``Two operators that can't be written side by side are a mistake`` () =
+    match parseModuleWithTrivia "t.nyx" "def v = a < b < c\n" with
+    | Result.Error error -> Assert.Equal((1, 15), (error.Span.StartLine + 1, error.Span.StartColumn + 1))
+    | Result.Ok parsed -> Assert.Fail $"%A{parsed.Items}"
 
 [<Fact>]
 let ``A type's field defaults and attributes are read as expressions`` () =
     let source = "type Options = (\n  retries: int = 3\n  @customKeywordType(#bind)\n  bind: () -> () = { () }\n  label: string = \"x {retries}\"\n)\n"
-    match parseModuleWithTriviaByFParsec "t.nyx" source with
-    | Result.Ok parsed ->
-        let roots = DescentCheck.typeRoots parsed
-        Assert.Equal<DescentCheck.Outcome list>([ DescentCheck.Same ], DescentCheck.checkTypes "t.nyx" parsed roots)
-    | Result.Error error -> failwith error.Message
+    readsWhole source

@@ -10,16 +10,8 @@ module Compiler =
     let private normalizeSource (source: string) =
         source.Replace("\r\n", "\n").Replace("\r", "\n")
 
-    /// The diagnostic for a failed parse. FParsec's report starts by giving the file and position ("Error in path:
-    /// Ln: 1 Col: 5"), which the diagnostic's span already gives. FParsec wraps that line when the path is long, so
-    /// it is cut off through the position, not at the first line break.
-    let syntaxError (error: ParseError) =
-        let column = error.Message.IndexOf(" Col: ", System.StringComparison.Ordinal)
-        let lineEnd = if column < 0 then -1 else error.Message.IndexOf('\n', column)
-        let message =
-            if error.Message.StartsWith "Error in " && lineEnd >= 0 then error.Message.Substring(lineEnd + 1)
-            else error.Message
-        Diagnostics.at DiagnosticCodes.SyntaxError error.Span message
+    /// The diagnostic for a failed parse.
+    let syntaxError (error: ParseError) = Diagnostics.at DiagnosticCodes.SyntaxError error.Span error.Message
 
     /// The diagnostics for the parse of `source`, the file `filePath`, failing with `error`: each character that looks
     /// like one Nanyx reads and isn't that it fails at, and then the syntax error it fails with next, if any (see
@@ -40,24 +32,23 @@ module Compiler =
     /// syntax errors found, which may be none (see `parseModuleFileWithDocsRecovering`), or the errors for contexts
     /// joined with `&` or `+` rather than separated by `,` (see `ContextSeparators`), after the syntax errors.
     let private parseWithDocs (filePath: string) (source: string) =
-        match parseModuleFileWithDocsRecovering filePath source with
-        | Result.Ok ((((items, _, _), _) as parsed), errors) ->
-            // An error at a character an earlier look-alike's fix rewrites, as the second of a pair of curly quotes
-            // is, is that diagnostic's.
-            let fixedBy (diagnostic: Diagnostic) (error: ParseError) =
-                diagnostic.Fixes |> List.exists (fun fix -> fix.Edits |> List.exists (fun edit -> edit.Span.Start <= error.Span.Start && error.Span.Start < edit.Span.End))
-            let syntax =
-                errors
-                |> List.fold
-                    (fun (found: Diagnostic list) error ->
-                        if found |> List.exists (fun diagnostic -> fixedBy diagnostic error) then found
-                        else found @ syntaxErrors filePath source error)
-                    []
-                |> List.distinctBy (fun diagnostic -> diagnostic.Code, diagnostic.Span)
-            match ContextSeparators.check (normalizeSource source) items with
-            | [] -> Ok (parsed, syntax)
-            | separators -> Error (syntax @ separators)
-        | Result.Error err -> Error (syntaxErrors filePath source err)
+        let (items, _, _) as parsedModule, docComments, errors = parseModuleFileWithDocsRecovering filePath source
+        let parsed = parsedModule, docComments
+        // An error at a character an earlier look-alike's fix rewrites, as the second of a pair of curly quotes
+        // is, is that diagnostic's.
+        let fixedBy (diagnostic: Diagnostic) (error: ParseError) =
+            diagnostic.Fixes |> List.exists (fun fix -> fix.Edits |> List.exists (fun edit -> edit.Span.Start <= error.Span.Start && error.Span.Start < edit.Span.End))
+        let syntax =
+            errors
+            |> List.fold
+                (fun (found: Diagnostic list) error ->
+                    if found |> List.exists (fun diagnostic -> fixedBy diagnostic error) then found
+                    else found @ syntaxErrors filePath source error)
+                []
+            |> List.distinctBy (fun diagnostic -> diagnostic.Code, diagnostic.Span)
+        match ContextSeparators.check (normalizeSource source) items with
+        | [] -> Ok (parsed, syntax)
+        | separators -> Error (syntax @ separators)
 
     /// The source of the file at `filePath` parsed, or the errors it has (see `parseWithDocs`).
     let private parseWithDiagnostics (filePath: string) (source: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, Diagnostic list> =

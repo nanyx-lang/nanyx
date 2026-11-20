@@ -14,13 +14,8 @@
     <Compile Include="Operators.fs" />
     <Compile Include="StringEscapes.fs" />
     <Compile Include="ParseState.fs" />
-    <Compile Include="Lexical.fs" />
-    <Compile Include="Refs.fs" />
-    <Compile Include="Patterns.fs" />
-    <Compile Include="Types.fs" />
+    <Compile Include="ImplicitNames.fs" />
     <Compile Include="ModuleBlocks.fs" />
-    <Compile Include="Mutation.fs" />
-    <Compile Include="OperatorTables.fs" />
     <Compile Include="SourceTrivia.fs" />
     <Compile Include="Destructuring.fs" />
     <Compile Include="Directives.fs" />
@@ -34,16 +29,10 @@
     <Compile Include="DescentBlocks.fs" />
     <Compile Include="DescentControl.fs" />
     <Compile Include="DescentTopLevel.fs" />
-    <Compile Include="Expressions.fs" />
-    <Compile Include="TopLevel.fs" />
     <Compile Include="DocComments.fs" />
     <Compile Include="Confusables.fs" />
     <Compile Include="Api.fs" />
     <Compile Include="DataValues.fs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="FParsec" Version="1.1.1" />
   </ItemGroup>
 
 </Project>

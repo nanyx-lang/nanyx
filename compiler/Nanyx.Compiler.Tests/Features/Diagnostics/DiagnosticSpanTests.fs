@@ -109,7 +109,6 @@ let ``A parse error has a code and the position where parsing failed`` () =
 
 [<Fact>]
 let ``A parse error's message leaves out the file however long its path is`` () =
-    // The FParsec parser wraps the line naming the file and position when the path is long.
     withTempDir (fun root ->
         let directory = Path.Combine(root, String.replicate 6 "a-rather-long-directory-name-")
         Directory.CreateDirectory directory |> ignore

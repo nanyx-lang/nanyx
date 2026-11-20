@@ -1,22 +1,11 @@
-/// The recursive-descent parser's lambdas, blocks and statements, at the places where reading them takes care: each is
-/// read as the FParsec parser reads it, with the same spans (see `DescentCheck.checkExpressions`).
+/// Lambdas, blocks and statements, at the places where reading them takes care: each is read with no mistake.
 module Nanyx.Parser.Tests.DescentBlockTests
 
 open Xunit
 open Parser.Program
-open Nanyx.Parser
+open ParserTestHelpers
 
-/// How the new parser reads each def's value and each statement of `source`.
-let private outcomesIn (source: string) =
-    match parseModuleWithTriviaByFParsec "t.nyx" source with
-    | Result.Ok parsed -> DescentCheck.checkExpressions "t.nyx" parsed (DescentCheck.expressionRoots parsed)
-    | Result.Error error -> failwith error.Message
-
-/// Each outcome of `source` is the same tree.
-let private allSame (source: string) =
-    let outcomes = outcomesIn source
-    Assert.NotEmpty(outcomes)
-    Assert.Equal<DescentCheck.Outcome list>(List.replicate outcomes.Length DescentCheck.Same, outcomes)
+let private allSame (source: string) = readsWhole source
 
 [<Theory>]
 [<InlineData("{ }")>]
@@ -45,7 +34,7 @@ let private allSame (source: string) =
 [<InlineData("f(1) { x -> x }")>]
 [<InlineData("f(1, y = 2) { x -> x }")>]
 [<InlineData("f() { x -> x }")>]
-let ``A lambda on one line is read as the FParsec parser reads it`` (value: string) =
+let ``A lambda on one line is read`` (value: string) =
     allSame $"def v = {value}\n"
 
 [<Fact>]
@@ -70,7 +59,7 @@ let ``Lambdas nest in arguments over several lines`` () =
 [<InlineData("{ context l, (a, b) -> a }")>]
 [<InlineData("{ (x: int): int -> x }")>]
 [<InlineData("{ x: int, y: int: int -> x + y }")>]
-let ``A lambda that names its context's instance or writes its result type is read as the FParsec parser reads it`` (value: string) =
+let ``A lambda that names its context's instance or writes its result type is read`` (value: string) =
     allSame $"def v = {value}\n"
 
 [<Fact>]
@@ -90,5 +79,5 @@ let ``A table literal is the list of a record for each row`` () =
 [<InlineData("{ | 0 -> 1 | n -> n }")>]
 [<InlineData("{ m, f ->\n  | #some(v), _ -> f(v)\n  | other, _ -> other\n}")>]
 [<InlineData("{ a, b -> | 0, _ -> b | _, _ -> a }")>]
-let ``A lambda of match arms is read as the FParsec parser reads it`` (value: string) =
+let ``A lambda of match arms is read`` (value: string) =
     allSame $"def v = {value}\n"

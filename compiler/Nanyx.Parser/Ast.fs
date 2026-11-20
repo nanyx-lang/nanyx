@@ -1,7 +1,6 @@
 namespace Parser.Program
 
 open System
-open FParsec
 
 // AST Types - Simplified for basic parsing
 type Identifier = string

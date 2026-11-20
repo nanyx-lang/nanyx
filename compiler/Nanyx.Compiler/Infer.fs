@@ -192,7 +192,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     // under, which must be in scope by its name.
     | IdentifierExpr name
     | FunctionCall(name, _, _) when WorkflowMembers.isMissing env state expr.Id name -> Error [ WorkflowMembers.missing state expr.Id name ]
-    | IdentifierExpr name when name = Parser.Program.Expressions.notImplemented ->
+    | IdentifierExpr name when name = Parser.Program.ImplicitNames.notImplemented ->
         Error [ Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "Not implemented: `???` stands for code not written yet" ]
     | IdentifierExpr name ->
         match TypeEnv.tryFind name env with

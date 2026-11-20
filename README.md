@@ -116,7 +116,7 @@ Nanyx is under active development and the language is still changing, so contrib
 
 | Path | Contents |
 |---|---|
-| `compiler/` | The compiler: an F# parser (FParsec), type checker and WebAssembly backend, a C# CLI (`nanyx`), and the runtime that embeds Wasmtime |
+| `compiler/` | The compiler: an F# parser (a lexer and a recursive-descent parser), type checker and WebAssembly backend, a C# CLI (`nanyx`), and the runtime that embeds Wasmtime |
 | `docs/` | The documentation site, built with Astro |
 | `examples/` | Example Nanyx programs, also rendered into the docs |
 | `extension/` | The VS Code extension and its language server |

@@ -2,80 +2,26 @@
 [<AutoOpen>]
 module Parser.Program.Api
 
-open System
-open FParsec
-// After the libraries, so that the parser's names shadow theirs (identifier, Attribute) as they did in one file.
 open Parser.Program
 
 let internal normalizeSource (input: string) =
     input.Replace("\r\n", "\n").Replace("\r", "\n").TrimEnd()
 
-/// Parses normalised source with the FParsec parser, returning the top-level items as written and the final state.
-let private runFParsec (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
-    let initialState = ParseState.empty ()
-    // A parse fails at a point: its span is the character there, or nothing at the end of the input.
-    let errorAt (position: Position) message =
-        { Message = message
-          Span = spanOf position (min normalized.Length (int position.Index + 1)) }
-    let reportAt position messages =
-        use stream = new CharStream<unit>(normalized, 0, normalized.Length)
-        stream.Name <- filePath
-        Result.Error (errorAt position (ParserError(position, null, messages).ToString stream))
-    match runParserOnString moduleParser initialState filePath (Directives.blank normalized) with
-    // An operator written without a space on each side is parsed as if it were spaced, and reported once the parse is
-    // done (see `ParseState.MisspacedOperator`), so that no other reading of the text hides it.
-    | _ when initialState.MisspacedOperator.Value.IsSome ->
-        let position, message = initialState.MisspacedOperator.Value.Value
-        reportAt position (ErrorMessageList(ErrorMessage.Message message))
-    | ParserResult.Success(result, state, _) -> Result.Ok (result, state)
-    // A directive after the code has started is not skipped, and fails where it starts.
-    | ParserResult.Failure(_, error, _) when error.Position.Column = 1L && String.CompareOrdinal(normalized, int error.Position.Index, "::", 0, 2) = 0 ->
-        Result.Error (errorAt error.Position "A directive (a `::` line) must come before the first line of code")
-    | ParserResult.Failure(errorMsg, error, _) ->
-        // A mistake the parser recognised is backtracked over, and FParsec reports some enclosing construct
-        // instead (often the whole def), so it is reported where it happened (see `reportFocused`). So is a failure
-        // inside brackets that FParsec backtracked out of (see `noteFailureInside`).
-        match initialState.FocusedError.Value, initialState.FailureInBrackets.Value with
-        | Some (position, message), _ -> reportAt position (ErrorMessageList(ErrorMessage.Message message))
-        | None, Some (position, messages) when position.Index > error.Position.Index -> reportAt position messages
-        | None, _ -> Result.Error (errorAt error.Position errorMsg)
-
-/// Whether the FParsec parser reads every file, as it did before the recursive-descent parser: the environment variable
-/// `NANYX_PARSER` set to `fparsec`, which stays for a release so that a regression can be checked against it (see The
-/// parser in the Compiler internals section).
-let private usesFParsec =
-    lazy (String.Equals(Environment.GetEnvironmentVariable "NANYX_PARSER", "fparsec", StringComparison.OrdinalIgnoreCase))
-
-/// Parses normalised source, returning the top-level items as written and the final state: the recursive-descent parser
-/// reads it (`DescentTopLevel`), and reports any mistake, or the FParsec parser, when `NANYX_PARSER` is `fparsec`.
+/// Parses normalised source, returning the top-level items as written and the final state (`DescentTopLevel`), or the
+/// first mistake in it.
 let internal runModuleParser (filePath: string) (normalized: string) : Result<TopLevelItem list * ParseState, ParseError> =
-    if usesFParsec.Value then runFParsec filePath normalized
-    else
-        match DescentTopLevel.tryReadModuleWithState filePath normalized with
-        | Result.Ok read -> Result.Ok read
-        | Result.Error failure -> Result.Error failure.Error
-
-/// How each parser reads the source of the file at `filePath`, for the corpus check that they read it the same: the
-/// FParsec parser's items and state, and the recursive-descent parser's, or why it gives up.
-let readWithBothParsers (filePath: string) (input: string) =
-    let normalized = normalizeSource input
-    runFParsec filePath normalized, DescentTopLevel.tryReadModuleWithState filePath normalized |> Result.mapError _.Reason
+    DescentTopLevel.tryReadModuleWithState filePath normalized
 
 /// Parses the source of the file at `filePath` as `parseModuleFileWithDocs` does, reading past each mistake: the items
 /// that read, with every syntax error found (see `DescentTopLevel.readModuleRecovering`), which may be none. An item
-/// with a mistake in it is left out. With `NANYX_PARSER` set to `fparsec`, the FParsec parser reads it, which stops at
-/// the first mistake: that one is the error.
+/// with a mistake in it is left out.
 let parseModuleFileWithDocsRecovering (filePath: string) (input: string)
-    : Result<((Module * DeclaredNames * (ModuleName * SourceSpan) list) * Lazy<FileDocComments>) * ParseError list, ParseError> =
+    : (Module * DeclaredNames * (ModuleName * SourceSpan) list) * Lazy<FileDocComments> * ParseError list =
     let normalized = normalizeSource input
-    let read =
-        if usesFParsec.Value then runFParsec filePath normalized |> Result.map (fun (items, state) -> items, state, [])
-        else Result.Ok(DescentTopLevel.readModuleRecovering filePath normalized)
-    read
-    |> Result.map (fun (items, state, errors) ->
-        ((expandMidFileModules items, state.Declared, state.ModuleBlocks),
-         lazy (DocComments.attach filePath normalized items state.Declared state.DocumentableStarts state.Comments)),
-        errors)
+    let items, state, errors = DescentTopLevel.readModuleRecovering filePath normalized
+    (expandMidFileModules items, state.Declared, state.ModuleBlocks),
+    lazy (DocComments.attach filePath normalized items state.Declared state.DocumentableStarts state.Comments),
+    errors
 
 /// Parses the source of the file at `filePath`, as `parseModuleFileWithNames` does, together with its doc comments,
 /// each attached to what it documents, which are found the first time they are asked for.
@@ -101,16 +47,6 @@ let parseModuleWithTrivia (filePath: string) (input: string) : Result<SourceModu
           Trivia = collectTrivia filePath normalized state.Comments state.StringTexts
           Source = normalized })
 
-/// Parses the source of the file at `filePath` as `parseModuleWithTrivia` does, with the FParsec parser whatever
-/// `NANYX_PARSER` says: the reference the corpus check holds the recursive-descent parser to while both exist.
-let parseModuleWithTriviaByFParsec (filePath: string) (input: string) : Result<SourceModule, ParseError> =
-    let normalized = normalizeSource input
-    runFParsec filePath normalized
-    |> Result.map (fun (items, state) ->
-        { Items = items
-          Trivia = collectTrivia filePath normalized state.Comments state.StringTexts
-          Source = normalized })
-
 /// Parses the source of the file at `filePath`, which is what the spans of the module's nodes refer to. Line
 /// endings are normalised to `\n` first, so span offsets are into the normalised source (lines and columns are
 /// unaffected).
@@ -119,18 +55,9 @@ let parseModuleFile (filePath: string) (input: string) : Result<Module, string> 
     |> Result.map (fun (module', _, _) -> module')
     |> Result.mapError (fun error -> error.Message)
 
-
 /// Parses source that has no file of its own.
 let parseModule (input: string) : Result<Module, string> = parseModuleFile "" input
 
-/// Parses `input` as the type in a def's annotation is written: `bool -> string`, `list(a), (a -> bool) -> list(a)`. The
-/// recursive-descent parser reads it, and the FParsec parser when that one gives up, which reports any mistake.
+/// Parses `input` as the type in a def's annotation is written: `bool -> string`, `list(a), (a -> bool) -> list(a)`.
 let parseTypeSignature (input: string) : Result<TypeExpr, string> =
-    let normalized = normalizeSource input
-    match DescentTypes.readTypeSignature normalized with
-    | Some typeExpr -> Result.Ok typeExpr
-    | None ->
-        match runParserOnString typeSignatureParser (ParseState.empty ()) "" normalized with
-        | ParserResult.Success(typeExpr, _, _) -> Result.Ok typeExpr
-        | ParserResult.Failure(message, _, _) -> Result.Error message
-
+    DescentTypes.readTypeSignature (normalizeSource input) |> Result.mapError _.Message
