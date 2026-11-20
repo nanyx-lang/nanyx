@@ -487,9 +487,45 @@ internal static partial class CliCommands
     private static CompileResult CompileScript(Shell shell, string inputFile, bool timings)
     {
         using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)), shell.DisplayPath, timings);
-        var result = Script.compileFileReporting(progress.Listener, shell.FullPath(inputFile));
+        var result = Script.compileFileReportingIn(shell.Packages, progress.Listener, shell.FullPath(inputFile));
         progress.Finish();
         return result;
+    }
+
+    /// <summary>
+    /// Downloads into the package cache the packages from the index that the script <paramref name="inputFile"/> pins
+    /// with its <c>::dependency</c> lines, and the packages they depend on (see <c>Script.pull</c>); false, with each
+    /// error reported, if they can't be. With <paramref name="listPulled"/>, each package is listed on stdout, as
+    /// <c>nanyx pull</c> lists them. A file that isn't there is left for its compile to report.
+    /// </summary>
+    internal static bool TryPullScript(Shell shell, string inputFile, bool listPulled = false)
+    {
+        var path = shell.FullPath(inputFile);
+        if (!File.Exists(path))
+        {
+            return true;
+        }
+
+        var pulled = Script.pull(PackageStoreModule.downloading(shell.Packages), path, File.ReadAllText(path));
+        if (pulled.IsError)
+        {
+            foreach (var error in pulled.ErrorValue)
+            {
+                shell.Error.WriteLine($"error: {error}");
+            }
+
+            return false;
+        }
+
+        if (listPulled)
+        {
+            foreach (var line in pulled.ResultValue)
+            {
+                shell.Out.WriteLine(line);
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Whether a path names a package (its directory or manifest) rather than a file to run as a script.</summary>
@@ -946,7 +982,13 @@ internal static partial class CliCommands
         using var box = RunBox.For(shell, $"run {shell.DisplayPath(shell.FullPath(inputFile))}");
         var compiling = box is null ? shell : shell with { Error = box.Lines };
 
-        // Script mode: the file's :: directives say what a package's manifest would.
+        // Script mode: the file's :: directives say what a package's manifest would. The packages from the index they
+        // pin are downloaded first, as `nanyx pull` downloads them.
+        if (!TryPullScript(compiling, inputFile))
+        {
+            return 1;
+        }
+
         var result = CompileScript(compiling, inputFile, timings);
         PrintDiagnostics(compiling, WorthStoppingFor(result.Diagnostics), compiling.Error);
         // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the

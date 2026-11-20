@@ -148,6 +148,7 @@
     <Compile Include="PackageArchive.fs" />
     <Compile Include="PackageIndex.fs" />
     <Compile Include="Resolution.fs" />
+    <Compile Include="ScriptDependencies.fs" />
     <Compile Include="NewPackage.fs" />
     <Compile Include="Script.fs" />
     <Compile Include="Migration.fs" />

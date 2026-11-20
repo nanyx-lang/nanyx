@@ -239,7 +239,9 @@ import syntax ([#289](https://github.com/nanyx-lang/nanyx/issues/289)), path dep
 the lockfile and the cache ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), the index
 ([#209](https://github.com/nanyx-lang/nanyx/issues/209)), `export module`
 ([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)), and `api.json`, the API comparison and `nanyx bump`
-(#1470). Local packages came first, so that hosts and linters could become packages
+(#1470), and a script's dependencies on packages from the index, each pinned at the exact version its `::dependency`
+writes ([#867](https://github.com/nanyx-lang/nanyx/issues/867), see
+[Package ownership and locking](./package-ownership-and-locking#scripts)). Local packages came first, so that hosts and linters could become packages
 ([Built-ins as packages](./built-ins-as-packages)) without waiting for downloads.
 
 1. **The official linter as a shipped package**, once its contract exists

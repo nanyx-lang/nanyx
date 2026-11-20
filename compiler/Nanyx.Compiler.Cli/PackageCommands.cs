@@ -65,9 +65,9 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Make a package's dependencies available to build: when the manifest asks for something nanyx.lock doesn't lock, choose the newest versions that satisfy every dependency, keeping those it locks while they still do, and write nanyx.lock; then download into the package cache each package it locks that isn't there yet, check that each dependency is there, and list them.
+    /// Make a package's dependencies available to build: when the manifest asks for something nanyx.lock doesn't lock, choose the newest versions that satisfy every dependency, keeping those it locks while they still do, and write nanyx.lock; then download into the package cache each package it locks that isn't there yet, check that each dependency is there, and list them. For a script, download the exact versions its ::dependency lines pin, and the packages they depend on.
     /// </summary>
-    /// <param name="path">A package's directory or .nyxp manifest; none means the package the current directory is in.</param>
+    /// <param name="path">A package's directory or .nyxp manifest, or a script; none means the package the current directory is in.</param>
     [Consolo("pull")]
     public static int Pull(params string[] path) => PullIn(Shell.Process, path);
 
@@ -77,6 +77,11 @@ internal static partial class CliCommands
         if (!TrySinglePath(shell, path, out var single))
         {
             return UsageError;
+        }
+
+        if (single is not null && single.EndsWith(".nyx", StringComparison.OrdinalIgnoreCase) && File.Exists(shell.FullPath(single)))
+        {
+            return TryPullScript(shell, single, listPulled: true) ? 0 : 1;
         }
 
         if (!TryFindManifest(shell, single, out var manifestPath, out var failed))

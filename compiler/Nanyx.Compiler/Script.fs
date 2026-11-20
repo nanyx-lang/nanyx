@@ -237,6 +237,54 @@ module Script =
             let options, errors = Manifest.linterEntries { Data = DataList(linters |> List.map entry); Location = first.Span }
             Some options, errors
 
+    /// The newest version of each package that a new resolution could choose, as an index last gave it, and when.
+    let private newestFound = Collections.Concurrent.ConcurrentDictionary<string * string, DateTime * SemanticVersion option>()
+
+    /// The newest version of `name` in the index of `store` that a new resolution could choose, if it has one and can be
+    /// read. The editor checks a script as it is typed, so what the index gives is kept for five minutes.
+    let private newestIn (store: PackageStore) (name: string) : SemanticVersion option =
+        match newestFound.TryGetValue((store.Index, name)) with
+        | true, (found, newest) when DateTime.UtcNow - found < TimeSpan.FromMinutes 5.0 -> newest
+        | _ ->
+            let newest = Resolution.newest store name |> Result.toOption |> Option.flatten
+            newestFound.[(store.Index, name)] <- (DateTime.UtcNow, newest)
+            newest
+
+    /// What is wrong with the package `package` a `::dependency` names, found at `place`, as a script names it: a package
+    /// from the index needs the exact version the script uses, since a script has no lockfile and the version its
+    /// directive writes is its pin. One with no version is offered the newest the index of `store` has.
+    let private unpinned (store: PackageStore) (package: DirectiveWord) (place: DirectivePlace) : Diagnostic list =
+        match place with
+        | Shipped when not (isShipped package.Text) ->
+            let newest = newestIn store package.Text
+            let example = newest |> Option.map string |> Option.defaultValue "1.2.0"
+            let found = match newest with Some version -> $": the newest in the index is {version}" | None -> ""
+            let message =
+                $"`::dependency {package.Text}` needs the version of '{package.Text}' to use, as in `::dependency {package.Text} {example}`, or the directory it is in, as in `../{package.Text.Substring(package.Text.LastIndexOf '.' + 1)}`. A script has no lockfile, so the version it writes is the one it uses{found}"
+            let diagnostic = invalid package.Span message |> Diagnostics.about package.Text
+            match newest with
+            | Some version ->
+                let length = package.Span.End - package.Span.Start
+                let atEnd = { package.Span with Start = package.Span.End; StartColumn = package.Span.StartColumn + length }
+                [ { diagnostic with Fixes = [ { Title = $"Use {package.Text} {version}"; Edits = [ { Span = atEnd; NewText = $" {version}" } ] } ] } ]
+            | None -> [ diagnostic ]
+        // One that isn't a version at all is the manifest's error, as `version = "1.x"` would be.
+        | AtVersion version when
+            not (isShipped package.Text)
+            && (SemanticVersion.tryParse version.Text).IsNone
+            && (VersionRequirement.tryParse version.Text).IsSome
+            ->
+            [ invalid version.Span $"A script names the exact version of '{package.Text}' it uses, as in `1.2.0`, not the versions it accepts, '{version.Text}': it has no lockfile, so the version it writes is the one it uses" ]
+        | _ -> []
+
+    /// The packages from the index among `dependencies`, a script's, each with the exact version its directive pins.
+    let private pinsOf (dependencies: Dependency list) : (string * SemanticVersion) list =
+        dependencies
+        |> List.choose (fun dependency ->
+            match dependency.Source with
+            | FromIndex requirement -> Some(dependency.Name, requirement.Minimum)
+            | _ -> None)
+
     /// The build the `::host` and `::dependency` directives of `settings` make, if there are any, for the script at
     /// `filePath`, whose imports by path, and the directories its directives give, are relative to its directory, with
     /// the packages they name found in `store`; or what is wrong with them. A script that names no host runs under the
@@ -252,16 +300,19 @@ module Script =
             | _ -> []
         let hosts = settings |> List.choose (function directive, HostSetting(package, place) -> Some (directive, package, place) | _ -> None)
         let dependencies = settings |> List.choose (function directive, DependencySetting(package, place) -> Some (directive, package, place) | _ -> None)
+        let script = if filePath = "" then "the script" else Path.GetFileName filePath
         match hosts, dependencies with
         | [], [] when defaultHost = Hosts.consolePackage -> Result.Ok None
-        | [], [] -> Package.scriptModules defaultHost store filePath SourceSpan.none None [] [] |> Result.map Some
+        | [], [] -> Package.scriptModules defaultHost store Lockfile.empty filePath SourceSpan.none None [] [] |> Result.map Some
         | (first, _, _) :: _, _
         | [], (first, _, _) :: _ ->
             let twice =
                 hosts
                 |> List.skip (min 1 hosts.Length)
                 |> List.map (fun (directive, _, _) -> invalid directive.Span "A script runs under one host, which an earlier `::host` names already: remove this one")
-            let unshipped = (hosts |> List.truncate 1) @ dependencies |> List.collect (fun (_, package, place) -> notShipped package place)
+            let unshipped =
+                (hosts |> List.truncate 1 |> List.collect (fun (_, package, place) -> notShipped package place))
+                @ (dependencies |> List.collect (fun (_, package, place) -> unpinned store package place))
             let host, hostErrors =
                 match hosts with
                 | (directive, package, place) :: _ when unshipped.IsEmpty ->
@@ -274,8 +325,12 @@ module Script =
                     Manifest.dependencyEntries root { Data = DataList(dependencies |> List.map (fun (directive, package, place) -> entryOf directive.Span package place [])); Location = first.Span }
                 else
                     [], [], []
-            match twice @ unshipped @ hostErrors @ dependencyErrors with
-            | [] -> Package.scriptModules defaultHost store filePath first.Span host dependencies files |> Result.map Some
+            let locked, lockErrors =
+                match ScriptDependencies.cached store script (pinsOf dependencies) with
+                | Result.Ok locked -> locked, []
+                | Result.Error messages -> Lockfile.empty, messages |> List.map (Diagnostics.at DiagnosticCodes.PackageNotDownloaded first.Span)
+            match twice @ unshipped @ hostErrors @ dependencyErrors @ lockErrors with
+            | [] -> Package.scriptModules defaultHost store locked filePath first.Span host dependencies files |> Result.map Some
             | errors -> Result.Error errors
 
     /// The directives at the top of `source`, the text of the file at `filePath` (empty for one not on disk), with the
@@ -310,6 +365,19 @@ module Script =
     let readFrom (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
         readFromUnder Hosts.consolePackage store filePath source
 
+    /// What `nanyx pull` does for the script at `filePath`, whose text is `source`: downloads into the cache of `store`
+    /// each package from the index its `::dependency` lines pin, and the packages they depend on (see
+    /// `ScriptDependencies.pull`), giving a line for each, or what went wrong. A directive written wrong is left for
+    /// the build to report.
+    let pull (store: PackageStore) (filePath: string) (source: string) : Result<string list, string list> =
+        let pins =
+            settings (Directives.read filePath source)
+            |> List.choose (function
+                | _, Result.Ok(DependencySetting(package, AtVersion version)) when not (isShipped package.Text) ->
+                    SemanticVersion.tryParse version.Text |> Option.map (fun version -> package.Text, version)
+                | _ -> None)
+        ScriptDependencies.pull store filePath pins
+
     /// `readFrom` the user's store.
     let read (filePath: string) (source: string) : ScriptDirectives = readFrom (PackageStore.user ()) filePath source
 
@@ -343,11 +411,16 @@ module Script =
 
     /// Compiles `source` as the script at `filePath`, with the linters its directives turn on (none if they turn none
     /// on), under the host and with the dependencies they name, as `nanyx run` does. A source file of a package is
-    /// compiled as one (see `Package.compileSourceWith`). Each module's check is reported to `listener`.
-    let compileSourceReporting (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
-        let directives = read filePath source
+    /// compiled as one (see `Package.compileSourceWith`). The packages its directives name are found in `store`, and
+    /// each module's check is reported to `listener`.
+    let compileSourceReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
+        let directives = readFrom store filePath source
         compileSourceReading listener File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
         |> withDirectives directives
+
+    /// `compileSourceReportingIn` the user's store.
+    let compileSourceReporting (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
+        compileSourceReportingIn (PackageStore.user ()) listener filePath source
 
     /// `compileSourceReporting`, telling nobody.
     let compileSource (filePath: string) (source: string) : CompileResult =
@@ -361,9 +434,13 @@ module Script =
         compileSourceReading CompileListener.none File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
         |> withDirectives directives
 
-    /// `compileSourceReporting` for the file at `filePath` as it is on disk.
+    /// `compileSourceReportingIn` for the file at `filePath` as it is on disk.
+    let compileFileReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
+        if File.Exists filePath then compileSourceReportingIn store listener filePath (File.ReadAllText filePath) else Compiler.compileFile filePath
+
+    /// `compileFileReportingIn` the user's store.
     let compileFileReporting (listener: CompileListener) (filePath: string) : CompileResult =
-        if File.Exists filePath then compileSourceReporting listener filePath (File.ReadAllText filePath) else Compiler.compileFile filePath
+        compileFileReportingIn (PackageStore.user ()) listener filePath
 
     /// `compileFileReporting`, telling nobody.
     let compileFile (filePath: string) : CompileResult = compileFileReporting CompileListener.none filePath
