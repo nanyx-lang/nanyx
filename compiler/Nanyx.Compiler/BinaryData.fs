@@ -192,6 +192,130 @@ module internal BinaryData =
         member _.Item
             with get (index: int) : 'T = if index < outerCount then outer.Value[index] else own[index - outerCount]
 
+    /// A delegate of type `'D` that runs the IL `emit` writes, taking `parameters` and giving `result`. It may use what
+    /// is internal to another assembly.
+    let private emitted<'D when 'D :> Delegate> (name: string) (result: Type) (parameters: Type[]) (emit: ILGenerator -> unit) : 'D =
+        let method = DynamicMethod(name, result, parameters, typeof<Shape>.Module, true)
+        emit (method.GetILGenerator())
+        method.CreateDelegate typeof<'D> :?> 'D
+
+    let private everyInstance = BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.Instance
+
+    /// One of FSharp.Core's types, which it keeps internal: a map's or set's tree.
+    let private collectionType (name: string) (args: Type[]) =
+        typeof<Map<int, int>>.Assembly.GetType("Microsoft.FSharp.Collections." + name, true).MakeGenericType args
+
+    /// The items `0 .. count - 1` as a balanced tree, built from the middle out, with `leaf` making a tree of one item
+    /// and `node` one with subtrees (either may be `null`, the empty tree) of the height it is given.
+    let private balancedTree (count: int) (leaf: int -> obj) (node: int -> obj -> obj -> int -> obj) : obj =
+        let rec tree (low: int) (high: int) : struct (obj * int) =
+            if low > high then
+                struct (null, 0)
+            else
+                let middle = low + (high - low) / 2
+                let struct (left, leftHeight) = tree low (middle - 1)
+                let struct (right, rightHeight) = tree (middle + 1) high
+                if leftHeight = 0 && rightHeight = 0 then struct (leaf middle, 1)
+                else
+                    let height = 1 + max leftHeight rightHeight
+                    struct (node middle left right height, height)
+        let struct (root, _) = tree 0 (count - 1)
+        root
+
+    /// Whether `items` are in the order `comparer` puts them in, each after the one before it.
+    let private ascending (comparer: IComparer<'T>) (items: 'T[]) =
+        let mutable inOrder = true
+        let mutable i = 1
+        while inOrder && i < items.Length do
+            inOrder <- comparer.Compare(items[i - 1], items[i]) < 0
+            i <- i + 1
+        inOrder
+
+    /// Maps built from their items in key order, as `write` writes them, straight into FSharp.Core's tree, which
+    /// `Map.Add` would build by inserting each item, making a new path to it each time.
+    type private SortedMaps<'K, 'V when 'K: comparison>() =
+        static let types = [| typeof<'K>; typeof<'V> |]
+        static let tree = collectionType "MapTree`2" types
+        static let node = collectionType "MapTreeNode`2" types
+        static let comparer =
+            typeof<Map<'K, 'V>>.GetProperty("Comparer", everyInstance).GetValue(Map.empty<'K, 'V>) :?> IComparer<'K>
+        static let makeLeaf =
+            emitted<Func<'K, 'V, obj>> "map leaf" typeof<obj> types (fun il ->
+                il.Emit OpCodes.Ldarg_0
+                il.Emit OpCodes.Ldarg_1
+                il.Emit(OpCodes.Newobj, tree.GetConstructor(everyInstance, types))
+                il.Emit OpCodes.Ret)
+        static let makeNode =
+            emitted<Func<'K, 'V, obj, obj, int, obj>> "map node" typeof<obj> [| typeof<'K>; typeof<'V>; typeof<obj>; typeof<obj>; typeof<int> |] (fun il ->
+                il.Emit OpCodes.Ldarg_0
+                il.Emit OpCodes.Ldarg_1
+                il.Emit OpCodes.Ldarg_2
+                il.Emit(OpCodes.Castclass, tree)
+                il.Emit OpCodes.Ldarg_3
+                il.Emit(OpCodes.Castclass, tree)
+                il.Emit(OpCodes.Ldarg_S, 4uy)
+                il.Emit(OpCodes.Newobj, node.GetConstructor(everyInstance, [| typeof<'K>; typeof<'V>; tree; tree; typeof<int> |]))
+                il.Emit OpCodes.Ret)
+        static let makeMap =
+            emitted<Func<IComparer<'K>, obj, Map<'K, 'V>>> "map" typeof<Map<'K, 'V>> [| typeof<IComparer<'K>>; typeof<obj> |] (fun il ->
+                il.Emit OpCodes.Ldarg_0
+                il.Emit OpCodes.Ldarg_1
+                il.Emit(OpCodes.Castclass, tree)
+                il.Emit(OpCodes.Newobj, typeof<Map<'K, 'V>>.GetConstructor(everyInstance, [| typeof<IComparer<'K>>; tree |]))
+                il.Emit OpCodes.Ret)
+
+        /// The map of `keys` to `values`. Keys out of order, which a key type compared differently than when it was
+        /// written would give, are added one by one.
+        static member Of(keys: 'K[], values: 'V[]) : Map<'K, 'V> =
+            if ascending comparer keys then
+                let root =
+                    balancedTree keys.Length
+                        (fun i -> makeLeaf.Invoke(keys[i], values[i]))
+                        (fun i left right height -> makeNode.Invoke(keys[i], values[i], left, right, height))
+                makeMap.Invoke(comparer, root)
+            else
+                Array.fold2 (fun (map: Map<'K, 'V>) k v -> map.Add(k, v)) Map.empty keys values
+
+    /// Sets built from their items in order, as `SortedMaps` builds maps.
+    type private SortedSets<'T when 'T: comparison>() =
+        static let types = [| typeof<'T> |]
+        static let tree = collectionType "SetTree`1" types
+        static let node = collectionType "SetTreeNode`1" types
+        static let comparer = typeof<Set<'T>>.GetProperty("Comparer", everyInstance).GetValue(Set.empty<'T>) :?> IComparer<'T>
+        static let makeLeaf =
+            emitted<Func<'T, obj>> "set leaf" typeof<obj> types (fun il ->
+                il.Emit OpCodes.Ldarg_0
+                il.Emit(OpCodes.Newobj, tree.GetConstructor(everyInstance, types))
+                il.Emit OpCodes.Ret)
+        static let makeNode =
+            emitted<Func<'T, obj, obj, int, obj>> "set node" typeof<obj> [| typeof<'T>; typeof<obj>; typeof<obj>; typeof<int> |] (fun il ->
+                il.Emit OpCodes.Ldarg_0
+                il.Emit OpCodes.Ldarg_1
+                il.Emit(OpCodes.Castclass, tree)
+                il.Emit OpCodes.Ldarg_2
+                il.Emit(OpCodes.Castclass, tree)
+                il.Emit OpCodes.Ldarg_3
+                il.Emit(OpCodes.Newobj, node.GetConstructor(everyInstance, [| typeof<'T>; tree; tree; typeof<int> |]))
+                il.Emit OpCodes.Ret)
+        static let makeSet =
+            emitted<Func<IComparer<'T>, obj, Set<'T>>> "set" typeof<Set<'T>> [| typeof<IComparer<'T>>; typeof<obj> |] (fun il ->
+                il.Emit OpCodes.Ldarg_0
+                il.Emit OpCodes.Ldarg_1
+                il.Emit(OpCodes.Castclass, tree)
+                il.Emit(OpCodes.Newobj, typeof<Set<'T>>.GetConstructor(everyInstance, [| typeof<IComparer<'T>>; tree |]))
+                il.Emit OpCodes.Ret)
+
+        /// The set of `items`, added one by one if they are out of order.
+        static member Of(items: 'T[]) : Set<'T> =
+            if ascending comparer items then
+                let root =
+                    balancedTree items.Length
+                        (fun i -> makeLeaf.Invoke items[i])
+                        (fun i left right height -> makeNode.Invoke(items[i], left, right, height))
+                makeSet.Invoke(comparer, root)
+            else
+                Array.fold (fun (set: Set<'T>) item -> set.Add item) Set.empty items
+
     /// A read of one part, from the file's bytes at the position it has got to. The readers `build` makes call its
     /// methods: one for each primitive, and one for each kind of value that holds others, given their readers.
     [<Sealed>]
@@ -279,17 +403,19 @@ module internal BinaryData =
             List.ofArray items
 
         member this.Set(item: Func<ReadState, 'T>) : Set<'T> =
-            let mutable set = Set.empty
-            for _ in 1 .. this.Count() do
-                set <- set.Add(item.Invoke this)
-            set
+            let items = Array.zeroCreate (this.Count())
+            for i in 0 .. items.Length - 1 do
+                items[i] <- item.Invoke this
+            SortedSets<'T>.Of items
 
         member this.Map(key: Func<ReadState, 'K>, value: Func<ReadState, 'V>) : Map<'K, 'V> =
-            let mutable map = Map.empty
-            for _ in 1 .. this.Count() do
-                let k = key.Invoke this
-                map <- map.Add(k, value.Invoke this)
-            map
+            let count = this.Count()
+            let keys = Array.zeroCreate count
+            let values = Array.zeroCreate count
+            for i in 0 .. count - 1 do
+                keys[i] <- key.Invoke this
+                values[i] <- value.Invoke this
+            SortedMaps<'K, 'V>.Of(keys, values)
 
         /// A `Lazy` whose value is in a part of its own, which this read skips, and which is read the first time the
         /// `Lazy` is asked for.
