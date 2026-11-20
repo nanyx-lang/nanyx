@@ -27,6 +27,7 @@ compiler/
 ├── Nanyx.LanguageServer/      # The language server (C#, OmniSharp LSP), run by `nanyx lsp`
 ├── Nanyx.LanguageServer.Tests/# Drives the server through a real LSP client in-process
 ├── Nanyx.Compiler.Cli/        # The `nanyx` executable (C#, Consolo)
+├── Nanyx.Browser/             # The compiler built for the browser, for the playground, and its headless test
 ├── Nyx.Compiler.slnx          # Solution covering all projects
 └── README.md
 
@@ -58,6 +59,15 @@ dotnet build Nyx.Compiler.slnx
 ```powershell
 cd compiler
 dotnet test Nyx.Compiler.slnx
+```
+
+The playground host's runner is tested in headless Chromium, with Playwright (`npm install playwright` and
+`npx playwright install chromium` where they aren't installed):
+
+```powershell
+cd compiler
+dotnet publish Nanyx.Browser/Nanyx.Browser.csproj -c Release
+node Nanyx.Browser/playground-test.mjs
 ```
 
 ## Running programs

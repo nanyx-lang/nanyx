@@ -53,6 +53,10 @@ module Hosts =
     /// `nanyx new` names.
     let consolePackage = "nanyx.console"
 
+    /// The package of the playground host the compiler ships, a stand-in for the console host in a web page: what a
+    /// script runs under in the compiler built for the browser (`Nanyx.Browser`), unless it names another.
+    let playgroundPackage = "nanyx.playground"
+
     /// The context a host is written on: raw reads and writes, which only a host may require.
     let runtimeContext = "HostRuntime"
 

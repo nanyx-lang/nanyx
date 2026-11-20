@@ -65,3 +65,37 @@ ignore(file.read(path.of("notes.txt")))"""
             diagnostic.Message)
         Assert.Equal(6, diagnostic.Span.Value.StartLine)
     | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
+
+/// The diagnostics of `source` compiled as the compiler built for the browser compiles a page's program: a script that
+/// runs under the playground host unless its `::host` names another (`Script.compileUnder`).
+let private underPlayground (source: string) =
+    use directory = new TempPackage([ "main.nyx", source ])
+    (Script.compileUnder Hosts.playgroundPackage (storeOf directory) (directory.Path "main.nyx") source).Diagnostics
+
+[<Fact>]
+let ``A script with no directives runs under the playground host where it is the default`` () =
+    Assert.Empty(underPlayground "println(bits())\nprintln(now() + ticks())\n")
+    match underPlayground "println(args())\n" with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
+        Assert.Equal("'args' is not in scope", diagnostic.Message)
+    | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
+
+[<Fact>]
+let ``A script that names its host runs under it, whatever the default`` () =
+    Assert.Empty(underPlayground "::host nanyx.console\n\nprintln(args())\n")
+
+[<Fact>]
+let ``A script with dependencies and no host runs under the default host`` () =
+    let source =
+        withFinalNewline """::dependency nanyx.fs
+
+import nanyx.fs/file as file
+import nanyx.fs/path as path
+
+ignore(file.read(path.of("notes.txt")))"""
+    match underPlayground source with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+        Assert.EndsWith("which the host 'nanyx.playground/playground.host' does not provide", diagnostic.Message)
+    | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"

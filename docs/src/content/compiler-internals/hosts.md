@@ -190,7 +190,28 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   with `print`, `println`, `eprint` and `eprintln`, `Random` and `Clock`, so a console program that needs only those compiles
   under it unchanged, and one that needs a context it doesn't provide is `NYX0205` naming it, by the check above
   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)). The runtime's own helpers still import WASI's `fd_write`
-  and `proc_exit`, for `dbg` and for a deferred error or crash, so whatever runs the module provides those two as well.
+  and `proc_exit`, for a deferred error or crash, so whatever runs the module provides those two as well.
+- **The playground host's runner.** `packages/nanyx.playground/runner` is the JavaScript that runs a module compiled for
+  the playground host; it isn't a source of the package (its `sources` are `src/**/*.nyx`), and the compiler built for
+  the browser publishes it with the page. `playground.js`'s `run(wasm, { seed, onStdout, onStderr, onDbg })` starts
+  `worker.js` in a web worker and gives `{ done, stop }`: `stop` terminates the worker, and `done` resolves to
+  `{ code }`, with `trap` when the program trapped, or `{ code: null, stopped: true }`. The worker implements
+  `nanyx:playground` (`write` and `writeError` post the text, decoded from the module's memory; `randomBits` is
+  SplitMix64 over the page's seed, so a seed gives what `random.seeded` gives with it; `now` is `Date.now()` and
+  `ticks` the milliseconds since the run started, from `performance.now()`), `nanyx:debug` `dbg` (posts the file,
+  line, column and text, and says it has dealt with it), and WASI's `fd_write` (fd 1 is stdout, any other stderr) and
+  `proc_exit`, which throws, so the program unwinds to the call of its start, which gives the exit code. A trap is
+  exit code 1. The module is compiled with its start exported (`WasmOptions.ExportStart`) and `dbg` given to the page
+  (`WasmOptions.DbgToEmbedder`), so the worker instantiates it, then calls `__nanyx_start` once the memory can be read.
+- **The browser's default host.** `Script.compileUnder` compiles a script that runs under a shipped host of the
+  caller's choosing unless its `::host` names another (`Script.readFromUnder`, and `Package.scriptModules`, which take
+  the default host); `nanyx run` and the language server pass the console host, as before. `BrowserCompiler.Compile`
+  (`compiler/Nanyx.Browser`) passes the playground host (`Hosts.playgroundPackage`), compiling the page's program as
+  the script `/playground/main.nyx` in the runtime's in-memory file system, with a store that finds only the packages
+  the compiler ships. The build writes `package-files.txt`, the shipped packages' files the page hands the compiler
+  (`wwwroot/compiler.js`). `wwwroot/run.html` compiles and runs a program, and `playground-test.mjs` drives it in
+  headless Chromium with Playwright: the tour's hello world, `Random` from a seed, `Clock`, a crash, `dbg`, a program
+  that needs `FileSystem`, and Stop; the Compiler workflow's `Browser test` job runs it.
 - **Where `dbg` prints.** `dbg` needs no context, and a host package does nothing for it: the runtime that runs the
   host's program decides. A module `nanyx run` runs gives each `dbg` to `nanyx:debug` `dbg` first, with its file, line,
   column and text, and the handler says whether it has dealt with it (`Probing.defineDbg`). The console runner

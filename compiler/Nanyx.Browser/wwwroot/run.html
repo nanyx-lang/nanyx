@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Nanyx playground runner</title>
+  <script type="module" src="run.js"></script>
+</head>
+<body>
+  <h1>Nanyx playground runner</h1>
+  <p>Compiles a program under the playground host and runs it in a web worker. The headless test drives it through
+    <code>window.playground</code>.</p>
+  <textarea id="source" rows="12" cols="80">println("Hello, world!")</textarea>
+  <p>
+    <label>Seed <input id="seed" type="number" value="0"></label>
+    <button id="run" disabled>Run</button>
+    <button id="stop" disabled>Stop</button>
+  </p>
+  <pre id="out">Loading…</pre>
+</body>
+</html>
