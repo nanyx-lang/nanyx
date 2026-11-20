@@ -65,7 +65,7 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Make a package's dependencies available to build: download into the package cache each package nanyx.lock locks that isn't there yet, check that each dependency is there, and list them. Choosing the version of a package that nanyx.lock doesn't lock isn't supported yet.
+    /// Make a package's dependencies available to build: when the manifest asks for something nanyx.lock doesn't lock, choose the newest versions that satisfy every dependency, keeping those it locks while they still do, and write nanyx.lock; then download into the package cache each package it locks that isn't there yet, check that each dependency is there, and list them.
     /// </summary>
     /// <param name="path">A package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     [Consolo("pull")]
@@ -87,11 +87,7 @@ internal static partial class CliCommands
         var pulled = PackageDependencies.pull(PackageStoreModule.downloading(shell.Packages), manifestPath);
         if (pulled.IsError)
         {
-            foreach (var error in pulled.ErrorValue)
-            {
-                shell.Error.WriteLine($"error: {error}");
-            }
-
+            PrintLockFailure(shell, pulled.ErrorValue);
             return 1;
         }
 
@@ -202,10 +198,10 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Add a dependency to the manifest of the package the current directory is in: one found in a directory with --path, or named by its version with --version. A package the compiler ships, such as nanyx.console.core, needs neither. A package named by its version can't be downloaded yet.
+    /// Add a dependency to the manifest of the package the current directory is in: one found in a directory with --path, or one from the package index, at the versions --version accepts, or else at its newest. A package the compiler ships, such as nanyx.console.core, is named at the compiler's version. A package from the index is locked in nanyx.lock and downloaded, as nanyx pull does; if no versions satisfy every dependency with it, the manifest is left as it was.
     /// </summary>
     /// <param name="package">The package to depend on, as in acme.util.</param>
-    /// <param name="version">The version of the package to download.</param>
+    /// <param name="version">The versions of the package to accept: 1.2 or 1.2.0 accepts that version and those compatible with it. The default is the newest version in the index.</param>
     /// <param name="directory">The directory the package is in, which holds its manifest.</param>
     [Consolo("install")]
     public static int Install(string package, [Consolo("version")] string? version = null, [Consolo("path")] string? directory = null) =>
@@ -219,23 +215,37 @@ internal static partial class CliCommands
             return failed;
         }
 
+        var store = PackageStoreModule.downloading(shell.Packages);
         var installed = PackageDependencies.install(
             Toolchain.version,
+            store,
             manifestPath,
             package,
             version is null ? FSharpOption<string>.None : FSharpOption<string>.Some(version),
             directory is null ? FSharpOption<string>.None : FSharpOption<string>.Some(shell.FullPath(directory)));
         if (installed.IsError)
         {
-            shell.Error.WriteLine($"error: {installed.ErrorValue}");
+            PrintLockFailure(shell, installed.ErrorValue);
             return 1;
         }
 
         File.WriteAllText(manifestPath, installed.ResultValue.Manifest);
         shell.Out.WriteLine($"Added {package} to {shell.DisplayPath(manifestPath)}");
-        if (installed.ResultValue.ToDownload is { } download)
+        if (installed.ResultValue.Lockfile?.Value is not { } locked)
         {
-            shell.Error.WriteLine($"error: {PackageDependencies.notDownloaded(download.Value.Item1, download.Value.Item2)}");
+            return 0;
+        }
+
+        File.WriteAllText(LockfileModule.pathIn(Path.GetDirectoryName(manifestPath)!), LockfileModule.write(locked.Item1));
+        foreach (var line in locked.Item2)
+        {
+            shell.Out.WriteLine(line);
+        }
+
+        var pulled = PackageDependencies.pull(store, manifestPath);
+        if (pulled.IsError)
+        {
+            PrintLockFailure(shell, pulled.ErrorValue);
             return 1;
         }
 

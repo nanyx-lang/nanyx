@@ -154,8 +154,17 @@ let errorsOf (result: Result<'T, 'Errors>) =
 let storeOf (package: TempPackage) : PackageStore =
     { Cache = package.Path "cache"; Index = package.Path "index"; GitHub = GitHub.unsupported }
 
+/// What `nanyx pull` does for the package whose manifest is at `manifestPath`, from `store`, with a conflict's
+/// explanation as its error.
+let pullFrom (store: PackageStore) (manifestPath: string) : Result<string list, string list> =
+    PackageDependencies.pull store manifestPath
+    |> Result.mapError (function
+        | NoVersions diagnostic -> [ diagnostic.Message ]
+        | LockErrors errors -> errors)
+
 /// Puts `bytes`, the packed `found`, in the `artifacts` directory of `package`'s index, and lists it in the index after
-/// the versions listed already, as a release would. Gives its SHA-256.
+/// the versions listed already, with the dependencies its manifest names by their version, as a release would. Gives
+/// its SHA-256.
 let publishToIndex (package: TempPackage) (found: Package) (bytes: byte array) =
     let name, version = found.Manifest.Name, found.Manifest.Version
     let artifact = package.Path $"index/artifacts/{PackageArchive.fileName found.Manifest}"
@@ -164,6 +173,13 @@ let publishToIndex (package: TempPackage) (found: Package) (bytes: byte array) =
     let hash = PackageArchive.sha256 bytes
     File.WriteAllText(package.Path "index/config.json", """{ "format": 1, "index": "index/" }""")
     let listing = package.Path $"index/index/acme/{name}.json"
+    let dependencies =
+        found.Manifest.Dependencies
+        |> List.choose (fun dependency ->
+            match dependency.Source with
+            | FromIndex requirement -> Some $"\"{dependency.Name}\": \"{requirement}\""
+            | _ -> None)
+        |> String.concat ", "
     Directory.CreateDirectory(Path.GetDirectoryName listing) |> ignore
     let earlier =
         if File.Exists listing then
@@ -173,7 +189,7 @@ let publishToIndex (package: TempPackage) (found: Package) (bytes: byte array) =
             ""
     File.WriteAllText(
         listing,
-        $$"""{ "name": "{{name}}", "versions": [{{earlier}} { "version": "{{version}}", "url": "../../artifacts/{{Path.GetFileName artifact}}", "sha256": "{{hash}}", "yanked": false, "available": true }] }"""
+        $$"""{ "name": "{{name}}", "versions": [{{earlier}} { "version": "{{version}}", "url": "../../artifacts/{{Path.GetFileName artifact}}", "sha256": "{{hash}}", "dependencies": { {{dependencies}} }, "yanked": false, "available": true }] }"""
     )
     hash
 

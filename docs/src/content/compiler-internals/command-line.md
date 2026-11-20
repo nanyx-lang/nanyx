@@ -100,12 +100,12 @@ and the live view is drawn inside the box.
 A manifest's `Dependency` says where the package is found with a `DependencySource`: `AtPath`, `Shipped`, `FromIndex`
 or `OnGitHub`. `nanyx migrate`, `nanyx install` and `nanyx new` hold the entries they write as that union, and write
 them with `Manifest.entryText`, which escapes their strings.
-`nanyx pull` downloads what `nanyx.lock` locks (`PackageIndex.download`), but nothing writes the lockfile yet:
+`nanyx pull` brings `nanyx.lock` up to date and downloads what it locks (`PackageDependencies.update`,
+`PackageIndex.download`); `nanyx build` and `nanyx run` call the same `update` first (`TryUpdateLockfile`), and
+`--locked` makes it refuse a lockfile that doesn't satisfy the manifest (`Resolution.unsatisfied`). `nanyx install`
+checks the manifest's new text and resolves it before writing either file, so a conflict leaves the manifest as it was.
 
-- **Stub:** a dependency named by its version that `nanyx.lock` doesn't lock is an error: `nanyx pull` says so and
-  exits with 1, and `nanyx install --version` writes the entry, then says so and exits with 1. Choosing versions and
-  writing the lockfile come with [#864](https://github.com/nanyx-lang/nanyx/issues/864), and so do `--locked` and
-  `--offline`.
+- **Not built:** `--offline`.
 - A dependency on GitHub (`github =` in the manifest, `github:` in a script's `::dependency`) is read and checked, and
   resolved through `GitHubFetcher` (`GitHub.fs`). A build's store fetches with `GitHub.cached`, which reads only the
   cache and fails with `NotPulled` (`NYX0041`); `nanyx pull` wraps the shell's store in `PackageStore.downloading`,
@@ -113,7 +113,7 @@ them with `Manifest.entryText`, which escapes their strings.
   unzipping are `Downloads.fs`, shared with the index.
 - `nanyx manifest` has only `--json` so far.
 
-Choosing versions is `Resolution.resolve`, which the commands don't call yet. It gathers the dependencies named by
+Choosing versions is `Resolution.resolve`. It gathers the dependencies named by
 their version of the package and of each package it reaches by path or on GitHub (`Resolution.requirements`), reads
 each package's versions from the index as it is reached (`PackageIndex.versions`, with their dependencies and minimum
 compiler), and hands them to `VersionSolver.solve`: [PubGrub](https://github.com/dart-lang/pub/blob/master/doc/solver.md)

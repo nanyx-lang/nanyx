@@ -10,7 +10,7 @@ and is the language server for editors. `nanyx --help` lists its commands, and `
 ```text
 nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [<file.nyx | package>] [--] [<arguments>]
 nanyx check [--timings] [--host <host>] [<file.nyx | package>]
-nanyx build [--out <path>] [--release] [--wat] [--timings] [--host <host>] [<package>]
+nanyx build [--out <path>] [--release] [--wat] [--locked] [--timings] [--host <host>] [<package>]
 nanyx wasm <file.nyx> [--out <path>] [--release] [--wat]
 nanyx format [--check | --write] [<files or directories>]
 nanyx format [--check] --stdin
@@ -129,11 +129,16 @@ nothing else.
 of its `@entry` as a WebAssembly module, to `out/<package name>.wasm` beside the manifest: the binary format, which
 browsers, Wasmtime and other WebAssembly runtimes load. A package with no `@entry` is only checked.
 
+When the manifest asks for something `nanyx.lock` doesn't lock (a new dependency, or a requirement that no longer
+accepts the version locked), `nanyx build` and `nanyx run` choose versions again and download them first, as
+[`nanyx pull`](#nanyx-pull) does, saying on stderr what they lock.
+
 | Option | What it does |
 |--------|--------------|
 | `--out <path>`, `-o <path>` | Writes the program to another file, making its directory if need be. |
 | `--release` | Refuses any error, and leaves out every [`dbg`](../stdlib/console#dbg): `dbg(x)` compiles to `x`. Without it, a build is a debug build: type and name errors are deferred, and the program is written all the same. |
 | `--wat` | Writes WebAssembly text, to `out/<package name>.wat`, rather than the binary format: the same program, for reading. |
+| `--locked` | Leaves `nanyx.lock` as it is: a manifest that asks for something it doesn't lock is an error, naming what. Use it in CI, so that a manifest change pushed without its lockfile fails rather than resolving something new. |
 | `--timings`, `--host <host>` | As for `run`. |
 
 ## `nanyx wasm`
@@ -256,19 +261,30 @@ differently.
 `nanyx install` adds a dependency to the manifest of the package the current directory is in:
 
 ```bash
+nanyx install acme.json                  # from the package index, at its newest version
+nanyx install acme.json --version 1.2    # from the package index, at 1.2 or a later version compatible with it
 nanyx install acme.util --path ../util   # the package in that directory
 nanyx install nanyx.console.core         # a package the compiler ships, at the compiler's version
 ```
 
-The directory must hold a package of the name you give, and a package already listed is an error. Choosing the version
-to lock in `nanyx.lock` isn't supported yet, so `--version` writes the entry and then fails, saying so.
+A package from the index is written at the versions `--version` accepts, or else at the newest version the index has,
+`version = "1.4.2"`, which accepts it and the later versions compatible with it. It is then locked in `nanyx.lock` and
+downloaded, as `nanyx pull` does, and `install` says which version it locked. If no versions satisfy every dependency
+with it, `install` explains why (`NYX0047`) and leaves the manifest as it was. A directory must hold a package of the
+name you give, and a package already listed is an error.
 
 ## `nanyx pull`
 
-`nanyx pull` downloads into the package cache each package `nanyx.lock` locks that isn't there yet, checking each
-against the SHA-256 the lockfile records, then checks that each dependency of a package is there, as a build would, and
-lists them: `acme.util 0.3.0 (../util)`, `acme.web 1.2.0 (downloaded)`. A dependency named by its version that the
-lockfile doesn't lock can't be had yet, since choosing a version isn't supported yet, so `pull` fails for one.
+`nanyx pull` makes a package's dependencies available to build. When the manifest asks for something `nanyx.lock`
+doesn't lock (a new dependency, or a requirement the version locked no longer satisfies), it chooses versions from the
+package index and writes the lockfile, saying what it locks: the newest version each package's dependencies accept,
+keeping every version the lockfile already locks while it is still accepted, so nothing is upgraded as a side effect.
+A yanked version isn't chosen anew, but stays where it is locked already, and a version that needs a newer compiler
+isn't chosen. When no versions satisfy every dependency, it explains why, a step at a time (`NYX0047`).
+
+Then it downloads into the package cache each package the lockfile locks that isn't there yet, checking each against
+the SHA-256 the lockfile records, checks that each dependency of a package is there, as a build would, and lists them:
+`acme.util 0.3.0 (../util)`, `acme.web 1.2.0 (downloaded)`.
 
 It fetches each dependency on GitHub, a package or a file, at the commit it is pinned to, into the cache too. Set
 `GITHUB_TOKEN` to a token of yours to have GitHub count its requests against your account.

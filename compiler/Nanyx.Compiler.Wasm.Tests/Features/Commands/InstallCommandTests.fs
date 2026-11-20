@@ -1,4 +1,5 @@
-/// `nanyx install`: a dependency added to the manifest of the package the current directory is in (#1471).
+/// `nanyx install`: a dependency added to the manifest of the package the current directory is in (#1471), and, for one
+/// from the package index, locked and downloaded (#864).
 module TranspilerWasmTests.Features.Commands.Install
 
 open System.IO
@@ -46,16 +47,53 @@ let ``A package the compiler ships is added at the compiler's version`` () =
     Assert.Equal(0, (nanyxIn app [ "install"; "nanyx.console.core" ]).ExitCode)
     Assert.Contains($"dependencies = [(package = \"nanyx.console.core\", version = \"{Toolchain.version}\")]", manifestOf app)
 
+/// A store whose cache and index are directories in `directory`, whose index lists acme.json 1.0.0 and 1.1.0, each with
+/// a public module `json` whose `version` says which it is.
+let private indexWithJson (directory: TempDirectory) =
+    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported }
+    for version in [ "1.0.0"; "1.1.0" ] do
+        directory.Write $"json-{version}/json.nyxp" $"(package = (name = \"acme.json\", version = \"{version}\"))\n"
+        directory.Write $"json-{version}/json.nyx" $"export module json\n\nexport def version = \"{version}\"\n"
+        publishToIndex store (Path.Combine(directory.Path, $"json-{version}")) [] "" |> ignore
+    store
+
 [<Fact>]
-let ``A package named by its version is written, but can't be downloaded yet`` () =
+let ``A package from the index is added at its newest version, locked and downloaded, and then runs`` () =
     use directory = new TempDirectory()
+    let store = indexWithJson directory
     let app = appWith directory plain
-    let outcome = nanyxIn app [ "install"; "acme.json"; "--version"; "1.2.0" ]
-    Assert.Equal(
-        "error: 'acme.json' 1.2.0 is named by its version, but it isn't locked in 'nanyx.lock', and choosing a version to lock isn't supported yet: give the directory it is in, with `path`\n",
-        outcome.StandardError.ReplaceLineEndings "\n")
+    File.WriteAllText(Path.Combine(app, "main.nyx"), "module main\n\nimport acme.json/json\n\n@entry\ndef main = { println(version) }\n")
+    let outcome = nanyxInStore store app [ "install"; "acme.json" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal("Added acme.json to app.nyxp\nLocked acme.json 1.1.0\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Contains("dependencies = [(package = \"acme.json\", version = \"1.1.0\")]", manifestOf app)
+    Assert.True(File.Exists(Path.Combine(app, "nanyx.lock")))
+    Assert.True(Directory.Exists(Path.Combine(directory.Path, "cache", "acme.json", "1.1.0")))
+    Assert.Equal("1.1.0\n", (nanyxInStore store app [ "run" ]).StandardOutput.ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``A package from the index is added at the versions --version accepts`` () =
+    use directory = new TempDirectory()
+    let store = indexWithJson directory
+    let app = appWith directory plain
+    let outcome = nanyxInStore store app [ "install"; "acme.json"; "--version"; "1.0.0" ]
+    Assert.Equal("Added acme.json to app.nyxp\nLocked acme.json 1.1.0\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+    Assert.Contains("dependencies = [(package = \"acme.json\", version = \"1.0.0\")]", manifestOf app)
+
+[<Fact>]
+let ``A package no version of which can be locked is explained, and the manifest is left as it was`` () =
+    use directory = new TempDirectory()
+    let store = indexWithJson directory
+    let app = appWith directory plain
+    let outcome = nanyxInStore store app [ "install"; "acme.json"; "--version"; "2.0" ]
+    Assert.Contains("error NYX0047: Version conflict 'app'", outcome.StandardError)
+    Assert.Contains("Because app depends on acme.json 2.0, which no version of acme.json in the index satisfies", outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("dependencies = [(package = \"acme.json\", version = \"1.2.0\")]", manifestOf app)
+    Assert.Equal(plain, manifestOf app)
+    let missing = nanyxInStore store app [ "install"; "acme.nope" ]
+    Assert.Contains("has no version of 'acme.nope' to install", missing.StandardError)
+    Assert.Equal(plain, manifestOf app)
 
 [<Fact>]
 let ``A package already listed is an error naming its entry`` () =
@@ -77,14 +115,6 @@ let ``A directory holding a package of another name is an error`` () =
     Assert.Contains("is named 'acme.util', not 'acme.tools': make the names match", outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal(plain, manifestOf app)
-
-[<Fact>]
-let ``A package that isn't shipped needs a path or a version`` () =
-    use directory = new TempDirectory()
-    let app = appWith directory plain
-    let outcome = nanyxIn app [ "install"; "acme.util" ]
-    Assert.Equal("error: Neither `--path` nor `--version` was given: give the directory 'acme.util' is in with `--path`, or its version with `--version`\n", outcome.StandardError.ReplaceLineEndings "\n")
-    Assert.Equal(1, outcome.ExitCode)
 
 [<Fact>]
 let ``A version that isn't one is an error, and the manifest is left as it was`` () =

@@ -11,14 +11,23 @@ type DependencyEntry =
       Path: string option
       Location: SourceSpan }
 
-/// What `nanyx install` makes: the manifest's new text, and the package it added if that one has to be downloaded,
-/// which can't be done yet.
-type Installed = { Manifest: string; ToDownload: (string * string) option }
+/// What `nanyx install` makes: the manifest's new text, and the lockfile that locks the package it added, if that one
+/// is named by its version and the lockfile didn't lock it already, with a line for each package it locks anew.
+type Installed =
+    { Manifest: string
+      Lockfile: (Lockfile * string list) option }
 
-/// `nanyx pull` and `nanyx install`: making a package's dependencies available, and adding one to its manifest. A
-/// dependency named by its version is the version `nanyx.lock` locks, which `pull` downloads into the cache; choosing a
-/// version to lock is to come ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), and both commands say so for
-/// one the lockfile doesn't lock.
+/// Why the lockfile can't be brought up to date.
+type LockFailure =
+    /// No versions satisfy every dependency (`NYX0047`).
+    | NoVersions of Diagnostic
+    /// Something else went wrong: each line says what.
+    | LockErrors of string list
+
+/// `nanyx pull` and `nanyx install`, and a build bringing `nanyx.lock` up to date: making a package's dependencies
+/// available, and adding one to its manifest. A dependency named by its version is the version `nanyx.lock` locks,
+/// chosen from the package index when the manifest asks for something the lockfile doesn't satisfy (`Resolution`), and
+/// downloaded into the cache.
 module PackageDependencies =
     let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
 
@@ -46,55 +55,102 @@ module PackageDependencies =
                 | _ -> None)
         | _ -> []
 
-    /// Whether `entry` names a package to download: by its version, and not one the compiler ships.
-    let private needsDownload (entry: DependencyEntry) = entry.Path.IsNone && entry.Version.IsSome && not (isShipped entry.Name)
-
-    /// What can't be had yet, for `nanyx pull` and `nanyx install`: a package named by its version that the lockfile
-    /// doesn't lock.
-    let private cantDownload (name: string) (version: string) =
-        $"'{name}' {version} is named by its version, but it isn't locked in '{Lockfile.fileName}', and choosing a version to lock isn't supported yet: give the directory it is in, with `path`"
-
     /// Each package of the build, depended on directly or through others, once, in the order a build reaches them.
     let rec private reached (packages: Package list) : Package list =
         packages |> List.collect (fun package -> package :: reached package.Dependencies) |> List.distinctBy _.Manifest.Path
 
-    /// Pulls the dependencies of the package whose manifest is at `manifestPath`, from `store`: downloads into the cache
-    /// each package `nanyx.lock` locks that isn't there yet, checking each against its SHA-256, then checks that every
-    /// dependency is there, and gives a line for each, as `acme.util 0.3.0 (../util)` or `acme.web 1.2.0 (downloaded)`.
-    /// A package named by its version that the lockfile doesn't lock is an error, since choosing a version isn't
-    /// supported yet; so is a download that fails, and anything a build would find wrong with the dependencies.
-    let pull (store: PackageStore) (manifestPath: string) : Result<string list, string list> =
-        readData manifestPath
-        |> Result.mapError List.singleton
-        |> Result.bind (fun (_, fields) ->
-            Lockfile.read (Lockfile.pathIn (Path.GetDirectoryName(Path.GetFullPath manifestPath)))
+    /// The lines that say how `after` differs from `before`: a package locked anew, at another version, or no longer.
+    let private changes (before: Lockfile) (after: Lockfile) : string list =
+        let locked =
+            after.Packages
+            |> List.choose (fun package ->
+                match Lockfile.tryFind package.Name before with
+                | Some earlier when earlier.Version = package.Version -> None
+                | Some earlier -> Some $"Locked {package.Name} {package.Version}, in place of {earlier.Version}"
+                | None -> Some $"Locked {package.Name} {package.Version}")
+        let unlocked =
+            before.Packages
+            |> List.filter (fun package -> (Lockfile.tryFind package.Name after).IsNone)
+            |> List.map (fun package -> $"Unlocked {package.Name} {package.Version}, which the build no longer needs")
+        locked @ unlocked
+
+    /// The lockfile `manifest` needs, if `lockfile` doesn't satisfy what it asks for, chosen from the index of `store`,
+    /// with a line for each package it locks anew; none when `lockfile` satisfies it. With `frozen`, as
+    /// `nanyx build --locked` asks, a lockfile that doesn't satisfy the manifest is an error, naming what it lacks.
+    let private relock (store: PackageStore) (manifest: Manifest) (lockfile: Lockfile) (frozen: bool) : Result<(Lockfile * string list) option, LockFailure> =
+        match Resolution.unsatisfied (Resolution.requirements store manifest) lockfile with
+        | [] -> Result.Ok None
+        | missing when frozen ->
+            Result.Error(
+                LockErrors(
+                    $"'{Lockfile.fileName}' doesn't satisfy what '{Path.GetFileName manifest.Path}' asks for, and `--locked` keeps it as it is: run `nanyx pull` to update it"
+                    :: missing
+                )
+            )
+        | _ ->
+            match Resolution.resolve store manifest lockfile with
+            | Result.Ok resolved -> Result.Ok(Some(resolved, changes lockfile resolved))
+            | Result.Error(Conflict diagnostic) -> Result.Error(NoVersions diagnostic)
+            | Result.Error(IndexUnreadable message) -> Result.Error(LockErrors [ message ])
+
+    /// Downloads into the cache of `store` each package `lockfile` locks that isn't there yet.
+    let private download (store: PackageStore) (lockfile: Lockfile) : Result<unit, LockFailure> =
+        match lockfile.Packages |> List.map (PackageIndex.download store) |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
+        | [] -> Result.Ok()
+        | failed -> Result.Error(LockErrors failed)
+
+    /// Brings the lockfile of the package whose manifest is at `manifestPath` up to date, as a build does before it reads
+    /// the lockfile: when the manifest asks for something the lockfile doesn't satisfy (a new dependency, a changed
+    /// requirement), chooses versions again from the index of `store`, keeping those still allowed, writes the lockfile and
+    /// downloads what it locks. Gives a line for each package it locks anew, none when it changes nothing. With `frozen`,
+    /// as `--locked` asks, a lockfile that doesn't satisfy the manifest is an error. A manifest or lockfile that doesn't
+    /// read is left for the build to report.
+    let update (store: PackageStore) (manifestPath: string) (frozen: bool) : Result<string list, LockFailure> =
+        match Manifest.read manifestPath, Lockfile.read (Lockfile.pathIn (Path.GetDirectoryName(Path.GetFullPath manifestPath))) with
+        | Result.Ok manifest, Result.Ok lockfile ->
+            relock store manifest (defaultArg lockfile Lockfile.empty) frozen
+            |> Result.bind (function
+                | None -> Result.Ok []
+                | Some(resolved, lines) ->
+                    File.WriteAllText(Lockfile.pathIn manifest.Root, Lockfile.write resolved)
+                    download store resolved |> Result.map (fun () -> lines))
+        | _ -> Result.Ok []
+
+    /// Pulls the dependencies of the package whose manifest is at `manifestPath`, from `store`: brings its lockfile up to
+    /// date (see `update`), downloads into the cache each package `nanyx.lock` locks that isn't there yet, checking each
+    /// against its SHA-256, then checks that every dependency is there. Gives a line for each package it locks anew, then
+    /// one for each dependency, as `acme.util 0.3.0 (../util)` or `acme.web 1.2.0 (downloaded)`. Or what is wrong: no
+    /// versions that satisfy every dependency, a download that fails, or anything a build would find wrong with the
+    /// dependencies.
+    let pull (store: PackageStore) (manifestPath: string) : Result<string list, LockFailure> =
+        let root = Path.GetDirectoryName(Path.GetFullPath manifestPath)
+        let before = Lockfile.read (Lockfile.pathIn root) |> Result.map (Option.defaultValue Lockfile.empty) |> Result.defaultValue Lockfile.empty
+        let wasCached = before.Packages |> List.filter (fun locked -> Directory.Exists(PackageStore.directoryOf store locked.Name locked.Version))
+        update store manifestPath false
+        |> Result.bind (fun locked ->
+            Lockfile.read (Lockfile.pathIn root)
             |> Result.map (Option.defaultValue Lockfile.empty)
-            |> Result.bind (fun lockfile ->
-                match entries fields |> List.filter (fun entry -> needsDownload entry && (Lockfile.tryFind entry.Name lockfile).IsNone) with
-                | _ :: _ as unlocked -> Result.Error(unlocked |> List.map (fun entry -> cantDownload entry.Name entry.Version.Value))
-                | [] ->
-                    let wasCached = lockfile.Packages |> List.filter (fun locked -> Directory.Exists(PackageStore.directoryOf store locked.Name locked.Version))
-                    let downloads = lockfile.Packages |> List.map (PackageIndex.download store)
-                    match downloads |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
-                    | _ :: _ as failed -> Result.Error failed
-                    | [] ->
-                        Package.ofManifestFrom store manifestPath
-                        |> Result.map (fun package ->
-                            let root = package.Manifest.Root
-                            match reached package.Dependencies with
-                            | [] -> [ $"{package.Manifest.Name} has no dependencies" ]
-                            | dependencies ->
-                                dependencies
-                                |> List.map (fun dependency ->
-                                    let name, version = dependency.Manifest.Name, dependency.Manifest.Version
-                                    let where =
-                                        if isShipped name && dependency.Manifest.Root = ShippedPackages.directoryOf name then
-                                            "shipped with the compiler"
-                                        elif PackageModules.samePath dependency.Manifest.Root (PackageStore.directoryOf store name (SemanticVersion.tryParse version).Value) then
-                                            if wasCached |> List.exists (fun locked -> locked.Name = name) then "in the cache" else "downloaded"
-                                        else
-                                            PackageModules.relativePath root dependency.Manifest.Root
-                                    $"{name} {version} ({where})"))))
+            |> Result.mapError LockErrors
+            |> Result.bind (fun lockfile -> download store lockfile)
+            |> Result.bind (fun () -> Package.ofManifestFrom store manifestPath |> Result.mapError LockErrors)
+            |> Result.map (fun package ->
+                let root = package.Manifest.Root
+                let listed =
+                    match reached package.Dependencies with
+                    | [] -> [ $"{package.Manifest.Name} has no dependencies" ]
+                    | dependencies ->
+                        dependencies
+                        |> List.map (fun dependency ->
+                            let name, version = dependency.Manifest.Name, dependency.Manifest.Version
+                            let where =
+                                if isShipped name && dependency.Manifest.Root = ShippedPackages.directoryOf name then
+                                    "shipped with the compiler"
+                                elif PackageModules.samePath dependency.Manifest.Root (PackageStore.directoryOf store name (SemanticVersion.tryParse version).Value) then
+                                    if wasCached |> List.exists (fun cached -> cached.Name = name && string cached.Version = version) then "in the cache" else "downloaded"
+                                else
+                                    PackageModules.relativePath root dependency.Manifest.Root
+                            $"{name} {version} ({where})")
+                locked @ listed))
 
     /// The name of the package whose manifest is in `directory`, or why there is none.
     let private packageIn (directory: string) : Result<string, string> =
@@ -129,13 +185,46 @@ module PackageDependencies =
         | _, Some package -> insert package.Value.Location.End $", dependencies = [{entry}]"
         | _, None -> text
 
-    /// Adds the package `name` to the dependencies of the package whose manifest is at `manifestPath`: found in
-    /// `directory` (a full path), which must hold a package of that name, or at `version`. A package the compiler ships
-    /// is named at the compiler's `toolVersion` when no version is given. Gives the manifest's new text; or why it can't
-    /// be added: a name the manifest refuses, one already listed, or neither a directory nor a version to find it by.
-    let install (toolVersion: string) (manifestPath: string) (name: string) (version: string option) (directory: string option) : Result<Installed, string> =
+    /// The lockfile the manifest `text`, the new text of the one at `manifestPath`, needs, chosen from the index of
+    /// `store`, with a line for each package it locks anew; none if the lockfile beside it satisfies it already.
+    let private lockFor (store: PackageStore) (manifestPath: string) (text: string) : Result<(Lockfile * string list) option, LockFailure> =
+        match Manifest.check manifestPath text, Lockfile.read (Lockfile.pathIn (Path.GetDirectoryName manifestPath)) with
+        | Result.Ok manifest, Result.Ok lockfile -> relock store manifest (defaultArg lockfile Lockfile.empty) false
+        | Result.Error problems, _ -> Result.Error(LockErrors(problems |> List.map Manifest.describe))
+        | _, Result.Error messages -> Result.Error(LockErrors messages)
+
+    /// Where `nanyx install` finds the package `name`: in `directory` (a full path), which must hold a package of that
+    /// name; at `version`; shipped with the compiler, when no version is given; or else at the newest version the index
+    /// of `store` has that can be chosen, written as that version, `1.4.2`, which accepts the versions compatible with it.
+    let private sourceOf (store: PackageStore) (name: string) (version: string option) (directory: string option) : Result<DependencySource, string> =
+        match directory, version with
+        | Some _, Some _ -> Result.Error "`--path` and `--version` were both given: give a dependency's directory or its version, not both"
+        | Some directory, None ->
+            packageIn directory
+            |> Result.bind (fun found ->
+                if found <> name then
+                    Result.Error $"The package in '{directory}' is named '{found}', not '{name}': make the names match"
+                else
+                    Result.Ok(DependencySource.AtPath directory))
+        | None, Some version ->
+            match VersionRequirement.tryParse version with
+            | Some requirement -> Result.Ok(FromIndex requirement)
+            | None -> Result.Error $"'{version}' is not a version, which must be {VersionRequirement.rule}"
+        | None, None when isShipped name -> Result.Ok DependencySource.Shipped
+        | None, None ->
+            Resolution.newest store name
+            |> Result.bind (function
+                | Some newest -> Result.Ok(FromIndex { Minimum = newest; Written = string newest })
+                | None -> Result.Error $"The index at '{store.Index}' has no version of '{name}' to install: check its name, or give the directory it is in with `--path`")
+
+    /// Adds the package `name` to the dependencies of the package whose manifest is at `manifestPath`, found as
+    /// `sourceOf` says, from `store`. A package the compiler ships is named at the compiler's `toolVersion`. Gives the
+    /// manifest's new text and, for a package named by its version, the lockfile that locks it; or why it can't be added:
+    /// a name the manifest refuses, one already listed, a directory that holds another package, or a version no
+    /// resolution can choose.
+    let install (toolVersion: string) (store: PackageStore) (manifestPath: string) (name: string) (version: string option) (directory: string option) : Result<Installed, LockFailure> =
         if not (Manifest.namePattern.IsMatch name) then
-            Result.Error $"""The package name '{name}' must be {Manifest.nameRule}"""
+            Result.Error(LockErrors [ $"""The package name '{name}' must be {Manifest.nameRule}""" ])
         else
             readData manifestPath
             |> Result.bind (fun (text, fields) ->
@@ -143,27 +232,12 @@ module PackageDependencies =
                 | Some existing ->
                     let written = text.Substring(existing.Location.Start, existing.Location.End - existing.Location.Start)
                     Result.Error $"'{name}' is already a dependency, at line {existing.Location.StartLine + 1} of '{Path.GetFileName manifestPath}': `{written}`"
-                | None ->
-                    let added =
-                        match directory, version with
-                        | Some _, Some _ -> Result.Error "`--path` and `--version` were both given: give a dependency's directory or its version, not both"
-                        | Some directory, None ->
-                            packageIn directory
-                            |> Result.bind (fun found ->
-                                if found <> name then
-                                    Result.Error $"The package in '{directory}' is named '{found}', not '{name}': make the names match"
-                                else
-                                    Result.Ok(DependencySource.AtPath directory, None))
-                        | None, Some version ->
-                            match VersionRequirement.tryParse version with
-                            | Some requirement -> Result.Ok(FromIndex requirement, (if isShipped name then None else Some (name, version)))
-                            | None -> Result.Error $"'{version}' is not a version, which must be {VersionRequirement.rule}"
-                        | None, None when isShipped name -> Result.Ok(DependencySource.Shipped, None)
-                        | None, None -> Result.Error $"Neither `--path` nor `--version` was given: give the directory '{name}' is in with `--path`, or its version with `--version`"
-                    added
-                    |> Result.map (fun (source, download) ->
-                        let entry = Manifest.entryText toolVersion (Path.GetDirectoryName manifestPath) name source
-                        { Manifest = withEntry text fields entry; ToDownload = download }))
-
-    /// What `nanyx install` says of the package `name` it added at `version`, which has to be downloaded.
-    let notDownloaded (name: string, version: string) = cantDownload name version
+                | None -> sourceOf store name version directory |> Result.map (fun source -> text, fields, source))
+            |> Result.mapError (List.singleton >> LockErrors)
+            |> Result.bind (fun (text, fields, source) ->
+                let entry = Manifest.entryText toolVersion (Path.GetDirectoryName manifestPath) name source
+                let manifest = withEntry text fields entry
+                match source with
+                | FromIndex _ when not (isShipped name) ->
+                    lockFor store manifestPath manifest |> Result.map (fun lockfile -> { Manifest = manifest; Lockfile = lockfile })
+                | _ -> Result.Ok { Manifest = manifest; Lockfile = None })

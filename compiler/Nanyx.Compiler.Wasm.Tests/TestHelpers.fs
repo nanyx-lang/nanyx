@@ -167,8 +167,9 @@ let private command (arguments: string list) : Shell -> int =
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
         let wat, rest = takeFlag "--wat" rest
+        let locked, rest = takeFlag "--locked" rest
         let outputPath, release, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not noInline, (if wat then ProgramFormat.Text else ProgramFormat.Binary))
+        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not noInline, (if wat then ProgramFormat.Text else ProgramFormat.Binary), locked)
     | "wasm" :: inputFile :: rest ->
         let wat, rest = takeFlag "--wat" rest
         let outputPath, release, _, _, _ = options (null, false, false, null, []) rest
@@ -215,6 +216,39 @@ let nanyxInUntil (stop: Threading.CancellationToken) (directory: string) (argume
 /// `nanyxIn`, with the package cache and index of `store` in place of the user's.
 let nanyxInStore (store: NyxCompiler.PackageStore) (directory: string) (arguments: string list) : RunOutcome =
     inProcessWith (Some store) Threading.CancellationToken.None directory "" [] (command arguments)
+
+/// Pulls the dependencies of the package in `packageDirectory` and packs it with `nanyx pack` into the `artifacts` directory of the index of `store`, a
+/// directory on disk, and lists it in the index after the versions listed already, as a release would, with
+/// `dependencies` as the index writes them and `fields`, more of its entry's JSON, such as `, "yanked": true`. Gives
+/// its SHA-256.
+let publishToIndex (store: NyxCompiler.PackageStore) (packageDirectory: string) (dependencies: (string * string) list) (fields: string) : string =
+    let artifacts = Path.Combine(store.Index, "artifacts")
+    let pulled = nanyxInStore store packageDirectory [ "pull" ]
+    if pulled.ExitCode <> 0 then failwith pulled.StandardError
+    let packed = nanyxInStore store packageDirectory [ "pack"; "--out"; artifacts ]
+    if packed.ExitCode <> 0 then failwith packed.StandardError
+    let hash = packed.StandardOutput.ReplaceLineEndings("\n").Split('\n') |> Array.find (fun line -> line.StartsWith "sha256 ") |> fun line -> line.Substring 7
+    let manifest =
+        match NyxCompiler.Manifest.tryFind packageDirectory with
+        | Result.Ok(Some path) ->
+            match NyxCompiler.Manifest.read path with
+            | Result.Ok manifest -> manifest
+            | Result.Error _ -> failwith $"'{path}' doesn't read"
+        | _ -> failwith $"'{packageDirectory}' has no manifest"
+    File.WriteAllText(Path.Combine(store.Index, "config.json"), """{ "format": 1, "index": "index/" }""")
+    let listing = Path.Combine(store.Index, "index", manifest.Name.Split('.')[0], manifest.Name + ".json")
+    Directory.CreateDirectory(Path.GetDirectoryName listing) |> ignore
+    let earlier =
+        if File.Exists listing then
+            let text = File.ReadAllText listing
+            text.Substring(text.IndexOf '[' + 1, text.LastIndexOf ']' - text.IndexOf '[' - 1).Trim() + ","
+        else
+            ""
+    let written = dependencies |> List.map (fun (name, range) -> $"\"{name}\": \"{range}\"") |> String.concat ", "
+    let entry =
+        $$"""{ "version": "{{manifest.Version}}", "url": "../../artifacts/{{manifest.Name}}-{{manifest.Version}}.nyxpkg", "sha256": "{{hash}}", "dependencies": { {{written}} }{{fields}} }"""
+    File.WriteAllText(listing, $$"""{ "name": "{{manifest.Name}}", "versions": [{{earlier}} {{entry}}] }""")
+    hash
 
 /// Does what `nanyx run <inputPath>` does, with `--check-memory` when `checkMemory` is set (see `nanyxWithInput`).
 /// `standardInput` is the program's stdin. Its stdout is captured, and so is its stderr, with the compiler's diagnostics

@@ -253,7 +253,7 @@ internal static partial class CliCommands
                 ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls, allowedDirectories: directories, profile: profile);
         }
 
-        if (!TryFindPackage(shell, single, host, out var package, out var failed))
+        if (!TryUpdateLockfile(shell, single, frozen: false, out var failed) || !TryFindPackage(shell, single, host, out var package, out failed))
         {
             return failed;
         }
@@ -293,28 +293,30 @@ internal static partial class CliCommands
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
     /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
+    /// <param name="locked">Refuse to change nanyx.lock: a manifest that asks for something it doesn't lock is an error, as CI wants. Without it, the build chooses versions again and updates nanyx.lock, as nanyx pull does.</param>
     [Consolo("build")]
     public static int Build(
         [Consolo("out", Alias = "o")] string? outputPath = null,
         [Consolo("release")] bool release = false,
+        [Consolo("locked")] bool locked = false,
         [Consolo("timings")] bool timings = false,
         [Consolo("host")] string? host = null,
         [Consolo("no-inline")] bool noInline = false,
         [Consolo("wat")] bool wat = false,
         params string[] path)
     {
-        return BuildIn(Shell.Process, outputPath, release, path, timings, host, !noInline, wat ? ProgramFormat.Text : ProgramFormat.Binary);
+        return BuildIn(Shell.Process, outputPath, release, path, timings, host, !noInline, wat ? ProgramFormat.Text : ProgramFormat.Binary, locked);
     }
 
     /// <summary>What <c>nanyx build</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary)
+    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary, bool locked = false)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
             return UsageError;
         }
 
-        if (!TryFindPackage(shell, single, host, out var package, out var failed))
+        if (!TryUpdateLockfile(shell, single, locked, out var failed) || !TryFindPackage(shell, single, host, out var package, out failed))
         {
             return failed;
         }
@@ -531,6 +533,63 @@ internal static partial class CliCommands
 
         package = chosen.ResultValue;
         return true;
+    }
+
+    /// <summary>
+    /// Brings the lockfile of the package a path names, or of the one the shell's directory is in, up to date before it
+    /// is built, as <see cref="PackageDependencies.update"/> does: when the manifest asks for something it doesn't lock,
+    /// chooses versions again, writes it and downloads what it locks, saying so on stderr. With <paramref name="frozen"/>
+    /// (<c>--locked</c>), that is an error. A path that names no package is left for the build to report.
+    /// </summary>
+    private static bool TryUpdateLockfile(Shell shell, string? path, bool frozen, out int failed)
+    {
+        failed = 0;
+        var full = path is null ? shell.Directory : shell.FullPath(path);
+        string? manifestPath = null;
+        if (File.Exists(full) && full.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase))
+        {
+            manifestPath = full;
+        }
+        else if (Directory.Exists(full) && ManifestModule.tryFind(full) is { IsOk: true } found && found.ResultValue is { } inside)
+        {
+            manifestPath = inside.Value;
+        }
+
+        if (manifestPath is null)
+        {
+            return true;
+        }
+
+        var updated = PackageDependencies.update(PackageStoreModule.downloading(shell.Packages), manifestPath, frozen);
+        if (updated.IsError)
+        {
+            PrintLockFailure(shell, updated.ErrorValue);
+            failed = 1;
+            return false;
+        }
+
+        foreach (var line in updated.ResultValue)
+        {
+            shell.Error.WriteLine(line);
+        }
+
+        return true;
+    }
+
+    /// <summary>Reports why a lockfile can't be brought up to date: a version conflict as a diagnostic, and anything
+    /// else as errors.</summary>
+    private static void PrintLockFailure(Shell shell, LockFailure failure)
+    {
+        if (failure is LockFailure.NoVersions conflict)
+        {
+            PrintDiagnostics(shell, ListModule.OfSeq([conflict.Item]), shell.Error);
+            return;
+        }
+
+        foreach (var error in ((LockFailure.LockErrors)failure).Item)
+        {
+            shell.Error.WriteLine($"error: {error}");
+        }
     }
 
     /// <summary>

@@ -371,22 +371,12 @@ To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
 
 # NYX0024: Manifest field not supported yet
 
-The manifest uses a field the compiler knows, but does not support yet: a dependency named by its version that
-`nanyx.lock` doesn't lock, since choosing a version to lock isn't supported yet.
+The manifest, or a script's directives, use something the compiler knows but doesn't support yet: a script's
+`::dependency` that names a package by its version, since a script has no lockfile to lock it in yet, or a dependency
+on GitHub where nothing can fetch it.
 
-```nanyx
--- file: demo.nyxp
-(
-  package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0024: The dependency 'acme.util' 1.2 is not locked in 'nanyx.lock', ...
-)
--- file: demo.nyx
-export module demo
+To fix it, give the directory the package is in instead, as in `::dependency acme.util ../util`.
 
-export def one = 1
-```
-
-To fix it, give the directory the package is in instead, `path = "../util"`.
 # NYX0025: Module not public
 
 A module imports a module of a package it depends on that the package does not make public. Another package can import
@@ -770,8 +760,8 @@ imports, or packages of their own.
 # NYX0044: Lockfile that can't be read
 
 The package's `nanyx.lock` is not a lockfile this `nanyx` reads: it is not a record, a locked package lacks a field,
-or it was written in another format. `nanyx` is to write the lockfile and keep it up to date, but nothing writes it
-yet ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), so today a lockfile is written by hand.
+or it was written in another format. `nanyx` writes the lockfile and keeps it up to date, so this happens when it was edited by hand or written by
+another version of `nanyx`.
 
 ```nanyx
 -- file: demo.nyxp
@@ -787,9 +777,8 @@ export module demo
 export def one = 1
 ```
 
-To fix it, correct the lockfile so that it is a record of the format the message names, or delete it if the package
-names no dependency by its version. `nanyx pull` doesn't write a lockfile yet: until
-[#864](https://github.com/nanyx-lang/nanyx/issues/864), it only downloads what one locks.
+To fix it, delete the lockfile and run `nanyx pull`, which writes it again, choosing the newest versions the
+dependencies accept.
 
 # NYX0045: Package with nothing to run
 
@@ -832,6 +821,27 @@ And because app depends on acme.web 1.0 and acme.json 2.0, the dependencies can'
 A step that later steps refer to is numbered, `(1)`, and they say `(1)` where they use it. To fix it, change the
 requirement of one of the packages the message names: depend on a version of `acme.web` that accepts `acme.core` 2, say,
 or on an older `acme.json`.
+
+# NYX0048: Dependency not locked
+
+A dependency named by its version is the version `nanyx.lock` locks, and the lockfile doesn't lock it: it is new, or
+nothing has chosen its version yet. `nanyx build` and `nanyx run` lock it themselves, as `nanyx pull` does, unless
+`--locked` keeps the lockfile as it is; the editor reports it until one of them has.
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [(package = "acme.util", version = "1.2")]  -- error NYX0048: The dependency 'acme.util' 1.2 is not locked in 'nanyx.lock': run `nanyx pull` to choose its version and lock it
+)
+-- file: demo.nyx
+export module demo
+
+export def one = 1
+```
+
+To fix it, run `nanyx pull`, which chooses the newest version the dependencies accept, writes it to `nanyx.lock` and
+downloads it.
 
 # NYX0101: Unknown identifier
 

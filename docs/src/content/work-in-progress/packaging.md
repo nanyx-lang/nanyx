@@ -50,11 +50,11 @@ compiler ships ([Packages and projects](../tour/packages),
 ([The package manifest](./package-manifest)); GitHub references; the lockfile, the `.nyxpkg` format and the package
 cache, read by builds and filled by `nanyx pull`; `api.json` and `nanyx bump`
 ([Versions](../tour/packages#versions)); and `nanyx new`, `migrate`, `install`, `pull`, `pack`, `bump` and `manifest`
-([Packages](../standard-tools/command-line#packages)). A program compiles to one WebAssembly module: imported modules
+([Packages](../standard-tools/command-line#packages)); and choosing versions with PubGrub, writing the lockfile, and
+`nanyx build --locked` ([#864](https://github.com/nanyx-lang/nanyx/issues/864)). A program compiles to one WebAssembly module: imported modules
 are checked separately and their items inlined, so there is no compiled artifact per module or package.
 
-Not built: choosing versions and writing the lockfile ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), so a
-dependency the lockfile doesn't lock is `NYX0024` and `install` and `pull` can't add one; publishing and yanking
+Not built: publishing and yanking
 ([#865](https://github.com/nanyx-lang/nanyx/issues/865)); projects (`.nyxproj`,
 [#1386](https://github.com/nanyx-lang/nanyx/issues/1386)); `nanyx manifest` beyond `--json`; and the editor's side. How
 the package commands are built is on [The nanyx command](../compiler-internals/command-line#packages).
@@ -111,8 +111,10 @@ how a claim survives a GitHub rename (it is kept by account ID), how organisatio
   [#859](https://github.com/nanyx-lang/nanyx/issues/859)), using
   [PubGrub](https://github.com/dart-lang/pub/blob/master/doc/solver.md) (as Dart and uv do). Its main attraction is that when
   there is no solution it explains why in plain sentences, which matches the error-message principles.
-- `nanyx.lock` records the exact version and SHA-256 of every package in the build. It is to be written by `pull`,
-  `install` and `build` ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), is committed, and is the only input a build needs from the network.
+- `nanyx.lock` records the exact version and SHA-256 of every package in the build. It is written by `pull`,
+  `install`, `build` and `run` when the manifest asks for something it doesn't lock
+  ([#864](https://github.com/nanyx-lang/nanyx/issues/864)), is committed, and is the only input a build needs from
+  the network. `nanyx build --locked` refuses to change it.
 - Only direct dependencies can be imported, as the docs say. The resolver still sees the whole graph.
 
 ## Enforced semantic versioning
@@ -179,7 +181,7 @@ What this gives up: because nothing is mirrored, an author who deletes a release
 need it. The hash protects integrity, not availability. Mirroring can be added later behind the same `url` field,
 with no client change.
 
-**Next**, `nanyx publish` ([plan item 3](#plan)) will build the asset, create the release on the package's own
+**Next**, `nanyx publish` ([plan item 2](#plan)) will build the asset, create the release on the package's own
 repository, and open the registration pull request for a package's first version. When pull requests become the
 bottleneck, a small service can take over registration and syncing behind an upload API with tokens, and keep
 writing the same static index. The client, the lockfile and every existing package are unaffected.
@@ -212,8 +214,7 @@ project and never modified, by `nanyx pull` only (`PackageIndex.download`); a bu
 `NANYX_INDEX`, if it is set: an address, or a directory on disk, which is how the tests use it. A yanked version still
 downloads, since a lockfile that names it must keep building.
 
-**Not built:** `nanyx build --offline`, which waits for resolution (#864), since until then a build never touches the
-network anyway.
+**Not built:** `nanyx build --offline`, which stops a build that would update the lockfile from reaching the index.
 
 ## The editor
 
@@ -226,7 +227,8 @@ cached source read-only.
 Done: imports by module name within a package ([#287](https://github.com/nanyx-lang/nanyx/issues/287)), the rest of the
 import syntax ([#289](https://github.com/nanyx-lang/nanyx/issues/289)), path dependencies
 ([#862](https://github.com/nanyx-lang/nanyx/issues/862)), packages shipped with the compiler
-([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)), the console host as one
+([#1342](https://github.com/nanyx-lang/nanyx/issues/1342)), resolution and writing the lockfile
+([#864](https://github.com/nanyx-lang/nanyx/issues/864)), the console host as one
 ([#1344](https://github.com/nanyx-lang/nanyx/issues/1344)), GitHub references
 ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), [#1742](https://github.com/nanyx-lang/nanyx/issues/1742)),
 the lockfile and the cache ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), the index
@@ -237,15 +239,13 @@ the lockfile and the cache ([#863](https://github.com/nanyx-lang/nanyx/issues/86
 
 1. **The official linter as a shipped package**, once its contract exists
    ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
-2. **Resolution.** PubGrub over the index protocol, with error messages for conflicts; writing the lockfile;
-   `nanyx install` and `pull` for a version not locked yet ([#864](https://github.com/nanyx-lang/nanyx/issues/864)).
-3. **Publishing.** `nanyx publish` and `yank`, with the version check
+2. **Publishing.** `nanyx publish` and `yank`, with the version check
    ([#865](https://github.com/nanyx-lang/nanyx/issues/865), [#1470](https://github.com/nanyx-lang/nanyx/issues/1470)).
-4. **The index:** recording owners' account IDs, and mirroring artifacts.
-5. **Projects** (`.nyxproj`, project references) when a workspace of several packages needs them
+3. **The index:** recording owners' account IDs, and mirroring artifacts.
+4. **Projects** (`.nyxproj`, project references) when a workspace of several packages needs them
    ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
-6. **Editor support.** Resolve packages in the language server; pull from the extension.
-7. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
+5. **Editor support.** Resolve packages in the language server; pull from the extension.
+6. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
    prove the whole path.
 # Open questions
 
