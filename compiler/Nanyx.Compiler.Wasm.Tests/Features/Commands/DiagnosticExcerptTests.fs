@@ -3,38 +3,69 @@ module TranspilerWasmTests.Features.Commands.DiagnosticExcerpt
 open Xunit
 open TranspilerWasmTestHelpers
 
-// The CLI shows each diagnostic's line of source under it, with the span underlined (#880).
+// The CLI shows each diagnostic as Rust lays out its errors: the code and headline, where it is, the line of source with
+// the span underlined (#880), then the body (#2131).
 
-/// The lines `nanyx check` printed for `source` from its first diagnostic on, without the file's path.
+/// The lines `nanyx check` printed for `source` from its first diagnostic on, with the file's directory left out.
 let private diagnosticLines (source: string) =
     let output = (checkScript (source.ReplaceLineEndings "\n")).StandardOutput.ReplaceLineEndings "\n"
     let lines = output.Split '\n' |> List.ofArray
     lines
-    |> List.skipWhile (fun line -> not (line.Contains ": error "))
+    |> List.skipWhile (fun line -> not (line.StartsWith "error "))
     |> List.takeWhile (fun line -> not (line.StartsWith "Types:"))
-    |> List.map (fun line -> match line.IndexOf ".nyx:" with -1 -> line | at -> line.Substring(at + 5))
+    |> List.map (fun line ->
+        match line.IndexOf "--> ", line.IndexOf "main.nyx:" with
+        | arrow, file when arrow >= 0 && file > arrow -> line.Substring(0, arrow + 4) + line.Substring file
+        | _ -> line)
     |> String.concat "\n"
 
 [<Fact>]
-let ``Check - an error shows its line with the span underlined`` () =
+let ``Check - an error shows its headline, its line with the span underlined, then its body`` () =
     let source =
         """def count = 3
 
 def total = count + "one"
 """
     Assert.StartsWith(
-        """3:13: error NYX0201: 'string' is not a number, so it cannot be used with +: use `++` to join them
-  |
-3 | def total = count + "one"
-  |             ^^^^^^^^^^^^^
+        """error NYX0201: Type mismatch
+  --> main.nyx:3:13
+   |
+ 3 | def total = count + "one"
+   |             ^^^^^^^^^^^^^
+   = 'string' is not a number, so it cannot be used with +: use `++` to join them
 """.ReplaceLineEndings "\n",
         diagnosticLines source)
+
+[<Fact>]
+let ``Check - a missing context's headline names the context`` () =
+    let source =
+        """context Log = (log: string -> ())
+def g: [Log] () -> () = { log("hi") }
+def h = { g() }
+"""
+    Assert.Equal(
+        """error NYX0205: Missing context 'Log'
+  --> main.nyx:3:11
+   |
+ 3 | def h = { g() }
+   |           ^
+   = 'g' requires the context 'Log', which is not available here
+""".ReplaceLineEndings "\n",
+        diagnosticLines source)
+
+[<Fact>]
+let ``Check - diagnostics are separated by a blank line`` () =
+    let source = "def a = missing\ndef b = alsoMissing\n"
+    let lines = (diagnosticLines source).Split '\n'
+    Assert.Equal("   = 'missing' is not in scope", lines[5])
+    Assert.Equal("", lines[6])
+    Assert.Equal("error NYX0101: Unknown identifier 'alsoMissing'", lines[7])
 
 [<Fact>]
 let ``Check - the underline keeps the tabs the line indents with`` () =
     let source = "def total = 1\n\n@entry\ndef main = {\n\tprintln(totl)\n}\n"
     Assert.StartsWith(
-        "5:10: error NYX0101: Unknown identifier 'totl': did you mean 'total'?\n  |\n5 | \tprintln(totl)\n  | \t        ^^^^\n",
+        "error NYX0101: Unknown identifier 'totl'\n  --> main.nyx:5:10\n   |\n 5 | \tprintln(totl)\n   | \t        ^^^^\n   = 'totl' is not in scope: did you mean 'total'?\n",
         diagnosticLines source)
 
 [<Fact>]
@@ -45,5 +76,5 @@ let ``Check - a span over several lines is underlined to the end of its first`` 
   2)
 """
     let lines = (diagnosticLines source).Split '\n'
-    Assert.Equal("1 | def count: string = (", lines[2])
-    Assert.Equal("  |                     ^", lines[3])
+    Assert.Equal(" 1 | def count: string = (", lines[3])
+    Assert.Equal("   |                     ^", lines[4])

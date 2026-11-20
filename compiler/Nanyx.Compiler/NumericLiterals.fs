@@ -57,6 +57,7 @@ module internal NumericLiterals =
         let context = $"{required.Context}({tyText})"
         Diagnostics.at DiagnosticCodes.MissingContextMembers at
             $"'{required.Def}' {required.Does} values of type '{tyText}' with {written op}, so its type must require {context}: add [{context}] to the type of '{required.Def}'"
+        |> Diagnostics.about required.Context
         |> ContextFixes.withAddToType state required.Def context
 
     /// The variables the type annotation being read names, as `subst` solves them, each with its name.

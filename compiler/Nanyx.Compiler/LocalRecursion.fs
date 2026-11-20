@@ -19,5 +19,5 @@ let selfReferences (env: TypeEnv) (name: Identifier) (value: Expression) : Diagn
         SyntaxTree.freeReferences value
         |> List.filter (fst >> (=) name)
         |> List.map (fun (_, at) ->
-            let message = $"Unknown identifier '{name}': a local def can't see itself, so write `rec {name} = ...` to make it recursive"
-            Diagnostics.at DiagnosticCodes.UnknownIdentifier at.Span message)
+            let message = $"A local def can't see itself: write `rec {name} = ...` to make it recursive"
+            Diagnostics.at DiagnosticCodes.UnknownIdentifier at.Span message |> Diagnostics.about name)

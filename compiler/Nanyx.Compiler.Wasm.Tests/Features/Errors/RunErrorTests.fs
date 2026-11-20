@@ -23,9 +23,9 @@ def main = { println(depth(#leaf(1))) }
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    // `path/to/file.nyx:6:31: error NYX0301: ...`, at the function, then the line with the function underlined.
+    // The code and headline, then the place, at the function, the line with the function underlined, and the body.
     Assert.Matches(
-        ":4:31: error NYX0301: The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet\\r?\\n  \\|\\r?\\n4 \\| def depth: Nest\\(int\\) -> int = \\{ t ->\\r?\\n  \\| {31}\\^+\\r?\\n$",
+        "error NYX0301: Not supported by the WebAssembly backend\\r?\\n  --> .*:4:31\\r?\\n   \\|\\r?\\n 4 \\| def depth: Nest\\(int\\) -> int = \\{ t ->\\r?\\n   \\| {31}\\^+\\r?\\n   = The WebAssembly backend cannot compile a recursive type that holds itself at other type arguments yet\\r?\\n$",
         outcome.StandardError)
 
 [<Fact>]
@@ -42,7 +42,7 @@ println(describe(Point(x = 1, y = 2)))
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    Assert.Contains(":1:16: error NYX0001: ", outcome.StandardError)
+    assertDiagnostic "NYX0001" "Syntax error" ":1:16" "" outcome.StandardError
     Assert.Contains("'ab' cannot be", outcome.StandardError)
     Assert.DoesNotContain("NYX0301", outcome.StandardError)
 
@@ -63,7 +63,7 @@ main()
 """
     let outcome = runSource (source.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains(":4:18: error NYX0236: ", outcome.StandardError)
+    assertDiagnostic "NYX0236" "Context on a type no parameter or result has" ":4:18" "" outcome.StandardError
     Assert.DoesNotContain("NYX0301", outcome.StandardError)
     Assert.DoesNotContain("NYX0205", outcome.StandardError)
 
@@ -81,8 +81,8 @@ let ``Run - a compile error that cannot be deferred exits 1 with the diagnostic 
 println("never")""")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    // `file:line:col: error CODE: message`, at the type.
-    Assert.Contains(":1:14: error NYX0109: Unknown type 'Missing'", outcome.StandardError)
+    // The code and headline, then the place, at the type, then the body.
+    assertDiagnostic "NYX0109" "Unknown type" ":1:14" "Unknown type 'Missing'" outcome.StandardError
     Assert.DoesNotContain("deferred", outcome.StandardError)
 
 [<Fact>]
@@ -95,7 +95,7 @@ println("fine")
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("fine\n", outcome.StandardOutput)
-    Assert.Contains(":1:21: error NYX0102: Unknown function 'missing'", outcome.StandardError)
+    assertDiagnostic "NYX0102" "Unknown function" ":1:21" "Unknown function 'missing'" outcome.StandardError
     Assert.Contains("Running with 1 deferred error", outcome.StandardError)
     Assert.DoesNotContain("(deferred from compile time)", outcome.StandardError)
 
@@ -111,7 +111,7 @@ println("after")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
-    Assert.Contains(":1:21: error NYX0102: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":1:21: error NYX0102: Unknown function: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
     // The error says why the program stopped: there is no trap report after it.
     Assert.DoesNotContain("Runtime error", outcome.StandardError)
 
@@ -136,7 +136,7 @@ let ``Run - a package with deferred errors runs its entry`` () =
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("before\n", outcome.StandardOutput)
     Assert.Contains("Running with 2 deferred errors", outcome.StandardError)
-    Assert.Contains("main.nyx:6:3: error NYX0102: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains("main.nyx:6:3: error NYX0102: Unknown function: Unknown function 'missing' (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Build - a debug build writes a package with deferred errors, and a release build refuses it`` () =
@@ -193,7 +193,7 @@ def main = {
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
-    Assert.Contains(":5:11: error NYX0101: Unknown identifier 'nope' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":5:11: error NYX0101: Unknown identifier 'nope': 'nope' is not in scope (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - piping a value of no known type that did not stop the program stops it there`` () =
@@ -227,7 +227,7 @@ println("never")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
-    Assert.Contains(":1:78: error NYX0111: Not implemented: `???` stands for code not written yet (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":1:78: error NYX0111: Not implemented: Not implemented: `???` stands for code not written yet (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - interpolating a call to a function with a deferred error runs up to the call`` () =
@@ -249,7 +249,7 @@ println("dist = {a \dist}")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("x = 5, y = 4\n", outcome.StandardOutput)
-    Assert.Contains(":7:25: error NYX0102: Unknown function 'hypot' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":7:25: error NYX0102: Unknown function: Unknown function 'hypot' (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - interpolating a value of no known type that does not stop the program stops it there`` () =
@@ -282,7 +282,7 @@ println("never")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("a\nb\n", outcome.StandardOutput)
-    Assert.Contains(":2:3: error NYX0203: Non-exhaustive match, missing tags: c (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":2:3: error NYX0203: Non-exhaustive match: Non-exhaustive match, missing tags: c (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - each kind of deferred error traps where it was found`` () =
@@ -325,7 +325,7 @@ println(show(mapError(int.fromString("zz"), { #invalidInt -> #bad("bad") })))
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("some 12\nbad\n", outcome.StandardOutput)
-    Assert.Contains(":1:5: error NYX0202: The annotation of 'broken' is more general than its inferred type", outcome.StandardError)
+    assertDiagnostic "NYX0202" "Annotation too general" ":1:5" "The annotation of 'broken' is more general than its inferred type" outcome.StandardError
     Assert.Contains("Running with 1 deferred error", outcome.StandardError)
 
 [<Fact>]

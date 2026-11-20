@@ -31,7 +31,11 @@ type Diagnostic =
       Severity: Severity
       /// Short and the same for every diagnostic with this code: "Type mismatch".
       Title: string
-      /// The details, with the actual names and types.
+      /// The one name the headline shows after the title, in single quotes: the `Console` of
+      /// "Missing context 'Console'". None for a headline that is the title alone.
+      Subject: string option
+      /// The body: the details, with the actual names and types, and the advice after a colon. It doesn't repeat the
+      /// headline.
       Message: string
       /// Where the node the diagnostic is about is written; none only for a problem with the whole compilation.
       Span: SourceSpan option
@@ -241,6 +245,7 @@ module Diagnostics =
         { Code = code.Code
           Severity = code.Severity
           Title = code.Title
+          Subject = None
           Message = message
           Span = span |> Option.filter (SourceSpan.isNone >> not)
           Related = []
@@ -254,6 +259,18 @@ module Diagnostics =
 
     /// A diagnostic about the whole compilation rather than any node in it.
     let general (code: DiagnosticCode) (message: string) = create code None message
+
+    /// `diagnostic` with `subject` as the name its headline shows: "Missing context 'Console'".
+    let about (subject: string) (diagnostic: Diagnostic) = { diagnostic with Subject = Some subject }
+
+    /// What the editor and the terminal show first: the title, then the subject, if there is one, in single quotes.
+    let headline (diagnostic: Diagnostic) =
+        match diagnostic.Subject with
+        | Some subject -> $"{diagnostic.Title} '{subject}'"
+        | None -> diagnostic.Title
+
+    /// The diagnostic on one line, where there is room for no more: its headline, then its body after a colon.
+    let oneLine (diagnostic: Diagnostic) = $"{headline diagnostic}: {diagnostic.Message}"
 
     /// `diagnostic` with `span` as a related location, explained by `message`. A made-up span is left out.
     let withRelated (span: SourceSpan) (message: string) (diagnostic: Diagnostic) =

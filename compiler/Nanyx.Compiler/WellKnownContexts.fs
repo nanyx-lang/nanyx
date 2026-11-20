@@ -185,7 +185,9 @@ module internal WellKnownContexts =
     /// `ty` as a diagnostic writes it, with the variables the compiler made up named `a`, `b`, ...
     let display (ty: Ty) = Unifier.tyToDisplayString Ascii ty
 
-    let error (span: SourceSpan) (message: string) = [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message ]
+    /// The error at `span` for a missing instance of the context `context`.
+    let error (context: Identifier) (span: SourceSpan) (message: string) =
+        [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about context ]
 
     /// For a context whose member must agree with another's (see `AgreesWith`), why the compiler's own cannot be used
     /// for `ty` because of a type in it (`attaches` says whether a type attaches a member), if it cannot: a type that
@@ -273,7 +275,7 @@ module internal WellKnownContexts =
 
     /// The error `undeclared` at `span`, with the fix that adds `wellKnown` of `v` to the type of `defName`.
     let private undeclaredError (state: InferState) (span: SourceSpan) (wellKnown: WellKnownContext) (op: string) (v: TyVar) (defName: Identifier option) =
-        error span (undeclared wellKnown op v defName)
+        error wellKnown.Context span (undeclared wellKnown op v defName)
         |> List.map (fun diagnostic ->
             match defName with
             | Some name -> ContextFixes.withAddToType state name $"{wellKnown.Context}({display (TyVar v)})" diagnostic
@@ -362,7 +364,7 @@ module internal WellKnownContexts =
         let env, annotatedDef, declaredVars = operatorScope defScheme state pending
         let ty = List.head argTys
         let failed (message: string) =
-            Ok (None, { state with FailedExprs = (pending.Call, error pending.Span message) :: state.FailedExprs })
+            Ok (None, { state with FailedExprs = (pending.Call, error wellKnown.Context pending.Span message) :: state.FailedExprs })
         match wellKnown.Lacks (hasInstance env) ty with
         | Some reason -> failed (cannotUse wellKnown pending.Callee ty reason)
         | None ->
@@ -446,7 +448,7 @@ module internal WellKnownContexts =
     /// The error `openAtCall` at `span`, with the fix that adds `wellKnown` of `v` to the type of `defName`.
     let private openAtCallError (state: InferState) (span: SourceSpan) (wellKnown: WellKnownContext) (calleeName: Identifier) (ty: Ty) (v: TyVar) (defName: Identifier option) =
         let required = $"{wellKnown.Context}({(Unifier.tysToDisplayStrings Ascii [ ty; TyVar v ]).[1]})"
-        error span (openAtCall wellKnown calleeName ty v defName)
+        error wellKnown.Context span (openAtCall wellKnown calleeName ty v defName)
         |> List.map (fun diagnostic ->
             match defName with
             | Some name -> ContextFixes.withAddToType state name required diagnostic
@@ -480,7 +482,7 @@ module internal WellKnownContexts =
             Some (Ok (found @ [ None ], { state with PendingContextInstances = pending :: state.PendingContextInstances }))
         match instance, ty, state.ContextScope with
         | BuiltIn, _, _ -> Some (Ok (found @ [ Some (InstanceSynthesized (builtInMembers wellKnown)) ], state))
-        | NoInstance reason, _, _ -> Some (Error (error span (noInstanceAtCall wellKnown calleeName ty reason)))
+        | NoInstance reason, _, _ -> Some (Error (error wellKnown.Context span (noInstanceAtCall wellKnown calleeName ty reason)))
         | Attached, _, _
         | Open _, TyVar _, DefScope(_, true) -> None
         | Open v, _, DefScope(defName, true) -> later (pendingIn defName v None) state
@@ -530,7 +532,7 @@ module internal WellKnownContexts =
                   Errors = openAtCallError state span wellKnown calleeName ty v annotatedDef; ChecksOnly = true }
             Ok { state with PendingContextInstances = pending :: state.PendingContextInstances }
         match instance, state.ContextScope with
-        | NoInstance reason, _ -> Error (error span (noInstanceAtCall wellKnown calleeName ty reason))
+        | NoInstance reason, _ -> Error (error wellKnown.Context span (noInstanceAtCall wellKnown calleeName ty reason))
         | BuiltIn, _
         | Attached, _ -> Ok state
         | Open v, DefScope(defName, true) -> pendingIn defName v None state

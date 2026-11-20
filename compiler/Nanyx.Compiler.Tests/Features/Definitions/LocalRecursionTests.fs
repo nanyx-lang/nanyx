@@ -21,7 +21,8 @@ let ``A local def that names itself without rec is an error that suggests rec`` 
     // It used to check, and then fail in the backend (#1013).
     let diagnostic = single (Compiler.compile (sumTo "def"))
     Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, diagnostic.Code)
-    Assert.Equal("Unknown identifier 'go': a local def can't see itself, so write `rec go = ...` to make it recursive", diagnostic.Message)
+    Assert.Equal("Unknown identifier 'go'", Diagnostics.headline diagnostic)
+    Assert.Equal("A local def can't see itself: write `rec go = ...` to make it recursive", diagnostic.Message)
     Assert.Equal("go(i - 1, acc + i)", textAt (sumTo "def") (spanOf diagnostic))
 
 [<Fact>]

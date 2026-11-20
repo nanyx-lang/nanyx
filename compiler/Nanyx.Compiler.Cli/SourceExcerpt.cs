@@ -1,8 +1,8 @@
 using System.Text;
 
 /// <summary>
-/// The source a diagnostic is about, as the CLI shows it under the diagnostic's line: the line its span starts on, after
-/// its number, and a line of carets under the span.
+/// The source a diagnostic is about, as the CLI shows it under the diagnostic's headline and place: the line its span
+/// starts on, after its number, and a line of carets under the span.
 /// <code>
 ///   |
 /// 3 | def total = count + "one"

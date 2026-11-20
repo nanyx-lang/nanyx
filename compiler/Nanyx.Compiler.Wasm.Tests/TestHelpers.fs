@@ -285,6 +285,26 @@ let checkScript (source: string) =
     File.WriteAllText(path, source)
     nanyxWithInput "" [ "check"; path ]
 
+/// Asserts that `output`, what `nanyx` printed, shows the diagnostic `code` as the CLI lays one out: a line
+/// `error <code>: <headline>`, then `--> <file>:<line>:<column>`, whose place ends with `place` (`main.nyx:3:13`, or
+/// `:3:13` for any file), and among the lines after it, before the next blank line, `= <body>`, whose body starts with
+/// `body`. In the run's box, each line starts with its gutter.
+let assertDiagnostic (code: string) (headline: string) (place: string) (body: string) (output: string) =
+    let lines = output.ReplaceLineEndings("\n").Split '\n'
+    let shown =
+        lines
+        |> Array.indexed
+        |> Array.exists (fun (index, line) ->
+            line.EndsWith $"error {code}: {headline}"
+            && index + 1 < lines.Length
+            && lines[index + 1].Contains "--> "
+            && lines[index + 1].EndsWith place
+            && (lines
+                |> Array.skip (index + 2)
+                |> Array.takeWhile (fun line -> line.Trim().TrimStart('│').Trim() <> "")
+                |> Array.exists (fun line -> line.Contains $" = {body}")))
+    Assert.True(shown, $"Expected error {code}: {headline} at {place} with the body '{body}' in:\n{output}")
+
 /// The docs site's pages, under docs/src/content.
 let docsContentDirectory =
     Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "docs", "src", "content"))

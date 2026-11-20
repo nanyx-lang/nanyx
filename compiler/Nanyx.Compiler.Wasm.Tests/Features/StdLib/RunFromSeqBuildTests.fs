@@ -151,4 +151,4 @@ let ``Check - a collection made from a Console sequence where Console is not dec
 }"""
     let outcome = checkScript source
     Assert.NotEqual(0, outcome.ExitCode)
-    Assert.Contains("error NYX0211: 'array.fromSeq' requires the context 'Console'", outcome.StandardOutput)
+    assertDiagnostic "NYX0211" "Undeclared context" "" "'array.fromSeq' requires the context 'Console'" outcome.StandardOutput

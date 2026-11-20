@@ -219,12 +219,12 @@ public sealed class DiagnosticsPublisher
         // An error in a file not on disk cannot be linked to, so it is described here.
         foreach (var (diagnostic, _) in found.Where(item => item.Location is null))
         {
-            message += $"\n{Shown(Some(diagnostic.Span)!.File, document)}: {diagnostic.Message}";
+            message += $"\n{Shown(Some(diagnostic.Span)!.File, document)}: {NyxCompiler.Diagnostics.oneLine(diagnostic)}";
         }
 
         var related = found
             .Where(item => item.Location is not null)
-            .Select(item => new DiagnosticRelatedInformation { Location = item.Location!, Message = item.Diagnostic.Message })
+            .Select(item => new DiagnosticRelatedInformation { Location = item.Location!, Message = NyxCompiler.Diagnostics.oneLine(item.Diagnostic) })
             .ToList();
         return new Diagnostic
         {
@@ -248,8 +248,8 @@ public sealed class DiagnosticsPublisher
     {
         var place = location is null
             ? null
-            : new DiagnosticRelatedInformation { Location = location, Message = diagnostic.Title };
-        return ToLsp(diagnostic, locator, new Range(0, 0, 0, 0), $"In {span.File}: {diagnostic.Message}", place);
+            : new DiagnosticRelatedInformation { Location = location, Message = NyxCompiler.Diagnostics.headline(diagnostic) };
+        return ToLsp(diagnostic, locator, new Range(0, 0, 0, 0), $"{NyxCompiler.Diagnostics.headline(diagnostic)}\nIn {span.File}: {diagnostic.Message}", place);
     }
 
     private static Diagnostic ToLsp(
@@ -276,11 +276,16 @@ public sealed class DiagnosticsPublisher
                 ? new CodeDescription { Href = new Uri(url) }
                 : null,
             Source = Source,
-            Message = message ?? diagnostic.Message,
+            // The headline, then the body on the next line: the Problems list and the hover lead with the headline.
+            Message = message ?? Displayed(diagnostic),
             Range = range,
             RelatedInformation = related.Count > 0 ? new Container<DiagnosticRelatedInformation>(related) : null
         };
     }
+
+    /// <summary>A diagnostic as the editor shows it: its headline, then its body on the next line.</summary>
+    internal static string Displayed(NyxCompiler.Diagnostic diagnostic) =>
+        $"{NyxCompiler.Diagnostics.headline(diagnostic)}\n{diagnostic.Message}";
 
     private static DiagnosticSeverity ToLsp(NyxCompiler.Severity severity) =>
         severity.Tag switch

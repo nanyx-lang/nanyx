@@ -6,8 +6,8 @@ order: 3
 
 The Nanyx extension for Visual Studio Code highlights `.nyx` files and package manifests, `.nyxp` files, which are Nanyx too (the type in a definition attached to a built-in type, `def string.shout`, is coloured as a type, the escapes in a double-quoted string, such as `\n` and `\{`, are coloured as escapes, a [doc comment](../getting-started/basics#doc-comments) is coloured as one throughout its lines, only [Nanyx's operators](../tour/operators#the-operators) are coloured as operators, every word the language reserves is coloured as a keyword (`pattern`, which declares a [custom pattern](../advanced/custom-patterns), among them), as is `scoped` before `context`, and a script's [directives](../getting-started/files-and-projects#directives), such as `::dependency acme.util ../util`, have their name coloured as a keyword and their package names, versions, directories, tags and numbers each coloured as what they are) and runs the compiler as a language server (`nanyx lsp`), which gives you:
 
-- errors and warnings as you type, each compiler error's code (such as `NYX0201`) a link to its section of
-  [Compiler errors](./errors). An error in a file the document imports is shown in that file, and the import that
+- errors and warnings as you type, each shown as its headline (`Missing context 'Console'`) with the details on the
+  next line, and each compiler error's code (such as `NYX0201`) a link to its section of [Compiler errors](./errors). An error in a file the document imports is shown in that file, and the import that
   brings the file in gets one diagnostic linking to each of its errors. A change to a file, in the editor or on disk,
   checks again the open files that import it
 - every name coloured by [what it is](#semantic-highlighting): a function, a parameter, a variable, a field, a tag, a type, a context or a module, as your theme colours other languages' names, and the names of [nominal types](#nominal-types) in italics

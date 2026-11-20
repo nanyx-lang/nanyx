@@ -142,7 +142,7 @@ println("{run(2)}")
     Assert.DoesNotContain("call $broken", functionText "run" (transpileWat source))
     let outcome = runSource source
     Assert.NotEqual(0, outcome.ExitCode)
-    Assert.Contains(":1:37: error NYX0101: Unknown identifier 'missing' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":1:37: error NYX0101: Unknown identifier 'missing': 'missing' is not in scope (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``nanyx run --no-inline runs the program without inlining`` () =

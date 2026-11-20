@@ -28,7 +28,7 @@
     unreachable
   )
 
-  (data (i32.const 256) "\00\00\00\00R\00\00\0012:27: error NYX0201: Type mismatch: 'bool' vs 'int' (deferred from compile time)\0a\00\00")
+  (data (i32.const 256) "\00\00\00\00a\00\00\0012:27: error NYX0201: Type mismatch: Type mismatch: 'bool' vs 'int' (deferred from compile time)\0a\00\00\00")
 
   (func $inRange (param $x_i64 i64) (param $lo_i64 i64) (param $hi_i64 i64) (result i32)
     local.get $x_i64

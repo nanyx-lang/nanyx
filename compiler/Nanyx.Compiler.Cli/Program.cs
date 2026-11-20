@@ -933,22 +933,40 @@ internal static partial class CliCommands
             return;
         }
 
-        // As compilers usually write them, so editors and terminals can link to the place:
-        // `path/to/file.nyx:3:9: error NYX0201: message`, then the line of source with the span underlined (see
-        // `SourceExcerpt`). On a terminal, the severity and the underline are in its colour. In the run's box, only the
-        // gutter is dimmed, so diagnostics keep their colours.
+        // As Rust lays out its errors: the severity, code and headline, then where it is, as editors and terminals
+        // link to a place, then the line of source with the span underlined (see `SourceExcerpt`), then the body, the
+        // related locations and the suggestions:
+        //
+        //     error NYX0205: Missing context 'Console'
+        //       --> wrapped.nyx:4:3
+        //        |
+        //      4 |   println("hi")
+        //        |   ^^^^^^^
+        //        = 'println' requires the context 'Console', which 'wrapped' does not declare: ...
+        //
+        // On a terminal, the severity, headline and underline are in its colour. In the run's box, only the gutter is
+        // dimmed, so diagnostics keep their colours.
         var box = (writer as RunBox.Writer)?.Box;
         writer = box?.Diagnostics ?? writer;
         var colour = box?.InColour ?? Terminal.InColour(writer);
         var sources = new Dictionary<string, string?>();
+        var first = true;
         foreach (var diagnostic in diagnostics)
         {
+            // A blank line between diagnostics, so each is seen as one.
+            if (!first)
+            {
+                writer.WriteLine();
+            }
+
+            first = false;
             var severity = diagnostic.Severity.ToString().ToLowerInvariant();
             var escape = colour ? SeverityColour(diagnostic.Severity) : null;
             string Coloured(string text) => escape is null ? text : $"\u001b[{escape}m{text}\u001b[0m";
-            var location = diagnostic.Span is null ? string.Empty : $"{FormatLocation(shell, diagnostic.Span.Value)}: ";
-            writer.WriteLine($"{location}{Coloured(severity)} {diagnostic.Code}: {diagnostic.Message}");
+            writer.WriteLine($"{Coloured($"{severity} {diagnostic.Code}: {Diagnostics.headline(diagnostic)}")}");
 
+            var excerpt = new List<string>();
+            var gutter = string.Empty;
             if (diagnostic.Span is not null)
             {
                 var span = diagnostic.Span.Value;
@@ -958,18 +976,25 @@ internal static partial class CliCommands
                     sources[span.File] = source;
                 }
 
-                if (source is not null)
-                {
-                    foreach (var line in SourceExcerpt.Lines(span, source, Coloured))
-                    {
-                        writer.WriteLine(line);
-                    }
-                }
+                excerpt.AddRange(source is null ? [] : SourceExcerpt.Lines(span, source, Coloured));
+                gutter = new string(' ', (span.StartLine + 1).ToString().Length);
+                writer.WriteLine($" {gutter}--> {FormatLocation(shell, span)}");
             }
 
+            foreach (var line in excerpt)
+            {
+                writer.WriteLine($" {line}");
+            }
+
+            writer.WriteLine($" {gutter} = {diagnostic.Message}");
             foreach (var related in diagnostic.Related)
             {
-                writer.WriteLine($"  {FormatLocation(shell, related.Item1)}: {related.Item2}");
+                writer.WriteLine($" {gutter} = note: {FormatLocation(shell, related.Item1)}: {related.Item2}");
+            }
+
+            foreach (var suggestion in diagnostic.Suggestions)
+            {
+                writer.WriteLine($" {gutter} = help: {suggestion}");
             }
         }
     }

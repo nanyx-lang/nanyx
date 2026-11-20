@@ -121,6 +121,7 @@ let private unsuppliedAt (state: InferState) (subject: string) (instead: string)
         | ScriptValueScope _ ->
             Diagnostics.at DiagnosticCodes.MissingContextMembers span
                 $"{subject} requires the scoped context '{context}', which is not available here: {instead} inside {supplier}"
+            |> Diagnostics.about context
             |> Some
 
 /// The error for the call to `callee` at `span`, which requires the scoped context `context`, where nothing supplies it
