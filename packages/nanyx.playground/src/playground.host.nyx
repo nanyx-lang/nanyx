@@ -1,0 +1,50 @@
+--| The playground host: it runs a console program in a web page, as the playground on the docs site
+  does.
+
+  It stands in for the console host, `nanyx.console`, so a program the console host runs compiles
+  under it unchanged, as long as it needs only what this host provides: [`Console`], whose output
+  goes to the page, and [`Random`], which draws from a generator the page seeds. It provides no
+  `Env`, `FileSystem`, `Http` or `Async`, so a program that needs one is an error naming this host.
+
+  Its imports are its own, from `nanyx:playground`, not WASI, and the page that runs the program
+  implements them.
+export module playground.host
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx/random as (Random)
+  nanyx.console.core/console as (Console, IoError)
+)
+
+@extern("nanyx:playground", "write")
+def pageWrite: [HostRuntime] I32, I32 -> ()
+
+@extern("nanyx:playground", "writeError")
+def pageWriteError: [HostRuntime] I32, I32 -> ()
+
+@extern("nanyx:playground", "randomBits")
+def randomBits: [HostRuntime] () -> I64
+
+--| Gives `text` to the page through `write`, which reads it from the module's memory.
+def writeWith: [HostRuntime] ([HostRuntime] I32, I32 -> ()), string -> () = { write, text ->
+  write(addressOf(text), byteLength(text))
+  keepAlive(text)
+}
+
+--| Runs `entry`, the program's entry point, with a `Console` that writes to the page and a
+  `Random` that draws from the page's generator, which the page seeds. The page has no input yet,
+  so reading a line gives `#error(#endOfInput)`. What `entry` returns is ignored.
+export def run: [HostRuntime] ([Console, Random] () -> a) -> () = { entry ->
+  use Console(
+    write = { text -> writeWith(pageWrite, text) }
+    writeError = { text -> writeWith(pageWriteError, text) }
+    readLine = { _ -> #error(#endOfInput) }
+    readToEnd = { _ -> #some("") }
+    flush = { _ -> () }
+  )
+
+  use Random(bits = { _ -> randomBits() })
+
+  ignore(entry())
+}

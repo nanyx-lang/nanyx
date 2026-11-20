@@ -256,9 +256,29 @@ module internal BinaryData =
         emit (method.GetILGenerator())
         method.CreateDelegate typeof<'D> :?> 'D
 
-    /// One of FSharp.Core's types, which it keeps internal: a map's or set's tree.
+    /// One of FSharp.Core's types, which it keeps internal: a map's or set's tree. `None` if this FSharp.Core has none
+    /// by that name.
     let private collectionType (name: string) (args: Type[]) =
-        typeof<Map<int, int>>.Assembly.GetType("Microsoft.FSharp.Collections." + name, true).MakeGenericType args
+        match typeof<Map<int, int>>.Assembly.GetType("Microsoft.FSharp.Collections." + name) with
+        | null -> None
+        | definition -> Some(definition.MakeGenericType args)
+
+    /// The constructor of `ty` that takes `parameters`, if it has one.
+    let private constructorOf (parameters: Type[]) (ty: Type) = Option.ofObj (ty.GetConstructor(everyInstance, parameters))
+
+    /// The comparer a collection of type `ty` keeps (`Map.Comparer`, `Set.Comparer`, internal), read from `empty`.
+    let private comparerOf<'T> (ty: Type) (empty: obj) =
+        ty.GetProperty("Comparer", everyInstance) |> Option.ofObj |> Option.map (fun property -> property.GetValue empty :?> IComparer<'T>)
+
+    /// Emits `new (args ...)` with the constructor `make`, each argument loaded and, where `casts` names a type, cast to
+    /// it from `obj`.
+    let private emitConstruction (il: ILGenerator) (casts: Type option[]) (make: ConstructorInfo) =
+        casts
+        |> Array.iteri (fun index cast ->
+            il.Emit(OpCodes.Ldarg_S, byte index)
+            cast |> Option.iter (fun ty -> il.Emit(OpCodes.Castclass, ty)))
+        il.Emit(OpCodes.Newobj, make)
+        il.Emit OpCodes.Ret
 
     /// The items `0 .. count - 1` as a balanced tree, built from the middle out, with `leaf` making a tree of one item
     /// and `node` one with subtrees (either may be `null`, the empty tree) of the height it is given.
@@ -286,90 +306,106 @@ module internal BinaryData =
             i <- i + 1
         inOrder
 
-    /// Maps built from their items in key order, as `write` writes them, straight into FSharp.Core's tree, which
-    /// `Map.Add` would build by inserting each item, making a new path to it each time.
-    type private SortedMaps<'K, 'V when 'K: comparison>() =
-        static let types = [| typeof<'K>; typeof<'V> |]
-        static let tree = collectionType "MapTree`2" types
-        static let node = collectionType "MapTreeNode`2" types
-        static let comparer =
-            typeof<Map<'K, 'V>>.GetProperty("Comparer", everyInstance).GetValue(Map.empty<'K, 'V>) :?> IComparer<'K>
-        static let makeLeaf =
-            emitted<Func<'K, 'V, obj>> "map leaf" typeof<obj> types (fun il ->
-                il.Emit OpCodes.Ldarg_0
-                il.Emit OpCodes.Ldarg_1
-                il.Emit(OpCodes.Newobj, tree.GetConstructor(everyInstance, types))
-                il.Emit OpCodes.Ret)
-        static let makeNode =
-            emitted<Func<'K, 'V, obj, obj, int, obj>> "map node" typeof<obj> [| typeof<'K>; typeof<'V>; typeof<obj>; typeof<obj>; typeof<int> |] (fun il ->
-                il.Emit OpCodes.Ldarg_0
-                il.Emit OpCodes.Ldarg_1
-                il.Emit OpCodes.Ldarg_2
-                il.Emit(OpCodes.Castclass, tree)
-                il.Emit OpCodes.Ldarg_3
-                il.Emit(OpCodes.Castclass, tree)
-                il.Emit(OpCodes.Ldarg_S, 4uy)
-                il.Emit(OpCodes.Newobj, node.GetConstructor(everyInstance, [| typeof<'K>; typeof<'V>; tree; tree; typeof<int> |]))
-                il.Emit OpCodes.Ret)
-        static let makeMap =
-            emitted<Func<IComparer<'K>, obj, Map<'K, 'V>>> "map" typeof<Map<'K, 'V>> [| typeof<IComparer<'K>>; typeof<obj> |] (fun il ->
-                il.Emit OpCodes.Ldarg_0
-                il.Emit OpCodes.Ldarg_1
-                il.Emit(OpCodes.Castclass, tree)
-                il.Emit(OpCodes.Newobj, typeof<Map<'K, 'V>>.GetConstructor(everyInstance, [| typeof<IComparer<'K>>; tree |]))
-                il.Emit OpCodes.Ret)
+    /// How `SortedMaps` builds a map from its sorted items: FSharp.Core's comparer for its keys, and a leaf of the tree,
+    /// a node, and the map of a tree.
+    type private MapBuilders<'K, 'V when 'K: comparison> =
+        { Comparer: IComparer<'K>
+          Leaf: Func<'K, 'V, obj>
+          Node: Func<'K, 'V, obj, obj, int, obj>
+          Map: Func<IComparer<'K>, obj, Map<'K, 'V>> }
 
-        /// The map of `keys` to `values`. Keys out of order, which a key type compared differently than when it was
-        /// written would give, are added one by one.
+    /// Maps built from their items in key order, as `write` writes them, straight into FSharp.Core's tree, which
+    /// `Map.Add` would build by inserting each item, making a new path to it each time. The tree's types are internal to
+    /// FSharp.Core, so if a version of it doesn't have them as this expects, a map is built by adding its items one by
+    /// one, as it is when they are out of order (a key type compared differently than when it was written would give
+    /// that).
+    type private SortedMaps<'K, 'V when 'K: comparison>() =
+        static let builders : MapBuilders<'K, 'V> option =
+            let types = [| typeof<'K>; typeof<'V> |]
+            match collectionType "MapTree`2" types, collectionType "MapTreeNode`2" types with
+            | Some tree, Some node ->
+                match
+                    comparerOf<'K> typeof<Map<'K, 'V>> Map.empty<'K, 'V>,
+                    constructorOf types tree,
+                    constructorOf [| typeof<'K>; typeof<'V>; tree; tree; typeof<int> |] node,
+                    constructorOf [| typeof<IComparer<'K>>; tree |] typeof<Map<'K, 'V>>
+                with
+                | Some comparer, Some leaf, Some node', Some map ->
+                    Some
+                        { Comparer = comparer
+                          Leaf = emitted "map leaf" typeof<obj> types (fun il -> emitConstruction il [| None; None |] leaf)
+                          Node =
+                            emitted "map node" typeof<obj> [| typeof<'K>; typeof<'V>; typeof<obj>; typeof<obj>; typeof<int> |] (fun il ->
+                                emitConstruction il [| None; None; Some tree; Some tree; None |] node')
+                          Map =
+                            emitted "map" typeof<Map<'K, 'V>> [| typeof<IComparer<'K>>; typeof<obj> |] (fun il ->
+                                emitConstruction il [| None; Some tree |] map) }
+                | _ -> None
+            | _ -> None
+
+        /// Whether maps of these types are built straight into FSharp.Core's tree.
+        static member BuiltDirectly = builders.IsSome
+
+        /// The map of `keys` to `values`.
         static member Of(keys: 'K[], values: 'V[]) : Map<'K, 'V> =
-            if ascending comparer keys then
+            match builders with
+            | Some builders when ascending builders.Comparer keys ->
                 let root =
                     balancedTree keys.Length
-                        (fun i -> makeLeaf.Invoke(keys[i], values[i]))
-                        (fun i left right height -> makeNode.Invoke(keys[i], values[i], left, right, height))
-                makeMap.Invoke(comparer, root)
-            else
-                Array.fold2 (fun (map: Map<'K, 'V>) k v -> map.Add(k, v)) Map.empty keys values
+                        (fun i -> builders.Leaf.Invoke(keys[i], values[i]))
+                        (fun i left right height -> builders.Node.Invoke(keys[i], values[i], left, right, height))
+                builders.Map.Invoke(builders.Comparer, root)
+            | _ -> Array.fold2 (fun (map: Map<'K, 'V>) k v -> map.Add(k, v)) Map.empty keys values
 
-    /// Sets built from their items in order, as `SortedMaps` builds maps.
+    /// How `SortedSets` builds a set from its sorted items, as `MapBuilders` does a map.
+    type private SetBuilders<'T when 'T: comparison> =
+        { Comparer: IComparer<'T>
+          Leaf: Func<'T, obj>
+          Node: Func<'T, obj, obj, int, obj>
+          Set: Func<IComparer<'T>, obj, Set<'T>> }
+
+    /// Sets built from their items in order, as `SortedMaps` builds maps, and by adding them one by one where it does.
     type private SortedSets<'T when 'T: comparison>() =
-        static let types = [| typeof<'T> |]
-        static let tree = collectionType "SetTree`1" types
-        static let node = collectionType "SetTreeNode`1" types
-        static let comparer = typeof<Set<'T>>.GetProperty("Comparer", everyInstance).GetValue(Set.empty<'T>) :?> IComparer<'T>
-        static let makeLeaf =
-            emitted<Func<'T, obj>> "set leaf" typeof<obj> types (fun il ->
-                il.Emit OpCodes.Ldarg_0
-                il.Emit(OpCodes.Newobj, tree.GetConstructor(everyInstance, types))
-                il.Emit OpCodes.Ret)
-        static let makeNode =
-            emitted<Func<'T, obj, obj, int, obj>> "set node" typeof<obj> [| typeof<'T>; typeof<obj>; typeof<obj>; typeof<int> |] (fun il ->
-                il.Emit OpCodes.Ldarg_0
-                il.Emit OpCodes.Ldarg_1
-                il.Emit(OpCodes.Castclass, tree)
-                il.Emit OpCodes.Ldarg_2
-                il.Emit(OpCodes.Castclass, tree)
-                il.Emit OpCodes.Ldarg_3
-                il.Emit(OpCodes.Newobj, node.GetConstructor(everyInstance, [| typeof<'T>; tree; tree; typeof<int> |]))
-                il.Emit OpCodes.Ret)
-        static let makeSet =
-            emitted<Func<IComparer<'T>, obj, Set<'T>>> "set" typeof<Set<'T>> [| typeof<IComparer<'T>>; typeof<obj> |] (fun il ->
-                il.Emit OpCodes.Ldarg_0
-                il.Emit OpCodes.Ldarg_1
-                il.Emit(OpCodes.Castclass, tree)
-                il.Emit(OpCodes.Newobj, typeof<Set<'T>>.GetConstructor(everyInstance, [| typeof<IComparer<'T>>; tree |]))
-                il.Emit OpCodes.Ret)
+        static let builders : SetBuilders<'T> option =
+            let types = [| typeof<'T> |]
+            match collectionType "SetTree`1" types, collectionType "SetTreeNode`1" types with
+            | Some tree, Some node ->
+                match
+                    comparerOf<'T> typeof<Set<'T>> Set.empty<'T>,
+                    constructorOf types tree,
+                    constructorOf [| typeof<'T>; tree; tree; typeof<int> |] node,
+                    constructorOf [| typeof<IComparer<'T>>; tree |] typeof<Set<'T>>
+                with
+                | Some comparer, Some leaf, Some node', Some set ->
+                    Some
+                        { Comparer = comparer
+                          Leaf = emitted "set leaf" typeof<obj> types (fun il -> emitConstruction il [| None |] leaf)
+                          Node =
+                            emitted "set node" typeof<obj> [| typeof<'T>; typeof<obj>; typeof<obj>; typeof<int> |] (fun il ->
+                                emitConstruction il [| None; Some tree; Some tree; None |] node')
+                          Set =
+                            emitted "set" typeof<Set<'T>> [| typeof<IComparer<'T>>; typeof<obj> |] (fun il ->
+                                emitConstruction il [| None; Some tree |] set) }
+                | _ -> None
+            | _ -> None
 
-        /// The set of `items`, added one by one if they are out of order.
+        /// Whether sets of this type are built straight into FSharp.Core's tree.
+        static member BuiltDirectly = builders.IsSome
+
+        /// The set of `items`.
         static member Of(items: 'T[]) : Set<'T> =
-            if ascending comparer items then
+            match builders with
+            | Some builders when ascending builders.Comparer items ->
                 let root =
                     balancedTree items.Length
-                        (fun i -> makeLeaf.Invoke items[i])
-                        (fun i left right height -> makeNode.Invoke(items[i], left, right, height))
-                makeSet.Invoke(comparer, root)
-            else
-                Array.fold (fun (set: Set<'T>) item -> set.Add item) Set.empty items
+                        (fun i -> builders.Leaf.Invoke items[i])
+                        (fun i left right height -> builders.Node.Invoke(items[i], left, right, height))
+                builders.Set.Invoke(builders.Comparer, root)
+            | _ -> Array.fold (fun (set: Set<'T>) item -> set.Add item) Set.empty items
+
+    /// Whether this FSharp.Core has the internal tree types a read builds maps and sets with (see `SortedMaps`).
+    /// Without them it still reads them, more slowly, by adding their items one by one.
+    let treesBuiltDirectly () = SortedMaps<string, int>.BuiltDirectly && SortedSets<int64>.BuiltDirectly
 
     /// A read of one part, from the file's bytes at the position it has got to. The readers `build` makes call its
     /// methods: one for each primitive, and one for each kind of value that holds others, given their readers.
