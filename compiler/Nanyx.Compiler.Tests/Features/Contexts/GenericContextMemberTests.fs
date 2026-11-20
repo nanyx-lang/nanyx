@@ -72,5 +72,5 @@ def bad: [Pair(int)] () -> string = { pair("x").first }
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-        Assert.Equal("Type mismatch: 'int' vs 'string'", diagnostic.Message)
+        Assert.Equal("'int' vs 'string'", diagnostic.Message)
     | other -> failwith $"Expected one diagnostic: %A{other}"

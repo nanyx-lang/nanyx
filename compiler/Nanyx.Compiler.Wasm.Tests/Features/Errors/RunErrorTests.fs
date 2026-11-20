@@ -282,7 +282,7 @@ println("never")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("a\nb\n", outcome.StandardOutput)
-    Assert.Contains(":2:3: error NYX0203: Non-exhaustive match: Non-exhaustive match, missing tags: c (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":2:3: error NYX0203: Non-exhaustive match '#c': Missing tags: c (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - each kind of deferred error traps where it was found`` () =
@@ -325,7 +325,7 @@ println(show(mapError(int.fromString("zz"), { #invalidInt -> #bad("bad") })))
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("some 12\nbad\n", outcome.StandardOutput)
-    assertDiagnostic "NYX0202" "Annotation too general" ":1:5" "The annotation of 'broken' is more general than its inferred type" outcome.StandardError
+    assertDiagnostic "NYX0202" "Annotation too general 'broken'" ":1:5" "The annotation of 'broken' is more general than its inferred type" outcome.StandardError
     Assert.Contains("Running with 1 deferred error", outcome.StandardError)
 
 [<Fact>]
@@ -341,7 +341,7 @@ dbg(pick(2))
 """
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("Non-exhaustive match, missing int values, such as 0 (deferred from compile time)", outcome.StandardError)
+    Assert.Contains("Non-exhaustive match '0': Missing int values, such as 0 (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - matching on a value of no known type that did not stop the program stops it there`` () =

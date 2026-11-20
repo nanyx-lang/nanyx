@@ -71,7 +71,7 @@ let ``A Type match that leaves out a tag is non-exhaustive`` () =
 """
         )
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, code)
-    Assert.StartsWith("Non-exhaustive match, the type's description may be #float, #bool", message)
+    Assert.StartsWith("The type's description may be #float, #bool", message)
     Assert.Equal("match t", at)
 
 [<Fact>]

@@ -35,7 +35,7 @@ let ``A match on a call that widened its argument's union is checked against the
 """
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
-    Assert.Equal("Non-exhaustive match, missing tags: notFound", diagnostic.Message)
+    Assert.Equal("Missing tags: notFound", diagnostic.Message)
 
 [<Fact>]
 let ``A match on a union whose rest an annotation names needs a catch-all`` () =

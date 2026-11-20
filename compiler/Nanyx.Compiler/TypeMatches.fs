@@ -182,6 +182,6 @@ let infer
                     let listed = missing |> List.map (sprintf "#%s") |> String.concat ", "
                     let error =
                         Diagnostics.at DiagnosticCodes.NonExhaustiveMatch (MatchHead.span expr scrutinees arms)
-                            $"Non-exhaustive match, the type's description may be {listed}: add arms for them, or `else`"
+                            $"The type's description may be {listed}: add arms for them, or `else`"
                     { current with UnhandledMatches = (expr.Id, [ error ]) :: current.UnhandledMatches }
             mkTypedExpr expr resultTy None None (Some typedArms), current)
