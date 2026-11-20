@@ -28,17 +28,43 @@ module Compiler =
         let lookAlikes, rest = LookAlikes.diagnose filePath source error
         lookAlikes @ (rest |> Option.map syntaxError |> Option.toList)
 
-    /// The source of the file at `filePath` parsed, with its doc comments (see `parseModuleFileWithDocs`), or the syntax
-    /// error, or the errors for contexts joined with `&` or `+` rather than separated by `,` (see `ContextSeparators`).
+    /// Whether `diagnostic` reports a mistake in the syntax: a syntax error or a look-alike character.
+    let private isSyntaxError (diagnostic: Diagnostic) =
+        diagnostic.Code = DiagnosticCodes.SyntaxError.Code || diagnostic.Code = DiagnosticCodes.LookAlikeCharacter.Code
+
+    /// Whether the text `result` is the compile of has mistakes in its syntax, so the items they are in were left out
+    /// of what was typed.
+    let hasSyntaxErrors (result: CompileResult) = result.Diagnostics |> List.exists isSyntaxError
+
+    /// The source of the file at `filePath` parsed past its mistakes, with its doc comments and the diagnostics for the
+    /// syntax errors found, which may be none (see `parseModuleFileWithDocsRecovering`), or the errors for contexts
+    /// joined with `&` or `+` rather than separated by `,` (see `ContextSeparators`), after the syntax errors.
     let private parseWithDocs (filePath: string) (source: string) =
-        match parseModuleFileWithDocs filePath source with
-        | Result.Ok (((items, _, _), _) as parsed) ->
-            match ContextSeparators.check (source.Replace("\r\n", "\n").Replace("\r", "\n")) items with
-            | [] -> Ok parsed
-            | errors -> Error errors
+        match parseModuleFileWithDocsRecovering filePath source with
+        | Result.Ok ((((items, _, _), _) as parsed), errors) ->
+            // An error at a character an earlier look-alike's fix rewrites, as the second of a pair of curly quotes
+            // is, is that diagnostic's.
+            let fixedBy (diagnostic: Diagnostic) (error: ParseError) =
+                diagnostic.Fixes |> List.exists (fun fix -> fix.Edits |> List.exists (fun edit -> edit.Span.Start <= error.Span.Start && error.Span.Start < edit.Span.End))
+            let syntax =
+                errors
+                |> List.fold
+                    (fun (found: Diagnostic list) error ->
+                        if found |> List.exists (fun diagnostic -> fixedBy diagnostic error) then found
+                        else found @ syntaxErrors filePath source error)
+                    []
+                |> List.distinctBy (fun diagnostic -> diagnostic.Code, diagnostic.Span)
+            match ContextSeparators.check (normalizeSource source) items with
+            | [] -> Ok (parsed, syntax)
+            | separators -> Error (syntax @ separators)
         | Result.Error err -> Error (syntaxErrors filePath source err)
+
+    /// The source of the file at `filePath` parsed, or the errors it has (see `parseWithDocs`).
     let private parseWithDiagnostics (filePath: string) (source: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, Diagnostic list> =
-        parseWithDocs filePath source |> Result.map fst
+        match parseWithDocs filePath source with
+        | Ok ((parsed, _), []) -> Ok parsed
+        | Ok (_, errors)
+        | Error errors -> Error errors
 
     /// Applies the substitution found by unification to everything inference produced.
     /// A definition's type is reported with the rest variables that only stand for tags it gives out closed (see
@@ -661,21 +687,24 @@ module Compiler =
             |> List.choose (fun item -> match importModule item with Ok (_, imported) -> Some imported.KeywordKinds | Error _ -> None)
             |> List.fold (fun kinds imported -> Attributes.withKeywordKinds imported kinds) Map.empty
         let resolved =
+            // A module with syntax errors is checked with the items that read, for the editor's features, and the errors
+            // are its own: it cannot be run or imported.
             parseWithDocs (checkedModules.FileName origin) source
             // A module split across files is checked as one: its other files' items join this one's.
-            |> Result.bind (fun (parsed, docComments) ->
+            |> Result.bind (fun ((parsed, docComments), syntaxDiagnostics) ->
                 let packages = Option.toList checkedModules.Package @ Option.toList hostModules
                 PartialModules.assemble parseWithDiagnostics (PartialModules.otherFragments checkedModules.ReadFile packages checkedModules.Edited origin) parsed
-                |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), docComments, assembled))
+                |> Result.map (fun assembled -> (let ast, _, _ = parsed in ast), docComments, assembled, syntaxDiagnostics)
+                |> Result.mapError (fun diagnostics -> syntaxDiagnostics @ diagnostics))
             |> Result.mapError (fun diagnostics -> Parsed, diagnostics)
             // A record that names a field twice is reported before anything is inferred from it (see `DuplicateFields`).
-            |> Result.bind (fun ((_, _, (items, declared, _)) as parsed) ->
+            |> Result.bind (fun ((_, _, (items, declared, _), syntaxDiagnostics) as parsed) ->
                 match DuplicateFields.check declared items with
                 | [] -> Ok parsed
-                | errors -> Error (Parsed, errors))
-            |> Result.bind (fun (ast, docComments, (items, declared, moduleBlocks)) ->
+                | errors -> Error (Parsed, syntaxDiagnostics @ errors))
+            |> Result.bind (fun (ast, docComments, (items, declared, moduleBlocks), syntaxDiagnostics) ->
                 match WorkflowDesugaring.desugarWithDiagnostics (importedKeywordKinds (importsOf moduleBlocks items)) items with
-                | _, (_ :: _ as errors), _, _ -> Error (Desugared, errors)
+                | _, (_ :: _ as errors), _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
                 | desugaredAst, [], memberPlaces, lowered ->
                     Attributes.applyAttributes host desugaredAst
                     |> Result.map (fun (desugared, entries) ->
@@ -687,8 +716,8 @@ module Compiler =
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors
                         let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered
-                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, script, nameErrors)
-                    |> Result.mapError (fun diagnostics -> Desugared, diagnostics))
+                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, script, syntaxDiagnostics @ nameErrors)
+                    |> Result.mapError (fun diagnostics -> Desugared, syntaxDiagnostics @ diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
         | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, script, nameErrors) ->
@@ -1258,15 +1287,20 @@ module Compiler =
             // configured as an error fails the compile as a compiler error does.
             { Phase = Typed
               Diagnostics =
-                if checkedModule.Errors.IsEmpty then Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments typed)
-                  else
-                      // A name another module of the package, or of a package it depends on, exports gets its import too.
-                      let packageExports =
-                          match checkedModules.Package, origin with
-                          | Some package, SourceFile path when PackageModules.contains package path -> PackageExports.importable package checkedModules.ReadFile path
-                          | _ -> []
-                      ImportFixes.addFrom packageExports CheckedLibrary.standardLibraryExportPaths.Value (normalizeSource source) checkedModule.Syntax checkedModule.Errors
-                      |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
+                // A module with syntax errors is reported by those alone: what the items left out of it would have
+                // declared is missing, and the errors that follow from aren't the user's to fix.
+                let syntaxErrors = checkedModule.Errors |> List.filter isSyntaxError
+                if not syntaxErrors.IsEmpty then syntaxErrors
+                elif checkedModule.Errors.IsEmpty then
+                    Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments typed)
+                else
+                    // A name another module of the package, or of a package it depends on, exports gets its import too.
+                    let packageExports =
+                        match checkedModules.Package, origin with
+                        | Some package, SourceFile path when PackageModules.contains package path -> PackageExports.importable package checkedModules.ReadFile path
+                        | _ -> []
+                    ImportFixes.addFrom packageExports CheckedLibrary.standardLibraryExportPaths.Value (normalizeSource source) checkedModule.Syntax checkedModule.Errors
+                    |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty

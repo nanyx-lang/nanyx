@@ -17,7 +17,7 @@ namespace Nanyx.LanguageServer;
 /// </param>
 /// <param name="CompilerFailure">The exception the compiler threw, if it did.</param>
 /// <param name="PreviousGood">
-/// The last earlier text of this document that was typed, if this one was not: see <see cref="LastGood"/>.
+/// The last earlier text of this document that was typed whole, if this one was not: see <see cref="LastGood"/>.
 /// </param>
 public sealed record OpenDocument(
     string Text,
@@ -91,18 +91,27 @@ public sealed record OpenDocument(
         new(FileName, Compiled!.DocComments.Value, Compiled, offset, span => SourceLocations.LinkTo(uri, this, span, standardLibrary)!);
 
     /// <summary>
-    /// Whether <see cref="Compiled"/> has the types and symbols editor features read. A text with type or name errors
-    /// has them: the type checker types what did check, and gives what did not the type <c>???</c>. A text that does
-    /// not parse, or whose imports do not check, has none.
+    /// Whether <see cref="Compiled"/> has the types and symbols editor features read for the whole text. A text with
+    /// type or name errors has them: the type checker types what did check, and gives what did not the type
+    /// <c>???</c>. A text whose imports do not check has none, and one with syntax errors has them only for the items
+    /// that parsed (see <see cref="PartlyTyped"/>).
     /// </summary>
-    public bool Typed => Compiled is { Syntax: not null, Typed: not null };
+    public bool Typed => PartlyTyped && !Compiler.hasSyntaxErrors(Compiled!);
+
+    /// <summary>
+    /// Whether <see cref="Compiled"/> has types and symbols, if only for the items of a text with syntax errors that
+    /// parsed: the parser leaves out an item with a mistake in it and reads on.
+    /// </summary>
+    public bool PartlyTyped => Compiled is { Syntax: not null, Typed: not null };
 
     /// <summary>
     /// The text of this document that hover, type hints and completion read: this one if it was typed, or else the
-    /// last one that was, since while the user is typing the text often does not parse. <c>null</c> if no text of it
-    /// has been. Diagnostics always come from this text's own compile.
+    /// last one that was, since while the user is typing the text often does not parse, and the item being typed is
+    /// left out of this one's compile. With no text typed before, this one if it was <see cref="PartlyTyped"/>, so a
+    /// file opened with a mistake in it has the types of the items around the mistake. <c>null</c> if no text of it
+    /// has been typed. Diagnostics always come from this text's own compile.
     /// </summary>
-    public OpenDocument? LastGood => Typed ? this : PreviousGood;
+    public OpenDocument? LastGood => Typed ? this : PreviousGood ?? (PartlyTyped ? this : null);
 
     /// <summary>
     /// The offset in <see cref="LastGood"/>'s text of the character at <paramref name="offset"/> in this one, or
@@ -209,7 +218,7 @@ public sealed class DocumentStore
     /// <summary>Records a compiled text of a document, as its latest.</summary>
     public OpenDocument Record(DocumentUri uri, OpenDocument document)
     {
-        if (!document.Typed && TryGet(uri)?.LastGood is { } lastGood)
+        if (!document.Typed && TryGet(uri)?.LastGood is { Typed: true } lastGood)
         {
             document = document with { PreviousGood = lastGood };
         }

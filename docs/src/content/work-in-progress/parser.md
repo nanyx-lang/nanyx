@@ -32,7 +32,7 @@ that approach rather than from the grammar:
 - **Comments are kept on the side.** The parser records comment positions in its state (`Comments` in
   `ParseState.fs`); the formatter and doc comments attach them by position afterwards.
 - **The first error ends the parse.** The parser has no error recovery, so the editor gets no outline, no hover and
-  no completion below a half-typed line.
+  no completion below a half-typed line. Stage 5 settled this for the new parser.
 
 # Where to end up
 
@@ -127,13 +127,14 @@ checked against it.
 
 ## Stage 5: error recovery
 
-Teach the parser to recover: after an error, skip to the next statement or definition at the same layout depth,
-record the error, and carry on. The result is a tree with error nodes in it and every error found, not just the
-first.
+Done: after a mistake the parser leaves out the top-level item it is in, records the error and reads on at the next
+top-level item, so every syntax error is reported and the items around them are typed, with hover and completion (see
+[The parser](../compiler-internals/parser) in the Compiler internals section).
 
-- The type checker and the language server learn to skip error nodes, so the rest of the file keeps its outline,
-  hover, completion and type errors.
-- **Done when** a file with a half-typed line in the middle still gets hover and completion below it, with a test.
+Still open: recovering inside an item, at the next statement of a block or the next arm of a match, with an error node
+in the tree where the mistake was, so the rest of the def being typed keeps its types too. The type checker and the
+language server would then learn to skip error nodes. Until then the language server reads the last text that parsed
+for the item being typed.
 
 ## Stage 6: remove FParsec
 

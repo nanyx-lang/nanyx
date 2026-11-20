@@ -12,8 +12,8 @@ type CompilationPhase =
 type CompileResult =
     { Phase: CompilationPhase
       Diagnostics: Diagnostic list
-      /// The module typed with what did check: present when it parsed and its imports checked, even if it has type
-      /// or name errors of its own (see `TypeChecked`).
+      /// The module typed with what did check: present when its imports checked, even if it has type or name errors
+      /// of its own (see `TypeChecked`), or syntax errors, when it has the items that parsed.
       Typed: TypedModule option
       /// Whether the module type-checked: it has no type or name errors. A linter rule configured as an error does
       /// not stop it type-checking.

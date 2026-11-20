@@ -179,6 +179,21 @@ public sealed class HoverTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_document_opened_with_a_half_typed_line_has_hover_and_completion_around_it()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-recovered.nyx"));
+
+        Open(uri, "def answer = 42\n\ndef broken = (1 +\n\ndef doubled = answer * 2\n\ndef later = dou\n");
+        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        Assert.Equal("NYX0001", diagnostic.Code?.String);
+
+        // The items around the one with the mistake are read and typed.
+        Assert.Equal("```nanyx\ndef answer: int\n```", (await HoverAt(uri, 4, 14))?.Contents.MarkupContent?.Value);
+        Assert.Null(await HoverAt(uri, 2, 14));
+        Assert.Contains(await CompletionsAt(uri, 6, 15), item => item.Label == "doubled" && item.Detail == "int");
+    }
+
+    [Fact]
     public async Task Hover_on_a_type_name_shows_the_type_definition_even_inside_a_block()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-9");

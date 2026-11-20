@@ -11,8 +11,38 @@ open Nanyx.Compiler.Tests.TestSupport
 let ``Compile reports diagnostics on parse error`` () =
     let source = "def message = "
     let result = Compiler.compile source
-    Assert.Equal(CompilationPhase.Parsed, result.Phase)
+    Assert.False(result.TypeChecked)
+    Assert.False(result.ErrorsDeferred)
     assertReports DiagnosticCodes.SyntaxError result
+
+[<Fact>]
+let ``The items around a syntax error are typed and only the syntax errors are reported`` () =
+    let result = Compiler.compile (normalized """def a = 1
+
+def b = (1 +
+
+def c = a + 2
+
+def d = c +
+
+def e = c * 2""")
+    // The errors are found where an item left open is seen to end, on the line of the item after it.
+    Assert.Equal<(string * int) list>(
+        [ DiagnosticCodes.SyntaxError.Code, 4; DiagnosticCodes.SyntaxError.Code, 8 ],
+        result.Diagnostics |> List.map (fun diag -> diag.Code, diag.Span.Value.StartLine))
+    Assert.False(result.TypeChecked)
+    Assert.False(result.ErrorsDeferred)
+    let typed = result.Typed.Value
+    Assert.Equal(TyPrimitive "int", typed.Types.["c"])
+    Assert.Equal(TyPrimitive "int", typed.Types.["e"])
+    Assert.False(typed.Types.ContainsKey "b")
+    Assert.False(typed.Types.ContainsKey "d")
+
+[<Fact>]
+let ``A module with a syntax error cannot be imported`` () =
+    let result = compileImporting "module mod\n\ndef one = 1\n\ndef two = (2 +\n" "import mod\n\ndef three = mod.one + 2\n"
+    Assert.False(result.TypeChecked)
+    Assert.NotEmpty(result.Diagnostics)
 
 [<Fact>]
 let ``Every type mismatch in a module is reported`` () =
