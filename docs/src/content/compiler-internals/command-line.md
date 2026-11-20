@@ -108,6 +108,14 @@ them with `Manifest.entryText`, which escapes their strings.
 `PackageIndex.download`); `nanyx build` and `nanyx run` call the same `update` first (`TryUpdateLockfile`), and
 `--locked` makes it refuse a lockfile that doesn't satisfy the manifest (`Resolution.unsatisfied`). `nanyx install`
 checks the manifest's new text and resolves it before writing either file, so a conflict leaves the manifest as it was.
+A script has no lockfile: each `::dependency` on a package from the index pins an exact version. `nanyx run` on a
+script (`TryPullScript`) and `nanyx pull script.nyx` download them first (`Script.pull`, `ScriptDependencies.pull`):
+`Resolution.resolvePinned` resolves as `resolve` does, but offers the solver only the pinned version of each pinned
+package, which may be yanked, and `PackageIndex.download` checks each download against the index's SHA-256. A build
+of the script reads the cache alone (`ScriptDependencies.cached`, the same solve over the versions in the cache), and
+the versions it finds are the lockfile `Package.scriptModules` reads, so a pin that isn't downloaded is `NYX0041`. A
+package from the index with no version is `NYX0009`, whose fix writes the newest version the index has
+(`Resolution.newest`, kept for five minutes, since the editor checks a script as it is typed).
 
 - **Not built:** `--offline`.
 - A dependency on GitHub (`github =` in the manifest, `github:` in a script's `::dependency`) is read and checked, and

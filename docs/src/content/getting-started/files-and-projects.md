@@ -52,12 +52,20 @@ println("Hello!")
 | `::host nanyx.console` | Runs the script under a host the compiler ships; without `::host`, a script runs under `nanyx.console` | `host = (package = "nanyx.console", version = "0.31.0")` |
 | `::host acme.server ../server` | Runs the script under the host package in a directory, relative to the script | `host = (package = "acme.server", path = "../server")` |
 | `::dependency acme.json ../json` | Depends on the package in a directory, so the script can import its public modules, `import acme.json/parse` | `dependencies = [(package = "acme.json", path = "../json")]` |
+| `::dependency acme.json 1.2.0` | Depends on a package from the [package index](../tour/packages#package-dependencies), at exactly that version | `dependencies = [(package = "acme.json", version = "1.2.0")]`, locked in `nanyx.lock` |
 | `::dependency nanyx.console.core` | Depends on a package the compiler ships | `dependencies = [(package = "nanyx.console.core", version = "0.31.0")]` |
 | `::linter nanyx.lint` | Turns the official linter on, with every rule at its default severity | `linters = [(package = "nanyx.lint", version = "0.31.0")]` |
 | `::lint unusedBindings #error` | Sets a rule's severity (`#error`, `#warning`, `#info`, `#hint` or `#off`) for the linter of the nearest `::linter` above it | `settings = (rules = (unusedBindings = #error))` in that linter's entry |
 | `::format lineWidth 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `formatter = (lineWidth = 80)` |
 
 `::host`, `::dependency` and `::linter` take a package's name and then, if it isn't one the compiler ships, where it is found: a version, which starts with a digit (`1.2.0`), or a directory, which starts with `.` or `/` (`../util`), relative to the script. A package the compiler ships, named on its own, is at the compiler's version, and a version given for one must be the compiler's.
+
+A script has no lockfile, so a package from the index is named at the exact version it uses, `1.2.0`, not the versions
+it accepts, `1.2`: the directive is the pin. Named with no version it is an error, whose fix writes the newest version
+the index has. `nanyx run` downloads each version a script pins into the package cache, with the packages it depends
+on, the newest each accepts, and checks each download against the SHA-256 the index records, as `nanyx pull script.nyx`
+does; `nanyx check` and the editor read them from the cache. A version that has been yanked still resolves when a
+script names it.
 
 As in a manifest, only the linters a script's `::linter` lines name run, so a script without one runs none. A `::lint` with no `::linter` above it is an error, whose fix turns the official linter on above it. A wrong `::host` or `::dependency` is the error a manifest's entry would be, at the word it is about. A directive the compiler does not understand, one written in the old form (`::linters.default`, which the error's fix rewrites), or one after the first line of code, is an error. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things. When a script grows into a package, `nanyx migrate` writes its manifest from its directives and makes the script the package's `@entry` (see [`nanyx migrate`](../standard-tools/command-line#nanyx-migrate)).
 

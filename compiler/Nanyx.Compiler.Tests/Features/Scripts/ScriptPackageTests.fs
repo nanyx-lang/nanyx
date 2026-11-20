@@ -20,7 +20,7 @@ export def shout = { s: string -> s ++ "!" }""" ]
 let private compileScriptWith (files: (string * string) list) (source: string) =
     use package = new TempPackage(("scripts/main.nyx", source) :: files)
     let path = package.Path "scripts/main.nyx"
-    (Script.compileSource path source).Diagnostics
+    (Script.compileSourceReportingIn (storeOf package) CompileListener.none path source).Diagnostics
 
 let private codesOf (diagnostics: Diagnostic list) = diagnostics |> List.map _.Code
 
@@ -100,10 +100,11 @@ println("hi")"""
 [<InlineData("::host", "NYX0009", "`::host` takes a host and where it is found")>]
 [<InlineData("::host nanyx.console ../console extra", "NYX0009", "`::host` takes a host and where it is found")>]
 [<InlineData("::host nanyx.console latest", "NYX0009", "'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory")>]
-[<InlineData("::dependency acme.util 1.2.0", "NYX0024", "is named by its version, but a script has no 'nanyx.lock' to lock it in yet")>]
+[<InlineData("::dependency acme.util 1.2.0", "NYX0041", "'acme.util' 1.2.0 isn't in the package cache")>]
+[<InlineData("::dependency acme.util 1.2", "NYX0009", "A script names the exact version of 'acme.util' it uses, as in `1.2.0`, not the versions it accepts, '1.2'")>]
 [<InlineData("::dependency acme.util ../nowhere", "NYX0023", "The dependency 'acme.util' can't be read")>]
 [<InlineData("::dependency acme.other ../util", "NYX0023", "is named 'acme.util', not 'acme.other'")>]
-[<InlineData("::dependency acme.util", "NYX0009", "The compiler ships no package 'acme.util': give the directory it is in, as in `../util`")>]
+[<InlineData("::dependency acme.util", "NYX0009", "`::dependency acme.util` needs the version of 'acme.util' to use, as in `::dependency acme.util 1.2.0`, or the directory it is in, as in `../util`")>]
 [<InlineData("::dependency nanyx.console.core 0.0.1", "NYX0029", "The compiler ships 'nanyx.console.core' {version}, not 0.0.1")>]
 [<InlineData("::dependency", "NYX0009", "`::dependency` takes a package and where it is found")>]
 let ``A wrong ::host or ::dependency is the manifest's error, at the directive`` (directive: string, code: string, message: string) =

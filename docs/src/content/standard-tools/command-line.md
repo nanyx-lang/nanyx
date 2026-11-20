@@ -16,7 +16,7 @@ nanyx format [--check | --write] [<files or directories>]
 nanyx format [--check] --stdin
 nanyx new <name> [<directory>]
 nanyx migrate [<file.nyx | directory>] [--name <name>]
-nanyx pull [<package>]
+nanyx pull [<package> | <file.nyx>]
 nanyx install <package> [--path <directory> | --version <version>]
 nanyx pack [--out <directory>] [<package>]
 nanyx bump [<package>]
@@ -288,6 +288,11 @@ isn't chosen. When no versions satisfy every dependency, it explains why, a step
 Then it downloads into the package cache each package the lockfile locks that isn't there yet, checking each against
 the SHA-256 the lockfile records, checks that each dependency of a package is there, as a build would, and lists them:
 `acme.util 0.3.0 (../util)`, `acme.web 1.2.0 (downloaded)`.
+
+Given a script, `nanyx pull script.nyx` downloads the exact version each of its `::dependency` lines pins, and the
+packages those depend on, the newest each accepts, checking each against the SHA-256 the index records, and lists them:
+`acme.web 1.2.0`. A script has no lockfile: the versions it writes are its pins. `nanyx run` does the same for a script
+before it runs it.
 
 It fetches each dependency on GitHub, a package or a file, at the commit it is pinned to, into the cache too. Set
 `GITHUB_TOKEN` to a token of yours to have GitHub count its requests against your account.

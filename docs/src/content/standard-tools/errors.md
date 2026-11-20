@@ -371,8 +371,7 @@ To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
 
 # NYX0024: Manifest field not supported yet
 
-The manifest, or a script's directives, use something the compiler knows but doesn't support yet: a script's
-`::dependency` that names a package by its version, since a script has no lockfile to lock it in yet, or a dependency
+The manifest, or a script's directives, use something the compiler knows but doesn't support yet, such as a dependency
 on GitHub where nothing can fetch it.
 
 To fix it, give the directory the package is in instead, as in `::dependency acme.util ../util`.
@@ -689,7 +688,8 @@ the standard library, on the package it comes from.
 
 A dependency named by its version is the version `nanyx.lock` locks, unpacked in the package cache, and that version
 isn't there: the lockfile is new, or the cache was cleared. The same goes for a dependency on GitHub, at the commit it
-is pinned to: a build reads it from the cache, and never downloads.
+is pinned to, and for the version a script's `::dependency` pins, as in `::dependency acme.util 1.2.0`: a build reads
+it from the cache, and never downloads.
 
 ```nanyx
 -- file: demo.nyxp
@@ -711,6 +711,7 @@ export def one = 1
 ```
 
 To fix it, run `nanyx pull`, which downloads each package the lockfile locks, and each GitHub reference, into the cache.
+For a script, `nanyx pull script.nyx` downloads what its directives pin, and `nanyx run` does so before it runs it.
 
 # NYX0042: Sources that match no file
 
