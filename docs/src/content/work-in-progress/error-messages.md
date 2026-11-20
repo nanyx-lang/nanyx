@@ -17,10 +17,11 @@ common errors offer fixes. What is left:
   headline, its code's fixed title plus at most one name in single quotes (`Missing context 'Console'`), kept as the
   diagnostic's `Subject`, and a body that doesn't repeat it. The editor shows the headline, then the body on the next
   line; the terminal shows the code and headline, then the underlined source line, then the body. The codes for
-  resolving names (NYX01xx) and NYX0205 are written this way. The other messages are rewritten to it a phase at a
-  time: reading a module ([#2132](https://github.com/nanyx-lang/nanyx/issues/2132)), types
-  ([#2134](https://github.com/nanyx-lang/nanyx/issues/2134)), and the rest
+  reading a module (NYX00xx) and resolving names (NYX01xx), and NYX0205, are written this way. The other messages are
+  rewritten to it a phase at a time: types ([#2134](https://github.com/nanyx-lang/nanyx/issues/2134)), and the rest
   ([#2135](https://github.com/nanyx-lang/nanyx/issues/2135)). Until then, many bodies still start with their headline.
+  A syntax error's headline has no name yet: the parser's errors carry only a message, so the token it found isn't
+  known apart from it.
 - **Related locations.** Few errors use them yet. An error should point, where it helps, at the code that explains it
   as well: "expected because of this annotation", "first defined here". The CLI shows a related location as one line,
   with no excerpt.

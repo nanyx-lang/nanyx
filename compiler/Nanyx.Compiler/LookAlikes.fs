@@ -45,7 +45,8 @@ let private diagnostic (filePath: string) (original: string) (found: Confusables
             let pair = if offsets.Length > 1 then $" (and its pair, '{original.[List.last offsets]}')" else ""
             $"{Confusables.written found}{pair} looks like `{ascii}` ({found.AsciiName}), but it isn't one: write `{ascii}`",
             $"Replace '{found.Character}' with '{ascii}'"
-    { Diagnostics.at DiagnosticCodes.LookAlikeCharacter (spanIn filePath original offsets.Head (offsets.Head + 1)) message with
+    { (Diagnostics.at DiagnosticCodes.LookAlikeCharacter (spanIn filePath original offsets.Head (offsets.Head + 1)) message
+       |> Diagnostics.about (string found.Character)) with
         Fixes = [ { Title = title; Edits = edits } ] }
 
 /// The diagnostics for the look-alike characters that the parse of `source`, the text of the file `filePath`, fails at,

@@ -1030,7 +1030,7 @@ module Compiler =
         let checkImport (importOrigin: ModuleOrigin) (readSource: unit -> string) =
             let importKey = originKey importOrigin
             if importKey = key || visited.Contains importKey then
-                Error [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"'{importKey}' imports this module, directly or through others, so the imports make a cycle" ]
+                Error [ Diagnostics.at DiagnosticCodes.ImportCycle item.Span $"'{importKey}' imports this module, directly or through others, so the imports make a cycle" |> Diagnostics.about importKey ]
             else
                 // The imported module's errors name this import as the one that brings them in, in place
                 // of the one in that module that brought them into it.
@@ -1057,12 +1057,12 @@ module Compiler =
             match StandardLibrary.tryLoadSource moduleName with
             | None ->
                 let available = Diagnostics.listed (StandardLibrary.moduleNames |> List.map (fun name -> $"'{StandardLibrary.importPrefix}{name}'"))
-                Error [ Diagnostics.at DiagnosticCodes.UnknownStandardLibraryModule item.Span $"Unknown standard library module '{StandardLibrary.importPrefix}{moduleName}': the modules are {available}" ]
+                Error [ Diagnostics.at DiagnosticCodes.UnknownStandardLibraryModule item.Span $"The modules are {available}" |> Diagnostics.about $"{StandardLibrary.importPrefix}{moduleName}" ]
             | Some moduleSource ->
                 match checkImport (StandardLibraryModule moduleName) (fun () -> moduleSource) with
                 | Ok (_, imported) when imported.Name <> Some moduleName ->
                     let declared = imported.Name |> Option.defaultValue "(none)"
-                    Error [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"The standard library module '{StandardLibrary.importPrefix}{moduleName}' declares the module name '{declared}'" ]
+                    Error [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"It declares the module name '{declared}'" |> Diagnostics.about $"{StandardLibrary.importPrefix}{moduleName}" ]
                 | checkedImport -> checkedImport
         | None, None ->
             match origin with
@@ -1078,13 +1078,13 @@ module Compiler =
                         | diags -> Error diags
                     | failed -> failed
             | StandardLibraryModule name ->
-                Error [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span $"The standard library module '{name}' imports a module outside the standard library: import only other standard library modules" ]
+                Error [ Diagnostics.at DiagnosticCodes.InvalidStandardLibraryModule item.Span "It imports a module outside the standard library: import only other standard library modules" |> Diagnostics.about name ]
             | InMemory ->
                 let shown =
                     match item.Source with
                     | PathImport path -> path
                     | ModuleImport name -> name
-                Error [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span $"'{shown}' cannot be imported by source that has no file: import only standard library modules here" ]
+                Error [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span "Source that has no file can import only standard library modules" |> Diagnostics.about shown ]
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then. A
     /// standard-library module is checked once per process (see `checkedStandardLibrary`), and a source file's module
@@ -1335,7 +1335,7 @@ module Compiler =
     let compileFileWith (options: LinterOptions) (filePath: string) : CompileResult =
         if not (File.Exists filePath) then
             { Phase = Parsed
-              Diagnostics = [ Diagnostics.general DiagnosticCodes.FileNotFound $"There is no file '{filePath}'" ]
+              Diagnostics = [ Diagnostics.general DiagnosticCodes.FileNotFound "There is no file at this path" |> Diagnostics.about filePath ]
               Typed = None
               TypeChecked = false
               ErrorsDeferred = false

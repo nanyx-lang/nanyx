@@ -136,7 +136,7 @@ let ``An allow must name the rules it allows`` (source: string) =
     let diagnostic = diagnosticOf source
     Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, diagnostic.Code)
     Assert.Equal(
-        "Attribute '@allow' takes the linter rules it allows, separated by commas, as `@allow(default/unusedBindings)`",
+        "It takes the linter rules it allows, separated by commas, as `@allow(default/unusedBindings)`",
         diagnostic.Message)
 
 [<Fact>]
@@ -149,7 +149,7 @@ let ``An allow must be followed by a def`` () =
 """
     let diagnostic = diagnosticOf (source.ReplaceLineEndings "\n")
     Assert.Equal(DiagnosticCodes.MisplacedAttribute.Code, diagnostic.Code)
-    Assert.Equal("Attribute '@allow' must be followed by a definition", diagnostic.Message)
+    Assert.Equal("It must be followed by a definition", diagnostic.Message)
 
 [<Fact>]
 let ``Only allow can be written in a block`` () =
@@ -162,7 +162,8 @@ let ``Only allow can be written in a block`` () =
 """
     let diagnostic = diagnosticOf (source.ReplaceLineEndings "\n")
     Assert.Equal(DiagnosticCodes.UnknownAttribute.Code, diagnostic.Code)
-    Assert.Equal("Unknown attribute '@entry': in a block, only '@allow' can come before a def", diagnostic.Message)
+    Assert.Equal("Unknown attribute '@entry'", Diagnostics.headline diagnostic)
+    Assert.Equal("In a block, only '@allow' can come before a def", diagnostic.Message)
 
 [<Fact>]
 let ``A local def after an allow type-checks as it would without it`` () =

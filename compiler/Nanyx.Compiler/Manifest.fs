@@ -149,6 +149,9 @@ module Manifest =
         let sentence (message: string) = if message = "" then message else string (Char.ToUpperInvariant message[0]) + message.Substring 1
         member _.All = List.ofSeq found
         member _.Add (code: DiagnosticCode) (span: SourceSpan) (message: string) = found.Add(Diagnostics.at code span (sentence message))
+        /// `Add`, with `subject`, the field the problem is about, in the headline.
+        member _.AddAbout (code: DiagnosticCode) (span: SourceSpan) (subject: string) (message: string) =
+            found.Add(Diagnostics.at code span (sentence message) |> Diagnostics.about subject)
         member _.AddWithFixes (code: DiagnosticCode) (span: SourceSpan) (message: string) (fixes: Fix list) =
             found.Add { Diagnostics.at code span (sentence message) with Fixes = fixes }
 
@@ -158,7 +161,7 @@ module Manifest =
             | DataRecord fields ->
                 for field in fields do
                     if not (List.contains field.Name known) then
-                        this.Add DiagnosticCodes.UnknownManifestField field.NameSpan $"{what} has no field '{field.Name}': its fields are {quoted known}"
+                        this.AddAbout DiagnosticCodes.UnknownManifestField field.NameSpan field.Name $"{what} has no field '{field.Name}': its fields are {quoted known}"
                 Some fields
             | _ ->
                 this.Add DiagnosticCodes.InvalidManifestValue value.Location $"{what} must be a record, `(name = value, ...)`, not {DataValue.describe value}"
@@ -170,17 +173,17 @@ module Manifest =
             match DataValue.field name fields with
             | Some { DataField.Value = { DataValue.Data = DataString text } } when pattern.IsMatch text -> Some text
             | Some { DataField.Value = { DataValue.Data = DataString text } as value } ->
-                this.Add DiagnosticCodes.InvalidManifestValue value.Location $"""{what}'s {name} "{text}" must be {rule}"""
+                this.AddAbout DiagnosticCodes.InvalidManifestValue value.Location name $"""{what}'s {name} "{text}" must be {rule}"""
                 None
             | Some field ->
-                this.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"{what}'s {name} must be a string, not {DataValue.describe field.Value}"
+                this.AddAbout DiagnosticCodes.InvalidManifestValue field.Value.Location name $"{what}'s {name} must be a string, not {DataValue.describe field.Value}"
                 None
             | None -> None
 
         /// `Text`, for a field that must be there: its absence is an error at `at`.
         member this.RequiredText (what: string) (at: SourceSpan) (fields: DataField list) (name: string) (pattern: Regex) (rule: string) =
             if (DataValue.field name fields).IsNone then
-                this.Add DiagnosticCodes.MissingManifestField at $"{what} has no {name}, which it needs"
+                this.AddAbout DiagnosticCodes.MissingManifestField at name $"{what} has no {name}, which it needs"
             this.Text what fields name pattern rule
 
         /// The strings of the list in the field `name` of `fields`, each with where it is written, if it has one.
@@ -189,7 +192,7 @@ module Manifest =
             | Some { DataField.Value = { DataValue.Data = DataList items } } when items |> List.forall (fun item -> item.Data.IsDataString) ->
                 Some(items |> List.choose (fun item -> match item.Data with DataString text -> Some(text, item.Location) | _ -> None))
             | Some field ->
-                this.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"{what}'s {name} must be a list of strings, not {DataValue.describe field.Value}"
+                this.AddAbout DiagnosticCodes.InvalidManifestValue field.Value.Location name $"{what}'s {name} must be a list of strings, not {DataValue.describe field.Value}"
                 None
             | None -> None
 
@@ -598,7 +601,7 @@ module Manifest =
                 | Some field -> problems.Record "package" packageFields field.Value |> Option.map (fun fields -> fields, field.Value.Location)
                 | None ->
                     if manifest.Data.IsDataRecord then
-                        problems.Add DiagnosticCodes.MissingManifestField manifest.Location "The manifest has no `package`, which needs at least a name and a version"
+                        problems.AddAbout DiagnosticCodes.MissingManifestField manifest.Location "package" "The manifest has no `package`, which needs at least a name and a version"
                     None
             let name, version, sources =
                 match package with

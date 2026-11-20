@@ -194,7 +194,7 @@ let ``Unknown standard library module is an error`` () =
         File.WriteAllText(mainPath, "import nanyx/sockets\n")
         let result = Compiler.compileFile mainPath
         let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-        Assert.Contains("Unknown standard library module 'nanyx/sockets'", message)
+        Assert.Equal(Some "nanyx/sockets", (List.head result.Diagnostics).Subject)
         Assert.Contains("nanyx/math", message))
 
 [<Fact>]
