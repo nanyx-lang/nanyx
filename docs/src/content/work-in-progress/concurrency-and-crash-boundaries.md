@@ -126,7 +126,8 @@ A and B both put "this can wait" in the type; the difference is who pays for it.
   either way, and only needs `k` in scope. B's extra demand is that library authors know `[k]`-generic types, which
   are less familiar than a type parameter.
 - **What B costs at run time** is suspending: nothing extra per call in a host that suspends instances or switches
-  stacks, but about half again in code size under Asyncify, which is why that's only the fallback. A pays a closure
+  stacks. With tasks compiled as state machines (#1890), an `Async` function that can wait keeps its live locals in a
+  frame on the heap, and one that can't pays nothing. A pays a closure
   allocated per `await!`, which in-place reuse can't remove.
 
 So the recommendation isn't "B has no colour". It's that B's colour is a context, and contexts already have the
@@ -284,12 +285,18 @@ The language doesn't change between these; the hosts and the backend do.
   functions on Wasmtime's stacks, which .NET doesn't support. A possible later optimisation
   ([#1901](https://github.com/nanyx-lang/nanyx/issues/1901)). Tasks can be built on instances by running each as a
   process (below), at the cost of copying.
-- **Then: tasks inside one instance, by stack switching.** WebAssembly's stack-switching proposal gives a module
-  many stacks and lets it switch between them; it's built for effect handlers, which is what `Async` is. Wasmtime
-  implements it; browsers suspend a Wasm stack on a JavaScript promise with JSPI. With it, a task is a stack, and
-  starting one costs about as much as a closure.
-- **A fallback** for a platform with neither: Binaryen's Asyncify transform, which makes a module able to unwind
-  and rewind its own stack, at a cost in code size and speed.
+- **Then: tasks inside one instance, as compiler state machines** (decided 2026-11-20,
+  [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)). The backend compiles each `Async` function to a state
+  machine, as C# and Rust compile async functions: it splits the function at each point where it can wait and keeps
+  the locals that live across them in a frame on the heap, and a scheduler in the runtime runs an instance's tasks on
+  one stack. It needs nothing from the runtime, so the same module runs under Wasmtime on every OS and in a browser,
+  and a function that can't wait is compiled as before.
+- **Stack switching, later** ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). WebAssembly's
+  stack-switching proposal gives a module many stacks and lets it switch between them, so a task is a stack and
+  starting one costs about as much as a closure. It was the first plan, but the proposal is still experimental:
+  Wasmtime's implementation covers only some platforms and panics on Windows, and no browser ships it (Chrome's JSPI
+  is narrower). Once it is standard and widely supported, it comes back as a second way to compile tasks, behind the
+  same language.
 
 A host that can't suspend at all (a plain WASI command with no async support) doesn't provide `Async`, and a program
 that needs it doesn't type-check there. That's the capability model doing its job.
@@ -478,9 +485,9 @@ Async is filed in three stages, after the keyword kinds. The crash-boundary step
 |---|---|---|
 | The `#delay` and `#bindF` keyword kinds ([Keyword kinds](../advanced/workflows#keyword-kinds)) | [#1879](https://github.com/nanyx-lang/nanyx/issues/1879) | Done |
 | Async 1: the `Async` context, provided by hosts; a wait holds only its instance | [#1889](https://github.com/nanyx-lang/nanyx/issues/1889) | Done |
-| Async 2: `start!`, `await` and `race`, each def a scope, tasks on stack switching | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
+| Async 2: `start!`, `await` and `race`, each def a scope, tasks as compiler state machines | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
-| Asyncify, for hosts with neither stack switching nor JSPI | | not filed |
+| Tasks on stack switching, once it's standard and widely supported | [#2164](https://github.com/nanyx-lang/nanyx/issues/2164) | Planning |
 | Crash reports: `Crash` with message, span and stack, used by the console, HTTP and test hosts | | proposed |
 | `isolate`, the deep copy, and the test runner and HTTP host built on it | | proposed |
 | `nanyx.process`: typed mailboxes and supervisors, and hot streams on them | | proposed |
