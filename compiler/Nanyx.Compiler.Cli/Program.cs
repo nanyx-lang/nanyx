@@ -34,6 +34,11 @@ internal sealed record Shell(string Directory, TextWriter Out, TextWriter Error,
     /// <summary>The package cache, the index and GitHub, as a build reads them: the user's (see <c>PackageStore.user</c>).</summary>
     public PackageStore Packages { get; init; } = PackageStoreModule.user();
 
+    /// <summary>What <c>nanyx publish</c> and <c>nanyx yank</c> send requests to GitHub with: none for GitHub itself,
+    /// signed in with <c>GITHUB_TOKEN</c> or the GitHub CLI's login (see <c>GitHubApi.token</c>); the Wasm tests give a
+    /// fake one.</summary>
+    public FSharpFunc<GitHubRequest, FSharpResult<GitHubResponse, string>>? GitHub { get; init; }
+
     /// <summary>What stops a program the command serves, as `nanyx run` serves one whose host answers HTTP requests: none
     /// for the process's own, which Ctrl+C stops.</summary>
     public CancellationToken Stop { get; init; } = CancellationToken.None;

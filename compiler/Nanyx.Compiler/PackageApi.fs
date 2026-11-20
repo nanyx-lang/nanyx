@@ -482,3 +482,28 @@ module PackageApi =
                         let version = if current > before && allows before current needed then current else bumped before needed
                         let version = string version
                         { Baseline = Some before; Changes = changes; Version = version; Manifest = withVersion manifest.Path text version }))
+
+    /// What `nanyx publish` checks of `package`'s version against `store`'s index (#865): that it isn't published
+    /// already, and that it is a big enough bump from the newest version published below it (`versionErrors`). Gives
+    /// that version, with the changes since it; none for a package's first version. Or what is wrong, each a line.
+    let publishCheck (store: PackageStore) (package: Package) : Result<(SemanticVersion * ApiChange list) option, string list> =
+        let manifest = package.Manifest
+        match SemanticVersion.tryParse manifest.Version with
+        | None -> Result.Error [ $"{manifest.Name}'s version {manifest.Version} is not a semantic version" ]
+        | Some version ->
+            PackageIndex.versions store.Index manifest.Name
+            |> Result.mapError List.singleton
+            |> Result.bind (fun (_, listed) ->
+                if listed |> List.exists (fun published -> published.Version = version) then
+                    Result.Error [ $"{manifest.Name} {version} is published already, and a published version can't change: run `nanyx bump` to choose the next version" ]
+                else
+                    baseline store manifest.Name version |> Result.mapError List.singleton)
+            |> Result.bind (function
+                | None -> Result.Ok None
+                | Some(before, beforeApi) ->
+                    ofPackage package
+                    |> Result.mapError (List.map Manifest.describe)
+                    |> Result.bind (fun api ->
+                        match versionErrors (before, beforeApi) (version, api) with
+                        | [] -> Result.Ok(Some(before, compare beforeApi api))
+                        | errors -> Result.Error(errors @ [ "Run `nanyx bump` to set the version these changes need" ])))

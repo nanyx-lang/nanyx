@@ -67,7 +67,7 @@ The manifest describes the package and the source files and dependencies that ma
 )
 ```
 
-A manifest holds only data: records, lists, tuples, strings, numbers, `true` and `false`, tags such as `#error`, and `--` comments. A name, a call, an operator or any other code in it is an error, so a manifest can always be read without running anything. Its fields are `package`, `dependencies`, `linters`, `host` and `formatter`; any other is an error. `package` must have a `name`, lower case with words separated by dots, and a `version`, a semantic version.
+A manifest holds only data: records, lists, tuples, strings, numbers, `true` and `false`, tags such as `#error`, and `--` comments. A name, a call, an operator or any other code in it is an error, so a manifest can always be read without running anything. Its fields are `package`, `dependencies`, `linters`, `host` and `formatter`; any other is an error. `package` must have a `name`, lower case with words separated by dots, and a `version`, a semantic version. A package to publish also gives its `repository`, the GitHub repository whose releases are its versions, as `repository = "acme/web"`.
 
 Manifests were once written in TOML. One still in that form, starting `[package]` or `name = "..."`, is an error that says so (`NYX0034`). While a package's manifest has errors, checking or running any of its files reports them, at the manifest, rather than checking the file on its own.
 
@@ -298,3 +298,15 @@ manifest:
 Below `1.0.0`, a breaking change needs a minor bump, `0.3.1` to `0.4.0`, and any other a patch. A dependant that asks
 for `1.2` gets any `1.x` version from `1.2.0` on, so a change the version doesn't announce would break its build. An
 inferred type can change by accident, so writing the types of what a module exports keeps its API what you meant.
+
+## Publishing
+
+`nanyx publish` publishes the version a package's manifest gives. It checks that the package builds and is formatted,
+and that its version is a big enough bump from the newest version published below it, by the rules above. Then it
+packs the package and creates the release `v1.2.0`, with the `.nyxpkg` as its asset, on the package's `repository`.
+The [package index](https://nanyx-lang.github.io/packages/) records each new release within the hour. For a package's
+first version, `publish` also opens the pull request that registers it with the index, which a maintainer merges.
+
+A published version never changes. `nanyx yank acme.web 1.2.0` opens the pull request that yanks it: once that is
+merged, no new resolution chooses it, but a lockfile that locks it keeps building. Both commands sign in to GitHub
+with `GITHUB_TOKEN`, or else the GitHub CLI's login. See [`nanyx publish`](../standard-tools/command-line#nanyx-publish).

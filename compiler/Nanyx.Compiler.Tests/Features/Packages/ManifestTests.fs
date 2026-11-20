@@ -71,6 +71,15 @@ let ``Linters turn on the linters they name, with the severities their settings 
     Assert.Equal(Some None, manifest.Linters.Severities |> Map.tryFind "default/linterFailed")
 
 [<Fact>]
+let ``A package's repository is the GitHub repository its versions are released on`` () =
+    let manifest = okOf """(package = (name = "acme.web", version = "1.0.0", repository = "acme/web"))"""
+    Assert.Equal(Some { Owner = "acme"; Name = "web" }, manifest.Repository)
+    Assert.Equal(None, (okOf """(package = (name = "demo", version = "0.1.0"))""").Repository)
+    let error = errorOf """(package = (name = "acme.web", version = "1.0.0", repository = "https://github.com/acme/web"))"""
+    Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, error.Code)
+    Assert.Contains("must be a GitHub repository, `owner/name`, as `acme/web`", error.Message)
+
+[<Fact>]
 let ``A manifest that is not Nanyx is a syntax error`` () =
     let error = errorOf "package: demo"
     Assert.Equal(DiagnosticCodes.SyntaxError.Code, error.Code)
@@ -140,7 +149,7 @@ let ``An unknown field is an error at its name`` () =
     Assert.Equal<string list>([ DiagnosticCodes.UnknownManifestField.Code; DiagnosticCodes.UnknownManifestField.Code ], errors |> List.map _.Code)
     Assert.Equal<string list>(
         [ "The manifest has no field 'extras': its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'"
-          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'host'" ],
+          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'repository', 'host'" ],
         errors |> List.map _.Message
     )
     let extras = errors.[0].Span.Value
