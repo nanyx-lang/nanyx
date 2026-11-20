@@ -109,7 +109,7 @@ decompressed; the page and the examples are a few kilobytes of it. The largest p
 
 **The first compile** is most of the wait. Of its 2.2 s, checking takes about 1.9 and lowering 0.25, against 0.08
 and 0.09 for a second compile of the same program: the first check reads the checked standard library (`CheckedLibrary.fs`), 2.9 MB that
-`BinaryData` reads back through reflection, under the runtime's interpreter. Without the checked library
+`BinaryData` reads back under the runtime's interpreter, with the readers it emits as IL for each type. Without the checked library
 (`?library=none`) the download is 0.5 MB smaller and the first compile takes 4.1 s, checking the library from its
 source, so the library is worth its download. The page can hide most of the wait by compiling a hello world as soon as
 the compiler is ready, while you read the example or start typing.

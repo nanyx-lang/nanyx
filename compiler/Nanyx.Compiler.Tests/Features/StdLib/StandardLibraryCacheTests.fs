@@ -125,6 +125,48 @@ let ``A value read back from its part refers to what was written before the part
     Assert.True(obj.ReferenceEquals(before, held))
     Assert.True(obj.ReferenceEquals(twice[0], twice[1]))
 
+type private Shape =
+    | Circle of radius: float
+    | Square of side: int * label: string
+    | Empty
+
+type private Sample =
+    { Name: string
+      Counts: Map<string, int>
+      Seen: Set<int64>
+      Shapes: Shape list
+      Day: System.DayOfWeek
+      Letter: char
+      Flag: bool
+      Huge: bigint
+      Small: byte
+      Unsigned: uint32 * uint64
+      Maybe: string option
+      Nothing: unit }
+
+[<Fact>]
+let ``Each kind of value is read back as it was written`` () =
+    let value =
+        { Name = "sample"
+          Counts = Map.ofList [ "b", 2; "a", -1; "c", System.Int32.MaxValue ]
+          Seen = Set.ofList [ 5L; -3L; System.Int64.MinValue ]
+          Shapes = [ Circle 1.5; Square(3, "three"); Empty; Square(-4, "sample") ]
+          Day = System.DayOfWeek.Friday
+          Letter = 'é'
+          Flag = true
+          Huge = bigint.Parse "-123456789012345678901234567890"
+          Small = 200uy
+          Unsigned = (System.UInt32.MaxValue, System.UInt64.MaxValue)
+          Maybe = Some "maybe"
+          Nothing = () }
+    let roundTrip (value: 'T) =
+        use stream = new MemoryStream()
+        use writer = new BinaryWriter(stream)
+        BinaryData.write writer id typeof<'T> value
+        BinaryData.read (stream.ToArray()) 0 id typeof<'T> :?> 'T
+    Assert.Equal(value, roundTrip value)
+    Assert.Equal({ value with Maybe = None; Shapes = [] }, roundTrip { value with Maybe = None; Shapes = [] })
+
 // The build checks the packages the compiler ships too (#1637), so a loose script does not check the console host.
 
 let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.console.core", "src", "console.nyx")

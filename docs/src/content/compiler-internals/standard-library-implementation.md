@@ -67,6 +67,14 @@ parsed for its name. Without them the first compile of `def x = 1` parsed every 
 console host's packages: with them it allocates about 146 MB against 261 MB, and a one-line `nanyx check` takes a
 median of 1.22 s against 1.61 s on a slower machine (Release, 15 runs of each, interleaved).
 
+`BinaryData` reads each type with a reader of its own, which it emits as IL (a `DynamicMethod`) the first time a read
+meets the type, and keeps for the process: the reader reads each field straight from the file's bytes, a primitive
+without boxing it, and calls the record's constructor or the union case's with them, where reading through reflection
+boxed each primitive and made an array of the fields for each value. A list, set or map is built from its items as
+they are read. The first `nanyx check` of `def x = 1` in a process allocates about 114 MB against 138 MB, and takes a
+median of 1.28 s against 1.39 s (Release, 9 runs of each, interleaved); in the browser, under the runtime's
+interpreter, the playground's first compile takes 3.2 s against 4.5 s.
+
 Each standard-library module the file does not have is checked once per process, the first time a compile imports
 it, and every later compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the
 module and its source).
