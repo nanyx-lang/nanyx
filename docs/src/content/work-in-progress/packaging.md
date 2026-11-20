@@ -125,8 +125,12 @@ rules, and `api.json` and `nanyx bump`, which are built (`PackageApi.fs`), are d
 [Versions](../tour/packages#versions). `nanyx publish` refuses a version whose bump is too small, listing the changes
 that need a bigger one, and the index refuses a release that skipped the check.
 
-**Left for #865:** `nanyx publish` calling `PackageApi.versionErrors` against the newest version published below the
-one it publishes, and the index's check that a release's `api.json` came from a bump that passed it.
+`nanyx api-check` runs the comparison on two `.nyxpkg` files, for the index's sync, which is to download the latest
+compiler release and run it on each new release against the newest version recorded below it, reporting a release that
+fails rather than recording it.
+
+**Left for #865:** `nanyx publish` running the check against the newest version published below the one it publishes,
+and the index's sync running `nanyx api-check`.
 ## What a package is
 
 A published package is a `.nyxpkg` file, built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): a zip of the

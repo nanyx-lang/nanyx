@@ -182,6 +182,7 @@ let private command (arguments: string list) : Shell -> int =
         fun shell -> CliCommands.MigrateIn(shell, name, Array.ofList path)
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
+    | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)
     | "pack" :: rest ->
         let outputPath, _, _, _, path = options (null, false, false, null, []) rest
         fun shell -> CliCommands.PackIn(shell, outputPath, path)

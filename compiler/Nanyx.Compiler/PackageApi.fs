@@ -391,6 +391,33 @@ module PackageApi =
     /// `api.json`, the name of the file a packed package holds its API in.
     let fileName = "api.json"
 
+    /// The API the packed package `bytes` holds in its `api.json`, at the zip's root; or why it has none to read. `what`
+    /// names the package, to say so.
+    let ofArchive (what: string) (bytes: byte array) : Result<PackageApi, string> =
+        try
+            use zip = new IO.Compression.ZipArchive(new MemoryStream(bytes), IO.Compression.ZipArchiveMode.Read)
+            match zip.GetEntry fileName with
+            | null -> Result.Error $"{what} has no {fileName}, so its API can't be compared: pack it with `nanyx pack`, which writes one"
+            | entry ->
+                use reader = new StreamReader(entry.Open())
+                ofJson (reader.ReadToEnd()) |> Result.mapError (fun message -> $"The {fileName} of {what} can't be read: {message}")
+        with :? InvalidDataException ->
+            Result.Error $"{what} is not a packed package, which is a zip"
+
+    /// Compares `older` with `newer`, two versions of a package as `api.json` records them, as the package index does
+    /// before it records `newer`: the changes between them, if `newer`'s version is a big enough bump for them (see
+    /// `versionErrors`); or what is wrong, each a line, ending with what to do about it.
+    let checkVersions (older: PackageApi) (newer: PackageApi) : Result<ApiChange list, string list> =
+        match SemanticVersion.tryParse older.Version, SemanticVersion.tryParse newer.Version with
+        | _ when older.Package <> newer.Package ->
+            Result.Error [ $"The older package is {older.Package}, and the newer {newer.Package}: give two versions of one package" ]
+        | Some before, Some after ->
+            match versionErrors (before, older) (after, newer) with
+            | [] -> Result.Ok(compare older newer)
+            | errors -> Result.Error(errors @ [ $"Run `nanyx bump` in {newer.Package} to set the version its changes need, then pack and publish that version" ])
+        | None, _ -> Result.Error [ $"{older.Package}'s version {older.Version} is not a semantic version" ]
+        | _, None -> Result.Error [ $"{newer.Package}'s version {newer.Version} is not a semantic version" ]
+
     /// `package` packed as `PackageArchive.pack` packs it, with its API in `api.json`; or what keeps it from being packed,
     /// a module that doesn't compile among them.
     let pack (package: Package) : Result<byte array, Diagnostic list> =

@@ -3,7 +3,7 @@ using Microsoft.FSharp.Core;
 using NyxCompiler;
 
 /// <summary>
-/// The commands that make a package and manage its dependencies: <c>nanyx migrate</c>, <c>nanyx pull</c>,
+/// The commands that make a package and manage its dependencies: <c>nanyx migrate</c>, <c>nanyx pull</c>, <c>nanyx api-check</c>,
 /// <c>nanyx install</c>, <c>nanyx pack</c> and <c>nanyx bump</c>. What they do is in the compiler (<see cref="MigrationModule"/>,
 /// <see cref="PackageDependencies"/>, <see cref="PackageArchive"/>, <see cref="PackageApiModule"/>); these parse their arguments, write what they make
 /// and say what happened.
@@ -175,11 +175,7 @@ internal static partial class CliCommands
             return 0;
         }
 
-        foreach (var change in result.Changes)
-        {
-            var bump = change.Bump.IsMajorBump ? "major" : change.Bump.IsMinorBump ? "minor" : "patch";
-            shell.Out.WriteLine($"{bump}: {change.Description}");
-        }
+        PrintChanges(shell, result.Changes);
 
         if (result.Changes.IsEmpty)
         {
@@ -195,6 +191,65 @@ internal static partial class CliCommands
         File.WriteAllText(package.Manifest.Path, result.Manifest);
         shell.Out.WriteLine($"{name} {package.Manifest.Version} -> {result.Version}, after {baseline}: written to {shell.DisplayPath(package.Manifest.Path)}");
         return 0;
+    }
+
+    /// <summary>
+    /// Check that a new version of a package is a big enough bump from an older one, as the package index checks a release before it records it: compare the API each .nyxpkg's api.json records, list the changes, and fail when the newer version's number is too small for them.
+    /// </summary>
+    /// <param name="older">The .nyxpkg of the older version: the newest published below the newer one.</param>
+    /// <param name="newer">The .nyxpkg of the newer version.</param>
+    [Consolo("api-check")]
+    public static int ApiCheck(string older, string newer) => ApiCheckIn(Shell.Process, older, newer);
+
+    /// <summary>What <c>nanyx api-check</c> does, run in <paramref name="shell"/>: the changes on stdout, as
+    /// <c>nanyx bump</c> lists them, then a line that says the bump is big enough; or what is wrong on stderr, exiting
+    /// with 1.</summary>
+    internal static int ApiCheckIn(Shell shell, string older, string newer)
+    {
+        var apis = new List<PackageApi>();
+        foreach (var path in new[] { older, newer })
+        {
+            var full = shell.FullPath(path);
+            if (!File.Exists(full))
+            {
+                shell.Error.WriteLine($"error: There is no file '{path}'");
+                return UsageError;
+            }
+
+            var api = PackageApiModule.ofArchive(Path.GetFileName(full), File.ReadAllBytes(full));
+            if (api.IsError)
+            {
+                shell.Error.WriteLine($"error: {api.ErrorValue}");
+                return 1;
+            }
+
+            apis.Add(api.ResultValue);
+        }
+
+        var checkedVersions = PackageApiModule.checkVersions(apis[0], apis[1]);
+        if (checkedVersions.IsError)
+        {
+            foreach (var error in checkedVersions.ErrorValue)
+            {
+                shell.Error.WriteLine($"error: {error}");
+            }
+
+            return 1;
+        }
+
+        PrintChanges(shell, checkedVersions.ResultValue);
+        shell.Out.WriteLine($"{apis[1].Package} {apis[1].Version} is a big enough bump from {apis[0].Version}");
+        return 0;
+    }
+
+    /// <summary>Writes each of <paramref name="changes"/> on a line of its own, after the bump it needs.</summary>
+    private static void PrintChanges(Shell shell, IEnumerable<ApiChange> changes)
+    {
+        foreach (var change in changes)
+        {
+            var bump = change.Bump.IsMajorBump ? "major" : change.Bump.IsMinorBump ? "minor" : "patch";
+            shell.Out.WriteLine($"{bump}: {change.Description}");
+        }
     }
 
     /// <summary>

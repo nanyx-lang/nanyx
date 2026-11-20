@@ -95,7 +95,8 @@ and the live view is drawn inside the box.
 # Packages
 
 `nanyx migrate` is `Migration.fs`, `nanyx pull` is `PackageDependencies.pull`, `nanyx install` is
-`PackageDependencies.install`, `nanyx pack` is `PackageApi.pack` (`PackageArchive.packWith`, with the package's `api.json`) and `nanyx bump` is `PackageApi.bump`. The cache and the index a command uses are the
+`PackageDependencies.install`, `nanyx pack` is `PackageApi.pack` (`PackageArchive.packWith`, with the package's `api.json`), `nanyx bump` is `PackageApi.bump`, and `nanyx api-check` is `PackageApi.checkVersions` on the `api.json` of each
+`.nyxpkg` (`PackageApi.ofArchive`). The cache and the index a command uses are the
 `Shell`'s `Packages`, `PackageStore.user ()` (`NANYX_PACKAGES`, `NANYX_INDEX`); the Wasm tests give their own.
 A manifest's `Dependency` says where the package is found with a `DependencySource`: `AtPath`, `Shipped`, `FromIndex`
 or `OnGitHub`. `nanyx migrate`, `nanyx install` and `nanyx new` hold the entries they write as that union, and write
