@@ -181,6 +181,16 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   and answers each request in a store and an instance of its own, on a thread of its own. An instance that traps or
   exits without responding is answered with a 500, the reason goes to standard error, and the server carries on.
   `Request.path` takes the path from the whole URL the runtime passes.
+- **The playground host.** `packages/nanyx.playground` declares itself a host with `host = (root = "playground.host",
+  prelude = "playground.prelude")`, and depends only on `nanyx.console.core`. Its `run` takes `[Console, Random] () -> a`
+  and `use`s a `Console` and a `Random` written on imports of its own, `nanyx:playground` `write`, `writeError` (each
+  given the address and byte length of the text in the module's memory) and `randomBits` (64 bits, as an `i64`),
+  which a page implements, not on WASI. Its `readLine` gives `#error(#endOfInput)` and its `readToEnd` the empty
+  string ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151) gives it input). Its prelude re-exports `Console`
+  with `print`, `println`, `eprint` and `eprintln`, and `Random`, so a console program that needs only those compiles
+  under it unchanged, and one that needs a context it doesn't provide is `NYX0205` naming it, by the check above
+  ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)). The runtime's own helpers still import WASI's `fd_write`
+  and `proc_exit`, for `dbg` and for a deferred error or crash, so whatever runs the module provides those two as well.
 - **Where `dbg` prints.** `dbg` needs no context, and a host package does nothing for it: the runtime that runs the
   host's program decides. A module `nanyx run` runs gives each `dbg` to `nanyx:debug` `dbg` first, with its file, line,
   column and text, and the handler says whether it has dealt with it (`Probing.defineDbg`). The console runner

@@ -1,0 +1,66 @@
+/// The playground host, `nanyx.playground`, a stand-in for the console host in a web page, which provides `Console` and
+/// `Random` and nothing else (#2150, see docs/src/content/compiler-internals/hosts.md).
+module Nanyx.Compiler.Tests.Features.Hosts.PlaygroundHost
+
+open Xunit
+open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
+
+/// The diagnostics of the script `source`, saved as `main.nyx` in a directory of its own.
+let private diagnosticsOf (source: string) =
+    use directory = new TempPackage([ "main.nyx", source ])
+    let path = directory.Path "main.nyx"
+    (Script.compileSource path source).Diagnostics
+
+[<Fact>]
+let ``A console program that prints and draws random numbers compiles unchanged under the playground host, with the host's linters clean`` () =
+    let source =
+        withFinalNewline """::host nanyx.playground
+
+import nanyx/random as random
+
+@entry
+def main = {
+  println("Hello, world!")
+  eprintln(random.between(1, 6))
+}"""
+    Assert.Empty(diagnosticsOf source)
+
+[<Fact>]
+let ``An entry that requires Env doesn't fit the playground host, which says what it provides`` () =
+    let source =
+        withFinalNewline """::host nanyx.playground
+::dependency nanyx.console.core
+
+import nanyx.console.core/env as (Env)
+
+@entry
+def main: [Console, Env] () -> () = { println("hi") }"""
+    match diagnosticsOf source |> List.filter Diagnostics.isError with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, diagnostic.Code)
+        Assert.StartsWith(
+            """It doesn't fit the host 'nanyx.playground/playground.host'
+  expected: [Console, Random] () -> a
+""".ReplaceLineEndings "\n",
+            diagnostic.Message)
+    | diagnostics -> Assert.Fail $"Expected one error, got %A{diagnostics}"
+
+[<Fact>]
+let ``A program that uses FileSystem under the playground host is an error naming the host`` () =
+    let source =
+        withFinalNewline """::host nanyx.playground
+::dependency nanyx.fs
+
+import nanyx.fs/file as file
+import nanyx.fs/path as path
+
+ignore(file.read(path.of("notes.txt")))"""
+    match diagnosticsOf source with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+        Assert.Equal(
+            "'file.read' requires the contexts 'Async' and 'FileSystem', which the host 'nanyx.playground/playground.host' does not provide",
+            diagnostic.Message)
+        Assert.Equal(6, diagnostic.Span.Value.StartLine)
+    | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
