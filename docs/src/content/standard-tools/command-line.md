@@ -20,6 +20,7 @@ nanyx pull [<package>]
 nanyx install <package> [--path <directory> | --version <version>]
 nanyx pack [--out <directory>] [<package>]
 nanyx bump [<package>]
+nanyx api-check <older.nyxpkg> <newer.nyxpkg>
 nanyx manifest --json [<package>]
 nanyx search <query>
 nanyx lsp [<options>]
@@ -321,6 +322,20 @@ An export removed or changed needs a major bump, one added, or a type made more 
 to the public API a patch. Below `1.0.0`, a breaking change needs a minor bump and any other a patch. A version you
 wrote already that is big enough stays, and with no version published there is nothing to compare, so the version
 stays as it is. See [Packages and projects](../tour/packages#versions).
+
+## `nanyx api-check`
+
+`nanyx api-check` compares two versions of a package, each a `.nyxpkg`, as the package index does before it records a
+new release: the newer one's version must be a big enough bump from the older one's for the changes between the APIs
+their `api.json` files record, by the rules `nanyx bump` follows.
+
+```bash
+nanyx api-check acme.util-1.0.0.nyxpkg acme.util-1.1.0.nyxpkg
+```
+
+It lists the changes as `nanyx bump` does, then says the bump is big enough. When it isn't, it lists on stderr the
+changes that need a bigger one and exits with 1; so it does for a `.nyxpkg` with no `api.json`, and for two different
+packages.
 
 ## `nanyx manifest`
 
