@@ -48,12 +48,13 @@ module internal BinaryData =
             member _.Value value = box (value :?> Lazy<'T>).Value
 
     /// How a type is written: its parts, each with the type it is declared as. A record's, a tuple's and a union case's
-    /// constructor is how `read` builds one again.
+    /// constructor is how `read` builds one again. What takes a value apart, which only `write` needs, is made the first
+    /// time it is asked for: F#'s reflection takes long to make it, and a read meets every type in the file.
     type private Shape =
         | Primitive
-        | Record of fields: Type[] * read: (obj -> obj[]) * make: ConstructorInfo
-        | Union of tag: (obj -> int) * cases: (Type[] * (obj -> obj[]) * MethodInfo)[]
-        | Tuple of items: Type[] * read: (obj -> obj[]) * make: ConstructorInfo
+        | Record of fields: Type[] * read: Lazy<obj -> obj[]> * make: ConstructorInfo
+        | Union of tag: Lazy<obj -> int> * cases: (Type[] * Lazy<obj -> obj[]> * MethodInfo)[]
+        | Tuple of items: Type[] * read: Lazy<obj -> obj[]> * make: ConstructorInfo
         /// A list, set or map (two element types).
         | Elements of elementTypes: Type[] * Collection
         /// A `Lazy`, with the type of its value.
@@ -77,19 +78,19 @@ module internal BinaryData =
         elif generic typedefof<Lazy<_>> ty then Later (ty.GetGenericArguments()[0], instance typedefof<LazyValue<_>> ty)
         elif FSharpType.IsTuple ty then
             match FSharpValue.PreComputeTupleConstructorInfo ty with
-            | make, None -> Tuple (FSharpType.GetTupleElements ty, FSharpValue.PreComputeTupleReader ty, make)
+            | make, None -> Tuple (FSharpType.GetTupleElements ty, lazy (FSharpValue.PreComputeTupleReader ty), make)
             | _, Some _ -> failwith $"BinaryData cannot write a tuple of more than seven items: {ty.FullName}"
         elif FSharpType.IsRecord(ty, flags) then
             let fields = FSharpType.GetRecordFields(ty, flags) |> Array.map _.PropertyType
-            Record (fields, FSharpValue.PreComputeRecordReader(ty, flags), FSharpValue.PreComputeRecordConstructorInfo(ty, flags))
+            Record (fields, lazy (FSharpValue.PreComputeRecordReader(ty, flags)), FSharpValue.PreComputeRecordConstructorInfo(ty, flags))
         elif FSharpType.IsUnion(ty, flags) then
             let cases =
                 FSharpType.GetUnionCases(ty, flags)
                 |> Array.map (fun case ->
                     case.GetFields() |> Array.map _.PropertyType,
-                    FSharpValue.PreComputeUnionReader(case, flags),
+                    lazy (FSharpValue.PreComputeUnionReader(case, flags)),
                     FSharpValue.PreComputeUnionConstructorInfo(case, flags))
-            Union (FSharpValue.PreComputeUnionTagReader(ty, flags), cases)
+            Union (lazy (FSharpValue.PreComputeUnionTagReader(ty, flags)), cases)
         else
             failwith $"BinaryData cannot write a value of type {ty.FullName}: it is not F# data"
 
@@ -159,13 +160,13 @@ module internal BinaryData =
                     writer.Write bytes
                 | _ -> ()
             | Enum _ -> writer.Write(Convert.ToInt64 value)
-            | Record(fields, read, _) -> Array.iter2 item fields (read value)
-            | Tuple(items, read, _) -> Array.iter2 item items (read value)
+            | Record(fields, read, _) -> Array.iter2 item fields (read.Value value)
+            | Tuple(items, read, _) -> Array.iter2 item items (read.Value value)
             | Union(tag, cases) ->
-                let index = tag value
+                let index = tag.Value value
                 writeCount writer index
                 let fields, read, _ = cases[index]
-                Array.iter2 item fields (read value)
+                Array.iter2 item fields (read.Value value)
             | Elements(elementTypes, collection) ->
                 let items = collection.Items value
                 writeCount writer (items.Length / elementTypes.Length)
