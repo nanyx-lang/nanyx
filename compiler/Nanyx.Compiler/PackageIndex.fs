@@ -11,6 +11,10 @@ type IndexedVersion =
       Url: string
       /// The SHA-256 of its `.nyxpkg`, as the index first recorded it.
       Sha256: string
+      /// The oldest compiler it builds with, as its manifest writes it, `0.14`, if it gives one.
+      Nanyx: string option
+      /// Its dependencies, each a package's name and the versions it accepts, as the index writes them: `2.1` or `^2.1`.
+      Dependencies: (string * string) list
       Yanked: bool
       /// Whether its release and asset are there to download.
       Available: bool }
@@ -95,6 +99,16 @@ module PackageIndex =
                                     { Version = version
                                       Url = url
                                       Sha256 = sha256
+                                      Nanyx = text "nanyx" entry
+                                      Dependencies =
+                                        match property "dependencies" entry with
+                                        | Some dependencies when dependencies.ValueKind = JsonValueKind.Object ->
+                                            dependencies.EnumerateObject()
+                                            |> Seq.map (fun dependency ->
+                                                dependency.Name,
+                                                (if dependency.Value.ValueKind = JsonValueKind.String then dependency.Value.GetString() else string dependency.Value))
+                                            |> List.ofSeq
+                                        | _ -> []
                                       Yanked = flag "yanked" entry
                                       Available = property "available" entry |> Option.forall (fun value -> value.ValueKind <> JsonValueKind.False) }
                             | _ -> None)

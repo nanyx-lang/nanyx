@@ -113,4 +113,14 @@ them with `Manifest.entryText`, which escapes their strings.
   unzipping are `Downloads.fs`, shared with the index.
 - `nanyx manifest` has only `--json` so far.
 
+Choosing versions is `Resolution.resolve`, which the commands don't call yet. It gathers the dependencies named by
+their version of the package and of each package it reaches by path or on GitHub (`Resolution.requirements`), reads
+each package's versions from the index as it is reached (`PackageIndex.versions`, with their dependencies and minimum
+compiler), and hands them to `VersionSolver.solve`: [PubGrub](https://github.com/dart-lang/pub/blob/master/doc/solver.md)
+as pub builds it, with a term's versions a finite set of those the index lists. A version that is yanked (unless the
+lockfile locks it), missing from GitHub or too new for the compiler is ruled out by an incompatibility of its own, so
+that an explanation can name it, and a dependency that no listed version satisfies is one too. The version a lockfile
+locks is chosen whenever it is allowed. A conflict is `NYX0047`, whose message is the solver's explanation, written as
+pub writes it: a sentence for each step, and a number for a step used twice.
+
 `nanyx test` is proposed on [Testing](../work-in-progress/testing).
