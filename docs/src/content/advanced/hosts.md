@@ -107,6 +107,21 @@ settings = (port = 8080))`, and `nanyx run` serves it there, on 3000 when no por
 settings it takes, each with its default, so a setting it doesn't take is an error at the setting. See the
 [HTTP server cookbook](../cookbook/http-server).
 
+# The playground host
+
+The playground host, `nanyx.playground`, runs a console program in a web page, as the [playground](../work-in-progress/playground)
+will. It stands in for the console host: it provides the same `Console`, from `nanyx.console.core`, whose output goes
+to the page, and `Random`, drawn from a generator the page seeds, so a program that needs only those compiles under it
+unchanged. It provides nothing else, no `Env`, `FileSystem`, `Http` or `Async`, so a program that needs one of them is
+an error naming the host:
+
+```
+error NYX0205: 'file.read' requires the contexts 'Async' and 'FileSystem', which the host 'nanyx.playground/playground.host' does not provide
+```
+
+A script runs under it with `::host nanyx.playground`. Reading a line gives `#error(#endOfInput)` for now: the page
+has no input yet.
+
 # Where `dbg` prints
 
 [`dbg`](../stdlib/console#dbg) needs no context, so it works under every host, but where what it prints goes is the
@@ -244,6 +259,7 @@ The compiler ships the packages every program needs beside itself, in a `package
 - `nanyx.fs`, the interface package of the file system, which declares `FileSystem`, `Path` and the functions on them;
 - `nanyx.http.core`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
 - `nanyx.http`, the HTTP host;
+- `nanyx.playground`, the playground host, which runs a console program in a web page;
 - `nanyx.json`, for reading and writing [JSON](../stdlib/json);
 - `nanyx.regex`, for [regular expressions](../stdlib/regex).
 

@@ -66,6 +66,15 @@ let ``The HTTP host is shipped beside the compiler, and takes a port, 3000 by de
     Assert.Equal<string list>([ "nanyx.http.core" ], (manifestOf "nanyx.http").Dependencies |> List.map _.Name)
 
 [<Fact>]
+let ``The playground host is shipped beside the compiler, and depends only on the console's interface package`` () =
+    match HostPackages.tryShipped "nanyx.playground" with
+    | Ok host -> Assert.Equal(("playground.host", Some "playground.prelude"), (host.Module, host.Prelude))
+    | Error message -> failwith message
+    let manifest = manifestOf "nanyx.playground"
+    Assert.Equal(("nanyx.playground", Toolchain.version), (manifest.Name, manifest.Version))
+    Assert.Equal<string list>([ "nanyx.console.core" ], manifest.Dependencies |> List.map _.Name)
+
+[<Fact>]
 let ``The JSON package is shipped beside the compiler, with its modules for values and for encoders, and no dependencies`` () =
     let manifest = manifestOf "nanyx.json"
     Assert.Equal(("nanyx.json", Toolchain.version), (manifest.Name, manifest.Version))
