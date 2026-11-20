@@ -77,14 +77,14 @@ let ``A name bound by two parts of an and-pattern is an error`` () =
     let diagnostic = Assert.Single (Compiler.compile source).Diagnostics
     Assert.Equal(DiagnosticCodes.NameBoundTwiceInPattern.Code, diagnostic.Code)
     Assert.Equal(source.IndexOf "(a, _) &", diagnostic.Span.Value.Start)
-    Assert.Contains("'a'", diagnostic.Message)
+    Assert.Equal(Some "a", diagnostic.Subject)
 
 [<Fact>]
 let ``An and-pattern covers what all its parts cover`` () =
     // A guard part covers nothing for certain, so the arm after it is still needed.
     let guarded =
         Compiler.compile "def f: int -> int = { n ->\n  match n\n    | m & { > 100 } -> m\n}\n"
-    Assert.Contains("Non-exhaustive match", (Assert.Single guarded.Diagnostics).Message)
+    Assert.StartsWith("Missing", (Assert.Single guarded.Diagnostics).Message)
     assertCompiles "def f: int -> int = { n ->\n  match n\n    | m & _ -> m\n}\n"
     assertCompiles (
         withFinalNewline """def f: #some(int) | #none -> int = { o ->
@@ -99,4 +99,4 @@ let ``An and-pattern covers what all its parts cover`` () =
     | #some(n) & #some(1) -> n
     | #none -> 0
 }""")
-    Assert.Contains("Non-exhaustive match", (Assert.Single partialTag.Diagnostics).Message)
+    Assert.StartsWith("Missing", (Assert.Single partialTag.Diagnostics).Message)

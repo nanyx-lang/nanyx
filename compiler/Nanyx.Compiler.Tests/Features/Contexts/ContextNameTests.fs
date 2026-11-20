@@ -41,7 +41,7 @@ let ``A context name is not a value`` () =
         Assert.Equal(DiagnosticCodes.ContextNameAsValue.Code, code)
         Assert.Equal(text, at)
     let result = Compiler.compile ((contexts + "def run: [Log] () -> () = { context l ->\n  def x = l\n  ()\n}\n").ReplaceLineEndings "\n")
-    Assert.Equal("'l' names a context instance, which can only be loaded with `use l`", (Assert.Single result.Diagnostics).Message)
+    Assert.Equal("It names a context instance, which can only be loaded with `use l`", (Assert.Single result.Diagnostics).Message)
 
 [<Fact>]
 let ``An inner lambda may capture a context name to use it`` () =

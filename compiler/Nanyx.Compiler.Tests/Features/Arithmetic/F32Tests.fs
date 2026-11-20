@@ -26,4 +26,4 @@ let ``An F32 is not a float`` () =
     let result = Compiler.compile source
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
-    Assert.Equal("Type mismatch: 'F32' vs 'float'", diagnostic.Message)
+    Assert.Equal("'F32' vs 'float'", diagnostic.Message)

@@ -85,10 +85,10 @@ module Script =
     /// The package a `::host`, `::dependency` or `::linter` directive names, and where it is found.
     let private packageOf (directive: Directive) : Result<DirectiveWord * DirectivePlace, Diagnostic> =
         match directive.Arguments with
-        | [] -> Result.Error(invalid directive.Span (usage directive.Name))
+        | [] -> Result.Error(invalid directive.Span (usage directive.Name) |> Diagnostics.about $"::{directive.Name}")
         | [ package ] -> Result.Ok(package, Shipped)
         | [ package; place ] -> placeOf place |> Result.map (fun place -> package, place)
-        | _ :: _ :: extra :: _ -> Result.Error(invalid extra.Span (usage directive.Name))
+        | _ :: _ :: extra :: _ -> Result.Error(invalid extra.Span (usage directive.Name) |> Diagnostics.about $"::{directive.Name}")
 
     /// A value a `::lint` or `::format` directive sets, written as a manifest writes one.
     let private valueOf (directive: Directive) (word: DirectiveWord) : Result<DataValue, Diagnostic> =
@@ -185,13 +185,13 @@ module Script =
                         match directive.Arguments, linter with
                         | [ rule; severity ], Some linter -> valueOf directive severity |> Result.map (fun severity -> LintSetting(linter, rule, severity)), Some linter
                         | [ _; _ ], None -> Result.Error(lintWithoutLinter directive), linter
-                        | _ -> Result.Error(invalid directive.Span (usage "lint")), linter
+                        | _ -> Result.Error(invalid directive.Span (usage "lint") |> Diagnostics.about "::lint"), linter
                     | "format" ->
                         match directive.Arguments with
                         | [ key; value ] -> valueOf directive value |> Result.map (fun value -> FormatSetting(key, value)), linter
-                        | _ -> Result.Error(invalid directive.Span (usage "format")), linter
+                        | _ -> Result.Error(invalid directive.Span (usage "format") |> Diagnostics.about "::format"), linter
                     | "" -> Result.Error(invalid directive.Span $"`::` has no directive's name after it: the directives are {directiveList}"), linter
-                    | name -> Result.Error(invalid directive.Words.Head.Span $"Unknown directive `::{name}`: the directives are {directiveList}"), linter
+                    | name -> Result.Error(invalid directive.Words.Head.Span $"Nanyx has no directive of this name: the directives are {directiveList}" |> Diagnostics.about $"::{name}"), linter
                 let linterAbove = linterAbove || linter.IsSome || (directive.IsOldForm && directive.Name.StartsWith "linters.")
                 (directive, setting), (linter, linterAbove))
             (None, false)

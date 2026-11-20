@@ -59,7 +59,7 @@ let ``A match on the result of bindSome that leaves out a step's tag says which`
 """
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.NonExhaustiveMatch.Code, diagnostic.Code)
-    Assert.Equal("Non-exhaustive match, missing tags: invalidInt", diagnostic.Message)
+    Assert.Equal("Missing tags: invalidInt", diagnostic.Message)
 
 [<Fact>]
 let ``Result.bind of two steps with one error type keeps it`` () =

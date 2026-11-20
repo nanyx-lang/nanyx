@@ -197,7 +197,7 @@ let internal inferCall
                             | other -> other
                         Ok (mkTypedExpr expr returnTy None None None, { LambdaContexts.recordRunHere env typedLambda.Type next with WorkflowBlocks = next.WorkflowBlocks.Add expr.Id })
                     | Error err -> Error err
-                | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"The workflow '{name}' is called without a trailing lambda: write its block after it, as in `{name} {{ ... }}`" ]
+                | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidWorkflow calleeSpan $"It is called without a trailing lambda: write its block after it, as in `{name} {{ ... }}`" |> Diagnostics.about name ]
             | None ->
                 // With a known signature, each argument is checked against its parameter as it is inferred,
                 // so a lambda argument's parameters can take their types from the signature and from the
@@ -351,7 +351,7 @@ let internal inferCall
             // Only a nominal type's home module can make one: anywhere else it comes from what that module exports.
             | Some info when isNominal info && not (inNominalHome state (TypeDefInfo.nominalId info) calleeSpan) ->
                 let message = ProtectedShapes.constructedOutside state (Map.toList env.Names) name info
-                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan message ]
+                Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule calleeSpan message |> Diagnostics.about name ]
             // A context's instance is never a value: it is written only as what a `use` loads.
             | Some info when info.IsContext && not (state.UseInstances.Contains expr.Id) ->
                 let message =

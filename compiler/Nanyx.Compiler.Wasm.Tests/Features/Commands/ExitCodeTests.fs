@@ -8,7 +8,7 @@ open TranspilerWasmTestHelpers
 let private assertExit (expected: int) (message: string) (directory: string) (arguments: string list) =
     let outcome = nanyxIn directory arguments
     Assert.Equal(expected, outcome.ExitCode)
-    Assert.Equal(message, outcome.StandardError.Trim())
+    Assert.Equal(message, outcome.StandardError.Trim().ReplaceLineEndings "\n")
 
 [<Theory>]
 [<InlineData("check")>]
@@ -20,7 +20,7 @@ let ``Exit codes - more than one path is a usage error, 2, for every command tha
 [<Fact>]
 let ``Exit codes - run takes what follows the path as the program's arguments, not as more paths`` () =
     use directory = new TempDirectory()
-    assertExit 2 "error NYX0002: There is no file 'a.nyx'" directory.Path [ "run"; "a.nyx"; "b" ]
+    assertExit 2 "error NYX0002: File not found 'a.nyx'\n  = There is no file at this path" directory.Path [ "run"; "a.nyx"; "b" ]
 
 [<Fact>]
 let ``Exit codes - new given two directories is a usage error, 2`` () =
@@ -33,7 +33,7 @@ let ``Exit codes - new given two directories is a usage error, 2`` () =
 [<InlineData("wasm")>]
 let ``Exit codes - a file that does not exist is a usage error, 2`` (command: string) =
     use directory = new TempDirectory()
-    assertExit 2 "error NYX0002: There is no file 'missing.nyx'" directory.Path [ command; "missing.nyx" ]
+    assertExit 2 "error NYX0002: File not found 'missing.nyx'\n  = There is no file at this path" directory.Path [ command; "missing.nyx" ]
 
 [<Theory>]
 [<InlineData("check")>]
@@ -56,7 +56,7 @@ let ``Exit codes - a script with an error fails check with 1`` () =
     File.WriteAllText(Path.Combine(directory.Path, "main.nyx"), "def answer: int = \"forty-two\"\n")
     let outcome = nanyxIn directory.Path [ "check"; "main.nyx" ]
     Assert.Equal(1, outcome.ExitCode)
-    assertDiagnostic "NYX0201" "Type mismatch" "main.nyx:1:19" "Type mismatch: 'string' vs 'int'" outcome.StandardOutput
+    assertDiagnostic "NYX0201" "Type mismatch" "main.nyx:1:19" "'string' vs 'int'" outcome.StandardOutput
 
 [<Fact>]
 let ``Exit codes - a script that checks exits with 0`` () =

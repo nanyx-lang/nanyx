@@ -25,9 +25,9 @@ module HostSettings =
         |> List.choose (fun setting ->
             match host.Settings |> List.tryFind (fun declared -> declared.Name = setting.Name) with
             | None when host.Settings.IsEmpty ->
-                Some(Diagnostics.at DiagnosticCodes.UnknownManifestField setting.NameSpan $"The host '{host.Package}' takes no settings")
+                Some(Diagnostics.at DiagnosticCodes.UnknownManifestField setting.NameSpan $"The host '{host.Package}' takes no settings" |> Diagnostics.about setting.Name)
             | None ->
-                Some(Diagnostics.at DiagnosticCodes.UnknownManifestField setting.NameSpan $"The host '{host.Package}' takes no setting '{setting.Name}': it takes {taken}")
+                Some(Diagnostics.at DiagnosticCodes.UnknownManifestField setting.NameSpan $"The host '{host.Package}' takes no setting '{setting.Name}': it takes {taken}" |> Diagnostics.about setting.Name)
             | Some declared when not (sameKind setting.Value declared.Value) ->
                 Some(
                     Diagnostics.at

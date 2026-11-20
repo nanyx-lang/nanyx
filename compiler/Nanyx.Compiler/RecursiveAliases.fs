@@ -112,4 +112,5 @@ module RecursiveAliases =
         |> List.filter (snd >> not)
         |> List.map (fun (typeExpr, _) ->
             Diagnostics.at DiagnosticCodes.UnguardedRecursiveAlias typeExpr.Span
-                $"The type '{name}' refers to itself outside a tag: a type alias can name itself only in the payload of one of its tags, as in `#node({name})`")
+                $"It refers to itself outside a tag: a type alias can name itself only in the payload of one of its tags, as in `#node({name})`"
+            |> Diagnostics.about name)

@@ -272,9 +272,10 @@ internal static partial class CliCommands
         var entry = PackageModule.entryResult(build);
         if (entry is null)
         {
-            compiling.Error.WriteLine(package.Host is null
-                ? $"error {DiagnosticCodes.NothingToRun.Code}: '{package.Manifest.Name}' names no host, so it is a library, which can't be run: name the host its `@entry` runs under in its manifest, as `host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")`"
-                : $"error {DiagnosticCodes.NothingToRun.Code}: The package '{package.Manifest.Name}' has no `@entry`, so there is nothing to run");
+            var nothing = package.Host is null
+                ? $"It names no host, so it is a library, which can't be run: name the host its `@entry` runs under in its manifest, as `host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")`"
+                : "It has no `@entry`, so there is nothing to run";
+            PrintDiagnostics(compiling, General(DiagnosticCodes.NothingToRun, package.Manifest.Name, nothing), compiling.Error);
             return 1;
         }
 
@@ -839,7 +840,7 @@ internal static partial class CliCommands
 
         if (!File.Exists(shell.FullPath(inputFile)))
         {
-            shell.Error.WriteLine($"error {DiagnosticCodes.FileNotFound.Code}: There is no file '{inputFile}'");
+            PrintDiagnostics(shell, General(DiagnosticCodes.FileNotFound, inputFile, "There is no file at this path"), shell.Error);
             return UsageError;
         }
 
@@ -960,7 +961,8 @@ internal static partial class CliCommands
             }
 
             first = false;
-            var severity = diagnostic.Severity.ToString().ToLowerInvariant();
+            // A critical diagnostic, such as a missing file, is an error that stops everything: it is shown as one.
+            var severity = diagnostic.Severity.IsCritical ? "error" : diagnostic.Severity.ToString().ToLowerInvariant();
             var escape = colour ? SeverityColour(diagnostic.Severity) : null;
             string Coloured(string text) => escape is null ? text : $"\u001b[{escape}m{text}\u001b[0m";
             writer.WriteLine($"{Coloured($"{severity} {diagnostic.Code}: {Diagnostics.headline(diagnostic)}")}");
@@ -998,6 +1000,13 @@ internal static partial class CliCommands
             }
         }
     }
+
+    /// <summary>
+    /// The diagnostic <paramref name="code"/> about the whole command, not a place in a file, its headline naming
+    /// <paramref name="subject"/>, as the one diagnostic to print.
+    /// </summary>
+    private static FSharpList<Diagnostic> General(DiagnosticCode code, string subject, string message) =>
+        ListModule.Singleton(Diagnostics.about(subject, Diagnostics.general(code, message)));
 
     /// <summary>The ANSI colour a diagnostic of <paramref name="severity"/> is shown in: bold red, yellow or cyan.</summary>
     private static string SeverityColour(Severity severity) =>

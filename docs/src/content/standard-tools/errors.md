@@ -70,7 +70,7 @@ An import names a file or a module that does not exist. For a file-path import, 
 file's directory, and `.nyx` is added to it.
 
 ```nanyx
-import "./helpers" as helpers  -- error NYX0003: There is no file '.../helpers' to import
+import "./helpers" as helpers  -- error NYX0003: There is no file at this path, which is read from the importing file's directory
 
 def total = 1
 ```
@@ -105,7 +105,7 @@ An import that starts with `nanyx/` names a module the standard library does not
 modules it has.
 
 ```nanyx
-import nanyx/strings  -- error NYX0005: Unknown standard library module 'nanyx/strings': the modules are ...
+import nanyx/strings  -- error NYX0005: The modules are ...
 
 def total = 1
 ```
@@ -127,7 +127,7 @@ A definition is marked with an attribute the compiler does not know, or a local 
 the only attribute a block can hold. The attributes are listed in [Attributes](../tour/attributes).
 
 ```nanyx
-@inline  -- error NYX0007: Unknown attribute '@inline'
+@inline  -- error NYX0007: A definition can have '@entry', '@extern' or '@allow'
 def double: int -> int = { x -> x * 2 }
 ```
 
@@ -141,7 +141,7 @@ type can only come before a field of a record type's definition or a member of a
 ```nanyx
 def double: int -> int = { x -> x * 2 }
 
-@entry  -- error NYX0008: Attribute '@entry' must be followed by a definition
+@entry  -- error NYX0008: It must be followed by a definition
 ```
 
 To fix it, write the attribute on the line before the definition or context member it marks.
@@ -186,7 +186,7 @@ belongs at the top level of the file, or in a definition.
 ```nanyx
 module money =
   export def zero = 0
-  zero + 1  -- error NYX0012: Module 'money' is a block, which can only hold definitions, types and imports, not code to run
+  zero + 1  -- error NYX0012: 'money' is a module block, which can only hold definitions, types and imports, not code to run
 ```
 
 To fix it, move the code out of the block, or make it a definition.
@@ -197,7 +197,7 @@ An attribute that takes no argument is given one, or one that takes an argument 
 takes the linter rules it allows, such as `@allow(default/unusedBindings)`.
 
 ```nanyx
-@entry(main)  -- error NYX0013: Attribute '@entry' takes no argument
+@entry(main)  -- error NYX0013: It takes no argument
 def main = { () }
 ```
 
@@ -209,7 +209,7 @@ A file is imported by its path without `as` and a name. The names a file exports
 
 ```nanyx
 -- file: main.nyx
-import "./helpers"  -- error NYX0014: This import of a file path has no alias: write `import "./helpers" as helpers`
+import "./helpers"  -- error NYX0014: An import of a file path needs an alias for what the file exports: write `import "./helpers" as helpers`
 
 def total = 1
 -- file: helpers.nyx
@@ -301,7 +301,7 @@ in [Workflows](../advanced/workflows#keyword-kinds).
 
 ```nanyx
 context Lazy = (
-  @customKeywordType(#later)  -- error NYX0019: Unknown keyword kind '#later': the kinds are `#bind`, `#bindF`, `#delay`, `#yield`
+  @customKeywordType(#later)  -- error NYX0019: The kinds are `#bind`, `#bindF`, `#delay`, `#yield`
   force: [c] (int, ([c] int -> int)) -> int
 )
 ```
@@ -1093,7 +1093,7 @@ A value's type is not the type its place needs: an argument is not what the func
 not the type its annotation says, or two branches give back different types. The message names the two types.
 
 ```nanyx
-def count: int = "three"  -- error NYX0201: Type mismatch: 'string' vs 'int'
+def count: int = "three"  -- error NYX0201: 'string' vs 'int'
 ```
 
 To fix it, change the value, or the annotation, so that the two types agree. Where the types come from far apart, an
@@ -1132,7 +1132,7 @@ to add the missing arms ([Pattern matching](../tour/pattern-matching)).
 
 ```nanyx
 def describe: #some(int) | #none -> string = { o ->
-  match o  -- error NYX0203: Non-exhaustive match, missing tags: none
+  match o  -- error NYX0203: Missing tags: none
     | #some(n) -> "some"
 }
 ```
@@ -1340,7 +1340,7 @@ Two parts of an and-pattern (`p & q`) bind the same name.
 ```nanyx
 def pick: (int, int) -> int = { p ->
   match p
-    | (a, _) & (_, a) -> a  -- error NYX0215: The name 'a' is bound by more than one part of this and-pattern: bind it in one part only
+    | (a, _) & (_, a) -> a  -- error NYX0215: More than one part of this and-pattern binds it: bind it in one part only
 }
 ```
 
@@ -1427,7 +1427,7 @@ To fix it, write the code inside a `memory { ... }` block.
 ```nanyx
 def count = memory {
   def x = 0
-  x := 1  -- error NYX0222: 'x' is not a cell, so `:=` cannot change it: only a name declared with `mut` is one
+  x := 1  -- error NYX0222: `:=` changes only a cell, a name declared with `mut`
   x
 }
 ```
@@ -1441,7 +1441,7 @@ A value of one type is assigned to a cell of another. A cell holds values of one
 ```nanyx
 def count = memory {
   mut x = 0
-  x := "one"  -- error NYX0223: Type mismatch: 'string' vs 'int'
+  x := "one"  -- error NYX0223: 'string' vs 'int'
   x
 }
 ```
@@ -1455,7 +1455,7 @@ but is not among the contexts of the definition itself, or of the function it re
 `([c] a -> b), ([c] b -> d) -> [c] a -> d`, where whoever calls that function binds it).
 
 ```nanyx
-def g: [d] ([c] int -> int) -> int = { f -> 1 }  -- error NYX0226: The context variable 'c' is not bound: add it to the contexts of 'g', as in '[c] ...'
+def g: [d] ([c] int -> int) -> int = { f -> 1 }  -- error NYX0226: Nothing binds it: add it to the contexts of 'g', as in '[c] ...'
 ```
 
 To fix it, add the variable to the definition's own contexts, as in `[c] ([c] int -> int) -> int`.
@@ -1485,7 +1485,7 @@ message names both types and the contexts only one of them carries.
 A type alias names itself other than in the payload of one of its tags, so the type would have no end.
 
 ```nanyx
-type Pair = (int, Pair)  -- error NYX0228: The type 'Pair' refers to itself outside a tag: ...
+type Pair = (int, Pair)  -- error NYX0228: It refers to itself outside a tag: ...
 ```
 
 To fix it, put the recursion inside a tag, as in `type List = #empty | #cons(int, List)`.
@@ -1555,7 +1555,7 @@ An argument is passed with `mut`, as a cell, but it is not one.
 def inc = { mut cell -> cell := cell + 1 }
 def total = memory {
   def count = 0
-  inc(mut count)  -- error NYX0234: 'count' is not a cell, so `mut count` cannot pass it: ...
+  inc(mut count)  -- error NYX0234: `mut` passes only a cell, a name declared with `mut` or a `mut` parameter
   count
 }
 ```
@@ -1604,7 +1604,7 @@ under the console host, `nanyx.console/console.host`, whose entry point takes no
 module main
 
 @entry
-def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: The entry point 'main' doesn't fit the host 'nanyx.console/console.host' ...
+def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.console/console.host' ...
 ```
 
 The error is reported at `@entry`, and shows the type the host expects and the type the entry point has. To fix it,
@@ -1740,7 +1740,7 @@ instance whoever calls the lambda supplies, which is never a value: it can't be 
 context Log = (log: string -> ())
 
 def keep: [Log] () -> () = { context l ->
-  def saved = l  -- error NYX0245: 'l' names a context instance, which can only be loaded with `use l`
+  def saved = l  -- error NYX0245: It names a context instance, which can only be loaded with `use l`
   ()
 }
 ```

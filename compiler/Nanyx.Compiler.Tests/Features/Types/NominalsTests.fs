@@ -37,7 +37,7 @@ def user: UserId = email"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Type mismatch", message)
+    Assert.Contains("' vs '", message)
 
 [<Fact>]
 let ``Typecheck allows local private nominal construction`` () =
@@ -84,7 +84,7 @@ def theirs: p.Person = mine
     let diagnostics = compiledWithPeople ids
     Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], diagnostics |> List.map fst)
     Assert.Equal(
-        "Type mismatch: 'Person' vs 'Person', defined in 'ids.nyx' and 'people.nyx'",
+        "'Person' vs 'Person', defined in 'ids.nyx' and 'people.nyx'",
         snd diagnostics.Head)
 
 [<Fact>]

@@ -212,7 +212,7 @@ let internal ambiguousReference (name: string) (expr: Expression) (scheme: TypeS
 let internal contextNameReference (name: string) (expr: Expression) (scheme: TypeScheme) (state: InferState) : Diagnostic list =
     match scheme.Symbol with
     | Some symbol when state.ContextNames.ContainsKey symbol ->
-        [ Diagnostics.at DiagnosticCodes.ContextNameAsValue expr.Span $"'{name}' names a context instance, which can only be loaded with `use {name}`" ]
+        [ Diagnostics.at DiagnosticCodes.ContextNameAsValue expr.Span $"It names a context instance, which can only be loaded with `use {name}`" |> Diagnostics.about name ]
     | _ -> []
 
 /// The errors for a reference to `name`, bound to `scheme`, that the name alone does not show: a definition a module

@@ -52,7 +52,7 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
                 Ok ()
             else
                 let details = Diagnostics.listed problems
-                Error [ Diagnostics.at DiagnosticCodes.AnnotationTooGeneral span $"The annotation of '{name}' is more general than its inferred type, where {details}" ]
+                Error [ Diagnostics.at DiagnosticCodes.AnnotationTooGeneral span $"The annotation of '{name}' is more general than its inferred type, where {details}" |> Diagnostics.about name ]
 
 /// `item` with the ambient contexts it was inferred to require (`required`, by the def's name) in its annotation, where
 /// it is a def that does not write its type: after the parameterised contexts it was given, or on their own
@@ -419,7 +419,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         // A block is a module, not a program, so it has no top-level code.
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
             let blockName = fst (blockAround state.ModuleBlocks expr.Span).Value
-            errors <- errors @ [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"Module '{blockName}' is a block, which can only hold definitions, types and imports, not code to run" ]
+            errors <- errors @ [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"'{blockName}' is a module block, which can only hold definitions, types and imports, not code to run" |> Diagnostics.about blockName ]
         | Expr expr ->
             match inferExpr env state expr with
             | Ok (typedExpr, next) ->

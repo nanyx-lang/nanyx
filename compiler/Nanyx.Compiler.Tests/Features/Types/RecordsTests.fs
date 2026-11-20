@@ -63,7 +63,7 @@ def result = f(4)"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("Type mismatch", message)
+    Assert.Contains("' vs '", message)
     Assert.Contains("(", message)
     Assert.Contains("'int' vs '(", message)
 

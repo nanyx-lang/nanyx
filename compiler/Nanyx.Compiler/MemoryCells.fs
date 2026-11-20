@@ -86,7 +86,7 @@ let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr 
                 mkTypedExpr expr (TyPrimitive "unit") None None None,
                 { assigned with CellAssignments = assigned.CellAssignments.Add expr.Span }))
     | IdentifierExpr name when env.Names.ContainsKey name ->
-        Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span $"'{name}' is not a cell, so `:=` cannot change it: only a name declared with `mut` is one" ]
+        Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span $"`:=` changes only a cell, a name declared with `mut`" |> Diagnostics.about name ]
     | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span "Only a cell can be assigned with `:=`: a name declared with `mut name = value`" ]
 
 /// The type the parameter `symbol` of a lambda binds its name to, `ty` being the parameter's type and `typeOpt` its
@@ -159,6 +159,7 @@ let ensureMemoryWritten (state: InferState) (defName: Identifier) (typeOpt: Type
         |> List.map (fun (span, written) ->
             Diagnostics.at DiagnosticCodes.UndeclaredContext span
                 $"'{defName}' takes a cell, a `mut` parameter, so it requires '{context}' too: write '[{written}, {context}]'"
+            |> Diagnostics.about context
             |> ContextFixes.withAddToType state defName context)
         |> Error
 
@@ -173,7 +174,7 @@ let inferArgument (infer: TypeEnv -> InferState -> Expression -> Result<TypedExp
             mkTypedExpr expr (FunctionContexts.cellType typedCell.Type scope) None None None, next)
     | IdentifierExpr name ->
         Error [ Diagnostics.at DiagnosticCodes.NotACellArgument cell.Span
-                    $"'{name}' is not a cell, so `mut {name}` cannot pass it: only a name declared with `mut`, or a `mut` parameter, is one" ]
+                    $"`mut` passes only a cell, a name declared with `mut` or a `mut` parameter" |> Diagnostics.about name ]
     | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACellArgument cell.Span "Only a cell can be passed with `mut`: a name declared with `mut name = value`" ]
 
 /// The errors for each `mut T` in `typeOpt`, a def's annotation, that is not a function's parameter: a cell can be passed

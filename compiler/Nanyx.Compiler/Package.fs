@@ -91,7 +91,8 @@ module Package =
             [ Diagnostics.at
                   DiagnosticCodes.LibraryExportsNothing
                   manifest.PackageSpan
-                  $"'{manifest.Name}' is a library, since its manifest names no host, but it exports no module: export at least one, by declaring it with `export module`" ]
+                  $"'{manifest.Name}' is a library, since its manifest names no host, but it exports no module: export at least one, by declaring it with `export module`"
+              |> Diagnostics.about manifest.Name ]
 
     /// The problem with the GitHub reference `what`, written at `span`, that `failure` kept from being fetched.
     let private notFetched (span: SourceSpan) (what: string) (failure: FetchFailure) : Problem =
@@ -118,6 +119,7 @@ module Package =
                                   DiagnosticCodes.InvalidReferencedFile
                                   file.Span
                                   $"'{reference}' declares the module name '{declared}', but a file from GitHub declares none, since the manifest names it '{file.Module}' and no package can export it: use a file that declares no module name"
+                              |> Diagnostics.about (string reference)
                           ) ]
                 | None when own.ContainsKey file.Module ->
                     Result.Error
@@ -126,6 +128,7 @@ module Package =
                                   DiagnosticCodes.DuplicateModule
                                   file.Span
                                   $"The package's own files declare the module '{file.Module}' already: give the file from GitHub another name"
+                              |> Diagnostics.about file.Module
                           ) ]
                 | None -> Result.Ok(file.Module, path))
         |> all
@@ -138,7 +141,7 @@ module Package =
     /// locks, in the cache; or why it can't be: it isn't locked, the version locked isn't one it accepts, or that version
     /// isn't in the cache, which `nanyx pull` fills.
     let private locked (lookup: Lookup) (dependency: Dependency) (requirement: VersionRequirement) : Result<string, Problem list> =
-        let error code message = Result.Error [ AtManifest(Diagnostics.at code dependency.SourceSpan message) ]
+        let error code message = Result.Error [ AtManifest(Diagnostics.at code dependency.SourceSpan message |> Diagnostics.about dependency.Name) ]
         match Lockfile.tryFind dependency.Name lookup.Locked with
         | None ->
             error
@@ -245,10 +248,9 @@ module Package =
                 | Result.Ok found ->
                     match reached.TryGetValue found.Name with
                     | true, other when not (PackageModules.samePath other path) ->
-                        error
-                            DiagnosticCodes.PackageReachedTwice
-                            dependency.SourceSpan
+                        let message =
                             $"The build reaches the package '{found.Name}' by two paths, '{Path.GetDirectoryName other}' and '{directory}', but a build has one of each package"
+                        Result.Error [ AtManifest(Diagnostics.at DiagnosticCodes.PackageReachedTwice dependency.SourceSpan message |> Diagnostics.about found.Name) ]
                     | _ ->
                         reached.[found.Name] <- path
                         ofManifestIn lookup reached chain found
