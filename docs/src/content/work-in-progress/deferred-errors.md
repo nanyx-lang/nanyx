@@ -29,7 +29,7 @@ Wider deferral, if it is wanted:
 - **Imports.** An import that is not found, an import cycle or an error inside an imported module is not deferred. A
   later version could defer the names the import brings in.
 - **Syntax errors**, with parser recovery ([compilation](./compilation#plan)): a top-level definition that does not
-  parse. The [principles](../foundations/principles) say syntax errors stop a build.
+  parse. The [principles](../meta/principles) say syntax errors stop a build.
 - **Conflicts among constraints** bind to the error type only the variables of a failed constraint's expected side
   that nothing else fixes, solved after everything else once the module is checked (`Solving.solveLeavingUnknown`):
   a failed argument leaves unknown what it would have decided of the call's result. The expressions where a conflict

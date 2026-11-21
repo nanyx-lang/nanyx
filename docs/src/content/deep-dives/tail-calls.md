@@ -6,7 +6,7 @@ order: 7
 
 A call in tail position uses no stack. The guarantee and the rules for tail position are in
 [Tail recursion](../tour/functions#tail-recursion), why it is a guarantee in
-[Compiler optimisations](../foundations/compiler-optimisations#optimisation-model), and the linter's rule in
+[Compiler optimisations](../meta/compiler-optimisations#optimisation-model), and the linter's rule in
 [Recursion not in tail position](../standard-tools/official-linter#recursion-not-in-tail-position). This page says how
 the compiler keeps the guarantee. What is still planned or open is on [Tail calls](../work-in-progress/tail-calls) in
 Work in progress.

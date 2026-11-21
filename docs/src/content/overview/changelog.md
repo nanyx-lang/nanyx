@@ -209,7 +209,7 @@ refactorings. Several changes break existing code; they are marked below.
 - The standard library and shipped packages are checked when the compiler is built, and a module is checked in
   linear time.
 - The inliner reaches only what the start reaches, takes a function called once whatever its size, and specialises a
-  function on a lambda it is given ([Compiler optimisations](../foundations/compiler-optimisations)).
+  function on a lambda it is given ([Compiler optimisations](../meta/compiler-optimisations)).
 - Functions borrow what they only read, cells taken apart by a pattern are reused, and `MList.set` allocates nothing.
 - Small blocks have free lists, and large ones boundary tags, so freeing never walks the heap.
 - A program imports only the WASI functions it uses.
@@ -261,7 +261,7 @@ host. The backend gained an inliner and a smaller, faster heap.
 **Performance**
 
 - Calls are inlined in the core IR, and closures and matches it makes known are simplified away
-  ([Inlining](../compiler-internals/inlining)).
+  ([Inlining](../deep-dives/inlining)).
 - The allocator joins and splits freed blocks and gives back the top of the heap.
 - A record held once is updated in place by `with`.
 - Only the functions a program reaches are emitted, and a top-level value is built on its first read.
@@ -499,7 +499,7 @@ Memory is reference counted, and `nanyx new` starts a package.
 **Language**
 
 - Every heap object is reference counted, with cells reused in place
-  ([Reference counting](../foundations/reference-counting)).
+  ([Reference counting](../meta/reference-counting)).
 - And-patterns, `n & { > 100 }`, any predicate lambda as a guard, and patterns as lambda parameters
   ([Pattern matching](../tour/pattern-matching)).
 - The except operator handles some cases of a union.
@@ -529,7 +529,7 @@ now compiled through a monomorphising core IR.
 - `???` is the placeholder for code not written yet ([Error handling](../tour/error-handling)).
 - Any pattern on the left of a def, unit patterns such as `#some()`, and bracketed lambda parameters.
 - `#:` directives let a script say what a manifest would.
-- Tail calls use no stack ([Tail calls](../compiler-internals/tail-calls)).
+- Tail calls use no stack ([Tail calls](../deep-dives/tail-calls)).
 - Strings and lists have a built-in `length` property.
 
 **Tools**

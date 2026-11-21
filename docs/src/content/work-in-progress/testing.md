@@ -12,7 +12,7 @@ Other parts of the design already say what testing must do:
 
 - [Hosts](./hosts#the-test-runner-is-a-host) says `nanyx test` runs the program under a test host. That host finds test functions instead of an `@entry`, and provides fake or recording versions of the contexts the code needs.
 - [Deferred errors](./deferred-errors) says every test runs in a debug build. A test that reaches a type error fails with that error, and the others pass or fail on their own.
-- The [principles](../foundations/principles) say a developer is never blocked from running their tests because, say, a commented-out line left a variable unused.
+- The [principles](../meta/principles) say a developer is never blocked from running their tests because, say, a commented-out line left a variable unused.
 
 This page fills in the rest: how a test is written, how it fails, and how the runner reports it.
 
@@ -170,7 +170,7 @@ These fit the design but are not part of the first version:
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
-- **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the tour's ([compilation](../compiler-internals/compilation#tour-examples)); `nanyx test` could do the same for a package's.
+- **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the tour's ([compilation](../deep-dives/compilation#tour-examples)); `nanyx test` could do the same for a package's.
 
 # Prior art
 

@@ -1,4 +1,4 @@
-/// Top-level values built once (see "Top-level values" in `docs/src/content/compiler-internals/memory-management.md`). A
+/// Top-level values built once (see "Top-level values" in `docs/src/content/deep-dives/memory-management.md`). A
 /// top-level value is lowered to a function of no parameters, one per type it is used at when it is generic. Each such
 /// function that computes its value is emitted under `buildName` of its name, and its own name is a getter: the first
 /// read builds the value into a global, and every read hands out one more reference to it. The start function drops

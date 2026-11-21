@@ -1,5 +1,5 @@
 /// The core IR: the program between the typed AST and WebAssembly text (see "Core IR" in
-/// `docs/src/content/compiler-internals/memory-management.md`). It is in A-normal form, so every intermediate value has a name and a place, and every
+/// `docs/src/content/deep-dives/memory-management.md`). It is in A-normal form, so every intermediate value has a name and a place, and every
 /// node has a concrete type: generic functions are specialised for each set of type arguments they are used at as the
 /// IR is built (`CoreIrLower.fs`), and code is generated from it (`CoreIrEmit.fs`).
 module Transpiler.Wasm.CoreIr
@@ -98,7 +98,7 @@ type Atom =
     | AStaticClosure of string * arity: int * IrType
 
 /// Which entry of the function a closure holds a call through it calls (see "Closures" in
-/// `docs/src/content/compiler-internals/memory-management.md`). Every function a closure is over has two, which differ
+/// `docs/src/content/deep-dives/memory-management.md`). Every function a closure is over has two, which differ
 /// only in whether they own their environment, the closure itself.
 type ClosureEntry =
     /// The entry in the closure's table slot, which borrows the closure: the caller keeps its reference for the call.

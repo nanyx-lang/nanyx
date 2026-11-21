@@ -6,7 +6,7 @@ order: 32
 
 > The refactorings built so far are described for users on
 > [VS Code extension](../standard-tools/vs-code-extension#refactorings), and how a refactoring is built, with the rules
-> every refactoring follows, in [Refactorings](../compiler-internals/refactorings) in the Compiler internals section.
+> every refactoring follows, in [Refactorings](../deep-dives/refactorings) in the Deep dives section.
 > This page keeps the [planned](#planned) ones.
 
 Nanyx should have the best editing experience we can manage, and that means the editor giving people the tools to

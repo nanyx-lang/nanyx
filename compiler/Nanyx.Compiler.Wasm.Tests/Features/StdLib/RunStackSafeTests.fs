@@ -3,7 +3,7 @@ module TranspilerWasmTests.Features.StdLib.RunStackSafe
 open Xunit
 open TranspilerWasmTestHelpers
 
-// The standard library's walks are stack-safe (docs/src/content/compiler-internals/tail-calls.md): each of these ran out of stack when
+// The standard library's walks are stack-safe (docs/src/content/deep-dives/tail-calls.md): each of these ran out of stack when
 // the function recursed once per element other than in tail position, as every one of them traps on 20,000 elements
 // written that way. The lists are 20,000 long, not more, only to keep the suite quick.
 

@@ -1,5 +1,5 @@
 /// The program's entry point runs through its host's `run`, and `HostRuntime` is provided only to hosts (#1245, see
-/// docs/src/content/compiler-internals/hosts.md).
+/// docs/src/content/deep-dives/hosts.md).
 module Nanyx.Compiler.Tests.Features.Hosts.ConsoleHost
 
 open System.IO

@@ -6,7 +6,7 @@ order: 6
 
 This page says how the inliner of the WebAssembly backend works (`CoreIrInline.fs` and `CoreIrSimplify.fs`). What it
 means for users, and the `proc` block it compiles to a nested match, are in
-[Inlining](../foundations/compiler-optimisations#inlining). It builds on [context calls](./context-calls). What is still
+[Inlining](../meta/compiler-optimisations#inlining). It builds on [context calls](./context-calls). What is still
 planned or open is on [Inlining](../work-in-progress/inlining) in Work in progress.
 
 # How a workflow block compiles away

@@ -5,7 +5,7 @@ order: 20
 ---
 
 The pages from here to the end of this section are the design of the compiler and its tools: what is planned, what is
-decided and what is still open. How they work today is in the [Compiler internals](../compiler-internals/compilation)
+decided and what is still open. How they work today is in the [Deep dives](../deep-dives/compilation)
 section. Both change as the work does. Anyone who changes something one of them describes updates the page in the same
 pull request.
 
@@ -27,7 +27,7 @@ the backlog:
 | Error messages | [Error messages](./error-messages) | [`error messages`](https://github.com/nanyx-lang/nanyx/labels/error%20messages) |
 | Language server and editor | [Language server and editor](./language-server) | [`lsp`](https://github.com/nanyx-lang/nanyx/labels/lsp) |
 | Packaging | [Packaging](./packaging) | [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) |
-| Formatter | [Formatter](../compiler-internals/formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
+| Formatter | [Formatter](../deep-dives/formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
 | Refactorings | [Refactorings](./refactorings) | [`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) |
 | Code quality | — | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
 
@@ -36,8 +36,8 @@ The compilation workstream has pages of its own for the larger pieces of its des
 [deferred errors](./deferred-errors),
 [tail calls](./tail-calls), [memory management](./memory-management), [inlining](./inlining)
 and [lazy sequences](./lazy-sequences). How the standard library is built is in
-[Standard library implementation](../compiler-internals/standard-library-implementation), and how the CLI is built in
-[The `nanyx` command](../compiler-internals/command-line); what the CLI does is on
+[Standard library implementation](../deep-dives/standard-library-implementation), and how the CLI is built in
+[The `nanyx` command](../deep-dives/command-line); what the CLI does is on
 [The nanyx command](../standard-tools/command-line).
 
 An issue that serves more than one workstream gets every label that applies. The finer labels (`parser`, `type checker`, `wasm backend`) say which part of the compiler an issue is in,

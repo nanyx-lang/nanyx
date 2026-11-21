@@ -20,7 +20,7 @@ Tail calls are the exception: a call in tail position never uses up stack. That 
 
 It is a guarantee because recursion is how Nanyx loops: `for` needs a collection that already exists, and `while` needs `Memory`, so any other loop is a recursive function, and a loop that may run out of stack depending on its input is no use. It holds for every kind of call, not only a function calling itself: functions calling each other (a state machine, a parser), a closure, a context member, and the continuations a [workflow](../advanced/workflows) passes. And a rule you can check ("a call in tail position uses no stack") is predictable where an optimisation that applies to some shapes of code is not. The cost is that every backend needs real tail calls. WebAssembly has them; a backend that had to fake them would be slow.
 
-Freeing memory is not an optimisation either: a value is freed as soon as nothing refers to it, by [reference counting](../foundations/reference-counting), not left for a garbage collector.
+Freeing memory is not an optimisation either: a value is freed as soon as nothing refers to it, by [reference counting](../meta/reference-counting), not left for a garbage collector.
 
 # Typical optimisation areas
 
@@ -30,7 +30,7 @@ Depending on code shape and target backend, the compiler may perform optimisatio
 - [inlining](#inlining) of lambdas called once, handlers and small functions,
 - dead-code elimination: a function, closure or host member that nothing reaches is not in the program,
 - copy elision and reduced temporary allocations,
-- reuse in place: a value a `match` takes apart and holds the only reference to is rewritten into a new value of the same size, so mapping over a list nothing else refers to allocates nothing (see [Reference counting](../foundations/reference-counting#reuse-in-place)),
+- reuse in place: a value a `match` takes apart and holds the only reference to is rewritten into a new value of the same size, so mapping over a list nothing else refers to allocates nothing (see [Reference counting](../meta/reference-counting#reuse-in-place)),
 - improved passing strategy for values (for example by-value vs by-reference decisions).
 
 For allocation-specific behavior, see [Stack vs heap allocation](../advanced/stack-vs-heap-allocation).

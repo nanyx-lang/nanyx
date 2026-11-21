@@ -6,7 +6,7 @@ order: 28
 
 How errors are shown, their suggestions and fixes, and every code are described in
 [Compiler errors](../standard-tools/errors), and how a message is worded in
-[Principles](../foundations/principles#friendly-errors). This page keeps what is still open in the error messages
+[Principles](../meta/principles#friendly-errors). This page keeps what is still open in the error messages
 workstream. Work is tracked under the `error messages` label.
 
 Every compiler error has a code and title from the table in `Diagnostics.fs` (`DiagnosticCodes`), the span of the node

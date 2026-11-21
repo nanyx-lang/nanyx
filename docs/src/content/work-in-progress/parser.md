@@ -8,7 +8,7 @@ The parser moved from FParsec combinators to a lexer, a layout pass and a hand-w
 stages, tracked in [#846](https://github.com/nanyx-lang/nanyx/issues/846). All six are done: the corpus and the
 differential test, the lexer, the layout pass, the new parser a part of the grammar at a time, the new parser as the
 default, error recovery at the top level, and the removal of FParsec. How the parser works now is
-[The parser](../compiler-internals/parser) in the Compiler internals section. This page is what is still open.
+[The parser](../deep-dives/parser) in the Deep dives section. This page is what is still open.
 
 # Recovering inside an item
 

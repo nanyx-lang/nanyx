@@ -1,5 +1,5 @@
 /// The playground host, `nanyx.playground`, a stand-in for the console host in a web page, which provides `Console`,
-/// `Random` and `Clock` and nothing else (#2150, see docs/src/content/compiler-internals/hosts.md).
+/// `Random` and `Clock` and nothing else (#2150, see docs/src/content/deep-dives/hosts.md).
 module Nanyx.Compiler.Tests.Features.Hosts.PlaygroundHost
 
 open Xunit

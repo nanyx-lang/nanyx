@@ -7,9 +7,9 @@ order: 8
 Today Nanyx has [`dbg`](../stdlib/console#dbg), which prints any value after where it was called and which a release
 build leaves out, and [deferred errors](../standard-tools/errors) that report their span when they're reached. A crash, a
 deferred error and a runtime error print the stack, with the file and line of each frame, in debug and release builds
-alike ([Crash stacks](../compiler-internals/crash-stacks)). A program `nanyx run` runs has debug probes, which a test
+alike ([Crash stacks](../deep-dives/crash-stacks)). A program `nanyx run` runs has debug probes, which a test
 host can already follow with a shadow stack and read a frame's locals from
-([Debug probes](../compiler-internals/debug-probes)), but there is no debugger yet. This page is the plan, agreed with
+([Debug probes](../deep-dives/debug-probes)), but there is no debugger yet. This page is the plan, agreed with
 the maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
 
 # Decisions
@@ -46,7 +46,7 @@ the maintainer on 2026-11-17 and filed in stages ([Plan](#plan)).
 - **A frame's locals are written when the runtime asks,** at the probe, through the `dbg` printers, rather than spilled
   to a shadow frame at each probe: a spilled reference could outlive the value, which reference counting gives up after
   its last use, and keeping it alive would change every debug run's memory. Measured in
-  [#2040](https://github.com/nanyx-lang/nanyx/issues/2040), on [Debug probes](../compiler-internals/debug-probes).
+  [#2040](https://github.com/nanyx-lang/nanyx/issues/2040), on [Debug probes](../deep-dives/debug-probes).
 
 # Open questions
 

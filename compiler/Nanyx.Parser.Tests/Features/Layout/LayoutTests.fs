@@ -1,4 +1,4 @@
-/// The layout pass: where it puts `Indent`, `Newline` and `Dedent`, by the rules on the Compiler internals page "The
+/// The layout pass: where it puts `Indent`, `Newline` and `Dedent`, by the rules on the Deep dives page "The
 /// parser".
 module Nanyx.Parser.Tests.LayoutTests
 
