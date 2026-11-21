@@ -185,24 +185,38 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   prelude = "playground.prelude")`, and depends only on `nanyx.console.core`. Its `run` takes `[Clock, Console, Random] () -> a`
   and `use`s a `Console`, a `Random` and a `Clock` written on imports of its own, `nanyx:playground` `write`,
   `writeError` (each given the address and byte length of the text in the module's memory), `randomBits` (64 bits, as
-  an `i64`), and `now` and `ticks` (milliseconds, as `i64`s), which a page implements, not on WASI. Its `readLine` gives `#error(#endOfInput)` and its `readToEnd` the empty
-  string ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151) gives it input). Its prelude re-exports `Console`
+  an `i64`), `now` and `ticks` (milliseconds, as `i64`s), and `readLine` and `takeLine`, which a page implements, not
+  on WASI. Its `Console`'s `readLine` calls the page's `readLine`, which waits for a line and gives its length in
+  bytes, or -1 when the input has ended (`#error(#endOfInput)`), then allocates a buffer that long and has `takeLine`
+  write the line into it; its `readToEnd` reads lines until the input ends, each followed by a line break
+  ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)). Its prelude re-exports `Console`
   with `print`, `println`, `eprint` and `eprintln`, `Random` and `Clock`, so a console program that needs only those compiles
   under it unchanged, and one that needs a context it doesn't provide is `NYX0205` naming it, by the check above
   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)). The runtime's own helpers still import WASI's `fd_write`
   and `proc_exit`, for a deferred error or crash, so whatever runs the module provides those two as well.
 - **The playground host's runner.** `packages/nanyx.playground/runner` is the JavaScript that runs a module compiled for
   the playground host; it isn't a source of the package (its `sources` are `src/**/*.nyx`), and the compiler built for
-  the browser publishes it with the page. `playground.js`'s `run(wasm, { seed, onStdout, onStderr, onDbg })` starts
-  `worker.js` in a web worker and gives `{ done, stop }`: `stop` terminates the worker, and `done` resolves to
-  `{ code }`, with `trap` when the program trapped, or `{ code: null, stopped: true }`. The worker implements
-  `nanyx:playground` (`write` and `writeError` post the text, decoded from the module's memory; `randomBits` is
+  the browser publishes it with the page. `playground.js`'s `run(wasm, { seed, onStdout, onStderr, onDbg, onRead })`
+  starts `worker.js` in a web worker and gives `{ done, stop, input, closeInput }`: `stop` terminates the worker, and
+  `done` resolves to `{ code }`, with `trap` when the program trapped, or `{ code: null, stopped: true }`. The worker
+  implements `nanyx:playground` (`write` and `writeError` post the text, decoded from the module's memory; `readLine`
+  waits for the page's next line, below, and `takeLine` copies it into the module's memory; `randomBits` is
   SplitMix64 over the page's seed, so a seed gives what `random.seeded` gives with it; `now` is `Date.now()` and
   `ticks` the milliseconds since the run started, from `performance.now()`), `nanyx:debug` `dbg` (posts the file,
   line, column and text, and says it has dealt with it), and WASI's `fd_write` (fd 1 is stdout, any other stderr) and
   `proc_exit`, which throws, so the program unwinds to the call of its start, which gives the exit code. A trap is
   exit code 1. The module is compiled with its start exported (`WasmOptions.ExportStart`) and `dbg` given to the page
   (`WasmOptions.DbgToEmbedder`), so the worker instantiates it, then calls `__nanyx_start` once the memory can be read.
+- **Input in the playground.** A program's `readLine` blocks, which a page's main thread can't, so the worker waits
+  for the line: the page gives it a `SharedArrayBuffer`, three `Int32`s (answered, the line's length or -1 for the end
+  of the input, and whether the line goes on) and then 64 KiB for the line's bytes. To read, the worker posts `read`
+  and blocks in `Atomics.wait` until the page answers; a longer line comes in parts. The page answers from the lines
+  given to `input(text)`, in order; when it has none it calls `onRead()`, where a page shows its input line, and
+  answers when a line arrives, or with the end of the input after `closeInput()`. A page has a `SharedArrayBuffer`
+  only when it is cross-origin isolated, served with `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp`, as `docs/vercel.json` serves the playground's route and `serve.mjs`
+  serves the compiler's page; `canReadInput` says whether it is, and when it isn't, the worker gets no buffer and a
+  program's input has ended before it starts.
 - **The browser's default host.** `Script.compileUnder` compiles a script that runs under a shipped host of the
   caller's choosing unless its `::host` names another (`Script.readFromUnder`, and `Package.scriptModules`, which take
   the default host); `nanyx run` and the language server pass the console host, as before. `BrowserCompiler.Compile`
@@ -211,7 +225,8 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   the compiler ships. The build writes `package-files.txt`, the shipped packages' files the page hands the compiler
   (`wwwroot/compiler.js`). `wwwroot/run.html` compiles and runs a program, and `playground-test.mjs` drives it in
   headless Chromium with Playwright: the tour's hello world, `Random` from a seed, `Clock`, a crash, `dbg`, a program
-  that needs `FileSystem`, and Stop; the Compiler workflow's `Browser test` job runs it.
+  that needs `FileSystem`, two lines typed into the page's input line and then Ctrl+D, `readToEnd` and a line longer
+  than the buffer, and Stop; the Compiler workflow's `Browser test` job runs it.
 - **Where `dbg` prints.** `dbg` needs no context, and a host package does nothing for it: the runtime that runs the
   host's program decides. A module `nanyx run` runs gives each `dbg` to `nanyx:debug` `dbg` first, with its file, line,
   column and text, and the handler says whether it has dealt with it (`Probing.defineDbg`). The console runner
