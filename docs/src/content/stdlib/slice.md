@@ -104,13 +104,12 @@ last result, or `initial` for an empty slice.
 ## `Slice.reduce`
 
 ```nanyx fragment
-def Slice.reduce: [Default(a), c] Slice(a), ([c] (a, a) -> a) -> a
+def Slice.reduce: [c] Slice(a), ([c] (a, a) -> a) -> #some(a) | #none
 ```
 
-The elements of `s` combined with `f`, in order, starting from the element type's `Default`: a
-slice of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the default, so `reduce`
-never fails, unlike a `reduce` that starts from the first element. To start from another value,
-use [`Slice.fold`](#slicefold).
+The elements of `s` combined with `f`, in order, starting from the first: a slice of `1` to `5`
+reduced with `{ * }` is `#some(120)`, and an empty slice, having no first element, gives `#none`.
+To start from another value, use [`Slice.fold`](#slicefold).
 
 ## `Slice.toSeq`
 

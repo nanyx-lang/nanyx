@@ -146,12 +146,11 @@ later leaves the list as it is.
 ## `MList.reduce`
 
 ```nanyx fragment
-def MList.reduce: [Memory, Default(a), c] MList(a), ([c] (a, a) -> a) -> a
+def MList.reduce: [Memory, c] MList(a), ([c] (a, a) -> a) -> #some(a) | #none
 ```
 
-The elements of `xs` combined with `f`, in order, starting from the element type's `Default`:
-an `MList` of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives the default, so
-`reduce` never fails, unlike a `reduce` that starts from the first element. To start from another
-value, use [`list.fold`](prelude-lists#listfold).
+The elements of `xs` combined with `f`, in order, starting from the first: an `MList` of `1` to
+`5` reduced with `{ * }` is `#some(120)`, and an empty one, having no first element, gives
+`#none`. To start from another value, use [`list.fold`](prelude-lists#listfold).
 
 <!-- End of the generated reference. -->

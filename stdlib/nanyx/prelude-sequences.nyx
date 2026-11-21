@@ -444,12 +444,13 @@ export def seq.fold: [c, d] ([c] seq(a)), b, ([d] b, a -> b) -> b = { s, initial
     | #done -> initial
 }
 
---| The elements of `s`, pulled now, combined with `f`, in order, starting from the element type's
-  [`Default`]: `(1..4) \seq.reduce { + }` is `10`. An empty one gives the default, so `reduce` never
-  fails, unlike a `reduce` that starts from the first element. To start from another value, use
-  [`seq.fold`].
-export def seq.reduce: [Default(a), c, d] ([c] seq(a)), ([d] a, a -> a) -> a = { s, f ->
-  seq.fold(s, default, f)
+--| The elements of `s`, pulled now, combined with `f`, in order, starting from the first: `(1..5)
+  \seq.reduce { * }` is `#some(120)`, and an empty sequence, having no first element, gives `#none`.
+  To start from another value, use [`seq.fold`].
+export def seq.reduce: [c, d] ([c] seq(a)), ([d] a, a -> a) -> #some(a) | #none = { s, f ->
+  match s.next()
+    | #next(x, rest) -> #some(seq.fold(rest, x, f))
+    | #done -> #none
 }
 
 --| The elements of `s`, pulled now, as a list: `(1..3) \seq.toList` is `[1, 2, 3]`. Stack-safe, but

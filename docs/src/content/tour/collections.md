@@ -77,13 +77,17 @@ def unique: set(int) = [1, 2, 2, 3]
 
 The functions on them are on the standard library's [lists](../stdlib/prelude-lists), [maps and sets](../stdlib/prelude-maps), [array](../stdlib/array), [stack](../stdlib/stack), [queue](../stdlib/queue) and [trie](../stdlib/trie) pages. A stack, a queue and a trie are immutable, as a list is: each operation that adds or takes away gives back a new one, and the old one still holds what it held.
 
-Each collection combines its elements into one value with `fold`, from a starting value, or with `reduce`, from the element type's [`Default`](../advanced/contexts#defaulta). So `reduce` of an empty collection is that default, `0`, `""` or `[]`, rather than a failure:
+Each collection combines its elements into one value with `fold`, from a starting value, or with `reduce`, from its first element. An empty collection has no first element, so `reduce` gives `#some` of the result, or `#none` for an empty one. For a total, a list has `sum` and `product`, which give `0` and `1` for an empty list:
 
 ```nanyx
 println([1, 2, 3, 4] \fold(0) { + })
-println([1, 2, 3, 4] \reduce { + })
-println(["a", "b"] \reduce { ++ })
+println([1, 2, 3, 4, 5] \reduce { * })
+def none: list(int) = []
+println(none \reduce { * })
+println([1, 2, 3, 4] \list.product)
 ```
+
+This prints `10`, `#some(120)`, `#none` and `24`.
 
 Each collection is made from a [sequence](../stdlib/prelude-sequences) with `fromSeq`, which pulls the whole sequence, and from a block that `yield`s its elements with `build`, which is `fromSeq` of the block's `seq { }`:
 

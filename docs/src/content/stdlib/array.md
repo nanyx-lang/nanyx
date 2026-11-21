@@ -123,12 +123,11 @@ on to the last: `array.fold(xs, 0, { total, x -> total + x })` adds them up.
 ## `array.reduce`
 
 ```nanyx fragment
-def array.reduce: [Default(a), c] array(a), ([c] (a, a) -> a) -> a
+def array.reduce: [c] array(a), ([c] (a, a) -> a) -> #some(a) | #none
 ```
 
-The elements of `xs` combined with `f`, in order, starting from the element type's `Default`:
-`Array[1, 2, 3] \array.reduce { + }` is `6`. An empty one gives the default, so `reduce` never
-fails, unlike a `reduce` that starts from the first element. To start from another value, use
-[`array.fold`](#arrayfold).
+The elements of `xs` combined with `f`, in order, starting from the first: `Array[1, 2, 3, 4, 5]
+\array.reduce { * }` is `#some(120)`, and an empty array, having no first element, gives `#none`.
+To start from another value, use [`array.fold`](#arrayfold).
 
 <!-- End of the generated reference. -->
