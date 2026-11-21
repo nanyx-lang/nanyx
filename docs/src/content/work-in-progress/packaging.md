@@ -134,7 +134,7 @@ fails rather than recording it.
 ## What a package is
 
 A published package is a `.nyxpkg` file, built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): a zip of the
-manifest, at its root, the source files its `sources` select, and `api.json`, packed the same way every time
+manifest, at its root, the source files its `sources` select, and `api.json`, packed the same way every time from the same files
 (`PackageArchive.pack`, `nanyx pack`).
 
 - Packages ship **source**. The compiler inlines imported modules into one WebAssembly module, so there is no
@@ -269,8 +269,18 @@ writes ([#867](https://github.com/nanyx-lang/nanyx/issues/867), see
      second run refuses a version whose release exists. If the pull request can't be opened, for example because
      the token can't reach nanyx-lang/packages, the publish can't be finished by running it again.
    - The compiler's tests need the package without the network: they read the `.nyxpkg` of its release, kept beside
-     them, from an index on disk. `nanyx pack` packs a version the same way every time, so that file is the one the
-     release carries.
+     them, from an index on disk.
+   - `nanyx pack` packs the files as they are on disk, so the same version packed on two machines can differ: 0.1.0,
+     published from a Windows checkout, holds its sources with CRLF line endings, and its SHA-256 isn't that of the
+     same commit packed on Linux. Packing should write LF line endings whatever the checkout has.
+   - `nanyx publish` 0.31.0 couldn't publish a package's first version: the API comparison read the 404 for a package
+     the index doesn't list as an error ([#2184](https://github.com/nanyx-lang/nanyx/pull/2184)). Pointing
+     `NANYX_INDEX` at an empty index on disk got past it.
+   - The index's Sync refused the release: the manifest writes its `repository` as `owner/name`, which `publish`
+     needs, and the registration `publish` opens gives its address, which Sync compared literally
+     ([nanyx-lang/packages#6](https://github.com/nanyx-lang/packages/pull/6)).
+   - `nanyx publish` opens the registration pull request from a fork of nanyx-lang/packages in the publisher's
+     account, which it makes if need be, even for an account that can push to the index itself.
 # Open questions
 
 - **A custom domain and mirroring.** The index is at `https://nanyx-lang.github.io/packages/` and points at

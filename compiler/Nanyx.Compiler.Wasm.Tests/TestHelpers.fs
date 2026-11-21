@@ -125,7 +125,7 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (github: NyxC
 
 /// The packages from the index that the tests' programs and the docs' examples use, though the compiler doesn't ship
 /// them, so that no test needs the network: `nanyx.json` 0.1.0, the `.nyxpkg` its release on nanyx-lang/json carries
-/// (`Packages/nanyx.json-0.1.0.nyxpkg`, packed by `nanyx pack`, which packs a version the same way every time). It is
+/// (`Packages/nanyx.json-0.1.0.nyxpkg`, downloaded from the release, whose SHA-256 the index records). It is
 /// listed in an index on disk, in a directory of its own, and downloaded into the store's cache once, before any test
 /// reads it, so that tests run in parallel never unpack it at the same time.
 let private packagesForTests =
