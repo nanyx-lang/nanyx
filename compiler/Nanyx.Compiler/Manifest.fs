@@ -107,7 +107,7 @@ module Manifest =
     let internal nameRule = "lower case, with words separated by dots, as `acme.web`"
 
     /// A GitHub repository, `owner/name`.
-    let private repositoryPattern = Regex(@"^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$")
+    let private repositoryPattern = Regex(@"^(?<owner>[A-Za-z0-9-]+)/(?<name>[A-Za-z0-9_.-]+)$")
 
     let private versionPattern = Regex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$")
 
@@ -617,7 +617,7 @@ module Manifest =
                     DataValue.field HostPackages.field fields |> Option.iter (fun field -> checkHostDeclaration problems field.Value)
                     let repository =
                         problems.Text "package" fields "repository" repositoryPattern "a GitHub repository, `owner/name`, as `acme/web`"
-                        |> Option.map (fun text -> let parts = text.Split '/' in { Owner = parts[0]; Name = parts[1] })
+                        |> Option.map (fun text -> let found = repositoryPattern.Match text in { Owner = found.Groups["owner"].Value; Name = found.Groups["name"].Value })
                     name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), repository
                 | None -> None, None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
