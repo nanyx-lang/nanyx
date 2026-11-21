@@ -844,6 +844,20 @@ export def one = 1
 To fix it, run `nanyx pull`, which chooses the newest version the dependencies accept, writes it to `nanyx.lock` and
 downloads it.
 
+# NYX0049: Package file that isn't UTF-8
+
+`nanyx pack` and `nanyx publish` pack a package's manifest and source files as UTF-8 text with LF line endings, whatever
+line endings and byte-order mark the checkout gives them, so that the same commit packs to the same bytes on every
+machine ([`nanyx pack`](./command-line#nanyx-pack)). A file that isn't UTF-8 can't be written that way, and the
+package isn't packed:
+
+```text
+error NYX0049: Package file that isn't UTF-8
+  'src/strings.nyx' isn't UTF-8 text, so 'acme.util' can't be packed: save it as UTF-8
+```
+
+To fix it, save the file as UTF-8.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
