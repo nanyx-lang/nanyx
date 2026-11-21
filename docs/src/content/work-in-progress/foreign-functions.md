@@ -46,5 +46,6 @@ and a foreign function named as a value ([#1781](https://github.com/nanyx-lang/n
   build writes it out beside the module ([Hosts](./hosts#open-questions) asks the same).
 - **Pure foreign functions.** Should an extern that does no input or output, such as a math routine, be callable
   without `HostRuntime`? The safe answer is no, until there's a case for it.
-- **WASI preview 2.** The `wasi:http` world the [HTTP host](./hosts#serving-http) needs is a component, not a core
-  module. Externs over the component model's types may need more than the value types above.
+- **Components.** The `wasi:http` world the [HTTP host](./hosts#serving-http) needs is a component, not a core
+  module. [Components](./components) proposes that a host lower the canonical ABI by hand on externs of `i32` and
+  `i64` at first, and that the compiler generate it for Nanyx types later.
