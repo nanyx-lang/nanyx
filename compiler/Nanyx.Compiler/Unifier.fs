@@ -13,6 +13,10 @@ type MismatchKind =
     | ContextsNotAllowed
     /// A value of the shape of the nominal type it is given for: the type, whether it is private, and its shape.
     | NominalShape of NominalId * isPrivate: bool * shape: Ty
+    /// Two records that differ in one field each, whose names are close, so one is likely the other misspelled: the
+    /// field only the first has and the second record's type, then the field only the second has and the first's.
+    /// Each type is named as its alias if it was written as one: `P`.
+    | MisspelledField of onlyLeft: string * rightRecord: string * onlyRight: string * leftRecord: string
 
 /// A constraint that cannot be satisfied: what is wrong, where (the constraint's span), and what kind of failure it is.
 type Mismatch = string * SourceSpan * MismatchKind
@@ -565,6 +569,13 @@ module Unifier =
             |> Option.orElse (List.tryLast failures)
         // The pairs of references to recursive aliases being compared by what they stand for (see `unfoldBoth`).
         let assumed = HashSet<Ty * Ty>(HashIdentity.Structural)
+        // The name of the alias each type compared was written as, by the type it stands for: `P` for a record of `P`'s
+        // fields, so a misspelled field can say which record it is not a field of.
+        let aliasNames = Dictionary<Ty, string>(HashIdentity.Structural)
+        let unfoldAlias (ty: Ty) =
+            let underlying = RecursiveAliases.underlying ty
+            aliasNames[underlying] <- tyToString ty
+            underlying
         let rec loop (subst: Subst) (remaining: ConstraintSet) =
             // A closed record has exactly its fields, so two closed records agree only when they have the same ones:
             // a record with a field more or a field fewer is a different type.
@@ -576,7 +587,13 @@ module Unifier =
                         lKeys |> Seq.map (fun key -> (lFields.[key], rFields.[key], Equal, origin)) |> Seq.toList
                     loop subst (pairConstraints @ rest)
                 else
-                    Error (recordKeyMessage lKeys rKeys left right, origin, TypesDiffer)
+                    let kind =
+                        match Set.toList (Set.difference lKeys rKeys), Set.toList (Set.difference rKeys lKeys) with
+                        | [ onlyLeft ], [ onlyRight ] when NameSuggestions.closest [ onlyRight ] onlyLeft = [ onlyRight ] ->
+                            let named ty = match aliasNames.TryGetValue ty with | true, name -> name | _ -> $"'{tyToString ty}'"
+                            MisspelledField(onlyLeft, named right, onlyRight, named left)
+                        | _ -> TypesDiffer
+                    Error (recordKeyMessage lKeys rKeys left right, origin, kind)
             // Two references to recursive aliases are compared by what they stand for, taking them to agree while that
             // is checked: unfolded, they may hold the same two references again, which agree if nothing else differs.
             let unfoldBoth kind origin l r rest =
@@ -627,9 +644,9 @@ module Unifier =
                 | RecursiveAliases.RecursiveAlias _, RecursiveAliases.RecursiveAlias _ -> unfoldBoth Equal origin l r rest
                 // An alias is the type it stands for.
                 | TyAlias _, _ ->
-                    loop subst ((RecursiveAliases.underlying l, r, Equal, origin) :: rest)
+                    loop subst ((unfoldAlias l, r, Equal, origin) :: rest)
                 | _, TyAlias _ ->
-                    loop subst ((l, RecursiveAliases.underlying r, Equal, origin) :: rest)
+                    loop subst ((l, unfoldAlias r, Equal, origin) :: rest)
                 | TyPrimitive lName, TyPrimitive rName when lName = rName ->
                     loop subst rest
                 | TyApply(lName, lArgs), TyApply(rName, rArgs) when lName = rName && lArgs.Length = rArgs.Length ->
@@ -838,9 +855,9 @@ module Unifier =
                         // are compared by what they stand for (see `unfoldBoth`).
                         | RecursiveAliases.RecursiveAlias _, RecursiveAliases.RecursiveAlias _ -> unfoldBoth Assignable origin l r rest
                         | TyAlias _, _ ->
-                            loop subst ((RecursiveAliases.underlying l, r, Assignable, origin) :: rest)
+                            loop subst ((unfoldAlias l, r, Assignable, origin) :: rest)
                         | _, TyAlias _ ->
-                            loop subst ((l, RecursiveAliases.underlying r, Assignable, origin) :: rest)
+                            loop subst ((l, unfoldAlias r, Assignable, origin) :: rest)
                         // A closed union given where an open one is expected widens it: the tags it has that the
                         // expected union does not name go into the expected union's rest, which stays open for
                         // more. So `#some(string) | #nil` and then `#some(int) | #notFound`, given in turn to a

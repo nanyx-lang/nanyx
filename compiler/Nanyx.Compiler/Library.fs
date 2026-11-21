@@ -847,6 +847,9 @@ module Compiler =
                                 let names = (Map.toList env.Names) @ (types |> Map.toList |> List.map (fun (name, ty) -> name, TypeEnv.mono (Unifier.apply subst ty)))
                                 ProtectedShapes.shapeError state names (normalizeSource source) desugared nominal isPrivate shape span
                             | ContextsNotAllowed -> Diagnostics.at DiagnosticCodes.ContextsNotAllowed span message
+                            | MisspelledField(onlyLeft, rightRecord, onlyRight, leftRecord) ->
+                                MisspelledFields.diagnose state desugared span (onlyLeft, rightRecord, onlyRight, leftRecord)
+                                |> Option.defaultWith (fun () -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
                             | TypesDiffer
                             | NominalShape _ -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
                     |> List.distinct
