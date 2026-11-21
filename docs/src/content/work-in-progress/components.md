@@ -6,7 +6,8 @@ order: 4
 
 This page is the design for [#2182](https://github.com/nanyx-lang/nanyx/issues/2182): emitting WebAssembly components
 that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or any runtime that implements WASI 0.3, and
-not only under `nanyx`'s own runtime. Nothing here is built yet. The page sets out what was found, the
+not only under `nanyx`'s own runtime. Stage 0 is built, and described on [Components](../deep-dives/components) in
+Deep dives; nothing a user can see is yet. The page sets out what was found, the
 [design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
 whose stages are filed as issues.
 
@@ -262,9 +263,9 @@ Each import of the console and HTTP hosts maps onto a WASI 0.3 interface, or ont
 
 **wit-component ships as WebAssembly** and runs on the Wasmtime the runtime already embeds, as the spike did.
 
-- It is built from a small Rust crate in the repository to `wasm32-wasip1` by CI, and embedded in
+- It is built from a small Rust crate in the repository to `wasm32-wasip1` by Cargo when the runtime builds, and embedded in
   `Nanyx.Compiler.Runtime`. Rust is needed to build the CLI, but not to use it.
-- It adds 2.2 MB to the CLI, plus a one-off compile that is cached as a serialized module.
+- It adds about 2 MB to the CLI, plus a one-off compile that is cached as a serialized module.
 - wit-component validates what it builds and keeps up with the spec; we follow the spec by bumping a crate.
 
 Requiring `wasm-tools` on the user's PATH was rejected as one more thing to install at a matching version, and an
@@ -329,7 +330,7 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 
 | Stage | What it builds | What users can do then |
 |---|---|---|
-| 0. The componentizer ([#2236](https://github.com/nanyx-lang/nanyx/issues/2236)) | A small Rust crate on wit-component, built to `wasm32-wasip1` by CI and embedded in `Nanyx.Compiler.Runtime`. A `cabi_realloc` export. The entry exported under a world's name. The runtime's own imports on `wasi:cli` | Nothing visible yet |
+| 0. The componentizer ([#2236](https://github.com/nanyx-lang/nanyx/issues/2236)), done | A small Rust crate on wit-component, built to `wasm32-wasip1` by Cargo when the runtime builds, and embedded in `Nanyx.Compiler.Runtime`. A `cabi_realloc` export. The entry exported under a world's name. The runtime's own imports on `wasi:cli` | Nothing visible yet |
 | 1. Console components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)) | `nanyx.console`'s component root on `wasi:cli`, `wasi:filesystem`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the examples under `wasmtime run` | Build a command-line program once, and run it with `wasmtime run` or any WASI 0.3 runtime |
 | 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)) | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
 | 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)) | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |

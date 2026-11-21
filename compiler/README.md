@@ -24,6 +24,7 @@ compiler/
 ├── Nanyx.Compiler.Wasm/       # WebAssembly text (.wat) backend (F#)
 ├── Nanyx.Compiler.Wasm.Tests/ # Backend fixture, end-to-end and execution tests
 ├── Nanyx.Compiler.Runtime/    # Runs emitted modules on an embedded Wasmtime engine (F#)
+├── Nanyx.Componentizer/       # wit-component as a WASI command (Rust), which the runtime embeds
 ├── Nanyx.LanguageServer/      # The language server (C#, OmniSharp LSP), run by `nanyx lsp`
 ├── Nanyx.LanguageServer.Tests/# Drives the server through a real LSP client in-process
 ├── Nanyx.Compiler.Cli/        # The `nanyx` executable (C#, Consolo)
@@ -45,7 +46,9 @@ To **build** the compiler from source you need the
 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0); `dotnet --version` should print
 `10.x`. The build restores everything else from NuGet, including the `Wasmtime` package that ships
 the native engine for every platform above, so no separate Wasmtime, wat2wasm or wasm runtime
-install is needed.
+install is needed. It also needs [Rust](https://rustup.rs) with the `wasm32-wasip1` target
+(`rustup target add wasm32-wasip1`): the runtime embeds the componentizer, which is wit-component compiled to
+WebAssembly from the crate in `Nanyx.Componentizer/`, and the build runs Cargo for it.
 
 ## Building
 

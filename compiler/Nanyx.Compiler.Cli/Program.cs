@@ -342,7 +342,7 @@ internal static partial class CliCommands
             return deferred ? 1 : 0;
         }
 
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false), deferred, timings))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: false), deferred, timings))
         {
             return 1;
         }
@@ -1158,7 +1158,7 @@ internal static partial class CliCommands
     private static int RunWasm(Shell shell, CompileResult result, string inputFile, string? outputPath, bool release, ProgramFormat format)
     {
         var deferred = !release && ErrorsDeferred(result);
-        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false), deferred))
+        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: false), deferred))
         {
             return 1;
         }

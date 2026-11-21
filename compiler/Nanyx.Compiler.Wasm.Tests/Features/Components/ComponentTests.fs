@@ -1,0 +1,61 @@
+/// The core module of a WASI 0.3 component (`WasmOptions.Component`, see `ComponentAbi`), and the componentizer that
+/// wraps it (`Nanyx.Runtime.Componentizer`), with WASI 0.3.0's own WIT: `wit/` here is `wasi:cli@0.3.0` as WASI's
+/// v0.3.0 tag has it, with the packages it uses under `wit/deps`.
+module TranspilerWasmTests.Features.Components.Component
+
+open System
+open System.IO
+open System.Text.RegularExpressions
+open Xunit
+open Transpiler.Wasm.CodeGen
+open TranspilerWasmTestHelpers
+
+let private componentOptions = { WasmOptions.Default with Component = true }
+
+/// `wasi:cli`'s package, whose world `command` the tests wrap modules as.
+let private wit = Path.Combine(AppContext.BaseDirectory, "Features", "Components", "wit")
+
+/// The modules a module's text imports from.
+let private importedModules (wat: string) =
+    Regex.Matches(wat, """\(import "([^"]+)" """) |> Seq.map (fun m -> m.Groups.[1].Value) |> Set.ofSeq
+
+/// What a binary starts with: a component's preamble, or a core module's.
+let private preamble (bytes: byte array) = bytes |> Array.take 8
+
+let private componentPreamble = [| 0x00uy; 0x61uy; 0x73uy; 0x6duy; 0x0duy; 0x00uy; 0x01uy; 0x00uy |]
+
+[<Fact>]
+let ``A component's core module exports its entry as wasi:cli/run's run, and cabi_realloc, and runs nothing when instantiated`` () =
+    let wat = transpileWatWith componentOptions (normalized "dbg(1)\n")
+    Assert.Contains("""(export "wasi:cli/run@0.3.0#run")""", wat)
+    Assert.Contains("""(export "cabi_realloc")""", wat)
+    Assert.DoesNotContain("(start ", wat)
+
+[<Fact>]
+let ``A component's core module writes and exits through wasi:cli alone, not WASI preview 1`` () =
+    // `println` is a foreign function of preview 1's `fd_write`, which the module defines itself on `wasi:cli`.
+    let wat = transpileWatWith componentOptions (normalized "dbg(1)\nprintln(\"hi\")\n")
+    Assert.Equal<Set<string>>(set [ "$root"; "wasi:cli/exit@0.3.0"; "wasi:cli/stderr@0.3.0"; "wasi:cli/stdout@0.3.0" ], importedModules wat)
+
+[<Fact>]
+let ``A program with no top-level code still has an entry`` () =
+    let wat = transpileWatWith componentOptions (normalized "def double = { x -> x * 2 }\n")
+    Assert.Contains("""(export "wasi:cli/run@0.3.0#run")""", wat)
+
+[<Theory>]
+[<InlineData("dbg(1)\nprintln(\"hi\")\n")>]
+// A crash writes why to stderr, with the runtime's own helper, and stops.
+[<InlineData("println(\"before\")\nlet xs = [1, 2]\nprintln(xs[5])\n")>]
+let ``The componentizer wraps a component's core module as a component of wasi:cli/command`` (source: string) =
+    let wat = transpileWatWith { componentOptions with Places = true } (normalized source)
+    match Nanyx.Runtime.Componentizer.componentize (Transpiler.Wasm.WasmBinary.assemble wat) wit "command" with
+    | Ok bytes -> Assert.Equal<byte array>(componentPreamble, preamble bytes)
+    | Error message -> Assert.Fail message
+
+[<Fact>]
+let ``The componentizer says why it can't wrap a module that imports what the world doesn't have`` () =
+    // A module the runtime runs imports WASI preview 1, which no WASI 0.3 world has.
+    let wat = transpileWatWith WasmOptions.Default (normalized "println(\"hi\")\n")
+    match Nanyx.Runtime.Componentizer.componentize (Transpiler.Wasm.WasmBinary.assemble wat) wit "command" with
+    | Ok _ -> Assert.Fail "A module that imports WASI preview 1 was wrapped"
+    | Error message -> Assert.Contains("wasi_snapshot_preview1", message)

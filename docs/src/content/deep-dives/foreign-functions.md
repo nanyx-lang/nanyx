@@ -78,5 +78,6 @@ progress. They are what [hosts](./hosts) are built on.
   (`ImportedContextTypes`, the module's own, and those in the callee's type, where a foreign function has them),
   anywhere in a module that isn't a host. The runtime imports `fd_write` and `proc_exit` itself only for `dbg`, a
   deferred error and the memory checks, and a foreign function of a WASI function shares the runtime's name for it
-  (`CoreIrEmit.importName`), so the module imports it once. Hello world's WebAssembly text went from 49,990 bytes to
+  (`CoreIrEmit.importName`), so the module imports it once. A component's core module defines both functions itself on `wasi:cli` instead of
+  importing them ([Components](./components)). Hello world's WebAssembly text went from 49,990 bytes to
   41,824, and a program that reads its arguments and an environment variable from 74,568 to 68,181.
