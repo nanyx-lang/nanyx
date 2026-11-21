@@ -184,7 +184,7 @@ Because `memory` is scoped, global mutable state is effectively impossible. Top-
 
 # How cells are compiled
 
-A cell that no lambda captures is a WebAssembly local, and `:=` sets it. A cell a lambda captures, or one passed with `mut`, is a box on the heap, shared by the block, every lambda that captures it and every function it is passed to, and reference counted like any other value, so it is freed when the last of them is done with it. A reference is the same box: `MRef.set` gives up the value it held, and the box gives up the value it holds when it is freed.
+A cell that no lambda captures is a WebAssembly local, and `:=` sets it. A cell a lambda captures, or one passed with `mut`, is a box on the heap, shared by the block, every lambda that captures it and every function it is passed to, and reference counted like any other value, so it is freed when the last of them is done with it. A reference is the same box: `MRef.set` gives up the value it held, and the box gives up the value it holds when it is freed. Counting can't free a reference that holds, through what it holds, the reference itself: such a cycle leaks until a block frees its mutable objects when it ends ([#2232](https://github.com/nanyx-lang/nanyx/issues/2232)).
 
 # Mutable collections
 
