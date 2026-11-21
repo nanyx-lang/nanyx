@@ -84,12 +84,14 @@ let internal inferCall
                 | Some fields ->
                     let mutable current = afterBase
                     let mutable errors: Diagnostic list = []
-                    // Field names have no span of their own (#96): a field is reported at its new value.
+                    // A field that isn't the record's is reported at its name, with the record's field closest to it.
                     for update in updates do
                         match update with
                         | NamedField(fieldName, valueExpr) ->
                             match fields |> Map.tryFind fieldName with
-                            | None -> errors <- errors @ [ Diagnostics.at DiagnosticCodes.UnknownMember valueExpr.Span $"The record has no member '{fieldName}' to update" |> Diagnostics.about fieldName ]
+                            | None ->
+                                let nameSpan = declarationSpan current NamedFieldValue valueExpr
+                                errors <- errors @ [ NameSuggestions.unknown DiagnosticCodes.UnknownMember nameSpan $"The record has no member '{fieldName}' to update" fields.Keys fieldName ]
                             | Some fieldTy ->
                                 match inferExpr env current valueExpr with
                                 | Ok (typedValue, next) -> current <- addConstraintAt valueExpr.Span typedValue.Type fieldTy next

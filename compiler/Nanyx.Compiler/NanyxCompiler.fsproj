@@ -83,6 +83,7 @@
     <Compile Include="DefinitionOrder.fs" />
     <Compile Include="InitialisationCycles.fs" />
     <Compile Include="MemoryCells.fs" />
+    <Compile Include="MisspelledFields.fs" />
     <Compile Include="ScopedCalls.fs" />
     <Compile Include="Loops.fs" />
     <Compile Include="RecordSpread.fs" />
