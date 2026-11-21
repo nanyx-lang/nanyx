@@ -1,19 +1,31 @@
 ---
 import { Menu, Search } from "lucide-react";
+
+interface Props {
+  /** Whether the page has the docs' sidebar, which the menu button opens on a narrow window. */
+  sidebar?: boolean;
+}
+
+const { sidebar = true } = Astro.props;
+const onPlayground = Astro.url.pathname.replace(/\.html$/, "") === "/playground";
 ---
 
 <!-- Kept across page swaps, with the sidebar, so the buttons' listeners stay bound. -->
 <header class="docs-header" transition:persist>
   <div class="docs-header-inner">
-    <button
-      type="button"
-      id="sidebar-toggle"
-      class="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
-      aria-label="Toggle navigation"
-      aria-controls="docs-sidebar"
-    >
-      <Menu className="h-5 w-5" />
-    </button>
+    {
+      sidebar && (
+        <button
+          type="button"
+          id="sidebar-toggle"
+          class="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+          aria-label="Toggle navigation"
+          aria-controls="docs-sidebar"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )
+    }
 
     <a href="/" class="docs-logo-link">
       <div class="docs-logo-mark">
@@ -31,6 +43,16 @@ import { Menu, Search } from "lucide-react";
       <span>Search docs...</span>
       <kbd class="ml-auto text-xs bg-muted px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
     </button>
+
+    <!-- The playground loads afresh, not through the client router, so that it is cross-origin isolated. -->
+    <a
+      href="/playground"
+      data-astro-reload
+      class="docs-header-link"
+      aria-current={onPlayground ? "page" : undefined}
+    >
+      Playground
+    </a>
 
     <a
       href="https://github.com/nanyx-lang/nanyx"

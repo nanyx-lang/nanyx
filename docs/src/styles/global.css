@@ -172,6 +172,33 @@
   font-family: "Space Grotesk", system-ui, sans-serif;
 }
 
+.docs-header-link {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+}
+
+.docs-header-link:hover,
+.docs-header-link[aria-current="page"] {
+  color: hsl(var(--foreground));
+}
+
+/* The "Open in the playground" link under a runnable tour example (site/playground-examples.mjs). */
+.playground-link {
+  margin-top: -0.75rem;
+  text-align: right;
+  font-size: 0.8125rem;
+}
+
+.playground-link a {
+  color: hsl(var(--muted-foreground));
+}
+
+.playground-link a:hover {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+
 /* Sidebar */
 .docs-sidebar {
   position: fixed;
