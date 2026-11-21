@@ -47,8 +47,8 @@ let ``A code's reference link is its section of this page`` () =
 
 /// The codes whose sections have no example, because no program reports them: the file given to `nanyx` is missing, a
 /// standard library module is broken, or the backend has a bug; or because an example can't show them: a package is
-/// packed, published or run, a file is fetched from GitHub, versions are chosen from the package index, a script
-/// names a dependency by its version, or a program is built as a component under a host package of its own.
+/// packed, published or run, a file is fetched from GitHub, versions are chosen from the package index, or a script
+/// names a dependency by its version.
 let private withoutExamples =
     [ DiagnosticCodes.FileNotFound
       DiagnosticCodes.InvalidStandardLibraryModule
@@ -58,7 +58,6 @@ let private withoutExamples =
       DiagnosticCodes.NothingToRun
       DiagnosticCodes.VersionConflict
       DiagnosticCodes.PackageFileNotUtf8
-      DiagnosticCodes.ComponentRootProvidesMore
       DiagnosticCodes.BackendInternalError ]
     |> List.map _.Code
 
