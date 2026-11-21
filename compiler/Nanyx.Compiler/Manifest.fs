@@ -723,3 +723,8 @@ module Manifest =
 
     /// The manifest at `path`, or every problem with it (see `check`).
     let read (path: string) : Result<Manifest, Diagnostic list> = check path (File.ReadAllText path)
+
+    /// The manifest of the package in `directory`, if it has one and it reads: what is wrong with it is left for the
+    /// build to report.
+    let internal tryReadIn (directory: string) : Manifest option =
+        manifestIn directory |> Result.toOption |> Option.bind (read >> Result.toOption)
