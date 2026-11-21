@@ -14,8 +14,6 @@ type ResolutionError =
 /// that satisfies every dependency, keeping each version a lockfile already locks while it still does. What it gives is
 /// the lockfile that records them.
 module Resolution =
-    let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
-
     /// The dependencies a resolution for the package `manifest` describes has to satisfy: those it names by their
     /// version, and those of each package it finds on disk or on GitHub, which share its lockfile. A package found
     /// that way that can't be read is left out, for the build to report.
@@ -54,7 +52,7 @@ module Resolution =
     let private candidate (locked: SemanticVersion option) (indexed: IndexedVersion) : SolverVersion =
         let dependencies =
             indexed.Dependencies
-            |> List.filter (fst >> isShipped >> not)
+            |> List.filter (fst >> ShippedPackages.isShipped >> not)
             |> List.map (fun (name, written) -> name, requirementOf written)
         let needsNewer =
             match indexed.Nanyx |> Option.bind VersionRequirement.tryParse, running with
@@ -82,7 +80,7 @@ module Resolution =
         : Result<Lockfile, ResolutionError> =
         let listings = Dictionary<string, IndexedVersion list>()
         let versions (name: string) =
-            if isShipped name then
+            if ShippedPackages.isShipped name then
                 Result.Ok None
             else
                 PackageIndex.versions store.Index name

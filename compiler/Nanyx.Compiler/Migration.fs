@@ -351,7 +351,7 @@ module Migration =
                                 let downloads =
                                     settings
                                     |> List.choose (function
-                                        | DependencyEntry(dependency, FromIndex _) when not (Directory.Exists(ShippedPackages.directoryOf dependency)) -> Some dependency
+                                        | DependencyEntry(dependency, FromIndex _) when not (ShippedPackages.isShipped dependency) -> Some dependency
                                         | _ -> None)
                                 Result.Ok
                                     { ManifestPath = Path.Combine(root, packageName + Manifest.extension)

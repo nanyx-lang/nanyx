@@ -8,8 +8,6 @@ open System.IO
 /// script download them into the cache (`pull`), and a build reads them from the cache alone (`cached`), as a
 /// package's build reads what its lockfile locks.
 module ScriptDependencies =
-    let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
-
     /// Each of `pins`, a package and the exact version the script `script` (its path, for messages) names, and the
     /// packages they depend on, chosen from the index of `store` and downloaded into its cache, each checked against the
     /// SHA-256 the index records: a line for each, `nanyx.json 0.1.0`, or what went wrong.
@@ -28,7 +26,7 @@ module ScriptDependencies =
     /// The versions of `name` in the cache of `store`, as the solver reads them: each with the dependencies its manifest
     /// names by their version. None for a package the compiler ships.
     let private cachedVersions (store: PackageStore) (name: string) : Result<SolverVersion list option, string> =
-        if isShipped name then
+        if ShippedPackages.isShipped name then
             Result.Ok None
         else
             let directory = Path.Combine(store.Cache, name)
