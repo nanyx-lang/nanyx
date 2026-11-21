@@ -1,13 +1,14 @@
 ---
 title: "Components"
-description: "Proposal: `nanyx build` writes WASI 0.3 components, and the console and HTTP hosts target the standard wasi:* interfaces"
+description: "Design: `nanyx build` writes WASI 0.3 components, and the console and HTTP hosts target the standard wasi:* interfaces"
 order: 4
 ---
 
-This page answers the open questions on [#2182](https://github.com/nanyx-lang/nanyx/issues/2182): emitting WebAssembly
-components that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or any runtime that implements
-WASI 0.3, and not only under `nanyx`'s own runtime. Nothing here is built. The page sets out what was found, the options
-for each question and a recommendation for each, and a staged plan. The decisions are the maintainer's.
+This page is the design for [#2182](https://github.com/nanyx-lang/nanyx/issues/2182): emitting WebAssembly components
+that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or any runtime that implements WASI 0.3, and
+not only under `nanyx`'s own runtime. Nothing here is built yet. The page sets out what was found, the
+[design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
+whose stages are filed as issues.
 
 # Where things stand
 
@@ -184,44 +185,16 @@ synchronously, and it wrote to stdout through `[stream-new-0]write-via-stream`, 
 So the compiler can build components with nothing native beyond the Wasmtime it already embeds, and with
 wit-component's validation.
 
-# Open questions, options and recommendations
+# Design
 
-## 1. Scope: where components are written, and how `nanyx run` runs them
+## Scope: components from `nanyx build` only
 
-**Options:**
+**`nanyx build` writes components; every other tool keeps core modules.** `nanyx run`, `nanyx test`, the debugger and
+the profiler run core modules on wasmtime-dotnet, as today, keeping probes, the profiler, named crash stacks, `dbg`
+interleaving and a fresh instance per test or request. No embedding runs WASI 0.3 in a .NET process yet
+([Running components from .NET](#running-components-from-net)), and this is the one choice that works today.
 
-- **A. Components from `nanyx build` only.** `nanyx run`, `nanyx test`, the debugger and the profiler keep running core
-  modules on wasmtime-dotnet. A host package gives a second root module for the component, written against `wasi:*`.
-  This works today. The cost is two implementations of each host's contexts, each a few hundred lines of Nanyx.
-- **B. Components everywhere, run by the `wasmtime` CLI.** `nanyx run` starts `wasmtime run`. Several things are lost
-  or would need redoing outside the process:
-  - the debugger's probes (`nanyx:debug`);
-  - the profiler (`GuestProfiler`);
-  - crash stacks named from the module's table of places;
-  - `dbg` interleaved by the runtime;
-  - the test runner's and HTTP host's fresh instance per test or request, in process.
-
-  Every user would also need Wasmtime 46 or later installed, or downloaded by `nanyx`.
-- **C. Components everywhere, on a native library of our own.** A small Rust library on `wasmtime` and `wasmtime-wasi`
-  (with WASI 0.3 and `wasi:http` 0.3) that the runtime calls through a C ABI, keeping probes and profiling in process.
-  It adds Rust to the build and the release matrix (Linux, Windows and macOS on x64 and arm64), and we would own that
-  binding. Doing the same upstream, in Wasmtime's C API and wasmtime-dotnet, is the same work done for everyone, but on
-  their schedule.
-- **D. The runtime implements the lowered imports itself.** The runtime would instantiate the inner core module and
-  provide `[stream-new-0]…` and the rest in .NET: a component-model runtime of our own. This option is rejected: it is
-  the largest job of the four, and it duplicates Wasmtime.
-
-**Recommendation: A now, then remove the core roots once an embedding runs 0.3 in process.**
-
-- A keeps every tool working and delivers the portable output, which is what #2182 is for.
-- The duplication stays in the hosts. Programs and libraries see only contexts, so they never know which root they ran
-  on.
-- File the upstream question, whether Wasmtime's C API and wasmtime-dotnet will add WASI 0.3, and revisit C if the answer
-  is no, or slow.
-- Test the component roots by building the examples as components and running them under `wasmtime run` in the Compiler
-  workflow. That is the one place a native Wasmtime CLI is needed.
-
-**How `nanyx build` chooses.** The host's manifest names a component root and its world, beside the core root:
+**Each host has two roots.** Its manifest names a component root and its world beside the core root:
 
 ```nanyx fragment
 host = (
@@ -231,11 +204,20 @@ host = (
 )
 ```
 
-- `nanyx build` writes a component when the host has a component root, and `--core` writes a core module.
-- `nanyx run` always runs the core root.
-- The two roots must provide the same contexts, which the compiler can check.
+- **The component root is written against `wasi:*`.** The two roots must provide the same contexts, which the compiler
+  checks. Programs and libraries see only contexts, so they never know which root they ran on.
+- **`nanyx build` writes a component** when the host has a component root, and `--core` writes a core module.
+  `nanyx run` always runs the core root.
+- **CI tests the component roots** by building the examples as components and running them under `wasmtime run` (46 or
+  later) in the Compiler workflow. That is the one place a native Wasmtime CLI is needed.
+- **The core roots go once an embedding runs 0.3 in process** (stage 6). Whether Wasmtime's C API and wasmtime-dotnet
+  will add WASI 0.3 is a question for upstream; if the answer is no, or slow, a native library of our own on the `wasmtime` and
+  `wasmtime-wasi` crates is the fallback.
 
-## 2. Which hosts, and which imports
+Two alternatives were rejected: running components everywhere through the `wasmtime` CLI loses every in-process tool
+and makes each user install Wasmtime, and a component-model runtime of our own in .NET duplicates Wasmtime.
+
+## Which hosts, and which imports
 
 Each import of the console and HTTP hosts maps onto a WASI 0.3 interface, or onto nothing:
 
@@ -253,77 +235,56 @@ Each import of the console and HTTP hosts maps onto a WASI 0.3 interface, or ont
 | `nanyx:debug` `dbg` | `wasi:cli/stderr` | A build written to a file already writes `dbg` to stderr itself |
 | a terminal's raw mode and size (`Terminal`, not built) | none | WASI 0.3's `terminal-*` interfaces only say whether a stream is a terminal |
 
-**Recommendation:**
-
 - **The console host's component root uses `wasi:*` alone.** Everything it provides has an equivalent. `dbg` writes to
-  stderr, and probes don't apply.
-- **A context with no WASI equivalent isn't provided by the component root.** When `Terminal` is built, the component
-  root doesn't provide it, so a program that needs it is a compile error naming `Terminal` when it is built as a
-  component. That is the capability check doing its job, as for the browser host's missing `FileSystem`. A
-  `nanyx:terminal` WIT interface, which only our runtime implements, would make the component non-portable without
-  saying so.
-- **The HTTP host moves onto `wasi:http/service`,** with `Log` on stderr. `Env` imports `wasi:cli/environment`, which
-  the `service` world doesn't include, so the HTTP host's component root would either import it beyond the world, which
-  `wasmtime serve` provides but other hosts may not, or not provide `Env`. Of the two, not providing `Env` is the more
-  honest, and configuration then comes in through `init` (see [Serving HTTP](./hosts#serving-http)).
+  stderr, and probes never apply.
+- **A context with no WASI equivalent is a compile error in a component build.** The component root doesn't provide
+  it, so a program that needs it, such as `Terminal` once it is built, is an error naming the context when it is built
+  as a component. That is the capability check doing its job, as for the browser host's missing `FileSystem`. There is
+  no `nanyx:*` WIT interface for it, which would make the component non-portable without saying so.
+- **The HTTP host's component root is in the world `wasi:http/service`,** with `Log` on stderr. It doesn't provide
+  `Env`: the `service` world has no `wasi:cli/environment`, and importing it beyond the world would tie the component to
+  hosts that happen to provide it. Configuration comes in through `init` (see [Serving HTTP](./hosts#serving-http)).
+- **One request per instance.** `wasmtime serve` lets a 0.3 component handle up to 128 requests at once, which would
+  have requests share one instance's memory, and so its crashes. The HTTP host's model is a fresh instance per request,
+  so its component raises backpressure (`backpressure.inc`) while it serves a request, and the host sends it no second
+  one. With a synchronous lift the instance is locked for the whole call anyway; the backpressure keeps it so under
+  the callback ABI too.
 - **The runtime's own imports follow the target.** On a component, the compiler's crash, deferred-error and `dbg` writes
   use `wasi:cli/stderr`, and its exits use `wasi:cli/exit`, not `fd_write` and `proc_exit`.
-- **Target `@0.3.0`.** Every 0.3 host accepts it, since later 0.3.x versions are compatible, and nothing a host needs
+- **The WIT is `@0.3.0`.** Every 0.3 host accepts it, since later 0.3.x versions are compatible, and nothing a host needs
   changed after it.
 - **The playground keeps its own host.** Browsers don't run components, so `nanyx.playground` is unaffected
   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
 
-**Requests at once in one instance.** `wasmtime serve` lets a 0.3 component handle many requests at once: its
-concurrency default is 128 for 0.3 against 1 for 0.2. That conflicts with the HTTP host's model of a fresh instance per
-request, where a crash ends only that request.
-
-- With a synchronous lift, the instance is locked for the whole call, so it handles one request at a time.
-- With the callback ABI, requests would share one instance's memory, and so share its crashes.
-- `backpressure.inc` lets the component refuse a second request while it serves one.
-
-This page doesn't settle it: it belongs with tasks and processes on
-[Concurrency and crash boundaries](./concurrency-and-crash-boundaries#3-tasks-and-processes).
-
-## 3. The backend work
+## The backend
 
 **What the compiler emits is still a core module,** in wit-component's conventions. The wrapper is built from it.
 
-**How the wrapper is built. Options:**
+**wit-component ships as WebAssembly** and runs on the Wasmtime the runtime already embeds, as the spike did.
 
-- **A. Ship wit-component compiled to WebAssembly,** and run it on the Wasmtime the runtime already embeds, as the spike
-  did.
-  - It adds 2.2 MB to the CLI, plus a one-off compile that can be cached.
-  - wit-component validates what it builds, and keeps up with the spec. Wasmtime 50, for instance, tracked a change to
-    the async built-ins' immediates. We follow the spec by bumping a crate.
-  - The `.wasm` is built from a small Rust crate in the repository, by CI, and embedded in `Nanyx.Compiler.Runtime`.
-    Rust is then needed to build the CLI, but not to use it.
-- **B. Require `wasm-tools` on the user's PATH.** No build change, but users have one more thing to install, at a
-  version that matches.
-- **C. Write the encoder in F#.** It would cover the component binary format's type, import, core-module, canon,
-  instance and export sections, encoding the world's WIT types, and either a WIT parser or a fixed encoding of each
-  host's world.
-  - It has no dependency, and it works in the browser build. The browser doesn't need components, though.
-  - It is a few thousand lines that we would keep in step with a spec still gaining features, with no validator of our
-    own. Tests would still need wasm-tools to check what it writes.
+- It is built from a small Rust crate in the repository to `wasm32-wasip1` by CI, and embedded in
+  `Nanyx.Compiler.Runtime`. Rust is needed to build the CLI, but not to use it.
+- It adds 2.2 MB to the CLI, plus a one-off compile that is cached as a serialized module.
+- wit-component validates what it builds and keeps up with the spec; we follow the spec by bumping a crate.
 
-**Recommendation: A.** C can replace it later if the dependency is ever a problem. The format would by then be settled,
-and A's output can test it.
+Requiring `wasm-tools` on the user's PATH was rejected as one more thing to install at a matching version, and an
+encoder of our own in F# as a few thousand lines kept in step with a moving spec, with no validator of our own. An F#
+encoder can still replace wit-component later, once the format is settled, with wit-component's output to test it.
 
-**Canonical ABI. Recommendation: by hand in the host packages first, generated by the compiler later.**
+**The canonical ABI is lowered by hand in the host packages,** in Nanyx on `nanyx/host.memory`, as the console host
+lowers WASI preview 1 today.
 
-- **For the hosts' imports**, the host package lowers by hand in Nanyx, on `nanyx/host.memory`, as the console host
-  lowers WASI preview 1 today.
-  - An `@extern` already names any module and function, so `@extern("wasi:cli/stdout@0.3.0", "[stream-write-0]write-via-stream")`
-    is an ordinary extern.
-  - Every lowered signature is `i32` and `i64`, which externs already take.
-  - A string is the UTF-8 bytes a Nanyx string already holds, so it goes out as an address and a length. A string that
-    comes back is copied out of a buffer the host allocated through `cabi_realloc`, as the console host copies out of a
-    preview 1 buffer.
-- **For Nanyx types at a boundary that a user declares**, the compiler generates the lifting and lowering: a record as a
-  record, a tag union as a variant, `list` as `list`, `string` as `string`. This is only needed for user-facing
-  components (stage 5 of the [Plan](#plan)), such as a plugin that exports functions of its own types.
+- An `@extern` already names any module and function, so `@extern("wasi:cli/stdout@0.3.0", "[stream-write-0]write-via-stream")`
+  is an ordinary extern.
+- Every lowered signature is `i32` and `i64`, which externs already take.
+- A string is the UTF-8 bytes a Nanyx string already holds, so it goes out as an address and a length. A string that
+  comes back is copied out of a buffer the host allocated through `cabi_realloc`, as the console host copies out of a
+  preview 1 buffer.
 
-**What the compiler needs for stage 1:**
+The compiler generates lifting and lowering only for user components (stage 5), where Nanyx types cross a boundary a
+user declares: a record as a record, a tag union as a variant, `list` as `list`, `string` as `string`.
+
+**What the compiler adds:**
 
 - **A `cabi_realloc` export** on the allocator: `(old, oldSize, align, newSize) -> address`.
 - **The entry exported under the world's name.** It is `wasi:cli/run@0.3.0#run`, returning 0 for `ok`. The playground
@@ -332,7 +293,7 @@ and A's output can test it.
 - **The world's WIT,** shipped in the host package (a `wit/` folder, with WASI 0.3's WIT under `wit/deps`), and given to
   the componentizer with the world's name.
 
-**Async. Recommendation: a synchronous lift first, and the callback ABI with #1890.**
+## Async: a synchronous lift first, the callback ABI after #1890
 
 - **First**, `run` and `handle` are lifted synchronously.
   - A call that waits, or a stream read or write, is lowered async and waited on at once with `waitable-set.wait`,
@@ -340,32 +301,38 @@ and A's output can test it.
   - A wait blocks the instance, as it blocks its thread today.
   - The host package writes this "start, then wait" pair once per kind of call. It is the same code that #1890's
     scheduler later splits in two.
-- **With #1890**, an `Async` entry is lifted `[async-lift]` with the scheduler as its `[callback][async-lift]`.
+- **After [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)'s state machines**, an `Async` entry is lifted
+  `[async-lift]` with the scheduler as its `[callback][async-lift]`.
   - A call that waits becomes an `[async-lower]` import, or an async `stream.read` or `stream.write`, whose subtask the
     task joins to the instance's waitable set.
   - When every task is waiting, the scheduler returns WAIT. When the callback gets an event, the scheduler resumes the
     task that was waiting on it.
   - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), and
     `TASK_CANCELLED` arriving at the callback is how the host cancels the entry.
-
-## 4. When
-
 - **Stage 1 doesn't depend on #1890 or #2164.** A synchronously lifted component is the same program model as today.
-- **The callback ABI comes after #1890's state machines,** and uses them unchanged. That is the reason to lift
-  synchronously first rather than wait.
 - **#2164 isn't needed for components at all.** Stack switching would make the stackful ABI possible, but the callback
   ABI does the same job with the state machines. #2164 stays about running tasks on stacks.
 
+# Open questions
+
+- **Sharing an instance between requests.** A service handles one request per instance for now. Whether requests may
+  share an instance, and so its memory and crashes, once the callback ABI lets them interleave, belongs with tasks and
+  processes on [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#3-tasks-and-processes).
+- **User components (stage 5).** How a program declares its own exports and imports (written WIT, or WIT generated
+  from Nanyx declarations), and which Nanyx types map to which WIT types where the match isn't one to one.
+- **Running 0.3 in process (stage 6).** Whether Wasmtime's C API and wasmtime-dotnet will add WASI 0.3, or we build a
+  native library of our own.
+
 # Plan
 
-Each stage is a separate issue, to be filed once the maintainer settles the questions above.
+Each stage is an issue. A stage is marked done here when its issue closes.
 
 | Stage | What it builds | What users can do then |
 |---|---|---|
-| 0. The componentizer | A small Rust crate on wit-component, built to `wasm32-wasip1` by CI and embedded in `Nanyx.Compiler.Runtime`. A `cabi_realloc` export. The entry exported under a world's name. The runtime's own imports on `wasi:cli` | Nothing visible yet |
-| 1. Console components | `nanyx.console`'s component root on `wasi:cli`, `wasi:filesystem`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the examples under `wasmtime run` | Build a command-line program once, and run it with `wasmtime run` or any WASI 0.3 runtime |
-| 2. HTTP client | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
-| 3. HTTP service | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`) | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
-| 4. Async components (after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait. A service handles many requests per instance, if that is allowed (see [Requests at once](#2-which-hosts-and-which-imports)) |
-| 5. User components | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types | Write plugins and libraries that other languages' components call, and call theirs |
-| 6. One root per host | Run 0.3 components in `nanyx run`, once an embedding supports it (upstream or our own), and delete the core roots | One implementation of each host |
+| 0. The componentizer ([#2236](https://github.com/nanyx-lang/nanyx/issues/2236)) | A small Rust crate on wit-component, built to `wasm32-wasip1` by CI and embedded in `Nanyx.Compiler.Runtime`. A `cabi_realloc` export. The entry exported under a world's name. The runtime's own imports on `wasi:cli` | Nothing visible yet |
+| 1. Console components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)) | `nanyx.console`'s component root on `wasi:cli`, `wasi:filesystem`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the examples under `wasmtime run` | Build a command-line program once, and run it with `wasmtime run` or any WASI 0.3 runtime |
+| 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)) | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
+| 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)) | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
+| 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
+| 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)) | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types | Write plugins and libraries that other languages' components call, and call theirs |
+| 6. One root per host ([#2242](https://github.com/nanyx-lang/nanyx/issues/2242)) | Run 0.3 components in `nanyx run`, once an embedding supports it (upstream or our own), and delete the core roots | One implementation of each host |
