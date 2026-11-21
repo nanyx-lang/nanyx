@@ -19,52 +19,6 @@ import nanyx.http.core/http as http
 
 """
 
-/// A port nothing is listening on, as the system gives it for a moment.
-let private freePort () =
-    let listener = new TcpListener(IPAddress.Loopback, 0)
-    listener.Start()
-    let port = (listener.LocalEndpoint :?> IPEndPoint).Port
-    listener.Stop()
-    port
-
-/// A server on a port of its own on this machine, for as long as it is held, that answers each request with what
-/// `answer` makes of its method, path, headers and body: a status, headers and a body.
-type private TestServer(answer: string -> string -> (string * string) list -> string -> int * (string * string) list * string) =
-    let port = freePort ()
-    let listener = new HttpListener()
-    do
-        listener.Prefixes.Add($"http://localhost:{port}/")
-        listener.Start()
-    let serving =
-        Thread(
-            (fun () ->
-                try
-                    while listener.IsListening do
-                        let context = listener.GetContext()
-                        let request = context.Request
-                        let headers = [ for name in request.Headers.AllKeys -> name.ToLowerInvariant(), request.Headers.[name] ]
-                        let body = (new StreamReader(request.InputStream)).ReadToEnd()
-                        let status, answerHeaders, text = answer request.HttpMethod request.Url.AbsolutePath headers body
-                        try
-                            context.Response.StatusCode <- status
-                            for name, value in answerHeaders do
-                                context.Response.Headers.Add(name, value)
-                            let bytes = Encoding.UTF8.GetBytes(text: string)
-                            context.Response.OutputStream.Write(bytes, 0, bytes.Length)
-                            context.Response.Close()
-                        with _ -> ()
-                with _ -> ()),
-            IsBackground = true)
-    do serving.Start()
-
-    /// Where it is: `http://localhost:<port>`.
-    member _.Url = $"http://localhost:{port}"
-
-    interface IDisposable with
-        member _.Dispose() =
-            listener.Stop()
-            listener.Close()
-
 /// What `nanyx run --check-memory` gives for `source` after `header`, saved as `main.nyx` in a directory of its own.
 let private run (source: string) =
     use directory = new TempDirectory()

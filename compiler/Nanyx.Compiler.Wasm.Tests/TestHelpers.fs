@@ -595,3 +595,49 @@ let runCheckedHost (arguments: string list) (wat: string) : Result<string * int,
         |> Result.map (fun counters -> Text.Encoding.UTF8.GetString(output.ToArray()), counters.[0])
     finally
         File.Delete input
+
+/// A port nothing is listening on, as the system gives it for a moment.
+let freePort () =
+    let listener = new Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+    listener.Start()
+    let port = (listener.LocalEndpoint :?> Net.IPEndPoint).Port
+    listener.Stop()
+    port
+
+/// A server on a port of its own on this machine, for as long as it is held, that answers each request with what
+/// `answer` makes of its method, path, headers and body: a status, headers and a body.
+type TestServer(answer: string -> string -> (string * string) list -> string -> int * (string * string) list * string) =
+    let port = freePort ()
+    let listener = new Net.HttpListener()
+    do
+        listener.Prefixes.Add($"http://localhost:{port}/")
+        listener.Start()
+    let serving =
+        Threading.Thread(
+            (fun () ->
+                try
+                    while listener.IsListening do
+                        let context = listener.GetContext()
+                        let request = context.Request
+                        let headers = [ for name in request.Headers.AllKeys -> name.ToLowerInvariant(), request.Headers.[name] ]
+                        let body = (new StreamReader(request.InputStream)).ReadToEnd()
+                        let status, answerHeaders, text = answer request.HttpMethod request.Url.AbsolutePath headers body
+                        try
+                            context.Response.StatusCode <- status
+                            for name, value in answerHeaders do
+                                context.Response.Headers.Add(name, value)
+                            let bytes = Text.Encoding.UTF8.GetBytes(text: string)
+                            context.Response.OutputStream.Write(bytes, 0, bytes.Length)
+                            context.Response.Close()
+                        with _ -> ()
+                with _ -> ()),
+            IsBackground = true)
+    do serving.Start()
+
+    /// Where it is: `http://localhost:<port>`.
+    member _.Url = $"http://localhost:{port}"
+
+    interface IDisposable with
+        member _.Dispose() =
+            listener.Stop()
+            listener.Close()

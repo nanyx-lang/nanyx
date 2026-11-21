@@ -14,14 +14,6 @@ open System.Threading.Tasks
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// A port nothing is listening on, as the system gives it for a moment.
-let private freePort () =
-    let listener = new TcpListener(IPAddress.Loopback, 0)
-    listener.Start()
-    let port = (listener.LocalEndpoint :?> IPEndPoint).Port
-    listener.Stop()
-    port
-
 /// The program of the HTTP server cookbook page, its one ```nanyx block.
 let private cookbookProgram () =
     let page = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "..", "docs", "src", "content", "cookbook", "http-server.md")
