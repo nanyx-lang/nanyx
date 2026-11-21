@@ -99,10 +99,16 @@ let internal inferCall
                     else Error errors
         | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` takes a record and the fields to update" ]
     elif name = RangeSyntax.builtIn then
-        // `a..b` is the prelude's `seq.range(a, b)`, and `a..`, which has no end, its `seq.from(a)`: each a `seq(int)` (see
-        // `Seqs`).
-        let callee = if args.Length = 1 then Seqs.fromFunction else Seqs.rangeFunction
-        inferAsCall (inferExpr env) state expr callee args
+        // `a..b` is the prelude's `seq.range(a, b)`, and `a..`, which has no end, its `seq.from(a)`: each a sequence of
+        // the bounds' type, which needs its `Enumerable` (see `Seqs`). A range of `int`s is inferred again as the call
+        // of the prelude's counting function, which is passed no instances.
+        let callee, intCallee = if args.Length = 1 then Seqs.fromFunction, Seqs.intFromFunction else Seqs.rangeFunction, Seqs.intRangeFunction
+        match inferAsCall (inferExpr env) state expr callee args with
+        | Ok (typed, next) ->
+            match Unifier.unalias (resolveSoFar next typed.Type) with
+            | Seqs.SeqType (TyPrimitive "int") -> inferAsCall (inferExpr env) state expr intCallee args
+            | _ -> Ok (typed, next)
+        | Error err -> Error err
     elif name = ExternSyntax.builtIn then
         // A foreign function's value (see `ExternSyntax`): the embedder provides it, so it is whatever the def's
         // written type says.

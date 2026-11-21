@@ -45,15 +45,35 @@ export def seq: ([c] () -> [d] seq(a)) -> [c, d] seq(a) = { block ->
   seq.delay(block)
 }
 
---| The `int`s from `first` up to `last`, both included: `1..10`. Empty when `last` is less than
-  `first`.
-export def seq.range: int, int -> seq(int) = { first, last ->
-  Seq(next = { if first > last then #done else #next(first, seq.range(first + 1, last)) })
+--| The values that come one after another, so that a range of them can be counted through: `succ`
+  gives the value after `x`. A range, `first..last`, takes the values from `first` up to `last` in
+  steps of `succ`, and stops by their [`Ord`]. A type gets it by attaching `succ`, as `int` does.
+export context Enumerable(a) = (succ: a -> a)
+
+--| The value after `n`: `n + 1`. `int`'s [`Enumerable`], which counts a range of `int`s.
+export def int.succ: int -> int = { n ->
+  n + 1
 }
 
---| The `int`s from `first` up, without end: `0..`.
-export def seq.from: int -> seq(int) = { first ->
-  Seq(next = { #next(first, seq.from(first + 1)) })
+--| The values from `first` up to `last`, both included, each the `succ` of the one before: `1..10`.
+  Empty when `last` is less than `first`.
+export def seq.range: [Enumerable(a), Ord(a)] a, a -> seq(a) = { first, last ->
+  Seq(next = { if first > last then #done else #next(first, seq.range(succ(first), last)) })
+}
+
+--| The values from `first` up, each the `succ` of the one before, without end: `0..`.
+export def seq.from: [Enumerable(a)] a -> seq(a) = { first ->
+  Seq(next = { #next(first, seq.from(succ(first))) })
+}
+
+--| [`seq.range`] of `int`s, which counts: what `1..10` calls.
+export def __intRange: int, int -> seq(int) = { first, last ->
+  Seq(next = { if first > last then #done else #next(first, __intRange(first + 1, last)) })
+}
+
+--| [`seq.from`] of an `int`, which counts: what `0..` calls.
+export def __intFrom: int -> seq(int) = { first ->
+  Seq(next = { #next(first, __intFrom(first + 1)) })
 }
 
 --| The elements `step` gives, starting from `state`: `#some(x, next)` gives `x` and carries on from

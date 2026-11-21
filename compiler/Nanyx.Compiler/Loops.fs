@@ -27,10 +27,11 @@ let inferFor
     let elementOf (current: InferState) (iterable: Expression) =
         inferExpr env current iterable
         |> Result.bind (fun (typedIterable, afterIterable) ->
-            // A range the loop walks is counted through with its bounds, not read as the sequence it is (see `Seqs`).
+            // A range of `int`s the loop walks is counted through with its bounds, not read as the sequence it is (see
+            // `Seqs`). A range of any other type is the sequence, pulled as any is.
             let afterIterable =
-                match iterable.Kind with
-                | RangeSyntax.Call _ -> { afterIterable with ReadAs = afterIterable.ReadAs |> Map.remove iterable.Id }
+                match iterable.Kind, Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
+                | RangeSyntax.Call _, Seqs.SeqType (TyPrimitive "int") -> { afterIterable with ReadAs = afterIterable.ReadAs |> Map.remove iterable.Id }
                 | _ -> afterIterable
             match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
             | Lists.ListType elementTy -> Ok ((elementTy, false), afterIterable)

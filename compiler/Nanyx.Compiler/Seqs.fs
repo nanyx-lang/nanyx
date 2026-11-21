@@ -3,7 +3,8 @@ namespace NyxCompiler
 /// The prelude's lazy sequence, `type Seq(a) = [k] protected (next: [k] () -> #next(a, Seq(a)) | #done)`, a type as
 /// any user's is (see the lazy sequences page of the docs). Its alias `seq` is written as it, as `list` is the built-in
 /// `List` (see `BuiltinTypeNames`), and it is shown by its alias, `seq(int)`. A range, `1..10` or `0..`, is one, made
-/// by the prelude's `seq.range` or `seq.from`, but for a `for` loop's, which counts with its bounds (see `Loops`).
+/// by the prelude's `seq.range` or `seq.from` from its bounds' `Enumerable`, but for a range of `int`s a `for` loop
+/// walks, which counts with its bounds (see `Loops`).
 module Seqs =
     /// The type's name, as the prelude declares it and definitions are attached to it: `Seq.map`.
     let typeName = "Seq"
@@ -35,6 +36,11 @@ module Seqs =
 
     /// The prelude's function a range with no end, `first..`, is a call to.
     let fromFunction = $"{typeName}.from"
+
+    /// The prelude's functions a range of `int`s is a call to instead, `first..last` and `first..`: they count, and
+    /// need no `Enumerable` passed.
+    let intRangeFunction = "__intRange"
+    let intFromFunction = "__intFrom"
 
     /// The prelude's functions a lambda with a `yield` in it is rewritten into calls to (see `WorkflowDesugaring`):
     /// `yield x` with the rest of the block is `seq.cons(x, { rest })`, the block's end `seq.empty()`,

@@ -71,22 +71,42 @@ The sequence `block` gives, worked out when it is pulled. A block with `yield` i
 `seq { yield 1  yield 2 }` gives `1` and `2`, and the code after a `yield` runs only when the
 sequence is pulled that far.
 
+## `Enumerable`
+
+```nanyx fragment
+context Enumerable(a) = (
+  succ: a -> a
+)
+```
+
+The values that come one after another, so that a range of them can be counted through: `succ`
+gives the value after `x`. A range, `first..last`, takes the values from `first` up to `last` in
+steps of `succ`, and stops by their `Ord`. A type gets it by attaching `succ`, as `int` does.
+
+## `int.succ`
+
+```nanyx fragment
+def int.succ: int -> int
+```
+
+The value after `n`: `n + 1`. `int`'s [`Enumerable`](#enumerable), which counts a range of `int`s.
+
 ## `seq.range`
 
 ```nanyx fragment
-def seq.range: int, int -> seq(int)
+def seq.range: [Enumerable(a), Ord(a)] a, a -> seq(a)
 ```
 
-The `int`s from `first` up to `last`, both included: `1..10`. Empty when `last` is less than
-`first`.
+The values from `first` up to `last`, both included, each the `succ` of the one before: `1..10`.
+Empty when `last` is less than `first`.
 
 ## `seq.from`
 
 ```nanyx fragment
-def seq.from: int -> seq(int)
+def seq.from: [Enumerable(a)] a -> seq(a)
 ```
 
-The `int`s from `first` up, without end: `0..`.
+The values from `first` up, each the `succ` of the one before, without end: `0..`.
 
 ## `seq.unfold`
 

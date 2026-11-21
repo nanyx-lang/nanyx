@@ -17,7 +17,7 @@ println(oneToTen \seq.map { * 2 } \seq.toList)
 println(naturalNumbers \seq.take(3) \seq.toList)
 ```
 
-A range is a value like any other: it can be passed around, stored, and pulled with the `seq` functions. A `for` loop over a range written in place counts through it without making the sequence.
+A range is a value like any other: it can be passed around, stored, and pulled with the `seq` functions. A `for` loop over a range of `int`s written in place counts through it without making the sequence.
 
 A `for` loop walks any other sequence too, pulling one element each time round, just before the body runs with it:
 
@@ -35,28 +35,38 @@ for ["a", "b", "c"], 1.. | letter, n -> println("{n}. {letter}")
 
 # Types and ranges
 
-Any type can be used in a range if it supports `succ` and comparison:
+A range can be of any type whose values come one after another: one with an `Enumerable`, the prelude's context of `succ`, which gives the value after `x`, and an `Ord`, which says when the range has reached its end. `int` has both. A type of your own gets an `Enumerable` by attaching `succ`, and an `Ord` by attaching `compare`:
 
-```nanyx skip=#1700
-def aToZ = 'a'..'z'
+```nanyx
+type Point = protected (x: int, y: int)
 
-type Point = (x: int, y: int)
+def Point.succ: Point -> Point = { p ->
+  Point(x = p.x + 1, y = p.y + 1)
+}
 
-def Point.succ: Point -> Point = { p -> Point(x = p.x + 1, y = p.y + 1) }
-
-def Point.`<=`: (Point, Point) -> bool = { p1, p2 -> p1.x + p1.y <= p2.x + p2.y }
+def Point.compare: Point, Point -> #less | #equal | #greater = { p1, p2 ->
+  int.compare(p1.x + p1.y, p2.x + p2.y)
+}
 
 def points = Point(x = 1, y = 1)..Point(x = 8, y = 8)
+
+for points | p -> println("({p.x}, {p.y})")
+```
+
+A range of a type with no `succ` is an error that says so: `Enumerable` is missing, as any context a call needs is.
+
+A range of characters, `'a'..'z'`, waits on a character type, which Nanyx doesn't have yet:
+
+```nanyx skip=#2196
+def aToZ = 'a'..'z'
 ```
 
 # Implementing ranges
 
-You can implement your own range generator when you have `succ` and a comparison. A block with `yield` in it is a sequence, and the code after a `yield` runs only when the sequence is pulled that far, so a range can be made of its first element and the range after it:
+You can implement your own range generator from the same two contexts. A block with `yield` in it is a sequence, and the code after a `yield` runs only when the sequence is pulled that far, so a range can be made of its first element and the range after it:
 
 ```nanyx
-context Succ(a) = (succ: a -> a)
-
-def range: [Succ(a), Ord(a)] a, a -> seq(a) = { start, end ->
+def range: [Enumerable(a), Ord(a)] a, a -> seq(a) = { start, end ->
   seq {
     if start <= end then
       yield start
@@ -64,10 +74,5 @@ def range: [Succ(a), Ord(a)] a, a -> seq(a) = { start, end ->
   }
 }
 
-def main = {
-  use Succ(int)(succ = { n -> n + 1 })
-  println(range(1, 5) \seq.toList)
-}
-
-main()
+println(range(1, 5) \seq.toList)
 ```
