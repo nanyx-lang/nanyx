@@ -443,7 +443,7 @@ module Manifest =
         let readPackage (fields: DataField list) (value: DataValue) : Dependency option =
             let name = problems.RequiredText "a dependency" value.Location fields "package" namePattern nameRule
             let example = $"""path = "../{name |> Option.map (fun name -> name.Substring(name.LastIndexOf '.' + 1)) |> Option.defaultValue "util"}" """.TrimEnd()
-            let shipped = name |> Option.filter (fun name -> Directory.Exists(ShippedPackages.directoryOf name))
+            let shipped = name |> Option.filter (fun name -> ShippedPackages.isShipped name)
             match DataValue.field "path" fields, DataValue.field "version" fields with
             | Some _, Some version ->
                 let named = defaultArg name "here"

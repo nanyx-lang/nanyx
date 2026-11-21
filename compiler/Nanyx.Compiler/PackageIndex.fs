@@ -29,6 +29,9 @@ module PackageIndex =
 
     let private isAddress = Downloads.isAddress
 
+    /// The namespace of the package `name`, the directory the index keeps its files in: `acme` for `acme.web`.
+    let namespaceOf (name: string) = name.Substring(0, max 0 (name.IndexOf '.'))
+
     /// `relative`, an address or a path, read from the file at `from`: an address or a rooted path as it is, and
     /// anything else relative to the directory `from` is in.
     let private resolve (from: string) (relative: string) =
@@ -85,10 +88,9 @@ module PackageIndex =
     /// The versions the index at `index` lists of the package `name`, oldest first, with where its index file is, which a
     /// version's `url` is relative to; none for a package it doesn't list. Or why they can't be read.
     let versions (index: string) (name: string) : Result<string * IndexedVersion list, string> =
-        let namespace' = name.Substring(0, max 0 (name.IndexOf '.'))
         indexFiles index
         |> Result.bind (fun files ->
-            let file = resolve (files + "config.json") $"{namespace'}/{name}.json"
+            let file = resolve (files + "config.json") $"{namespaceOf name}/{name}.json"
             // A package the index doesn't list has no index file, on disk or at an address (404).
             match tryRead file |> Result.bind (Option.map (parseJson file >> Result.map Some) >> Option.defaultValue (Result.Ok None)) with
             | Result.Ok None -> Result.Ok(file, [])
