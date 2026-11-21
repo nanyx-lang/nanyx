@@ -63,7 +63,9 @@ Every ` ```nanyx ` block in the [language tour](../tour/variables), the [Getting
 pages, the [Standard Library](../stdlib/standard-library) pages, the [Custom patterns](../advanced/custom-patterns)
 page and the [JSON cookbook](../cookbook/json-parsing) page is a test case: `RunTourExampleTests.fs` in
 `Nanyx.Compiler.Wasm.Tests` reads their pages, and compiles and runs each block in the test process, as `nanyx run`
-would run it as a script. A standard-library page's generated reference is left out (see
+would run it as a script. Packages from the index that a block names, such as `::dependency nanyx.json 0.1.0`, are read
+from an index on disk that the tests make (`testStore` in `TestHelpers.fs`), from the `.nyxpkg` files of their releases
+in `Nanyx.Compiler.Wasm.Tests/Packages`, so no example needs the network. A standard-library page's generated reference is left out (see
 [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)). The words after
 `nanyx` on a block's opening fence say what kind of example it is:
 

@@ -60,7 +60,7 @@ show(zeroOf(type Reading))
 [<Fact>]
 let ``Run - a generic decoder reads JSON into any record, union, list and built-in type`` () =
     let source =
-        """::dependency nanyx.json
+        """::dependency nanyx.json 0.1.0
 
 import nanyx.json/json as json
 
