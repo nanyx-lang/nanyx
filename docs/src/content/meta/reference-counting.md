@@ -13,8 +13,15 @@ the scheme the Koka language uses.
 # Why counting is enough
 
 Reference counting on its own cannot free a cycle: two values that refer to each other keep each other's count
-above zero. Nanyx values are immutable, and a value can only refer to values that existed before it, so the heap
-never holds a cycle. Counting frees everything.
+above zero. Nanyx values are immutable, and a value can only refer to values that existed before it, so immutable
+values never form a cycle, and counting frees them all.
+
+Mutable objects can. A reference ([`MRef`](../advanced/memory#references)) can hold a value that holds the
+reference, and counting never frees that cycle: today it leaks. Every mutable object belongs to the `memory` block
+it was made in, and nothing that needs the block's `Memory` can leave it, so the plan is for a block to free its
+mutable objects when it ends, whatever their counts
+([#2232](https://github.com/nanyx-lang/nanyx/issues/2232)). Counting still frees them earlier when there is no
+cycle.
 
 That keeps [performance predictable](../meta/principles#performance-you-can-reason-about). Memory comes back
 at a point the program determines, not when a collector decides to run, and there are no collector pauses.
