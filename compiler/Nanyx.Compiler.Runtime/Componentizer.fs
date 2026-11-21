@@ -69,22 +69,25 @@ module Componentizer =
             try
                 let inside name = Path.Combine(work.FullName, name)
                 File.WriteAllBytes(inside "core.wasm", core)
-                use engine = new Engine()
-                use module' = load engine componentizer
-                use linker = new Linker(engine)
-                use store = new Store(engine)
-                linker.DefineWasi()
-                store.SetWasiConfiguration(
-                    WasiConfiguration()
-                        .WithArgs([ "nanyx-componentizer"; "/work/core.wasm"; "/wit"; world; "/work/component.wasm" ])
-                        .WithPreopenedDirectory(work.FullName, "/work", true)
-                        .WithPreopenedDirectory(Path.GetFullPath wit, "/wit", false)
-                        .WithStandardError(inside "error.txt"))
-                let exitCode =
+                // The store holds error.txt open until it is disposed, and Windows won't let it be read or deleted
+                // until then, so the run is over, and the store gone, before either.
+                let run () =
+                    use engine = new Engine()
+                    use module' = load engine componentizer
+                    use linker = new Linker(engine)
+                    use store = new Store(engine)
+                    linker.DefineWasi()
+                    store.SetWasiConfiguration(
+                        WasiConfiguration()
+                            .WithArgs([ "nanyx-componentizer"; "/work/core.wasm"; "/wit"; world; "/work/component.wasm" ])
+                            .WithPreopenedDirectory(work.FullName, "/work", true)
+                            .WithPreopenedDirectory(Path.GetFullPath wit, "/wit", false)
+                            .WithStandardError(inside "error.txt"))
                     try
                         linker.Instantiate(store, module').GetAction("_start").Invoke()
                         0
                     with :? WasmtimeException as ex when ex.ExitCode.HasValue -> ex.ExitCode.Value
+                let exitCode = run ()
                 let error () = if File.Exists(inside "error.txt") then File.ReadAllText(inside "error.txt").Trim() else ""
                 if exitCode = 0 then Ok (File.ReadAllBytes(inside "component.wasm"))
                 else Error (error ())
