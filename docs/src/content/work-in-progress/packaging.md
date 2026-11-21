@@ -134,8 +134,11 @@ fails rather than recording it.
 ## What a package is
 
 A published package is a `.nyxpkg` file, built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): a zip of the
-manifest, at its root, the source files its `sources` select, and `api.json`, packed the same way every time from the same files
-(`PackageArchive.pack`, `nanyx pack`).
+manifest, at its root, the source files its `sources` select, and `api.json` (`PackageArchive.pack`, `nanyx pack`). The
+archive is the same from any checkout of the same commit: each file is written as UTF-8 with LF line endings and no
+byte-order mark, and the entries' order, times, permissions and platform are fixed
+([#2205](https://github.com/nanyx-lang/nanyx/issues/2205)), so anyone can rebuild a release's `.nyxpkg` from its tag
+and check it against the index's SHA-256.
 
 - Packages ship **source**. The compiler inlines imported modules into one WebAssembly module, so there is no
   compiled form to ship yet, and source works for every compiler version that supports the package's language
@@ -272,7 +275,7 @@ writes ([#867](https://github.com/nanyx-lang/nanyx/issues/867), see
      them, from an index on disk.
    - `nanyx pack` packs the files as they are on disk, so the same version packed on two machines can differ: 0.1.0,
      published from a Windows checkout, holds its sources with CRLF line endings, and its SHA-256 isn't that of the
-     same commit packed on Linux. Packing should write LF line endings whatever the checkout has.
+     same commit packed on Linux. Packing now writes LF line endings whatever the checkout has (#2205).
    - `nanyx publish` 0.31.0 couldn't publish a package's first version: the API comparison read the 404 for a package
      the index doesn't list as an error ([#2184](https://github.com/nanyx-lang/nanyx/pull/2184)). Pointing
      `NANYX_INDEX` at an empty index on disk got past it.

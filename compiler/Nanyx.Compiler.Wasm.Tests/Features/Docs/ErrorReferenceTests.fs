@@ -57,6 +57,7 @@ let private withoutExamples =
       DiagnosticCodes.InvalidReferencedFile
       DiagnosticCodes.NothingToRun
       DiagnosticCodes.VersionConflict
+      DiagnosticCodes.PackageFileNotUtf8
       DiagnosticCodes.BackendInternalError ]
     |> List.map _.Code
 
