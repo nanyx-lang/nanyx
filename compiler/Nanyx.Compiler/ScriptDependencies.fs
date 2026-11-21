@@ -8,8 +8,6 @@ open System.IO
 /// script download them into the cache (`pull`), and a build reads them from the cache alone (`cached`), as a
 /// package's build reads what its lockfile locks.
 module ScriptDependencies =
-    let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
-
     /// Each of `pins`, a package and the exact version the script `script` (its path, for messages) names, and the
     /// packages they depend on, chosen from the index of `store` and downloaded into its cache, each checked against the
     /// SHA-256 the index records: a line for each, `nanyx.json 0.1.0`, or what went wrong.
@@ -28,7 +26,7 @@ module ScriptDependencies =
     /// The versions of `name` in the cache of `store`, as the solver reads them: each with the dependencies its manifest
     /// names by their version. None for a package the compiler ships.
     let private cachedVersions (store: PackageStore) (name: string) : Result<SolverVersion list option, string> =
-        if isShipped name then
+        if ShippedPackages.isShipped name then
             Result.Ok None
         else
             let directory = Path.Combine(store.Cache, name)
@@ -38,18 +36,16 @@ module ScriptDependencies =
                     |> Array.choose (fun versionDirectory ->
                         SemanticVersion.tryParse (Path.GetFileName versionDirectory)
                         |> Option.bind (fun version ->
-                            match Manifest.manifestIn versionDirectory |> Result.bind (Manifest.read >> Result.mapError (fun _ -> "")) with
-                            | Result.Ok manifest ->
-                                Some
-                                    { Version = version
-                                      Dependencies =
-                                        manifest.Dependencies
-                                        |> List.choose (fun dependency ->
-                                            match dependency.Source with
-                                            | FromIndex requirement -> Some(dependency.Name, requirement)
-                                            | _ -> None)
-                                      Unusable = None }
-                            | Result.Error _ -> None))
+                            Manifest.tryReadIn versionDirectory
+                            |> Option.map (fun manifest ->
+                                { Version = version
+                                  Dependencies =
+                                    manifest.Dependencies
+                                    |> List.choose (fun dependency ->
+                                        match dependency.Source with
+                                        | FromIndex requirement -> Some(dependency.Name, requirement)
+                                        | _ -> None)
+                                  Unusable = None })))
                     |> List.ofArray
                 else
                     []
@@ -70,16 +66,10 @@ module ScriptDependencies =
         | _, [] ->
             let pinned = Map.ofList pins
             let versions (name: string) =
-                cachedVersions store name
-                |> Result.map (Option.map (fun versions ->
-                    match pinned.TryFind name with
-                    | Some version -> versions |> List.filter (fun cached -> cached.Version = version)
-                    | None -> versions))
+                cachedVersions store name |> Result.map (Option.map (Resolution.onlyPinned pinned name _.Version))
             let input =
                 { Root = script
-                  Requirements =
-                    pins
-                    |> List.map (fun (name, version) -> { From = script; Package = name; Requirement = { Minimum = version; Written = string version } })
+                  Requirements = Resolution.pinRequirements script pins
                   Versions = versions
                   Locked = pinned }
             match VersionSolver.solve input with

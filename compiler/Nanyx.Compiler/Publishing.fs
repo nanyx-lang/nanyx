@@ -7,13 +7,11 @@ open System.Text.Json.Nodes
 /// The files `nanyx publish` and `nanyx yank` change in the package index's repository, as its README specifies them:
 /// a package's registration, `registry/<namespace>/<name>.json`, and its index file, `index/<namespace>/<name>.json`.
 module Publishing =
-    let private namespaceOf (name: string) = name.Substring(0, max 0 (name.IndexOf '.'))
-
     /// Where the registration of the package `name` is, in the index's repository.
-    let registrationPath (name: string) = $"registry/{namespaceOf name}/{name}.json"
+    let registrationPath (name: string) = $"registry/{PackageIndex.namespaceOf name}/{name}.json"
 
     /// Where the index file of the package `name` is, in the index's repository.
-    let indexPath (name: string) = $"index/{namespaceOf name}/{name}.json"
+    let indexPath (name: string) = $"index/{PackageIndex.namespaceOf name}/{name}.json"
 
     let private options = JsonSerializerOptions(WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping)
 

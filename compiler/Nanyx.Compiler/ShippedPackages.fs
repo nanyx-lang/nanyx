@@ -17,6 +17,9 @@ module ShippedPackages =
     /// Where the package `name` would be if the compiler shipped it.
     let directoryOf (name: string) = Path.Combine(directory, name)
 
+    /// Whether the compiler ships the package `name`.
+    let isShipped (name: string) = Directory.Exists(directoryOf name)
+
     /// The names of the packages the compiler ships, in order.
     let names () : string list =
         if Directory.Exists directory then Directory.GetDirectories directory |> Array.map Path.GetFileName |> Array.sort |> List.ofArray else []
