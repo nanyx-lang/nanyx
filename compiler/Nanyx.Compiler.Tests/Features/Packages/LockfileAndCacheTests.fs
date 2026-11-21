@@ -155,6 +155,87 @@ let ``Pull downloads a locked package into the cache, and the build uses it`` ()
     let build = Package.build (okOf (Package.ofManifestFrom store (package.Path "app/app.nyxp")))
     Assert.Empty(build.Diagnostics)
 
+/// The checked file of acme.util 1.0.0 in the cache of `package`, as this compiler writes it.
+let private checkedFileOf (package: TempPackage) = CheckedPackages.fileFor (package.Path "cache") "acme.util" "1.0.0"
+
+/// Builds the app in `package` from its cache, as a new process does, with no checked file read yet, and gives what the
+/// build did with the module of the file `file` in the cache: `start` when it checked it, `reused` when it read it.
+let private buildChecking (file: string) (package: TempPackage) =
+    Compiler.forgetCheckedPackages ()
+    let recording = Recording()
+    let build = Package.buildReporting recording (okOf (Package.ofManifestFrom (storeOf package) (package.Path "app/app.nyxp")))
+    Assert.Empty(build.Diagnostics)
+    let key = Path.GetFullPath(package.Path $"cache/{file}")
+    recording.Events |> List.filter (fun event -> event.EndsWith(" " + key)) |> List.map (fun event -> event.Split(' ')[0]) |> List.distinct
+
+/// The app of `util @ app`, depending on acme.util from the index, locked and pulled into the cache.
+/// `buildChecking` acme.util's `strings.nyx`.
+let private buildCheckingUtil = buildChecking "acme.util/1.0.0/strings.nyx"
+
+let private pulledUtil () =
+    let package = new TempPackage(util @ app [ """(package = "acme.util", version = "1.0")""" ])
+    lock package [ publish package "util/acme.util.nyxp" ]
+    okOf (pullFrom (storeOf package) (package.Path "app/app.nyxp")) |> ignore
+    package
+
+[<Fact>]
+let ``A package in the cache is checked by the first build that uses it, and read from its checked file after`` () =
+    use package = pulledUtil ()
+    Assert.Contains("start", buildCheckingUtil package)
+    Assert.True(File.Exists(checkedFileOf package))
+    Assert.Equal<string list>([ "reused" ], buildCheckingUtil package)
+
+[<Fact>]
+let ``A package in the cache that depends on another is read from its checked file, with the other's`` () =
+    let web =
+        library "web" "acme.web" "2.1.0" [ """(package = "acme.util", version = "1.0")""" ] """export module loud
+
+import acme.util/strings
+
+export def loud = { s: string -> shout(s) }"""
+    use package = new TempPackage(util @ web @ app [ """(package = "acme.web", version = "2.0"), (package = "acme.util", version = "1")""" ])
+    let store = storeOf package
+    let utilLocked = publish package "util/acme.util.nyxp"
+    File.WriteAllText(package.Path "web/nanyx.lock", Lockfile.write { Packages = [ utilLocked ] })
+    okOf (pullFrom store (package.Path "web/acme.web.nyxp")) |> ignore
+    lock package [ utilLocked; publish package "web/acme.web.nyxp" ]
+    okOf (pullFrom store (package.Path "app/app.nyxp")) |> ignore
+    File.WriteAllText(package.Path "app/main.nyx", (File.ReadAllText(package.Path "app/main.nyx")).Replace("import acme.util/strings", "import acme.util/strings\nimport acme.web/loud"))
+    let buildCheckingWeb = buildChecking "acme.web/2.1.0/strings.nyx"
+    Assert.Contains("start", buildCheckingWeb package)
+    Assert.True(File.Exists(CheckedPackages.fileFor (package.Path "cache") "acme.web" "2.1.0"))
+    Assert.Equal<string list>([ "reused" ], buildCheckingWeb package)
+    Assert.Equal<string list>([ "reused" ], buildCheckingUtil package)
+
+[<Fact>]
+let ``A checked file that is corrupt, or another compiler's, is checked again and written again`` () =
+    use package = pulledUtil ()
+    buildCheckingUtil package |> ignore
+    let written = File.ReadAllBytes(checkedFileOf package)
+    File.WriteAllBytes(checkedFileOf package, Array.append written[.. written.Length / 2] (Array.create 64 0xFFuy))
+    Assert.Contains("start", buildCheckingUtil package)
+    Assert.Equal<string list>([ "reused" ], buildCheckingUtil package)
+    // The header names the build of the compiler that wrote the file: another compiler's is not this one's.
+    let build = System.Text.Encoding.UTF8.GetBytes CheckedLibrary.build
+    let other = System.Text.Encoding.UTF8.GetBytes(System.Guid.NewGuid().ToString())
+    let header = File.ReadAllBytes(checkedFileOf package)
+    let at = Seq.windowed build.Length header |> Seq.findIndex (fun window -> window = build)
+    Array.blit other 0 header at other.Length
+    let otherBuild = (checkedFileOf package).Replace(CheckedLibrary.build, System.Text.Encoding.UTF8.GetString other)
+    File.WriteAllBytes(otherBuild, header)
+    File.WriteAllBytes(checkedFileOf package, header)
+    Assert.Contains("start", buildCheckingUtil package)
+    Assert.Equal<string list>([ "reused" ], buildCheckingUtil package)
+    Assert.False(File.Exists otherBuild)
+
+[<Fact>]
+let ``A package found by its path has no checked file`` () =
+    use package = new TempPackage(util @ app [ """(package = "acme.util", path = "../util")""" ])
+    let found = okOf (Package.ofManifestFrom (storeOf package) (package.Path "app/app.nyxp"))
+    Assert.Equal(None, (Package.modules found).Dependencies.Head.CheckedFile)
+    Assert.Empty((Package.build found).Diagnostics)
+    Assert.False(Directory.Exists(package.Path "cache/.checked"))
+
 [<Fact>]
 let ``A package and the package it depends on are both locked and downloaded`` () =
     let web =

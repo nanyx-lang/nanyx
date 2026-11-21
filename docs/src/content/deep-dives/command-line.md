@@ -135,4 +135,28 @@ that an explanation can name it, and a dependency that no listed version satisfi
 locks is chosen whenever it is allowed. A conflict is `NYX0047`, whose message is the solver's explanation, written as
 pub writes it: a sentence for each step, and a number for a step used twice.
 
+A package in the cache, from the index or GitHub, never changes, so a build doesn't check it again: its checked modules
+are kept in a file of their own in the cache, `.checked/<name>-<version>-<build>.bin` (`CheckedPackages`,
+[#2167](https://github.com/nanyx-lang/nanyx/issues/2167)), in the format of the standard library's checked library
+([Implementing the standard library](./standard-library-implementation)). `Package.fs` gives such a package its
+`CheckedFile`. The first time a compilation meets a file of one (`Compiler.fromCheckedPackage`), it reads the package's
+checked file, or, if there is none it can use, checks every module of the package from source and writes it
+(`writeCheckedPackage`), and then takes the module from the file, with the package's other modules. A path dependency
+never has one. The file is named for the compiler's build, and is used only while the package's files hash as they did
+when it was written; a file that doesn't read, or whose bytes aren't those written, is written again.
+
+Every `int64` a checked module holds is the id of a syntax node or a symbol, which a process numbers from 1, so a module
+written by one process would share ids with what another checks. The package is checked with both counters moved past
+every id given so far (`CheckedPackages.startIds`), and as the file is written (`BinaryData.writeWith`) every id given
+while it was checked moves into a range of the file's own, from 2⁶² up, chosen by the file's path; an id given before,
+which a module this process checked itself holds, stops the file being written. A module from the file names the ids of
+what it imports as the files it was checked against have them, so the file records, for each module outside the package
+that its checks imported, which checked file it came from (`CheckedFileOrigins`: the checked library, or another
+package's file), and a compilation uses the file only when those modules are here as the same files have them. A
+package that depends on another in the cache is checked against the other's checked file, written first if need be.
+Using `nanyx.json` from the cache, `nanyx check` of the JSON cookbook's first example takes about 0.9 s against 1.3 s
+(Release): the package's module is read in about 30 ms rather than checked in 0.86 s.
+
+- **Not built:** `nanyx pull` writing the checked files of what it downloads ahead of the first build.
+
 `nanyx test` is proposed on [Testing](../work-in-progress/testing).
