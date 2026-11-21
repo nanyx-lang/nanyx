@@ -11,12 +11,16 @@ namespace Nanyx.LanguageServer.Handlers;
 /// call a definition and workflow keywords, with the standard <c>declaration</c>, <c>readonly</c> and
 /// <c>defaultLibrary</c> modifiers, and three of the server's own: <see cref="Mutable"/> for a cell, and
 /// <see cref="Nominal"/> and <see cref="Private"/> for the names of protected and private types, so that the editor can
-/// show them apart from aliases of a shape, whose names look the same. Everything else, and a name that did not
-/// resolve, is left to the extension's TextMate grammar. The tokens come from the document's last compile that was
+/// show them apart from aliases of a shape, whose names look the same. A name that names nothing in scope has the
+/// server's own <see cref="Unresolved"/> type, which the extension colours as its theme colours errors. Everything else
+/// is left to the extension's TextMate grammar. The tokens come from the document's last compile that was
 /// typed (see <c>NyxCompiler.SemanticTokens.inModule</c>); none is given in a top-level item edited since.
 /// </summary>
 public sealed class SemanticTokensHandler : SemanticTokensHandlerBase
 {
+    /// <summary>The type of a name that names nothing in scope: an unknown value, function, member, type, context or module.</summary>
+    public static readonly SemanticTokenType Unresolved = new("unresolved");
+
     /// <summary>The modifier of a cell: a local made with <c>mut</c>, or a parameter that takes one.</summary>
     public static readonly SemanticTokenModifier Mutable = new("mutable");
 
@@ -69,6 +73,7 @@ public sealed class SemanticTokensHandler : SemanticTokensHandlerBase
         SemanticTokens.TokenType.Tags.Interface => SemanticTokenType.Interface,
         SemanticTokens.TokenType.Tags.Namespace => SemanticTokenType.Namespace,
         SemanticTokens.TokenType.Tags.Operator => SemanticTokenType.Operator,
+        SemanticTokens.TokenType.Tags.Unresolved => Unresolved,
         _ => SemanticTokenType.Keyword
     };
 
@@ -105,7 +110,8 @@ public sealed class SemanticTokensHandler : SemanticTokensHandlerBase
                     SemanticTokenType.Interface,
                     SemanticTokenType.Namespace,
                     SemanticTokenType.Operator,
-                    SemanticTokenType.Keyword),
+                    SemanticTokenType.Keyword,
+                    Unresolved),
                 TokenModifiers = new Container<SemanticTokenModifier>(
                     SemanticTokenModifier.Declaration,
                     SemanticTokenModifier.Readonly,
