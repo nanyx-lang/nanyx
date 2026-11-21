@@ -13,7 +13,27 @@
     <Compile Include="Profiling.fs" />
     <Compile Include="Runner.fs" />
     <Compile Include="Serving.fs" />
+    <Compile Include="Componentizer.fs" />
   </ItemGroup>
+
+  <!--
+    The componentizer (Componentizer.fs) is wit-component compiled to WebAssembly: the Rust crate in
+    ../Nanyx.Componentizer, built with Cargo for wasm32-wasip1 and embedded in this assembly. Building it needs Rust, with
+    `rustup target add wasm32-wasip1`; using it doesn't.
+  -->
+  <PropertyGroup>
+    <ComponentizerDirectory>$(MSBuildThisFileDirectory)../Nanyx.Componentizer/</ComponentizerDirectory>
+    <ComponentizerWasm>$(ComponentizerDirectory)target/wasm32-wasip1/release/nanyx-componentizer.wasm</ComponentizerWasm>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ComponentizerSource Include="$(ComponentizerDirectory)Cargo.toml;$(ComponentizerDirectory)Cargo.lock;$(ComponentizerDirectory)src/**/*.rs" />
+    <EmbeddedResource Include="$(ComponentizerWasm)" LogicalName="nanyx-componentizer.wasm" />
+  </ItemGroup>
+
+  <Target Name="BuildComponentizer" BeforeTargets="PrepareForBuild" Inputs="@(ComponentizerSource)" Outputs="$(ComponentizerWasm)">
+    <Exec Command="cargo build --release --locked --target wasm32-wasip1" WorkingDirectory="$(ComponentizerDirectory)" />
+  </Target>
 
   <ItemGroup>
     <!-- Embeds the Wasmtime engine; the package ships the native library for every platform the CLI is published for. -->

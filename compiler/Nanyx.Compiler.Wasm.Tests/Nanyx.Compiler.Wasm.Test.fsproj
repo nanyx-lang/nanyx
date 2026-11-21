@@ -71,6 +71,7 @@
     <Compile Include="Features\Contexts\RunBlockContextTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
+    <Compile Include="Features\Components\ComponentTests.fs" />
     <Compile Include="Features\Embedding\EmbedderOptionsTests.fs" />
     <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
@@ -235,6 +236,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="E2E\**\*.wat">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Features\Components\wit\**\*.wit">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
