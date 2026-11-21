@@ -1,6 +1,6 @@
-// The headless test of the playground host (#2150): it serves the published compiler page, opens `run.html` in
+// The headless test of the playground host (#2150, #2151): it serves the published compiler page, opens `run.html` in
 // headless Chromium, and has the page compile programs under the playground host and run them with the host's runner,
-// in a web worker, checking what each printed and how it ended. From `compiler/`, after publishing the page:
+// in a web worker, checking what each printed and how it ended, and types input into the page's input line. From `compiler/`, after publishing the page:
 //
 //   dotnet publish Nanyx.Browser/Nanyx.Browser.csproj -c Release
 //   node Nanyx.Browser/playground-test.mjs [<publish>/wwwroot]
@@ -34,6 +34,18 @@ const tourHelloWorld = () => {
   const page = readFileSync(join(here, "..", "..", "docs", "src", "content", "tour", "attributes.md"), "utf8").replaceAll("\r\n", "\n");
   return page.match(/```nanyx\n(module main\n\n@entry\n[^`]*?)```/)[1];
 };
+
+/** A program that echoes each line it reads, until its input ends. */
+const echo = `def echo: [Console] () -> () = { _ ->
+  match readLine()
+    | #some(line) ->
+      println("echo: " ++ line)
+      echo()
+    | #error(_) -> println("end of input")
+}
+
+echo()
+`;
 
 const tests = [
   ["the tour's hello world prints, and ends with 0", async (playground) => {
@@ -76,6 +88,38 @@ const tests = [
     assert.equal(result.exit, null);
     assert.equal(result.diagnostics.length, 1);
     assert.match(result.diagnostics[0], /^NYX0205: .*'nanyx\.playground\/playground\.host' does not provide/);
+  }],
+  ["the page is cross-origin isolated, so programs can read input", async (_, page) => {
+    assert.equal(await page.evaluate(() => window.playground.canReadInput), true);
+  }],
+  ["lines typed into the input line reach readLine, and Ctrl+D ends the input", async (_, page) => {
+    await page.fill("#source", echo);
+    await page.click("#run");
+    for (const line of ["first", "second"]) {
+      await page.locator("#stdin").waitFor({ state: "visible" });
+      await page.fill("#stdin", line);
+      await page.press("#stdin", "Enter");
+    }
+    await page.locator("#stdin").waitFor({ state: "visible" });
+    await page.press("#stdin", "Control+d");
+    await page.locator("#run:enabled").waitFor();
+    assert.equal(await page.textContent("#out"), "first\necho: first\nsecond\necho: second\nend of input\nexited with 0");
+  }],
+  ["readToEnd gives the rest of the input, and a line longer than the buffer arrives whole", async (_, page) => {
+    const source = `match readLine()
+  | #some(line) -> println("{string.length(line)} {string.take(line, 4)}")
+  | #error(_) -> println("no line")
+
+match readToEnd()
+  | #some(rest) -> print("[" ++ rest ++ "]")
+  | #error(_) -> println("no input")
+`;
+    // 100,000 bytes: more than the 64 KiB the runner passes at a time.
+    const long = "é".repeat(50_000);
+    const result = await page.evaluate(([source, text]) => window.playground.runWithInput(source, text), [source, `${long}\nb\n\nc\n`]);
+    assert.deepEqual(result.diagnostics, []);
+    assert.equal(result.stdout, "100000 éé\n[b\n\nc\n]");
+    assert.deepEqual(result.exit, { code: 0 });
   }],
   ["Stop ends a program that never does", async (_, page) => {
     const result = await page.evaluate(() => window.playground.runAndStopAfter("def spin: int -> int = { n -> spin(n + 1) }\n\nprintln(spin(0))\n", 500));
