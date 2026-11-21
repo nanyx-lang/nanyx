@@ -120,26 +120,29 @@ let builtInProperty (ty: Ty) (name: string) : (BuiltInProperty * Ty) option =
 
 /// The error for reading `memberName` with a dot from a value of type `ty` that has no such field or property.
 /// `receiver` is the value as written, if it is a name. A definition attached to the type under that name is
-/// reached with a pipe, not a dot, so the message says so when there is one.
+/// reached with a pipe, not a dot, so the message says so when there is one; otherwise a field of the record whose name
+/// is close is suggested, with a fix that writes it.
 let internal unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string option) (ty: Ty) (memberName: string) : Diagnostic =
-    let rec isRecord (ty: Ty) =
+    let rec recordFields (ty: Ty) =
         match Unifier.unalias ty with
-        | TyRecord _
-        | TyOpenRecord _ -> true
-        | RecursiveNominals.Nominal(_, _, underlying, _) -> isRecord underlying
-        | _ -> false
+        | TyRecord(fields, _)
+        | TyOpenRecord(fields, _) -> Some fields
+        | RecursiveNominals.Nominal(_, _, underlying, _) -> recordFields underlying
+        | _ -> None
+    let isRecord ty = (recordFields ty).IsSome
     let missing =
         match receiver with
         | Some name when isRecord ty -> $"The record '{name}' has no member '{memberName}'"
         | None when isRecord ty -> $"The record has no member '{memberName}'"
         | _ -> $"'{Unifier.tyToString ty}' has no property '{memberName}'"
-    let message =
-        match tryResolveAttachedFunction env ty memberName with
-        | Some attached ->
-            let piped = receiver |> Option.defaultValue "x"
-            $"{missing}, but '{attached}' is attached to its type: call it with a pipe, as in `{piped} \\{memberName}`"
-        | None -> missing
-    Diagnostics.at DiagnosticCodes.UnknownMember span message |> Diagnostics.about memberName
+    match tryResolveAttachedFunction env ty memberName with
+    | Some attached ->
+        let piped = receiver |> Option.defaultValue "x"
+        Diagnostics.at DiagnosticCodes.UnknownMember span $"{missing}, but '{attached}' is attached to its type: call it with a pipe, as in `{piped} \\{memberName}`"
+        |> Diagnostics.about memberName
+    | None ->
+        let fields = recordFields ty |> Option.map (Map.keys >> List.ofSeq) |> Option.defaultValue []
+        NameSuggestions.unknown DiagnosticCodes.UnknownMember span missing fields memberName
 
 /// The alias `name`, defined by `info`, written without arguments: a generic one is applied to its own parameters.
 let private aliasType (name: string) (info: TypeDefInfo) : Ty =
