@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.25",
+  "version": "0.9.26",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -44,6 +44,22 @@
         "language": "nanyx",
         "scopeName": "source.nanyx",
         "path": "./syntaxes/nanyx.tmLanguage.json"
+      }
+    ],
+    "semanticTokenTypes": [
+      {
+        "id": "unresolved",
+        "description": "A name that names nothing in scope: an unknown value, function, member, type, context or module"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "nanyx",
+        "scopes": {
+          "unresolved": [
+            "invalid.illegal"
+          ]
+        }
       }
     ],
     "semanticTokenModifiers": [

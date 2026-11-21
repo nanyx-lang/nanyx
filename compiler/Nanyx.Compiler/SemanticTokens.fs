@@ -5,7 +5,8 @@ module NyxCompiler.SemanticTokens
 
 open Parser.Program
 
-/// What a name is. Each is one of the protocol's standard token types, so that themes colour it with no setup.
+/// What a name is. Each but `Unresolved` is one of the protocol's standard token types, so that themes colour it with no
+/// setup.
 [<RequireQualifiedAccess>]
 type TokenType =
     /// A def or local def whose value is a function, a context's member that is one, or an attached definition.
@@ -27,6 +28,10 @@ type TokenType =
     | Operator
     /// A workflow keyword, `try` or `return`, which calls the builder's member of its name.
     | Keyword
+    /// A name that names nothing in scope: an unknown value, function, member, type, context or module, or the type an
+    /// attached definition is attached to that isn't there. Not one of the protocol's standard types: the editor maps it
+    /// to the colour its theme gives errors.
+    | Unresolved
 
 [<RequireQualifiedAccess>]
 type TokenModifier =
@@ -83,10 +88,38 @@ let private nameBefore (source: string) (like: SourceSpan) (name: string) (separ
             Some (spanFrom source like start (index + 1))
         else None
 
+/// The codes of the diagnostics that report a name as naming nothing in scope.
+let private unknownNameCodes =
+    [ DiagnosticCodes.UnknownIdentifier; DiagnosticCodes.UnknownFunction; DiagnosticCodes.UnknownMember
+      DiagnosticCodes.UnknownAttachedType; DiagnosticCodes.UnknownContext; DiagnosticCodes.UnknownType ]
+    |> List.map _.Code
+    |> Set.ofList
+
+/// The name each of `diagnostics` reports as naming nothing, in the file `file` whose text is `source`: the last part of
+/// the name it is about, where it is written last in the diagnostic's span (`missing` in `m.missing`), or the span's
+/// own last part if the name isn't written there.
+let private unresolved (file: string) (source: string) (diagnostics: Diagnostic list) : Token list =
+    diagnostics
+    |> List.choose (fun diagnostic ->
+        match diagnostic.Span with
+        | Some span when unknownNameCodes.Contains diagnostic.Code && span.File = file && 0 <= span.Start && span.Start < span.End && span.End <= source.Length ->
+            let text = source.Substring(span.Start, span.End - span.Start)
+            let ownPart (name: string) = name.Substring(name.LastIndexOf '.' + 1)
+            let at =
+                diagnostic.Subject
+                |> Option.map (fun subject -> ownPart subject, text.LastIndexOf(ownPart subject, System.StringComparison.Ordinal))
+                |> Option.filter (fun (name, at) -> name <> "" && at >= 0)
+                |> Option.defaultWith (fun () -> let name = ownPart text in name, text.Length - name.Length)
+            match at with
+            | name, at when name <> "" -> Some { Span = spanFrom source span (span.Start + at) (span.Start + at + name.Length); Type = TokenType.Unresolved; Modifiers = [] }
+            | _ -> None
+        | _ -> None)
+
 /// Every name in the compiled root module, the file `file` whose text is `source`, that an editor colours by what it
 /// is, in the order they are written: each name that refers to a symbol, at its declaration and at each use, and each
 /// field, tag, module name, operator and workflow keyword. A qualified name gives its own part, and its alias part
-/// as a module. A name that did not resolve has none, and the module none at all when it did not type-check.
+/// as a module. A name the compile reports as naming nothing is `Unresolved`. A module with type or name errors has
+/// tokens for what did resolve; one that has no types, as one whose imports don't check, has none.
 let inModule (file: string) (source: string) (result: CompileResult) : Token list =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
@@ -261,8 +294,8 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
                         let start = item.Span.Start + at + "module ".Length
                         [ { Span = spanFrom source item.Span start (start + name.Length); Type = TokenType.Namespace; Modifiers = [ TokenModifier.Declaration ] } ]
                 | _ -> [])
-        // A name found twice keeps what it was first found as: its declaration, then its use.
-        declarations @ uses @ types @ patterns @ modules
+        // A name found twice keeps what it was first found as: unresolved, then its declaration, then its use.
+        unresolved file source result.Diagnostics @ declarations @ uses @ types @ patterns @ modules
         |> List.filter (fun token ->
             token.Span.File = file && not (SourceSpan.isNone token.Span) && token.Span.Start < token.Span.End
             && not ((textOf token.Span).Contains '\n'))
