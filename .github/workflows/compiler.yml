@@ -103,7 +103,9 @@ jobs:
         run: dotnet test ${{ env.PROJECT }} --no-build --configuration Release
 
   # The playground host's runner, in headless Chromium: the compiler built for the browser compiles programs under the
-  # playground host, and the runner runs them in a web worker (see compiler/Nanyx.Browser/playground-test.mjs).
+  # playground host, and the runner runs them in a web worker (see compiler/Nanyx.Browser/playground-test.mjs). The
+  # build it tested is the release's nanyx-browser.zip, which the docs site's playground runs
+  # (docs/site/playground-compiler.mjs).
   browser-test:
     name: Browser test
     runs-on: ubuntu-latest
@@ -129,6 +131,21 @@ jobs:
 
       - name: Test
         run: node Nanyx.Browser/playground-test.mjs
+
+      # The published page, with the shipped packages and the playground host's runner, without the .br and .gz copies
+      # the publish writes beside each file: the site that serves it compresses what it serves itself.
+      - name: Package
+        working-directory: compiler/Nanyx.Browser/bin/Release/net10.0/publish/wwwroot
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/compiler/dist"
+          zip -qr "$GITHUB_WORKSPACE/compiler/dist/nanyx-browser.zip" . -x '*.br' -x '*.gz'
+          unzip -l "$GITHUB_WORKSPACE/compiler/dist/nanyx-browser.zip" packages/nanyx.playground/runner/playground.js compiler.js _framework/dotnet.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nanyx-browser
+          path: compiler/dist/nanyx-browser.zip
+          if-no-files-found: error
 
   # Runs alongside the tests, not after them: only a release has to wait for both.
   publish:
@@ -236,10 +253,11 @@ jobs:
           if-no-files-found: error
 
   # Merging a version bump is the release: main publishes the binaries it just built and tested
-  # as compiler/<version>, unless that tag already exists. Nothing is rebuilt for a release.
+  # as compiler/<version>, with the browser build, nanyx-browser.zip, unless that tag already exists. Nothing is rebuilt
+  # for a release.
   release:
     name: Release
-    needs: [test, wasm-test, publish]
+    needs: [test, wasm-test, browser-test, publish]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

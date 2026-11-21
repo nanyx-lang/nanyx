@@ -143,10 +143,16 @@ browser it is given, with a fresh profile, and waits for the reports (`-Library 
 `node Nanyx.Browser/playground-test.mjs` is the headless test of that (see
 [Hosts](../deep-dives/hosts) in Deep dives).
 
-**Building it.** The docs site is built on Vercel, which has no .NET SDK, so it can't build the compiler. Proposed:
-the Compiler workflow's `Release` job publishes the browser build as a release asset, `nanyx-browser.zip`, and the
-docs build downloads the release it names; neither does so yet. The playground is then pinned to a compiler release
-and names it, and moving it on to a newer release is a one-line change.
+**Building it.** The docs site is built on Vercel, which has no .NET SDK, so it can't build the compiler. Instead the
+Compiler workflow's `Browser test` job zips the page it published and tested, with the shipped packages and the
+playground host's runner but without the `.br` and `.gz` copies, as `nanyx-browser.zip`, and the `Release` job attaches
+it to the release with the binaries ([#2152](https://github.com/nanyx-lang/nanyx/issues/2152)). The docs build
+downloads it from the release named by `playgroundRelease` in `docs/site/playground-compiler.mjs`, the one place it is
+named, and unpacks it into `public/playground/compiler`, so the site serves the compiler at `/playground/compiler/`;
+`compiler.js` fetches its files from beside itself, so it works from there. Moving the playground on to a newer
+release is changing that line, after the release is published: a build that names a release without the asset fails.
+No release has the asset yet, so `playgroundRelease` is `null` and the build unpacks nothing; it names the first
+release after 0.32.0. To build the site with a compiler you built yourself, set `NANYX_BROWSER_ZIP` to its zip.
 
 # The editor
 
@@ -225,7 +231,7 @@ are the questions to answer before building it, each with a proposal.
 3. Done: **The `nanyx.playground` host** and its runner in a worker, with the entry callable by the page
    ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
 4. Done: **Input**, through an input line in the page ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)).
-5. **The browser build as a release asset**, fetched by the docs build. Decided: the playground runs the latest
+5. Done: **The browser build as a release asset**, fetched by the docs build. Decided: the playground runs the latest
    release, not also a build of `main` ([#2152](https://github.com/nanyx-lang/nanyx/issues/2152)).
 6. **The page.** `/playground` on the docs site: CodeMirror, Run and Stop, the output, examples and share links. Decided:
    it downloads the compiler at page load and compiles a hello world at once, so the first Run is quick
