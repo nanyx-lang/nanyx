@@ -1,15 +1,17 @@
 // Loads the compiler built for the browser and hands it the files it reads from beside itself (see
 // `BrowserCompiler.AddFile`): the checked library, unless `library` is false, and every file of the packages the
-// compiler ships, as `package-files.txt`, which the build writes, lists them.
+// compiler ships, as `package-files.txt`, which the build writes, lists them. It fetches them from its own directory, wherever
+// the page that loads it is, as the docs site's playground loads it from `/playground/compiler/`.
 
 /** The compiler, ready: `compile(source)` gives `{ wasm, diagnostics, checkMs, emitMs, assembleMs }`, `wasm` the bytes. */
 export async function loadCompiler({ library = true } = {}) {
   const { dotnet } = await import("./_framework/dotnet.js");
   const runtime = await dotnet.create();
   const exports = await runtime.getAssemblyExports(runtime.getConfig().mainAssemblyName);
-  const packageFiles = (await (await fetch("package-files.txt")).text()).split("\n").map((line) => line.trim()).filter((line) => line);
+  const beside = (file) => new URL(file, import.meta.url);
+  const packageFiles = (await (await fetch(beside("package-files.txt"))).text()).split("\n").map((line) => line.trim()).filter((line) => line);
   const files = [...(library ? ["checked-library.bin"] : []), ...packageFiles];
-  const contents = await Promise.all(files.map(async (file) => new Uint8Array(await (await fetch(file)).arrayBuffer())));
+  const contents = await Promise.all(files.map(async (file) => new Uint8Array(await (await fetch(beside(file))).arrayBuffer())));
   files.forEach((file, index) => exports.BrowserCompiler.AddFile(file, contents[index]));
   return {
     compile(source) {

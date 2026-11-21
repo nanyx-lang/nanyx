@@ -7,6 +7,7 @@ import nyxGrammar from "../extension/syntaxes/nanyx.tmLanguage.json";
 import { inkNight, paperWhite } from "./site/shiki-themes.mjs";
 import { rehypeDiagnosticCodeIds, rehypeHeadingAnchors, rehypeShiftHeadings } from "./site/rehype-plugins.mjs";
 import { sectionRedirects } from "./site/sections.mjs";
+import { unpackPlaygroundCompiler } from "./site/playground-compiler.mjs";
 
 export default defineConfig({
   site: "https://nanyx.dev",
@@ -25,7 +26,19 @@ export default defineConfig({
     "/docs/work-in-progress/sized-numbers": "/docs/advanced/sized-numbers",
     "/docs/work-in-progress/printing-values": "/docs/advanced/contexts#tostringa",
   },
-  integrations: [react(), sitemap()],
+  integrations: [
+    react(),
+    sitemap(),
+    {
+      // The build unpacks the playground's compiler into public/ before anything reads it.
+      name: "playground-compiler",
+      hooks: {
+        "astro:config:setup": async ({ command }) => {
+          if (command === "build") await unpackPlaygroundCompiler();
+        },
+      },
+    },
+  ],
   markdown: {
     processor: unified({
       rehypePlugins: [rehypeShiftHeadings, rehypeDiagnosticCodeIds, rehypeHeadingIds, rehypeHeadingAnchors],
