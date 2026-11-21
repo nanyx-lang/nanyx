@@ -8,6 +8,26 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.32.0
+
+*21 November 2026*
+
+A small release about packages. A script can now use a package from the package index by naming its exact version,
+and `nanyx publish` can publish a package's first version.
+
+**Tools**
+
+- A script names a package from the index at an exact version, `::dependency nanyx.json 0.1.0`, and that version is
+  its pin, so a script needs no lockfile. `nanyx run` and `nanyx pull script.nyx` download it, and a build reads the
+  cache alone. A dependency with no version, or a range, is `NYX0009`, with a quick fix that writes in the newest
+  version ([Files and projects](../getting-started/files-and-projects), [Packages](../tour/packages)).
+
+**Fixes**
+
+- `nanyx publish` no longer fails on a package's first version, and `install`, `pull` and resolution now explain that
+  the index doesn't list a package instead of reporting a missing file
+  ([The command line](../standard-tools/command-line)).
+
 # 0.31.0
 
 *20 November 2026*
