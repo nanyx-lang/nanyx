@@ -8,6 +8,27 @@ open System.Text
 /// What checking a module gave: the module, or the phase it stopped at and why.
 type internal CheckedResult = Result<CheckedModule, CompilationPhase * Diagnostic list>
 
+/// Which checked file each module read from one came from: the checked library, or a package's checked file in the
+/// package cache (see `CheckedPackages`), each named by a token of its own. A module read from a file refers to the ids
+/// of the modules it imports as that file has them, so a module from one file can be used only with the very modules
+/// its file was written against: those read from the files it names.
+module internal CheckedFileOrigins =
+    let private origins = System.Runtime.CompilerServices.ConditionalWeakTable<CheckedModule, string>()
+
+    /// `result`, read from the file `token` names, recording that the module it holds came from that file when it is read.
+    let record (token: string) (result: Lazy<CheckedResult>) : Lazy<CheckedResult> =
+        lazy
+            (match result.Value with
+             | Ok checkedModule -> origins.AddOrUpdate(checkedModule, token)
+             | Error _ -> ()
+             result.Value)
+
+    /// The token of the file the module `checkedModule` was read from; none for a module this process checked itself.
+    let tryFind (checkedModule: CheckedModule) : string option =
+        match origins.TryGetValue checkedModule with
+        | true, token -> Some token
+        | false, _ -> None
+
 /// A standard-library module as an import of it checks it, with the modules it imports, all the way down, each by its
 /// `originKey` and read only when it is first asked for: what `Compiler.typecheckImport` keeps of it for the rest of the
 /// process.
@@ -193,8 +214,13 @@ module internal CheckedLibrary =
                      PackageModules.knowDeclaration shippedFile.Path shippedFile.Text shippedFile.Declares
              | None -> ())
 
+    /// What checking each module gave, as the file has it, each read when it is first asked for and recorded as the
+    /// checked library's (see `CheckedFileOrigins`), by key.
+    let private checkedResults =
+        lazy (file.Value.Value.Checked |> Map.map (fun _ result -> CheckedFileOrigins.record build result))
+
     /// What checking the module `key` gave, as the file has it, read when it is first asked for.
-    let private checkedResult (key: string) = file.Value.Value.Checked[key]
+    let private checkedResult (key: string) = checkedResults.Value[key]
 
     /// The library module `key` (its `originKey`) as the checked library has it, if the library was checked from
     /// `source`.

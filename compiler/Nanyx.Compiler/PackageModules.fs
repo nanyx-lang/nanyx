@@ -36,7 +36,10 @@ type PackageModules =
       /// Whether this is a script's build, whose `::host` and `::dependency` directives say what a manifest would (see
       /// `Script`): it has no files of its own, and every file of the build that is in no package it depends on is the
       /// program's, its imports found by their paths.
-      Script: bool }
+      Script: bool
+      /// For a package in the package cache, which never changes, the file its checked modules are kept in (see
+      /// `CheckedPackages`); none for any other, whose files can change.
+      CheckedFile: string option }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
@@ -119,6 +122,7 @@ module PackageModules =
           Dependencies = []
           Referenced = []
           Script = false
+          CheckedFile = None
           Modules = Map.empty }
         |> declaring (files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file)))
 

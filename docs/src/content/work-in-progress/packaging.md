@@ -142,7 +142,8 @@ and check it against the index's SHA-256.
 
 - Packages ship **source**. The compiler inlines imported modules into one WebAssembly module, so there is no
   compiled form to ship yet, and source works for every compiler version that supports the package's language
-  level. A cached compiled form can be added later, as an optimisation the cache owns.
+  level. The cache keeps each package's checked modules, for the compiler that checked them
+  ([The cache and offline builds](#the-cache-and-offline-builds)).
 - **Not built:** the readme and licence in the archive, and the manifest's `package` gaining `nanyx = "0.14"` (the
   minimum compiler version), `license` and `description`. Its `repository` is built: `nanyx publish` needs it.
 - `api.json` is what the API comparison and the package website read, so neither has to compile the package.
@@ -227,7 +228,13 @@ project and never modified, by `nanyx pull` only (`PackageIndex.download`); a bu
 `NANYX_INDEX`, if it is set: an address, or a directory on disk, which is how the tests use it. A yanked version still
 downloads, since a lockfile that names it must keep building.
 
-**Not built:** `nanyx build --offline`, which stops a build that would update the lockfile from reaching the index.
+A package in the cache never changes, so the first build that uses one checks it and keeps its checked modules in the
+cache beside it, in the standard library's checked format, and later builds read them rather than checking it again
+([#2167](https://github.com/nanyx-lang/nanyx/issues/2167); how, on
+[The nanyx command](../deep-dives/command-line#packages)). A package found by its path is always checked from source.
+
+**Not built:** `nanyx build --offline`, which stops a build that would update the lockfile from reaching the index; and
+`nanyx pull` checking what it downloads, so that the first build after it is fast too.
 
 ## The editor
 
