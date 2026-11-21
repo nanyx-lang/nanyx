@@ -161,9 +161,10 @@ module internal BinaryData =
                 numbers.Remove order[i] |> ignore
             order.RemoveRange(count, order.Count - count)
 
-    /// Writes `value`, of type `ty`, to `writer`, each string as `text` gives it. The writer's stream must be seekable:
-    /// the length of a `Lazy`'s part is written in front of it once the part is written.
-    let write (writer: BinaryWriter) (text: string -> string) (ty: Type) (value: obj) =
+    /// Writes `value`, of type `ty`, to `writer`, each string as `text` gives it and each `int64` as `ids` gives it: every
+    /// `int64` a checked module holds is a syntax node's or a symbol's id (see `CheckedPackages`). The writer's stream must
+    /// be seekable: the length of a `Lazy`'s part is written in front of it once the part is written.
+    let writeWith (writer: BinaryWriter) (text: string -> string) (ids: int64 -> int64) (ty: Type) (value: obj) =
         let objects = Numbering<obj>(HashIdentity.Reference)
         let strings = Numbering<string>(StringComparer.Ordinal)
         let rec item (ty: Type) (value: obj) =
@@ -192,7 +193,7 @@ module internal BinaryData =
                 | :? byte as b -> writer.Write b
                 | :? char as c -> writer.Write c
                 | :? int as i -> writer.Write i
-                | :? int64 as i -> writer.Write i
+                | :? int64 as i -> writer.Write(ids i)
                 | :? uint32 as i -> writer.Write i
                 | :? uint64 as i -> writer.Write i
                 | :? float as f -> writer.Write f
@@ -225,6 +226,9 @@ module internal BinaryData =
                 objects.ForgetFrom objectsBefore
                 strings.ForgetFrom stringsBefore
         item ty value
+
+    /// Writes `value` as `writeWith` does, each `int64` as it is.
+    let write (writer: BinaryWriter) (text: string -> string) (ty: Type) (value: obj) = writeWith writer text id ty value
 
     /// The values a read has seen, by number: the first `outerCount` of the part around the one it is reading, then its
     /// own.

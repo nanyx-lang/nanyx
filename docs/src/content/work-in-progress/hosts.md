@@ -72,7 +72,7 @@ This gives capability security as a side effect. A host that doesn't provide `Fi
 # Hosts on WebAssembly
 
 On the WASM backend, a host maps directly onto a set of imports and exports: the "world" the module is instantiated in. The WASI `wasi:cli` and `wasi:http` worlds are natural targets for `ConsoleHost` and an HTTP host. Emitting WASI 0.3
-components for them is proposed on [Components](./components).
+components for them is designed on [Components](./components).
 
 # Running in a browser
 

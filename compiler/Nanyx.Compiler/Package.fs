@@ -20,7 +20,9 @@ type Package =
       /// The host its manifest's `host` names, read from the host's own manifest; none for a library.
       Host: Host option
       /// The host's package, whose modules the host's import resolves in.
-      HostPackage: Package option }
+      HostPackage: Package option
+      /// For a package in the package cache, the file its checked modules are kept in (see `CheckedPackages`).
+      CheckedFile: string option }
 
 /// What building a package found: each source file's compile, and every diagnostic once. Each module is checked once
 /// for the whole build, though a file imported by another is compiled as part of both.
@@ -187,7 +189,8 @@ module Package =
                   Dependencies = dependencies
                   ReferencedFiles = Result.defaultValue [] referenced
                   Host = host |> Option.map fst
-                  HostPackage = host |> Option.map snd }
+                  HostPackage = host |> Option.map snd
+                  CheckedFile = None }
         | entry, dependencies, host ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
             Result.Error(errorsOf entry @ exports @ errorsOf referenced @ errorsOf dependencies @ errorsOf host)
@@ -255,7 +258,17 @@ module Package =
                     | _ ->
                         reached.[found.Name] <- path
                         ofManifestIn lookup reached chain found
-        dependencies |> List.map (fun dependency -> fetched dependency |> Result.bind (read dependency)) |> all
+        // A package from the index or GitHub is in the cache, and never changes, so its checked modules can be kept.
+        let checkedFile (dependency: Dependency) (package: Package) =
+            let kept identity = { package with CheckedFile = Some(CheckedPackages.fileFor lookup.Store.Cache package.Manifest.Name identity) }
+            match dependency.Source with
+            | FromIndex _ -> kept (string package.Manifest.Version)
+            | OnGitHub reference -> kept reference.Commit
+            | AtPath _
+            | Shipped -> package
+        dependencies
+        |> List.map (fun dependency -> fetched dependency |> Result.bind (read dependency) |> Result.map (checkedFile dependency))
+        |> all
 
     /// The packages of a build whose root is `manifest`: none read yet but the root.
     let private reachedFrom (manifest: Manifest) : Reached =
@@ -378,7 +391,8 @@ module Package =
     let rec modules (package: Package) : PackageModules =
         { PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Host package.Sources with
             Dependencies = package.Dependencies |> List.map modules
-            HostPackage = package.HostPackage |> Option.map modules }
+            HostPackage = package.HostPackage |> Option.map modules
+            CheckedFile = package.CheckedFile }
         |> PackageModules.withReferenced package.ReferencedFiles
 
     /// The modules of the package the file at `filePath` is a source file of, if it is one, with those of the packages
@@ -412,7 +426,8 @@ module Package =
                             referencedFiles store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
                             |> Result.defaultValue []
                           Host = host |> Option.map fst
-                          HostPackage = host |> Option.map snd }
+                          HostPackage = host |> Option.map snd
+                          CheckedFile = None }
                 Result.Ok(Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] }))
             | Result.Ok _ -> Result.Ok None
         | _ -> Result.Ok None
