@@ -86,7 +86,12 @@ type WasmOptions =
       /// Export the start function, as `CheckedExports.start`, rather than running it when the module is instantiated, so
       /// that the embedder can reach the module's memory before the program runs, and calls it itself: what a page does,
       /// whose imports read the text the program writes from the memory the module exports. `CheckMemory` does it too.
-      ExportStart: bool }
+      ExportStart: bool
+      /// Write the core module of a WASI 0.3 component (see `ComponentAbi`): the entry exported as `wasi:cli/run`'s
+      /// `run` rather than run when the module is instantiated, `cabi_realloc` exported, and the runtime's own writes and
+      /// exits on `wasi:cli` rather than WASI preview 1. Not with `CheckMemory`, `Probes` or `DbgToEmbedder`, whose
+      /// imports and exports no WASI world has.
+      Component: bool }
 
     static member Default =
         { CheckMemory = false
@@ -96,7 +101,8 @@ type WasmOptions =
           Places = false
           Probes = false
           DbgToEmbedder = false
-          ExportStart = false }
+          ExportStart = false
+          Component = false }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -1219,10 +1225,11 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 usedHelpers.Add helper |> ignore
             functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
             let directive =
-                if options.CheckMemory || options.ExportStart then $"""  (export "{CheckedExports.start}" (func ${CoreIrLowerInput.startFunctionName}))"""
+                if options.Component then ComponentAbi.runFunction (Some CoreIrLowerInput.startFunctionName)
+                elif options.CheckMemory || options.ExportStart then $"""  (export "{CheckedExports.start}" (func ${CoreIrLowerInput.startFunctionName}))"""
                 else $"  (start ${CoreIrLowerInput.startFunctionName})"
             emitted.Text, directive
-        | None -> "", ""
+        | None -> "", (if options.Component then ComponentAbi.runFunction None else "")
 
     let support = supportFunctions (definitionFunctions @ Option.toList startFunction) tagIdMap functionTable usedHelpers
 
@@ -1242,16 +1249,20 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     if checksMemory then
         usedHelpers.Add Helpers.writeStderr |> ignore
         usedHelpers.Add Helpers.procExit |> ignore
+    if options.Component then
+        for helper in ComponentAbi.reallocHelpers do
+            usedHelpers.Add helper |> ignore
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     // Exiting is not a stream, but its WASI import is declared with stderr's.
     let moduleUsesStandardStreams = [ Helpers.writeStderr; Helpers.procExit ] |> List.exists usedHelperSet.Contains
-    // Anything that writes to stderr, or `dbg`, shares the WASI import, the memory and the newline byte.
-    let moduleUsesIoHelpers = facts.UsesDbgHelpers || moduleUsesStandardStreams
+    // Anything that writes to stderr, or `dbg`, shares the WASI import, the memory and the newline byte. A component's
+    // core module defines both of the runtime's WASI functions itself, on `wasi:cli`.
+    let moduleUsesIoHelpers = facts.UsesDbgHelpers || moduleUsesStandardStreams || options.Component
     // The WASI functions the runtime imports itself. A foreign function of one of them is the same import (see
     // `CoreIrEmit.importName`), so the module declares it once.
     let runtimeImports =
         [ if moduleUsesIoHelpers then CoreIrEmit.wasiFdWrite
-          if usedHelperSet.Contains Helpers.procExit then CoreIrEmit.wasiProcExit ]
+          if usedHelperSet.Contains Helpers.procExit || options.Component then CoreIrEmit.wasiProcExit ]
     let foreignImports =
         facts.Imports
         |> List.filter (fun declared ->
@@ -1271,6 +1282,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               |> List.map fst
               |> List.filter usedHelperSet.Contains
               |> List.map (fun name -> helpers |> Map.find name)
+          if options.Component then
+              yield ComponentAbi.functions
           if checksMemory then
               yield memoryCheckFunctions heapBase (fun message -> stringLiteralMap |> Map.find message)
               yield memoryCheckExports
@@ -1280,7 +1293,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let dbgPrelude =
         if moduleUsesIoHelpers then
-            [ yield! runtimeImports |> List.map CoreIrEmit.importDeclaration
+            [ if options.Component then ComponentAbi.imports
+              else yield! runtimeImports |> List.map CoreIrEmit.importDeclaration
 
               memoryDirective
               """  (export "memory" (memory 0))"""
