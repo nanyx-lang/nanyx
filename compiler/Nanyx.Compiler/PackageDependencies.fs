@@ -29,8 +29,6 @@ type LockFailure =
 /// chosen from the package index when the manifest asks for something the lockfile doesn't satisfy (`Resolution`), and
 /// downloaded into the cache.
 module PackageDependencies =
-    let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
-
     /// The manifest at `manifestPath`, read as data, with its text, line breaks `\n`; or why it can't be.
     let private readData (manifestPath: string) : Result<string * DataField list, string> =
         let text = Manifest.normalized (File.ReadAllText manifestPath)
@@ -143,7 +141,7 @@ module PackageDependencies =
                         |> List.map (fun dependency ->
                             let name, version = dependency.Manifest.Name, dependency.Manifest.Version
                             let where =
-                                if isShipped name && dependency.Manifest.Root = ShippedPackages.directoryOf name then
+                                if ShippedPackages.isShipped name && dependency.Manifest.Root = ShippedPackages.directoryOf name then
                                     "shipped with the compiler"
                                 elif PackageModules.samePath dependency.Manifest.Root (PackageStore.directoryOf store name (SemanticVersion.tryParse version).Value) then
                                     if wasCached |> List.exists (fun cached -> cached.Name = name && string cached.Version = version) then "in the cache" else "downloaded"
@@ -210,7 +208,7 @@ module PackageDependencies =
             match VersionRequirement.tryParse version with
             | Some requirement -> Result.Ok(FromIndex requirement)
             | None -> Result.Error $"'{version}' is not a version, which must be {VersionRequirement.rule}"
-        | None, None when isShipped name -> Result.Ok DependencySource.Shipped
+        | None, None when ShippedPackages.isShipped name -> Result.Ok DependencySource.Shipped
         | None, None ->
             Resolution.newest store name
             |> Result.bind (function
@@ -238,6 +236,6 @@ module PackageDependencies =
                 let entry = Manifest.entryText toolVersion (Path.GetDirectoryName manifestPath) name source
                 let manifest = withEntry text fields entry
                 match source with
-                | FromIndex _ when not (isShipped name) ->
+                | FromIndex _ when not (ShippedPackages.isShipped name) ->
                     lockFor store manifestPath manifest |> Result.map (fun lockfile -> { Manifest = manifest; Lockfile = lockfile })
                 | _ -> Result.Ok { Manifest = manifest; Lockfile = None })

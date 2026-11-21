@@ -97,9 +97,6 @@ module Script =
         | None ->
             Result.Error(invalid word.Span $"'{word.Text}' is not a value: write one as a manifest does, a tag, `#error`, a number, `4`, or a string, `\"text\"`; {usage directive.Name}")
 
-    /// Whether the compiler ships the package `name`.
-    let private isShipped (name: string) = Directory.Exists(ShippedPackages.directoryOf name)
-
     /// A string in a directive written the old way, `"error"`, without its quotes.
     let private oldString = "\"([^\"\\\\]*)\""
 
@@ -255,7 +252,7 @@ module Script =
     /// directive writes is its pin. One with no version is offered the newest the index of `store` has.
     let private unpinned (store: PackageStore) (package: DirectiveWord) (place: DirectivePlace) : Diagnostic list =
         match place with
-        | Shipped when not (isShipped package.Text) ->
+        | Shipped when not (ShippedPackages.isShipped package.Text) ->
             let newest = newestIn store package.Text
             let example = newest |> Option.map string |> Option.defaultValue "1.2.0"
             let found = match newest with Some version -> $": the newest in the index is {version}" | None -> ""
@@ -270,7 +267,7 @@ module Script =
             | None -> [ diagnostic ]
         // One that isn't a version at all is the manifest's error, as `version = "1.x"` would be.
         | AtVersion version when
-            not (isShipped package.Text)
+            not (ShippedPackages.isShipped package.Text)
             && (SemanticVersion.tryParse version.Text).IsNone
             && (VersionRequirement.tryParse version.Text).IsSome
             ->
@@ -294,7 +291,7 @@ module Script =
         let root = if filePath = "" then Directory.GetCurrentDirectory() else Path.GetDirectoryName filePath
         let notShipped (package: DirectiveWord) place =
             match place with
-            | Shipped when not (isShipped package.Text) ->
+            | Shipped when not (ShippedPackages.isShipped package.Text) ->
                 let last = package.Text.Substring(package.Text.LastIndexOf '.' + 1)
                 [ invalid package.Span $"The compiler ships no package '{package.Text}': give the directory it is in, as in `../{last}`" ]
             | _ -> []
@@ -373,7 +370,7 @@ module Script =
         let pins =
             settings (Directives.read filePath source)
             |> List.choose (function
-                | _, Result.Ok(DependencySetting(package, AtVersion version)) when not (isShipped package.Text) ->
+                | _, Result.Ok(DependencySetting(package, AtVersion version)) when not (ShippedPackages.isShipped package.Text) ->
                     SemanticVersion.tryParse version.Text |> Option.map (fun version -> package.Text, version)
                 | _ -> None)
         ScriptDependencies.pull store filePath pins
