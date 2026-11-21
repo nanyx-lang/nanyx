@@ -99,7 +99,11 @@ and the live view is drawn inside the box.
 `.nyxpkg` (`PackageApi.ofArchive`). `nanyx publish` and `nanyx yank` are `PublishCommands.cs`: the GitHub requests they send are
 `GitHubApi.fs`, through a `GitHubClient` the `Shell`'s `GitHub` gives (a fake one in the Wasm tests, otherwise GitHub
 signed in with `GITHUB_TOKEN` or `gh auth token`), and the files of the index's repository they write are
-`Publishing.fs`. Running a package's tests before publishing waits for `nanyx test`. The cache and the index a command uses are the
+`Publishing.fs`. `publish` checks everything it can before it creates the release: that the account can push to the
+package's repository (`GitHubApi.canPush`) and, for a first version, where it will open the registration from
+(`GitHubApi.indexRoute`: a branch of nanyx-lang/packages if it can push there, otherwise its fork, made and waited for,
+since GitHub makes a fork in the background). `GitHubApi.createRelease` finishes a release a publish left part way, one
+with the same asset (by the `digest` GitHub records) or none yet, so running `publish` again finishes it. Running a package's tests before publishing waits for `nanyx test`. The cache and the index a command uses are the
 `Shell`'s `Packages`, `PackageStore.user ()` (`NANYX_PACKAGES`, `NANYX_INDEX`); the Wasm tests give their own.
 A manifest's `Dependency` says where the package is found with a `DependencySource`: `AtPath`, `Shipped`, `FromIndex`
 or `OnGitHub`. `nanyx migrate`, `nanyx install` and `nanyx new` hold the entries they write as that union, and write

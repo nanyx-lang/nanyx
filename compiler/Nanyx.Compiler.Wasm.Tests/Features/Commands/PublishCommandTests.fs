@@ -12,32 +12,54 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-/// A fake GitHub, signed in as `acme`: the releases made, the files of the index's repository, and the pull requests
-/// opened on it, with every request it was sent.
+/// A fake GitHub, signed in as `acme`, which can push to `acme/util`: the releases made, with their assets, the files of
+/// the index's repository, the branches made and files written in it or in `acme/packages`, acme's fork of it, and the
+/// pull requests opened on it, with every request it was sent. Whether acme can push to the index or fork it, whether
+/// opening a pull request fails, and how many looks the fork takes to appear once it is asked for, can be set.
 type private FakeGitHub(indexFiles: (string * string) list) =
     let files = Collections.Generic.Dictionary<string, string>(dict indexFiles)
     let releases = ResizeArray<string * string>()
     let assets = ResizeArray<string * byte array>()
+    let branches = ResizeArray<string>()
     let written = ResizeArray<string * string>()
     let pulls = ResizeArray<string * string>()
     let requests = ResizeArray<string>()
+    let mutable forked = false
+    let mutable looksAtFork = 0
+
+    member val CanPushToIndex = false with get, set
+    member val PullsFail = false with get, set
+    member val LooksBeforeForkAppears = 0 with get, set
+    member val CanFork = true with get, set
 
     member _.Releases = List.ofSeq releases
     member _.Assets = List.ofSeq assets
+    member _.Branches = List.ofSeq branches
     member _.Written = List.ofSeq written
     member _.Pulls = List.ofSeq pulls
     member _.Requests = List.ofSeq requests
 
-    member _.Client: GitHubClient =
+    member this.Client: GitHubClient =
         fun request ->
             let path = request.Url.Replace("https://api.github.com", "").Replace("https://uploads.github.com", "")
             requests.Add $"{request.Method} {path}"
             let body () = JsonNode.Parse(Encoding.UTF8.GetString request.Body.Value)
             let answer status (json: string) = Result.Ok { Status = status; Body = json }
+            let permissions (push: bool) = answer 200 $$"""{ "permissions": { "pull": true, "push": {{(if push then "true" else "false")}} } }"""
+            let canWrite owner = owner = "nanyx-lang" && this.CanPushToIndex || owner = "acme" && forked
             let segments = (path.Split('?')[0]).TrimStart('/').Split('/') |> List.ofArray
             match request.Method, segments with
-            | "GET", [ "user" ] -> answer 200 """{ "login": "acme" }"""
-            | "GET", [ "repos"; owner; repo; "releases"; "tags"; tag ] when releases.Contains($"{owner}/{repo}", tag) -> answer 200 "{}"
+            | "GET", [ "repos"; "acme"; "util" ] -> permissions true
+            | "GET", [ "repos"; "nanyx-lang"; "packages" ] -> permissions this.CanPushToIndex
+            | "GET", [ "repos"; "acme"; "packages" ] ->
+                looksAtFork <- looksAtFork + 1
+                if forked && looksAtFork > this.LooksBeforeForkAppears then permissions true else answer 404 """{ "message": "Not Found" }"""
+            | "GET", [ "repos"; owner; repo; "releases"; "tags"; tag ] when releases.Contains($"{owner}/{repo}", tag) ->
+                let listed =
+                    assets
+                    |> Seq.map (fun (name, bytes) -> $$"""{ "name": "{{name}}", "digest": "sha256:{{PackageArchive.sha256 bytes}}" }""")
+                    |> String.concat ", "
+                answer 200 $$"""{ "id": 1, "html_url": "https://github.com/{{owner}}/{{repo}}/releases/tag/{{tag}}", "assets": [{{listed}}] }"""
             | "POST", [ "repos"; owner; repo; "releases" ] ->
                 let tag = string (body ()).["tag_name"]
                 releases.Add($"{owner}/{repo}", tag)
@@ -51,12 +73,19 @@ type private FakeGitHub(indexFiles: (string * string) list) =
                     let content = Convert.ToBase64String(Encoding.UTF8.GetBytes text)
                     answer 200 $$"""{ "content": "{{content}}", "sha": "blob1" }"""
                 | _ -> answer 404 """{ "message": "Not Found" }"""
-            | "POST", [ "repos"; "nanyx-lang"; "packages"; "forks" ] -> answer 202 """{ "full_name": "acme/packages" }"""
+            | "POST", [ "repos"; "nanyx-lang"; "packages"; "forks" ] when not this.CanFork -> answer 403 """{ "message": "Resource not accessible by personal access token" }"""
+            | "POST", [ "repos"; "nanyx-lang"; "packages"; "forks" ] ->
+                forked <- true
+                answer 202 """{ "full_name": "acme/packages" }"""
             | "GET", [ "repos"; "nanyx-lang"; "packages"; "git"; "ref"; "heads"; "main" ] -> answer 200 """{ "object": { "sha": "c0ffee" } }"""
-            | "POST", [ "repos"; "acme"; "packages"; "git"; "refs" ] -> answer 201 "{}"
-            | "PUT", "repos" :: "acme" :: "packages" :: "contents" :: file ->
+            | "GET", [ "repos"; owner; "packages"; "git"; "ref"; "heads"; branch ] when branches.Contains $"{owner}/packages:{branch}" -> answer 200 "{}"
+            | "POST", [ "repos"; owner; "packages"; "git"; "refs" ] when canWrite owner ->
+                branches.Add $"""{owner}/packages:{(string (body ()).["ref"]).Replace("refs/heads/", "")}"""
+                answer 201 "{}"
+            | "PUT", "repos" :: owner :: "packages" :: "contents" :: file when canWrite owner ->
                 written.Add(String.concat "/" file, Encoding.UTF8.GetString(Convert.FromBase64String(string (body ()).["content"])))
                 answer 201 "{}"
+            | "POST", [ "repos"; "nanyx-lang"; "packages"; "pulls" ] when this.PullsFail -> answer 403 """{ "message": "Resource not accessible by personal access token" }"""
             | "POST", [ "repos"; "nanyx-lang"; "packages"; "pulls" ] ->
                 let pull = body ()
                 pulls.Add(string pull.["title"], string pull.["head"])
@@ -97,6 +126,8 @@ let ``A package's first version is released, and a pull request registers it`` (
         + "Comparing its API with the newest version published\n"
         + "It is the first version, so there is nothing to compare\n"
         + "Packing it\n"
+        + "Checking that you can release on acme/util\n"
+        + "Checking that you can open the pull request that registers it on nanyx-lang/packages\n"
         + "Creating the release v0.1.0 of acme/util\n"
         + "Released: https://github.com/acme/util/releases/tag/v0.1.0\n"
         + "Opening the pull request that registers acme.util with the package index\n"
@@ -114,6 +145,7 @@ let ``A package's first version is released, and a pull request registers it`` (
         github.Written |> List.map (fun (path, text) -> path, text.ReplaceLineEndings "\n")
     )
     Assert.Equal<(string * string) list>([ "Register acme.util", "acme:register-acme.util" ], github.Pulls)
+    Assert.Equal<string list>([ "acme/packages:register-acme.util" ], github.Branches)
 
 [<Fact>]
 let ``A patch of a registered package is released, with no pull request`` () =
@@ -129,6 +161,96 @@ let ``A patch of a registered package is released, with no pull request`` () =
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal<(string * string) list>([ "acme/util", "v1.0.1" ], github.Releases)
     Assert.Empty(github.Pulls)
+
+[<Fact>]
+let ``An account that can push to the index registers from a branch of it, with a suffix when its name is taken`` () =
+    use directory = new TempDirectory()
+    let app = util directory "0.1.0" shout
+    let store = storeIn directory false
+    let github = FakeGitHub []
+    github.CanPushToIndex <- true
+    github.PullsFail <- true
+    Assert.Equal(1, (nanyxWithGitHub store github.Client app [ "publish" ]).ExitCode)
+    github.PullsFail <- false
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal<string list>([ "nanyx-lang/packages:register-acme.util"; "nanyx-lang/packages:register-acme.util-2" ], github.Branches)
+    Assert.Equal<(string * string) list>([ "Register acme.util", "register-acme.util-2" ], github.Pulls)
+    Assert.DoesNotContain("POST /repos/nanyx-lang/packages/forks", github.Requests)
+
+[<Fact>]
+let ``Registering waits for the fork GitHub is still making`` () =
+    use directory = new TempDirectory()
+    let app = util directory "0.1.0" shout
+    let store = storeIn directory false
+    let github = FakeGitHub []
+    github.LooksBeforeForkAppears <- 1
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal(2, github.Requests |> List.filter ((=) "GET /repos/acme/packages") |> List.length)
+    Assert.Equal<(string * string) list>([ "Register acme.util", "acme:register-acme.util" ], github.Pulls)
+
+[<Fact>]
+let ``A publish whose registration failed is finished by running it again, which leaves the release as it is`` () =
+    use directory = new TempDirectory()
+    let app = util directory "0.1.0" shout
+    let store = storeIn directory false
+    let github = FakeGitHub []
+    github.PullsFail <- true
+    let failed = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal(
+        "error: Opening the pull request on nanyx-lang/packages failed: GitHub answered 403, Resource not accessible by personal access token\n"
+        + "error: The release is made: run `nanyx publish` again to open the pull request\n",
+        failed.StandardError.ReplaceLineEndings "\n"
+    )
+    Assert.Equal(1, failed.ExitCode)
+    github.PullsFail <- false
+    let again = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal("", again.StandardError)
+    Assert.Contains(
+        "Released already, with this .nyxpkg, by a publish that didn't finish: https://github.com/acme/util/releases/tag/v0.1.0\n",
+        again.StandardOutput.ReplaceLineEndings "\n"
+    )
+    Assert.Equal(0, again.ExitCode)
+    Assert.Equal<(string * string) list>([ "acme/util", "v0.1.0" ], github.Releases)
+    Assert.Equal(1, github.Assets.Length)
+    Assert.Equal<(string * string) list>([ "Register acme.util", "acme:register-acme.util-2" ], github.Pulls)
+
+[<Fact>]
+let ``Running a publish again with a changed package is refused`` () =
+    use directory = new TempDirectory()
+    let app = util directory "0.1.0" shout
+    let store = storeIn directory false
+    let github = FakeGitHub []
+    github.PullsFail <- true
+    Assert.Equal(1, (nanyxWithGitHub store github.Client app [ "publish" ]).ExitCode)
+    github.PullsFail <- false
+    util directory "0.1.0" shoutAndWhisper |> ignore
+    let changed = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal(
+        "error: acme/util has a release v0.1.0 already, with a different acme.util-0.1.0.nyxpkg, and a published version can't change: publish a new version\n",
+        changed.StandardError.ReplaceLineEndings "\n"
+    )
+    Assert.Equal(1, changed.ExitCode)
+    Assert.Equal(1, github.Assets.Length)
+    Assert.Empty(github.Pulls)
+
+[<Fact>]
+let ``A publish that can't reach the index fails before it creates the release`` () =
+    use directory = new TempDirectory()
+    let app = util directory "0.1.0" shout
+    let store = storeIn directory false
+    let github = FakeGitHub []
+    github.CanFork <- false
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal(
+        "error: Forking nanyx-lang/packages failed: GitHub answered 403, Resource not accessible by personal access token\n",
+        outcome.StandardError.ReplaceLineEndings "\n"
+    )
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Empty(github.Releases)
 
 [<Fact>]
 let ``A bump too small is refused, listing the changes that need a bigger one, and nothing is released`` () =
@@ -194,6 +316,18 @@ let ``Yanking opens the pull request that marks the version yanked in the index`
     let versions = JsonNode.Parse(text).["versions"].AsArray() |> Seq.map (fun entry -> string entry.["version"], entry.["yanked"].GetValue<bool>()) |> List.ofSeq
     Assert.Equal<(string * bool) list>([ "1.0.0", false; "1.1.0", true ], versions)
     Assert.Equal<(string * string) list>([ "Yank acme.util 1.1.0", "acme:yank-acme.util-1.1.0" ], github.Pulls)
+
+[<Fact>]
+let ``An account that can push to the index yanks from a branch of it`` () =
+    use directory = new TempDirectory()
+    let store = storeIn directory false
+    let github = FakeGitHub [ "index/acme/acme.util.json", indexFile false ]
+    github.CanPushToIndex <- true
+    let outcome = nanyxWithGitHub store github.Client directory.Path [ "yank"; "acme.util"; "1.1.0" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal<string list>([ "nanyx-lang/packages:yank-acme.util-1.1.0" ], github.Branches)
+    Assert.Equal<(string * string) list>([ "Yank acme.util 1.1.0", "yank-acme.util-1.1.0" ], github.Pulls)
 
 [<Fact>]
 let ``A version yanked already, one the index doesn't have, or a package it doesn't have can't be yanked`` () =
