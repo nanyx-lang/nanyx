@@ -218,6 +218,9 @@ module Compiler =
                   if not (this.ContainsKey key) then yield key, imported ]
         member _.Listener = listener
         member _.Edited = edited
+        /// The checked file of the package this compilation checks to write it (see `CheckedPackages`), if it is one:
+        /// that package's own files are checked from their source.
+        member val Writing: string option = None with get, set
         member _.ReadFile(path: string) = readFile path
 
         /// The file the syntax nodes of the module from `origin` are reported in: the editor's, for the file it has open.
@@ -249,6 +252,14 @@ module Compiler =
     /// that imports it changes. Only a module that checked without errors is kept: an error can depend on which file
     /// the compilation started from (an import cycle is reported where that file enters it).
     let private checkedSourceFiles = System.Collections.Concurrent.ConcurrentDictionary<string, CheckedSourceFile>()
+
+    /// The checked files of the packages in the package cache this process has read, or written, by path; none for one
+    /// it can't use (see `CheckedPackages`).
+    let private checkedPackages = System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<CheckedPackage option>>()
+
+    /// Forgets the checked files of packages this process has read, so that the next compilation reads them again, as a
+    /// new process does.
+    let internal forgetCheckedPackages () = checkedPackages.Clear()
 
     /// What a module's imports have brought in so far, as `typecheckModule` merges them one by one.
     type private MergedImports =
@@ -1132,6 +1143,77 @@ module Compiler =
     /// and else checked again on its own, recording what it reads.
     and private typecheckSourceFile (checkedModules: CheckedModules) (origin: ModuleOrigin) (path: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
+        match fromCheckedPackage checkedModules key path visited with
+        | Some checkedModule -> checkedModule
+        | None -> typecheckSourceFileAgain checkedModules key path visited
+
+    /// The module of the file at `path`, of a package in the package cache, as the package's checked file has it, written
+    /// first if there is none (see `CheckedPackages`), with the package's other modules; none for a file of any other
+    /// package, of the package this compilation writes the checked file of, or of one whose checked file can't be used
+    /// in this compilation, because a module its checks imported is here as another checked file has it, or as this
+    /// process checked it itself.
+    and private fromCheckedPackage (checkedModules: CheckedModules) (key: string) (path: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> option =
+        let owner =
+            [ checkedModules.Package; snd (buildHostOf checkedModules) ]
+            |> List.choose id
+            |> List.tryPick (fun modules -> PackageModules.ownerOf modules path)
+        match owner with
+        | Some({ CheckedFile = Some file } as owner) when checkedModules.Writing <> Some file ->
+            let package =
+                checkedPackages.GetOrAdd(file, fun file ->
+                    lazy (CheckedPackages.tryRead file owner |> Option.orElseWith (fun () -> writeCheckedPackage checkedModules.Listener owner file)))
+            match package.Value with
+            | Some package when package.Checked.ContainsKey key && importsMatch checkedModules package visited ->
+                checkedModules.Listener.ModuleReused key
+                for KeyValue(other, result) in package.Checked do
+                    if other <> key then checkedModules.AddImported(other, result)
+                Some package.Checked[key].Value
+            | _ -> None
+        | _ -> None
+
+    /// Whether the modules the checks of `package` imported are here as the checked files it was written against have
+    /// them, each imported now if it isn't yet.
+    and private importsMatch (checkedModules: CheckedModules) (package: CheckedPackage) (visited: Set<string>) : bool =
+        package.File.Imports
+        |> List.forall (fun (importKey, token) ->
+            let imported =
+                if importKey.StartsWith(StandardLibrary.importPrefix, StringComparison.Ordinal) then
+                    let name = importKey.Substring StandardLibrary.importPrefix.Length
+                    typecheckImport checkedModules (StandardLibraryModule name) (fun () -> StandardLibrary.tryLoadSource name |> Option.defaultValue "") visited
+                else
+                    typecheckImport checkedModules (SourceFile importKey) (fun () -> checkedModules.ReadFile importKey) visited
+            match imported with
+            | Ok checkedModule -> CheckedFileOrigins.tryFind checkedModule = Some token
+            | Error _ -> false)
+
+    /// Checks every module of `owner`, a package in the package cache, from its source, and writes them to its checked
+    /// file, `file`; gives the file as a later compilation reads it, or none if the package has errors or the file can't
+    /// be written (see `CheckedPackages.write`). The modules of other packages its modules import are read from their
+    /// own checked files, written first if need be, so that this one can name them.
+    and private writeCheckedPackage (listener: CompileListener) (owner: PackageModules) (file: string) : CheckedPackage option =
+        let own = CheckedModules(Some owner, None, listener, File.ReadAllText, Writing = Some file)
+        let first = CheckedPackages.startIds ()
+        let checkedFiles =
+            [ for path in owner.Modules |> Map.values |> Seq.choose List.tryHead |> Seq.distinct ->
+                  originKey (SourceFile path), typecheckImport own (SourceFile path) (fun () -> own.ReadFile path) Set.empty ]
+        let last = CheckedPackages.lastId ()
+        let ownKeys = checkedFiles |> List.map fst |> Set.ofList
+        let imports =
+            [ for importKey, imported in own.Imported do
+                  if not (ownKeys.Contains importKey) then
+                      importKey, (match imported.Value with Ok checkedModule -> CheckedFileOrigins.tryFind checkedModule | Error _ -> None) ]
+        let clean = checkedFiles |> List.forall (fun (_, result) -> match result with Ok checkedModule -> checkedModule.Errors.IsEmpty | Error _ -> false)
+        if clean && imports |> List.forall (snd >> Option.isSome) then
+            CheckedPackages.write file owner (first, last) checkedFiles (imports |> List.map (fun (importKey, token) -> importKey, token.Value))
+        else
+            None
+
+    /// The module of the source file at `path`, as `typecheckSourceFile` finds it when no checked file of a package has
+    /// it.
+    and private typecheckSourceFileAgain (checkedModules: CheckedModules) (key: string) (path: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
+        let origin = SourceFile path
+        // A package checked to write its checked file is checked from its source, and isn't kept: its ids are moved.
+        let writing = checkedModules.Writing.IsSome
         let readsTheSame (file: string, text: string) =
             try checkedModules.ReadFile file = text with _ -> false
         let shipped () =
@@ -1145,6 +1227,7 @@ module Compiler =
             | _ -> None
         let kept =
             match checkedSourceFiles.TryGetValue key with
+            | _ when writing -> None
             | true, kept when kept.Package = checkedModules.Package && List.forall readsTheSame kept.Read -> Some kept
             | _ -> shipped ()
         match kept with
@@ -1159,12 +1242,13 @@ module Compiler =
                 let text = checkedModules.ReadFile file
                 read.Add((file, text))
                 text
-            let own = CheckedModules(checkedModules.Package, None, checkedModules.Listener, reading)
+            let own = CheckedModules(checkedModules.Package, None, checkedModules.Listener, reading, Writing = checkedModules.Writing)
             let checkedModule = typecheckModule own origin (reading path) visited
             let imports = own.Imported
             for importKey, imported in imports do
                 checkedModules.AddImported(importKey, imported)
             match checkedModule with
+            | _ when writing -> ()
             | Ok checked when checked.Errors.IsEmpty ->
                 checkedSourceFiles.[key] <- { Package = checkedModules.Package; Read = List.ofSeq read; Module = checked; Imports = imports }
             | _ -> checkedSourceFiles.TryRemove key |> ignore
