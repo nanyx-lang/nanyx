@@ -355,20 +355,31 @@ at the first that fails:
 2. it compares its API with the newest version published below it, as [`nanyx api-check`](#nanyx-api-check) does, and
    refuses a version published already or a bump too small for the changes, listing them;
 3. it packs the package, as [`nanyx pack`](#nanyx-pack) does;
-4. it creates the release `v<version>` on the GitHub repository the manifest's `repository` names, with the
-   `.nyxpkg` as its asset;
-5. for a package the index hasn't registered yet, it opens the pull request on
-   [nanyx-lang/packages](https://github.com/nanyx-lang/packages) that registers it, from a fork in your account.
+4. it checks that you can create releases on the GitHub repository the manifest's `repository` names and, for a
+   package the index hasn't registered yet, that you can open a pull request on
+   [nanyx-lang/packages](https://github.com/nanyx-lang/packages), so that nothing is made if either would fail;
+5. it creates the release `v<version>` on the package's repository, with the `.nyxpkg` as its asset;
+6. for a package the index hasn't registered yet, it opens the pull request that registers it.
+
+A pull request to the index comes from a branch of nanyx-lang/packages if you can push to it, and otherwise from your
+fork of it, which `publish` makes if you have none. A branch is named `register-<package>`, with `-2`, `-3` and so on
+after it when that name is taken.
+
+If a publish stops after it has created the release, for example because the pull request couldn't be opened, run it
+again: a release that holds the same `.nyxpkg` (GitHub records its SHA-256), or none yet, is the one it made, so it
+goes on to the pull request. A release with a different `.nyxpkg` is refused, since a published version can't change.
 
 The index's sync records the release within the hour (for a new package, once a maintainer has merged its
 registration). `publish` signs in to GitHub with `GITHUB_TOKEN`, if it is set, or else with the GitHub CLI's login
-(`gh auth login`); the token must be able to create releases on the repository and pull requests.
+(`gh auth login`); the token must be able to create releases on the repository, and to push to or fork
+nanyx-lang/packages and open pull requests on it.
 
 ## `nanyx yank`
 
 `nanyx yank acme.web 1.2.0` opens the pull request on the package index that marks a version yanked. Once it is
 merged, no new resolution chooses the version, but a lockfile that locks it keeps building. It signs in as `publish`
-does, and refuses a version the index doesn't have or has yanked already.
+does, opens its pull request from a branch `yank-<package>-<version>` in the same place `publish` would, and refuses a
+version the index doesn't have or has yanked already.
 
 ## `nanyx manifest`
 
