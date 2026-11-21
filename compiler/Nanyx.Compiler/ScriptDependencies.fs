@@ -36,18 +36,16 @@ module ScriptDependencies =
                     |> Array.choose (fun versionDirectory ->
                         SemanticVersion.tryParse (Path.GetFileName versionDirectory)
                         |> Option.bind (fun version ->
-                            match Manifest.manifestIn versionDirectory |> Result.bind (Manifest.read >> Result.mapError (fun _ -> "")) with
-                            | Result.Ok manifest ->
-                                Some
-                                    { Version = version
-                                      Dependencies =
-                                        manifest.Dependencies
-                                        |> List.choose (fun dependency ->
-                                            match dependency.Source with
-                                            | FromIndex requirement -> Some(dependency.Name, requirement)
-                                            | _ -> None)
-                                      Unusable = None }
-                            | Result.Error _ -> None))
+                            Manifest.tryReadIn versionDirectory
+                            |> Option.map (fun manifest ->
+                                { Version = version
+                                  Dependencies =
+                                    manifest.Dependencies
+                                    |> List.choose (fun dependency ->
+                                        match dependency.Source with
+                                        | FromIndex requirement -> Some(dependency.Name, requirement)
+                                        | _ -> None)
+                                  Unusable = None })))
                     |> List.ofArray
                 else
                     []
@@ -68,16 +66,10 @@ module ScriptDependencies =
         | _, [] ->
             let pinned = Map.ofList pins
             let versions (name: string) =
-                cachedVersions store name
-                |> Result.map (Option.map (fun versions ->
-                    match pinned.TryFind name with
-                    | Some version -> versions |> List.filter (fun cached -> cached.Version = version)
-                    | None -> versions))
+                cachedVersions store name |> Result.map (Option.map (Resolution.onlyPinned pinned name _.Version))
             let input =
                 { Root = script
-                  Requirements =
-                    pins
-                    |> List.map (fun (name, version) -> { From = script; Package = name; Requirement = { Minimum = version; Written = string version } })
+                  Requirements = Resolution.pinRequirements script pins
                   Versions = versions
                   Locked = pinned }
             match VersionSolver.solve input with

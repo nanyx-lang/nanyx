@@ -26,9 +26,9 @@ module Resolution =
                 manifest.Dependencies
                 |> List.collect (fun dependency ->
                     let onDisk (directory: string) =
-                        match Manifest.manifestIn directory |> Result.bind (Manifest.read >> Result.mapError (fun _ -> "")) with
-                        | Result.Ok found -> from found
-                        | Result.Error _ -> []
+                        match Manifest.tryReadIn directory with
+                        | Some found -> from found
+                        | None -> []
                     match dependency.Source with
                     | FromIndex requirement -> [ { From = manifest.Name; Package = dependency.Name; Requirement = requirement } ]
                     | AtPath directory -> onDisk directory
@@ -68,6 +68,18 @@ module Resolution =
           Dependencies = dependencies |> List.choose (fun (name, requirement) -> requirement |> Option.map (fun requirement -> name, requirement))
           Unusable = unusable }
 
+    /// What the script `script` (its name, for messages) asks of each of `pins`: exactly the version it gives.
+    let pinRequirements (script: string) (pins: (string * SemanticVersion) list) : RootRequirement list =
+        pins
+        |> List.map (fun (name, version) -> { From = script; Package = name; Requirement = { Minimum = version; Written = string version } })
+
+    /// `versions` of the package `name`, each the version `versionOf` gives: only the one `pinned` gives, if it names
+    /// the package.
+    let onlyPinned (pinned: Map<string, SemanticVersion>) (name: string) (versionOf: 'version -> SemanticVersion) (versions: 'version list) : 'version list =
+        match pinned.TryFind name with
+        | Some version -> versions |> List.filter (fun found -> versionOf found = version)
+        | None -> versions
+
     /// Resolves `requirements`, those of `root`, against the index of `store`, keeping each version `locked` gives while it
     /// is still allowed, and choosing only the version `pinned` gives of each package it names: the lockfile that records
     /// the versions chosen, or why there are none.
@@ -86,11 +98,7 @@ module Resolution =
                 PackageIndex.versions store.Index name
                 |> Result.map (fun (_, listed) ->
                     listings.[name] <- listed
-                    let listed =
-                        match pinned.TryFind name with
-                        | Some version -> listed |> List.filter (fun indexed -> indexed.Version = version)
-                        | None -> listed
-                    Some(listed |> List.map (candidate (locked.TryFind name))))
+                    Some(listed |> onlyPinned pinned name _.Version |> List.map (candidate (locked.TryFind name))))
         let input =
             { Root = root
               Requirements = requirements
@@ -121,11 +129,8 @@ module Resolution =
     /// `pins` at exactly the version it gives, which may be yanked, since the script names it, and the packages they
     /// depend on as a package's are. A script has no lockfile: the versions its directives write are its pins.
     let resolvePinned (store: PackageStore) (script: string) (pins: (string * SemanticVersion) list) : Result<Lockfile, ResolutionError> =
-        let requirements =
-            pins
-            |> List.map (fun (name, version) -> { From = script; Package = name; Requirement = { Minimum = version; Written = string version } })
         let pinned = Map.ofList pins
-        resolveWith store script requirements pinned pinned
+        resolveWith store script (pinRequirements script pins) pinned pinned
 
     /// What `requirements` ask for that `lockfile` doesn't satisfy, each a line naming it: a package it doesn't lock, one
     /// it locks at a version the requirement doesn't accept, or one a locked package depends on that it doesn't lock.

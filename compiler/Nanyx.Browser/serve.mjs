@@ -1,5 +1,7 @@
 // Serves the published compiler page as a static host would: each file brotli-compressed when the browser accepts it
-// (the publish writes a .br beside each file), cacheable, and appends each report the page posts to results.jsonl.
+// (the publish writes a .br beside each file), cacheable, and cross-origin isolated, as the playground's route on the
+// docs site is (`docs/vercel.json`), so that a program can read input. It appends each report the page posts to
+// results.jsonl.
 //
 //   node serve.mjs <publish>/wwwroot [port]
 
@@ -29,7 +31,12 @@ createServer((request, response) => {
   let path = normalize(join(root, decodeURIComponent(url.pathname)));
   if (!path.startsWith(normalize(root)) || !existsSync(path)) { response.writeHead(404).end(); return; }
   if (statSync(path).isDirectory()) path = join(path, "index.html");
-  const headers = { "Content-Type": types[extname(path)] ?? "application/octet-stream", "Cache-Control": "max-age=3600" };
+  const headers = {
+    "Content-Type": types[extname(path)] ?? "application/octet-stream",
+    "Cache-Control": "max-age=3600",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+  };
   if ((request.headers["accept-encoding"] ?? "").includes("br") && existsSync(path + ".br")) {
     headers["Content-Encoding"] = "br";
     path += ".br";
