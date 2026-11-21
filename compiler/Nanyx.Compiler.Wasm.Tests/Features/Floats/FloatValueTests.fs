@@ -1,5 +1,5 @@
 /// A float is an `f64` and an `F32` an `f32`, held as an int is, not boxes on the heap (#1876, see "Value
-/// representation" in docs/src/content/compiler-internals/memory-management.md).
+/// representation" in docs/src/content/deep-dives/memory-management.md).
 module TranspilerWasmTests.Features.Floats.FloatValues
 
 open Xunit

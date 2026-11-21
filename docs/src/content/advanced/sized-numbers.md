@@ -89,7 +89,7 @@ def wrapped = I32.wrappingAdd(2_000_000_000, 2_000_000_000) -- -294967296
 
 Swift checks every operation in the same way; Rust checks in debug builds and wraps in release builds. Nanyx checks
 in every build, so a program behaves the same however it was compiled. Checking costs a compare and a branch per
-operation, which the [principles](../foundations/principles) accept in exchange for never computing a wrong answer
+operation, which the [principles](../meta/principles) accept in exchange for never computing a wrong answer
 silently.
 
 Floating-point arithmetic does not stop: it follows IEEE 754, giving infinities and NaN.
@@ -163,4 +163,4 @@ reads what `float.fromString` reads and gives the nearest `F32`, or infinity pas
 `FromString`, so a function that requires one works at the sized types.
 
 How each of these types is held in memory is described in
-[Memory management](../compiler-internals/memory-management#value-representation).
+[Memory management](../deep-dives/memory-management#value-representation).

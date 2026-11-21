@@ -7,7 +7,7 @@ order: 32
 The console host is already an ordinary package that the compiler ships, described in
 [Hosts](../advanced/hosts#packages-the-compiler-ships), and the manifest that names it in
 [Packages and projects](../tour/packages#package-manifests), and how shipped packages are built in
-[Shipped packages](../compiler-internals/shipped-packages) in the Compiler internals section. This page keeps what is
+[Shipped packages](../deep-dives/shipped-packages) in the Deep dives section. This page keeps what is
 left: the official linter as a package, and the open questions. It is part of the [packaging](./packaging)
 workstream.
 

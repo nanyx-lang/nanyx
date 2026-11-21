@@ -11,7 +11,7 @@
 -- a new map.
 --
 -- For now a map holds a list of its entries, each key once, in the order the keys were first added,
--- so a lookup walks the list (see docs/src/content/compiler-internals/maps-and-sets.md).
+-- so a lookup walks the list (see docs/src/content/deep-dives/maps-and-sets.md).
 
 --| The value `entries` holds for `key`, or `#notFound`.
 def findEntry: [Eq(k)] list((k, v)), k -> #some(v) | #notFound = {
@@ -245,7 +245,7 @@ export def map.unionWith
 -- known to be a set. Sets are immutable: every function gives back a new set.
 --
 -- For now a set holds a list of its elements, each once, in the order they were first added, so
--- `contains` walks the list (see docs/src/content/compiler-internals/maps-and-sets.md).
+-- `contains` walks the list (see docs/src/content/deep-dives/maps-and-sets.md).
 
 --| The set with no elements.
 export def set.empty: set(a) = __nanyx_set_of_elements([])

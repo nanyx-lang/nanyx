@@ -1,6 +1,6 @@
 /// A definition that declares contexts is not exported, and is lowered in its own form, which takes the members, only
 /// where a call asks for it: a function value, or a caller that does not know the instance (#1269, see
-/// `docs/src/content/compiler-internals/context-calls.md`).
+/// `docs/src/content/deep-dives/context-calls.md`).
 module TranspilerWasmTests.Features.Contexts.ContextDefinitionLowering
 
 open Xunit

@@ -1,6 +1,6 @@
 /// The console host (`nanyx.console/console.host`) provides `FileSystem`, from the shipped package `nanyx.fs`, on WASI's
 /// file functions: `nanyx run` gives the program the current directory, and the one `--allow-dir` names (#1783, see
-/// docs/src/content/compiler-internals/hosts.md).
+/// docs/src/content/deep-dives/hosts.md).
 module TranspilerWasmTests.Features.Hosts.FileSystem
 
 open System.IO

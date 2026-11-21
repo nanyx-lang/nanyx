@@ -57,7 +57,7 @@ are checked separately and their items inlined, so there is no compiled artifact
 
 Not built: the index's check of a release's API (in nanyx-lang/packages, part of #865); projects (`.nyxproj`,
 [#1386](https://github.com/nanyx-lang/nanyx/issues/1386)); `nanyx manifest` beyond `--json`; and the editor's side. How
-the package commands are built is on [The nanyx command](../compiler-internals/command-line#packages).
+the package commands are built is on [The nanyx command](../deep-dives/command-line#packages).
 # Goals
 
 - `nanyx install acme.json` followed by `nanyx run` works on a clean machine, and gives the same result on every

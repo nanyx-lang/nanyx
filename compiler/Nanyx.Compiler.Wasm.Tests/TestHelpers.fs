@@ -360,7 +360,7 @@ let docsContentDirectory =
     Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "docs", "src", "content"))
 
 /// What a docs example's fence says it is: the words after `nanyx` on its opening line. The conventions are in
-/// docs/src/content/compiler-internals/compilation.md#tour-examples.
+/// docs/src/content/deep-dives/compilation.md#tour-examples.
 type DocExampleKind =
     /// A whole program, which compiles.
     | Program

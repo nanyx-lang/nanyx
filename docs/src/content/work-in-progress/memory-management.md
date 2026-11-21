@@ -5,8 +5,8 @@ order: 25
 ---
 
 This page keeps what is still to do and open about how the WebAssembly backend lays values out, counts references and
-reuses memory. How it works today is in [Memory management](../compiler-internals/memory-management) in the Compiler
-internals section, and what a user sees in [Reference counting](../foundations/reference-counting). It is part of the
+reuses memory. How it works today is in [Memory management](../deep-dives/memory-management) in the Compiler
+internals section, and what a user sees in [Reference counting](../meta/reference-counting). It is part of the
 [compilation](./compilation) workstream, and its issues carry the `compilation` and `wasm backend` labels.
 
 # Open questions

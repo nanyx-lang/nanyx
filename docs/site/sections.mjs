@@ -22,10 +22,10 @@ export const sections = [
   { title: "Coming from other languages", dir: "coming-from-other-languages", icon: "Languages" },
   { title: "Standard Library", dir: "stdlib", icon: "Library" },
   { title: "Standard tools", dir: "standard-tools", icon: "Wrench" },
-  { title: "Meta", dir: "foundations", icon: "Fingerprint" },
+  { title: "Meta", dir: "meta", icon: "Fingerprint" },
   { title: "Cookbook", dir: "cookbook", icon: "BookOpen" },
   { title: "Examples", dir: "examples", icon: "Code", firstPage: EXAMPLES_OVERVIEW_SLUG },
-  { title: "Compiler internals", dir: "compiler-internals", icon: "Cpu" },
+  { title: "Deep dives", dir: "deep-dives", icon: "Cpu" },
   { title: "Work in progress", dir: "work-in-progress", icon: "Construction" },
 ];
 

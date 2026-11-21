@@ -16,7 +16,7 @@ the compiler in the browser exists so far.
   each code linked to its section of [Compiler errors](../standard-tools/errors). With
   [deferred errors](./deferred-errors), a program with errors still runs up to the first one, as `nanyx run` does.
 - **Start from an example.** A menu of examples, starting with the tour's, which are already whole programs that
-  [are compiled and run by the tests](../compiler-internals/compilation#tour-examples). A tour example can link to "open in the
+  [are compiled and run by the tests](../deep-dives/compilation#tour-examples). A tour example can link to "open in the
   playground".
 - **Share.** The code is kept in the page's URL, so a link reproduces it with no server storage.
 - **Look underneath.** A pane shows the WebAssembly text the program compiled to, for people curious about the
@@ -34,12 +34,12 @@ Done: programs run under a host of their own, `nanyx.playground`, a browser stan
 needs `FileSystem`, HTTP, `Env` or `Async` is a compile error naming the host. Programs are source-identical: the
 compiler built for the browser runs a script under it unless the script names another host. The program runs in a web
 worker, so Stop, or a time limit, terminates the worker, and what it prints, and what its `dbg`s print, reach the page
-as it prints them. How it works is on [Hosts](../compiler-internals/hosts) in Compiler internals.
+as it prints them. How it works is on [Hosts](../deep-dives/hosts) in Deep dives.
 
 Still open: a trap shows the message the program wrote, but not the stack the CLI shows, which needs the module's table
 of places read in the page; and reading input ("Input" below).
 
-**Browsers.** The backend emits `return_call` for [tail calls](../compiler-internals/tail-calls), which Safari has had since 18.2;
+**Browsers.** The backend emits `return_call` for [tail calls](../deep-dives/tail-calls), which Safari has had since 18.2;
 Chrome and Firefox have had it for longer. An older browser gets a message saying so instead of a broken page.
 
 # Where the compiler runs
@@ -141,7 +141,7 @@ in the directory it runs in. `Nanyx.Browser/measure.ps1` runs the rounds above: 
 browser it is given, with a fresh profile, and waits for the reports (`-Library none` leaves out the checked library).
 `http://localhost:8123/run.html` compiles a program and runs it under the playground host, and
 `node Nanyx.Browser/playground-test.mjs` is the headless test of that (see
-[Hosts](../compiler-internals/hosts) in Compiler internals).
+[Hosts](../deep-dives/hosts) in Deep dives).
 
 **Building it.** The docs site is built on Vercel, which has no .NET SDK, so it can't build the compiler. Proposed:
 the Compiler workflow's `Release` job publishes the browser build as a release asset, `nanyx-browser.zip`, and the

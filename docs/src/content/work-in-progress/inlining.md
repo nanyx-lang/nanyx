@@ -5,8 +5,8 @@ order: 25
 ---
 
 This page keeps what is planned and open about the inliner of the WebAssembly backend. How it works today is in
-[Inlining](../compiler-internals/inlining) in the Compiler internals section, and what it means for users in
-[Inlining](../foundations/compiler-optimisations#inlining). It is part of the [compilation](./compilation) workstream.
+[Inlining](../deep-dives/inlining) in the Deep dives section, and what it means for users in
+[Inlining](../meta/compiler-optimisations#inlining). It is part of the [compilation](./compilation) workstream.
 
 # Plan
 

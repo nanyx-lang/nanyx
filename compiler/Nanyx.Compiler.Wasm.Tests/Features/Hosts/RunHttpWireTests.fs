@@ -1,5 +1,5 @@
 /// How `nanyx.http.core/wire` reads the requests and responses the runtime's HTTP imports hand back (see
-/// docs/src/content/compiler-internals/hosts.md).
+/// docs/src/content/deep-dives/hosts.md).
 module TranspilerWasmTests.Features.Hosts.HttpWire
 
 open System.IO

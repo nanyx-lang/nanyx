@@ -6,7 +6,7 @@ order: 7
 
 Functions on `list(a)`. They are [attached definitions](../advanced/attached-definitions) on `list`, so `xs \map(f)` resolves to `list.map` without qualification when `xs` is a list, and are in the [prelude](prelude), so no import is needed. `list.groupBy`, which gives a map, is on the [maps and sets](prelude-maps#listgroupby) page.
 
-Since lists are immutable, every function that transforms a list gives back a new one. When nothing else refers to the list you transform, the new list may be built in the old one's memory: `list.map` rewrites its cells in place (see [Reference counting](../foundations/reference-counting#reuse-in-place)).
+Since lists are immutable, every function that transforms a list gives back a new one. When nothing else refers to the list you transform, the new list may be built in the old one's memory: `list.map` rewrites its cells in place (see [Reference counting](../meta/reference-counting#reuse-in-place)).
 
 Each of them is stack-safe, and works on a list of any length without running out of stack: it walks the list with [tail calls](../tour/functions#tail-recursion), and one that builds a list builds it in reverse and reverses it at the end.
 

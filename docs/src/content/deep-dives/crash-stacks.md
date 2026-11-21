@@ -33,7 +33,7 @@ every other, so no pass that compares expressions sees a difference.
 
 When `CoreIrInline` inlines a call, each place in the callee's body records the callee's name and the place of the
 call (`Place.InlinedAt`), and code with no place of its own takes the call's. So inlined code keeps the line it was
-written on, as [inlining](../foundations/compiler-optimisations#inlining) promises, and the stack still shows the frame
+written on, as [inlining](../meta/compiler-optimisations#inlining) promises, and the stack still shows the frame
 each inlined call would have had: the stack of a program is the same inlined or not.
 
 # Markers and the table of places

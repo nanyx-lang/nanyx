@@ -8,7 +8,7 @@ order: 10
 > `list.groupBy` came with [#477](https://github.com/nanyx-lang/nanyx/issues/477); the `Hash` context, keys that
 > require it, and `set(a)` with [#533](https://github.com/nanyx-lang/nanyx/issues/533). What works is described on
 > [maps and sets](../stdlib/prelude-maps) and in [Collections](../tour/collections), and how they are built in
-> [Maps and sets](../compiler-internals/maps-and-sets) in the Compiler internals section. Both still hold a list, so a
+> [Maps and sets](../deep-dives/maps-and-sets) in the Deep dives section. Both still hold a list, so a
 > lookup takes time in proportion to the size. The [open questions](#open-questions) need the maintainer's answer; the
 > defaults the code takes until then are marked.
 

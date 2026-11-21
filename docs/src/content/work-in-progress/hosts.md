@@ -5,8 +5,8 @@ order: 3
 ---
 
 What works today, choosing a host, the console host, writing a host package, foreign functions and host memory, is
-described in [Hosts](../advanced/hosts), and how the compiler builds hosts in [Hosts](../compiler-internals/hosts) in the
-Compiler internals section. This page keeps the hosts still to come, the design they follow, and the open questions.
+described in [Hosts](../advanced/hosts), and how the compiler builds hosts in [Hosts](../deep-dives/hosts) in the
+Deep dives section. This page keeps the hosts still to come, the design they follow, and the open questions.
 
 A command-line tool, an HTTP service, a browser app and a test run are all the same program model running under
 different hosts.
@@ -82,12 +82,12 @@ A browser can be the embedder for two different hosts. Neither works today.
 A console program can run in a page unchanged, with the page standing in for the terminal. This is what a [playground](./playground) on the docs site needs. It runs under a host of its own, `nanyx.playground`, a stand-in for the console host whose imports a page implements, rather than under the console host with the page faking WASI ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
 
 - Done: **the toolchain writes `.wasm`** ([#1235](https://github.com/nanyx-lang/nanyx/issues/1235)). `nanyx wasm` and `nanyx build` write the binary format, which a browser loads, and WebAssembly text with `--wat`.
-- Done: **the host.** `nanyx.playground` provides `Console`, `Random` and `Clock` on its own imports, `nanyx:playground` (see [Compiler internals](../compiler-internals/hosts)), and nothing else, so a program that needs `FileSystem`, `Env`, `Http` or `Async` is an error naming it.
+- Done: **the host.** `nanyx.playground` provides `Console`, `Random` and `Clock` on its own imports, `nanyx:playground` (see [Deep dives](../deep-dives/hosts)), and nothing else, so a program that needs `FileSystem`, `Env`, `Http` or `Async` is an error naming it.
 - Done: **the entry is the page's to call.** The compiler built for the browser exports the module's start rather than running it when the module is instantiated, and the runner calls it once it can read the module's memory.
 - Done: **exiting unwinds.** The runner's `proc_exit`, which a crash or a deferred error ends with, throws, and the code that called the start catches it and reports the exit code.
 - **Reading input blocks**, and a page can't wait for input on its main thread; the program runs in a worker, which can ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)).
 
-The backend also emits `return_call` for [tail calls](../compiler-internals/tail-calls), which needs Safari 18.2 or later; Chrome and Firefox have had it for longer.
+The backend also emits `return_call` for [tail calls](../deep-dives/tail-calls), which needs Safari 18.2 or later; Chrome and Firefox have had it for longer.
 
 ## A browser host
 
@@ -161,7 +161,7 @@ a `Request -> Response`. That is the next section's rule.
 names and values, and the body as a string; the host, `nanyx.http`, on the machinery ConsoleHost builds; and serving
 without WASI: `nanyx run` listens on the port the `settings` of the manifest's `host` give, and answers each request
 with a fresh instance, which is enough for local development and for the [HTTP server cookbook](../cookbook/http-server)
-([#1786](https://github.com/nanyx-lang/nanyx/issues/1786); see [How it's built](../compiler-internals/hosts#how-its-built)). The host provides
+([#1786](https://github.com/nanyx-lang/nanyx/issues/1786); see [How it's built](../deep-dives/hosts#how-its-built)). The host provides
 `Http` only, so far; what else it lacks is on [Files, HTTP and JSON](./files-http-json#http).
 
 **What it still needs:** to serve on WASI, the `wasi:http` incoming-handler world. That is the largest piece: the
