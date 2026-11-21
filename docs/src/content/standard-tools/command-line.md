@@ -10,7 +10,7 @@ and is the language server for editors. `nanyx --help` lists its commands, and `
 ```text
 nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [<file.nyx | package>] [--] [<arguments>]
 nanyx check [--timings] [--host <host>] [<file.nyx | package>]
-nanyx build [--out <path>] [--release] [--wat] [--locked] [--timings] [--host <host>] [<package>]
+nanyx build [--out <path>] [--release] [--core] [--wat] [--locked] [--timings] [--host <host>] [<package>]
 nanyx wasm <file.nyx> [--out <path>] [--release] [--wat]
 nanyx format [--check | --write] [<files or directories>]
 nanyx format [--check] --stdin
@@ -132,6 +132,10 @@ nothing else.
 of its `@entry` as a WebAssembly module, to `out/<package name>.wasm` beside the manifest: the binary format, which
 browsers, Wasmtime and other WebAssembly runtimes load. A package with no `@entry` is only checked.
 
+A program whose host has a component root, as the console host does, is written as a WASI 0.3 component, which
+`wasmtime run` or any runtime that implements WASI 0.3 runs ([Hosts](../advanced/hosts#built-as-a-component)).
+`--core` writes a core module instead, which only `nanyx` runs.
+
 When the manifest asks for something `nanyx.lock` doesn't lock (a new dependency, or a requirement that no longer
 accepts the version locked), `nanyx build` and `nanyx run` choose versions again and download them first, as
 [`nanyx pull`](#nanyx-pull) does, saying on stderr what they lock.
@@ -140,7 +144,8 @@ accepts the version locked), `nanyx build` and `nanyx run` choose versions again
 |--------|--------------|
 | `--out <path>`, `-o <path>` | Writes the program to another file, making its directory if need be. |
 | `--release` | Refuses any error, and leaves out every [`dbg`](../stdlib/console#dbg): `dbg(x)` compiles to `x`. Without it, a build is a debug build: type and name errors are deferred, and the program is written all the same. |
-| `--wat` | Writes WebAssembly text, to `out/<package name>.wat`, rather than the binary format: the same program, for reading. |
+| `--core` | Writes a core module, rather than the component that a host with a component root otherwise has written. |
+| `--wat` | Writes WebAssembly text, to `out/<package name>.wat`, rather than the binary format: the same program, for reading. For a component, it is the core module the component wraps. |
 | `--locked` | Leaves `nanyx.lock` as it is: a manifest that asks for something it doesn't lock is an error, naming what. Use it in CI, so that a manifest change pushed without its lockfile fails rather than resolving something new. |
 | `--timings`, `--host <host>` | As for `run`. |
 

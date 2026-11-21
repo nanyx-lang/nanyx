@@ -6,14 +6,15 @@ order: 17
 
 The compiler can write a WebAssembly component that targets WASI 0.3, so that a program runs under Wasmtime, or any
 runtime that implements WASI 0.3, and not only under `nanyx`'s own runtime. The design, and the stages still to come,
-are on [Components](../work-in-progress/components) in Work in progress. So far the pieces below are built; no command
-writes a component yet, which comes with the console host's component root
-([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)).
+are on [Components](../work-in-progress/components) in Work in progress. `nanyx build` writes a component for a program
+whose host has a component root, as the console host does; `--core` writes a core module, which is all `nanyx run`,
+`nanyx test`, the debugger and the profiler run.
 
-A component is built in two steps:
+A component is built in three steps:
 
-1. The backend writes a core module in wit-component's conventions (`WasmOptions.Component`).
-2. The componentizer wraps it as a component of a world (`Nanyx.Runtime.Componentizer.componentize`).
+1. The program is checked under its host's component root (`Package.asComponent`, see [Component roots](#component-roots)).
+2. The backend writes a core module in wit-component's conventions (`WasmOptions.Component`).
+3. The componentizer wraps it as a component of the root's world (`Nanyx.Runtime.Componentizer.componentize`).
 
 # The core module
 
@@ -70,3 +71,47 @@ The wrapper around the core module is wit-component's, the library nearly every 
 The WIT directory is a WIT package, with the packages it uses under `deps/`, as wit-component reads it. The tests use
 `wasi:cli@0.3.0` itself, with the WIT of WASI's v0.3.0 tag
 (`compiler/Nanyx.Compiler.Wasm.Tests/Features/Components/wit`), and wrap modules as its world `command`.
+
+# Component roots
+
+A host's manifest names its component root and the world it is written against beside its root
+(`component = (root = "console.host.wasi", world = "wasi:cli/command@0.3.0")`), and keeps the world's WIT in its `wit`
+directory. `HostPackages` reads it into `Host.Component`.
+
+- **A component build swaps the root.** `nanyx build` takes the package as `Package.asComponent` gives it, whose host's
+  `Module` is the component root (`Host.AsComponent`). Everything after that is a build as any other: the entry point is
+  passed to that root's `run`, so it is checked against the contexts the component root provides, and the backend
+  compiles the program with `WasmOptions.Component`. `Host.IsComponent` says whether a host is one a component build
+  sees. The componentizer is given the host's `wit` directory and the world.
+- **What the component root lacks is named.** An entry point that requires a context the root's `run` doesn't provide
+  doesn't fit it (`NYX0237`, `Hosts.entryMismatch`), and the error names each such context, and says to build with
+  `--core` when the host is a component root.
+- **It provides no more than the core root.** When the component root's own module is checked, in a component build,
+  `Library.checkModule` imports the core root and compares the contexts the two `run`s provide; one only the component
+  root provides is `NYX0275` (`Hosts.componentRootErrors`). It may provide fewer, while it is being built.
+- **CI runs them.** The Compiler workflow builds each package in `examples/` as a component, runs it under
+  `wasmtime run`, and checks that it prints what `nanyx run` does.
+
+## The console host's component root
+
+`console.host.wasi` provides `Console`, `Env`, `Clock`, `Random` and `Async` on WASI 0.3 alone. It is Nanyx, on
+`@extern`s named as wit-component expects, and it lowers the canonical ABI by hand with `nanyx/host.memory`:
+
+- **Writes** to stdout and stderr go as the runtime's own do ([The core module](#the-core-module)): a `stream<u8>`
+  given to the stream's `write-via-stream`, written until the host has taken every byte, then dropped, and its future
+  waited on. The stdout and stderr imports are a record of functions (`Output`), so the one `writeTo` serves both.
+  Imports the runtime's code also declares, such as `[stream-new-0]write-via-stream`, are imported twice, which
+  WebAssembly and wit-component allow.
+- **Standard input** is one stream, which `wasi:cli/stdin`'s `read-via-stream` opens the first time the program reads:
+  its result is a tuple, written to memory the host is given the address of. Each read fills the buffer in the host's
+  block from it. Taking lines and the rest of the input out of the buffer is `console.stdin`'s, shared with the core
+  root, which fills the buffer with WASI preview 1's `fd_read`.
+- **Arguments and environment variables** are `list<string>` and `list<tuple<string, string>>`, returned in memory: an
+  address and a count, each string an address and a length. The host allocates them with `cabi_realloc`, which is the
+  program's allocator, and the root frees each once it has copied it out.
+- **The clocks and random numbers** are `wasi:clocks/system-clock`'s `now`, an `instant` of seconds and nanoseconds
+  written to memory, `monotonic-clock`'s `now`, nanoseconds as a `u64`, and `wasi:random`'s `get-random-u64`.
+- **Exiting** is `wasi:cli/exit`'s `exit-with-code`, which takes 0 to 255; any other code exits with 1.
+
+A wait blocks: each async-lowered call that returns BLOCKED is waited on at once, in a waitable set of its own, as
+the runtime's own writes are.

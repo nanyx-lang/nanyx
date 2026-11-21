@@ -641,10 +641,9 @@ module Compiler =
         let buildHost, hostModules = buildHostOf checkedModules
         // A file of the host's package, or of a package it depends on, such as the interface package it implements.
         let inHostPackage (path: string) = hostModules |> Option.exists (fun modules -> (PackageModules.ownerOf modules path).IsSome)
+        // A file of the host's own package, which may require `HostRuntime`: its root modules, and the modules they share.
         let isHost (path: string) =
-            Option.map2 (fun (host: Host) (modules: PackageModules) -> modules.Modules |> Map.tryFind host.Module) buildHost hostModules
-            |> Option.flatten
-            |> Option.exists (List.exists (PackageModules.samePath path))
+            hostModules |> Option.exists (fun modules -> modules.Files |> List.exists (PackageModules.samePath path))
         // The module's own host: the build's, for a module of the program itself, which sees the host's prelude and may
         // declare its `@entry`. A file of a package the program depends on, or of the host's package or one it depends on,
         // is a library's, and a module of the standard library is the standard library's: none.
@@ -827,12 +826,25 @@ module Compiler =
                 // Every error in the module is reported: the items that failed to check, and each conflict among the
                 // constraints of those that did, in the order they are in the source rather than the order solving
                 // found them. The module is typed all the same, with what did check.
+                // The module's own top-level defs.
+                let ownTopLevel =
+                    state.Scopes
+                    |> Map.keys
+                    |> Seq.map (fun id -> state.Symbols.[id])
+                    |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
+                    |> List.ofSeq
+                let contextTypes = RequiredContexts.ofDefs state subst ownTopLevel
                 // A mismatch where an entry point is passed to its host's `run` is the entry point not fitting the host.
                 let entryMismatch (entry: EntryPoint) =
                     let expected =
                         TypeEnv.tryFind $"{Hosts.importAlias}.{Hosts.runFunction}" env
                         |> Option.bind (fun scheme -> match Unifier.unalias scheme.Type with TyFunc(parameter, _, _) -> Some parameter | _ -> None)
-                    Hosts.entryMismatch entry (types |> Map.tryFind entry.Name |> Option.map (Unifier.apply subst)) expected
+                    let required =
+                        ownTopLevel
+                        |> List.tryFind (fun symbol -> symbol.Name = entry.Name)
+                        |> Option.bind (fun symbol -> contextTypes |> Map.tryFind symbol.Id)
+                        |> Option.defaultValue []
+                    Hosts.entryMismatch entry (types |> Map.tryFind entry.Name |> Option.map (Unifier.apply subst)) required expected
                 let mismatchErrors =
                     mismatches
                     |> List.sortBy (fun (_, span, _) -> span.Start)
@@ -850,14 +862,6 @@ module Compiler =
                             | TypesDiffer
                             | NominalShape _ -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
                     |> List.distinct
-                // The module's own top-level defs.
-                let ownTopLevel =
-                    state.Scopes
-                    |> Map.keys
-                    |> Seq.map (fun id -> state.Symbols.[id])
-                    |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
-                    |> List.ofSeq
-                let contextTypes = RequiredContexts.ofDefs state subst ownTopLevel
                 // What each call requires of the def it calls, by the call's node: `HostRuntime`, which has no members,
                 // is found by it.
                 // A function that is not a lambda, as a foreign function is, has the contexts it requires in its type.
@@ -904,7 +908,20 @@ module Compiler =
                             | Error _ -> None))
                 let blockReExportErrors =
                     ModuleLinking.blockReExportClashes desugared merged.ReExports (blockReExports |> List.map (fun (blockImport, own) -> blockImport.Import, own))
-                let moduleErrors = blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                // A host's component root, checked in a component build, provides no context its core root doesn't.
+                let componentRootErrors =
+                    match buildHost, hostModules, origin with
+                    | Some buildHost, Some modules, SourceFile path when buildHost.IsComponent && (modules.Modules |> Map.tryFind buildHost.Module |> Option.exists (List.exists (PackageModules.samePath path))) ->
+                        let coreRoot = ImportItem.synthetic (ModuleImport $"{buildHost.Package}/{buildHost.Component.Value.CoreRoot}") None
+                        let ownRun = ownTopLevel |> List.tryFind (fun symbol -> symbol.Name = Hosts.runFunction)
+                        match importModule coreRoot, ownRun, types |> Map.tryFind Hosts.runFunction with
+                        | Ok(_, core), Some run, Some runType ->
+                            match core.Exports |> Map.tryFind Hosts.runFunction |> Option.bind (fun symbol -> core.RawSymbolTypes |> Map.tryFind symbol.Id) with
+                            | Some coreRun -> Hosts.componentRootErrors buildHost run.Declaration (Unifier.apply subst runType) (Unifier.apply core.Subst coreRun)
+                            | None -> []
+                        | _ -> []
+                    | _ -> []
+                let moduleErrors = componentRootErrors @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []

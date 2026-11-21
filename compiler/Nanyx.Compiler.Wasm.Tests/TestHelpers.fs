@@ -208,8 +208,9 @@ let private command (arguments: string list) : Shell -> int =
         let noInline, rest = takeFlag "--no-inline" rest
         let wat, rest = takeFlag "--wat" rest
         let locked, rest = takeFlag "--locked" rest
+        let core, rest = takeFlag "--core" rest
         let outputPath, release, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not noInline, (if wat then ProgramFormat.Text else ProgramFormat.Binary), locked)
+        fun shell -> CliCommands.BuildIn(shell, outputPath, release, path, timings, host, not noInline, (if wat then ProgramFormat.Text else ProgramFormat.Binary), locked, core)
     | "wasm" :: inputFile :: rest ->
         let wat, rest = takeFlag "--wat" rest
         let outputPath, release, _, _, _ = options (null, false, false, null, []) rest

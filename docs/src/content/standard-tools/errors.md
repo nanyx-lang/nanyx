@@ -1649,14 +1649,17 @@ module main
 def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.console/console.host' ...
 ```
 
-The error is reported at `@entry`, and shows the type the host expects and the type the entry point has. To fix it,
-give the entry point the shape the host expects: for a command-line program, a function that takes nothing.
+The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, and names each
+context the entry point requires that the host doesn't provide. To fix it, give the entry point the shape the host
+expects: for a command-line program, a function that takes nothing. A program built as a component runs under its
+host's [component root](../advanced/hosts#built-as-a-component), which may provide fewer contexts: build it with `--core`
+for a core module, which runs under the host's root.
 
 # NYX0238: HostRuntime required outside a host
 
 A definition or call requires `HostRuntime`, the context a host is written on. The toolchain provides it only to the
-host, the module that runs the program's entry point, so that a library can only reach the outside world through the
-contexts the host provides.
+modules of the host's package, the package whose `run` runs the program's entry point, so that a library can only reach
+the outside world through the contexts the host provides.
 
 ```nanyx
 import (
@@ -1664,7 +1667,7 @@ import (
   nanyx/host.runtime
 )
 
-def peek = { address -> readByte(address) }  -- error NYX0238: 'peek' requires the context 'HostRuntime', which only a host may require: ...
+def peek = { address -> readByte(address) }  -- error NYX0238: 'peek' requires the context 'HostRuntime', which only a host's package may require: ...
 ```
 
 To fix it, require the context the host provides instead, such as `Console`, and call its members.
@@ -2237,6 +2240,30 @@ def values: a, type a -> int = { value, t ->
 ```
 
 To fix it, use the value where it is opened, with the field's `type`.
+
+# NYX0275: Component root provides a context its core root doesn't
+
+A host's [component root](../advanced/hosts#writing-a-host), which `nanyx build` builds a WebAssembly component from,
+provides a context in its `run` that the host's core root doesn't. A program that runs under the one would then not run
+under the other. It is reported at the component root's `run`, when a program is built as a component.
+
+```nanyx fragment
+export module shout.host.wasi
+
+import (
+  nanyx/host.runtime
+  shout.log as (Log)
+  shout.extra as (Extra)
+)
+
+-- error NYX0275: The component root's 'run' provides 'Extra', which the core root 'acme.shout/shout.host' doesn't: ...
+export def run: [HostRuntime] ([Extra, Log] () -> a) -> () = { entry ->
+  ignore(entry())
+}
+```
+
+To fix it, provide the context in the core root too, or not in the component root. A component root may provide fewer
+contexts than its core root: a program that needs one it lacks is told so when it is built as a component (`NYX0237`).
 
 # NYX0301: Not supported by the WebAssembly backend
 

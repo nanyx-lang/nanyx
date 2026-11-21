@@ -159,13 +159,13 @@ let ``nanyx build writes a .wasm that runs, and --wat writes the text`` () =
     File.WriteAllText(Path.Combine(root, "app.nyxp"), $"(package = (name = \"app\", version = \"0.1.0\", sources = [\"src/**/*.nyx\"]), {consoleHostEntry})")
     for path, text in files do
         File.WriteAllText(Path.Combine(root, "src", path), text)
-    let built = nanyxIn root [ "build" ]
+    let built = nanyxIn root [ "build"; "--core" ]
     Assert.Equal(0, built.ExitCode)
     let wasm = File.ReadAllBytes(Path.Combine(root, "out", "app.wasm"))
     Assert.Equal<byte array>([| 0uy; 0x61uy; 0x73uy; 0x6Duy |], wasm.[.. 3])
     let output, _, ended = run (Nanyx.Runtime.Binary wasm)
     Assert.Equal(("built\n", "ok"), (output.ReplaceLineEndings "\n", ended))
-    let text = nanyxIn root [ "build"; "--wat" ]
+    let text = nanyxIn root [ "build"; "--core"; "--wat" ]
     Assert.Equal(0, text.ExitCode)
     Assert.StartsWith("(module", File.ReadAllText(Path.Combine(root, "out", "app.wat")))
 

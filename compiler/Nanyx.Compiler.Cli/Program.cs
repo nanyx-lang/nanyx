@@ -293,7 +293,8 @@ internal static partial class CliCommands
     /// </summary>
     /// <param name="path">The package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="outputPath">Where to write the program; the default is out/&lt;package name&gt;.wasm (or .wat) beside the manifest.</param>
-    /// <param name="wat">Write WebAssembly text (.wat) rather than the binary format (.wasm).</param>
+    /// <param name="wat">Write WebAssembly text (.wat) rather than the binary format (.wasm): the core module, which a component wraps.</param>
+    /// <param name="core">Write a core module, as nanyx run runs, rather than the WASI 0.3 component that a host with a component root otherwise has written.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
     /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
@@ -308,13 +309,14 @@ internal static partial class CliCommands
         [Consolo("host")] string? host = null,
         [Consolo("no-inline")] bool noInline = false,
         [Consolo("wat")] bool wat = false,
+        [Consolo("core")] bool core = false,
         params string[] path)
     {
-        return BuildIn(Shell.Process, outputPath, release, path, timings, host, !noInline, wat ? ProgramFormat.Text : ProgramFormat.Binary, locked);
+        return BuildIn(Shell.Process, outputPath, release, path, timings, host, !noInline, wat ? ProgramFormat.Text : ProgramFormat.Binary, locked, core);
     }
 
     /// <summary>What <c>nanyx build</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary, bool locked = false)
+    internal static int BuildIn(Shell shell, string? outputPath, bool release, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary, bool locked = false, bool core = false)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -324,6 +326,14 @@ internal static partial class CliCommands
         if (!TryUpdateLockfile(shell, single, locked, out var failed) || !TryFindPackage(shell, single, host, out var package, out failed))
         {
             return failed;
+        }
+
+        // A host with a component root builds a WASI 0.3 component from it, unless a core module is asked for.
+        var asComponent = core ? null : PackageModule.asComponent(package);
+        var component = asComponent?.Value.Host.Value.Component.Value;
+        if (asComponent is not null)
+        {
+            package = asComponent.Value;
         }
 
         var build = BuildPackage(shell, package, timings);
@@ -342,21 +352,46 @@ internal static partial class CliCommands
             return deferred ? 1 : 0;
         }
 
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: false), deferred, timings))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is not null), deferred, timings))
         {
             return 1;
         }
 
-        var written = WriteProgram(shell, wat, format, string.IsNullOrWhiteSpace(outputPath)
+        var outputFile = string.IsNullOrWhiteSpace(outputPath)
             ? Path.Combine(package.Manifest.Root, "out", package.Manifest.Name + Extension(format))
-            : outputPath!);
+            : outputPath!;
+        var written = component is null || format == ProgramFormat.Text
+            ? WriteProgram(shell, wat, format, outputFile)
+            : WriteComponent(shell, wat, package.Host.Value, component, outputFile);
         if (written is null)
         {
             return 1;
         }
 
-        shell.Out.WriteLine($"Built {package.Manifest.Name} ({FileCount(package)}){WithDeferred(deferred, build.Diagnostics)}: {written}");
+        var kind = component is null ? "" : $", a component of {component.World}";
+        shell.Out.WriteLine($"Built {package.Manifest.Name} ({FileCount(package)}){WithDeferred(deferred, build.Diagnostics)}{kind}: {written}");
         return 0;
+    }
+
+    /// <summary>
+    /// Writes the program <paramref name="wat"/>, the core module of a component, to <paramref name="outputPath"/> as a
+    /// component of the world of <paramref name="host"/>'s component root, and gives the path as the shell shows it;
+    /// <c>null</c>, said on the shell's stderr, when it can't be built, with wit-component's reason.
+    /// </summary>
+    private static string? WriteComponent(Shell shell, string wat, Host host, HostComponent component, string outputPath)
+    {
+        var built = Componentizer.componentize(WasmBinary.assemble(wat), host.WitDirectory, component.World);
+        if (built.IsError)
+        {
+            shell.Error.WriteLine($"The program can't be built as a component of {component.World}: {built.ErrorValue}");
+            shell.Error.WriteLine("Build it with --core for a core module, as nanyx run runs.");
+            return null;
+        }
+
+        var fullPath = shell.FullPath(outputPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        File.WriteAllBytes(fullPath, built.ResultValue);
+        return shell.DisplayPath(fullPath);
     }
 
     /// <summary>

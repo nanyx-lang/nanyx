@@ -18,6 +18,7 @@ import (
   nanyx/host.runtime
   nanyx/random as (Random)
   nanyx/text
+  console.stdin as (bufferOffset, bufferSize, readLineAfter, readToEndAfter, stateAt)
   nanyx.console.core/console as (Console, IoError)
   nanyx.console.core/env as (Env)
   nanyx.fs/filesystem as (FileSystem, FsError)
@@ -60,15 +61,7 @@ def clockTimeGet: [HostRuntime] I32, I64, I32 -> I32
 -- where what is left of the standard input it has read starts and ends in its buffer; at 12, an
 -- iovec, the address and length of the bytes to write or read; at 20, the count of bytes written or
 -- read; at 24, the bits `random_get` last gave; at 32, the time `clock_time_get` last gave; at 40, what kind of answer an HTTP request had; and
--- from 64 to the end of the block, the buffer standard input is read into.
-
---| The address `offset` bytes into the host's state.
-def stateAt: [HostRuntime] I32 -> I32 = { offset ->
-  I32.wrappingAdd(hostState(), offset)
-}
-
---| How many bytes of standard input are read at a time: the rest of the host's block.
-def bufferSize: I32 = 4032
+-- from 64 to the end of the block, the buffer standard input is read into (see `console.stdin`).
 
 --| Writes `text` to the file descriptor `fd`, as it is.
 def writeTo: [HostRuntime] I32, string -> () = { fd, text ->
@@ -85,57 +78,12 @@ def fill: [HostRuntime] () -> I32 = { _ ->
   def end = readI32(stateAt(8))
 
   if start < end then end - start else
-    writeI32(stateAt(12), stateAt(64))
+    writeI32(stateAt(12), stateAt(bufferOffset))
     writeI32(stateAt(16), bufferSize)
     def read = if fdRead(0, stateAt(12), 1, stateAt(20)) == 0 then readI32(stateAt(20)) else 0
     writeI32(stateAt(4), 0)
     writeI32(stateAt(8), read)
     read
-}
-
---| Where the line from `index` ends in the buffer at `held`: after its first line break before
-  `end`, or at `end`.
-def lineEnd: [HostRuntime] I32, I32, I32 -> I32 = { held, index, end ->
-  if index >= end
-    then end
-    else if readByte(I32.wrappingAdd(held, index)) == 10
-      then index + 1
-      else lineEnd(held, index + 1, end)
-}
-
---| The standard input left in the buffer, read into it when none is, up to and including its first
-  line break when `toLineBreak`; the empty string when the input has ended.
-def readStdin: [HostRuntime] bool -> string = { toLineBreak ->
-  def left = fill()
-  def start = readI32(stateAt(4))
-  def stop = if toLineBreak then lineEnd(stateAt(64), start, start + left) else start + left
-  writeI32(stateAt(4), stop)
-  stringAt(stateAt(I32.wrappingAdd(64, start)), stop - start)
-}
-
---| `parts`, the latest first, joined in the order they were read.
-def joined: list(string) -> string = { parts ->
-  string.concat(list.reverse(parts))
-}
-
---| The rest of the current line of standard input, after `parts`, the pieces of it read so far (the
-  latest first), each of them not empty.
-def readLineAfter: [HostRuntime] list(string) -> #some(string) | #error(IoError) = { parts ->
-  def part = readStdin(true)
-
-  if string.isEmpty(part)
-    then (if list.isEmpty(parts) then #error(#endOfInput) else #some(joined(parts)))
-    else if string.endsWith(part, "\n")
-      then #some(
-        string.removeSuffix(joined([string.take(part, string.length(part) - 1), ...parts]), "\r")
-      )
-      else readLineAfter([part, ...parts])
-}
-
---| Everything left on standard input, after `blocks`, the blocks read so far (the latest first).
-def readToEndAfter: [HostRuntime] list(string) -> string = { blocks ->
-  def block = readStdin(false)
-  if string.isEmpty(block) then joined(blocks) else readToEndAfter([block, ...blocks])
 }
 
 --| How many bytes the string ending in a zero byte at `address` has before it, after `count`.
@@ -260,8 +208,8 @@ export def run
     use Console(
       write = { text -> writeTo(1, text) }
       writeError = { text -> writeTo(2, text) }
-      readLine = { _ -> readLineAfter([]) }
-      readToEnd = { _ -> #some(readToEndAfter([])) }
+      readLine = { _ -> readLineAfter(fill, []) }
+      readToEnd = { _ -> #some(readToEndAfter(fill, [])) }
       flush = { _ -> () }
     )
 

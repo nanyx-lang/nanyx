@@ -35,10 +35,11 @@
   <!--
     The compiler reads the checked library and the shipped packages from beside itself (AppContext.BaseDirectory),
     which in the browser is the runtime's in-memory file system. They are published with the page, which hands them to
-    `BrowserCompiler.AddFile` before the first compile (the SDK has no way to put files in that file system).
+    `BrowserCompiler.AddFile` before the first compile (the SDK has no way to put files in that file system). The WIT a
+    host's component root is written against is left out: the browser builds no components.
   -->
   <ItemGroup>
-    <Content Include="..\..\packages\**\*" Link="wwwroot\packages\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\packages\**\*" Exclude="..\..\packages\**\wit\**" Link="wwwroot\packages\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!--

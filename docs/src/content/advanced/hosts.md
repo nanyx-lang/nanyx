@@ -86,6 +86,18 @@ export def greet: [Console] string -> () = { name ->
 
 An application that depends on the library calls `greet` from its entry point, which the console host gives a `Console`.
 
+## Built as a component
+
+`nanyx build` writes a program under the console host as a [WebAssembly component](../deep-dives/components) of the
+world `wasi:cli/command@0.3.0`, which `wasmtime run` (46 or later), or any runtime that implements WASI 0.3, runs as it
+is: `wasmtime run out/greet.wasm Ada`. `nanyx run` runs the program as it always has, and `nanyx build --core` writes a
+core module, as before.
+
+A component is built from the host's _component root_, `console.host.wasi`, which provides what WASI 0.3 can:
+`Console`, `Env`, `Clock`, `Random` and `Async`. `FileSystem` comes next, and `Http` after it
+([Components](../work-in-progress/components#plan)). An entry point that needs a context the component root doesn't
+provide is an error (`NYX0237`) naming it, when it is built as a component; `--core` builds it.
+
 # The HTTP host
 
 The HTTP host, `nanyx.http`, serves a program whose entry point is a request handler, a `Request -> Response`
@@ -159,7 +171,13 @@ A host is a package whose manifest says it is one, in its `package`'s `host` fie
 )
 ```
 
-Naming a package as a host when its manifest doesn't declare it one is an error. The host here provides one context, `Log`, which writes a line in capitals. The context is declared in a module of its own:
+Naming a package as a host when its manifest doesn't declare it one is an error.
+
+A host may also have a component root, which `nanyx build` builds a [WASI 0.3 component](../deep-dives/components)
+from: `component = (root = "shout.host.wasi", world = "wasi:cli/command@0.3.0")`, beside `root`. It exports `run` as the
+root does, written against the WIT of the world it names, which the package keeps in its `wit` directory, with the
+packages that WIT uses under `wit/deps`. It may provide fewer contexts than the root, but no other: one the root doesn't
+provide is an error at its `run` (`NYX0275`). The host here provides one context, `Log`, which writes a line in capitals. The context is declared in a module of its own:
 
 ```nanyx fragment
 --| What a program under the shouting host can do.
@@ -223,7 +241,7 @@ It prints `HELLO!`. A call to `println` in it is an unknown function, since this
 
 ## `HostRuntime`
 
-`run` and the functions it calls require [`HostRuntime`](../stdlib/host-runtime), a context with no members that marks the host. The toolchain provides it only to the host's root module, the one its manifest's `root` names; anywhere else, a function that requires it, or calls one that does, is an error (`NYX0238`). Foreign functions and host memory require it, so only the host can call them, and a library can only reach the outside world through the contexts the host chose to provide.
+`run` and the functions it calls require [`HostRuntime`](../stdlib/host-runtime), a context with no members that marks the host. The toolchain provides it only to the modules of the host's own package: its root, its component root, and the modules they share; anywhere else, including the packages the host depends on, a function that requires it, or calls one that does, is an error (`NYX0238`). Foreign functions and host memory require it, so only the host can call them, and a library can only reach the outside world through the contexts the host chose to provide.
 
 ## Foreign functions
 
