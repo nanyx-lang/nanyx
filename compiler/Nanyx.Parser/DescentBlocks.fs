@@ -92,7 +92,7 @@ let rec statement (c: Cursor) : Statement =
             if not c.OnSameLine then raise NoMatch
             statementFrom c start (ImportStatement(Forward.importItems.Value c))
         | "type" | "context" -> typeDefinitionStatement c start
-        | "export" when (match c.At 1 with Code next -> c.Text next = "type" || c.Text next = "context" | _ -> false) ->
+        | "export" when (match c.At 1 with Code next -> c.Text next = "type" || c.Text next = "context" || c.Text next = "scoped" | _ -> false) ->
             typeDefinitionStatement c start
         | "export" | "mut" ->
             c.GiveUp $"a `{c.Text token}` statement, which the descent parser doesn't read yet"
