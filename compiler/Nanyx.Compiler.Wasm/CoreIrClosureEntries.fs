@@ -1,5 +1,5 @@
 /// The two entries of a function a closure is over (see "Closures have two entries" in
-/// `docs/src/content/compiler-internals/memory-management.md`). The function itself, in the closure's table slot, borrows
+/// `docs/src/content/deep-dives/memory-management.md`). The function itself, in the closure's table slot, borrows
 /// its environment, so a caller that holds the closure past the call neither takes a reference for it nor gives one
 /// up. Its owning entry sits in the slot after it: a tail call of a closure that dies there calls it, since the caller
 /// could not drop the closure after the call (see `CoreIrCounting`). The owning entry is a copy of the function that owns

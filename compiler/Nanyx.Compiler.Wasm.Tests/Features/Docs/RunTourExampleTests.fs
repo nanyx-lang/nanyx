@@ -1,7 +1,7 @@
 /// Every ```nanyx block in the language tour (docs/src/content/tour), the Getting started pages
 /// (docs/src/content/getting-started), the standard library's pages (docs/src/content/stdlib), the custom patterns page (docs/src/content/advanced/custom-patterns.md) and the JSON and regular expressions cookbook pages (docs/src/content/cookbook/json-parsing.md and regular-expressions.md), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
 /// does. The words after `nanyx` on a block's opening fence say what kind of example it is; the conventions are in
-/// docs/src/content/compiler-internals/compilation.md#tour-examples. A standard-library page's generated reference is
+/// docs/src/content/deep-dives/compilation.md#tour-examples. A standard-library page's generated reference is
 /// left out: its blocks are signatures, and its doc comments' examples are checked where they are written.
 module TranspilerWasmTests.Features.Docs.RunTourExamples
 

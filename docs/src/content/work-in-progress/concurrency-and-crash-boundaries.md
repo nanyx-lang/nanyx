@@ -61,7 +61,7 @@ type Crash = (
 The host decides what happens: the console host prints it and exits with 1, as today; the HTTP host answers that
 request with a 500 and keeps serving; the test runner marks the test failed and runs the next. The stack comes from
 the module's table of places, which debug and release builds both keep, so each frame has its file and line (see
-[Crash stacks](../compiler-internals/crash-stacks)); today the runtime prints it under the message.
+[Crash stacks](../deep-dives/crash-stacks)); today the runtime prints it under the message.
 
 This needs no language feature and makes every later step better, so it comes first.
 

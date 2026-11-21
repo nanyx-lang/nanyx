@@ -30,7 +30,7 @@ those files workable. Problems with the code's structure are tracked as GitHub i
   ([#367](https://github.com/nanyx-lang/nanyx/issues/367)).
 - **Layout and reserved words live in one place each.** Where a block, a match or a pipeline ends is decided by the
   layout pass (`Layout.fs`), whose rules are numbered on the
-  [parser's Compiler internals page](docs/src/content/compiler-internals/parser.md#the-layout-rules); the parser reads
+  [parser's Deep dives page](docs/src/content/deep-dives/parser.md#the-layout-rules); the parser reads
   its `Indent`, `Newline` and `Dedent` tokens and never measures indentation itself. The reserved words are
   `Keywords.reserved`, which the lexer reads. Change a rule there, not in the parser.
 - **Report user errors as diagnostics, with a span.** A bare `failwith` is never the way to tell users
@@ -44,15 +44,15 @@ those files workable. Problems with the code's structure are tracked as GitHub i
 
 ## Documentation
 
-- **All documentation lives on the docs site.** Descriptions of how the compiler and its tools work today go in the
-  Compiler internals section, [docs/src/content/compiler-internals](docs/src/content/compiler-internals). Design
+- **All documentation lives on the docs site.** Technical detail on how things work today, such as the compiler's
+  internals, inlining, desugaring, workflow rewriting and the runtime, goes in the Deep dives section, [docs/src/content/deep-dives](docs/src/content/deep-dives). Design
   notes, proposals, plans and open questions, what is open, undecided or planned, go in the Work in progress section,
   [docs/src/content/work-in-progress](docs/src/content/work-in-progress). Don't add design docs or long READMEs
   elsewhere in the repository; `compiler/README.md` only says how to build and test.
-- **Keep the Compiler internals and Work in progress sections up to date.** If your change touches something a page
+- **Keep the Deep dives and Work in progress sections up to date.** If your change touches something a page
   there describes (a feature, a plan item, an open question, a file or function it names), update the page in the
-  same PR: correct what a Compiler internals page says about the code, mark plan items done, and move settled
-  questions into the design. When something planned is built, describe it in Compiler internals and cut the Work in
+  same PR: correct what a Deep dives page says about the code, mark plan items done, and move settled
+  questions into the design. When something planned is built, describe it in Deep dives and cut the Work in
   progress page down to what is still open, or delete it. If you start on something that has no page, add one.
 - **Keep the VS Code extension page up to date.** A change to the extension in `extension/` (a setting, a
   command, a feature, how it finds `nanyx`) updates
@@ -60,7 +60,7 @@ those files workable. Problems with the code's structure are tracked as GitHub i
 - **The tour's examples are tests.** Every ` ```nanyx ` block in `docs/src/content/tour` is compiled and run by
   `RunTourExampleTests.fs`. Mark a block that isn't a whole program ` ```nanyx fragment `, and one the compiler
   gets wrong ` ```nanyx skip=#<issue> `; the rules are in
-  [Compilation](docs/src/content/compiler-internals/compilation.md#tour-examples).
+  [Compilation](docs/src/content/deep-dives/compilation.md#tour-examples).
 - **Use types, not strings.** Prefer a union case to a string for types, kinds and keys. Never take
   structured data apart with `Split`.
 

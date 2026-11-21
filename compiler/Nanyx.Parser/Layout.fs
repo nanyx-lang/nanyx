@@ -1,6 +1,6 @@
 /// The layout pass: the lexer's tokens in, the same tokens out with the block structure that indentation gives them
 /// made explicit, as `Indent`, `Newline` and `Dedent`, which the recursive-descent parser reads. Its rules are the
-/// numbered list on the Compiler internals page "The parser"; each is marked here where it is applied.
+/// numbered list on the Deep dives page "The parser"; each is marked here where it is applied.
 module Parser.Program.Layout
 
 open Parser.Program.Lexer

@@ -16,7 +16,7 @@ Reference counting on its own cannot free a cycle: two values that refer to each
 above zero. Nanyx values are immutable, and a value can only refer to values that existed before it, so the heap
 never holds a cycle. Counting frees everything.
 
-That keeps [performance predictable](../foundations/principles#performance-you-can-reason-about). Memory comes back
+That keeps [performance predictable](../meta/principles#performance-you-can-reason-about). Memory comes back
 at a point the program determines, not when a collector decides to run, and there are no collector pauses.
 
 # What the compiler does
@@ -111,4 +111,4 @@ Reference counting and reuse are in the WebAssembly backend, the one `nanyx run`
 runs a program with an allocator that checks its counts. It stops the program at an object freed twice or used after
 it was freed, and fails the run if anything is left unfreed at the end. A way to ask the compiler to
 check that a function runs entirely in place, as Koka's `fip` functions do, is an open question. The design, with
-how values are laid out in memory, is in [Memory management](../compiler-internals/memory-management).
+how values are laid out in memory, is in [Memory management](../deep-dives/memory-management).

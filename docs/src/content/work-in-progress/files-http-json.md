@@ -11,7 +11,7 @@ for `nanyx.fs`; [client](../stdlib/client), [http](../stdlib/http), [request](..
 [response](../stdlib/response) for `nanyx.http.core`; [The HTTP host](../advanced/hosts#the-http-host) and the
 [HTTP server cookbook](../cookbook/http-server) for `nanyx.http`; and [json](../stdlib/json),
 [decoders](../stdlib/json-typed) and [encoders](../stdlib/encode) for `nanyx.json`. How the hosts implement them is on
-[Hosts](../compiler-internals/hosts#how-its-built) and [Foreign functions](../compiler-internals/foreign-functions#whats-built). This page keeps what is still
+[Hosts](../deep-dives/hosts#how-its-built) and [Foreign functions](../deep-dives/foreign-functions#whats-built). This page keeps what is still
 open.
 
 The calls that wait, `nanyx.http.core`'s and `nanyx.fs`'s, require `Async`, which the console and HTTP hosts provide

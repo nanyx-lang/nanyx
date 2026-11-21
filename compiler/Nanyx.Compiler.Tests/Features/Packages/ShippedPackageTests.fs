@@ -1,5 +1,5 @@
 /// The compiler ships the console host and its interface package as source directories beside it, at its own version
-/// (#1342 and #1344, see docs/src/content/compiler-internals/shipped-packages.md).
+/// (#1342 and #1344, see docs/src/content/deep-dives/shipped-packages.md).
 module Nanyx.Compiler.Tests.Features.Packages.ShippedPackages
 
 open System.IO

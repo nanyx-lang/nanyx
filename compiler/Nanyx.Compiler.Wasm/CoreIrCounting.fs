@@ -1,5 +1,5 @@
 /// Inserts reference counting into the core IR, as Perceus does (see "Inserting counts" in
-/// `docs/src/content/compiler-internals/memory-management.md`): a `Dup` where a value is used again after something takes it over, and a `Drop` (or
+/// `docs/src/content/deep-dives/memory-management.md`): a `Dup` where a value is used again after something takes it over, and a `Drop` (or
 /// `DropAfter`) where a variable dies, on every branch.
 ///
 /// Every variable holds a reference of its own (an owned one), except a parameter its function only borrows, a name
@@ -167,7 +167,7 @@ let internal inferAddressResults (functions: Function list) : AddressResults =
                 changed <- true
     found
 
-/// The calls `e` makes in tail position, by the rules of `docs/src/content/compiler-internals/tail-calls.md`.
+/// The calls `e` makes in tail position, by the rules of `docs/src/content/deep-dives/tail-calls.md`.
 let rec private tailCalls (e: Expr) : (string * Atom list) list =
     match e.Kind with
     | Let(_, _, body)
@@ -233,7 +233,7 @@ let private couldReuse (func: Function) (borrowed: Set<int>) : bool =
 /// `borrowedFrom`), save by a call that borrows it in turn, and no arm could reuse its block (see `couldReuse`). A
 /// parameter that a tail call passes something the caller owns to is owned as well: the caller could otherwise only
 /// drop it after the call, which would then not be a tail call (see "Reference counting" in
-/// `docs/src/content/compiler-internals/tail-calls.md`).
+/// `docs/src/content/deep-dives/tail-calls.md`).
 let internal inferOwnership (functions: Function list) : Ownership =
     let indirect = CoreIrClosureEntries.targets functions
     let owningEntries = indirect |> Set.map CoreIrClosureEntries.owningName

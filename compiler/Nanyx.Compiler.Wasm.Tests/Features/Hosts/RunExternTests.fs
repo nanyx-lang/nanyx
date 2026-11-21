@@ -1,5 +1,5 @@
 /// A foreign function declared with `@extern` is an import of the module, called directly (#1424, see
-/// docs/src/content/compiler-internals/foreign-functions.md).
+/// docs/src/content/deep-dives/foreign-functions.md).
 module TranspilerWasmTests.Features.Hosts.Externs
 
 open Xunit

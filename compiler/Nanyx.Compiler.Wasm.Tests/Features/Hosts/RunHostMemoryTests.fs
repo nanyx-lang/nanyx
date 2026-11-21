@@ -1,5 +1,5 @@
 /// `nanyx/host.memory` gives a host typed access to linear memory, to pass buffers to and from the foreign functions it
-/// calls (#1425, see docs/src/content/compiler-internals/foreign-functions.md).
+/// calls (#1425, see docs/src/content/deep-dives/foreign-functions.md).
 module TranspilerWasmTests.Features.Hosts.HostMemory
 
 open Xunit

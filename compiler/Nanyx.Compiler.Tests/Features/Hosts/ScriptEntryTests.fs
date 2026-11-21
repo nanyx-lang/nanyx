@@ -1,5 +1,5 @@
 /// A script's statements are its entry point, run by the console host's `run`, and so are its values that need a
-/// context, as local defs in the order written (#1245, see docs/src/content/compiler-internals/hosts.md).
+/// context, as local defs in the order written (#1245, see docs/src/content/deep-dives/hosts.md).
 module Nanyx.Compiler.Tests.Features.Hosts.ScriptEntry
 
 open Xunit

@@ -1,5 +1,5 @@
 /// Specialising a function that requires contexts on the members known where it is called (see "Specialising on
-/// known members" in `docs/src/content/compiler-internals/context-calls.md`).
+/// known members" in `docs/src/content/deep-dives/context-calls.md`).
 ///
 /// A member is known when a call finds it as a closure over the wrapper of a top-level function (a member of the
 /// ambient instance, or of an instance built from attached definitions), as a top-level definition's value, or in a

@@ -6,7 +6,7 @@ order: 3
 
 Foreign functions (`@extern`) and host memory (`nanyx/host.memory`) are built, and described in
 [Hosts](../advanced/hosts#foreign-functions), and how the compiler builds them in
-[Foreign functions](../compiler-internals/foreign-functions) in the Compiler internals section. This page keeps the
+[Foreign functions](../deep-dives/foreign-functions) in the Deep dives section. This page keeps the
 reasoning behind them, what is planned, and the open questions. It is part of the [hosts](./hosts) work.
 
 # Two kinds of outside call
