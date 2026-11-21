@@ -12,8 +12,18 @@ release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/re
 
 *21 November 2026*
 
-A small release about packages. A script can now use a package from the package index by naming its exact version,
-and `nanyx publish` can publish a package's first version.
+A small release about packages. `nanyx.json` is now a package published to the index rather than one the compiler
+ships, a script can use a package from the index by naming its exact version, and `nanyx publish` can publish a
+package's first version.
+
+**Standard library**
+
+- `nanyx.json` is published from [nanyx-lang/json](https://github.com/nanyx-lang/json) at 0.1.x instead of shipping
+  with the compiler. **This breaks code** that uses it without declaring it: a package adds
+  `(package = "nanyx.json", version = "0.1")` to its dependencies (or runs `nanyx install nanyx.json`), and a script
+  writes `::dependency nanyx.json 0.1.1` ([JSON](../stdlib/json)).
+- **This breaks code** that calls `reduce`: it starts from the first element and gives `#none` for an empty
+  collection, instead of starting from `Default(a)`'s value, on every collection type.
 
 **Tools**
 
