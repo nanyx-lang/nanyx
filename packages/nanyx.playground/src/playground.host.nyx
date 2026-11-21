@@ -3,9 +3,9 @@
 
   It stands in for the console host, `nanyx.console`, so a program the console host runs compiles
   under it unchanged, as long as it needs only what this host provides: [`Console`], whose output
-  goes to the page, [`Random`], which draws from a generator the page seeds, and [`Clock`], the
-  browser's time. It provides no
-  `Env`, `FileSystem`, `Http` or `Async`, so a program that needs one is an error naming this host.
+  goes to the page and whose input is what you type in it, [`Random`], which draws from a generator
+  the page seeds, and [`Clock`], the browser's time. It provides no `Env`, `FileSystem`, `Http` or
+  `Async`, so a program that needs one is an error naming this host.
 
   Its imports are its own, from `nanyx:playground`, not WASI, and the page that runs the program
   implements them.
@@ -25,6 +25,12 @@ def pageWrite: [HostRuntime] I32, I32 -> ()
 @extern("nanyx:playground", "writeError")
 def pageWriteError: [HostRuntime] I32, I32 -> ()
 
+@extern("nanyx:playground", "readLine")
+def pageReadLine: [HostRuntime] () -> I32
+
+@extern("nanyx:playground", "takeLine")
+def pageTakeLine: [HostRuntime] I32 -> ()
+
 @extern("nanyx:playground", "randomBits")
 def randomBits: [HostRuntime] () -> I64
 
@@ -40,16 +46,39 @@ def writeWith: [HostRuntime] ([HostRuntime] I32, I32 -> ()), string -> () = { wr
   keepAlive(text)
 }
 
+--| The next line of input, without its line break, or `#error(#endOfInput)` once the input has
+  ended. The page's `readLine` waits for the line and gives its length in bytes, or -1 at the end of
+  the input, and its `takeLine` writes the line's bytes at the address it is given.
+def readPageLine: [HostRuntime] () -> #some(string) | #error(IoError) = { _ ->
+  def length = pageReadLine()
+
+  if length < 0 then #error(#endOfInput) else
+    def buffer = allocate(length + 1)
+    pageTakeLine(buffer)
+    def line = stringAt(buffer, length)
+    free(buffer)
+    #some(line)
+}
+
+--| The rest of the input after `lines`, the lines read so far (the latest first), each line
+  followed by a line break.
+def readToEndAfter: [HostRuntime] list(string) -> string = { lines ->
+  match readPageLine()
+    | #some(line) -> readToEndAfter([line, ...lines])
+    | #error(_) -> string.concat(list.map(list.reverse(lines), { line -> line ++ "\n" }))
+}
+
 --| Runs `entry`, the program's entry point, with a `Console` that writes to the page, a `Random`
   that draws from the page's generator, which the page seeds, and a `Clock` that reads the
-  browser's time. The page has no input yet,
-  so reading a line gives `#error(#endOfInput)`. What `entry` returns is ignored.
+  browser's time. Reading waits for a line typed in the page, and gives `#error(#endOfInput)` once
+  you end the input, or at once when the page can't pass input to the program (see the runner's
+  `playground.js`). What `entry` returns is ignored.
 export def run: [HostRuntime] ([Clock, Console, Random] () -> a) -> () = { entry ->
   use Console(
     write = { text -> writeWith(pageWrite, text) }
     writeError = { text -> writeWith(pageWriteError, text) }
-    readLine = { _ -> #error(#endOfInput) }
-    readToEnd = { _ -> #some("") }
+    readLine = { _ -> readPageLine() }
+    readToEnd = { _ -> #some(readToEndAfter([])) }
     flush = { _ -> () }
   )
 

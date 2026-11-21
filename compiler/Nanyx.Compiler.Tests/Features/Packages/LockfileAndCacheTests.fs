@@ -120,6 +120,33 @@ let ``Packing the same package twice makes the same bytes, of its manifest and i
     Assert.Equal<string list>([ "acme.util.nyxp"; "strings.nyx" ], zip.Entries |> Seq.map _.FullName |> List.ofSeq)
     Assert.Equal("acme.util-1.0.0.nyxpkg", PackageArchive.fileName found.Manifest)
 
+/// The package `util` packed after each of its files is rewritten by `rewrite`, from the text it has to the bytes the
+/// checkout gives it.
+let private packRewritten (rewrite: string -> byte array) =
+    use package = new TempPackage(util)
+    for path, contents in util do
+        File.WriteAllBytes(package.Path path, rewrite contents)
+    PackageArchive.pack (okOf (Package.ofManifestFrom (storeOf package) (package.Path "util/acme.util.nyxp")))
+
+[<Fact>]
+let ``A checkout with CRLF line endings and a byte-order mark packs to the same bytes as one with LF`` () =
+    let lf = okOf (packRewritten System.Text.Encoding.UTF8.GetBytes)
+    let crlf = okOf (packRewritten (fun text -> Array.append (System.Text.Encoding.UTF8.GetPreamble()) (System.Text.Encoding.UTF8.GetBytes(text.Replace("\n", "\r\n")))))
+    Assert.Equal(PackageArchive.sha256 lf, PackageArchive.sha256 crlf)
+    use zip = new ZipArchive(new MemoryStream(crlf))
+    use reader = new StreamReader(zip.GetEntry("strings.nyx").Open())
+    Assert.Equal("export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n", reader.ReadToEnd())
+    // Every entry is a file anyone can read, recorded as made on Unix (3), whatever machine packed it.
+    Assert.All(zip.Entries, fun entry -> Assert.Equal(0o100644 <<< 16, entry.ExternalAttributes))
+    let centralDirectory = int (System.BitConverter.ToUInt32(crlf, crlf.Length - 22 + 16))
+    Assert.Equal(3uy, crlf[centralDirectory + 5])
+
+[<Fact>]
+let ``A package whose file isn't UTF-8 can't be packed`` () =
+    let latin1 (text: string) = System.Text.Encoding.Latin1.GetBytes(text.Replace("!", "\u00e9"))
+    let errors = errorsOf (packRewritten latin1) |> List.map _.Message
+    Assert.Equal<string list>([ "'strings.nyx' isn't UTF-8 text, so 'acme.util' can't be packed: save it as UTF-8" ], errors)
+
 [<Fact>]
 let ``A package with a path dependency or one on GitHub can't be packed`` () =
     let github = """(module = "retry", github = "acme/snippets/retry.nyx", rev = "1f8ae8b3c9d04e5f6a7b8c9d0e1f2a3b4c5d6e7f")"""

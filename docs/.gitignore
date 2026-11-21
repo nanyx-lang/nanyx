@@ -23,3 +23,6 @@ pnpm-debug.log*
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# the playground's compiler, which the build unpacks from a compiler release (site/playground-compiler.mjs)
+public/playground/compiler/

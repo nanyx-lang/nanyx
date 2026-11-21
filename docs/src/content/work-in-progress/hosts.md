@@ -71,7 +71,8 @@ This gives capability security as a side effect. A host that doesn't provide `Fi
 
 # Hosts on WebAssembly
 
-On the WASM backend, a host maps directly onto a set of imports and exports: the "world" the module is instantiated in. The WASI `wasi:cli` and `wasi:http` worlds are natural targets for `ConsoleHost` and an HTTP host.
+On the WASM backend, a host maps directly onto a set of imports and exports: the "world" the module is instantiated in. The WASI `wasi:cli` and `wasi:http` worlds are natural targets for `ConsoleHost` and an HTTP host. Emitting WASI 0.3
+components for them is proposed on [Components](./components).
 
 # Running in a browser
 
@@ -164,8 +165,9 @@ with a fresh instance, which is enough for local development and for the [HTTP s
 ([#1786](https://github.com/nanyx-lang/nanyx/issues/1786); see [How it's built](../deep-dives/hosts#how-its-built)). The host provides
 `Http` only, so far; what else it lacks is on [Files, HTTP and JSON](./files-http-json#http).
 
-**What it still needs:** to serve on WASI, the `wasi:http` incoming-handler world. That is the largest piece: the
-backend emits a WASI preview 1 core module today, and `wasi:http` is a preview 2 component.
+**What it still needs:** to serve on WASI, the `wasi:http/service` world, which exports `wasi:http/handler`. That is
+the largest piece: the backend emits a WASI preview 1 core module today, and `wasi:http` is a component interface. The
+plan for it is on [Components](./components).
 
 # Libraries for a host
 
@@ -282,7 +284,7 @@ Done: the console host written in Nanyx (#1245), `Env` (#1246), choosing a host 
    beside the module. The [Nim demo](./nim-demo) is its first user.
 4. **The test host**, with [Testing](./testing).
 5. **The HTTP host** ([Serving HTTP](#serving-http)): serving from the CLI for local development is done (#1786); the
-   `wasi:http` world is next.
+   `wasi:http` world is next ([Components](./components)).
 
 # Open questions
 

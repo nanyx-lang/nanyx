@@ -11,7 +11,7 @@ using NyxCompiler;
 internal static partial class CliCommands
 {
     /// <summary>
-    /// Publish the version a package's manifest gives: check that it builds and is formatted, check that its version is a big enough bump from the newest published below it, pack it, create the release v&lt;version&gt; with the .nyxpkg on the GitHub repository its manifest's repository names, and, for its first version, open the pull request that registers it with the package index. Signs in to GitHub with GITHUB_TOKEN, or else the GitHub CLI's login (gh auth login).
+    /// Publish the version a package's manifest gives: check that it builds and is formatted, check that its version is a big enough bump from the newest published below it, pack it, create the release v&lt;version&gt; with the .nyxpkg on the GitHub repository its manifest's repository names, and, for its first version, open the pull request that registers it with the package index. Run it again to finish a publish that stopped after creating the release. Signs in to GitHub with GITHUB_TOKEN, or else the GitHub CLI's login (gh auth login).
     /// </summary>
     /// <param name="path">A package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     [Consolo("publish")]
@@ -90,6 +90,37 @@ internal static partial class CliCommands
             return 1;
         }
 
+        // Everything that can stop the publish part way is checked before the release is made, so that a failure leaves
+        // nothing behind; a publish that stops after it all the same can be run again to finish (see createRelease).
+        shell.Out.WriteLine($"Checking that you can release on {repository}");
+        var canRelease = GitHubApi.canPush(github, repository);
+        if (canRelease.IsError || !canRelease.ResultValue)
+        {
+            shell.Error.WriteLine(canRelease.IsError
+                ? $"error: {canRelease.ErrorValue}"
+                : $"error: The account you are signed in to GitHub as can't push to {repository}, so it can't create the release: sign in as one that can, or use a token with write access to it");
+            return 1;
+        }
+
+        var registrationPath = Publishing.registrationPath(manifest.Name);
+        var registered = GitHubApi.indexFile(github, registrationPath);
+        if (registered.IsError)
+        {
+            shell.Error.WriteLine($"error: {registered.ErrorValue}");
+            return 1;
+        }
+
+        var needsRegistration = registered.ResultValue is null;
+        GitHubApi.IndexRoute? route = null;
+        if (needsRegistration)
+        {
+            shell.Out.WriteLine($"Checking that you can open the pull request that registers it on {GitHubApi.indexRepository}");
+            if (!TryIndexRoute(shell, github, out route))
+            {
+                return 1;
+            }
+        }
+
         var tag = $"v{manifest.Version}";
         shell.Out.WriteLine($"Creating the release {tag} of {repository}");
         var release = GitHubApi.createRelease(github, repository, tag, $"{manifest.Name} {manifest.Version}", PackageArchive.fileName(manifest), packed.ResultValue);
@@ -99,20 +130,19 @@ internal static partial class CliCommands
             return 1;
         }
 
-        shell.Out.WriteLine($"Released: {release.ResultValue}");
-        var registrationPath = Publishing.registrationPath(manifest.Name);
-        var registered = GitHubApi.indexFile(github, registrationPath);
-        if (registered.IsError)
+        shell.Out.WriteLine(release.ResultValue switch
         {
-            shell.Error.WriteLine($"error: {registered.ErrorValue}");
-            return 1;
-        }
+            GitHubApi.Release.Released released => $"Released: {released.Item}",
+            GitHubApi.Release.ReleasedAlready earlier => $"Released already, with this {PackageArchive.extension}, by a publish that didn't finish: {earlier.Item}",
+            _ => throw new InvalidOperationException("A release is made or found"),
+        });
 
-        if (registered.ResultValue is null)
+        if (needsRegistration)
         {
             shell.Out.WriteLine($"Opening the pull request that registers {manifest.Name} with the package index");
             var pull = GitHubApi.openIndexPullRequest(
                 github,
+                route!,
                 registrationPath,
                 Publishing.registration(manifest.Name, repository),
                 FSharpOption<string>.None,
@@ -122,6 +152,7 @@ internal static partial class CliCommands
             if (pull.IsError)
             {
                 shell.Error.WriteLine($"error: {pull.ErrorValue}");
+                shell.Error.WriteLine($"error: The release is made: run `nanyx publish` again to open the pull request");
                 return 1;
             }
 
@@ -170,9 +201,15 @@ internal static partial class CliCommands
             return 1;
         }
 
+        if (!TryIndexRoute(shell, github, out var route))
+        {
+            return 1;
+        }
+
         shell.Out.WriteLine($"Opening the pull request that yanks {package} {parsed}");
         var pull = GitHubApi.openIndexPullRequest(
             github,
+            route,
             indexPath,
             yanked.ResultValue,
             FSharpOption<string>.Some(index.ResultValue.Value.Item2),
@@ -201,11 +238,32 @@ internal static partial class CliCommands
 
         if (GitHubApi.token()?.Value is not { } token)
         {
-            shell.Error.WriteLine("error: You aren't signed in to GitHub: run `gh auth login`, or set GITHUB_TOKEN to a token that can create releases and pull requests");
+            shell.Error.WriteLine("error: You aren't signed in to GitHub: run `gh auth login`, or set GITHUB_TOKEN to a token that can create releases on the package's repository and fork or push to nanyx-lang/packages");
             return false;
         }
 
         github = FuncConvert.FromFunc<GitHubRequest, FSharpResult<GitHubResponse, string>>(request => GitHubApi.client(token, request));
+        return true;
+    }
+
+    /// <summary>Where the account <paramref name="github"/> is signed in as opens its pull requests to the package index
+    /// from: a branch of the index, if it can push to it, or else its fork of it, which this makes if need be; otherwise
+    /// reports why it can't open them.</summary>
+    private static bool TryIndexRoute(
+        Shell shell,
+        FSharpFunc<GitHubRequest, FSharpResult<GitHubResponse, string>> github,
+        out GitHubApi.IndexRoute route)
+    {
+        var sleep = FuncConvert.FromAction<int>(seconds => shell.Stop.WaitHandle.WaitOne(TimeSpan.FromSeconds(seconds)));
+        var found = GitHubApi.indexRoute(github, sleep);
+        if (found.IsError)
+        {
+            shell.Error.WriteLine($"error: {found.ErrorValue}");
+            route = null!;
+            return false;
+        }
+
+        route = found.ResultValue;
         return true;
     }
 
