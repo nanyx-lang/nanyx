@@ -174,6 +174,46 @@ is served with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embed
 its scripts, fonts and editor from the site. In a page that isn't isolated, a program's input has ended before it
 starts.
 
+# The page's layout
+
+What the page has is settled ([#2153](https://github.com/nanyx-lang/nanyx/issues/2153)); how it is laid out isn't. These
+are the questions to answer before building it, each with a proposal.
+
+1. **The site around it.** Either the docs site's header (logo, search, GitHub) over the playground, without the
+   docs' sidebar and table of contents, or a page of its own that fills the window. **Proposed: the site's header**,
+   and the playground fills the rest of the window, so it is plainly part of nanyx.dev and search still works.
+2. **Editor and output.** **Proposed: side by side** on a wide window, the editor on the left with about 60% of the
+   width, the output on the right; **stacked** below about 900 pixels, the editor above. No draggable divider in the
+   first version.
+3. **The controls.** **Proposed: one toolbar above the editor**: Run (with Ctrl+Enter and ⌘+Enter), Stop, which
+   replaces Run while a program runs, the examples menu, and Share, which copies the link and says so; at its right end,
+   the compiler release, linking to its notes. A "loading the compiler" note sits in the toolbar, with Run disabled,
+   until the compiler is ready.
+4. **The output pane.** **Proposed: one stream, in the order things happened**, as a terminal shows them: standard
+   error in the error colour, each `dbg` on a line of its own, dimmed and prefixed with its place (`[main.nyx:3]`), and
+   the end as the CLI shows it (a crash's message, or "exited with 2"; nothing for 0). The input line is the pane's
+   last line while the program waits, as a terminal's prompt is, and a line typed stays in the output. A program that
+   doesn't compile shows its errors there instead, each code linking to [Compiler errors](../standard-tools/errors).
+   Each Run clears the pane.
+5. **Opening a share link.** **Proposed: the page shows the code and doesn't run it** until you press Run, so a link
+   can't start a program you haven't seen.
+6. **What the editor starts with.** A share link's code; else what you last wrote, kept in the browser's storage, so
+   reloading loses nothing; else the default example. **Proposed: the tour's hello world as the default**, since
+   the headless test runs it; an example that reads input (such as [Nim](./nim-demo)) is in the menu.
+7. **The examples menu.** **Proposed: a short list chosen by hand**, each with a title: hello world, a few of the
+   tour's examples that show the language best, `fizzbuzzbaz.nyx`, and the Nim game, which reads input. Choosing one
+   replaces the editor's code, after asking when it has changes.
+8. **The share link's form.** **Proposed: the code in the URL's fragment**, compressed with deflate and written in
+   base64url (`/playground#code=...`): a fragment isn't sent to the server, so it isn't in its logs and has no length
+   limit there. A link that doesn't decode opens the default example with a message saying so.
+9. **Getting there.** **Proposed: "Playground" in the site's header**, beside search, and "open in the playground"
+   under the tour's examples. These links must load the page afresh, not through the site's client router
+   (`data-astro-reload`): a page swapped in by the router isn't cross-origin isolated, since the headers come with the
+   page's own response, and its programs couldn't read input.
+10. **Light and dark.** **Proposed: the editor and output follow the site's theme**, which follows the system's.
+11. **Phones.** **Proposed: the stacked layout works on a phone** (you can read, run and share), but the first version
+    does nothing more for them.
+
 # Plan
 
 1. Done: **Measure the compiler in the browser.** The compile path built for `browser-wasm` (`compiler/Nanyx.Browser`)
