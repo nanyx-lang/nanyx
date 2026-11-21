@@ -34,9 +34,13 @@ order: 25
   subtyping or by implicit conversion.
 - Sequences are built with `seq.unfold`, from a list with `list.toSeq`, or with a `seq { ... }` block whose `yield`
   keyword produces the elements ([#1699](https://github.com/nanyx-lang/nanyx/issues/1699), done).
-- A range is a sequence: `a..b` is read as the prelude's `seq.range(a, b)`, and `a..` as `seq.from(a)` (`Infer`,
-  `Seqs`). A `for` loop over a range written in place still counts with its bounds, and doesn't make the sequence
-  (`Loops.inferFor` keeps the range as it is written; `CoreIrLowerLoops`).
+- A range is a sequence: `a..b` is read as the prelude's `seq.range(a, b)`, and `a..` as `seq.from(a)`, of any type
+  with an `Enumerable` (its `succ`) and an `Ord` ([#1700](https://github.com/nanyx-lang/nanyx/issues/1700); `InferCalls`,
+  `Seqs`). A range of `int`s is read as the prelude's `__intRange` or `__intFrom` instead, which count and are passed
+  no instances. A `for` loop over a range of `int`s written in place still counts with its bounds, and doesn't make
+  the sequence (`Loops.inferFor` keeps the range as it is written; `CoreIrLowerLoops`); a range of any other type is
+  pulled as any sequence is. A range of characters waits on a character type
+  ([#2196](https://github.com/nanyx-lang/nanyx/issues/2196)).
 
 # Where we are today
 
