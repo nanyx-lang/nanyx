@@ -36,26 +36,33 @@ module PackageIndex =
         elif isAddress from then Uri(Uri from, relative).ToString()
         else Path.GetFullPath(Path.Combine(Path.GetDirectoryName from, relative))
 
-    /// The bytes at `location`, an address or a path, or why they can't be read.
-    let private read (location: string) : Result<byte array, string> =
+    /// The bytes at `location`, an address or a path; none when there is nothing there. Or why they can't be read.
+    let private tryRead (location: string) : Result<byte array option, string> =
         if isAddress location then
-            Downloads.get [] location |> Result.bind (function Some bytes -> Result.Ok bytes | None -> Result.Error $"there is no {location}")
+            Downloads.get [] location
         elif File.Exists location then
             try
-                Result.Ok(File.ReadAllBytes location)
+                Result.Ok(Some(File.ReadAllBytes location))
             with :? IOException as error ->
                 Result.Error $"{location} can't be read: {error.Message}"
         else
-            Result.Error $"there is no {location}"
+            Result.Ok None
+
+    /// The bytes at `location`, or why they can't be read, as when there is nothing there.
+    let private read (location: string) : Result<byte array, string> =
+        tryRead location |> Result.bind (function Some bytes -> Result.Ok bytes | None -> Result.Error $"there is no {location}")
+
+    /// `bytes`, read from `location`, as JSON, or why they aren't.
+    let private parseJson (location: string) (bytes: byte array) : Result<JsonElement, string> =
+        try
+            use document = JsonDocument.Parse(bytes: ReadOnlyMemory<byte>)
+            Result.Ok(document.RootElement.Clone())
+        with :? JsonException as error ->
+            Result.Error $"{location} is not JSON: {error.Message}"
+
     /// The JSON at `location`, or why it can't be read.
     let private readJson (location: string) : Result<JsonElement, string> =
-        read location
-        |> Result.bind (fun bytes ->
-            try
-                use document = JsonDocument.Parse(bytes: ReadOnlyMemory<byte>)
-                Result.Ok(document.RootElement.Clone())
-            with :? JsonException as error ->
-                Result.Error $"{location} is not JSON: {error.Message}")
+        read location |> Result.bind (parseJson location)
 
     let private property (name: string) (element: JsonElement) =
         match element.TryGetProperty name with
@@ -82,10 +89,11 @@ module PackageIndex =
         indexFiles index
         |> Result.bind (fun files ->
             let file = resolve (files + "config.json") $"{namespace'}/{name}.json"
-            match readJson file with
-            | Result.Error _ when not (isAddress file) && not (File.Exists file) -> Result.Ok(file, [])
+            // A package the index doesn't list has no index file, on disk or at an address (404).
+            match tryRead file |> Result.bind (Option.map (parseJson file >> Result.map Some) >> Option.defaultValue (Result.Ok None)) with
+            | Result.Ok None -> Result.Ok(file, [])
             | Result.Error message -> Result.Error message
-            | Result.Ok listing ->
+            | Result.Ok(Some listing) ->
                 let text name' (element: JsonElement) = property name' element |> Option.filter (fun value -> value.ValueKind = JsonValueKind.String) |> Option.map _.GetString()
                 let flag name' (element: JsonElement) = property name' element |> Option.exists (fun value -> value.ValueKind = JsonValueKind.True)
                 let listed =
