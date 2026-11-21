@@ -442,5 +442,6 @@ These are for people working on the compiler and the standard library, and are n
 - `--no-inline`, on `run` and `build`, compiles every call as a call. Inlining changes no behaviour, so a program
   that behaves differently with it points at a bug in the compiler.
 - `nanyx stdlib-docs <directory>` writes the reference on each page of the docs site's
-  [Standard Library](../stdlib/standard-library) section from the library's doc comments, and with `--check` lists
+  [Standard Library](../stdlib/standard-library) section from the library's doc comments, or, on a page that pins a
+  published package in its front matter (`package: nanyx.json 0.1.0`), from that version's, and with `--check` lists
   the pages that are out of date and exits with 1.

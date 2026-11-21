@@ -16,9 +16,11 @@ open TranspilerWasmTestHelpers
 /// but for those in a standard-library page's generated reference.
 let private examplesOf (section: string) (page: string) =
     let path = Path.Combine(docsContentDirectory, section, page)
-    let lines = File.ReadAllText(path).ReplaceLineEndings("\n").Split('\n')
+    let text = File.ReadAllText path
+    let lines = text.ReplaceLineEndings("\n").Split('\n')
+    let beginMarker = StandardLibraryDocs.beginMarkerOf (StandardLibraryDocs.pinOf text |> Result.defaultValue None)
     let generated =
-        match Array.IndexOf(lines, StandardLibraryDocs.beginMarker), Array.IndexOf(lines, StandardLibraryDocs.endMarker) with
+        match Array.IndexOf(lines, beginMarker), Array.IndexOf(lines, StandardLibraryDocs.endMarker) with
         | start, finish when start >= 0 && finish > start -> fun line -> line > start && line <= finish
         | _ -> fun _ -> false
     docExamplesOf path |> Map.filter (fun line _ -> not (generated line))
