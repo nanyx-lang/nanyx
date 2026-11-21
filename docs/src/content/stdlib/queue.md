@@ -145,13 +145,12 @@ The values in `queue`, the front one first.
 ## `Queue.reduce`
 
 ```nanyx fragment
-def Queue.reduce: [Default(a), c] Queue(a), ([c] (a, a) -> a) -> a
+def Queue.reduce: [c] Queue(a), ([c] (a, a) -> a) -> #some(a) | #none
 ```
 
-The elements of `q`, from the front, combined with `f`, in order, starting from the element
-type's `Default`: a queue of `1`, `2` and `3` reduced with `{ + }` is `6`. An empty one gives
-the default, so `reduce` never fails, unlike a `reduce` that starts from the first element. To
-start from another value, use [`list.fold`](prelude-lists#listfold).
+The elements of `q`, from the front, combined with `f`, in order, starting from the first: a
+queue of `1` to `5` reduced with `{ * }` is `#some(120)`, and an empty one, having no first
+element, gives `#none`. To start from another value, use [`list.fold`](prelude-lists#listfold).
 
 ## `` Queue.`==` ``
 

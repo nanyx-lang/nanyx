@@ -354,13 +354,12 @@ on, pulling the whole of `s` now. Stack-safe, but an endless sequence never ends
 ## `seq.reduce`
 
 ```nanyx fragment
-def seq.reduce: [Default(a), c, d] ([c] seq(a)), ([d] (a, a) -> a) -> a
+def seq.reduce: [c, d] ([c] seq(a)), ([d] (a, a) -> a) -> #some(a) | #none
 ```
 
-The elements of `s`, pulled now, combined with `f`, in order, starting from the element type's
-`Default`: `(1..4) \seq.reduce { + }` is `10`. An empty one gives the default, so `reduce` never
-fails, unlike a `reduce` that starts from the first element. To start from another value, use
-[`seq.fold`](#seqfold).
+The elements of `s`, pulled now, combined with `f`, in order, starting from the first: `(1..5)
+\seq.reduce { * }` is `#some(120)`, and an empty sequence, having no first element, gives `#none`.
+To start from another value, use [`seq.fold`](#seqfold).
 
 ## `seq.toList`
 

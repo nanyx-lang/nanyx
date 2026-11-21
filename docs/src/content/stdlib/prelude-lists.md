@@ -36,13 +36,12 @@ def list.fold: [c] list(a), b, ([c] (b, a) -> b) -> b
 ## `list.reduce`
 
 ```nanyx fragment
-def list.reduce: [Default(a), c] list(a), ([c] (a, a) -> a) -> a
+def list.reduce: [c] list(a), ([c] (a, a) -> a) -> #some(a) | #none
 ```
 
-The elements of `xs` combined with `f`, in order, starting from the element type's `Default`:
-`[1, 2, 3] \list.reduce { + }` is `6`. An empty one gives the default, so `reduce` never fails,
-unlike a `reduce` that starts from the first element. To start from another value, use
-[`list.fold`](#listfold).
+The elements of `xs` combined with `f`, in order, starting from the first: `[1, 2, 3, 4, 5]
+\list.reduce { * }` is `#some(120)`, and an empty list, having no first element, gives `#none`.
+To start from another value, use [`list.fold`](#listfold); for a total, [`list.sum`](#listsum) or [`list.product`](#listproduct).
 
 ## `list.reverse`
 
@@ -67,6 +66,15 @@ def list.sum: [Add(a)] list(a) -> a
 ```
 
 The elements added together: `[1, 2, 3] \list.sum` is 6, and the sum of no elements is `zero`.
+
+## `list.product`
+
+```nanyx fragment
+def list.product: [Num(a)] list(a) -> a
+```
+
+The elements multiplied together: `[1, 2, 3, 4] \list.product` is 24, and the product of no
+elements is 1.
 
 ## `list.isEmpty`
 
