@@ -121,6 +121,11 @@ those files workable. Problems with the code's structure are tracked as GitHub i
 
 - **A version bump is a release.** Merging a change to `<Version>` in `compiler/Directory.Build.props` makes `main`
   tag `compiler/<version>` and publish the binaries.
+- **The shipped packages move with the version.** A package the compiler ships is named at the compiler's own version,
+  so the PR that bumps `<Version>` also sets that version in every manifest under `packages/` (the package's own
+  `version` and each shipped dependency's), in `examples/`, and in the docs that name a shipped package's version
+  (`git grep '<old version>' packages examples docs/src/content`). Without it, every package fails with `NYX0029` and
+  the release job never runs.
 - **The PR that bumps the version writes its changelog section.** Add a `# <version>` section at the top of the
   [Changelog](docs/src/content/overview/changelog.md), with the date under it in italics. The release job uses that
   section as the GitHub release's notes, and the Compiler workflow fails if there isn't one.
