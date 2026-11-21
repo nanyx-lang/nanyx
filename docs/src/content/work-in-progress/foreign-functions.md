@@ -39,6 +39,10 @@ Done: `@extern` ([#1424](https://github.com/nanyx-lang/nanyx/issues/1424)), host
 and a foreign function named as a value ([#1781](https://github.com/nanyx-lang/nanyx/issues/1781)).
 
 1. **Later:** the browser host's imports, which a page's JavaScript provides ([Hosts](./hosts#a-browser-host)).
+2. **Components:** a host's component root lowers WASI 0.3's canonical ABI by hand, on externs of `i32` and `i64`
+   named for the interface and function, such as `@extern("wasi:cli/stdout@0.3.0", "[stream-write-0]write-via-stream")`.
+   The compiler generates the canonical ABI for Nanyx types only for user components, later
+   ([Components](./components#the-backend)).
 
 # Open questions
 
@@ -46,6 +50,3 @@ and a foreign function named as a value ([#1781](https://github.com/nanyx-lang/n
   build writes it out beside the module ([Hosts](./hosts#open-questions) asks the same).
 - **Pure foreign functions.** Should an extern that does no input or output, such as a math routine, be callable
   without `HostRuntime`? The safe answer is no, until there's a case for it.
-- **Components.** The `wasi:http` world the [HTTP host](./hosts#serving-http) needs is a component, not a core
-  module. [Components](./components) proposes that a host lower the canonical ABI by hand on externs of `i32` and
-  `i64` at first, and that the compiler generate it for Nanyx types later.
