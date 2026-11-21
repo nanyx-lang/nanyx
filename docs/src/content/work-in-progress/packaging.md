@@ -274,8 +274,9 @@ writes ([#867](https://github.com/nanyx-lang/nanyx/issues/867), see
    - A script couldn't depend on a package from the index, so no script, the docs' examples among them, could use a
      package that isn't shipped. A script now pins the exact version it uses (#2179).
    - The docs site's reference pages are generated from the standard library and the shipped packages only, so
-     `json`, `json, decoders` and `encode` keep their guides but link to the doc comments in nanyx-lang/json for the
-     reference ([#2178](https://github.com/nanyx-lang/nanyx/issues/2178)).
+     `json`, `json, decoders` and `encode` lost their generated reference. A page now pins a published package in its
+     front matter, `package: nanyx.json 0.1.0`, and `nanyx stdlib-docs` generates its reference from that version
+     ([#2178](https://github.com/nanyx-lang/nanyx/issues/2178)).
    - A script in a package's directory is one of the package's files, and a package has one `@entry`, so a package's
      tests can't be scripts beside it. nanyx-lang/json's test runner copies the package and its test scripts to a
      directory of their own and compares what each prints with an `.expected` file, until `nanyx test`

@@ -786,7 +786,7 @@ internal static partial class CliCommands
         }
 
         var failed = false;
-        foreach (var (page, update) in StandardLibraryDocs.update(path))
+        foreach (var (page, update) in StandardLibraryDocs.update(shell.Packages, path))
         {
             switch (update)
             {

@@ -2,8 +2,9 @@
 /// library, and on it the names the file exports, in the order it declares them, each with its signature and doc
 /// comment. It is read from the compile of each module that the compiler embeds, and of each public module of the
 /// packages the compiler ships beside it, but for the hosts (see `ShippedPackages`), whose modules a program doesn't
-/// import. The reference sits on its page between `beginMarker` and `endMarker`, and the rest of the page is written by
-/// hand.
+/// import; and, for a page that pins a published package in its front matter, `package: nanyx.json 0.1.0`, from that
+/// version of the package (see `pinOf`). The reference sits on its page between `beginMarkerOf` its pin and `endMarker`, and the
+/// rest of the page is written by hand.
 module NyxCompiler.StandardLibraryDocs
 
 open System
@@ -12,6 +13,14 @@ open System.Text.RegularExpressions
 open Parser.Program
 
 let beginMarker = "<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->"
+
+/// The line a page's reference starts after: `beginMarker`, or, on a page that pins a published package (see `pinOf`),
+/// one that names the package.
+let beginMarkerOf (pin: (string * SemanticVersion) option) =
+    match pin with
+    | Some (name, version) ->
+        $"<!-- The reference below is generated from the doc comments of {name} {version}, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->"
+    | None -> beginMarker
 
 let endMarker = "<!-- End of the generated reference. -->"
 
@@ -153,12 +162,27 @@ let private render (moduleDoc: string option) (exports: (Export * string) list) 
           if not members.IsEmpty then String.concat "\n" members ]
     Option.toList moduleDoc @ (exports |> List.collect entry) |> String.concat "\n\n"
 
-/// A module whose reference is written: its files, its compile, and the file it is compiled from, whose doc comment is
-/// the module's.
+/// A module whose reference is written: its files, its compile, the file it is compiled from, whose doc comment is the
+/// module's, and, for a module of a published package, the package and the version its pages pin.
 type private Documented =
     { Files: string list
       Result: CompileResult
-      ModuleFile: string }
+      ModuleFile: string
+      Pin: (string * SemanticVersion) option }
+
+/// The public modules of `modules`, a package's, each compiled as a program that imports it checks it, from the package
+/// `pin` names if it is a published one.
+let private publicModules (pin: (string * SemanticVersion) option) (modules: PackageModules) : Documented list =
+    modules.PublicModules
+    |> List.choose (fun moduleName -> modules.Modules |> Map.tryFind moduleName)
+    |> List.choose (function
+        | file :: _ as files ->
+            Some
+                { Files = files
+                  Result = Compiler.compileSourceIn modules Linters.none file (File.ReadAllText file)
+                  ModuleFile = file
+                  Pin = pin }
+        | [] -> None)
 
 /// The modules whose reference is written: each of the standard library's, and each public module of a package the
 /// compiler ships but for the hosts', compiled as a program that imports it checks it.
@@ -168,28 +192,58 @@ let private documented () : Documented list =
         |> List.map (fun moduleName ->
             { Files = StandardLibrary.moduleFiles moduleName
               Result = compile moduleName
-              ModuleFile = StandardLibrary.resourceName moduleName })
+              ModuleFile = StandardLibrary.resourceName moduleName
+              Pin = None })
     let packages =
         ShippedPackages.names ()
         |> List.filter (fun name -> Result.isError (HostPackages.tryShipped name))
         |> List.choose ShippedPackages.tryModules
-        |> List.collect (fun modules ->
-            modules.PublicModules
-            |> List.choose (fun moduleName -> modules.Modules |> Map.tryFind moduleName)
-            |> List.choose (function
-                | file :: _ as files ->
-                    Some
-                        { Files = files
-                          Result = Compiler.compileSourceIn modules Linters.none file (File.ReadAllText file)
-                          ModuleFile = file }
-                | [] -> None))
+        |> List.collect (publicModules None)
     library @ packages
 
-/// The reference of each page, by page: one for each file of the library, or of a package the compiler ships, that
-/// exports a name, as `documented` compiles its module. A link in a doc comment, `` [`name`] ``, leads to the name's
-/// entry, on its own page or another.
-let references () : Map<string, string> =
-    let compiled = documented ()
+/// The package and version the page `text` pins in its front matter, `package: nanyx.json 0.1.0`, whose reference it
+/// shows rather than the standard library's; none if it pins none; or what is wrong with the pin.
+let pinOf (text: string) : Result<(string * SemanticVersion) option, string> =
+    let lines = text.ReplaceLineEndings("\n").Split('\n')
+    let frontMatter =
+        if lines.Length > 0 && lines[0] = "---" then
+            lines |> Array.skip 1 |> Array.takeWhile ((<>) "---")
+        else
+            [||]
+    match frontMatter |> Array.tryFind (fun line -> line.StartsWith "package:") with
+    | None -> Ok None
+    | Some line ->
+        let written = line.Substring("package:".Length).Trim().Trim('"')
+        match written.Split(' ', StringSplitOptions.RemoveEmptyEntries) with
+        | [| name; version |] when (SemanticVersion.tryParse version).IsSome -> Ok(Some(name, (SemanticVersion.tryParse version).Value))
+        | _ -> Error $"pins its package as '{written}', but a pin is a package and its exact version, `package: nanyx.json 0.1.0`"
+
+/// The public modules of each published package that `pins` names at a version (see `pinOf`), read from the package
+/// cache of `store`, and downloaded into it from its index first if it isn't there, as a script's `::dependency` is
+/// (see `Script.pull`); or, for a pin, why it can't be. `directory` is where the pages are.
+let private published (store: PackageStore) (directory: string) (pins: (string * SemanticVersion) list) =
+    pins
+    |> List.map (fun (name, version) ->
+        let pin = name, version
+        // The pin is read as a script beside the pages that names it in a `::dependency` line would be.
+        let script = Path.Combine(directory, "stdlib-docs.nyx")
+        let text = $"::dependency {name} {version}\n"
+        let pulled =
+            if Directory.Exists(PackageStore.directoryOf store name version) then Ok()
+            else Script.pull store script text |> Result.map ignore |> Result.mapError (String.concat "; ")
+        let modules =
+            pulled
+            |> Result.bind (fun () ->
+                let directives = Script.readFrom store script text
+                match directives.Build |> Option.bind (fun build -> build.Dependencies |> List.tryFind (fun dependency -> dependency.Package = name)) with
+                | Some modules -> Ok modules
+                | None -> Error(directives.Diagnostics |> List.map _.Message |> String.concat "; "))
+        pin, modules |> Result.map (publicModules (Some pin)))
+
+/// The reference of each page, by page, with the published package and version it is from, if it is from one: one for
+/// each file of `compiled` that exports a name. A link in a doc comment, `` [`name`] ``, leads to the name's entry, on
+/// its own page or another.
+let private referencesOf (compiled: Documented list) : Map<string, string * (string * SemanticVersion) option> =
     // Every entry's page and heading, by where its name is declared, for the links.
     let targets =
         compiled
@@ -218,12 +272,16 @@ let references () : Map<string, string> =
                 |> Option.map anchors
                 |> Option.defaultValue []
             let moduleDoc = if file = documented.ModuleFile then reader.ForModule file else None
-            if exports.IsEmpty then None else Some (page, render moduleDoc exports)))
+            if exports.IsEmpty then None else Some (page, (render moduleDoc exports, documented.Pin))))
     |> Map.ofList
-/// `page`, a page's text, with its reference between the markers replaced by `reference`. An error when it has no
-/// markers, or they are out of order.
-let withReference (reference: string) (page: string) : Result<string, string> =
+
+/// The reference of each page of the standard library and the packages the compiler ships, by page (see `referencesOf`).
+let references () : Map<string, string> = referencesOf (documented ()) |> Map.map (fun _ (reference, _) -> reference)
+/// `page`, a page's text, which pins `pin`, with its reference between the markers replaced by `reference`. An error
+/// when it has no markers, or they are out of order.
+let withReference (pin: (string * SemanticVersion) option) (reference: string) (page: string) : Result<string, string> =
     let page = page.ReplaceLineEndings "\n"
+    let beginMarker = beginMarkerOf pin
     match page.IndexOf beginMarker, page.IndexOf endMarker with
     | start, finish when start >= 0 && finish > start ->
         Ok (page.Substring(0, start + beginMarker.Length) + "\n\n" + reference + "\n\n" + page.Substring finish)
@@ -240,29 +298,55 @@ type PageUpdate =
     | Unwritable of string
 
 /// What each page of the library's reference in `directory` (docs/src/content/stdlib) needs, by its path: its text with
-/// the library's reference, if that is not what it has.
-let update (directory: string) : (string * PageUpdate) list =
-    let references = references ()
+/// the library's reference, if that is not what it has. A page that pins a published package (see `pinOf`) has that
+/// package's reference, read from the package cache of `store`, or downloaded from its index.
+let update (store: PackageStore) (directory: string) : (string * PageUpdate) list =
     let pages =
         Directory.GetFiles(directory, "*.md")
         |> Array.sort
-        |> Array.map (fun path -> Path.GetFileNameWithoutExtension path, path)
+        |> Array.map (fun path -> Path.GetFileNameWithoutExtension path, (path, File.ReadAllText path))
         |> Map.ofArray
+    let pins = pages |> Map.map (fun _ (_, text) -> pinOf text)
+    let pinned = pins |> Map.values |> Seq.choose (function Ok pin -> pin | Error _ -> None) |> Seq.distinct |> List.ofSeq
+    let fromPackages = published store directory pinned
+    let references = referencesOf (documented () @ (fromPackages |> List.collect (fun (_, modules) -> Result.defaultValue [] modules)))
+    let pinError (pin: (string * SemanticVersion) option) =
+        match pin with
+        | Some (name, version) ->
+            fromPackages
+            |> List.tryPick (fun (found, modules) -> match modules with Error message when found = (name, version) -> Some message | _ -> None)
+            |> Option.map (fun message -> $"pins {name} {version}, which can't be read: {message}")
+        | None -> None
+    let written (pin: (string * SemanticVersion) option) =
+        match pin with
+        | Some (name, version) -> $"{name} {version}"
+        | None -> "the standard library, or a package the compiler ships"
     let ofLibrary =
         references
         |> Map.toList
-        |> List.map (fun (page, reference) ->
+        |> List.map (fun (page, (reference, from)) ->
             match pages |> Map.tryFind page with
-            | None -> Path.Combine(directory, page + ".md"), Unwritable "is missing: a file of the standard library, or of a package the compiler ships, exports names it would list"
-            | Some path ->
-                let text = File.ReadAllText path
-                match withReference reference text with
+            | None -> Path.Combine(directory, page + ".md"), Unwritable $"is missing: a file of {written from} exports names it would list"
+            | Some (path, text) ->
+                match pins[page] with
                 | Error message -> path, Unwritable message
-                | Ok written when written = text.ReplaceLineEndings "\n" -> path, UpToDate
-                | Ok written -> path, OutOfDate written)
+                | Ok pin when pin <> from -> path, Unwritable $"pins {written pin}, but its reference is from {written from}"
+                | Ok pin ->
+                    match withReference pin reference text with
+                    | Error message -> path, Unwritable message
+                    | Ok written when written = text.ReplaceLineEndings "\n" -> path, UpToDate
+                    | Ok written -> path, OutOfDate written)
     let stale =
         pages
         |> Map.toList
-        |> List.filter (fun (page, path) -> not (references.ContainsKey page) && File.ReadAllText(path).Contains beginMarker)
-        |> List.map (fun (_, path) -> path, Unwritable "has a reference, but no file of the standard library, or of a package the compiler ships, is its")
+        |> List.filter (fun (page, _) -> not (references.ContainsKey page))
+        |> List.choose (fun (page, (path, text)) ->
+            match pins[page] with
+            | Error message -> Some(path, Unwritable message)
+            | Ok pin ->
+                match pinError pin with
+                | Some message -> Some(path, Unwritable message)
+                | None when pin.IsSome -> Some(path, Unwritable $"pins {written pin}, but no file of it exports names for this page")
+                | None when text.Contains(beginMarkerOf pin) -> Some(path, Unwritable $"has a reference, but no file of {written pin} is its")
+                | None -> None)
     ofLibrary @ stale
