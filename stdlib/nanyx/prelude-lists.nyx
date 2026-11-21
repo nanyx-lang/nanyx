@@ -17,12 +17,12 @@ export def list.fold: [c] list(a), b, ([c] b, a -> b) -> b = {
   | [x, ...rest], acc, step -> list.fold(rest, step(acc, x), step)
 }
 
---| The elements of `xs` combined with `f`, in order, starting from the element type's [`Default`]:
-  `[1, 2, 3] \list.reduce { + }` is `6`. An empty one gives the default, so `reduce` never fails,
-  unlike a `reduce` that starts from the first element. To start from another value, use
-  [`list.fold`].
-export def list.reduce: [Default(a), c] list(a), ([c] a, a -> a) -> a = { xs, f ->
-  list.fold(xs, default, f)
+--| The elements of `xs` combined with `f`, in order, starting from the first: `[1, 2, 3, 4, 5]
+  \list.reduce { * }` is `#some(120)`, and an empty list, having no first element, gives `#none`.
+  To start from another value, use [`list.fold`]; for a total, [`list.sum`] or [`list.product`].
+export def list.reduce: [c] list(a), ([c] a, a -> a) -> #some(a) | #none = {
+  | [], _ -> #none
+  | [x, ...rest], f -> #some(list.fold(rest, x, f))
 }
 
 --| The elements in reverse order.
@@ -38,6 +38,12 @@ export def list.length: list(a) -> int = { xs ->
 --| The elements added together: `[1, 2, 3] \list.sum` is 6, and the sum of no elements is `zero`.
 export def list.sum: [Add(a)] list(a) -> a = { xs ->
   list.fold(xs, zero, { total, x -> total + x })
+}
+
+--| The elements multiplied together: `[1, 2, 3, 4] \list.product` is 24, and the product of no
+  elements is 1.
+export def list.product: [Num(a)] list(a) -> a = { xs ->
+  list.fold(xs, fromInt(1), { total, x -> total * x })
 }
 
 --| Whether there are no elements.

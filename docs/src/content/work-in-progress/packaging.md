@@ -134,7 +134,7 @@ fails rather than recording it.
 ## What a package is
 
 A published package is a `.nyxpkg` file, built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): a zip of the
-manifest, at its root, the source files its `sources` select, and `api.json`, packed the same way every time
+manifest, at its root, the source files its `sources` select, and `api.json`, packed the same way every time from the same files
 (`PackageArchive.pack`, `nanyx pack`).
 
 - Packages ship **source**. The compiler inlines imported modules into one WebAssembly module, so there is no
@@ -252,8 +252,35 @@ writes ([#867](https://github.com/nanyx-lang/nanyx/issues/867), see
 4. **Projects** (`.nyxproj`, project references) when a workspace of several packages needs them
    ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
 5. **Editor support.** Resolve packages in the language server; pull from the extension.
-6. **First packages.** Publish at least one official package (`nanyx.json`, say) end to end before launch, to
-   prove the whole path.
+6. **First packages.** Publish at least one official package end to end before launch, to prove the whole path.
+   `nanyx.json` is the trial ([#867](https://github.com/nanyx-lang/nanyx/issues/867)): it is no longer shipped, and
+   lives in [nanyx-lang/json](https://github.com/nanyx-lang/json), with its tests and a CI workflow that builds them
+   with the latest released compiler. What the trial turned up so far:
+   - A script couldn't depend on a package from the index, so no script, the docs' examples among them, could use a
+     package that isn't shipped. A script now pins the exact version it uses (#2179).
+   - The docs site's reference pages are generated from the standard library and the shipped packages only, so
+     `json`, `json, decoders` and `encode` keep their guides but link to the doc comments in nanyx-lang/json for the
+     reference ([#2178](https://github.com/nanyx-lang/nanyx/issues/2178)).
+   - A script in a package's directory is one of the package's files, and a package has one `@entry`, so a package's
+     tests can't be scripts beside it. nanyx-lang/json's test runner copies the package and its test scripts to a
+     directory of their own and compares what each prints with an `.expected` file, until `nanyx test`
+     ([Testing](./testing)) replaces it.
+   - `nanyx publish` creates the GitHub release before it opens the registration pull request on the index, and a
+     second run refuses a version whose release exists. If the pull request can't be opened, for example because
+     the token can't reach nanyx-lang/packages, the publish can't be finished by running it again.
+   - The compiler's tests need the package without the network: they read the `.nyxpkg` of its release, kept beside
+     them, from an index on disk.
+   - `nanyx pack` packs the files as they are on disk, so the same version packed on two machines can differ: 0.1.0,
+     published from a Windows checkout, holds its sources with CRLF line endings, and its SHA-256 isn't that of the
+     same commit packed on Linux. Packing should write LF line endings whatever the checkout has.
+   - `nanyx publish` 0.31.0 couldn't publish a package's first version: the API comparison read the 404 for a package
+     the index doesn't list as an error ([#2184](https://github.com/nanyx-lang/nanyx/pull/2184)). Pointing
+     `NANYX_INDEX` at an empty index on disk got past it.
+   - The index's Sync refused the release: the manifest writes its `repository` as `owner/name`, which `publish`
+     needs, and the registration `publish` opens gives its address, which Sync compared literally
+     ([nanyx-lang/packages#6](https://github.com/nanyx-lang/packages/pull/6)).
+   - `nanyx publish` opens the registration pull request from a fork of nanyx-lang/packages in the publisher's
+     account, which it makes if need be, even for an account that can push to the index itself.
 # Open questions
 
 - **A custom domain and mirroring.** The index is at `https://nanyx-lang.github.io/packages/` and points at

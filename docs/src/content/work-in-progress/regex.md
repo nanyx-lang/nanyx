@@ -13,7 +13,7 @@ Nanyx ([below](#patterns-checked-at-compile-time)).
 # Decisions
 
 - **A shipped package, `nanyx.regex`,** named in a manifest's `dependencies` or a script's `::dependency`, as
-  [`nanyx.json`](./files-http-json) is. The standard library stays what every program needs.
+  [`nanyx.json`](./files-http-json) was before it was published from a repository of its own. The standard library stays what every program needs.
 - **Written in Nanyx, not provided by a host.** Matching is pure computation, so it needs no capability, and taking it
   from the host (.NET's engine in the console host, JavaScript's in a browser) would give each host different
   semantics. The engine is also a real workload for `MArray`, functional but in place and sequences, written with the

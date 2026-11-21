@@ -191,13 +191,12 @@ def map.fold: [c] map(k, v), b, ([c] (b, k, v) -> b) -> b
 ## `map.reduce`
 
 ```nanyx fragment
-def map.reduce: [Default(v), c] map(k, v), ([c] (v, v) -> v) -> v
+def map.reduce: [c] map(k, v), ([c] (v, v) -> v) -> #some(v) | #none
 ```
 
-The values of `m` combined with `f`, in order, starting from the value type's `Default`: `["a"
-=> 1, "b" => 2] \map.reduce { + }` is `3`. An empty one gives the default, so `reduce` never
-fails, unlike a `reduce` that starts from the first element. To start from another value, use
-[`map.fold`](#mapfold).
+The values of `m` combined with `f`, in order, starting from the first: `["a" => 4, "b" => 5]
+\map.reduce { * }` is `#some(20)`, and an empty map, having no first value, gives `#none`. To
+start from another value, use [`map.fold`](#mapfold).
 
 ## `map.map`
 
@@ -352,13 +351,12 @@ def set.fold: [c] set(a), b, ([c] (b, a) -> b) -> b
 ## `set.reduce`
 
 ```nanyx fragment
-def set.reduce: [Default(a), c] set(a), ([c] (a, a) -> a) -> a
+def set.reduce: [c] set(a), ([c] (a, a) -> a) -> #some(a) | #none
 ```
 
-The elements of `s` combined with `f`, in order, starting from the element type's `Default`:
-`set[1, 2, 3] \set.reduce { + }` is `6`. An empty one gives the default, so `reduce` never fails,
-unlike a `reduce` that starts from the first element. To start from another value, use
-[`set.fold`](#setfold).
+The elements of `s` combined with `f`, in order, starting from the first: `set[1, 2, 3, 4, 5]
+\set.reduce { * }` is `#some(120)`, and an empty set, having no first element, gives `#none`. To
+start from another value, use [`set.fold`](#setfold).
 
 ## `set.map`
 

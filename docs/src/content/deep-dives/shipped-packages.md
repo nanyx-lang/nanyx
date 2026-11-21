@@ -14,7 +14,7 @@ progress.
 - **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
   package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console`,
   `packages/nanyx.console.core`, `packages/nanyx.fs`, `packages/nanyx.http.core`, `packages/nanyx.http`,
-  `packages/nanyx.json` and `packages/nanyx.regex`. Every build of the compiler copies the directory beside it (a `None` item in
+  and `packages/nanyx.regex`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
   executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with

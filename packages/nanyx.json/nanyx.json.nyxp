@@ -1,7 +1,0 @@
-(
-  package = (
-    name = "nanyx.json"
-    version = "0.31.0"
-    sources = ["src/**/*.nyx"]
-  )
-)

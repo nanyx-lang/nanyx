@@ -40,7 +40,7 @@ let standardLibraryExamples () : obj array seq = examplesIn "stdlib"
 let customPatternExamples () : obj array seq =
     examplesOf "advanced" "custom-patterns.md" |> Map.keys |> Seq.map (fun line -> [| box "custom-patterns.md"; box line |])
 
-/// The JSON cookbook page's examples, which run as the tour's do: they show the shipped package `nanyx.json`.
+/// The JSON cookbook page's examples, which run as the tour's do: they show the package `nanyx.json`, from the index.
 let jsonCookbookExamples () : obj array seq =
     examplesOf "cookbook" "json-parsing.md" |> Map.keys |> Seq.map (fun line -> [| box "json-parsing.md"; box line |])
 
@@ -94,7 +94,7 @@ let private expectedOutput (code: string) =
 
 let private errorCodes (code: string) =
     let path = Path.Combine(Path.GetTempPath(), $"nanyx-tour-{Guid.NewGuid():N}.nyx")
-    (Script.compileSource path (withImports code)).Diagnostics
+    (Script.compileSourceReportingIn (testStore ()) CompileListener.none path (withImports code)).Diagnostics
     |> List.filter Diagnostics.isError
     |> List.map _.Code
     |> List.distinct
