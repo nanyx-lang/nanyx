@@ -309,7 +309,10 @@ script's values that need a context are not top-level values by then: they are l
 its type (see Value representation above). A temporary is not stored: it is used exactly once, by the next instruction that needs
 it, so its value is computed where it is used. An operand that stores to a local on its way to its value (a `match`
 or an interpolated string among a call's arguments, say) is one temporary whose value is the whole sequence, stores
-and all, so nothing waits on the stack across a store. Record layouts and function table slots are numbered as
+and all, so nothing waits on the stack across a store. A chain of temporaries, such as a sum of thousands of terms,
+or an else-if chain, nests as deep as it is long, so the code of each value, sequence and remaining match arm is kept
+aside, its parent holding a short reference to it, and the references are replaced by their code once the function is
+written (`WatPieces.fs`): a chain is written in time that grows with its length, not its square. Record layouts and function table slots are numbered as
 functions are emitted, in definition order, each definition followed by its specialisations. What the module needs
 besides its functions comes from the IR of exactly the functions it emits (`CoreIrFacts.fs`): the tags it numbers
 (sorted by name, so every case of a tag type a hole prints has one), the string literals in its data segment, and the
