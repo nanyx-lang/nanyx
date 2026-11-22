@@ -195,3 +195,30 @@ def s = memory {
 println(s())
 """
     Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
+
+/// A block that gives back `lambda`, made where `r`, a reference, and `c`, a cell, are in scope.
+let private capturing (lambda: string) =
+    $"import nanyx/mref\n\ndef k = {{ a, b -> a }}\n\ndef x = memory {{\n  def r = MRef.new(1)\n  mut c = 0\n  c := 1\n  {lambda}\n}}\n"
+
+[<Theory>]
+[<InlineData("{ list.length([r]) }")>]
+[<InlineData("{ k(1, r) }")>]
+[<InlineData("{\n    def y = r\n    1\n  }")>]
+[<InlineData("{\n    def y = { c }\n    1\n  }")>]
+[<InlineData("{\n    def f = {\n      def y = r\n      1\n    }\n    2\n  }")>]
+let ``A lambda that captures a reference or a cell can't leave the block, though it doesn't read it`` (lambda: string) =
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes (capturing lambda))
+
+[<Fact>]
+let ``A lambda that captures a reference is called inside the block`` () =
+    let source =
+        """
+import nanyx/mref
+
+def x = memory {
+  def r = MRef.new(1)
+  def f = { list.length([r]) }
+  f() + f()
+}
+"""
+    Assert.Equal<string list>([], codes source)
