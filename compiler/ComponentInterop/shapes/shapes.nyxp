@@ -1,4 +1,4 @@
--- The Nanyx side of the test that Nanyx components and Rust components call each other (see ../run.sh): a component
--- that exports `acme:shapes/shapes` and imports `acme:units/units`. Its host, the console host, is given with --host,
+-- The Nanyx side of the test that Nanyx components and Rust components call each other (see ../run.sh): a library
+-- component, with no `@entry`, that exports `acme:shapes/shapes` and imports `acme:units/units`. Its host, the console host, is given with --host,
 -- which needs no version, so that this manifest needn't change with each release.
 (package = (name = "acme.shapes", version = "0.1.0", sources = ["src/**/*.nyx"]))

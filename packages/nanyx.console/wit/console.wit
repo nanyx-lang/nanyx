@@ -7,3 +7,10 @@ world command {
   include wasi:cli/command@0.3.0;
   import wasi:http/client@0.3.0;
 }
+
+/// What a library component the console host builds runs in: a package with `@component` defs and
+/// no `@entry`. It imports what `command` does, and exports no `run`.
+world library {
+  include wasi:cli/imports@0.3.0;
+  import wasi:http/client@0.3.0;
+}

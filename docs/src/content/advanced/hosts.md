@@ -200,7 +200,10 @@ A host may also have a component root, which `nanyx build` builds a [WASI 0.3 co
 from: `component = (root = "shout.host.wasi", world = "wasi:cli/command@0.3.0")`, beside `root`. It exports `run` as the
 root does, written against the WIT of the world it names, which the package keeps in its `wit` directory, with the
 packages that WIT uses under `wit/deps`. It provides the contexts the root does: one more or fewer is an error at its
-`run` (`NYX0275`). The host here provides one context, `Log`, which writes a line in capitals. The context is declared in a module of its own:
+`run` (`NYX0275`). A host whose programs may be library components, packages with `@component` defs and no `@entry`,
+also names the world they are built in, which imports what its other world does and exports nothing:
+`library = "nanyx:console/library"`, beside `world`. Without one, building a library component under the host is an
+error. The host here provides one context, `Log`, which writes a line in capitals. The context is declared in a module of its own:
 
 ```nanyx fragment
 --| What a program under the shouting host can do.

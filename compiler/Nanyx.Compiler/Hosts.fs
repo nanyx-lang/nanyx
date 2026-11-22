@@ -10,6 +10,9 @@ type HostComponent =
       /// The world, as WIT names it: `wasi:cli/command@0.3.0`. Its WIT is the package in the host's `wit` directory, with
       /// the packages it uses under `wit/deps`.
       World: string
+      /// The world a library component, a package with `@component` defs and no `@entry`, is built in, if the host
+      /// has one: `nanyx:console/library`, which imports what `World` does and exports nothing.
+      Library: string option
       /// The host's core root, beside which the component root is built: its `run` provides every context the
       /// component root's does (see `Hosts.componentRootErrors`).
       CoreRoot: string }

@@ -7,6 +7,9 @@ type ComponentEntry =
     /// `wasi:http/handler`'s `handle`, lifted with the callback ABI: the program answers the request, `handle` returns
     /// the response, and the component then writes its body as the host reads it.
     | HttpHandler
+    /// No entry: a library component, a package with `@component` defs and no `@entry`, which exports only them. It
+    /// imports what `CliRun` does.
+    | Library
 
 module ComponentEntry =
     /// The entry a component of the world `world`, as WIT names it, exports: a `wasi:http/service` world's is the

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Components in Nanyx and in Rust call each other (#2241). A Rust command (app) calls the Nanyx component (shapes)'s
+# Components in Nanyx and in Rust call each other (#2241). A Rust command (app) calls the Nanyx library component (shapes)'s
 # exports, `acme:shapes/shapes`, which calls the Rust component (units)'s `acme:units/units` in turn. Each is built, the
 # three composed with wac, and the result run under wasmtime run, which must print expected.txt.
 #

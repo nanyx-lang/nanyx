@@ -75,6 +75,7 @@
     <Compile Include="Features\Debugging\ProbeTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />
     <Compile Include="Features\Components\ComponentBuildTests.fs" />
+    <Compile Include="Features\Components\LibraryComponentTests.fs" />
     <Compile Include="Features\Components\ComponentExportTests.fs" />
     <Compile Include="Features\Components\ComponentImportTests.fs" />
     <Compile Include="Features\Embedding\EmbedderOptionsTests.fs" />

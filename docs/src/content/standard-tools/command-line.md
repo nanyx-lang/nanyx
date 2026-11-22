@@ -130,7 +130,9 @@ nothing else.
 
 `nanyx build` checks every source file of a package, with the linters its manifest turns on, and writes the program
 of its `@entry` as a WebAssembly module, to `out/<package name>.wasm` beside the manifest: the binary format, which
-browsers, Wasmtime and other WebAssembly runtimes load. A package with no `@entry` is only checked.
+browsers, Wasmtime and other WebAssembly runtimes load. A package with no `@entry` is only checked, unless its
+modules mark defs [`@component`](../tour/attributes#component) and its host has a component root: then it is a library
+component, which exports them and has no `run`.
 
 A program whose host has a component root, as the console host does, is written as a WASI 0.3 component, which
 `wasmtime run` or any runtime that implements WASI 0.3 runs ([Hosts](../advanced/hosts#built-as-a-component)).
