@@ -18,8 +18,12 @@ type MismatchKind =
     /// Each type is named as its alias if it was written as one: `P`.
     | MisspelledField of onlyLeft: string * rightRecord: string * onlyRight: string * leftRecord: string
 
+/// What a mismatch says, with the types it names written by the function it is given: `Unifier.tyToString`, or one
+/// that writes them with the names a module knows them by (see `Unifier.tyToDisplayStringIn`).
+type MismatchText = (Ty -> string) -> string
+
 /// A constraint that cannot be satisfied: what is wrong, where (the constraint's span), and what kind of failure it is.
-type Mismatch = string * SourceSpan * MismatchKind
+type Mismatch = MismatchText * SourceSpan * MismatchKind
 
 /// The characters a type shown to a reader is written in.
 type TypeNotation =
@@ -78,6 +82,11 @@ module Unifier =
     /// `ty` as it would be written in a def's annotation (see `TypePrinting.printTy`).
     let tyToString (ty: Ty) : string = TypePrinting.tyToString ty
 
+    /// `ty` as `tyToString` writes it, with a union that holds all the tags of a union alias of `typeDefs` written with
+    /// its name (see `TypePrinting.withUnionAliases`): how a diagnostic writes the types it names.
+    let tyToStringIn (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : string =
+        TypePrinting.printTy (TypePrinting.printingFor "..." (fun _ -> []) (TypePrinting.unionAliasesIn typeDefs) ty) true ty
+
     open TypePrinting
 
     /// The module `origin` is, as a reader knows it: its file's name, or the standard library's module's.
@@ -89,7 +98,7 @@ module Unifier =
 
     /// Says that two types are not the same: `'int' vs 'string'`, under the headline "Type mismatch". Two nominal types of the same name from
     /// different modules are written alike, so it says where each is defined.
-    let private mismatchMessage left right =
+    let private mismatchMessage left right : MismatchText = fun tyToString ->
         let homes =
             match left, right with
             | TyNominal(l, _, _, _), TyNominal(r, _, _, _) when l.Name = r.Name && l.Home <> r.Home ->
@@ -98,7 +107,7 @@ module Unifier =
         $"'{tyToString left}' vs '{tyToString right}'{homes}"
 
     /// `items`, each in single quotes, as a message lists them.
-    let private quotedList (items: Ty list) =
+    let private quotedList (tyToString: Ty -> string) (items: Ty list) =
         items |> List.map (fun item -> $"'{tyToString item}'") |> String.concat ", "
 
     /// What only one of two types has, as a message says it: `only the first requires 'Console' and only the second
@@ -112,44 +121,44 @@ module Unifier =
         names |> List.sort |> List.map format |> String.concat ", "
 
     /// `the context 'Console'`, or `the contexts 'Console', 'Log'`, as a message names `contexts`.
-    let private theContexts (contexts: Ty list) =
-        $"""{(if contexts.Length = 1 then "the context" else "the contexts")} {quotedList contexts}"""
+    let private theContexts (tyToString: Ty -> string) (contexts: Ty list) =
+        $"""{(if contexts.Length = 1 then "the context" else "the contexts")} {quotedList tyToString contexts}"""
 
     /// Says that a value of type `given` is given where one of type `expected` is expected.
-    let private givenWhereExpected (given: Ty) (expected: Ty) =
+    let private givenWhereExpected (tyToString: Ty -> string) (given: Ty) (expected: Ty) =
         $"'{tyToString given}' is given where '{tyToString expected}' is expected"
 
     /// Says which contexts make two function types differ: `onlyLeft` are those the first requires that the second has
     /// no room for, and `onlyRight` the reverse.
-    let private contextsMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right =
-        let differences = differencesText "requires" quotedList onlyLeft onlyRight
+    let private contextsMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right : MismatchText = fun tyToString ->
+        let differences = differencesText "requires" (quotedList tyToString) onlyLeft onlyRight
         $"Context mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
     /// Says that a function of type `given`, which requires `extra`, is given where one of type `expected` is, which
     /// has no room for them.
-    let private contextsNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
-        $"{givenWhereExpected given expected}, which does not require {theContexts extra}: write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`"
+    let private contextsNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) : MismatchText = fun tyToString ->
+        $"{givenWhereExpected tyToString given expected}, which does not require {theContexts tyToString extra}: write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`"
 
     /// Says that a value of a type generic in contexts that carries `extra` is given where one that does not is expected.
-    let private carriedNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) =
-        $"{givenWhereExpected given expected}, whose functions don't require {theContexts extra}: write them in front of the type expected, or a context variable for any, as in `[c] {tyToString expected}`"
+    let private carriedNotAllowedMessage (extra: Ty list) (given: Ty) (expected: Ty) : MismatchText = fun tyToString ->
+        $"{givenWhereExpected tyToString given expected}, whose functions don't require {theContexts tyToString extra}: write them in front of the type expected, or a context variable for any, as in `[c] {tyToString expected}`"
 
     /// Says which contexts make two values of a type generic in contexts, `left` and `right`, differ where they must be
     /// the same type: `onlyLeft` are those the first carries that the second has no room for, and `onlyRight` the reverse.
-    let private carriedMismatchMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right =
-        let differences = differencesText "carries" quotedList onlyLeft onlyRight
+    let private carriedMismatchMessage (onlyLeft: Ty list) (onlyRight: Ty list) left right : MismatchText = fun tyToString ->
+        let differences = differencesText "carries" (quotedList tyToString) onlyLeft onlyRight
         $"Context mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}: write the same contexts in front of both, or a context variable for any"
 
     /// Says which tags make two unions differ: `onlyLeft` are tags only the first has that the second cannot take,
     /// and `onlyRight` the reverse. `Tag union mismatch: '...' vs '...', where only the first has #bad and only the
     /// second has #underflow`.
-    let private tagUnionMessage (onlyLeft: Set<string>) (onlyRight: Set<string>) left right =
+    let private tagUnionMessage (onlyLeft: Set<string>) (onlyRight: Set<string>) left right : MismatchText = fun tyToString ->
         let differences = differencesText "has" (sortedNames (sprintf "#%s")) (Set.toList onlyLeft) (Set.toList onlyRight)
         $"Tag union mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
     /// Says which fields only one of two records has: `Record field mismatch: '...' vs '...', where only the first has
     /// 'a' and only the second has 'y'`.
-    let private recordKeyMessage leftKeys rightKeys left right =
+    let private recordKeyMessage leftKeys rightKeys left right : MismatchText = fun tyToString ->
         let differences =
             differencesText "has" (sortedNames (sprintf "'%s'")) (Set.toList (Set.difference leftKeys rightKeys)) (Set.toList (Set.difference rightKeys leftKeys))
         $"Record field mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
@@ -402,18 +411,22 @@ module Unifier =
         |> Seq.append (unnamedRests |> Seq.map (fun id -> id, TyPrimitive ""))
         |> Map.ofSeq
 
-    /// `ty` as `tyToString` writes it, with a spread written in `notation`, and the associated types of the contexts of
-    /// `typeDefs` written by name (see `TypePrinting.printTy`).
+    /// `ty` as `tyToString` writes it, with a spread written in `notation`, the associated types of the contexts of
+    /// `typeDefs` written by name, and a union that holds all the tags of a union alias of `typeDefs` written with its
+    /// name (see `TypePrinting.printTy`).
     let private printIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (ty: Ty) : string =
-        printTy (printingFor (match notation with Unicode -> "…" | Ascii | Source -> "...") (associatedIn typeDefs) ty) true ty
+        let spread = match notation with Unicode -> "…" | Ascii | Source -> "..."
+        printTy (printingFor spread (associatedIn typeDefs) (unionAliasesIn typeDefs) ty) true ty
 
     /// `ty` for a reader, in `notation`, with the variables the compiler made up named as `displayRenaming`
     /// describes, a rest that appears nowhere else written as a bare spread: `(name: α, …)`, `#some(α) | …`, and the
-    /// associated types of the contexts of `typeDefs` written by name: `[Iter(c)] c -> elem`, `Iter(c, elem = int)`.
+    /// associated types of the contexts of `typeDefs` written by name: `[Iter(c)] c -> elem`, `Iter(c, elem = int)`,
+    /// and the tags of a union alias of `typeDefs` by its name: `#some(string) | FsError`.
     let tyToDisplayStringIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (ty: Ty) : string =
         printIn typeDefs notation (apply (displayRenaming notation (loneRests notation ty) ty) ty)
 
-    /// `ty` for a reader, as `tyToDisplayStringIn` writes it, where no context has associated types.
+    /// `ty` for a reader, as `tyToDisplayStringIn` writes it, where no context has associated types and no union has an
+    /// alias.
     let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string = tyToDisplayStringIn Map.empty notation ty
 
     /// The rests of `tys` that are lone (see `loneRests`) in every one of them they appear in.
@@ -627,7 +640,7 @@ module Unifier =
                 | TyVar v, ty
                 | ty, TyVar v ->
                     if occurs v.Id ty then
-                        Error ($"'{tyToString (TyVar v)}' vs '{tyToString ty}', which contains it, so the type would be infinite", origin, TypesDiffer)
+                        Error ((fun tyToString -> $"'{tyToString (TyVar v)}' vs '{tyToString ty}', which contains it, so the type would be infinite"), origin, TypesDiffer)
                     else
                         if madeUpBefore v then restTaken <- true
                         let newSubst = subst |> Map.add v.Id ty
@@ -731,7 +744,7 @@ module Unifier =
                     match lPayload, rPayload with
                     | None, None -> loop subst rest
                     | Some lTy, Some rTy -> loop subst ((lTy, rTy, Equal, origin) :: rest)
-                    | _ -> Error ($"Tag payload mismatch: '{tyToString l}' vs '{tyToString r}', where only one of them gives #{lName} a payload", origin, TypesDiffer)
+                    | _ -> Error ((fun tyToString -> $"Tag payload mismatch: '{tyToString l}' vs '{tyToString r}', where only one of them gives #{lName} a payload"), origin, TypesDiffer)
                 | TyUnion lItems, TyUnion rItems ->
                     match parseTagUnion lItems, parseTagUnion rItems with
                     | Ok (lMap, lRest), Ok (rMap, rRest) ->
@@ -778,8 +791,8 @@ module Unifier =
                             let onlyLeft = if rRest.IsNone then extraLeft else Set.empty
                             let onlyRight = if lRest.IsNone then extraRight else Set.empty
                             Error (tagUnionMessage onlyLeft onlyRight l r, origin, TypesDiffer)
-                    | Error message, _ -> Error (message, origin, TypesDiffer)
-                    | _, Error message -> Error (message, origin, TypesDiffer)
+                    | Error message, _ -> Error ((fun _ -> message), origin, TypesDiffer)
+                    | _, Error message -> Error ((fun _ -> message), origin, TypesDiffer)
                 | TyUnion lItems, ty ->
                     match parseTagUnion lItems with
                     | Ok (lMap, lRest) ->
@@ -800,7 +813,7 @@ module Unifier =
                                 | Ok result -> Ok result
                                 | Error inner -> tryItems restItems (failures @ [ inner ])
                         tryItems tags []
-                    | Error message -> Error (message, origin, TypesDiffer)
+                    | Error message -> Error ((fun _ -> message), origin, TypesDiffer)
                 | ty, TyUnion rItems ->
                     match parseTagUnion rItems with
                     | Ok (rMap, rRest) ->
@@ -816,7 +829,7 @@ module Unifier =
                                 | Ok result -> Ok result
                                 | Error inner -> tryItems restItems (failures @ [ inner ])
                         tryItems tags []
-                    | Error message -> Error (message, origin, TypesDiffer)
+                    | Error message -> Error ((fun _ -> message), origin, TypesDiffer)
                 | _ -> Error (mismatchMessage l r, origin, TypesDiffer)
             match remaining with
             | [] -> Ok subst
@@ -916,7 +929,7 @@ module Unifier =
                              | _ -> false) ->
                             match parseTagUnion rItems with
                             | Ok (rMap, _) -> loop subst ((l, rMap.[name], Assignable, origin) :: rest)
-                            | Error message -> Error (message, origin, TypesDiffer)
+                            | Error message -> Error ((fun _ -> message), origin, TypesDiffer)
                         // Assignability reaches into what types are built from, so a nominal type stays one-way
                         // there too: `list(Person)` is assignable to `list((name: string))`, but not the reverse.
                         // Values are immutable, so a type's arguments are covariant, and so are a record's fields:

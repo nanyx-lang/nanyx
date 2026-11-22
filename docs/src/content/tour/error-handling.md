@@ -40,7 +40,7 @@ match getCustomer(someId)
   | #databaseError -> println("Database error")
 ```
 
-A failure that has something to say carries it as its payload, under a tag named for what went wrong: `#invalidPattern(RegexError)`, `#unreadable(string)`. A type alias can name a group of failures that several functions share, as the [`nanyx.fs`](../stdlib/filesystem) package's `FsError` does, and a signature writes it beside `#some`: `#some(string) | FsError`. A function that succeeds with nothing to give back has `#ok` in place of `#some`: `#ok | FsError`.
+A failure that has something to say carries it as its payload, under a tag named for what went wrong: `#invalidPattern(RegexError)`, `#unreadable(string)`. A type alias can name a group of failures that several functions share, as the [`nanyx.fs`](../stdlib/filesystem) package's `FsError` does, and a signature writes it beside `#some`: `#some(string) | FsError`. A function that succeeds with nothing to give back has `#ok` in place of `#some`: `#ok | FsError`. The alias stands for its tags, so the union holds them all, but hover, an error message and the reference pages write it as it was written: a union that holds every tag of an alias in scope, with the same payloads, is written with the alias's name, while one with only some of them is written out.
 
 # The `try` keyword
 
