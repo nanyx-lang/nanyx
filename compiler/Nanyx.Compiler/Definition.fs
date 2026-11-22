@@ -124,6 +124,10 @@ let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (
         if info.IsNominal then Some $"A {kind} {what}, declared in {declared}." else None
     definition, note
 
+/// `typeDefs` without the type `info` defines, under any name: its definition is not written with its own name.
+let internal typeDefsBesides (info: TypeDefInfo) (typeDefs: Map<string, TypeDefInfo>) =
+    typeDefs |> Map.filter (fun _ other -> TypeDefInfo.nominalId other <> TypeDefInfo.nominalId info)
+
 /// What hovering a type's name shows: its definition, as `writtenTypeDefinition` writes it, with made-up type
 /// variables named by `names`, over the span of the name. The name can be in an annotation, a type definition (its
 /// own or another's) or a signature's contexts, and the type can be the module's own or an imported one. `None` when
@@ -133,7 +137,7 @@ let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult
     | Some typed, Some (symbol, span) when symbol.Kind = TypeDefinition ->
         typeDefinitionOf typed symbol
         |> Option.map (fun info ->
-            let definition, note = writtenTypeDefinition (Unifier.tyToDisplayStringIn typed.TypeDefs names) symbol info (symbol.Declaration.File = file)
+            let definition, note = writtenTypeDefinition (Unifier.tyToDisplayStringIn (typeDefsBesides info typed.TypeDefs) names) symbol info (symbol.Declaration.File = file)
             { Type = definition; Span = span; Note = note })
     | _ -> None
 

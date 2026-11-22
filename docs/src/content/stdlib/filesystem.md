@@ -62,15 +62,15 @@ already. Anything else is `#other`, with what the host said.
 
 ```nanyx fragment
 context FileSystem = (
-  readFile: [Async] Path -> #some(string) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
-  readFileBytes: [Async] Path -> #some(array(U8)) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
-  readFileChunk: [Async] Path, int, int -> #some(string) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
-  writeFile: [Async] Path, string -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
-  appendFile: [Async] Path, string -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+  readFile: [Async] Path -> #some(string) | FsError
+  readFileBytes: [Async] Path -> #some(array(U8)) | FsError
+  readFileChunk: [Async] Path, int, int -> #some(string) | FsError
+  writeFile: [Async] Path, string -> #ok | FsError
+  appendFile: [Async] Path, string -> #ok | FsError
   pathExists: [Async] Path -> bool
-  deleteFile: [Async] Path -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
-  listDirectory: [Async] Path -> #some(list(string)) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
-  createDirectory: [Async] Path -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+  deleteFile: [Async] Path -> #ok | FsError
+  listDirectory: [Async] Path -> #some(list(string)) | FsError
+  createDirectory: [Async] Path -> #ok | FsError
 )
 ```
 

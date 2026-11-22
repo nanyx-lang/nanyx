@@ -75,6 +75,22 @@ public sealed class HoverTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Hover_writes_a_union_holding_all_of_an_aliass_tags_with_its_name()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-union-alias.nyx"));
+
+        Open(uri, "type Err = #notFound | #other(string)\ndef find = { x: int -> if x > 0 then #some(x) else if x == 0 then #notFound else #other(\"no\") }\ndef few = { x: int -> if x > 0 then #some(x) else #notFound }\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var find = await HoverAt(uri, 1, 5);
+        Assert.Equal("```nanyx\ndef find: int -> #some(int) | Err\n```", find?.Contents.MarkupContent?.Value);
+
+        // Only some of its tags: written out.
+        var few = await HoverAt(uri, 2, 5);
+        Assert.Equal("```nanyx\ndef few: int -> #some(int) | #notFound\n```", few?.Contents.MarkupContent?.Value);
+    }
+
+    [Fact]
     public async Task Hover_shows_what_a_hole_in_a_type_was_inferred_to_be()
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("hover-hole.nyx"));
