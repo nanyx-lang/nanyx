@@ -26,6 +26,7 @@
     <Compile Include="Features\Core\RunLexicalTests.fs" />
     <Compile Include="Features\Core\ReachTests.fs" />
     <Compile Include="Features\Core\TopLevelValueTests.fs" />
+    <Compile Include="Features\Core\RunLongChainTests.fs" />
     <Compile Include="Features\ControlFlow\BoolMatchTests.fs" />
     <Compile Include="Features\ControlFlow\BottomTypeTests.fs" />
     <Compile Include="Features\ControlFlow\ControlFlowFixtureTests.fs" />
