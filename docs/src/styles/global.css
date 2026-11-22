@@ -502,6 +502,12 @@
   text-decoration: var(--shiki-dark-text-decoration) !important;
 }
 
+/* The name of a nominal type, protected or private, in italics, as the editor shows it (see rehypeNominalTypes) */
+.astro-code span.nominal,
+.dark .astro-code span.nominal {
+  font-style: italic !important;
+}
+
 /* Code block wrapper with copy button (added by script) */
 .code-block {
   position: relative;

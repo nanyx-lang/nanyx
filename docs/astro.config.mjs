@@ -5,7 +5,13 @@ import sitemap from "@astrojs/sitemap";
 import { rehypeHeadingIds, unified } from "@astrojs/markdown-remark";
 import nyxGrammar from "../extension/syntaxes/nanyx.tmLanguage.json";
 import { inkNight, paperWhite } from "./site/shiki-themes.mjs";
-import { rehypeDiagnosticCodeIds, rehypeHeadingAnchors, rehypeShiftHeadings } from "./site/rehype-plugins.mjs";
+import nominalTypes from "./src/content/stdlib/nominal-types.json";
+import {
+  rehypeDiagnosticCodeIds,
+  rehypeHeadingAnchors,
+  rehypeNominalTypes,
+  rehypeShiftHeadings,
+} from "./site/rehype-plugins.mjs";
 import { sectionRedirects } from "./site/sections.mjs";
 import { unpackPlaygroundCompiler } from "./site/playground-compiler.mjs";
 import { rehypePlaygroundReload, remarkPlaygroundLinks } from "./site/playground-examples.mjs";
@@ -49,6 +55,7 @@ export default defineConfig({
         rehypeHeadingIds,
         rehypeHeadingAnchors,
         rehypePlaygroundReload,
+        [rehypeNominalTypes, nominalTypes],
       ],
     }),
     shikiConfig: {
