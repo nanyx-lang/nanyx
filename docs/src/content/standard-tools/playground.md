@@ -33,7 +33,7 @@ The output pane shows what happened in order, as a terminal does:
   [Compiler errors](./errors).
 
 When the program reads a line, an input line appears at the bottom of the pane. Enter gives the program the line, which
-stays in the output, and Ctrl+D ends the input, so that the program's next `readLine` gives `#error(#endOfInput)`.
+stays in the output, and Ctrl+D ends the input, so that the program's next `readLine` gives `#endOfInput`.
 
 Each run's output stays, under a divider with its number and time, so you can compare one run with the last. **Clear**
 empties the pane.

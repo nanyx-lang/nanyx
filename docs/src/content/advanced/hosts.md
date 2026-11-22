@@ -49,7 +49,7 @@ The console host, `nanyx.console`, runs command-line programs. It provides seven
 
 - [`Console`](../stdlib/console) reads standard input and writes standard output and standard error.
 - [`Env`](../stdlib/env) gives the program's command-line arguments (`args`) and environment variables (`variable`), and ends it with an exit code (`exit`).
-- [`FileSystem`](../stdlib/filesystem) reads and writes files, through the functions of the shipped package `nanyx.fs` ([`file`](../stdlib/file), [`dir`](../stdlib/dir) and [`path`](../stdlib/path)). `nanyx run` lets a program reach the current directory and, with [`--allow-dir`](../standard-tools/command-line#nanyx-run), one other; a path outside them is `#error(#permissionDenied)`.
+- [`FileSystem`](../stdlib/filesystem) reads and writes files, through the functions of the shipped package `nanyx.fs` ([`file`](../stdlib/file), [`dir`](../stdlib/dir) and [`path`](../stdlib/path)). `nanyx run` lets a program reach the current directory and, with [`--allow-dir`](../standard-tools/command-line#nanyx-run), one other; a path outside them is `#permissionDenied`.
 - [`Http`](../stdlib/client) makes HTTP requests, through the functions of the shipped package `nanyx.http.core` ([`http`](../stdlib/http)). Each call waits for its response.
 - [`Async`](../stdlib/async) lets a function wait. The calls of `nanyx.fs` and `nanyx.http.core` wait, so they require it, and so does every function that calls them.
 - [`Random`](../stdlib/random) gives random numbers, drawn from the operating system's random source, through the functions of `nanyx/random`. `random.seeded` gives the same numbers on every run instead.
@@ -158,7 +158,7 @@ error NYX0205: 'file.read' requires the contexts 'Async' and 'FileSystem', which
 The compiler built for the browser runs a script under it unless the script's `::host` names another; elsewhere a
 script runs under it with `::host nanyx.playground`. The package ships the JavaScript that runs such a program in a web
 worker and passes what it prints, and what its `dbg`s print, to the page. Reading a line waits for a line typed in the
-page, and gives `#error(#endOfInput)` once the input has ended.
+page, and gives `#endOfInput` once the input has ended.
 
 # Where `dbg` prints
 

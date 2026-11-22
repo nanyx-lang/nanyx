@@ -14,14 +14,14 @@ import (
 
 --| The paths of what the directory at `at` holds, its files and directories, each `at` joined with
   its name, sorted by name.
-export def list: [Async, FileSystem] Path -> #some(list(Path)) | #error(FsError) = { at ->
+export def list: [Async, FileSystem] Path -> #some(list(Path)) | FsError = { at ->
   match listDirectory(at)
     | #some(names) -> #some(names \sort \map({ name -> path.join(at, name) }))
-    | #error(e) -> #error(e)
+    | e -> e
 }
 
---| Makes the directory `at`. Its parent must be there already, and `#error(#alreadyExists)` says
+--| Makes the directory `at`. Its parent must be there already, and `#alreadyExists` says
   something is at `at` already.
-export def create: [Async, FileSystem] Path -> #ok | #error(FsError) = { at ->
+export def create: [Async, FileSystem] Path -> #ok | FsError = { at ->
   createDirectory(at)
 }

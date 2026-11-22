@@ -13,8 +13,8 @@ match dir.list(path.of("notes"))
   | #some(paths) ->
     for note in paths do
       println(note)
-  | #error(#notFound) -> println("No notes yet")
-  | #error(e) -> eprintln("Couldn't list the notes: {e}")
+  | #notFound -> println("No notes yet")
+  | e -> eprintln("Couldn't list the notes: {e}")
 ```
 
 # Reference
@@ -30,7 +30,7 @@ Each function requires [`FileSystem`](filesystem), and gives what went wrong as 
 ## `list`
 
 ```nanyx fragment
-def list: [Async, FileSystem] Path -> #some(list(Path)) | #error(FsError)
+def list: [Async, FileSystem] Path -> #some(list(Path)) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
 ```
 
 The paths of what the directory at `at` holds, its files and directories, each `at` joined with
@@ -39,10 +39,10 @@ its name, sorted by name.
 ## `create`
 
 ```nanyx fragment
-def create: [Async, FileSystem] Path -> #ok | #error(FsError)
+def create: [Async, FileSystem] Path -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
 ```
 
-Makes the directory `at`. Its parent must be there already, and `#error(#alreadyExists)` says
+Makes the directory `at`. Its parent must be there already, and `#alreadyExists` says
 something is at `at` already.
 
 <!-- End of the generated reference. -->

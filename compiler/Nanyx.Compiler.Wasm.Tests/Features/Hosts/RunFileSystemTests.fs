@@ -107,14 +107,14 @@ println(file.exists(path.of("folder")))
 """
     runIn directory.Path [] source
     |> assertPrinted
-        """#error(#notFound)
+        """#notFound
 false
-#error(#isDirectory)
-#error(#isDirectory)
-#error(#notFound)
-#error(#alreadyExists)
-#error(#notFound)
-#error(#notFound)
+#isDirectory
+#isDirectory
+#notFound
+#alreadyExists
+#notFound
+#notFound
 true
 """
     Assert.True(Directory.Exists(Path.Combine(directory.Path, "folder")))
@@ -129,7 +129,7 @@ let ``A directory too long to list in one read is listed whole`` () =
     let source =
         """match dir.list(path.of("many"))
   | #some(paths) -> println(list.length(paths))
-  | #error(e) -> println(e)
+  | e -> println(e)
 """
     runIn directory.Path [] source |> assertPrinted "300\n"
 
@@ -150,10 +150,10 @@ println(file.write(path.join(inside, "here.txt"), "here"))
 println(file.read(path.of("here.txt")))
 """
     runIn directory.Path [] source
-    |> assertPrinted "#error(#permissionDenied)\n#error(#permissionDenied)\nfalse\n#error(#permissionDenied)\n#ok\n#some(here)\n"
+    |> assertPrinted "#permissionDenied\n#permissionDenied\nfalse\n#permissionDenied\n#ok\n#some(here)\n"
     Assert.False(File.Exists(Path.Combine(other.Path, "new.txt")))
     runIn directory.Path [ "--allow-dir"; other.Path ] source
-    |> assertPrinted "#some(secret)\n#ok\ntrue\n#error(#permissionDenied)\n#ok\n#some(here)\n"
+    |> assertPrinted "#some(secret)\n#ok\ntrue\n#permissionDenied\n#ok\n#some(here)\n"
     Assert.Equal("x", File.ReadAllText(Path.Combine(other.Path, "new.txt")))
 
 [<Fact>]
@@ -183,8 +183,8 @@ import (
 export def setting: [FileSystem] string -> string = { name ->
   match file.read(path.join(path.of("settings"), name))
     | #some(text) -> text
-    | #error(#notFound) -> "default"
-    | #error(_) -> "unreadable"
+    | #notFound -> "default"
+    | _ -> "unreadable"
 }
 """
     File.WriteAllText(Path.Combine(library, "config.nyx"), config)

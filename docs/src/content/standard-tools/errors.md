@@ -1352,8 +1352,8 @@ To fix it, add the context to the definition's type, as in `[Console] string -> 
 
 # NYX0212: Nominal type constructed outside its module
 
-A nominal type, one declared `protected` or `private`, is constructed, or a private one taken apart, outside the
-module that defines it. Only its own module can make its values ([Nominal types](../advanced/nominal-and-protected-types)).
+A nominal type, one declared `protected` or `private`, is constructed, updated with `with`, or a private one taken
+apart, outside the module that defines it. Only its own module can make its values ([Nominal types](../advanced/nominal-and-protected-types)).
 
 ```nanyx
 module money =

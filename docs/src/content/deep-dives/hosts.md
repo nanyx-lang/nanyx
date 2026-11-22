@@ -190,7 +190,7 @@ in progress.
   `writeError` (each given the address and byte length of the text in the module's memory), `randomBits` (64 bits, as
   an `i64`), `now` and `ticks` (milliseconds, as `i64`s), and `readLine` and `takeLine`, which a page implements, not
   on WASI. Its `Console`'s `readLine` calls the page's `readLine`, which waits for a line and gives its length in
-  bytes, or -1 when the input has ended (`#error(#endOfInput)`), then allocates a buffer that long and has `takeLine`
+  bytes, or -1 when the input has ended (`#endOfInput`), then allocates a buffer that long and has `takeLine`
   write the line into it; its `readToEnd` reads lines until the input ends, each followed by a line break
   ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)). Its prelude re-exports `Console`
   with `print`, `println`, `eprint` and `eprintln`, `Random` and `Clock`, so a console program that needs only those compiles
