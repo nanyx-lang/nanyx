@@ -348,7 +348,7 @@ module Compiler =
                 | _, (_ :: _ as errors), _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
                 | desugaredAst, [], memberPlaces, lowered ->
                     Attributes.applyAttributes host desugaredAst
-                    |> Result.map (fun (desugared, entries) ->
+                    |> Result.map (fun (desugared, entries, components) ->
                         // A module's statements run as an entry point of their own (see `Scripts`).
                         let desugared, script =
                             match origin, entries with
@@ -357,11 +357,11 @@ module Compiler =
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors
                         let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered
-                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, script, syntaxDiagnostics @ nameErrors)
+                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, syntaxDiagnostics @ nameErrors)
                     |> Result.mapError (fun diagnostics -> Desugared, syntaxDiagnostics @ diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, script, nameErrors) ->
+        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, nameErrors) ->
             let imports = importsOf moduleBlocks desugared
             let initial =
                 { Env =
@@ -389,6 +389,7 @@ module Compiler =
                   ProvidesContexts = providesContexts host hostModules
                   HostImport = host |> Option.map _.Import
                   CarriedAmbientMembers = []
+                  ComponentExports = []
                   UnqualifiedSources = Map.empty
                   ImportedFiles = Map.empty
                   ReExports = []
@@ -564,7 +565,9 @@ module Compiler =
                             | None -> []
                         | _ -> []
                     | _ -> []
-                let moduleErrors = componentRootErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                // A def marked `@component` has a type that can cross a component's boundary.
+                let componentErrors = ComponentInterface.errors (fun name -> types |> Map.tryFind name |> Option.map (Unifier.apply subst)) (fun name -> state.ContextRequirements |> Map.tryFind name |> Option.exists (List.isEmpty >> not)) desugared components
+                let moduleErrors = componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []
@@ -597,7 +600,7 @@ module Compiler =
                         | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
                         | _ -> true)
                     |> ModuleLinking.distinctDefinitions
-                    |> ModuleLinking.reachedItems instances own
+                    |> ModuleLinking.reachedItems instances own (merged.ComponentExports |> List.map _.Definition)
                 // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
                 // alias), each meaning the definition the environment settled on (an explicit import's over
                 // the prelude's), less the names the module declares at the top level itself.
@@ -652,6 +655,15 @@ module Compiler =
                           ImportedContextTypes = merged.ImportedContextTypes
                           AmbientContexts = Contexts.ambientContexts state |> Set.toList
                           AmbientMembers = ambientMembers state merged.CarriedAmbientMembers
+                          ComponentExports =
+                            // A file that declares no module name is named by its file, or `main` when it has none.
+                            let moduleName =
+                                FileImports.declaredName moduleBlocks desugared
+                                |> Option.orElse (Some (System.IO.Path.GetFileNameWithoutExtension(checkedModules.FileName origin)))
+                                |> Option.filter (fun name -> ComponentInterface.witName name <> "")
+                                |> Option.defaultValue "main"
+                            let own = components |> List.map (fun (name, _) -> { Module = moduleName; Name = name; Definition = name })
+                            own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.
                           InlinedExprTypes = Map.empty

@@ -7,6 +7,11 @@ module Attributes =
     /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
     let entryAttribute = "entry"
 
+    /// The attribute that marks an exported definition as one a component built from the program exports:
+    /// `@component export def area: Shape -> float = ...`, in the WIT interface its module names (see
+    /// `ComponentInterface`).
+    let componentAttribute = "component"
+
     /// The import of `host` itself, under an alias of its own, which a module that runs under it gets.
     let internal hostImport (host: Host) =
         TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport host.Import) (Some Hosts.importAlias) ])
@@ -259,25 +264,41 @@ module Attributes =
     /// the contexts it provides (see `Host`). `@extern("module", "name")` on a definition written with a type and no
     /// value makes it a foreign function (see `Externs`): its value becomes the import's module and name (see
     /// `ExternSyntax`). Any other attribute, an attribute that does not precede a value definition, or a definition with
-    /// no value and no `@extern`, is an error. `@entry` takes no argument. The host is `host`: the package's, or the
-    /// console host for a file in no package. A package with no host is a library, so an `@entry` in it is an error. With the module, each entry point (see `EntryPoint`). An attribute before
+    /// no value and no `@extern`, is an error. `@entry` takes no argument. `@component`, which takes none either, marks an
+    /// exported def as one a component built from the program exports: it is left as it is, and given back by name, with
+    /// where it is written. The host is `host`: the package's, or the
+    /// console host for a file in no package. A package with no host is a library, so an `@entry` in it is an error. With the module, each entry point (see `EntryPoint`) and each def marked `@component`. An attribute before
     /// a member of a context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`), as is
     /// one in a block (see `statementAttributeErrors`). `@allow` is for the linters: it is checked and left out (see
     /// `withoutAllows`).
-    let applyAttributes (host: Host option) (module': Module) : Result<Module * EntryPoint list, Diagnostic list> =
+    let applyAttributes (host: Host option) (module': Module) : Result<Module * EntryPoint list * (string * SourceSpan) list, Diagnostic list> =
+        // The defs marked `@component`, each with where it is written, as `loop` finds them.
+        let components = ResizeArray<string * SourceSpan>()
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entries, List.rev externs, List.rev errors
+            | Kind (Attribute(name, Some argument)) :: rest when name = componentAttribute ->
+                let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"
+                loop rest acc entries externs (error :: errors)
+            | Kind (Attribute(name, None)) :: (Kind (Def (ValueDef(true, defName, _, value))) as def) :: rest when name = componentAttribute ->
+                components.Add((defName, def.Span))
+                loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ errors)
+            | Kind (Attribute(name, None)) as attribute :: (Kind (Def (ValueDef(false, defName, _, _))) as def) :: rest when name = componentAttribute ->
+                let error =
+                    Diagnostics.at DiagnosticCodes.MisplacedAttribute attribute.Span
+                        $"A component exports only what its module exports: write `export def {defName}`"
+                    |> Diagnostics.about $"@{name}"
+                loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ error :: errors)
             | Kind (Attribute(name, argument)) as attribute :: (Kind (Def (ValueDef(isExport, defName, typeOpt, value))) as def) :: rest when name = Externs.attribute ->
                 match Externs.declared attribute.Span argument defName def.Span typeOpt value with
                 | Ok declared ->
                     let imported = { def with Kind = Def (ValueDef(isExport, defName, typeOpt, ExternSyntax.import declared.Module declared.Name value)) }
                     loop rest (imported :: acc) entries ((defName, declared, def.Span) :: externs) errors
                 | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
-            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute ->
+            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute && name <> componentAttribute ->
                 let error =
                     Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span
-                        $"A definition can have '@{entryAttribute}', '@{Externs.attribute}' or '@{allowAttribute}'"
+                        $"A definition can have '@{entryAttribute}', '@{Externs.attribute}', '@{componentAttribute}' or '@{allowAttribute}'"
                     |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
             | Kind (Attribute(name, Some argument)) :: rest when name = entryAttribute ->
@@ -314,5 +335,5 @@ module Attributes =
             | [] ->
                 // The host's prelude is imported into every module of the program, not here (see `Library`).
                 let entryImport = match host with Some host when not entries.IsEmpty -> [ hostImport host ] | _ -> []
-                Ok (entryImport @ items @ List.map snd entries, List.map fst entries)
+                Ok (entryImport @ items @ List.map snd entries, List.map fst entries, List.ofSeq components)
             | errors -> Error errors
