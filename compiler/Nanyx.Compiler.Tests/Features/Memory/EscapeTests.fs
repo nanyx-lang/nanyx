@@ -181,3 +181,17 @@ def total = memory { context m ->
 }
 """
     Assert.Equal<string list>([], codes source)
+
+[<Fact>]
+let ``A script that uses what escaped its block is told only of the escape`` () =
+    let source =
+        """
+import nanyx/mref
+def s = memory {
+  def r = MRef.new(10)
+  { MRef.get(r) }
+}
+
+println(s())
+"""
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
