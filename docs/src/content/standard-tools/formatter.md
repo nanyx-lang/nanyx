@@ -126,7 +126,11 @@ def serve
 ```
 
 Each part breaks only if it doesn't fit once the parts around it have broken, so above, the parameters stay on one
-line. A type inside a parameter, such as a function's, is never broken: the parameter keeps a line of its own. The
+line; ones that still didn't fit would go one per line under the contexts. A list of contexts still too long for its
+line has one context per line, under the first, with the `]` after the last. A union that is the whole type, as a
+value's may be, breaks as a result does, its first `|` after the `: `. Only a function's outer arrow breaks: in
+`int -> string -> bool`, `-> string -> bool` goes on a line of its own, and only a union result breaks further. A
+type inside a parameter, such as a function's, is never broken: the parameter keeps a line of its own. The
 [info view](vs-code-extension#info-view) lays a signature out this way at its own width.
 
 A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
