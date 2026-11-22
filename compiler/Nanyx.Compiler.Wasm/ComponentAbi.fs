@@ -251,14 +251,23 @@ let private procExitFunction =
           ")" ]
 
 /// `cabi_realloc` on the program's allocator: a new block of `$newSize` bytes, with the first bytes of the block at
-/// `$old`, if there is one, copied into it and that block freed. Every block is aligned to 8 bytes, which is the most
-/// any WIT type asks for.
+/// `$old`, if there is one, copied into it and that block freed. The canonical ABI asks for blocks aligned to `$align`,
+/// at most 8 for any WIT type: `alloc`'s blocks are 4-byte aligned, so a larger `$align` takes an 8-byte aligned block
+/// from `allocAligned8`.
 let private cabiReallocFunction =
     lines
         [ $"(func $__nanyx_cli_cabi_realloc (export \"{cabiRealloc}\") (param $old i32) (param $oldSize i32) (param $align i32) (param $newSize i32) (result i32)"
           "  (local $new i32)"
-          "  local.get $newSize"
-          $"  call ${Helpers.alloc}"
+          "  local.get $align"
+          "  i32.const 4"
+          "  i32.gt_u"
+          "  if (result i32)"
+          "    local.get $newSize"
+          $"    call ${Helpers.allocAligned8}"
+          "  else"
+          "    local.get $newSize"
+          $"    call ${Helpers.alloc}"
+          "  end"
           "  local.set $new"
           "  local.get $old"
           "  if"
@@ -278,7 +287,7 @@ let private cabiReallocFunction =
           ")" ]
 
 /// The helpers `cabi_realloc` calls.
-let reallocHelpers = [ Helpers.alloc; Helpers.free; Helpers.copyBytes ]
+let reallocHelpers = [ Helpers.alloc; Helpers.allocAligned8; Helpers.free; Helpers.copyBytes ]
 
 /// The functions a component's core module defines for the runtime: `fd_write` and `proc_exit` on `wasi:cli`, and
 /// `cabi_realloc`.

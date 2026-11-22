@@ -148,6 +148,11 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
 
 - **Sizes.** `alloc(n)` rounds `n` up to a multiple of 4 (and at least 4), so blocks stay 4-byte aligned and
   pointers stay even.
+- **8-byte aligned blocks.** A component's `cabi_realloc` must hand out blocks 8-byte aligned when the host asks it to
+  ([Components](./components)). `__nanyx_alloc_aligned8` (`allocAligned8Helper`) asks `alloc` for 12 bytes more
+  than it needs. When the block it gets is not 8-byte aligned, it makes the block's first 8 bytes a block of their
+  own, which it frees, and gives the rest a size word of its own: that block starts 12 bytes on, at a multiple of 8,
+  and `free` takes it back like any other. Under memory checks it counts the block it keeps as handed out.
 - **Size word.** A block's rounded size is stored in the word just before the block `alloc` returns, so
   `free(b)` needs only the pointer. The object header is part of the block: once objects have one, a block holds
   the count, then the info word (if any), then the fields, so the size word sits just before the count. For a

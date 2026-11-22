@@ -90,6 +90,7 @@ type Use =
 /// The names of the WebAssembly helper functions the backend emits on demand (see `runtimeHelpers`).
 module Helpers =
     let alloc = Names.alloc
+    let allocAligned8 = Names.allocAligned8
     let copyBytes = "__nanyx_copy_bytes"
     let stringAlloc = "__nanyx_string_alloc"
     let stringConcat = "__nanyx_string_concat"
@@ -402,6 +403,7 @@ let private checkedIntHelper (name: string) (instruction: string) (overflowed: s
 let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
     [ Helpers.alloc, allocHelper checks heapBase
       Helpers.free, freeHelper checks heapBase
+      Helpers.allocAligned8, allocAligned8Helper checks
       // An object of `$size` bytes with a count of one and no info word: `size -> p`.
       Helpers.newCell,
       lines
@@ -1125,6 +1127,7 @@ let private storingDependencies (name: string) (calls: Storage -> string list) =
 let helperDependencies =
     [ Helpers.alloc, []
       Helpers.free, []
+      Helpers.allocAligned8, [ Helpers.alloc; Helpers.free ]
       Helpers.newCell, [ Helpers.alloc ]
       Helpers.newObject, [ Helpers.alloc ]
       Helpers.release, []
