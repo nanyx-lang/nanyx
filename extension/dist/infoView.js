@@ -337,7 +337,9 @@ function page(webview) {
   .doc[title] { cursor: pointer; }
   .doc.collapsed > :not(:first-child) { display: none; }
   .doc .more { color: var(--vscode-textLink-foreground); }
-  code { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); color: var(--vscode-editor-foreground); white-space: pre-wrap; word-break: break-word; }
+  code { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); color: var(--vscode-editor-foreground); white-space: pre-wrap; word-break: break-word; background: none; padding: 0; }
+  /* VS Code gives code in a webview a background; the view's code is drawn as the editor draws it, except in doc comments. */
+  .doc code { background: var(--vscode-textPreformat-background); padding: 1px 3px; border-radius: 3px; }
   a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
   a:hover { text-decoration: underline; }
   /* A name in code that links somewhere looks like the rest of the code until it is hovered. */
