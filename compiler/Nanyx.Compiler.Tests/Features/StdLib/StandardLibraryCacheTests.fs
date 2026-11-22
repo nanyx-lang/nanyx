@@ -237,6 +237,7 @@ let ``The checked library has the shipped packages' modules, with paths beside t
           "nanyx.wasi/src/cli.nyx"
           "nanyx.wasi/src/clocks.nyx"
           "nanyx.wasi/src/http.nyx"
+          "nanyx.wasi/src/http.service.nyx"
           "nanyx.wasi/src/preview1.nyx"
           "nanyx.wasi/src/random.nyx"
           "nanyx.wasi/src/runtime.nyx" ],

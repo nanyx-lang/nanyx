@@ -1,0 +1,3 @@
+/// The HTTP host's component root is built as a component of `wasi:http/service@0.3.0`, from
+/// `deps/http`: it exports `wasi:http/handler`, and imports what the program uses of the world.
+package nanyx:http;

@@ -121,3 +121,15 @@ def exit: [HostRuntime] I32 -> ()
 """
     |> compileClean
     |> ignore
+
+[<Fact>]
+let ``A foreign function of the compiler's own module outside a host is an error`` () =
+    let source = withRuntime "@extern(\"nanyx:component\", \"argument\")\ndef argument: [HostRuntime] () -> I32\n"
+    let code, message, _ = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.ReservedExternModule.Code, code)
+    Assert.StartsWith("'argument' imports from \"nanyx:component\", which is the compiler's own", message)
+
+[<Fact>]
+let ``A host may declare a foreign function of the compiler's own module`` () =
+    let result = compileAsHost Linters.none (withRuntime "@extern(\"nanyx:component\", \"argument\")\ndef argument: [HostRuntime] () -> I32\n")
+    Assert.Empty(result.Diagnostics)

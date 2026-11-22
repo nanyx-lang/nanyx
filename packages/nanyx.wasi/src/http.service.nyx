@@ -1,0 +1,183 @@
+--| `wasi:http/handler`'s side of a request, for the HTTP host's component root: the request the
+  host gives `handle`, as a `Request`, and the `response` it returns, from a `Response`.
+
+  The compiler exports `handle` (see `nanyx:component`, below): it gives the request's handle to
+  the program, through `argument`, and takes the response's through `result`, with the ends of its
+  body's stream and its trailers' future, to write once `handle` has returned, as the host reads
+  them.
+export module http.service
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx/text
+  abi as (aligned8, freeOptionalString, readableEnd, settled, takeString, writableEnd)
+  http as (bodyFrom, fieldsOf, headersOf)
+  nanyx.http.core/request as (Method, Request)
+  nanyx.http.core/response as (Response)
+)
+
+-- A request is a `wasi:http/types` `request`: its method, scheme, authority and path with its
+-- query, each read by a method of its own, its headers a `fields`, and its body the stream that
+-- `consume-body` gives. A response is a `response`, made with `response.new` from a `fields`, a
+-- `stream<u8>` and a future for its trailers, whose writable ends go to the compiler's `result`.
+
+@extern("nanyx:component", "argument")
+def argument: [HostRuntime] () -> I32
+
+@extern("nanyx:component", "result")
+def result: [HostRuntime] I32, I32, I32, I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]request.get-method")
+def getMethod: [HostRuntime] I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]request.get-scheme")
+def getScheme: [HostRuntime] I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]request.get-authority")
+def getAuthority: [HostRuntime] I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]request.get-path-with-query")
+def getPathWithQuery: [HostRuntime] I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]request.get-headers")
+def requestHeaders: [HostRuntime] I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[static]request.consume-body")
+def consumeBody: [HostRuntime] I32, I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[future-new-0][static]request.consume-body")
+def consumedFutureNew: [HostRuntime] () -> I64
+
+@extern("wasi:http/types@0.3.0", "[async-lower][future-write-0][static]request.consume-body")
+def consumedFutureWrite: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[future-drop-writable-0][static]request.consume-body")
+def consumedFutureDropWritable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[async-lower][stream-read-1][static]request.consume-body")
+def requestStreamRead: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[stream-drop-readable-1][static]request.consume-body")
+def requestStreamDropReadable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[future-drop-readable-2][static]request.consume-body")
+def trailersFutureDropReadable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[static]response.new")
+def newResponse: [HostRuntime] I32, I32, I32, I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]response.set-status-code")
+def setStatusCode: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[stream-new-0][static]response.new")
+def bodyStreamNew: [HostRuntime] () -> I64
+
+@extern("wasi:http/types@0.3.0", "[future-new-1][static]response.new")
+def trailersFutureNew: [HostRuntime] () -> I64
+
+@extern("wasi:http/types@0.3.0", "[future-drop-readable-2][static]response.new")
+def sentFutureDropReadable: [HostRuntime] I32 -> ()
+
+--| The `Method` the `wasi:http` `method` at `at` is, by its case's place in the variant, or
+  `#unknown` for one `Request` has no case for: `CONNECT`, `TRACE` and any other, whose name the
+  host allocated, and which is freed.
+def methodAt: [HostRuntime] I32 -> #some(Method) | #unknown = { at ->
+  match readByte(at)
+    | 0 -> #some(#get)
+    | 1 -> #some(#head)
+    | 2 -> #some(#post)
+    | 3 -> #some(#put)
+    | 4 -> #some(#delete)
+    | 6 -> #some(#options)
+    | 8 -> #some(#patch)
+    | 9 ->
+      free(readI32(at + 4))
+      #unknown
+    | _ -> #unknown
+}
+
+--| The string an `option<string>` at `at` holds, which the host allocated, or `otherwise`.
+def optionalStringAt: [HostRuntime] I32, string -> string = { at, otherwise ->
+  if readByte(at) == 1 then takeString(at + 4) else otherwise
+}
+
+--| The URL `request` asks for, from its scheme, `http` unless it is `HTTPS`, its authority,
+  `localhost` when it has none, and its path with its query, `/` when it has none.
+def urlOf: [HostRuntime] I32 -> string = { request ->
+  def block = allocate(16)
+  getScheme(request, block)
+  def https = readByte(block) == 1 and readByte(block + 4) == 1
+  if readByte(block) == 1 and readByte(block + 4) == 2 then free(readI32(block + 8)) else ()
+  getAuthority(request, block)
+  def authority = optionalStringAt(block, "localhost")
+  getPathWithQuery(request, block)
+  def pathWithQuery = optionalStringAt(block, "/")
+  free(block)
+  "{if https then "https" else "http"}://{authority}{pathWithQuery}"
+}
+
+--| Writes `ok` to the future `writer` that `consume-body` was given, once the body is read, and
+  drops it: a `result<_, error-code>`, its case at 0.
+def writeConsumed: [HostRuntime] I32 -> () = { writer ->
+  def block = allocate(48)
+  def value = aligned8(block)
+  writeI64(value, 0)
+  ignore(settled(writer, consumedFutureWrite(writer, value)))
+  consumedFutureDropWritable(writer)
+  free(block)
+}
+
+--| The body of `request`, which it consumes, read to the end.
+def bodyOf: [HostRuntime] I32 -> string = { request ->
+  def consumed = consumedFutureNew()
+  def ends = allocate(8)
+  consumeBody(request, readableEnd(consumed), ends)
+  def reader = readI32(ends)
+  def trailers = readI32(ends + 4)
+  free(ends)
+  def body = bodyFrom(requestStreamRead, reader)
+  requestStreamDropReadable(reader)
+  trailersFutureDropReadable(trailers)
+  writeConsumed(writableEnd(consumed))
+  body
+}
+
+--| The request `handle` was given, or `#unknownMethod` when `Request` can't say what it asks.
+export def incoming: [HostRuntime] () -> #some(Request) | #unknownMethod = { _ ->
+  def request = argument()
+  def block = allocate(12)
+  getMethod(request, block)
+  def method = methodAt(block)
+  free(block)
+
+  match method
+    | #unknown -> #unknownMethod
+    | #some(known) ->
+      def url = urlOf(request)
+      def headers = headersOf(requestHeaders(request))
+      def body = bodyOf(request)
+      #some(Request(method = known, url = url, headers = headers, body = body, timeout = 30000))
+}
+
+--| Returns a `response` from `handle` with `status`, the headers in `fields` and `text`, its
+  body, which the compiler writes once `handle` has returned.
+def respondWith: [HostRuntime] int, I32, string -> () = { status, fields, text ->
+  def body = bodyStreamNew()
+  def trailers = trailersFutureNew()
+  def made = allocate(8)
+  newResponse(fields, 1, readableEnd(body), readableEnd(trailers), made)
+  def handle = readI32(made)
+  sentFutureDropReadable(readI32(made + 4))
+  free(made)
+  ignore(setStatusCode(handle, I32.fromInt(status)))
+  result(handle, writableEnd(body), writableEnd(trailers), addressOf(text), byteLength(text))
+  keepAlive(text)
+}
+
+--| Returns `response` from `handle`. One whose headers can't be sent is a 500, with none.
+export def respond: [HostRuntime] Response -> () = { response ->
+  match fieldsOf(response.headers)
+    | #some(fields) -> respondWith(response.status, fields, response.body)
+    | #error(_) -> respond(Response(status = 500, headers = [], body = ""))
+}

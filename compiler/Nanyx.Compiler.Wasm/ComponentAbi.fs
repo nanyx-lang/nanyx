@@ -1,21 +1,29 @@
 /// What a module compiled as the core module of a WASI 0.3 component has that a module the runtime runs doesn't
-/// (`WasmOptions.Component`): its entry exported under `wasi:cli/run`'s name, `cabi_realloc`, and the runtime's own
-/// writes and exits on `wasi:cli` rather than on WASI preview 1.
+/// (`WasmOptions.Component`): its entry exported under its world's name for it (see `ComponentEntry`),
+/// `cabi_realloc`, and the runtime's own writes and exits on `wasi:cli` rather than on WASI preview 1.
 ///
 /// The module follows wit-component's conventions, and the componentizer (`Nanyx.Runtime.Componentizer`) wraps it as a
-/// component of a world that imports `wasi:cli/stdout`, `stderr` and `exit` and exports `wasi:cli/run`, all at
-/// `@0.3.0`, such as `wasi:cli/command`. Its canonical ABI is written out here by hand, on `i32`s and `i64`s
-/// (see the Components page under Work in progress).
+/// component of a world that imports `wasi:cli/stdout` and `stderr`, all at `@0.3.0`, and exports `wasi:cli/run`,
+/// importing `wasi:cli/exit` too, such as `wasi:cli/command`, or `wasi:http/handler`, such as `wasi:http/service`. Its
+/// canonical ABI is written out here by hand, on `i32`s and `i64`s (see the Components page of the Deep dives).
 module internal Transpiler.Wasm.ComponentAbi
 
+open NyxCompiler
 open Transpiler.Wasm.WasmAllocator
 open Transpiler.Wasm.WasmRuntime
 
 /// The version of WASI 0.3 the module imports and exports, which every 0.3 host accepts.
 let wasiVersion = "0.3.0"
 
-/// The name the module exports its entry under: `wasi:cli/run`'s `run`, which returns `result`, lifted synchronously.
+/// The name the module exports `CliRun` under: `wasi:cli/run`'s `run`, which returns `result`, lifted synchronously.
 let runExport = $"wasi:cli/run@{wasiVersion}#run"
+
+/// The interface whose `handle` the module exports as `HttpHandler`.
+let private handlerInterface = $"wasi:http/handler@{wasiVersion}"
+
+/// The name the module exports `HttpHandler` under: `wasi:http/handler`'s `handle`, which takes a `request` and returns
+/// `result<response, error-code>`, lifted async with a callback.
+let handleExport = $"[async-lift]{handlerInterface}#handle"
 
 /// The allocator the host allocates in the module's memory through: `(old, oldSize, align, newSize) -> address`.
 let cabiRealloc = "cabi_realloc"
@@ -68,11 +76,38 @@ let private streamImports (stream: Stream) =
       import "[async-lower][future-read-1]write-via-stream" "future_read" " (param i32 i32) (result i32)"
       import "[future-drop-readable-1]write-via-stream" "future_drop_readable" " (param i32)" ]
 
-/// Every import of a component's core module that the runtime's own code needs.
-let imports =
+/// The functions the handler's imports are called by in the module.
+module private Handler =
+    let backpressureInc = "$__nanyx_http_backpressure_inc"
+    let backpressureDec = "$__nanyx_http_backpressure_dec"
+    let taskReturn = "$__nanyx_http_task_return"
+    let bodyWrite = "$__nanyx_http_body_write"
+    let bodyDropWritable = "$__nanyx_http_body_drop_writable"
+    let trailersWrite = "$__nanyx_http_trailers_write"
+    let trailersDropWritable = "$__nanyx_http_trailers_drop_writable"
+
+/// The imports `HttpHandler` needs: backpressure, so that the host gives the instance one request at a time,
+/// `handle`'s `task.return`, and the writes to the response's body and trailers, a `stream<u8>` and a
+/// `future<result<option<trailers>, error-code>>`, the types 0 and 1 of `response.new`. `task.return` takes
+/// `result<response, error-code>` flattened: its case, then the response's handle or the error's case, then the rest of
+/// the error, which the module never gives.
+let private handlerImports =
+    let types = $"wasi:http/types@{wasiVersion}"
+    [ $"""  (import "$root" "[backpressure-inc]" (func {Handler.backpressureInc}))"""
+      $"""  (import "$root" "[backpressure-dec]" (func {Handler.backpressureDec}))"""
+      $"""  (import "[export]{handlerInterface}" "[task-return]handle" (func {Handler.taskReturn} (param i32 i32 i32 i64 i32 i32 i32 i32)))"""
+      $"""  (import "{types}" "[async-lower][stream-write-0][static]response.new" (func {Handler.bodyWrite} (param i32 i32 i32) (result i32)))"""
+      $"""  (import "{types}" "[stream-drop-writable-0][static]response.new" (func {Handler.bodyDropWritable} (param i32)))"""
+      $"""  (import "{types}" "[async-lower][future-write-1][static]response.new" (func {Handler.trailersWrite} (param i32 i32) (result i32)))"""
+      $"""  (import "{types}" "[future-drop-writable-1][static]response.new" (func {Handler.trailersDropWritable} (param i32)))""" ]
+
+/// Every import of a component's core module that the runtime's own code and its entry need.
+let imports (entry: ComponentEntry) =
     [ yield! streamImports Stdout
       yield! streamImports Stderr
-      $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
+      match entry with
+      | CliRun -> $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
+      | HttpHandler -> yield! handlerImports
       $"""  (import "$root" "[waitable-set-new]" (func {Waitables.setNew} (result i32)))"""
       $"""  (import "$root" "[waitable-join]" (func {Waitables.join} (param i32 i32)))"""
       $"""  (import "$root" "[waitable-set-wait]" (func {Waitables.setWait} (param i32 i32) (result i32)))"""
@@ -107,6 +142,47 @@ let private waitForFunction =
           "  i32.load"
           ")" ]
 
+/// Writes the `$length` bytes at `$bytes` to the stream's writable end `$writer` with `streamWrite`, a call of a
+/// `stream-write` lowered async, waiting while it is blocked, until the host has taken them all or dropped its end.
+/// The function it is in has the locals `$writer`, `$bytes`, `$length` and `$status`.
+let private writeAllLines (streamWrite: string) =
+    [ "  block $done"
+      "    loop $more"
+      "      local.get $length"
+      "      i32.eqz"
+      "      br_if $done"
+      "      local.get $writer"
+      "      local.get $bytes"
+      "      local.get $length"
+      "      " + streamWrite
+      "      local.tee $status"
+      $"      i32.const {blocked}"
+      "      i32.eq"
+      "      if"
+      "        local.get $writer"
+      $"        call {waitFor}"
+      "        local.set $status"
+      "      end"
+      // The host dropped its end, or the write was cancelled: nothing more can be written.
+      "      local.get $status"
+      "      i32.const 15"
+      "      i32.and"
+      "      br_if $done"
+      "      local.get $bytes"
+      "      local.get $status"
+      "      i32.const 4"
+      "      i32.shr_u"
+      "      local.tee $status"
+      "      i32.add"
+      "      local.set $bytes"
+      "      local.get $length"
+      "      local.get $status"
+      "      i32.sub"
+      "      local.set $length"
+      "      br $more"
+      "    end"
+      "  end" ]
+
 /// Writes the `$length` bytes at `$bytes` to `stream`: through a stream of its own, which it closes once the host has
 /// taken every byte, and then waits until the host has written them, so that writes to stdout and stderr come out in
 /// the order they were made.
@@ -129,42 +205,7 @@ let private writeFunction (stream: Stream) =
           "  i64.shr_u"
           "  i32.wrap_i64"
           "  local.set $writer"
-          "  block $done"
-          "    loop $more"
-          "      local.get $length"
-          "      i32.eqz"
-          "      br_if $done"
-          "      local.get $writer"
-          "      local.get $bytes"
-          "      local.get $length"
-          "      " + call "stream_write"
-          "      local.tee $status"
-          $"      i32.const {blocked}"
-          "      i32.eq"
-          "      if"
-          "        local.get $writer"
-          $"        call {waitFor}"
-          "        local.set $status"
-          "      end"
-          // The host dropped its end, or the write was cancelled: nothing more can be written.
-          "      local.get $status"
-          "      i32.const 15"
-          "      i32.and"
-          "      br_if $done"
-          "      local.get $bytes"
-          "      local.get $status"
-          "      i32.const 4"
-          "      i32.shr_u"
-          "      local.tee $status"
-          "      i32.add"
-          "      local.set $bytes"
-          "      local.get $length"
-          "      local.get $status"
-          "      i32.sub"
-          "      local.set $length"
-          "      br $more"
-          "    end"
-          "  end"
+          yield! writeAllLines (call "stream_write")
           "  local.get $writer"
           "  " + call "stream_drop_writable"
           "  local.get $written"
@@ -242,12 +283,16 @@ let private fdWriteFunction =
           "  i32.const 0"
           ")" ]
 
-/// WASI preview 1's `proc_exit`, on `wasi:cli/exit`'s `exit-with-code`, which never returns either.
-let private procExitFunction =
+/// WASI preview 1's `proc_exit`, which never returns either: on `wasi:cli/exit`'s `exit-with-code` for `CliRun`, and a
+/// trap for `HttpHandler`, whose world can't exit, so that the host answers the request with an error.
+let private procExitFunction (entry: ComponentEntry) =
     lines
         [ $"(func ${Helpers.procExit} (param $code i32)"
-          "  local.get $code"
-          $"  call {exitWithCode}"
+          match entry with
+          | CliRun ->
+              "  local.get $code"
+              $"  call {exitWithCode}"
+          | HttpHandler -> "  unreachable"
           ")" ]
 
 /// `cabi_realloc` on the program's allocator: a new block of `$newSize` bytes, with the first bytes of the block at
@@ -286,27 +331,185 @@ let private cabiReallocFunction =
           "  local.get $new"
           ")" ]
 
-/// The helpers `cabi_realloc` calls.
+/// The helpers `cabi_realloc` and the handler call.
 let reallocHelpers = [ Helpers.alloc; Helpers.allocAligned8; Helpers.free; Helpers.copyBytes ]
 
+/// The module the compiler defines the functions of for `HttpHandler`, which a host's component root declares as foreign
+/// functions (see `Hosts.componentModule`).
+let private componentExtern (name: string) (parameters: ExternValue list) (result: ExternValue option) =
+    { Module = Hosts.componentModule; Name = name; Parameters = parameters; Result = result }
+
+/// `argument`, which gives the handle of the `request` that `handle` was given.
+let private argumentExtern = componentExtern "argument" [] (Some ExternValue.I32)
+
+/// `result`, which takes the `response` that `handle` returns, the writable ends of its body's stream and of its
+/// trailers' future, and the address and length of its body, which it copies, to write once `handle` has returned.
+let private resultExtern = componentExtern "result" (List.replicate 5 ExternValue.I32) None
+
+/// The foreign functions of `Hosts.componentModule` that the module defines for `entry`.
+let externs (entry: ComponentEntry) =
+    match entry with
+    | CliRun -> []
+    | HttpHandler -> [ argumentExtern; resultExtern ]
+
+/// Where the handler keeps the request and what `result` was given, from `handle`'s call to its end.
+module private HandlerState =
+    let request = "$__nanyx_http_request"
+    let response = "$__nanyx_http_response"
+    let body = "$__nanyx_http_body"
+    let trailers = "$__nanyx_http_trailers"
+    let bytes = "$__nanyx_http_bytes"
+    let length = "$__nanyx_http_length"
+    let all = [ request; response; body; trailers; bytes; length ]
+
+/// `argument` and `result` (see `externs`), each the function a call of its foreign function calls, named by
+/// `functionName`, and the globals they keep what they are given in. `result`'s response is -1 until it is called.
+let private componentFunctions (functionName: Extern -> string) =
+    lines
+        [ for name in HandlerState.all do
+              $"(global {name} (mut i32) (i32.const 0))"
+          $"(func ${functionName argumentExtern} (result i32)"
+          $"  global.get {HandlerState.request}"
+          ")"
+          $"(func ${functionName resultExtern} (param $response i32) (param $body i32) (param $trailers i32) (param $bytes i32) (param $length i32)"
+          "  (local $copy i32)"
+          "  local.get $response"
+          $"  global.set {HandlerState.response}"
+          "  local.get $body"
+          $"  global.set {HandlerState.body}"
+          "  local.get $trailers"
+          $"  global.set {HandlerState.trailers}"
+          "  local.get $length"
+          $"  global.set {HandlerState.length}"
+          "  local.get $length"
+          "  i32.const 1"
+          "  i32.add"
+          $"  call ${Helpers.alloc}"
+          "  local.tee $copy"
+          "  local.get $bytes"
+          "  local.get $length"
+          $"  call ${Helpers.copyBytes}"
+          "  local.get $copy"
+          $"  global.set {HandlerState.bytes}"
+          ")" ]
+
+/// Writes `ok(none)` to the trailers' future `$trailers`, waiting while it is blocked, and drops it: the response has
+/// no trailers. A `result<option<trailers>, error-code>` is its case at 0 and, for `ok`, the option's at 8, in a block
+/// aligned to 8 (`allocAligned8`).
+let private writeNoTrailersFunction =
+    lines
+        [ "(func $__nanyx_http_write_no_trailers (param $trailers i32)"
+          "  (local $value i32)"
+          "  i32.const 16"
+          $"  call ${Helpers.allocAligned8}"
+          "  local.tee $value"
+          "  i64.const 0"
+          "  i64.store"
+          "  local.get $value"
+          "  i64.const 0"
+          "  i64.store offset=8"
+          "  local.get $trailers"
+          "  local.get $value"
+          $"  call {Handler.trailersWrite}"
+          $"  i32.const {blocked}"
+          "  i32.eq"
+          "  if"
+          "    local.get $trailers"
+          $"    call {waitFor}"
+          "    drop"
+          "  end"
+          "  local.get $trailers"
+          $"  call {Handler.trailersDropWritable}"
+          "  local.get $value"
+          $"  call ${Helpers.free}"
+          ")" ]
+
+/// `handle`, lifted async with a callback (see `HttpHandler`). It takes the request, runs the program's start function,
+/// `start`, if it has one, which answers it through `argument` and `result`, and returns the response; then, while the
+/// host reads it, writes its body, waiting as each write blocks, and its trailers. Backpressure keeps the host from
+/// giving the instance another request until then, and the start function runs afresh for each one.
+///
+/// The program runs synchronously, as it does under `CliRun`: it waits for what it imports where it calls it. So the
+/// callback is only ever called if the host cancels the task, and traps.
+let private handleFunctions (start: string option) =
+    lines
+        [ $"(func $__nanyx_http_handle (export \"{handleExport}\") (param $request i32) (result i32)"
+          "  (local $writer i32)"
+          "  (local $bytes i32)"
+          "  (local $length i32)"
+          "  (local $status i32)"
+          $"  call {Handler.backpressureInc}"
+          "  local.get $request"
+          $"  global.set {HandlerState.request}"
+          "  i32.const -1"
+          $"  global.set {HandlerState.response}"
+          match start with
+          | Some name -> $"  call ${name}"
+          | None -> ()
+          // A component root always answers: one that doesn't is a bug in its host.
+          $"  global.get {HandlerState.response}"
+          "  i32.const -1"
+          "  i32.eq"
+          "  if"
+          "    unreachable"
+          "  end"
+          "  i32.const 0"
+          $"  global.get {HandlerState.response}"
+          "  i32.const 0"
+          "  i64.const 0"
+          "  i32.const 0"
+          "  i32.const 0"
+          "  i32.const 0"
+          "  i32.const 0"
+          $"  call {Handler.taskReturn}"
+          $"  global.get {HandlerState.body}"
+          "  local.set $writer"
+          $"  global.get {HandlerState.bytes}"
+          "  local.set $bytes"
+          $"  global.get {HandlerState.length}"
+          "  local.set $length"
+          yield! writeAllLines $"call {Handler.bodyWrite}"
+          "  local.get $writer"
+          $"  call {Handler.bodyDropWritable}"
+          $"  global.get {HandlerState.bytes}"
+          $"  call ${Helpers.free}"
+          $"  global.get {HandlerState.trailers}"
+          "  call $__nanyx_http_write_no_trailers"
+          $"  call {Handler.backpressureDec}"
+          // EXIT: the task is done.
+          "  i32.const 0"
+          ")"
+          $"(func $__nanyx_http_callback (export \"[callback]{handleExport}\") (param $event i32) (param $handle i32) (param $code i32) (result i32)"
+          "  unreachable"
+          ")" ]
+
 /// The functions a component's core module defines for the runtime: `fd_write` and `proc_exit` on `wasi:cli`, and
-/// `cabi_realloc`.
-let functions =
+/// `cabi_realloc`, and for `HttpHandler`, the functions of `externs`, named by `functionName`.
+let functions (entry: ComponentEntry) (functionName: Extern -> string) =
     [ waitForFunction
       writeFunction Stdout
       writeFunction Stderr
       fdWriteFunction
-      procExitFunction
-      cabiReallocFunction ]
+      procExitFunction entry
+      cabiReallocFunction
+      match entry with
+      | CliRun -> ()
+      | HttpHandler ->
+          componentFunctions functionName
+          writeNoTrailersFunction ]
     |> String.concat "\n"
 
-/// The entry, exported under `runExport`: it runs the program's start function, if it has one, and returns `ok` (0).
-/// A program that crashes or exits stops in `proc_exit` instead, with its exit code.
-let runFunction (start: string option) =
-    lines
-        [ $"(func $__nanyx_cli_run (export \"{runExport}\") (result i32)"
-          match start with
-          | Some name -> $"  call ${name}"
-          | None -> ()
-          "  i32.const 0"
-          ")" ]
+/// The entry, exported under its name for `entry`: `run` runs the program's start function, if it has one, and returns
+/// `ok` (0), and a program that crashes or exits stops in `proc_exit` instead, with its exit code; `handle` is
+/// `handleFunctions`.
+let entryFunction (entry: ComponentEntry) (start: string option) =
+    match entry with
+    | CliRun ->
+        lines
+            [ $"(func $__nanyx_cli_run (export \"{runExport}\") (result i32)"
+              match start with
+              | Some name -> $"  call ${name}"
+              | None -> ()
+              "  i32.const 0"
+              ")" ]
+    | HttpHandler -> handleFunctions start

@@ -123,6 +123,26 @@ settings = (port = 8080))`, and `nanyx run` serves it there, on 3000 when no por
 settings it takes, each with its default, so a setting it doesn't take is an error at the setting. See the
 [HTTP server cookbook](../cookbook/http-server).
 
+## Served as a component
+
+`nanyx build` writes a program under the HTTP host as a [WebAssembly component](../deep-dives/components) of the world
+`wasi:http/service@0.3.0`, which `wasmtime serve` (Wasmtime 51 or later), or any runtime that implements the world, serves as it
+is: `wasmtime serve -S cli out/app.wasm` serves it on port 8080, with `-S cli` for the stdout and stderr the program
+writes `dbg` and its crashes to. `nanyx run` serves the program as it always has, and `nanyx build --core` writes a core
+module, as before.
+
+A component is built from the host's component root, `http.host.wasi`, which provides `Http`, `Async`, `Random` and
+`Clock` on WASI 0.3, as the core root does. Neither root provides `Env`: the world has no environment to read.
+
+- **The runtime may reuse an instance.** `wasmtime serve` gives an instance of the component up to 128 requests, one
+  after another, and the program runs afresh for each, so nothing the program computes is kept from one request to the
+  next. The instance's memory is, though, and a request that crashes ends its instance, which the runtime answers with
+  a 500. `wasmtime serve --max-instance-reuse-count 1` gives each request an instance of its own, as `nanyx run` does.
+- **An instance answers one request at a time.** The runtime gives it no second request until it has written the
+  first's response, and starts other instances for requests that come in meanwhile.
+- **A request whose method `Request` has no case for,** such as `CONNECT` or `TRACE`, is answered with a 400, without
+  calling the handler.
+
 # The playground host
 
 The playground host, `nanyx.playground`, runs a console program in a web page, as the [playground](../standard-tools/playground)

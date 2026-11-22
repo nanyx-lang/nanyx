@@ -1,0 +1,6 @@
+-- A package under the HTTP host: `nanyx run` in this directory serves its @entry on port 3000, and
+-- `nanyx build` writes it as a component of wasi:http/service, which `wasmtime serve` serves.
+(
+  package = (name = "hello.server", version = "0.1.0", sources = ["src/**/*.nyx"])
+  host = (package = "nanyx.http", version = "0.33.0")
+)

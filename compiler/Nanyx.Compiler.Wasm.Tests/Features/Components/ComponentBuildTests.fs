@@ -33,6 +33,20 @@ let ``A package under the console host is built as a component of nanyx:console/
     Assert.Equal<byte array>(componentPreamble, preamble (Path.Combine(app.Path, "out", "app.wasm")))
 
 [<Fact>]
+let ``A package under the HTTP host is built as a component of wasi:http/service`` () =
+    use app = new TempDirectory()
+    Directory.CreateDirectory(Path.Combine(app.Path, "src")) |> ignore
+    let host = $"host = (package = \"nanyx.http\", version = \"{Toolchain.version}\")"
+    File.WriteAllText(Path.Combine(app.Path, "app.nyxp"), $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), {host})""" + "\n")
+    let main = "module main\n\n@entry\ndef main: Request -> Response = { request -> Response.text(200, request.url) }\n"
+    File.WriteAllText(Path.Combine(app.Path, "src", "main.nyx"), main)
+    let built = nanyxIn app.Path [ "build"; "--release" ]
+    Assert.Equal("", built.StandardError)
+    Assert.Equal(0, built.ExitCode)
+    Assert.Contains("a component of wasi:http/service@0.3.0", built.StandardOutput)
+    Assert.Equal<byte array>(componentPreamble, preamble (Path.Combine(app.Path, "out", "app.wasm")))
+
+[<Fact>]
 let ``--core builds a core module, which the runtime runs`` () =
     use app = consoleApp hello
     let built = nanyxIn app.Path [ "build"; "--core" ]

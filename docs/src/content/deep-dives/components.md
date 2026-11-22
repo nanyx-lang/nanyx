@@ -7,7 +7,7 @@ order: 17
 The compiler can write a WebAssembly component that targets WASI 0.3, so that a program runs under Wasmtime, or any
 runtime that implements WASI 0.3, and not only under `nanyx`'s own runtime. The design, and the stages still to come,
 are on [Components](../work-in-progress/components) in Work in progress. `nanyx build` writes a component for a program
-whose host has a component root, as the console host does; `--core` writes a core module, which is all `nanyx run`,
+whose host has a component root, as the console and HTTP hosts do; `--core` writes a core module, which is all `nanyx run`,
 `nanyx test`, the debugger and the profiler run.
 
 A component is built in three steps:
@@ -18,11 +18,15 @@ A component is built in three steps:
 
 # The core module
 
-`WasmOptions.Component` changes three things about the module the backend writes (`ComponentAbi.fs`):
+`WasmOptions.Component` changes three things about the module the backend writes (`ComponentAbi.fs`). It holds the
+entry the module exports, a `ComponentEntry`, which the world says (`ComponentEntry.ofWorld`): `HttpHandler` for
+`wasi:http/service`, and `CliRun` for any other.
 
-- **The entry is exported as `wasi:cli/run@0.3.0#run`,** not run when the module is instantiated. It calls the start
-  function, if the program has one, and returns 0, which is `ok`. `run` is an `async func` in WIT, lifted synchronously:
-  the instance blocks in each call it makes, as it does under `nanyx run`.
+- **The entry is exported under the world's name for it,** not run when the module is instantiated:
+  - `CliRun` is `wasi:cli/run@0.3.0#run`. It calls the start function, if the program has one, and returns 0, which is
+    `ok`. `run` is an `async func` in WIT, lifted synchronously: the instance blocks in each call it makes, as it does
+    under `nanyx run`.
+  - `HttpHandler` is `wasi:http/handler@0.3.0#handle`, lifted async with a callback ([The handler](#the-handler)).
 - **`cabi_realloc` is exported,** for the host to allocate in the module's memory through. It is the program's own
   allocator: a new block of the size asked for, with the old block's bytes copied in and the old block freed. The
   allocator's blocks are only 4-byte aligned, so when the host asks for more (8, for a `list<u64>`, the most any WIT
@@ -40,7 +44,8 @@ A component is built in three steps:
     for it at once, in a waitable set of its own (`[waitable-set-wait]`). Wasmtime turns the synchronous forms of
     `stream.write` and `future.read` off by default, and the async form followed by a wait runs with its defaults.
   - The waits write their event at addresses 16 to 31, below the string literals, where nothing else reads or writes.
-  - `proc_exit` is `wasi:cli/exit`'s `exit-with-code`.
+  - `proc_exit` is `wasi:cli/exit`'s `exit-with-code`. A `wasi:http/service` component can't exit, so for
+    `HttpHandler` it traps, and the host answers the request with an error.
 
   A foreign function of preview 1's `fd_write` or `proc_exit` is the same function, as it is in a module the runtime runs
   ([Foreign functions](./foreign-functions)), so `println` writes through `wasi:cli` too.
@@ -51,6 +56,30 @@ stream's place among the types in `write-via-stream`'s signature. The waitable-s
 
 A component's module has no probes, no memory checks and no `nanyx:debug` `dbg`, whose imports and exports no WASI world
 has. A crash stops the program with a trap, as it does under `nanyx run`, having written why to stderr.
+
+## The handler
+
+`wasi:http/handler`'s `handle` takes a `request` and returns `result<response, error-code>`. The host reads the
+response's body from a stream after `handle` returns, so a handler lifted synchronously, which returns only when its
+core function does, can't write a body bigger than the stream's buffer: the host isn't reading it yet. So `handle` is
+lifted async, with the callback ABI (`[async-lift]` and `[callback][async-lift]`), and gives its result with
+`task.return` before it is done:
+
+1. It raises backpressure (`[backpressure-inc]`), so that the host gives the instance no other request until it is
+   done, and runs the program's start function, which answers the request through the component root's `run`.
+2. The root takes the request's handle from `argument`, and gives `result` the response it made, the writable ends of
+   its body's `stream<u8>` and its trailers' future, and the address and length of the body, which `result` copies.
+   `argument` and `result` are foreign functions of `nanyx:component` (`Hosts.componentModule`), which the module
+   defines itself (`ComponentAbi.externs`) rather than imports; only a host's package, or a host library it depends on,
+   may declare one (`NYX0276`).
+3. `handle` returns the response with `[task-return]handle`, then writes the body's copy to its stream, waiting while
+   a write blocks, as `fd_write` does, and drops it; writes `ok(none)` to the trailers' future and drops it; frees the
+   copy; lowers backpressure; and returns EXIT.
+
+The program runs synchronously, as under `CliRun`: a call it waits on is waited on where it is made, and the callback
+is only called if the host cancels the task, which traps. The start function runs afresh for each request an instance
+is given: it sets the program's cached values up and tears them down again, so nothing the program computes is kept
+from one request to the next.
 
 # The componentizer
 
@@ -90,7 +119,8 @@ directory. `HostPackages` reads it into `Host.Component`.
   provides is `NYX0275` (`Hosts.componentRootErrors`). So a program fits the one root when it fits the other, and an
   entry point that requires a context neither provides is the same error, `NYX0237`, naming it, in either build.
 - **CI runs them.** The Compiler workflow builds each package in `examples/` as a component, runs it under
-  `wasmtime run`, and checks that it prints what `nanyx run` does.
+  `wasmtime run`, and checks that it prints what `nanyx run` does. A package under the HTTP host, `hello.server`, is
+  served by `wasmtime serve` instead, and checked with requests in turn, which one instance answers.
 
 ## The console host's component root
 
@@ -130,7 +160,7 @@ requests has no `wasi:http` import. It is Nanyx, on
   - An `error-code` becomes the `FsError` the core root gives for the same WASI error: `no-entry` is `#notFound`, and so
     on (`errorAt`).
 - **HTTP requests** are `wasi:http/client`'s `send`, in the host library `nanyx.wasi` (`nanyx.wasi/http`), which the
-  HTTP host's component root will share. A `Request` becomes a
+  HTTP host's component root shares. A `Request` becomes a
   `wasi:http/types` `request`: its headers a `fields`, with a `Content-Length` for a body that doesn't name one, its body
   a `stream<u8>`, its trailers a future written `ok(none)`, its timeout `request-options`' connect and first-byte
   timeouts, and its URL split into scheme, authority and path with query (`urlParts`).
@@ -144,3 +174,20 @@ requests has no `wasi:http` import. It is Nanyx, on
 
 A wait blocks: each async-lowered call that returns BLOCKED is waited on at once, in a waitable set of its own, as
 the runtime's own writes are.
+
+## The HTTP host's component root
+
+`http.host.wasi` provides `Http`, `Clock`, `Random` and `Async`, as the console host's root does, in the world
+`wasi:http/service@0.3.0`. The package's `wit/http.wit` is a package of its own with nothing in it, which the
+componentizer needs as the root of the directory, and `wit/deps` holds WASI 0.3's WIT. Its `run` answers the request
+`handle` was given ([The handler](#the-handler)) through `nanyx.wasi/http.service`:
+
+- **The request** is read from the `wasi:http/types` `request` that `argument` gives. Its method is a `method` variant,
+  whose case is a `Method`; one `Request` has no case for, `CONNECT`, `TRACE` or another, is answered with a 400 without
+  calling the handler. Its URL is put together from its scheme, `http` unless it is `HTTPS`, its authority, and its path
+  with its query. Its headers are copied out of its `fields` (`headersOf`, shared with the client), and its body is
+  read from the stream `consume-body` gives (`bodyFrom`, shared too), whose future is then written `ok`.
+- **The response** is a `response` made with `response.new` from a `fields` with its headers (`fieldsOf`), a new
+  `stream<u8>` and a new future for its trailers, whose readable ends go to the host with it, and its status set with
+  `set-status-code`. The future `response.new` gives, which says how sending the response went, is dropped. A response
+  whose headers can't be sent is a 500 with no headers and no body.
