@@ -531,4 +531,65 @@ public sealed class InfoViewTests : LanguageServerTestBase
             [("provider", new Range(2, 11, 2, 14)), ("call", new Range(3, 2, 3, 6))],
             (await InfoViewAt(uri, 3, 3)).Highlights.Select(highlight => (highlight.Kind, highlight.Range)));
     }
+
+    [Fact]
+    public async Task Info_view_names_types_as_the_code_at_the_cursor_names_them()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-13");
+
+        Open(uri, """
+            module Points =
+              export type Point = protected (x: int, y: int)
+
+              export def Point.new: int, int -> #some(Point) | #error(string) = { x, y ->
+                if x < 0 or y < 0 then #error("negative") else #some(Point(x = x, y = y))
+              }
+
+            import Points
+            import Points as q
+
+            def made = Point.new(1, 2)
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // Inside the module block that declares it, a type is named as the block's code names it.
+        var inside = await InfoViewAt(uri, 4, 10);
+        Assert.Equal(
+            "Points.Point.new: int, int -> #some(Point) | #error(string)",
+            Assert.Single(Section(inside, "function", "signature")).Text);
+        Assert.Contains(
+            ("x: int", "parameter"),
+            Section(inside, "function", "names").Select(item => (item.Text, item.Detail)));
+
+        // Outside it, by the name an import brings in, without its module.
+        var outside = await InfoViewAt(uri, 10, 14);
+        Assert.Equal(
+            "def Points.Point.new: int, int -> #some(Point) | #error(string)",
+            Assert.Single(Section(outside, "cursor", "expression")).Text);
+        Assert.Equal("made: #some(Point) | #error(string)", Assert.Single(Section(outside, "function", "signature")).Text);
+    }
+
+    [Fact]
+    public async Task Info_view_names_a_type_imported_under_an_alias_through_the_alias()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-14");
+
+        Open(uri, """
+            module Points =
+              export type Point = protected (x: int, y: int)
+
+              export def Point.origin: Point = Point(x = 0, y = 0)
+
+            import Points as q
+
+            def made = q.Point.origin
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 7, 5);
+
+        Assert.Equal("made: q.Point", Assert.Single(Section(view, "function", "signature")).Text);
+    }
 }

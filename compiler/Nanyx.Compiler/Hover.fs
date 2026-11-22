@@ -166,18 +166,19 @@ let private hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty 
 
 /// `ty`, the type `symbol` has where it is hovered, as hover writes it: after the contexts it requires there (see
 /// `withContextsAt`) and the name (see `declared`), and with each of `others` written with it, its variables named as
-/// they are there.
-let private writtenAt (names: TypeNotation) (typed: TypedModule) (symbol: Symbol option) (ty: Ty) (others: Ty list) =
+/// they are there. The types and contexts they name are named by `rename` (see `Signatures.relativeAt`).
+let private writtenAt (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (symbol: Symbol option) (ty: Ty) (others: Ty list) =
     let ty, contexts =
         match symbol with
         | Some symbol -> withContextsAt typed symbol ty
         | None -> ty, []
-    let typeWritten, othersWritten = Signatures.typesWithContexts typed.TypeDefs names ty contexts others
+    let typeWritten, othersWritten =
+        Signatures.typesWithContexts typed.TypeDefs names (rename ty) (List.map rename contexts) (List.map rename others)
     (symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten), othersWritten
 
 /// The hover for what `hoveredAt` found (see `typeAt`).
-let private hoverOf (names: TypeNotation) (typed: TypedModule) (ty: Ty, symbol: Symbol option, span: SourceSpan) : HoverInfo =
-    { Type = fst (writtenAt names typed symbol ty []); Span = span; Note = None }
+let private hoverOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (ty: Ty, symbol: Symbol option, span: SourceSpan) : HoverInfo =
+    { Type = fst (writtenAt names rename typed symbol ty []); Span = span; Note = None }
 
 /// The hover for the expression at `offset` in the compiled root module: the type of the narrowest expression
 /// there that has one, or of the function itself on a call's function name or an operator, where it is
@@ -192,7 +193,7 @@ let private hoverOf (names: TypeNotation) (typed: TypedModule) (ty: Ty, symbol: 
 /// outermost wins, for the same reason: the parameters a shorthand match lambda makes up span the whole lambda.
 let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option =
     match result.Syntax, result.Typed with
-    | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.map (hoverOf names typed)
+    | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.map (hoverOf names id typed)
     | _ -> None
 
 /// A module a hover is on: the file it is read from, as its spans name it (see `ImportedFile`), the name it is shown
@@ -257,13 +258,13 @@ let moduleAt (file: string) (result: CompileResult) (offset: int) : ModuleHover 
 type Instantiation = { Declared: string; Bindings: (string * string) list; Definition: SourceSpan }
 
 /// The `Instantiation` of what `hoveredAt` found (see `instantiationAt`).
-let private instantiationOf (names: TypeNotation) (typed: TypedModule) (hovered: Ty * Symbol option * SourceSpan) : Instantiation option =
+let private instantiationOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (hovered: Ty * Symbol option * SourceSpan) : Instantiation option =
     match hovered with
     | ty, Some symbol, _ when symbol.Kind = TopLevelValue || symbol.Kind = LocalValue ->
         declaredType typed symbol
         |> Option.bind (fun (general, contexts) ->
             let contexts = contexts |> FunctionContexts.flatten |> Unifier.writtenContexts
-            let declaredWritten = declared symbol (Signatures.typeWithContexts typed.TypeDefs names general contexts)
+            let declaredWritten = declared symbol (Signatures.typeWithContexts typed.TypeDefs names (rename general) (List.map rename contexts))
             let contextVariables = FunctionContexts.variablesIn general
             // Each variable with what it is here: a type, or the contexts a context variable stands for, if any.
             let bound =
@@ -279,7 +280,7 @@ let private instantiationOf (names: TypeNotation) (typed: TypedModule) (hovered:
                             | boundContexts -> Some (name, true, boundContexts)
                         | boundTo -> Some (name, false, [ boundTo ]))
                 | Error _ -> []
-            let typeWritten, boundWritten = writtenAt names typed (Some symbol) ty (bound |> List.collect (fun (_, _, tys) -> tys))
+            let typeWritten, boundWritten = writtenAt names rename typed (Some symbol) ty (bound |> List.collect (fun (_, _, tys) -> tys))
             // A context variable stands for a list of contexts, written as a def's type writes one: `c = [Console, Log]`.
             let bindings =
                 bound
@@ -297,14 +298,15 @@ let private instantiationOf (names: TypeNotation) (typed: TypedModule) (hovered:
 /// `offset`, or its type there is its signature: a def that is not generic, or the def's own name.
 let instantiationAt (names: TypeNotation) (result: CompileResult) (offset: int) : Instantiation option =
     match result.Syntax, result.Typed with
-    | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.bind (instantiationOf names typed)
+    | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.bind (instantiationOf names id typed)
     | _ -> None
 
-/// What `typeAt` and `instantiationAt` show at `offset`, from one search for what is there.
-let typeAndInstantiationAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option * Instantiation option =
+/// What `typeAt` and `instantiationAt` show at `offset`, from one search for what is there, with the types and contexts
+/// they name named by `rename` (see `Signatures.relativeAt`).
+let typeAndInstantiationAt (names: TypeNotation) (rename: Ty -> Ty) (result: CompileResult) (offset: int) : HoverInfo option * Instantiation option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         match hoveredAt syntax typed offset with
-        | Some hovered -> Some (hoverOf names typed hovered), instantiationOf names typed hovered
+        | Some hovered -> Some (hoverOf names rename typed hovered), instantiationOf names rename typed hovered
         | None -> None, None
     | _ -> None, None
