@@ -11,6 +11,9 @@ type Rule =
       Title: string
       /// How serious the rule's diagnostics are unless configured otherwise.
       DefaultSeverity: Severity
+      /// Whether what the rule reports is code that does nothing, which an editor draws faded (see
+      /// `Diagnostic.Unnecessary`).
+      Unnecessary: bool
       Description: string }
 
 /// What linters know about the module they check: the module as written, and what type checking found out about
@@ -128,6 +131,7 @@ module UnusedBindings =
         { Id = "unusedBindings"
           Title = "Unused binding"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "A local def, a lambda's argument or a variable a pattern binds that is never used. Names starting with `_` are not reported." }
 
@@ -202,6 +206,7 @@ module NonTailRecursion =
         { Id = "nonTailRecursion"
           Title = "Recursive call not in tail position"
           DefaultSeverity = Severity.Info
+          Unnecessary = false
           Description =
             "A function calls itself, but not as the last thing it does, so every call keeps a stack frame and a deep enough input runs out of stack. A call in tail position uses no stack." }
 
@@ -324,6 +329,7 @@ module UnreachableArms =
         { Id = "unreachableArms"
           Title = "Unreachable match arm"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "A match arm that can never be chosen, because the arms before it match every value it matches: it comes after a catch-all, after an arm that matches everything it does, or after arms that between them match every tag, boolean, int, length of list or combination of them it does." }
 
@@ -401,6 +407,7 @@ module UnusedImports =
         { Id = "unusedImports"
           Title = "Unused import"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "An import that nothing in the module uses: no value, type or context it brings in is referred to, under its alias or unqualified. An alias starting with `_` is not reported." }
 
@@ -459,6 +466,7 @@ module UnusedPrivateDefinitions =
         { Id = "unusedPrivateDefinitions"
           Title = "Unused private definition"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "A top-level def, type or context that the module does not export, or a member of such a context, that nothing in the module uses. `@entry`'s def, defs an instance picks up from a type's attached definitions, and names starting with `_` are not reported." }
 
@@ -563,6 +571,7 @@ module NoTagInCommon =
         { Id = "noTagInCommon"
           Title = "Comparison of types with no tag in common"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "`==` or `!=` on two values whose types are closed tag unions with no tag in common, so that the comparison is always false (or always true)." }
 
@@ -610,6 +619,7 @@ module UnreachableCode =
         { Id = "unreachableCode"
           Title = "Unreachable code"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "Statements of a block after one that never gives a value, such as a call to `crash`, whose type is `undefined`, and the arguments of a call after one that never gives a value. They can never run." }
 
@@ -689,6 +699,7 @@ module UseInBraces =
         { Id = "useInBraces"
           Title = "`use ... in` with a body in braces"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "`use X in { ... }`, whose body is a function of no arguments, not a block run with `X` loaded. Put the statements on the lines after `in`, indented." }
 
@@ -716,6 +727,7 @@ module StrayDocComments =
         { Id = "strayDocComments"
           Title = "Doc comment documents nothing"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "A doc comment (`--|`) documents the definition, type, context member, field or tag on the line after it, or the module at the top of the file. One followed by anything else documents nothing." }
 
@@ -753,6 +765,7 @@ module UnannotatedExports =
         { Id = "unannotatedExports"
           Title = "Exported definition without a type annotation"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description = "An exported top-level def that does not write its type. Other modules use it by its type, so write it down." }
 
     /// The value defs the module writes, a `module name =` block's among them, each with whether it writes its
@@ -851,6 +864,7 @@ module UnusedResults =
         { Id = "unusedResults"
           Title = "Unused result"
           DefaultSeverity = Severity.Error
+          Unnecessary = false
           Description =
             "A statement of a block, other than its last, whose value is not `()` and is thrown away. Bind it to a name, or pass it to `ignore` to say it is not needed." }
 
@@ -955,6 +969,7 @@ module UselessExpressions =
         { Id = "uselessExpressions"
           Title = "Useless expression"
           DefaultSeverity = Severity.Error
+          Unnecessary = false
           Description =
             "A statement of a block, other than its last, whose value is thrown away and which can do nothing else, because neither its type nor any call in it requires a context. Remove it, or use its value." }
 
@@ -983,6 +998,7 @@ module ShadowedPreludeNames =
         { Id = "shadowedPreludeNames"
           Title = "Definition hides a prelude member"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "A def, a lambda's argument or a variable a pattern binds whose name is one the prelude brings into scope, such as `ignore` or `pow`, so the prelude's can't be named where it is in scope." }
 
@@ -1028,6 +1044,7 @@ module Semicolons =
         { Id = "semicolons"
           Title = "Statements separated by `;`"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description =
             "Statements separated by `;` on one line. Put each statement on a line of its own; turn the rule off to write short sequences on one line." }
 
@@ -1087,6 +1104,7 @@ module UnconstructibleTypes =
         { Id = "unconstructibleType"
           Title = "Exported type no one outside its module can get"
           DefaultSeverity = Severity.Error
+          Unnecessary = false
           Description =
             "An exported `protected` or `private` type that nothing its module exports gives out, so no code outside the module can get a value of it. Export a function that returns one." }
 
@@ -1170,6 +1188,121 @@ module UnconstructibleTypes =
                 | _ -> None))
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// The official linter's `unusedContexts` rule: a context a def's signature requires that nothing in its body uses, so
+/// that every caller must supply it for nothing (#2099). A context is used when the body names one of its members, an
+/// operator among them, or calls or names what requires it: a def that requires it (`ContextTypes`), or a callee whose
+/// type at the call does (`CalleeTypes`). Only a def whose value is a lambda is looked at, a local one too, and not an
+/// exported one: what it requires is part of what its module offers, and may be there to leave room for a later use. A
+/// context variable, `[c]`, is not a context.
+module UnusedContexts =
+    let rule =
+        { Id = "unusedContexts"
+          Title = "Unused context"
+          DefaultSeverity = Severity.Warning
+          Unnecessary = true
+          Description =
+            "A context a def's signature requires that nothing in its body uses: no member of it is read, and nothing the body calls requires it. Every caller must supply it for nothing. Exported defs are not reported." }
+
+    /// The names of the contexts the expressions within `value`, a def's value, use: those each call or pipe in it, or
+    /// one desugaring made for it, requires of its callee, those the defs it names require, and those whose members it
+    /// names, an operator among them.
+    let private usedIn (model: SemanticModel) (value: Expression) : Set<string> =
+        let contextOfMember =
+            model.TypeDefs
+            |> Map.toSeq
+            |> Seq.filter (fun (_, info) -> info.IsContext)
+            |> Seq.collect (fun (name, info) -> info.Members |> Map.values |> Seq.map (fun symbol -> symbol, name))
+            |> Map.ofSeq
+        let nodes =
+            SyntaxTree.expressionsWithin value
+            |> List.collect (fun expr -> expr.Id :: (model.Lowered |> Map.tryFind expr.Id |> Option.defaultValue []))
+        // A protected or private context is a nominal type.
+        let names (contexts: Ty list) =
+            contexts
+            |> List.choose (function
+                | TyApply(name, _)
+                | TyAlias(name, _, _) -> Some name
+                | TyNominal(nominal, _, _, _) -> Some nominal.Name
+                | _ -> None)
+        let ofCallee =
+            nodes
+            |> List.collect (fun node ->
+                match model.CalleeTypes |> Map.tryFind node |> Option.map Unifier.unalias with
+                | Some (TyFunc(_, _, contexts)) -> names contexts
+                | _ -> [])
+        let referenced = nodes |> List.choose (fun node -> model.References |> Map.tryFind node)
+        let ofDefs =
+            referenced
+            |> List.collect (fun symbol ->
+                match model.ContextTypes |> Map.tryFind symbol, model.ImportedContextTypes |> Map.tryFind symbol with
+                | Some contexts, _
+                | None, Some (_, contexts) -> names contexts
+                | None, None -> [])
+        let members = referenced |> List.choose contextOfMember.TryFind
+        Set.ofList (ofCallee @ ofDefs @ members)
+
+    /// The name of the context `context` names, if it names one the module knows: not a context variable.
+    let private contextName (model: SemanticModel) (context: TypeExpr) =
+        match context.Kind with
+        | TypeName name
+        | TypeApply(name, _) when model.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext -> Some name
+        | _ -> None
+
+    /// Each def that isn't exported, a local one too, whose value is a lambda, with its name, its signature and its value.
+    let private defs (model: SemanticModel) : (string * TypeExpr * Expression) list =
+        let rec topLevel (items: TopLevelItem list) =
+            items
+            |> List.collect (fun item ->
+                match item.Kind with
+                | Def(ValueDef(false, name, Some annotation, ({ Kind = Lambda _ } as value))) -> [ name, annotation, value ]
+                | ModuleBlock(_, items) -> topLevel items
+                | _ -> [])
+        let local =
+            model.Syntax
+            |> List.collect SyntaxTree.ofItem
+            |> List.collect SyntaxTree.expressionsWithin
+            |> List.collect (fun expr ->
+                match expr.Kind with
+                | Block statements ->
+                    statements
+                    |> List.choose (fun statement ->
+                        match statement.Kind with
+                        | DefStatement(false, name, Some annotation, ({ Kind = Lambda _ } as value)) -> Some (name, annotation, value)
+                        | _ -> None)
+                | _ -> [])
+        topLevel model.Syntax @ local
+
+    /// The edit that removes `context`, one of `contexts`, the contexts of `annotation`, whose type after them is
+    /// `inner`: with the `, ` after it, or before it if it is the last; the whole `[...] ` if it is the only one.
+    let private removal (source: string) (annotation: TypeExpr) (contexts: TypeExpr list) (inner: TypeExpr) (context: TypeExpr) : TextEdit =
+        let between start end' = TextEdit.spanBetween source annotation.Span start end'
+        match contexts |> List.tryFindIndex (fun other -> other.Span = context.Span) with
+        | Some _ when contexts.Length = 1 -> { Span = between annotation.Span.Start inner.Span.Start; NewText = "" }
+        | Some index when index < contexts.Length - 1 -> { Span = between context.Span.Start contexts.[index + 1].Span.Start; NewText = "" }
+        | Some index -> { Span = between contexts.[index - 1].Span.End context.Span.End; NewText = "" }
+        | None -> { Span = context.Span; NewText = "" }
+
+    let lint (model: SemanticModel) : Report list =
+        defs model
+        |> List.collect (fun (name, annotation, value) ->
+            match annotation.Kind with
+            | TypeWithContext(contexts, inner) ->
+                let used = usedIn model value
+                contexts
+                |> List.choose (fun context ->
+                    match contextName model context with
+                    | Some contextName when not (SourceSpan.isNone context.Span) && not (used.Contains contextName) ->
+                        Some
+                            { Rule = rule.Id
+                              Subject = Some contextName
+                              Span = context.Span
+                              Message = $"'{contextName}' is required but not used by '{name}'"
+                              Related = []
+                              Fixes = [ { Title = $"Remove `{contextName}`"; Edits = [ removal model.Source annotation contexts inner context ] } ] }
+                    | _ -> None)
+            | _ -> [])
+        |> List.sortBy (fun report -> report.Span.Start)
+
 /// Where `@allow` suppresses linter rules: before a def, a local one too, or a top-level type, it suppresses the
 /// diagnostics of the rules it names within the def (see `Attributes.allowAttribute`). The host applies it to every linter's diagnostics, and the
 /// official linter's `unusedAllows` rule reports a rule an `@allow` names that suppressed nothing.
@@ -1178,6 +1311,7 @@ module Allows =
         { Id = "unusedAllows"
           Title = "`@allow` that suppresses nothing"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description = "An `@allow` names a linter rule that reports nothing in the definition after it. Remove it." }
 
     /// An `@allow`: the attribute, the rules it names (each as its code and where it is written), and the def it is
@@ -1250,14 +1384,14 @@ module Linters =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
               UnannotatedExports.rule; UnusedResults.rule; UselessExpressions.rule; ShadowedPreludeNames.rule; Semicolons.rule
-              UnconstructibleTypes.rule; Allows.rule ]
+              UnconstructibleTypes.rule; UnusedContexts.rule; Allows.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ UnannotatedExports.lint model
                 @ UnusedResults.lint model @ UselessExpressions.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model
-                @ UnconstructibleTypes.lint model }
+                @ UnconstructibleTypes.lint model @ UnusedContexts.lint model }
 
     /// The linters the compiler has, which a manifest's `linters` or a script's `::linter` directives can turn on.
     let all = [ official ]
@@ -1277,6 +1411,7 @@ module Linters =
         { Id = "linterFailed"
           Title = "Linter failed"
           DefaultSeverity = Severity.Warning
+          Unnecessary = false
           Description = "The linter could not check the module. Its other reports for the module are left out." }
 
     /// The severity of a rule of a linter under `options`, or `None` if it is turned off.
@@ -1297,7 +1432,8 @@ module Linters =
               Related = related |> List.filter (fst >> SourceSpan.isNone >> not)
               Suggestions = []
               Fixes = fixes
-              Import = None })
+              Import = None
+              Unnecessary = rule.Unnecessary })
 
     let private failed (options: LinterOptions) (linter: Linter) (reason: string) =
         diagnostic options linter failedRule None $"The linter '{linter.Name}' failed: {reason}" [] []

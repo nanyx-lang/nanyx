@@ -279,7 +279,9 @@ public sealed class DiagnosticsPublisher
             // The headline, then the body on the next line: the Problems list and the hover lead with the headline.
             Message = message ?? Displayed(diagnostic),
             Range = range,
-            RelatedInformation = related.Count > 0 ? new Container<DiagnosticRelatedInformation>(related) : null
+            RelatedInformation = related.Count > 0 ? new Container<DiagnosticRelatedInformation>(related) : null,
+            // Code that does nothing, such as a context nothing uses, is drawn faded.
+            Tags = diagnostic.Unnecessary ? new Container<DiagnosticTag>(DiagnosticTag.Unnecessary) : null
         };
     }
 
