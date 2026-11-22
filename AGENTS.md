@@ -136,6 +136,11 @@ those files workable. Problems with the code's structure are tracked as GitHub i
   empty ones. Link each change to the docs page that describes it. Leave out refactors, test-only and docs-only
   changes, CI, and the extension, which has releases of its own.
 
+- **Release when the tour gets ahead of the playground.** The docs site's playground runs the release that
+  `playgroundRelease` in `docs/site/playground-compiler.mjs` names, not `main`. When a change lets the tour use something
+  that release can't compile, a release is due: make it, then move `playgroundRelease` to it in a PR of its own, after
+  the release is published. The playground page test's run of every example fails until then.
+
 ## Refactoring
 
 - **Keep refactors apart from behaviour changes.** A move is pure cut and paste. Behaviour, generated WAT,
