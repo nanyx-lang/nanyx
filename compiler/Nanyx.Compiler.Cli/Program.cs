@@ -75,7 +75,9 @@ internal static partial class CliCommands
     /// </summary>
     /// <param name="inputFile">The .nyx file to parse.</param>
     [Consolo("parse")]
-    public static int Parse(string inputFile) => Execute(Shell.Process, inputFile, Target.Parse, outputPath: null);
+    public static int Parse(string inputFile) => ParseIn(Shell.Process, inputFile);
+
+    internal static int ParseIn(Shell shell, string inputFile) => Execute(shell, inputFile, Target.Parse, outputPath: null);
 
     /// <summary>
     /// Check a Nanyx source file, or every source file of a package, and write nothing.
@@ -1081,7 +1083,14 @@ internal static partial class CliCommands
         return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile);
     }
 
-    private static int RunParse(Shell shell, string inputFile)
+    /// <summary>
+    /// What <c>nanyx parse</c> does: parses <paramref name="inputFile"/> and prints its syntax tree. Parsing and printing
+    /// the tree recurse once per level it nests, so both run on a large stack, as checking does.
+    /// </summary>
+    private static int RunParse(Shell shell, string inputFile) =>
+        Nanyx.LargeStack.run(FuncConvert.FromFunc(() => ParseAndPrint(shell, inputFile)));
+
+    private static int ParseAndPrint(Shell shell, string inputFile)
     {
         var parsed = Parser.Program.Api.parseModuleFile(shell.FullPath(inputFile), File.ReadAllText(shell.FullPath(inputFile)));
 
