@@ -58,6 +58,7 @@
     <Compile Include="Features\Contexts\RunContextMemberValueTests.fs" />
     <Compile Include="Features\Contexts\RunGenericContextMemberTests.fs" />
     <Compile Include="Features\Contexts\RunGenericValueMemberTests.fs" />
+    <Compile Include="Features\Contexts\RunGenericFunctionMemberTests.fs" />
     <Compile Include="Features\Contexts\RunUseDischargeTests.fs" />
     <Compile Include="Features\Contexts\RunLambdaMemberCaptureTests.fs" />
     <Compile Include="Features\Contexts\RunKnownMemberTests.fs" />
