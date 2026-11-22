@@ -638,4 +638,32 @@ public sealed class InfoViewTests : LanguageServerTestBase
         Assert.Equal("list(int)", expression.Text);
         Assert.Null(expression.Name);
     }
+
+    [Fact]
+    public async Task Info_view_lays_out_a_signature_that_does_not_fit_its_width_as_the_formatter_does()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-17");
+
+        Open(uri, """
+            def parse: string, int -> #some(int) | #error(string) = { text, base -> #some(base) }
+
+            def parsed = parse("1", 10)
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var narrow = await InfoViewAt(uri, 0, 70, width: 30);
+        var signature = Assert.Single(Section(narrow, "function", "signature"));
+        Assert.Equal("parse\n  : string, int -> #some(int) | #error(string)", signature.Text);
+        Assert.Equal(new InfoViewName(0, 5), signature.Name);
+        Assert.Contains("text: string", Section(narrow, "function", "names").Select(item => item.Text));
+        var call = Assert.Single(Section(await InfoViewAt(uri, 2, 14, width: 30), "cursor", "expression"));
+        Assert.Equal(("def parse\n  : string, int -> #some(int) | #error(string)", new InfoViewName(4, 5)), (call.Text, call.Name));
+
+        var wide = await InfoViewAt(uri, 0, 70, width: 80);
+        Assert.Equal("parse: string, int -> #some(int) | #error(string)", Assert.Single(Section(wide, "function", "signature")).Text);
+        Assert.Equal(
+            "parse: string, int -> #some(int) | #error(string)",
+            Assert.Single(Section(await InfoViewAt(uri, 0, 70), "function", "signature")).Text);
+    }
 }
