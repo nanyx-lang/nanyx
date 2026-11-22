@@ -14,15 +14,9 @@ def showOption: [Console] (#some(int) | #none) -> () = {
   | #some(n) -> println("#some({n})")
   | #none -> println("#none")
 }
-def showResult: [Console] Result(int, string) -> () = {
-  | #some(n) -> println("#some({n})")
-  | #error(e) -> println("#error({e})")
-}
 
 def present: #some(int) | #none = #some(3)
 def absent: #some(int) | #none = #none
-def ok: Result(int, string) = #some(4)
-def bad: Result(int, string) = #error("bad")
 
 """
 
@@ -69,34 +63,6 @@ def main = {
 }
 """
     runSource source |> withoutDbgLocations |> assertRan "100000\n2\n"
-
-[<Fact>]
-let ``Run - Result.mapOr applies the function to a success and gives the default for an error`` () =
-    let source =
-        header +
-        normalized """@entry
-def main = {
-  dbg(Result.mapOr(ok, 0, { n -> n * 10 }))
-  dbg(bad \Result.mapOr(0, { n -> n * 10 }))
-  println(Result.mapOr(bad, "none", int.toString))
-}
-"""
-    runSource source |> withoutDbgLocations |> assertRan "none\n40\n0\n"
-
-[<Fact>]
-let ``Run - Result.orElse keeps a success and passes an error to the fallback`` () =
-    let source =
-        header +
-        normalized """def retry: string -> Result(int, string) = { e -> #error("retried {e}") }
-@entry
-def main = {
-  showResult(Result.orElse(ok, { e -> #some(0) }))
-  showResult(bad \Result.orElse { e -> #some(string.length(e)) })
-  showResult(bad \Result.orElse(retry))
-  showResult(bad \Result.orElse { e -> #error("recovered from {e}") })
-}
-"""
-    runSource source |> assertRan "#some(4)\n#some(3)\n#error(retried bad)\n#error(recovered from bad)\n"
 
 [<Fact>]
 let ``Run - orElseSome keeps a #some and calls the fallback only for another tag (#480)`` () =
@@ -170,17 +136,3 @@ def main = {
 }
 """
     runSource source |> assertRan "#some(1)\n#invalidInt\n#notFound\n#some(1)\n#invalidInt\n#notFound\n"
-
-[<Fact>]
-let ``Run - Result.bind continues a success and stops at the first error`` () =
-    let source =
-        header +
-        normalized """def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error("odd") }
-@entry
-def main = {
-  showResult(ok \Result.bind(half))
-  showResult(Result.bind(ok, half) \Result.bind(half))
-  showResult(Result.bind(bad, half))
-}
-"""
-    runSource source |> assertRan "#some(2)\n#some(1)\n#error(bad)\n"

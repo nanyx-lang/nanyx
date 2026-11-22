@@ -349,8 +349,8 @@ Settled by the maintainer on 2026-11-22 ([#2241](https://github.com/nanyx-lang/n
   `greeter:greeter@0.1.0`.
 - **Types are written literally.** Scalars, strings, lists, records and tuples map directly. Every tag union is a WIT
   `variant` with the same case names, `#some`/`#none` and `#ok`/`#error` included (no `option` or `result`), and nominal
-  types are written out structurally. A named generic type is named with its arguments appended (`Result(string, int)`
-  is the variant `result-string-s64`). A function, a context, a type variable, and a record or tag union with no name
+  types are written out structurally. A named generic type is named with its arguments appended (`Outcome(string, int)`
+  is the variant `outcome-string-s64`). A function, a context, a type variable, and a record or tag union with no name
   in an exported or imported signature are a compile error, asking for a `type` where one would do.
 - **An export may require only contexts the host's component root provides,** which it runs under, as the entry does;
   any other is `NYX0237`.

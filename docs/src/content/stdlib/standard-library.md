@@ -115,4 +115,4 @@ These are planned, and not yet in the library:
 - `lookup(k, v)` for multi-value lookups
 - `stream(a)` for async streams, and `async(a)` for async computations
 
-There is no `Option` type: any union containing `#some(a)` is [option-like](../advanced/option-like-types) by convention, and the [option helpers](./prelude-results#options) work on all of them. The `Result(a, e)` type is `#some(a) | #error(e)`.
+There is no `Option` type: any union containing `#some(a)` is [option-like](../advanced/option-like-types) by convention, and the [option helpers](./prelude-results#options) work on all of them.

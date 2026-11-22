@@ -43,21 +43,20 @@ def reportDecoder = Json.record(
   malicious = Json.path(["data", "attributes", "last_analysis_stats", "malicious"], Json.int)
 )
 
-def checkOk: Response -> #some(Response) | #error(#httpError(int)) = { response ->
-  if response.ok then #some(response) else #error(#httpError(response.status))
+def checkOk: Response -> #some(Response) | #httpError(int) = { response ->
+  if response.ok then #some(response) else #httpError(response.status)
 }
 
-def lookup: [Http] string -> #some(Verdict) | #error(LookupError) = { sha ->
+def lookup: [Http] string -> #some(Verdict) | LookupError = { sha ->
   proc {
     def hex = toHex(sha)
 
     def response = try Http.get(
       url = "https://www.virustotal.com/api/v3/files/{hex}"
       headers = ["x-apikey" => apiKey]
-    ) \Result.bind(checkOk)
+    ) \bindSome(checkOk)
 
-    def report = try Json.decode(response.body, reportDecoder) \Result.mapError { _ -> #badResponse
-    }
+    def report = try Json.decode(response.body, reportDecoder) \orElseSome { #badResponse }
 
     def #some(name) = report.names \head except #emptyList -> #some("<unknown>")
 
@@ -82,8 +81,8 @@ def main: [Console, Http, FileSystem, Clock] () -> () = {
   for verdicts | verdict ->
     match verdict
       | #some(v) -> println("Retrieved {v.sha256hex} ({v.name}): {v.status}")
-      | #error(#httpError(status)) -> println("HTTP error {status}")
-      | #error(#badResponse) -> println("Unreadable response")
+      | #httpError(status) -> println("HTTP error {status}")
+      | #badResponse -> println("Unreadable response")
 
   def malicious = verdicts \somes \filter { .status == #malicious }
   def fileName = Clock.now \format("yyyy-MM-dd_HH-mm-ss") ++ ".csv"

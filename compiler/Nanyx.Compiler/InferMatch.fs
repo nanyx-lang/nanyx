@@ -213,7 +213,7 @@ let internal inferMatch
                 let mutable innerErrors: Diagnostic list = []
                 // A value whose type is still a variable, such as a list pattern's element, may already be known
                 // to be a record from the constraints so far; its fields' types then say what each member matches,
-                // so two elements' `(status = #error(msg))` and `(status = #some(v))` both match a `Result`.
+                // so two elements' `(status = #failed(msg))` and `(status = #some(v))` both match a `#some(v) | #failed(msg)`.
                 let knownFields =
                     match scrutineeTy with
                     | TyVar _ -> recordFieldsSoFar state' scrutineeTy

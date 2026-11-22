@@ -3,9 +3,9 @@
 -- Part of the prelude, which is prelude.nyx and each file beside it marked @partial.
 
 -- Results ---------------------------------------------------------------------------------------
-
---| A success carrying an `a`, or an error carrying an `e`.
-export type Result(a, e) = #some(a) | #error(e)
+--
+-- A function that can fail gives `#some` (or `#ok`) on success and a tag of its own for each way it
+-- fails, `#some(Config) | #notFound | #invalid(string)`, and the option helpers below work on it.
 
 --| The context of the result workflow, which `proc` runs its block under: a `try`, `return` or
   `for` in a `proc { ... }` block calls the member of that name, and a block that ends without
@@ -23,8 +23,8 @@ export context Proc = (
 )
 
 --| The result workflow: inside `proc { ... }`, `try x` continues with the payload of `#some`, and
-  gives back any `#error` as is without running the rest of the block, and `return x` wraps the
-  value in `#some`.
+  gives back any other tag, a failure, as is without running the rest of the block, and `return x`
+  wraps the value in `#some`.
 
   ```nanyx
   def total = proc {
@@ -41,10 +41,11 @@ export context Proc = (
   `return` has `zero` as its value, `#some()`, so a `proc` that is only run for what it does
   needs no `return`.
 
-  Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
-  `try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
+  Every tag other than `#some` is a failure, and the block collects them: a `try` on a
+  `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
   `#some(...) | #nil | #notFound`. Two failures with the same tag whose payloads are tags combine
-  too: `#error(#a)` and `#error(#b)` make `#error(#a | #b)`. Payloads of other types must agree.
+  too: `#invalid(#empty)` and `#invalid(#tooLong)` make `#invalid(#empty | #tooLong)`. Payloads of
+  other types must agree.
 
   A `for` loop over a list whose body uses `try` or `return` is run by `for`, item by item. A
   `try` that fails in the body ends the whole block with that failure, and a `return` ends it
@@ -74,57 +75,6 @@ def procFor
     | [], _, rest -> rest()
     | [item, ...others], body, rest -> body(item, { procFor(others, body, rest) })
   }
-
---| Applies `f` to a success, and leaves an error as it is.
-export def Result.map: [c] Result(a, e), ([c] a -> b) -> Result(b, e) = {
-  | #some(value), f -> #some(f(value))
-  | #error(e), _ -> #error(e)
-}
-
---| Applies `f` to an error, and leaves a success as it is.
-export def Result.mapError: [c] Result(a, e), ([c] e -> f) -> Result(a, f) = {
-  | #some(value), _ -> #some(value)
-  | #error(e), f -> #error(f(e))
-}
-
---| Continues with `f` on a success. Steps whose errors are tags chain with their errors joined: a
-  step that fails with `#notFound` and one that fails with `#invalidInt` give a
-  `Result(b, #notFound | #invalidInt)`, and a match on it handles both. Errors of other types
-  must be the same type: bring them to one with [`Result.mapError`] first.
-export def Result.bind: [c] Result(a, e), ([c] a -> Result(b, e)) -> Result(b, e) = {
-  | #some(value), f -> f(value)
-  | #error(e), _ -> #error(e)
-}
-
---| The success, or `fallback` for an error.
-export def Result.defaultValue: Result(a, e), a -> a = {
-  | #some(value), _ -> value
-  | #error(_), fallback -> fallback
-}
-
---| `f` applied to the success, or `default` for an error.
-export def Result.mapOr: [c] Result(a, e), b, ([c] a -> b) -> b = {
-  | #some(value), _, f -> f(value)
-  | #error(_), default, _ -> default
-}
-
---| The success as it is, or `f` applied to the error.
-export def Result.orElse: [c] Result(a, e), ([c] e -> Result(a, f)) -> Result(a, f) = {
-  | #some(value), _ -> #some(value)
-  | #error(e), f -> f(e)
-}
-
---| Whether the result is a success.
-export def Result.isOk: Result(a, e) -> bool = {
-  | #some(_) -> true
-  | #error(_) -> false
-}
-
---| Whether the result is an error.
-export def Result.isError: Result(a, e) -> bool = {
-  | #some(_) -> false
-  | #error(_) -> true
-}
 
 -- Options ---------------------------------------------------------------------------------------
 --
@@ -178,12 +128,6 @@ export def isNone: (#some(a) | r) -> bool = {
   | _ -> true
 }
 
---| The value of `#some` as a success, or `error` for any other tag.
-export def someToResult: (#some(a) | r), e -> Result(a, e) = {
-  | #some(value), _ -> #some(value)
-  | _, error -> #error(error)
-}
-
 --| `f` applied to the value of `#some`, or `default` for any other tag.
 export def mapSomeOr: [c] (#some(a) | r), b, ([c] a -> b) -> b = {
   | #some(value), _, f -> f(value)
@@ -222,9 +166,9 @@ export def somes: list(#some(a) | r) -> list(a) = { options ->
 }
 
 --| The values of `options`, in order, if every element is `#some`; otherwise the first element that
-  isn't, as it is. It works on results too, giving the first `#error`, and turns what parses a list
-  of inputs into one result: `["1", "2", "x"] \list.map(int.fromString) \allSome` is `#invalidInt`.
-  Stack-safe: it works on a list of any length.
+  isn't, as it is: the first failure. It turns what parses a list of inputs into one result:
+  `["1", "2", "x"] \list.map(int.fromString) \allSome` is `#invalidInt`. Stack-safe: it works on a
+  list of any length.
 export def allSome: list(#some(a) | r) -> #some(list(a)) | r = { options ->
   allSomeOnto(options, [])
 }

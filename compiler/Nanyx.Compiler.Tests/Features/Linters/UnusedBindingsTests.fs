@@ -60,7 +60,7 @@ let ``Names the compiler makes up are not reported`` () =
     // A destructuring def binds the whole value under a made-up name, `for` its element, a shorthand lambda its
     // argument, and a workflow bind a lambda's.
     let source =
-        normalized """def half: int -> Result(int, string) = { n -> #some(n / 2) }
+        normalized """def half: int -> #some(int) | #odd = { n -> #some(n / 2) }
 def f = { pair ->
   def (a, b) = pair
   def doubled = [a, b] \ list.map({ * 2 })
