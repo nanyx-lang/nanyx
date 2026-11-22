@@ -11,9 +11,9 @@ waits for the response, and gives it, or why there was none as an `HttpError`:
 ```nanyx fragment
 match http.post("https://example.com/notes", "Buy milk")
   | #some(response) -> println("{response.status}: {response.body}")
-  | #error(#timeout) -> println("No answer in time")
-  | #error(#connectionFailed(why)) -> println("Couldn't connect: {why}")
-  | #error(_) -> println("The request failed")
+  | #timeout -> println("No answer in time")
+  | #connectionFailed(why) -> println("Couldn't connect: {why}")
+  | _ -> println("The request failed")
 ```
 
 `http.send` takes a whole [`Request`](./request), for another method, headers or a timeout of its own:
@@ -23,7 +23,7 @@ def request = Request.of(#put, "https://example.com/notes/1") with headers = [("
 
 match http.send(request with body = "Buy eggs")
   | #some(response) -> println(response.status)
-  | #error(_) -> println("The request failed")
+  | _ -> println("The request failed")
 ```
 # Reference
 
@@ -38,7 +38,7 @@ call `http.get`, `http.post` and `http.send` by those names.
 ## `send`
 
 ```nanyx fragment
-def send: [Async, Http] Request -> #some(Response) | #error(HttpError)
+def send: [Async, Http] Request -> #some(Response) | #timeout | #connectionFailed(string) | #invalidUrl | #other(string)
 ```
 
 Sends `request`, and gives its response.
@@ -46,7 +46,7 @@ Sends `request`, and gives its response.
 ## `get`
 
 ```nanyx fragment
-def get: [Async, Http] string -> #some(Response) | #error(HttpError)
+def get: [Async, Http] string -> #some(Response) | #timeout | #connectionFailed(string) | #invalidUrl | #other(string)
 ```
 
 Gets `url`, and gives the response.
@@ -54,7 +54,7 @@ Gets `url`, and gives the response.
 ## `post`
 
 ```nanyx fragment
-def post: [Async, Http] string, string -> #some(Response) | #error(HttpError)
+def post: [Async, Http] string, string -> #some(Response) | #timeout | #connectionFailed(string) | #invalidUrl | #other(string)
 ```
 
 Posts `body` to `url`, and gives the response.

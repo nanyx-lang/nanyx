@@ -26,7 +26,7 @@ match file.read(path.of("input.txt"))
       \filter { != "" }
 
     println("Word count: {words.length}")
-  | #error(err) ->
+  | err ->
     println("Error: {err}")
 ```
 

@@ -176,16 +176,16 @@ let ``Run - readLine and readToEnd read stdin`` () =
 def main = {
   match readLine()
     | #some(line) -> println("first [" ++ line ++ "]")
-    | #error(_) -> println("no first")
+    | _ -> println("no first")
   match readLine()
     | #some(line) -> println("second [" ++ line ++ "]")
-    | #error(_) -> println("no second")
+    | _ -> println("no second")
   match readToEnd()
     | #some(rest) -> println("rest [" ++ rest ++ "]")
-    | #error(_) -> println("failed")
+    | _ -> println("failed")
   match readLine()
     | #some(line) -> println("more [" ++ line ++ "]")
-    | #error(_) -> println("end of input")
+    | _ -> println("end of input")
 }
 """
     runSourceWithInput "hello\r\nworld\nthe\nrest" source
@@ -200,13 +200,13 @@ let ``Run - readLine and readToEnd read input longer than the block the runtime 
 def main = {
   match readLine()
     | #some(line) -> println(string.length(line))
-    | #error(_) -> println("no first")
+    | _ -> println("no first")
   match readLine()
     | #some(line) -> println(line)
-    | #error(_) -> println("no second")
+    | _ -> println("no second")
   match readToEnd()
     | #some(rest) -> println(string.length(rest))
-    | #error(_) -> println("failed")
+    | _ -> println("failed")
 }
 """
     let long = String.replicate 100000 "a"

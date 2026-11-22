@@ -23,7 +23,7 @@ import (
 def colour: [Async, FileSystem] () -> string = {
   match file.read(path.of("colour.txt"))
     | #some(text) -> text
-    | #error(_) -> "blue"
+    | _ -> "blue"
 }
 
 println(colour())
@@ -32,7 +32,7 @@ println(colour())
 
 Under `nanyx run`, a program reaches the current directory and what is in it, and the one directory
 [`--allow-dir`](../standard-tools/command-line#nanyx-run) names. A path anywhere else, whether relative, as
-`../secret.txt`, or absolute, is `#error(#permissionDenied)`.
+`../secret.txt`, or absolute, is `#permissionDenied`.
 
 # Reference
 
@@ -62,15 +62,15 @@ already. Anything else is `#other`, with what the host said.
 
 ```nanyx fragment
 context FileSystem = (
-  readFile: [Async] Path -> #some(string) | #error(FsError)
-  readFileBytes: [Async] Path -> #some(array(U8)) | #error(FsError)
-  readFileChunk: [Async] Path, int, int -> #some(string) | #error(FsError)
-  writeFile: [Async] Path, string -> #ok | #error(FsError)
-  appendFile: [Async] Path, string -> #ok | #error(FsError)
+  readFile: [Async] Path -> #some(string) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+  readFileBytes: [Async] Path -> #some(array(U8)) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+  readFileChunk: [Async] Path, int, int -> #some(string) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+  writeFile: [Async] Path, string -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+  appendFile: [Async] Path, string -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
   pathExists: [Async] Path -> bool
-  deleteFile: [Async] Path -> #ok | #error(FsError)
-  listDirectory: [Async] Path -> #some(list(string)) | #error(FsError)
-  createDirectory: [Async] Path -> #ok | #error(FsError)
+  deleteFile: [Async] Path -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+  listDirectory: [Async] Path -> #some(list(string)) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+  createDirectory: [Async] Path -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
 )
 ```
 
