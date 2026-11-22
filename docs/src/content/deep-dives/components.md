@@ -28,8 +28,10 @@ entry the module exports, a `ComponentEntry`, which the world says (`ComponentEn
     under `nanyx run`.
   - `HttpHandler` is `wasi:http/handler@0.3.0#handle`, lifted async with a callback ([The handler](#the-handler)).
 - **`cabi_realloc` is exported,** for the host to allocate in the module's memory through. It is the program's own
-  allocator: a new block of the size asked for, with the old block's bytes copied in and the old block freed. Every
-  block is aligned to 8 bytes, the most any WIT type needs.
+  allocator: a new block of the size asked for, with the old block's bytes copied in and the old block freed. The
+  allocator's blocks are only 4-byte aligned, so when the host asks for more (8, for a `list<u64>`, the most any WIT
+  type needs), it takes the block from `allocAligned8`, which the
+  [allocator](./memory-management) describes.
 - **The runtime's own writes and exits go through `wasi:cli`,** not WASI preview 1. The runtime's helpers, `dbg` and a
   crash write with preview 1's `fd_write`, and exit with its `proc_exit`. A component's module defines both functions
   itself, with the same signatures, so every caller is unchanged:

@@ -296,14 +296,23 @@ let private procExitFunction (entry: ComponentEntry) =
           ")" ]
 
 /// `cabi_realloc` on the program's allocator: a new block of `$newSize` bytes, with the first bytes of the block at
-/// `$old`, if there is one, copied into it and that block freed. Every block is aligned to 8 bytes, which is the most
-/// any WIT type asks for.
+/// `$old`, if there is one, copied into it and that block freed. The canonical ABI asks for blocks aligned to `$align`,
+/// at most 8 for any WIT type: `alloc`'s blocks are 4-byte aligned, so a larger `$align` takes an 8-byte aligned block
+/// from `allocAligned8`.
 let private cabiReallocFunction =
     lines
         [ $"(func $__nanyx_cli_cabi_realloc (export \"{cabiRealloc}\") (param $old i32) (param $oldSize i32) (param $align i32) (param $newSize i32) (result i32)"
           "  (local $new i32)"
-          "  local.get $newSize"
-          $"  call ${Helpers.alloc}"
+          "  local.get $align"
+          "  i32.const 4"
+          "  i32.gt_u"
+          "  if (result i32)"
+          "    local.get $newSize"
+          $"    call ${Helpers.allocAligned8}"
+          "  else"
+          "    local.get $newSize"
+          $"    call ${Helpers.alloc}"
+          "  end"
           "  local.set $new"
           "  local.get $old"
           "  if"
@@ -323,7 +332,7 @@ let private cabiReallocFunction =
           ")" ]
 
 /// The helpers `cabi_realloc` and the handler call.
-let reallocHelpers = [ Helpers.alloc; Helpers.free; Helpers.copyBytes ]
+let reallocHelpers = [ Helpers.alloc; Helpers.allocAligned8; Helpers.free; Helpers.copyBytes ]
 
 /// The module the compiler defines the functions of for `HttpHandler`, which a host's component root declares as foreign
 /// functions (see `Hosts.componentModule`).
@@ -386,19 +395,13 @@ let private componentFunctions (functionName: Extern -> string) =
 
 /// Writes `ok(none)` to the trailers' future `$trailers`, waiting while it is blocked, and drops it: the response has
 /// no trailers. A `result<option<trailers>, error-code>` is its case at 0 and, for `ok`, the option's at 8, in a block
-/// aligned to 8.
+/// aligned to 8 (`allocAligned8`).
 let private writeNoTrailersFunction =
     lines
         [ "(func $__nanyx_http_write_no_trailers (param $trailers i32)"
-          "  (local $block i32)"
           "  (local $value i32)"
-          "  i32.const 24"
-          $"  call ${Helpers.alloc}"
-          "  local.tee $block"
-          "  i32.const 7"
-          "  i32.add"
-          "  i32.const -8"
-          "  i32.and"
+          "  i32.const 16"
+          $"  call ${Helpers.allocAligned8}"
           "  local.tee $value"
           "  i64.const 0"
           "  i64.store"
@@ -417,7 +420,7 @@ let private writeNoTrailersFunction =
           "  end"
           "  local.get $trailers"
           $"  call {Handler.trailersDropWritable}"
-          "  local.get $block"
+          "  local.get $value"
           $"  call ${Helpers.free}"
           ")" ]
 
