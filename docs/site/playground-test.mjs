@@ -69,7 +69,7 @@ const echo = `def echo: [Console] () -> () = { _ ->
     | #some(line) ->
       println("echo: " ++ line)
       echo()
-    | #error(_) -> println("end of input")
+    | _ -> println("end of input")
 }
 
 echo()
@@ -265,7 +265,7 @@ const tests = [
     assert.equal(await page.locator(".tour-run-output").count(), 0);
   }],
   ["an example that reads input gets only the playground link", async () => {
-    const tree = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value: "match readLine()\n  | #some(line) -> println(line)\n  | #error(_) -> ()" }] };
+    const tree = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value: "match readLine()\n  | #some(line) -> println(line)\n  | _ -> ()" }] };
     remarkPlaygroundLinks()(tree, { path: "/docs/src/content/tour/example.md" });
     const html = tree.children[1].value;
     assert.match(html, /data-reads-input/);
