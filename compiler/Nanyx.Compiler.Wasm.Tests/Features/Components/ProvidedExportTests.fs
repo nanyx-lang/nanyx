@@ -48,7 +48,7 @@ let ``An export that requires a context the host's root doesn't provide is NYX02
     Assert.Equal(1, checkedPackage.ExitCode)
     Assert.Contains("NYX0237", checkedPackage.StandardOutput + checkedPackage.StandardError)
     Assert.Contains("'later' requires 'Calendar', which the host 'nanyx.console/console.host' doesn't provide", checkedPackage.StandardOutput + checkedPackage.StandardError)
-    Assert.Contains("src/stamp.nyx:5:1", checkedPackage.StandardOutput + checkedPackage.StandardError)
+    Assert.Contains("stamp.nyx:5:1", checkedPackage.StandardOutput + checkedPackage.StandardError)
 
 [<Fact>]
 let ``An export that requires contexts under a host whose root has no provide is NYX0237 at the export`` () =
