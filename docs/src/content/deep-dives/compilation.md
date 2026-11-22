@@ -54,6 +54,12 @@ of the checkpoint's variables is solved on top of it, since the two share nothin
 can't show. Otherwise the whole list is solved afresh, newest first, so that the failure reported, and the order in
 which a union's tags are added, are what solving it afresh gives.
 
+Solved on top of an earlier solution, a variable can stand for another that stands for another in turn: an else-if
+joins each branch to the next, so each branch's variable stands for the one before it. `Unifier.unifyFrom` follows such
+a chain of the earlier solution once and remembers where it ends for each variable on it, so a long else-if checks in
+time that grows with its length. A type read against a solution once it is found, such as the type of each node of the
+module, is resolved with `Unifier.applySolved`, which keeps what each variable resolves to with the solution.
+
 # Deferred errors
 
 What deferred errors are for users is in [Deferred errors](../tour/error-handling#deferred-errors). The approach is the

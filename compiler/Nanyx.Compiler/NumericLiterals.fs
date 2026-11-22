@@ -65,7 +65,7 @@ module internal NumericLiterals =
         state.TypeVars
         |> Map.toList
         |> List.choose (fun (key, var) ->
-            match key, Unifier.apply subst (TyVar var) with
+            match key, Unifier.applySolved subst (TyVar var) with
             | WrittenVar name, TyVar solved -> Some (solved.Id, name)
             | _ -> None)
         |> Map.ofList
@@ -78,13 +78,13 @@ module internal NumericLiterals =
         let written = if operands then writtenVariables subst state else Map.empty
         let isSettling (literal: NumericLiteral) =
             literal.Operator.IsSome = operands
-            && (match Unifier.apply subst literal.Type with
+            && (match Unifier.applySolved subst literal.Type with
                 | TyVar { Name = None } as open' -> isOwn open'
                 | _ -> true)
         let settling, unsettled = state.UnsettledLiterals |> List.partition isSettling
         settling
         |> List.fold (fun current literal ->
-            match Unifier.apply subst literal.Type, literal.Operator with
+            match Unifier.applySolved subst literal.Type, literal.Operator with
             | TyVar v, Some (op, node) when literal.Requires.IsSome && written.ContainsKey v.Id ->
                 let error = undeclared current literal.At op literal.Requires.Value { v with Name = Some written.[v.Id] }
                 { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
@@ -131,7 +131,10 @@ module internal NumericLiterals =
     /// The literals of a variable of its own, as `state` resolves it, that is in `tys`.
     let openIn (tys: Ty list) (state: InferState) : NumericLiteral list =
         let inTys = tys |> List.map (resolveSoFar state >> TypeEnv.freeTyVars) |> Set.unionMany
-        openLiterals state |> Seq.filter (fun (_, v) -> inTys.Contains v.Id) |> Seq.map fst |> List.ofSeq
+        // Resolving every literal costs as much as there are, so a type with no variable, as `int` in `n == 1`, looks
+        // at none of them: a long else-if over an `int` has a literal in each branch (#2362).
+        if inTys.IsEmpty then []
+        else openLiterals state |> Seq.filter (fun (_, v) -> inTys.Contains v.Id) |> Seq.map fst |> List.ofSeq
 
     /// `state` with each of `literals` made its default type.
     let settleLiterals (literals: NumericLiteral list) (state: InferState) : InferState =
@@ -218,7 +221,7 @@ module internal NumericLiterals =
         settled.NumericLiterals
         |> List.rev
         |> List.fold (fun (current: InferState, errors) literal ->
-            let ty = Unifier.apply subst literal.Type
+            let ty = Unifier.applySolved subst literal.Type
             match literal.Value, Unifier.unalias ty, outOfRange literal ty with
             | IntLit value, TyPrimitive ("float" | "F32"), _ -> report literal (integerAsFloat literal.At value ty) (current, errors)
             | _ when not (ofItsKind literal ty) -> addConstraintAt literal.At literal.Type (defaultType literal.Value) current, errors
