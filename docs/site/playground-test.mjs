@@ -1,0 +1,207 @@
+// The headless test of the playground page (#2153): it serves the built site as Vercel does, with the playground
+// cross-origin isolated (`vercel.json`), opens `/playground` in headless Chromium, and checks that the page loads the
+// compiler, runs hello world, gives a program its input, keeps each run's output, and opens share links and the
+// tour's links without running them; and that every example in its menu, the tour's runnable ones, runs under the
+// playground host. From `docs/`, with a compiler built for the browser:
+//
+//   NANYX_BROWSER_ZIP=<nanyx-browser.zip> npm run build
+//   node site/playground-test.mjs
+//
+// It needs Playwright and its Chromium (`npm install --no-save playwright` and `npx playwright install chromium`, where
+// they aren't installed already). It exits with 1 when a check fails.
+
+import assert from "node:assert/strict";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { createServer } from "node:http";
+import { createRequire } from "node:module";
+import { dirname, extname, join, normalize, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const docs = dirname(dirname(fileURLToPath(import.meta.url)));
+const dist = join(docs, "dist");
+const { chromium } = createRequire(join(docs, "package.json"))("playwright");
+
+if (!existsSync(join(dist, "playground", "compiler", "compiler.js"))) {
+  console.error("The site in dist/ has no playground compiler: build it with NANYX_BROWSER_ZIP set (see the top of this file).");
+  process.exit(1);
+}
+
+const types = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript",
+  ".mjs": "text/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+  ".wasm": "application/wasm",
+  ".svg": "image/svg+xml",
+  ".txt": "text/plain; charset=utf-8",
+  ".ttf": "font/ttf",
+  ".woff2": "font/woff2",
+};
+
+/** Serves `dist` with clean URLs, and the playground's route with the headers `vercel.json` gives it. */
+const server = createServer((request, response) => {
+  const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
+  const candidates = [pathname, pathname + ".html", join(pathname, "index.html")];
+  const file = candidates
+    .map((candidate) => normalize(join(dist, candidate)))
+    .find((path) => (path === dist || path.startsWith(dist + sep)) && existsSync(path) && statSync(path).isFile());
+  if (!file) {
+    response.writeHead(404).end();
+    return;
+  }
+  const headers = { "Content-Type": types[extname(file)] ?? "application/octet-stream" };
+  if (pathname === "/playground" || pathname.startsWith("/playground/")) {
+    headers["Cross-Origin-Opener-Policy"] = "same-origin";
+    headers["Cross-Origin-Embedder-Policy"] = "require-corp";
+  }
+  response.writeHead(200, headers).end(readFileSync(file));
+});
+await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+const origin = `http://127.0.0.1:${server.address().port}`;
+
+/** A program that echoes each line it reads, until its input ends. */
+const echo = `def echo: [Console] () -> () = { _ ->
+  match readLine()
+    | #some(line) ->
+      println("echo: " ++ line)
+      echo()
+    | #error(_) -> println("end of input")
+}
+
+echo()
+`;
+
+const browser = await chromium.launch();
+const context = await browser.newContext();
+await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+const page = await context.newPage();
+const errors = [];
+page.on("pageerror", (error) => errors.push(String(error)));
+// Choosing an example over changed code asks first; the test says yes.
+page.on("dialog", (dialog) => dialog.accept());
+
+/** The editor's code, from its lines (`innerText` doubles an empty line). */
+const linesOf = (target) => target.locator(".cm-line").allTextContents().then((lines) => lines.join("\n").replace(/\u00a0/g, " ").trimEnd());
+const editorText = () => linesOf(page);
+const outputText = () => page.locator("[data-log]").innerText();
+const ready = () => page.waitForSelector("html[data-playground=ready]", { timeout: 180_000 });
+const idle = () => page.waitForSelector("[data-run]:not([hidden]):not([disabled])", { timeout: 60_000 });
+const run = async () => {
+  await page.click("[data-run]");
+  await page.waitForFunction(() => document.querySelector("[data-run]")?.hidden || document.querySelector("[data-run]")?.disabled);
+  await idle();
+};
+const setEditor = async (code) => {
+  await page.click(".cm-content");
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.insertText(code);
+};
+const helloWorld = JSON.parse(readFileSync(join(dist, "playground.html"), "utf8").match(/<script id="playground-data" type="application\/json">(.*?)<\/script>/s)[1]).defaultExample.code;
+
+const tests = [
+  ["the page loads the compiler and starts with the tour's hello world", async () => {
+    await page.goto(`${origin}/playground`);
+    assert.equal(await page.evaluate(() => crossOriginIsolated), true);
+    await ready();
+    assert.equal(await editorText(), helloWorld.trimEnd());
+    assert.match(await page.locator("[data-release]").innerText(), /Nanyx/);
+  }],
+  ["Run runs hello world", async () => {
+    await run();
+    assert.equal((await page.locator(".pg-run").last().innerText()).trim(), "Hello, World!");
+  }],
+  ["a program reads the lines typed into the input line, and Ctrl+D ends its input", async () => {
+    await setEditor(echo);
+    await page.click("[data-run]");
+    const input = page.locator("[data-input-line] input");
+    await input.waitFor({ state: "visible", timeout: 60_000 });
+    await input.fill("hello");
+    await input.press("Enter");
+    await page.waitForFunction(() => document.querySelector("[data-log]")?.textContent?.includes("echo: hello"));
+    await input.waitFor({ state: "visible" });
+    await input.press("Control+d");
+    await idle();
+    assert.equal((await page.locator(".pg-run").last().innerText()).replace(/^Run 2.*\n/, "").trim(), "hello\necho: hello\nend of input");
+  }],
+  ["each run keeps the output before it, under a divider", async () => {
+    assert.equal(await page.locator(".pg-run").count(), 2);
+    assert.match(await page.locator(".pg-divider").first().innerText(), /^Run 2/);
+    assert.match(await outputText(), /Hello, World![\s\S]*echo: hello/);
+  }],
+  ["a program that doesn't compile shows its errors, linked to the error reference", async () => {
+    await setEditor('println(1 + "a")\n');
+    await run();
+    const link = page.locator(".pg-run").last().locator(".pg-diagnostic a").first();
+    assert.match(await link.getAttribute("href"), /^\/docs\/standard-tools\/errors#nyx\d{4}$/);
+  }],
+  ["Share copies a link that opens the code without running it", async () => {
+    await setEditor(echo);
+    await page.click("[data-share]");
+    await page.waitForFunction(() => document.querySelector("[data-share]")?.dataset.link);
+    const link = await page.evaluate(() => navigator.clipboard.readText());
+    assert.match(link, /\/playground#code=[\w-]+$/);
+    const opened = await context.newPage();
+    await opened.goto(link);
+    await opened.waitForFunction(() => document.querySelector("[data-log]")?.textContent?.includes("Opened the code from a link"));
+    assert.equal(await linesOf(opened), echo.trimEnd());
+    assert.equal(await opened.locator(".pg-stdout").count(), 0);
+    await opened.close();
+  }],
+  ["a link that doesn't decode opens hello world and says so", async () => {
+    // From another page, since going from the playground to it changes only the fragment.
+    await page.goto("about:blank");
+    await page.goto(`${origin}/playground#code=not-a-link`);
+    await page.waitForFunction(() => document.querySelector("[data-log]")?.textContent?.includes("couldn't be read"));
+    assert.equal(await editorText(), helloWorld.trimEnd());
+  }],
+  ["reloading keeps the code last written", async () => {
+    await ready();
+    await setEditor(echo);
+    await page.waitForTimeout(500);
+    await page.goto(`${origin}/playground`);
+    assert.equal(await editorText(), echo.trimEnd());
+  }],
+  ["the tour's examples link to the playground, which opens them", async () => {
+    await page.goto(`${origin}/docs/tour/attributes`);
+    const link = page.locator(".playground-link a").first();
+    assert.equal(await link.getAttribute("data-astro-reload"), "");
+    await link.click();
+    await page.waitForURL(/\/playground$/);
+    assert.equal(await page.evaluate(() => crossOriginIsolated), true);
+    assert.equal(await editorText(), helloWorld.trimEnd());
+  }],
+  ["every example in the menu runs under the playground host", async () => {
+    await ready();
+    const options = await page.locator("[data-examples] option").evaluateAll((all) => all.map((o) => o.value).filter((v) => v));
+    assert.ok(options.length > 100, `the menu has ${options.length} examples`);
+    const failed = [];
+    for (const id of options) {
+      await page.selectOption("[data-examples]", id);
+      await run();
+      const last = page.locator(".pg-run").last();
+      const problems = await last.locator(".pg-diagnostic, .pg-stderr, .pg-end").allInnerTexts();
+      if (problems.length > 0) failed.push(`${id}: ${problems.join(" ").trim()}`);
+    }
+    assert.deepEqual(failed, []);
+  }],
+];
+
+let failures = 0;
+for (const [name, test] of tests) {
+  try {
+    await test();
+    console.log(`ok   ${name}`);
+  } catch (error) {
+    failures++;
+    console.log(`FAIL ${name}\n${error?.stack ?? error}`);
+  }
+}
+if (errors.length > 0) {
+  failures++;
+  console.log(`FAIL the page threw:\n${errors.join("\n")}`);
+}
+await browser.close();
+server.close();
+console.log(failures === 0 ? `All ${tests.length} checks passed.` : `${failures} failed.`);
+process.exit(failures === 0 ? 0 : 1);
