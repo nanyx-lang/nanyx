@@ -380,6 +380,13 @@ type InferState =
             CellAssignments: Set<SourceSpan>;
             /// The contexts each lambda being inferred uses so far, the innermost first (see `LambdaContexts`).
             LambdaContexts: Ty list list;
+            /// The first type variable made inside each lambda being inferred, the innermost first, and where the lambda
+            /// is written: a variable made earlier, or a name declared outside it, belongs to something the lambda
+            /// captures, or to the code around it (see `LambdaContexts.leave`).
+            LambdaStarts: (int * SourceSpan) list;
+            /// How many lambdas deep each call that supplies a scoped context is, by the variable of the scope it
+            /// starts (see `ScopedCalls.enter`).
+            CallDepths: Map<int, int>;
             /// The lambdas that are a def's own body: the def's contexts are its, not its type's (see `LambdaContexts`).
             BodyLambdas: Set<NodeId>;
             /// How many lambdas were being inferred around the body of each def, by the def's name: a lambda inferred
@@ -493,6 +500,8 @@ let emptyState =
             OpenScopes = [];
             CellAssignments = Set.empty;
             LambdaContexts = [];
+            LambdaStarts = [];
+            CallDepths = Map.empty;
             BodyLambdas = Set.empty;
             BodyDepths = Map.empty;
             InferredScopedContexts = Map.empty;
