@@ -8,7 +8,7 @@
 
   Bounds clamp: `array.slice(xs, from, to)` is the elements from `from` up to but not including
   `to`, each bound moved into `0` to the length, and an empty slice when `to` is before `from`.
-  Reading one element, [`Slice.at`], gives `#none` past the end, never a trap.
+  Reading one element, [`Slice.at`], gives `#notFound` past the end, never a trap.
 
   Each function is attached to `Slice`, so with `import nanyx/slice` it is called as
   `Slice.length(s)`, or as `s \length`; `xs \slice(1, 4)` makes a slice of the array `xs`.
@@ -52,10 +52,10 @@ export def Slice.isEmpty: Slice(a) -> bool = { s ->
   s.length == 0
 }
 
---| The element of `s` at `index`, counting from 0 at the start of `s`, or `#none` when `index` is
-  negative or past its end.
-export def Slice.at: Slice(a), int -> #some(a) | #none = { s, index ->
-  if index >= 0 and index < s.length then array.at(s.items, s.start + index) else #none
+--| The element of `s` at `index`, counting from 0 at the start of `s`, or `#notFound` when `index`
+  is negative or past its end.
+export def Slice.at: Slice(a), int -> #some(a) | #notFound = { s, index ->
+  if index >= 0 and index < s.length then array.at(s.items, s.start + index) else #notFound
 }
 
 --| The elements of `s` from `from` up to but not including `to`, counting from the start of `s`,
@@ -76,13 +76,13 @@ export def Slice.fold: [c] Slice(a), b, ([c] b, a -> b) -> b = { s, initial, ste
 export def Slice.reduce: [c] Slice(a), ([c] a, a -> a) -> #some(a) | #none = { s, f ->
   match Slice.at(s, 0)
     | #some(first) -> #some(foldFrom(s, 1, first, f))
-    | #none -> #none
+    | #notFound -> #none
 }
 
 def foldFrom: [c] Slice(a), int, b, ([c] b, a -> b) -> b = { s, index, acc, step ->
   match Slice.at(s, index)
     | #some(element) -> foldFrom(s, index + 1, step(acc, element), step)
-    | #none -> acc
+    | #notFound -> acc
 }
 
 --| The elements of `s`, in order, each read when the sequence is pulled. A slice is [`Iterable`] by
@@ -93,7 +93,7 @@ export def Slice.toSeq: Slice(a) -> seq(a) = { s ->
     { index ->
       match Slice.at(s, index)
         | #some(element) -> #some(element, index + 1)
-        | #none -> #done
+        | #notFound -> #done
     }
   )
 }

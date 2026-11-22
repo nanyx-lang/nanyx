@@ -171,20 +171,25 @@ def counted = list.unfold(3, { n -> if n == 0 then #done else #some("x", n - 1) 
     Assert.Equal("list(string)", typeOf "counted")
 
 [<Fact>]
-let ``The prelude's skipWhile, partition, unzip and get have the docs' types`` () =
+let ``The prelude's skipWhile, partition, unzip and at have the docs' types`` () =
     let source =
         normalized """def xs = [3, 1, 2]
 def rest = xs \ skipWhile({ x -> x > 2 })
 def halves = xs \ partition({ x -> x > 1 })
 def columns = list.unzip([(1, "a"), (2, "b")])
-def second = xs \ list.get(1)"""
+def second = xs \ list.at(1)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf = typeIn result.Typed.Value
     Assert.Equal("list(int)", typeOf "rest")
     Assert.Equal("(list(int), list(int))", typeOf "halves")
     Assert.Equal("(list(int), list(string))", typeOf "columns")
-    Assert.Equal("#some(int) | #outOfRange", typeOf "second")
+    Assert.Equal("#some(int) | #notFound", typeOf "second")
+
+[<Fact>]
+let ``list.get and seq.get are gone: the indexed read is at`` () =
+    assertReports DiagnosticCodes.UnknownFunction (Compiler.compile """def second = list.get([1, 2], 1)""")
+    assertReports DiagnosticCodes.UnknownFunction (Compiler.compile """def second = seq.get(1..3, 1)""")
 
 [<Fact>]
 let ``A module's own definition wins over the prelude's`` () =

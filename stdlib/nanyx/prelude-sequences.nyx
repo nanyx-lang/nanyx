@@ -568,13 +568,13 @@ export def seq.head: [c] ([c] seq(a)) -> #some(a) | #emptyList = { s ->
     | #done -> #emptyList
 }
 
---| The element of `s` at `index`, counting from 0, or `#outOfRange` when `index` is negative or `s`
+--| The element of `s` at `index`, counting from 0, or `#notFound` when `index` is negative or `s`
   ends before it. It pulls `s` up to that element.
-export def seq.get: [c] ([c] seq(a)), int -> #some(a) | #outOfRange = { s, index ->
-  if index < 0 then #outOfRange else
+export def seq.at: [c] ([c] seq(a)), int -> #some(a) | #notFound = { s, index ->
+  if index < 0 then #notFound else
     match s.next()
-      | #next(x, rest) -> (if index == 0 then #some(x) else seq.get(rest, index - 1))
-      | #done -> #outOfRange
+      | #next(x, rest) -> (if index == 0 then #some(x) else seq.at(rest, index - 1))
+      | #done -> #notFound
 }
 
 --| Whether `s` has no elements. It pulls one element.

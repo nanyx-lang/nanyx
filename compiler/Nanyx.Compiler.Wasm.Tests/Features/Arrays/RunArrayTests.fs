@@ -27,14 +27,14 @@ let ``Run - an array made from a list reads back its length, its elements and th
     |> assertRan "3\n#some(10)\n#some(30)\n[10, 20, 30]\n3\n"
 
 [<Fact>]
-let ``Run - an index out of range is none, never a trap`` () =
+let ``Run - an index out of range is notFound, never a trap`` () =
     printing
         [ "def xs = array.fromList([10, 20, 30])"
           "println(array.at(xs, 3))"
           "println(array.at(xs, -1))"
           "println(array.at(xs, 9223372036854775807))" ]
     |> runSource
-    |> assertRan "#none\n#none\n#none\n"
+    |> assertRan "#notFound\n#notFound\n#notFound\n"
 
 [<Fact>]
 let ``Run - an empty array has no elements`` () =
@@ -46,7 +46,7 @@ let ``Run - an empty array has no elements`` () =
           "println(empty)"
           "println(array.fold(empty, 7, { total, x -> total + x }))" ]
     |> runSource
-    |> assertRan "0\n#none\n[]\n[]\n7\n"
+    |> assertRan "0\n#notFound\n[]\n[]\n7\n"
 
 [<Fact>]
 let ``Run - an array of strings gives each element up once`` () =

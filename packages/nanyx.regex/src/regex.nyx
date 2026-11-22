@@ -73,7 +73,7 @@ export def Match.group: Match, int -> #some(string) | #none = { m, number ->
 
   match groups(number)
     | #some(captured) -> captured
-    | #none -> #none
+    | #notFound -> #none
 }
 
 --| What the group named `name`, as `(?<name> )` names it, matched, or `#none` when it took no part
@@ -89,7 +89,7 @@ def matchOf: Regex, Text, array(int) -> Match = { regex, text, slots ->
   def slot = { k ->
     match slots(k)
       | #some(at) -> at
-      | #none -> -1
+      | #notFound -> -1
   }
 
   def groups = array.init(

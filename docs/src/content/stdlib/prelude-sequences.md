@@ -488,13 +488,13 @@ def seq.head: [c] ([c] seq(a)) -> #some(a) | #emptyList
 The first element of `s`, or `#emptyList` when it has none, as [`list.head`](prelude-lists#listhead) says. It pulls one
 element.
 
-## `seq.get`
+## `seq.at`
 
 ```nanyx fragment
-def seq.get: [c] ([c] seq(a)), int -> #some(a) | #outOfRange
+def seq.at: [c] ([c] seq(a)), int -> #some(a) | #notFound
 ```
 
-The element of `s` at `index`, counting from 0, or `#outOfRange` when `index` is negative or `s`
+The element of `s` at `index`, counting from 0, or `#notFound` when `index` is negative or `s`
 ends before it. It pulls `s` up to that element.
 
 ## `seq.isEmpty`

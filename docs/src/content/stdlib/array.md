@@ -18,12 +18,12 @@ println(xs(2))
 println(xs \map({ x -> x / 10 }))
 -- 3
 -- #some(20)
--- #none
+-- #notFound
 -- #some(30)
 -- [1, 2, 3]
 ```
 
-An array is callable: `xs(i)` is `array.at(xs, i)`, so it gives `#some(a) | #none` and never traps. Use it as `xs(0) ?? fallback`. `array.at` is in the prelude, so a call of an array works in a module that doesn't import `nanyx/array`.
+An array is callable: `xs(i)` is `array.at(xs, i)`, so it gives `#some(a) | #notFound` and never traps. Use it as `xs(0) ?? fallback`. `array.at` is in the prelude, so a call of an array works in a module that doesn't import `nanyx/array`.
 
 `array.create(n)` fills each slot with the [`Default`](prelude-contexts#defaults) of the element type, so it needs to know that type: `def zeros: Array(int) = array.create(3)`. `==` compares two arrays element by element. An array has no order and no hash, so it can't be sorted against another, or put in a set or used as a map's key.
 

@@ -60,7 +60,7 @@ def main = {
   println((1..) \seq.any { n -> n > 100 })
   println((1..) \seq.all { n -> n < 5 })
   println((1..) \seq.head)
-  println((1..) \seq.get(4))
+  println((1..) \seq.at(4))
   println((1..) \seq.isEmpty)
   println((1..) \seq.selectOne { n -> seq { if n > 9 then yield n * 2 } })
 }
@@ -77,14 +77,14 @@ def main = {
   println(none \seq.find { n -> n > 0 })
   println(none \seq.head)
   println(none \seq.isEmpty)
-  println((1..3) \seq.get(9))
-  println((1..3) \seq.get(-1))
+  println((1..3) \seq.at(9))
+  println((1..3) \seq.at(-1))
   println(none \seq.all { n -> n > 0 })
   println(none \seq.selectOne { n -> seq { yield n } })
 }
 """
     runSource (source.ReplaceLineEndings "\n")
-    |> assertRan "#notFound\n#emptyList\ntrue\n#outOfRange\n#outOfRange\ntrue\n#notFound\n"
+    |> assertRan "#notFound\n#emptyList\ntrue\n#notFound\n#notFound\ntrue\n#notFound\n"
 
 [<Fact>]
 let ``Run - the functions that read the whole sequence`` () =
@@ -132,12 +132,12 @@ let ``Run - flatMap, filterMap and find read as the editor's search for a line d
 def isSignificant: string -> bool = { line -> string.trim(line) != "" }
 
 def iterLinesOutwards: list(string), int -> seq((#some(string) | #none, #some(string) | #none)) = { lines, at ->
-  (1..) \seq.map { step -> (lines \list.get(at - step) \option, lines \list.get(at + step) \option) }
+  (1..) \seq.map { step -> (lines \list.at(at - step) \option, lines \list.at(at + step) \option) }
 }
 
-def option: (#some(string) | #outOfRange) -> #some(string) | #none = {
+def option: (#some(string) | #notFound) -> #some(string) | #none = {
   | #some(line) -> #some(line)
-  | #outOfRange -> #none
+  | #notFound -> #none
 }
 
 @entry

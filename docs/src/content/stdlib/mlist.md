@@ -28,7 +28,7 @@ elements [`MList.set`](#mlistset) changes in place. It holds its elements in an 
 belongs to the `memory` block it was made in: every operation requires that block's `Memory`,
 and the list can't leave the block, so give back [`MList.toList`](#mlisttolist) of it, which takes no time
 when the `MList` isn't used afterwards. [`MList.at`](#mlistat) and [`MList.set`](#mlistset) walk to the element, as
-`list.get` does, so code that reads or changes elements by index wants an [`MArray`](marray),
+`list.at` does, so code that reads or changes elements by index wants an [`MArray`](marray),
 whose `at` and `set` take constant time; an `MList` is for building a list.
 
 Each function is attached to `MList`, so with `import nanyx/mlist` it is called as
@@ -101,11 +101,12 @@ Adds `value` at the end of `items`, as [`MList.add`](#mlistadd) does: `items += 
 ## `MList.at`
 
 ```nanyx fragment
-def MList.at: [Memory] MList(a), int -> #some(a) | #none
+def MList.at: [Memory] MList(a), int -> #some(a) | #notFound
 ```
 
-The element of `items` at `index`, counting from 0, or `#none` when `index` is negative or past
-the end. It walks to the element, in time proportional to `index`: use an `MArray` to index often.
+The element of `items` at `index`, counting from 0, or `#notFound` when `index` is negative or
+past the end. It walks to the element, in time proportional to `index`: use an `MArray` to index
+often.
 
 ## `MList.set`
 

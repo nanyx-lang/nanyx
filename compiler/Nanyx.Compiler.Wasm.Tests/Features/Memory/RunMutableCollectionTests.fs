@@ -96,7 +96,7 @@ def main = {
   println(empty)
 }
 """
-    runSource (source.ReplaceLineEndings "\n") |> assertRan "([a, B, c], 3, #some(a), #some(c), #none, #none, #ok, #outOfRange)\n(0, [])\n"
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "([a, B, c], 3, #some(a), #some(c), #notFound, #notFound, #ok, #outOfRange)\n(0, [])\n"
 
 [<Fact>]
 let ``Run - += adds to a mutable list, and gives ()`` () =
