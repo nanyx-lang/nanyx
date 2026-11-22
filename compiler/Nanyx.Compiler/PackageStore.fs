@@ -16,7 +16,7 @@ type PackageStore =
 
 module PackageStore =
     /// The index nanyx-lang publishes.
-    let defaultIndex = "https://nanyx-lang.github.io/packages/"
+    let defaultIndex = "https://packages.nanyx.dev/"
 
     /// The cache's directory: `NANYX_PACKAGES`, if it is set, or else `.nanyx/packages` in the user's home directory.
     let defaultCache () =

@@ -14,7 +14,7 @@ progress.
 # The index
 
 The index is the repository [`nanyx-lang/packages`](https://github.com/nanyx-lang/packages), served by GitHub Pages
-at `https://nanyx-lang.github.io/packages/`. Its README is the format's specification. A client speaks one small
+at `https://packages.nanyx.dev/`. Its README is the format's specification. A client speaks one small
 protocol, a static index read over HTTPS, as Cargo's sparse index is, so what serves the files can change without the
 client noticing. `PackageIndex.fs` reads it.
 
