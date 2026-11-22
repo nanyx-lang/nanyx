@@ -75,13 +75,16 @@ type Scope =
 /// that hover shows the doc comment of; `Instantiation`, on a name that refers to a generic def, the def's own
 /// signature and how this use fills in its type variables. `Scopes` are the scopes around the position, innermost
 /// first and the module last, each with what it declares and the contexts it provides. `Call` holds the contexts the
-/// innermost call or pipe around the position that requires any requires, each with where it finds it.
+/// innermost call or pipe around the position that requires any requires, each with where it finds it. `TypeNames`
+/// are the types and contexts that have a definition, each by the name the view writes it by, with the definition's
+/// symbol, for the view to link where it writes them (see `Signatures.typeNamesAt`).
 type Info =
     { Expression: Hover.HoverInfo option
       ExpressionSymbol: Symbol option
       Instantiation: Hover.Instantiation option
       Scopes: Scope list
-      Call: CallContext list }
+      Call: CallContext list
+      TypeNames: (string * Symbol) list }
 
 /// The value defs whose statements contain `offset`, innermost first, each as its name, its annotation, the span of its
 /// statement and its value.
@@ -450,6 +453,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
                 (fun (ty, source, span, instance) written ->
                     ({ Context = List.exactlyOne written; Name = writtenName ty; Source = source; Span = span; Documented = documented ty instance }: CallContext))
                 callContexts
-                callWritten }
-    | _ -> { Expression = None; ExpressionSymbol = None; Instantiation = None; Scopes = []; Call = [] }
+                callWritten
+          TypeNames = Signatures.typeNamesAt typed.TypeDefs typed.Symbols syntax offset }
+    | _ -> { Expression = None; ExpressionSymbol = None; Instantiation = None; Scopes = []; Call = []; TypeNames = [] }
 

@@ -666,4 +666,32 @@ public sealed class InfoViewTests : LanguageServerTestBase
             "parse: string, int -> #some(int) | #error(string)",
             Assert.Single(Section(await InfoViewAt(uri, 0, 70), "function", "signature")).Text);
     }
+
+    [Fact]
+    public async Task Info_view_links_each_type_name_to_its_definition()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-18");
+
+        Open(uri, """
+            type Point = protected (x: int, y: int)
+
+            def Point.new: int, int -> #some(Point) | #error(string) = { x, y -> #some(Point(x = x, y = y)) }
+
+            def moved = { p: Point -> p }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 4, 23);
+
+        var parameter = Assert.Single(Section(view, "function", "names"), item => item.Detail == "parameter");
+        Assert.Equal("p: Point", parameter.Text);
+        var link = Assert.Single(parameter.Links!);
+        Assert.Equal((3, 5, new Range(0, 5, 0, 10)), (link.Start, link.Length, link.Location.Range));
+        var made = Assert.Single(Section(await InfoViewAt(uri, 2, 75), "function", "signature"));
+        Assert.Equal(
+            ["Point"],
+            made.Links!.Select(found => made.Text.Substring(found.Start, found.Length)));
+        Assert.Equal(made.Text.IndexOf("#some(Point)") + "#some(".Length, made.Links![0].Start);
+    }
 }

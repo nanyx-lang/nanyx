@@ -30,6 +30,8 @@ interface InfoViewItem {
   code?: HighlightedCode;
   /** The part of `text` that links to `location`: the name it starts with. An item without one has no link in its text. */
   name?: { start: number; length: number };
+  /** The other parts of `text` that link: the names of types, each to its definition. */
+  links?: { start: number; length: number; location: LspLocation }[];
   /** The items under it: the calls a provider in the context flow serves. */
   children?: InfoViewItem[];
 }
@@ -449,18 +451,19 @@ function page(webview: vscode.Webview): string {
     return node;
   }
 
-  // Code, as the extension highlighted it, a span for each token in its colour and font style; or else as it is. The
-  // part of it that \`name\` says (its start and length) goes in \`link\`, a link element, splitting a token at its ends.
-  function highlightedCode(text, highlighted, name, link) {
+  // Code, as the extension highlighted it, a span for each token in its colour and font style; or else as it is. Each
+  // of \`links\` (a start and length in the text, and a link element) holds its part of the code, a token split at its
+  // ends.
+  function highlightedCode(text, highlighted, links) {
     const node = element("code");
     const lines = highlighted || text.split("\\n").map((line) => [{ text: line }]);
-    const nameStart = name ? name.start : -1;
-    const nameEnd = name ? name.start + name.length : -1;
+    const parts = (links || []).map((link) => ({ start: link.start, end: link.start + link.length, element: link.element }));
     let offset = 0;
     const place = (child, at) => {
-      if (link && at >= nameStart && at < nameEnd) {
-        if (!link.parentNode) node.appendChild(link);
-        link.appendChild(child);
+      const part = parts.find((candidate) => at >= candidate.start && at < candidate.end);
+      if (part) {
+        if (!part.element.parentNode) node.appendChild(part.element);
+        part.element.appendChild(child);
       } else {
         node.appendChild(child);
       }
@@ -471,8 +474,8 @@ function page(webview: vscode.Webview): string {
         offset += 1;
       }
       line.forEach((token) => {
-        // The token's pieces before, inside and after the name.
-        const cuts = [0, nameStart - offset, nameEnd - offset, token.text.length]
+        // The token's pieces between the links' ends.
+        const cuts = [0, token.text.length, ...parts.flatMap((part) => [part.start - offset, part.end - offset])]
           .filter((cut) => cut >= 0 && cut <= token.text.length)
           .sort((a, b) => a - b);
         for (let i = 0; i + 1 < cuts.length; i++) {
@@ -503,12 +506,15 @@ function page(webview: vscode.Webview): string {
     return link;
   }
 
-  // An item: its code, of which only the name it starts with, if any, links to where it is, and its detail, which is
-  // the link of a message. Under it, its doc comment and the items under it.
+  // An item: its code, of which the name it starts with, if any, links to where it is, and each type's name to its
+  // definition; and its detail, which is the link of a message. Under it, its doc comment and the items under it.
   function item(entry, expanded, isMessage) {
     const li = element("li", entry.detail && entry.detail.startsWith("error") ? "error" : "");
-    const nameLink = entry.location && entry.name && !isMessage ? linkTo(entry.location, "name") : undefined;
-    li.appendChild(highlightedCode(entry.text, entry.code, nameLink && entry.name, nameLink));
+    const links = (entry.links || []).map((link) => ({ start: link.start, length: link.length, element: linkTo(link.location, "name") }));
+    if (entry.location && entry.name && !isMessage) {
+      links.push({ start: entry.name.start, length: entry.name.length, element: linkTo(entry.location, "name") });
+    }
+    li.appendChild(highlightedCode(entry.text, entry.code, links));
     if (entry.detail) {
       if (isMessage && entry.location) {
         const link = linkTo(entry.location, "detail");
