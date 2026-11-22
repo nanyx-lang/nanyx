@@ -76,22 +76,31 @@ module GitHubApi =
 
     let private json (value: JsonNode) = Some(Encoding.UTF8.GetBytes(value.ToJsonString()))
 
-    /// Sends `request` with `client`, and gives the JSON GitHub answers when it answers `expected`; or why not, with
-    /// GitHub's own message, `what` saying what was being done.
+    /// The JSON of `response` when its status is one of `expected`; or why not, with GitHub's own message, `what` saying
+    /// what was being done.
+    let private answered (what: string) (expected: int list) (response: GitHubResponse) : Result<JsonNode, string> =
+        let body = if String.IsNullOrWhiteSpace response.Body then null else (try JsonNode.Parse response.Body with :? JsonException -> null)
+        if List.contains response.Status expected then
+            Result.Ok(if isNull body then JsonObject() :> JsonNode else body)
+        else
+            let message =
+                match body with
+                | :? JsonObject as answer when answer.ContainsKey "message" -> string answer.["message"]
+                | _ -> response.Body
+            Result.Error $"{what} failed: GitHub answered {response.Status}, {message}"
+
+    /// Sends `request` with `client`, and gives the JSON GitHub answers when it answers `expected`; or why not (see
+    /// `answered`).
     let private send (client: GitHubClient) (what: string) (expected: int list) (request: GitHubRequest) : Result<JsonNode, string> =
-        client request
-        |> Result.bind (fun response ->
-            let body = if String.IsNullOrWhiteSpace response.Body then null else (try JsonNode.Parse response.Body with :? JsonException -> null)
-            if List.contains response.Status expected then
-                Result.Ok(if isNull body then JsonObject() :> JsonNode else body)
-            else
-                let message =
-                    match body with
-                    | :? JsonObject as answer when answer.ContainsKey "message" -> string answer.["message"]
-                    | _ -> response.Body
-                Result.Error $"{what} failed: GitHub answered {response.Status}, {message}")
+        client request |> Result.bind (answered what expected)
 
     let private get client what url = send client what [ 200 ] { Method = "GET"; Url = url; Body = None; ContentType = None }
+
+    /// What `get` gives, for something that may not be there: none when GitHub answers 404.
+    let private tryGet (client: GitHubClient) (what: string) (url: string) : Result<JsonNode option, string> =
+        client { Method = "GET"; Url = url; Body = None; ContentType = None }
+        |> Result.bind (fun response ->
+            if response.Status = 404 then Result.Ok None else answered what [ 200 ] response |> Result.map Some)
 
     let private post client what expected url body = send client what expected { Method = "POST"; Url = url; Body = json body; ContentType = None }
 
@@ -119,15 +128,15 @@ module GitHubApi =
     /// Waits for the fork `fork` to be there, sleeping with `sleep` between looks; or says it never came.
     let private waitForFork (client: GitHubClient) (sleep: int -> unit) (fork: GitHubRepository) : Result<GitHubRepository, string> =
         let rec look waits =
-            match client { Method = "GET"; Url = $"{api}/repos/{fork}"; Body = None; ContentType = None } with
-            | Result.Ok response when response.Status = 200 -> Result.Ok fork
+            match tryGet client $"Looking for the fork {fork}" $"{api}/repos/{fork}" with
+            | Result.Ok(Some _) -> Result.Ok fork
             | Result.Error error -> Result.Error error
-            | Result.Ok response ->
+            | Result.Ok None ->
                 match waits with
                 | wait :: rest ->
                     sleep wait
                     look rest
-                | [] -> Result.Error $"GitHub made the fork {fork} of {indexRepository}, but it still isn't there (GitHub answered {response.Status}): try again in a minute"
+                | [] -> Result.Error $"GitHub made the fork {fork} of {indexRepository}, but it still isn't there: try again in a minute"
         look forkWaits
 
     /// Where the account `client` is signed in as opens its pull requests to the index's repository from (see
@@ -141,8 +150,9 @@ module GitHubApi =
             else
                 post client $"Forking {indexRepository}" [ 202 ] $"{api}/repos/{indexRepository}/forks" (JsonObject())
                 |> Result.bind (fun fork ->
-                    match (text "full_name" fork).Split '/' with
-                    | [| owner; name |] -> waitForFork client sleep { Owner = owner; Name = name }
+                    match fork.["owner"], fork.["name"] with
+                    | (:? JsonObject as owner), (:? JsonValue as name) when owner.ContainsKey "login" ->
+                        waitForFork client sleep { Owner = text "login" owner; Name = string name }
                     | _ -> Result.Error $"Forking {indexRepository} failed: GitHub's answer names no fork")
                 |> Result.map ThroughFork)
 
@@ -184,38 +194,29 @@ module GitHubApi =
         let release = JsonObject()
         release.["tag_name"] <- JsonValue.Create tag
         release.["name"] <- JsonValue.Create name
-        match client { Method = "GET"; Url = $"{api}/repos/{repository}/releases/tags/{Uri.EscapeDataString tag}"; Body = None; ContentType = None } with
+        match tryGet client $"Looking for a release {tag} of {repository}" $"{api}/repos/{repository}/releases/tags/{Uri.EscapeDataString tag}" with
         | Result.Error error -> Result.Error error
-        | Result.Ok response when response.Status = 200 -> resume client repository tag assetName asset (JsonNode.Parse response.Body)
-        | Result.Ok response when response.Status <> 404 ->
-            Result.Error $"Looking for a release {tag} of {repository} failed: GitHub answered {response.Status}"
-        | Result.Ok _ ->
+        | Result.Ok(Some existing) -> resume client repository tag assetName asset existing
+        | Result.Ok None ->
             post client $"Creating the release {tag} of {repository}" [ 201 ] $"{api}/repos/{repository}/releases" release
             |> Result.bind (fun created -> upload client repository tag created assetName asset |> Result.map (fun _ -> Released(text "html_url" created)))
 
     /// The text of the file at `path` on the default branch of the index's repository, with its blob's SHA; none if there
     /// is no such file.
     let indexFile (client: GitHubClient) (path: string) : Result<(string * string) option, string> =
-        client { Method = "GET"; Url = $"{api}/repos/{indexRepository}/contents/{path}"; Body = None; ContentType = None }
-        |> Result.bind (fun response ->
-            match response.Status with
-            | 404 -> Result.Ok None
-            | 200 ->
-                let found = JsonNode.Parse response.Body
-                let content = (text "content" found).Replace("\n", "")
-                Result.Ok(Some(Encoding.UTF8.GetString(Convert.FromBase64String content), text "sha" found))
-            | status -> Result.Error $"Reading {path} from {indexRepository} failed: GitHub answered {status}")
+        tryGet client $"Reading {path} from {indexRepository}" $"{api}/repos/{indexRepository}/contents/{path}"
+        |> Result.map (Option.map (fun found ->
+            let content = (text "content" found).Replace("\n", "")
+            Encoding.UTF8.GetString(Convert.FromBase64String content), text "sha" found))
 
     /// `branch`, or, if `repository` has a branch of that name already, the first of `branch-2`, `branch-3`, … it hasn't.
     let private freeBranch (client: GitHubClient) (repository: GitHubRepository) (branch: string) : Result<string, string> =
         let rec tryNumber number =
             let candidate = if number = 1 then branch else $"{branch}-{number}"
-            client { Method = "GET"; Url = $"{api}/repos/{repository}/git/ref/heads/{candidate}"; Body = None; ContentType = None }
-            |> Result.bind (fun response ->
-                match response.Status with
-                | 404 -> Result.Ok candidate
-                | 200 -> tryNumber (number + 1)
-                | status -> Result.Error $"Looking for the branch {candidate} in {repository} failed: GitHub answered {status}")
+            tryGet client $"Looking for the branch {candidate} in {repository}" $"{api}/repos/{repository}/git/ref/heads/{candidate}"
+            |> Result.bind (function
+                | None -> Result.Ok candidate
+                | Some _ -> tryNumber (number + 1))
         tryNumber 1
 
     /// Opens a pull request on the index's repository that writes `contents` to the file at `path` (replacing the blob

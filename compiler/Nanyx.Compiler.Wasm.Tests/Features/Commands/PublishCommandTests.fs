@@ -31,6 +31,7 @@ type private FakeGitHub(indexFiles: (string * string) list) =
     member val PullsFail = false with get, set
     member val LooksBeforeForkAppears = 0 with get, set
     member val CanFork = true with get, set
+    member val CanReadReleases = true with get, set
 
     member _.Releases = List.ofSeq releases
     member _.Assets = List.ofSeq assets
@@ -54,6 +55,7 @@ type private FakeGitHub(indexFiles: (string * string) list) =
             | "GET", [ "repos"; "acme"; "packages" ] ->
                 looksAtFork <- looksAtFork + 1
                 if forked && looksAtFork > this.LooksBeforeForkAppears then permissions true else answer 404 """{ "message": "Not Found" }"""
+            | "GET", [ "repos"; _; _; "releases"; "tags"; _ ] when not this.CanReadReleases -> answer 403 """{ "message": "Resource not accessible by personal access token" }"""
             | "GET", [ "repos"; owner; repo; "releases"; "tags"; tag ] when releases.Contains($"{owner}/{repo}", tag) ->
                 let listed =
                     assets
@@ -76,7 +78,7 @@ type private FakeGitHub(indexFiles: (string * string) list) =
             | "POST", [ "repos"; "nanyx-lang"; "packages"; "forks" ] when not this.CanFork -> answer 403 """{ "message": "Resource not accessible by personal access token" }"""
             | "POST", [ "repos"; "nanyx-lang"; "packages"; "forks" ] ->
                 forked <- true
-                answer 202 """{ "full_name": "acme/packages" }"""
+                answer 202 """{ "owner": { "login": "acme" }, "name": "packages" }"""
             | "GET", [ "repos"; "nanyx-lang"; "packages"; "git"; "ref"; "heads"; "main" ] -> answer 200 """{ "object": { "sha": "c0ffee" } }"""
             | "GET", [ "repos"; owner; "packages"; "git"; "ref"; "heads"; branch ] when branches.Contains $"{owner}/packages:{branch}" -> answer 200 "{}"
             | "POST", [ "repos"; owner; "packages"; "git"; "refs" ] when canWrite owner ->
@@ -247,6 +249,21 @@ let ``A publish that can't reach the index fails before it creates the release``
     let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
     Assert.Equal(
         "error: Forking nanyx-lang/packages failed: GitHub answered 403, Resource not accessible by personal access token\n",
+        outcome.StandardError.ReplaceLineEndings "\n"
+    )
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Empty(github.Releases)
+
+[<Fact>]
+let ``A release that can't be looked for is an error with GitHub's reason, and nothing is released`` () =
+    use directory = new TempDirectory()
+    let app = util directory "0.1.0" shout
+    let store = storeIn directory false
+    let github = FakeGitHub []
+    github.CanReadReleases <- false
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal(
+        "error: Looking for a release v0.1.0 of acme/util failed: GitHub answered 403, Resource not accessible by personal access token\n",
         outcome.StandardError.ReplaceLineEndings "\n"
     )
     Assert.Equal(1, outcome.ExitCode)
