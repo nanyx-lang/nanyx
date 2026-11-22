@@ -144,3 +144,17 @@ let ``Nor what holds it, nor a lambda over it`` (declaration: string) (store: st
 [<InlineData("def outer = MRef.new(0)", "MRef.set(outer, MRef.get(r))")>]
 let ``An inner block may store what its reference holds in an outer block's cell or reference`` (declaration: string) (store: string) =
     Assert.Equal<string list>([], codes (storedOutside declaration store))
+
+[<Fact>]
+let ``A script that uses what escaped its block is told only of the escape`` () =
+    let source =
+        """
+import nanyx/mref
+def s = memory {
+  def r = MRef.new(10)
+  { MRef.get(r) }
+}
+
+println(s())
+"""
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
