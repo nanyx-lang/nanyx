@@ -804,16 +804,21 @@ let internal withoutRepeatedPending (before: PendingContextInstance list) (first
 let internal resolveCallInstances (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     resolveInstancesAt false env state call name (state.CalleeTypes |> Map.tryFind call.Id) calleeSpan
 
-/// `resolveInstancesAt` for `value` when it names a function as a value, once something has settled its type. The
-/// backend passes the function as a closure over the instances it finds here.
-let internal resolveValueInstances (env: TypeEnv) (state: InferState) (value: Expression) : Result<InferState, Diagnostic list> =
+/// `resolveInstancesAt` for `value` when it names a function as a value, once something has settled its type, and
+/// for each such function a record or tuple literal holds: `use Log(log = println)` gives `println` as a member at
+/// `string -> ()`, with `ToString(string)`. The backend passes the function as a closure over the instances it finds here.
+let rec internal resolveValueInstances (env: TypeEnv) (state: InferState) (value: Expression) : Result<InferState, Diagnostic list> =
     let resolve name = resolveInstancesAt true env state value name (state.ExprTypes |> Map.tryFind value.Id) value.Span
+    let resolveEach (items: Expression list) =
+        items |> List.fold (fun result item -> result |> Result.bind (fun current -> resolveValueInstances env current item)) (Ok state)
     match value.Kind with
     | IdentifierExpr name -> resolve name
     | MemberAccess(Kind (IdentifierExpr qualifier), field, _) ->
         match qualifiedDefinition env state qualifier field with
         | Some (name, _) -> resolve name
         | None -> Ok state
+    | TupleExpr items -> resolveEach items
+    | RecordExpr fields -> fields |> List.map (function NamedField(_, item) | PositionalField item -> item) |> resolveEach
     | _ -> Ok state
 
 /// `resolveValueInstances` for each argument of `call`, once the call has settled its type: `apply(println, 7)` passes
