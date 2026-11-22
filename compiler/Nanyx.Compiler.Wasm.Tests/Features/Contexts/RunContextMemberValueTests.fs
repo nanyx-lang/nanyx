@@ -43,3 +43,25 @@ def main = {
 """
             .ReplaceLineEndings "\n"
     runSource source |> assertRan "10\n"
+
+[<Fact>]
+let ``Run - a plain context's member named as a value calls the instance where it is called`` () =
+    let source =
+        """context Holder = (get: () -> int)
+
+def wrap: [Holder] () -> ([Holder] () -> int) = { get }
+
+def kept = {
+  use Holder(get = { 1 })
+  wrap()
+}
+
+@entry
+def main = {
+  def f = kept()
+  use Holder(get = { 2 })
+  println(f())
+}
+"""
+            .ReplaceLineEndings "\n"
+    runSource source |> assertRan "2\n"

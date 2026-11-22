@@ -19,6 +19,9 @@ type internal Lowering =
     /// As a function value of the second type that calls one of the first, which its closure holds, with the members
     /// the first requires: each passed to it, or captured after the value where it was made (see `CoreIrLowerMembers.coerce`).
     | Adapting of IrType * IrType
+    /// As a function value of this type that calls the member of this key that it is passed, rather than one it holds:
+    /// a context's member named as a value, which requires the context where it is called (see `CoreIrLower`).
+    | MemberCalling of ContextMemberKey * IrType
     /// As the function that makes a value of the first type, a recursive one, a value of the second, which differs from
     /// it in the contexts its functions require (see `CoreIrLowerMembers.coerce`).
     | ValueAdapting of IrType * IrType
