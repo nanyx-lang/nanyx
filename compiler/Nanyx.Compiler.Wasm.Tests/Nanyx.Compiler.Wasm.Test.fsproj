@@ -215,6 +215,7 @@
     <Compile Include="Features\StdLib\RunRandomTests.fs" />
     <Compile Include="Features\StdLib\RunReduceTests.fs" />
     <Compile Include="Features\StdLib\RunFromSeqBuildTests.fs" />
+    <Compile Include="Features\StdLib\RunListSeqFromToTests.fs" />
     <Compile Include="Features\StdLib\RunSeqZipToSeqTests.fs" />
     <Compile Include="Features\StdLib\RunTrieTests.fs" />
     <Compile Include="Features\StdLib\RunCollectionLengthTests.fs" />
