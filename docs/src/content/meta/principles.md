@@ -43,7 +43,7 @@ Most of the time the user has seen an error before, so each error leads with a s
 |--------------|-----------|
 | Type mismatch: 'string' vs 'int' | You cannot pass a string to a function that expects an int |
 | Duplicate definition 'foo' | I found two definitions of foo |
-| Unknown identifier 'totl' | "You forgot to handle the `#error` case in this match expression", or "Illegal foo".|
+| Unknown identifier 'totl' | "You forgot to handle the `#notFound` case in this match expression", or "Illegal foo".|
 
 Examples of good errors:
 
@@ -51,7 +51,7 @@ Examples of good errors:
 |----------|------|-------------|-------|
 | `NYX0201: Type mismatch` | Expected type 'int' but found type 'string' in the expression `x + 1` | Convert 'x' to an int with `int(x)` | Apply the `int(x)` conversion |
 | `NYX0205: Missing context 'Console'` | 'println' requires the context 'Console', which 'main' does not declare: add [Console] to the type of 'main' | Add the context 'Console' to the type of 'main' | Add context 'Console' to 'main' |
-| `NYX0203: Non-exhaustive match` | The match does not handle `#error(#databaseError)` of the type '#some(Customer) \| #error(#notFound \| #databaseError)' | Handle the `#databaseError` case | Add a case for `#error(#databaseError)` |
+| `NYX0203: Non-exhaustive match` | The match does not handle `#databaseError` of the type '#some(Customer) \| #notFound \| #databaseError' | Handle the `#databaseError` case | Add a case for `#databaseError` |
 
 ## Structural type errors
 

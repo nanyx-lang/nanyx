@@ -20,13 +20,13 @@ export def Machine.deposit: Machine, int -> Machine = { machine, coins ->
 }
 
 -- Vending is a function from the machine before to the machine after
-export def Machine.vend: Machine, string -> #some(Machine) | #error(VendError) = { machine, name ->
+export def Machine.vend: Machine, string -> #some(Machine) | VendError = { machine, name ->
   match machine.inventory(name)
-    | #notFound -> #error(#invalidSelection)
-    | #some(count = 0, ...) -> #error(#outOfStock)
+    | #notFound -> #invalidSelection
+    | #some(count = 0, ...) -> #outOfStock
     | #some(item) ->
       if item.price > machine.coinsDeposited then
-        #error(#insufficientFunds(item.price - machine.coinsDeposited))
+        #insufficientFunds(item.price - machine.coinsDeposited)
       else
         #some(
           machine with (
@@ -47,7 +47,7 @@ def main = {
 
   match result
     | #some(machine) -> println("Dispensed; {machine.coinsDeposited} coins left")
-    | #error(#invalidSelection) -> println("No such item")
-    | #error(#outOfStock) -> println("Out of stock")
-    | #error(#insufficientFunds(needed)) -> println("Insert {needed} more coins")
+    | #invalidSelection -> println("No such item")
+    | #outOfStock -> println("Out of stock")
+    | #insufficientFunds(needed) -> println("Insert {needed} more coins")
 }

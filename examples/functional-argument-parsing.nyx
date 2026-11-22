@@ -8,10 +8,10 @@ type ParseError = #helpRequested | #missingArgument(string)
 
 -- The value following a flag, found by walking the argument list two at a time
 def requiredArgument
-  : Arguments, string -> #some(string) | #error(#missingArgument(string))
+  : Arguments, string -> #some(string) | #missingArgument(string)
   = { args, name ->
     rec loop = {
-      | [] | [_] -> #error(#missingArgument(name))
+      | [] | [_] -> #missingArgument(name)
       | [flag, value, ...rest] ->
         if flag == name then #some(value) else loop([value, ...rest])
     }
@@ -23,12 +23,12 @@ def optionalSwitch: Arguments, string -> bool = { args, name ->
   args \contains(name)
 }
 
-def checkHelp: Arguments -> #some() | #error(#helpRequested) = { args ->
-  if optionalSwitch(args, "--help") then #error(#helpRequested) else #some()
+def checkHelp: Arguments -> #some() | #helpRequested = { args ->
+  if optionalSwitch(args, "--help") then #helpRequested else #some()
 }
 
--- `proc` short-circuits on the first `#error`, so the happy path reads top to bottom
-def parseArguments: Arguments -> #some(Config) | #error(ParseError) = { args ->
+-- `proc` short-circuits on the first failure, so the happy path reads top to bottom
+def parseArguments: Arguments -> #some(Config) | ParseError = { args ->
   proc {
     try checkHelp(args)
     def input = try requiredArgument(args, "--input")
@@ -43,8 +43,6 @@ def main = {
 
   match parseArguments(args)
     | #some(config) -> println("Processing input '{config.input}' verbose={config.verbose}")
-    | #error(#helpRequested) -> println(
-      "Usage: example [--help] [--verbose] [--input <input file>]"
-    )
-    | #error(#missingArgument(name)) -> println("Error: command line argument {name} is missing")
+    | #helpRequested -> println("Usage: example [--help] [--verbose] [--input <input file>]")
+    | #missingArgument(name) -> println("Error: command line argument {name} is missing")
 }

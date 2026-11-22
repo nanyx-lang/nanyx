@@ -45,18 +45,15 @@ export type OptionsError =
   | #patienceWithoutBeamSize
   | #lengthPenaltyOutOfRange
 
-export def verifyOptions
-  : DecodingOptions -> #some(DecodingOptions) | #error(OptionsError)
-  = { options ->
-    if
-      | options.beamSize != #none and options.bestOf != #none -> #error(#beamSizeAndBestOf)
-      | options.temperature == 0.0 and options.bestOf != #none -> #error(#bestOfWithGreedySampling)
-      | options.patience != #none and options.beamSize == #none -> #error(#patienceWithoutBeamSize)
-      | not (options.lengthPenalty \mapSomeOr(true) { p -> p >= 0.0 and p <= 1.0 }) -> #error(
-        #lengthPenaltyOutOfRange
-      )
-      | else -> #some(options)
-  }
+export def verifyOptions: DecodingOptions -> #some(DecodingOptions) | OptionsError = { options ->
+  if
+    | options.beamSize != #none and options.bestOf != #none -> #beamSizeAndBestOf
+    | options.temperature == 0.0 and options.bestOf != #none -> #bestOfWithGreedySampling
+    | options.patience != #none and options.beamSize == #none -> #patienceWithoutBeamSize
+    | not (options.lengthPenalty \mapSomeOr(true) { p -> p >= 0.0 and p <= 1.0 }) ->
+      #lengthPenaltyOutOfRange
+    | else -> #some(options)
+}
 
 -- The tokenizer and the model are dependencies, so they are contexts
 context Tokenizer = (
@@ -143,8 +140,7 @@ def mainLoop
   }
 
 export def transcribe
-  : [Model, Tokenizer, Random]
-    AudioFeatures, DecodingOptions -> #some(string) | #error(OptionsError)
+  : [Model, Tokenizer, Random] AudioFeatures, DecodingOptions -> #some(string) | OptionsError
   = { audio, options ->
     proc {
       def options = try verifyOptions(options)

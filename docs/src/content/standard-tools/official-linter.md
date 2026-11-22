@@ -76,7 +76,7 @@ def greet: string, string -> string = { name, title ->
 ```nanyx
 match response
   | #some(value) -> "Success" -- Linter warning: Unused binding 'value'
-  | #error(msg) -> "Error" -- Linter warning: Unused binding 'msg'
+  | #failed(msg) -> "Failed" -- Linter warning: Unused binding 'msg'
 ```
 
 ## Unused import
