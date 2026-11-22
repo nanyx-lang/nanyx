@@ -94,7 +94,7 @@ directory. `HostPackages` reads it into `Host.Component`.
 
 ## The console host's component root
 
-`console.host.wasi` provides `Console`, `Env`, `Clock`, `Random` and `Async` on WASI 0.3 alone. It is Nanyx, on
+`console.host.wasi` provides `Console`, `Env`, `FileSystem`, `Clock`, `Random` and `Async` on WASI 0.3 alone. It is Nanyx, on
 `@extern`s named as wit-component expects, and it lowers the canonical ABI by hand with `nanyx/host.memory`:
 
 - **Writes** to stdout and stderr go as the runtime's own do ([The core module](#the-core-module)): a `stream<u8>`
@@ -112,6 +112,20 @@ directory. `HostPackages` reads it into `Host.Component`.
 - **The clocks and random numbers** are `wasi:clocks/system-clock`'s `now`, an `instant` of seconds and nanoseconds
   written to memory, `monotonic-clock`'s `now`, nanoseconds as a `u64`, and `wasi:random`'s `get-random-u64`.
 - **Exiting** is `wasi:cli/exit`'s `exit-with-code`, which takes 0 to 255; any other code exits with 1.
+- **Files** are `wasi:filesystem`'s, in `console.host.wasi.files.nyx`, a `@partial` fragment of the root. The preopens
+  come from `get-directories` once, and are kept in the host's block; a path is found in one as the core root finds it
+  in WASI preview 1's (`within`, in `console.files`, which both roots share, with `bytesAt`). A file is opened with
+  `open-at`, read through `read-via-stream` from an offset, and written through `write-via-stream` or
+  `append-via-stream`, which are `Output`s as stdout is, so `writeTo` writes a file too; its future's
+  `result<_, error-code>` says whether the write went through. `stat`, `stat-at`, `create-directory-at`,
+  `unlink-file-at` and `read-directory`, a `stream<directory-entry>` read 64 entries at a time, do the rest. Each
+  descriptor is dropped (`[resource-drop]descriptor`) once the call is done with it.
+  - These are `async func`s in WIT, lowered synchronously, which blocks, and runs with Wasmtime's default settings.
+  - A result in memory is laid out as the canonical ABI lays it out: a `result<descriptor-stat, error-code>` has its
+    case at 0 and its payload at 8, since `descriptor-stat` holds 64-bit fields; an `error-code` is its case, then
+    `other`'s `option<string>` at 4, whose string the host allocated and the root frees.
+  - An `error-code` becomes the `FsError` the core root gives for the same WASI error: `no-entry` is `#notFound`, and so
+    on (`errorAt`).
 
 A wait blocks: each async-lowered call that returns BLOCKED is waited on at once, in a waitable set of its own, as
 the runtime's own writes are.
