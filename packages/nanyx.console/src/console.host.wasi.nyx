@@ -4,14 +4,15 @@
 
   Its [`run`] runs the program's entry point as `console.host`'s does, in the contexts it can write
   on WASI 0.3 alone: [`Console`] on `wasi:cli`'s stdin, stdout and stderr, [`Env`] on
-  `wasi:cli/environment` and `exit`, [`Clock`] on `wasi:clocks` and [`Random`] on `wasi:random`,
-  and `Async`. A program that needs another, such as `FileSystem` or `Http`, is an error when it is
-  built as a component, and runs under `nanyx run`, or is built with `--core`.
+  `wasi:cli/environment` and `exit`, [`FileSystem`] on `wasi:filesystem` (see
+  `console.host.wasi.files.nyx`), [`Clock`] on `wasi:clocks` and [`Random`] on `wasi:random`, and
+  `Async`. A program that needs `Http` is an error when it is built as a component, and runs under
+  `nanyx run`, or is built with `--core`.
 
   It calls WASI 0.3 through `@extern`s named as wit-component expects, and passes their values in
   the canonical ABI by hand, with `nanyx/host.memory`. A call that waits is lowered async and waited
   on at once, so the program blocks in it, as it does under `nanyx run`.
-export module console.host.wasi
+@partial export module console.host.wasi
 
 import (
   nanyx/async as (Async)
@@ -20,17 +21,20 @@ import (
   nanyx/host.runtime
   nanyx/random as (Random)
   nanyx/text
+  console.files as (bytesAt, within)
   console.stdin as (bufferOffset, bufferSize, readLineAfter, readToEndAfter, stateAt)
   nanyx.console.core/console as (Console, IoError)
   nanyx.console.core/env as (Env)
+  nanyx.fs/filesystem as (FileSystem, FsError)
+  nanyx.fs/path as (Path)
 )
 
 -- The host keeps its state in the block the module sets aside for it (see `hostState`): at 4 and 8,
 -- where what is left of the standard input it has read starts and ends in its buffer (see
 -- `console.stdin`); at 16, the readable end of standard input's stream, once it is open, and at 20
--- its future; from 24, what a call that gives its result in memory writes there; at 40, the event a
--- wait had, its code at 44; and from 64 to the end of the block, the buffer standard input is read
--- into.
+-- its future; from 24, what a call that gives its result in memory writes there; at 48, the event a
+-- wait had, its code at 52; at 12, 56 and 60, the preopens (see `console.host.wasi.files.nyx`); and
+-- from 64 to the end of the block, the buffer standard input is read into.
 
 -- Waiting ----------------------------------------------------------------------------------------
 
@@ -54,10 +58,10 @@ def blocked: I32 = -1
 def waitFor: [HostRuntime] I32 -> I32 = { handle ->
   def set = waitableSetNew()
   waitableJoin(handle, set)
-  ignore(waitableSetWait(set, stateAt(40)))
+  ignore(waitableSetWait(set, stateAt(48)))
   waitableJoin(handle, 0)
   waitableSetDrop(set)
-  readI32(stateAt(44))
+  readI32(stateAt(52))
 }
 
 --| What a stream's read or write that may block gave, once it hasn't: `status` itself, or what
@@ -287,11 +291,12 @@ def timeOfDay: [HostRuntime] () -> int = { _ ->
 }
 
 --| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
-  streams, an `Env` that reads what the program was started with, a `Clock` that reads the host's
-  clocks, a `Random` that draws from its random source, and `Async`, so that it may wait. What
-  `entry` returns is ignored.
+  streams, an `Env` that reads what the program was started with, a `FileSystem` that reads and
+  writes the directories the host opened for it, a `Clock` that reads the host's clocks, a `Random`
+  that draws from its random source, and `Async`, so that it may wait. What `entry` returns is
+  ignored.
 export def run
-  : [HostRuntime, Async] ([Async, Clock, Console, Env, Random] () -> a) -> ()
+  : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Random] () -> a) -> ()
   = { entry ->
     use Console(
       write = { text -> writeTo(stdout, text) }
@@ -305,6 +310,18 @@ export def run
       args = { _ -> arguments() }
       variable = { name -> environmentVariable(name) }
       exit = { code -> exitProcess(code) }
+    )
+
+    use FileSystem(
+      readFile = { at -> readWith(at, { address, count -> stringAt(address, count) }) }
+      readFileBytes = { at -> readWith(at, { address, count -> bytesAt(address, count) }) }
+      readFileChunk = { at, offset, length -> chunkAt(at, offset, length) }
+      writeFile = { at, text -> writeWith(at, text, createFlag + truncateFlag, overwriting) }
+      appendFile = { at, text -> writeWith(at, text, createFlag, appending) }
+      pathExists = { at -> existsAt(at) }
+      deleteFile = { at -> deleteAt(at) }
+      listDirectory = { at -> namesAt(at) }
+      createDirectory = { at -> createDirectoryAt(at) }
     )
 
     use Random(bits = { _ -> getRandomU64() })

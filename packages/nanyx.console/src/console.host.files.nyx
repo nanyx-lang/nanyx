@@ -59,32 +59,6 @@ def errorOf: I32 -> FsError = { errno ->
           else if errno == 20 then #alreadyExists else #other("WASI error {errno}")
 }
 
---| `text`, a path, as preopens are compared: lowercase when it starts with a drive, as `C:/` does,
-  since Windows doesn't tell `C:/Temp` from `c:/temp`.
-def comparable: string -> string = { text ->
-  if string.contains(string.take(text, 3), ":") then string.lowercase(text) else text
-}
-
---| Where `text`, a normalised path, is in the preopen named `name`: the path relative to it, or
-  `#outside`.
-def within: string, string -> #some(string) | #outside = { name, text ->
-  def rooted = string.startsWith(text, "/") or string.contains(string.take(text, 3), ":")
-
-  if name == "." then (if rooted then #outside else #some(text)) else
-    def base = comparable(Path.toString(path.of(name)))
-    def compared = comparable(text)
-    -- A root, such as `/` or `C:/`, ends in `/`; any other directory is followed by one.
-    def prefix = if string.endsWith(base, "/") then base else base ++ "/"
-
-    if not rooted
-      then #outside
-      else if compared == base
-        then #some(".")
-        else if string.startsWith(compared, prefix)
-          then #some(string.skip(text, string.length(prefix)))
-          else #outside
-}
-
 --| The preopen, from the descriptor `fd` up, that `text` is in, with the path relative to it.
 def locatedFrom: [HostRuntime] I32, string -> #some(I32, string) | #error(FsError) = { fd, text ->
   if fdPrestatGet(fd, stateAt(24)) != 0 then #error(#permissionDenied) else
@@ -277,14 +251,6 @@ def chunkAt
             ignore(fdClose(fd))
             result
   }
-
---| The bytes from `address` on, `count` of them, as an array.
-def bytesAt: [HostRuntime] I32, I32 -> Array(U8) = { address, count ->
-  array.init(
-    I32.toInt(count)
-    { index -> U8.fromInt(I32.toInt(readByte(I32.wrappingAdd(address, I32.fromInt(index))))) }
-  )
-}
 
 --| Writes the `size` bytes at `buffer` to the file `fd`, after the `done` it has written.
 def writeFrom

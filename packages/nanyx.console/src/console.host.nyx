@@ -18,6 +18,7 @@ import (
   nanyx/host.runtime
   nanyx/random as (Random)
   nanyx/text
+  console.files as (bytesAt, within)
   console.stdin as (bufferOffset, bufferSize, readLineAfter, readToEndAfter, stateAt)
   nanyx.console.core/console as (Console, IoError)
   nanyx.console.core/env as (Env)
