@@ -137,7 +137,7 @@ You rarely need to write `...` yourself. When the compiler infers a function's t
 def area = { r -> r.width * r.height }
 -- inferred as `(height: int, width: int, …) -> int`
 
-area(width = 2, height = 3, colour = "red") -- fine
+println(area(width = 2, height = 3, colour = "red")) -- 6: the extra field is fine
 ```
 
 An editor writes a record's fields in the order they are written, in its type or where it is made, and those of a record inferred from the fields read in alphabetical order, with its other fields as an ellipsis, `…`, where you would write `...`. The order is only how it is shown: `(x: int, y: int)` and `(y: int, x: int)` are one type. The other fields get a name, such as `…ω`, only where the type uses them twice.

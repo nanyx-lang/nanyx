@@ -43,7 +43,9 @@ def f = `<>`
 Also, lambda syntax supports an [operator-based shorthand](../tour/functions#shorthand-lambdas) for using operators:
 
 ```nanyx
-[1, 2, 3] \fold(0) { + }
+def total = [1, 2, 3] \fold(0) { + }
+
+println(total) -- 6
 ```
 
 # Arithmetic and comparison

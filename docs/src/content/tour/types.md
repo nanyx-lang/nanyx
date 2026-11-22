@@ -155,7 +155,7 @@ def eval: Expr -> int = {
   | #add(a, b) -> eval(a) + eval(b)
 }
 
-eval(#add(#num(2), #num(3))) -- 5
+println(eval(#add(#num(2), #num(3)))) -- 5
 
 type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))
 
