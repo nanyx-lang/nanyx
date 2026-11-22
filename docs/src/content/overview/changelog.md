@@ -8,6 +8,40 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.34.0
+
+*22 November 2026*
+
+A release that brings the playground up to date with the tour, which now uses `is` anywhere. It also finishes WASI 0.3
+components for both of Nanyx's hosts, lets a program export functions of its own as a component, and gives every
+collection the same `at`.
+
+**Language**
+
+- `x is <pattern>` is a `bool` expression anywhere, not only in an `if` condition, and the names a pattern binds are in
+  scope for the rest of an `and` chain: `x is #some(v) and v > 3`. `is` binds tighter than `and` and `or`, and `not`
+  tighter than `is`, so a negated test is written `not (x is P)` ([Pattern matching](../tour/pattern-matching)).
+
+**Standard library**
+
+- `at` is the indexed read on every collection, and gives `#some(a) | #notFound`. **This breaks code** that calls
+  `list.get` or `seq.get`, now `list.at` and `seq.at`, or that matches `#none` or `#outOfRange` from an `at`
+  ([Lists](../stdlib/prelude-lists)).
+- `set` and `map` get `any`, `all` and `filterMap`, and `set` gets `select` ([Maps and sets](../stdlib/prelude-maps)).
+- `list.toList`, `list.fromList`, `seq.fromList` and `seq.fromArray` ([Lists](../stdlib/prelude-lists)).
+
+**Tools**
+
+- `nanyx build` writes an HTTP-host program as a `wasi:http/service` component, and a console program that uses
+  `Http` as a component of `nanyx:console/command`, which adds `wasi:http/client` to `wasi:cli/command`
+  ([Hosts](../advanced/hosts)).
+- A program can export functions of its own from its component: `@component export def` puts a def in the WIT
+  interface its module names, with numbers, strings, records, tuples, lists and tag unions crossing the boundary, and
+  `nanyx build` writes the WIT to `out/wit/` ([Attributes](../tour/attributes)).
+- A shipped host library, `nanyx.wasi`, holds the WASI code the console and HTTP hosts share; a host's package and
+  the host libraries it depends on may use `HostRuntime` ([Hosts](../advanced/hosts)).
+- The tour's examples that only declare things no longer show a Run button, only "Open in the playground".
+
 # 0.33.0
 
 *22 November 2026*
