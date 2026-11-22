@@ -159,9 +159,15 @@ After changing a doc comment, or what the library exports, write the references 
 dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -- stdlib-docs ../docs/src/content/stdlib
 ```
 
-`--check` writes nothing and lists the pages that are out of date. A test in the WebAssembly tests,
-`StandardLibraryReferenceTests.fs`, fails, showing the difference, when a page's reference is not what the library
-gives, when a file that exports names has no page, and when a page with a reference has no file. The `nanyx` blocks
+`stdlib-docs` also writes `nominal-types.json` beside the pages: the names of the protected and private types and
+contexts the library and those packages export. The docs site reads it to show those names in italics in its code
+blocks, as the editor does (`rehypeNominalTypes` in `docs/site/rehype-plugins.mjs`), together with the nominal types a
+page's own code blocks declare. It finds them in the text, as the site's build has no compiler; once the playground's
+browser compiler is released, the build could ask it which names are nominal instead, which would be exact.
+
+`--check` writes nothing and lists the pages, and the list, that are out of date. A test in the WebAssembly tests,
+`StandardLibraryReferenceTests.fs`, fails, showing the difference, when a page's reference, or the list of nominal
+types, is not what the library gives, when a file that exports names has no page, and when a page with a reference has no file. The `nanyx` blocks
 on these pages outside the reference are compiled and run, as the tour's are
 ([Tour examples](./compilation#tour-examples)).
 

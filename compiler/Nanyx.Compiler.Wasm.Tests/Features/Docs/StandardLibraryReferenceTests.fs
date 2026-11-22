@@ -18,6 +18,23 @@ let ``Every standard library page's reference is the library's`` () =
         | StandardLibraryDocs.Unwritable message -> Assert.Fail $"{Path.GetFileName path} {message}"
 
 [<Fact>]
+let ``The list of nominal types beside the pages has the library's protected and private types by their own names`` () =
+    let directory = Path.Combine(docsContentDirectory, "stdlib")
+    let written =
+        StandardLibraryDocs.update (testStore ()) directory
+        |> List.pick (fun (path, update) ->
+            match update with
+            | StandardLibraryDocs.OutOfDate text when Path.GetFileName path = StandardLibraryDocs.nominalTypesFile -> Some text
+            | StandardLibraryDocs.UpToDate when Path.GetFileName path = StandardLibraryDocs.nominalTypesFile -> Some (File.ReadAllText path)
+            | _ -> None)
+    let listed (kind: string) =
+        let start = written.IndexOf $"\"{kind}\": ["
+        written.Substring(start, written.IndexOf(']', start) - start)
+    Assert.Contains("\"Memory\"", listed "protected")
+    Assert.Contains("\"MRef\"", listed "private")
+    Assert.DoesNotContain("\"MRef\"", listed "protected")
+
+[<Fact>]
 let ``A public module of a package the compiler ships has a page, but a host's modules don't`` () =
     let pages = StandardLibraryDocs.references ()
     Assert.Contains("console", pages.Keys)

@@ -89,3 +89,70 @@ export function rehypeHeadingAnchors() {
     });
   };
 }
+
+/**
+ * The names a page's Nanyx code declares as types and contexts, from the text
+ * of its code blocks: those declared `protected` or `private`, which are
+ * nominal, and the others, aliases of a shape. Comments are left out.
+ */
+function declaredTypes(text) {
+  const code = text.replace(/--.*$/gm, "");
+  const declaration =
+    /\b(?:type|context)\s+([A-Z][A-Za-z0-9_]*)\s*(?:\([^)]*\))?\s*=\s*(?:\[[^\]]*\]\s*)?(protected|private)?/g;
+  const nominal = new Map();
+  const structural = new Set();
+  for (const match of code.matchAll(declaration)) {
+    if (match[2]) nominal.set(match[1], match[2] === "private");
+    else structural.add(match[1]);
+  }
+  return { nominal, structural };
+}
+
+/** `node` with `names` added to its classes, whether it keeps them as `class` or as `className`. */
+function addClasses(node, names) {
+  if (typeof node.properties.class === "string") {
+    node.properties.class = [node.properties.class, ...names].filter(Boolean).join(" ");
+  } else {
+    node.properties.className = [...[].concat(node.properties.className ?? []), ...names];
+  }
+}
+
+/**
+ * Show the names of nominal types apart in the page's highlighted Nanyx code
+ * blocks, as the editor does (see the VS Code extension page's Nominal types):
+ * each token that is such a name gets the class `nominal`, and `private` too
+ * for a private type's, which the site's styles show in italics. A type is
+ * nominal if a code block of the page declares it `protected` or `private`,
+ * or if the standard library or a package it documents exports it as one
+ * (`library`: the `nominal-types.json` that `nanyx stdlib-docs` writes), and
+ * no block of the page declares the name as an alias of a shape. It is read
+ * from the text, not from the compiler, which the site's build doesn't have:
+ * a name the page imports from elsewhere is missed. Runs after the code is
+ * highlighted, as Astro runs the site's rehype plugins.
+ *
+ * @param {{ protected: string[], private: string[] }} library
+ */
+export function rehypeNominalTypes(library) {
+  return (tree) => {
+    const blocks = [];
+    visit(tree, "element", (node) => {
+      if (node.tagName === "pre" && node.properties?.dataLanguage === "nanyx") blocks.push(node);
+    });
+    if (blocks.length === 0) return;
+    const { nominal, structural } = declaredTypes(blocks.map(textOf).join("\n"));
+    const isPrivate = new Map([
+      ...library.protected.map((name) => [name, false]),
+      ...library.private.map((name) => [name, true]),
+    ]);
+    for (const name of structural) isPrivate.delete(name);
+    for (const [name, isPrivateHere] of nominal) isPrivate.set(name, isPrivateHere);
+    if (isPrivate.size === 0) return;
+    for (const block of blocks) {
+      visit(block, "element", (node) => {
+        if (node.tagName !== "span" || node.children.length !== 1 || node.children[0].type !== "text") return;
+        const name = node.children[0].value.trim();
+        if (isPrivate.has(name)) addClasses(node, isPrivate.get(name) ? ["nominal", "private"] : ["nominal"]);
+      });
+    }
+  };
+}
