@@ -1,0 +1,12 @@
+# A Rust command that calls the Nanyx component in ../shapes, which exports `acme:shapes/shapes` (see ../run.sh).
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+wit-bindgen = "0.63"
+
+# A crate of its own, in no workspace.
+[workspace]

@@ -323,3 +323,19 @@ def area: Shape -> float
   strings and lists the callee allocated through `cabi_realloc`, and frees those blocks.
 - **Outside a component, nothing provides an import.** In a core module, as `nanyx run` and `nanyx test` run and
   `nanyx build --core` writes, a call of one that the program reaches is `NYX0278`, naming it, at its def.
+
+## Names at the boundary
+
+A component's WIT is what another language's bindings are generated from, and the component model checks more than a
+value's shape: an interface's types, a record's fields, a variant's cases and a function's parameters are matched by
+name. So the other component's WIT must be the WIT `nanyx build` writes, as it is for the Rust components below. An
+import's parameters have no names in its Nanyx type, so they are written `p0`, `p1` and on, and the other component's
+WIT names them so too.
+
+## Testing with other languages
+
+`compiler/ComponentInterop` holds a Nanyx component (`shapes`) and two Rust components: a command (`app`) that calls
+the Nanyx component's exports, and a component (`units`) whose exports the Nanyx component imports. `run.sh` builds the
+three, checks that the Rust components' WIT is what `nanyx build` wrote, composes them with `wac plug`, and runs the
+result under `wasmtime run`, which must print `expected.txt`. The Compiler workflow runs it on Linux, with Wasmtime,
+`wac` and Rust's `wasm32-wasip2` target installed at pinned versions.
