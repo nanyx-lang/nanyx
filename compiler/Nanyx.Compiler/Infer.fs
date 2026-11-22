@@ -269,7 +269,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         |> Result.map (fun (typedBody, next) -> mkTypedExpr expr typedBody.Type (Some typedBody) None None, next)
     | UseIn(value, body) when (ContextNames.loaded env state value).IsSome ->
         let scheme, instance = (ContextNames.loaded env state value).Value
-        inferExpr (ContextNames.load env instance) (ContextNames.recordLoad value scheme state) body
+        inferExpr (ContextNames.load env instance) (ContextNames.recordLoad value scheme instance state) body
         |> Result.map (fun (typedBody, next) -> mkTypedExpr expr typedBody.Type (Some typedBody) None None, next)
     | UseIn(value, _) when not (UseDischarge.notLoadable state value).IsEmpty -> Error (UseDischarge.notLoadable state value)
     | UseIn(value, body) ->
@@ -829,7 +829,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 typedStatements <- typedStatements @ [ TypedTypeDefStatement(name, modifiers, parameters, body) ]
             | UseStatement value when errors.IsEmpty && (ContextNames.loaded env' current value).IsSome ->
                 let scheme, instance = (ContextNames.loaded env' current value).Value
-                current <- ContextNames.recordLoad value scheme current
+                current <- ContextNames.recordLoad value scheme instance current
                 env' <- ContextNames.load env' instance
                 typedStatements <- typedStatements @ [ TypedUseStatement (mkTypedExpr value scheme.Type None None None) ]
             | UseStatement value when errors.IsEmpty && not (UseDischarge.notLoadable current value).IsEmpty ->

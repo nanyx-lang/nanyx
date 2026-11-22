@@ -144,3 +144,40 @@ let ``Nor what holds it, nor a lambda over it`` (declaration: string) (store: st
 [<InlineData("def outer = MRef.new(0)", "MRef.set(outer, MRef.get(r))")>]
 let ``An inner block may store what its reference holds in an outer block's cell or reference`` (declaration: string) (store: string) =
     Assert.Equal<string list>([], codes (storedOutside declaration store))
+
+[<Fact>]
+let ``A lambda that loads the block's named Memory can't leave the block`` () =
+    let source =
+        """
+import nanyx/mref
+
+def maker = memory { context m ->
+  { use m in MRef.get(MRef.new(3)) }
+}
+
+def call: () -> int = { memory { maker() } }
+"""
+    let code, text = singleError (normalized source)
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, code)
+    Assert.Equal("m", text)
+
+[<Theory>]
+[<InlineData("[{ use m in MRef.get(MRef.new(3)) }]")>]
+[<InlineData("(f = { use m in MRef.get(MRef.new(3)) })")>]
+[<InlineData("{ use m in 1 }")>]
+let ``Nor a list or record holding one, nor one that makes nothing`` (result: string) =
+    let source = $"import nanyx/mref\n\ndef maker = memory {{ context m ->\n  {result}\n}}\n"
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
+
+[<Fact>]
+let ``A lambda that loads the block's named Memory is called inside the block`` () =
+    let source =
+        """
+import nanyx/mref
+
+def total = memory { context m ->
+  def f = { use m in MRef.get(MRef.new(3)) }
+  f() + f()
+}
+"""
+    Assert.Equal<string list>([], codes source)
