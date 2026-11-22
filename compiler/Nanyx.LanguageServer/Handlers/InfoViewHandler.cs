@@ -8,12 +8,17 @@ using SymbolKind = NyxCompiler.SymbolKind;
 
 namespace Nanyx.LanguageServer.Handlers;
 
-/// <summary>The parameters of <c>nanyx/infoView</c>: the document and the position to describe.</summary>
+/// <summary>
+/// The parameters of <c>nanyx/infoView</c>: the document and the position to describe, and the width, in characters,
+/// the client shows an item's text in, if it says: a signature that doesn't fit it is laid out as the formatter lays
+/// out a def's (see <see cref="Nanyx.Formatter.SignatureLayout.layOut"/>).
+/// </summary>
 [Parallel, Method(InfoViewHandler.Method, Direction.ClientToServer)]
 public sealed record InfoViewParams : IRequest<InfoViewResult?>
 {
     public required TextDocumentIdentifier TextDocument { get; init; }
     public required Position Position { get; init; }
+    public int? Width { get; init; }
 }
 
 /// <summary>
@@ -168,6 +173,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         }
 
         Location? Locate(Parser.Program.SourceSpan span) => LocationOf(uri, document, span);
+        string Signature(string name, string type) => LaidOut(request.Width, name, type);
         string? DocOf(NyxCompiler.Symbol symbol) => docs?.ForSymbol(symbol)?.Value;
 
         // What is at the cursor is only shown where the text has not been edited since it was typed.
@@ -177,7 +183,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
               && NyxCompiler.Hover.moduleAt(typedDocument.FileName, typedCompile, typed)?.Value is { } module
                 ? [ModuleItem(module, typedDocument.DocReader(uri, typed, _standardLibrary), Locate)]
                 : info?.Expression?.Value is { } hover
-                    ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value, DocOf)
+                    ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value, DocOf, request.Width)
                     : [];
         var line = request.Position.Line;
         var messages = document.PublishedDiagnostics(uri)
@@ -192,7 +198,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
 
         InfoViewItem Name(InfoView.ScopedName name) => new()
         {
-            Text = name.Type?.Value is { } type ? $"{name.Name}: {type}" : name.Name,
+            Text = name.Type?.Value is { } type ? Signature(name.Name, type) : name.Name,
             Name = new InfoViewName(0, name.Name.Length),
             Detail = Describe(name.Kind),
             Location = Locate(name.Declaration),
@@ -268,7 +274,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                 var signature = scope.Type?.Value is { } type
                     ? new InfoViewItem
                     {
-                        Text = $"{scope.Symbol?.Value.Name}: {type}",
+                        Text = Signature(scope.Symbol?.Value.Name ?? "", type),
                         Name = scope.Symbol?.Value is { } named ? new InfoViewName(0, named.Name.Length) : null,
                         Detail = scope.Declared ? "declared" : "inferred",
                         Location = Locate(scope.Span),
@@ -385,20 +391,26 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         NyxCompiler.Hover.Instantiation? instantiation,
         Func<Parser.Program.SourceSpan, Location?> locate,
         NyxCompiler.Symbol? symbol,
-        Func<NyxCompiler.Symbol, string?> docOf)
+        Func<NyxCompiler.Symbol, string?> docOf,
+        int? width)
     {
         var documentation = symbol is null ? null : docOf(symbol);
         InfoViewName? NameIn(string text) => symbol is null ? null : InfoViewName.Declared(text, symbol.Name);
+        // What hover writes on a name, laid out as a signature: the name and its type, after `def` for a def.
+        string Written(string text) =>
+            NameIn(text) is { } name && symbol is not null
+                ? text[..name.Start] + LaidOut(width - name.Start, symbol.Name, text[(name.Start + name.Length + ": ".Length)..])
+                : text;
         if (instantiation is null)
         {
-            return [new InfoViewItem { Text = hover.Type, Name = NameIn(hover.Type), Location = locate(hover.Span), Documentation = documentation }];
+            return [new InfoViewItem { Text = Written(hover.Type), Name = NameIn(hover.Type), Location = locate(hover.Span), Documentation = documentation }];
         }
 
         var definition = locate(instantiation.Definition);
         var items = new List<InfoViewItem>
         {
-            new() { Text = instantiation.Declared, Name = NameIn(instantiation.Declared), Detail = "declared", Location = definition, Documentation = documentation },
-            new() { Text = hover.Type, Name = NameIn(hover.Type), Detail = "at this use", Location = definition }
+            new() { Text = Written(instantiation.Declared), Name = NameIn(instantiation.Declared), Detail = "declared", Location = definition, Documentation = documentation },
+            new() { Text = Written(hover.Type), Name = NameIn(hover.Type), Detail = "at this use", Location = definition }
         };
         if (!instantiation.Bindings.IsEmpty)
         {
@@ -412,6 +424,15 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
 
         return items;
     }
+
+    /// <summary>
+    /// <c>name: type</c>, laid out to fit <paramref name="width"/> characters as the formatter lays out a def's
+    /// signature, if the client gave a width and the formatter can read it; else on one line.
+    /// </summary>
+    private static string LaidOut(int? width, string name, string type) =>
+        width is { } columns && Nanyx.Formatter.SignatureLayout.layOut(columns, name, type)?.Value is { } laidOut
+            ? laidOut
+            : $"{name}: {type}";
 
     /// <summary>
     /// The location of a span of the last typed text: in this document's text, if it has not been edited since, or in
