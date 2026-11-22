@@ -98,14 +98,22 @@ link, a share link the build writes (`shareFragment`). `src/lib/playground/tour.
 - It adds **Run**, which loads the compiler and the runner through `loadPlayground` on the first Run on the page, not
   with the page, saying "Loading the compiler…" until they are ready, and then runs the example with `compileAndRun`
   into an output under the bar, a `Terminal` like the playground's, which keeps each run under a divider. Run becomes
-  Stop while the program runs; a run that prints nothing says `(no output)`, since most of the tour's examples only
-  define things. The example runs as `playgroundCode` makes it, with `import nanyx/text` added, as the
+  Stop while the program runs; a run that prints nothing says `(no output)`, as one edited to only define things
+  does. The example runs as `playgroundCode` makes it, with `import nanyx/text` added, as the
   playground opens it. A swap to another page stops what is running.
 - **The code is editable where it is.** Clicking the block, or Enter on it, puts the playground's editor in its place
   (`editor.ts`, imported then, so a page that isn't edited doesn't download CodeMirror), without line numbers, with
   the caret where it was clicked; a click that ends a selection leaves the text to copy. Ctrl+Enter runs it. **Reset**
   shows once the code has changed, and puts the example back.
 - **"Open in the playground"** opens the code as it is: edited, it builds the share link of the edited code.
+- **An example that only declares things** gets only the link, with `data-no-output`: running it would print nothing,
+  and most of the tour's examples are like this. `runsCode`, in `playground-code.mjs`, decides it from the block's
+  source when the site is built: a block runs something when it has an `@entry` or a top-level item that isn't a
+  declaration, an item being a line that isn't indented and doesn't start with a closing bracket, a `|` or another
+  operator, which go on with the item before. Its declarations are `def`, `type`, `context`, `module`, `import`,
+  `export`, `private`, `protected`, `pattern`, and attributes other than `@entry`. A top-level `def` doesn't run when
+  the module starts (see [Compilation](./compilation)), so a block of definitions prints nothing, whatever their
+  bodies do. A top-level expression that prints nothing still gets Run.
 - **An example that reads input** (`readsInput`: one that calls `readLine` or `readToEnd`) gets only the link, with
   `data-reads-input`: a tour page isn't cross-origin isolated, since those headers would put every resource the site
   loads under `require-corp`, so a program on it can't read input.
@@ -113,7 +121,7 @@ link, a share link the build writes (`shareFragment`). `src/lib/playground/tour.
 The output's styles, and the editor's colours, are shared with the playground (`playground-shared.css`); the bar's are
 in `tour-run.css`. The page test checks that a tour page fetches nothing of the compiler until Run, that an example
 runs where it is, that an edited example runs as edited and Reset gives its code back, that "Open in the playground"
-opens the edited code, and that an example that reads input gets no Run.
+opens the edited code, and that an example that only declares things, or reads input, gets no Run.
 
 # Where the compiler runs
 

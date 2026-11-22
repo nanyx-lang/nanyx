@@ -55,3 +55,29 @@ export function playgroundCode(code) {
 export function readsInput(code) {
   return /\b(readLine|readToEnd)\b/.test(code);
 }
+
+/** The words that start a top-level declaration, which defines something and runs nothing. */
+const declarationWords = new Set(["def", "type", "context", "module", "import", "export", "private", "protected", "pattern"]);
+
+/**
+ * Whether a program does something when it runs: whether it has an `@entry`, or a top-level item that isn't a
+ * declaration (a definition, a type, a context, a module, an import or an attribute other than `@entry`). A top-level
+ * item starts on a line that isn't indented; a line that starts with a closing bracket, a `|` or another operator goes
+ * on with the item before it. A program that does nothing when it runs, one that only declares things, gets only its
+ * "Open in the playground" link on a tour page, as running it would print nothing.
+ *
+ * @param {string} code
+ */
+export function runsCode(code) {
+  for (const line of code.replace(/\r\n/g, "\n").split("\n")) {
+    if (line.trim() === "" || /^\s/.test(line) || line.startsWith("--") || line.startsWith("::") || line.startsWith("#!")) continue;
+    const attribute = /^@(\w+)/.exec(line);
+    if (attribute) {
+      if (attribute[1] === "entry") return true;
+      continue;
+    }
+    const word = /^[A-Za-z_]\w*/.exec(line);
+    if (word ? !declarationWords.has(word[0]) : !/^[)\]}|<>=+\-*/&.,:]/.test(line)) return true;
+  }
+  return false;
+}

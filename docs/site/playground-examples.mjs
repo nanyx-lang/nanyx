@@ -6,7 +6,7 @@
 
 import { deflateRawSync } from "node:zlib";
 import { visit } from "unist-util-visit";
-import { isRunnable, playgroundCode, readsInput } from "./playground-code.mjs";
+import { isRunnable, playgroundCode, readsInput, runsCode } from "./playground-code.mjs";
 
 /**
  * @typedef {{ id: string; title: string; code: string }} PlaygroundExample
@@ -103,7 +103,9 @@ export function defaultExample(/** @type {PlaygroundExampleGroup[]} */ groups) {
 
 /**
  * A remark plugin that puts a bar under each runnable example in the tour, `<div data-tour-run>`, which
- * `src/lib/playground/tour.ts` gives a Run button, unless the example reads input (`data-reads-input`), and an output.
+ * `src/lib/playground/tour.ts` gives a Run button and an output, and whose code it makes editable in place. An example
+ * that only declares things, so that running it would print nothing (`data-no-output`, `runsCode`), or that reads input
+ * (`data-reads-input`) gets neither.
  * It holds an "Open in the playground" link, which loads the page afresh (`data-astro-reload`), since a page the client
  * router swaps in isn't cross-origin isolated, and a program in it couldn't read input.
  */
@@ -121,10 +123,11 @@ export function remarkPlaygroundLinks() {
     // From the last, so that inserting a link doesn't move the blocks still to come.
     for (const [parent, index] of found.reverse()) {
       const code = parent.children[index].value + "\n";
+      const flag = !runsCode(code) ? " data-no-output" : readsInput(code) ? " data-reads-input" : "";
       parent.children.splice(index + 1, 0, {
         type: "html",
         value:
-          `<div class="tour-run" data-tour-run${readsInput(code) ? " data-reads-input" : ""}>` +
+          `<div class="tour-run" data-tour-run${flag}>` +
           `<a class="tour-run-open" href="${playgroundLink(code)}" data-astro-reload>Open in the playground</a></div>`,
       });
     }
