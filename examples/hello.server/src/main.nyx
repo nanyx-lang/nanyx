@@ -1,0 +1,15 @@
+module main
+
+--| Answers `/` with a welcome, `/hello/<name>` with a greeting, a `POST` to `/echo` with its body,
+  and anything else with a 404.
+@entry
+def main: Request -> Response = { request ->
+  def path = Request.path(request)
+
+  match (request.method, path)
+    | (#get, "/") -> Response.text(200, "Welcome!")
+    | (#post, "/echo") -> Response.text(200, request.body)
+    | (#get, { p -> string.startsWith(p, "/hello/") }) ->
+      Response.text(200, "Hello, {string.skip(path, 7)}!")
+    | _ -> Response.text(404, "Not Found")
+}

@@ -182,7 +182,8 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   whatever its host: it compiles the module once, listens on `http://localhost:<port>/` with .NET's `HttpListener`,
   and answers each request in a store and an instance of its own, on a thread of its own. An instance that traps or
   exits without responding is answered with a 500, the reason goes to standard error, and the server carries on.
-  `Request.path` takes the path from the whole URL the runtime passes.
+  `Request.path` takes the path from the whole URL the runtime passes. Its component root, `http.host.wasi`, which
+  `nanyx build` builds a `wasi:http/service` component from, is on [Components](./components#the-http-hosts-component-root).
 - **The playground host.** `packages/nanyx.playground` declares itself a host with `host = (root = "playground.host",
   prelude = "playground.prelude")`, and depends only on `nanyx.console.core`. Its `run` takes `[Clock, Console, Random] () -> a`
   and `use`s a `Console`, a `Random` and a `Clock` written on imports of its own, `nanyx:playground` `write`,

@@ -97,6 +97,8 @@ jobs:
           project="$PWD/Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj"
           nanyx() { dotnet run --project "$project" --no-build --configuration Release -- "$@"; }
           for manifest in ../examples/*/*.nyxp; do
+            # A package under the HTTP host serves rather than prints: the next step checks it.
+            if grep -q '"nanyx.http"' "$manifest"; then continue; fi
             package=$(dirname "$manifest")
             component="$RUNNER_TEMP/$(basename "$package").wasm"
             nanyx build "$package" --out "$component"
@@ -108,6 +110,31 @@ jobs:
               exit 1
             fi
           done
+
+      # A package under the HTTP host is built as a component of wasi:http/service, which wasmtime serve serves. Its
+      # instances are reused, so the requests in turn are answered by one instance, which runs the program afresh for each.
+      - name: Serve the example HTTP package as a component under Wasmtime
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          project="$PWD/Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj"
+          component="$RUNNER_TEMP/hello.server.wasm"
+          dotnet run --project "$project" --no-build --configuration Release -- build ../examples/hello.server --out "$component"
+          wasmtime serve -Scli --addr 127.0.0.1:8080 "$component" &
+          server=$!
+          trap 'kill $server' EXIT
+          for attempt in $(seq 1 50); do curl -s -o /dev/null http://127.0.0.1:8080/ && break; sleep 0.2; done
+          check() {
+            if [ "$1" != "$2" ]; then
+              echo "::error::hello.server answers '$1' rather than '$2' under wasmtime serve"
+              exit 1
+            fi
+          }
+          check "$(curl -s http://127.0.0.1:8080/)" "Welcome!"
+          check "$(curl -s http://127.0.0.1:8080/hello/ada)" "Hello, ada!"
+          check "$(curl -s http://127.0.0.1:8080/hello/grace)" "Hello, grace!"
+          check "$(curl -s --data-binary 'some text' http://127.0.0.1:8080/echo)" "some text"
+          check "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/nowhere)" "404"
+          check "$(curl -s -o /dev/null -w '%{http_code}' -X TRACE http://127.0.0.1:8080/)" "400"
 
   # The Wasm tests take the longest by far (most of them compile and run a program), so they get a
   # runner to themselves rather than share its cores with the other test projects.

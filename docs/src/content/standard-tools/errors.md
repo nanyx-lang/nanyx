@@ -2283,6 +2283,23 @@ export def run: [HostRuntime] ([Extra, Log] () -> a) -> () = { entry ->
 
 To fix it, provide the same contexts in both roots.
 
+# NYX0276: Foreign function of the compiler's own module
+
+A foreign function imports from `nanyx:component`, whose functions the compiler defines itself in a component's core
+module, for a host's component root to take the request it answers and give the response
+([Components](../deep-dives/components#the-handler)). Only a host's package, and the host libraries it depends on, may
+declare one. It is reported at the declaration.
+
+```nanyx
+import nanyx/host.runtime
+
+-- error NYX0276: 'argument' imports from "nanyx:component", which is the compiler's own, for a host's component root: ...
+@extern("nanyx:component", "argument")
+def argument: [HostRuntime] () -> I32
+```
+
+To fix it, import from another module: the one whose function you mean.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it
