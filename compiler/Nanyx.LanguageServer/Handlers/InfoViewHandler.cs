@@ -69,15 +69,40 @@ public sealed record InfoViewSection
 /// An item of a section: its text (<c>name: type</c>, a context, a message), what kind of thing it is or where it
 /// comes from (<c>parameter</c>, <c>use</c>, <c>error NYX0101</c>), where it is, for a link, and the doc comment of
 /// what it names, as Markdown with its links written out, as hover shows it: for an import, that of the module it
-/// brings in. <see cref="Children"/> are the items under it: the calls a provider in the flow serves.
+/// brings in. <see cref="Name"/> is the part of the text that links to <see cref="Location"/>: the name it starts with
+/// (a def's, a local's, a parameter's, a context's, a callee's); an item without one, such as a type or a message, has
+/// no link in its text. <see cref="Children"/> are the items under it: the calls a provider in the flow serves.
 /// </summary>
 public sealed record InfoViewItem
 {
     public required string Text { get; init; }
+    public InfoViewName? Name { get; init; }
     public string? Detail { get; init; }
     public Location? Location { get; init; }
     public string? Documentation { get; init; }
     public IReadOnlyList<InfoViewItem>? Children { get; init; }
+}
+
+/// <summary>The part of an item's text that names something: where it starts, and how long it is.</summary>
+public sealed record InfoViewName(int Start, int Length)
+{
+    /// <summary>The name <paramref name="name"/> where <paramref name="text"/> starts with it, if it does.</summary>
+    public static InfoViewName? AtStart(string text, string name) =>
+        name.Length > 0 && text.StartsWith(name, StringComparison.Ordinal)
+        && (text.Length == name.Length || !IsNamePart(text[name.Length]))
+            ? new InfoViewName(0, name.Length)
+            : null;
+
+    /// <summary>
+    /// The name <paramref name="name"/> in what hover writes on a name, <c>def name: type</c> or <c>name: type</c>,
+    /// if <paramref name="text"/> is that.
+    /// </summary>
+    public static InfoViewName? Declared(string text, string name) =>
+        text.StartsWith($"def {name}:", StringComparison.Ordinal) ? new InfoViewName(4, name.Length)
+        : text.StartsWith($"{name}:", StringComparison.Ordinal) ? new InfoViewName(0, name.Length)
+        : null;
+
+    private static bool IsNamePart(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '.';
 }
 
 /// <summary>
@@ -152,7 +177,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
               && NyxCompiler.Hover.moduleAt(typedDocument.FileName, typedCompile, typed)?.Value is { } module
                 ? [ModuleItem(module, typedDocument.DocReader(uri, typed, _standardLibrary), Locate)]
                 : info?.Expression?.Value is { } hover
-                    ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value is { } symbol ? DocOf(symbol) : null)
+                    ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value, DocOf)
                     : [];
         var line = request.Position.Line;
         var messages = document.PublishedDiagnostics(uri)
@@ -168,6 +193,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         InfoViewItem Name(InfoView.ScopedName name) => new()
         {
             Text = name.Type?.Value is { } type ? $"{name.Name}: {type}" : name.Name,
+            Name = new InfoViewName(0, name.Name.Length),
             Detail = Describe(name.Kind),
             Location = Locate(name.Declaration),
             Documentation = DocOf(name.Symbol)
@@ -176,6 +202,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         InfoViewItem Context(InfoView.ScopedContext context) => new()
         {
             Text = context.Context,
+            Name = InfoViewName.AtStart(context.Context, context.Name),
             Detail = Describe(context.Source),
             Location = Locate(context.Span),
             Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
@@ -185,6 +212,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             .Select(context => new InfoViewItem
             {
                 Text = context.Context,
+                Name = InfoViewName.AtStart(context.Context, context.Name),
                 Detail = Describe(context.Source),
                 Location = Locate(context.Span),
                 Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
@@ -241,6 +269,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                     ? new InfoViewItem
                     {
                         Text = $"{scope.Symbol?.Value.Name}: {type}",
+                        Name = scope.Symbol?.Value is { } named ? new InfoViewName(0, named.Name.Length) : null,
                         Detail = scope.Declared ? "declared" : "inferred",
                         Location = Locate(scope.Span),
                         Documentation = scope.Symbol?.Value is { } def ? DocOf(def) : null
@@ -306,9 +335,12 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         return new InfoViewItem
         {
             Text = entry.Context,
+            Name = InfoViewName.AtStart(entry.Context, entry.Name),
             Detail = $"{source} · {serves}",
             Location = locate(entry.Span),
-            Children = entry.Calls.Select(call => new InfoViewItem { Text = call.Callee, Detail = "call", Location = locate(call.Span) }).ToList()
+            Children = entry.Calls
+                .Select(call => new InfoViewItem { Text = call.Callee, Name = new InfoViewName(0, call.Callee.Length), Detail = "call", Location = locate(call.Span) })
+                .ToList()
         };
     }
 
@@ -334,6 +366,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         new()
         {
             Text = $"module {module.Name}",
+            Name = new InfoViewName("module ".Length, module.Name.Length),
             Detail = "module",
             Location = locate(module.Span),
             Documentation = docs.ForModule(module.File)?.Value
@@ -343,25 +376,29 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
     /// The items of the cursor section on an expression: the expression's type, as hover shows it, linking to the expression. On a
     /// use of a generic def, the def's declared signature (<c>declared</c>) comes first, then the type at this use
     /// (<c>at this use</c>), then what the use fills each of the signature's type variables with
-    /// (<c>a = string, b = int</c>), each linking to the def. The first carries <paramref name="documentation"/>, the
-    /// doc comment of the name there.
+    /// (<c>a = string, b = int</c>), each linking to the def. The first carries the doc comment of
+    /// <paramref name="symbol"/>, the name there, read by <paramref name="docOf"/>. Where an item writes the name
+    /// (<c>def name: type</c>, <c>name: type</c>), the name is its link; a bare type has none.
     /// </summary>
     private static IReadOnlyList<InfoViewItem> ExpressionItems(
         NyxCompiler.Hover.HoverInfo hover,
         NyxCompiler.Hover.Instantiation? instantiation,
         Func<Parser.Program.SourceSpan, Location?> locate,
-        string? documentation)
+        NyxCompiler.Symbol? symbol,
+        Func<NyxCompiler.Symbol, string?> docOf)
     {
+        var documentation = symbol is null ? null : docOf(symbol);
+        InfoViewName? NameIn(string text) => symbol is null ? null : InfoViewName.Declared(text, symbol.Name);
         if (instantiation is null)
         {
-            return [new InfoViewItem { Text = hover.Type, Location = locate(hover.Span), Documentation = documentation }];
+            return [new InfoViewItem { Text = hover.Type, Name = NameIn(hover.Type), Location = locate(hover.Span), Documentation = documentation }];
         }
 
         var definition = locate(instantiation.Definition);
         var items = new List<InfoViewItem>
         {
-            new() { Text = instantiation.Declared, Detail = "declared", Location = definition, Documentation = documentation },
-            new() { Text = hover.Type, Detail = "at this use", Location = definition }
+            new() { Text = instantiation.Declared, Name = NameIn(instantiation.Declared), Detail = "declared", Location = definition, Documentation = documentation },
+            new() { Text = hover.Type, Name = NameIn(hover.Type), Detail = "at this use", Location = definition }
         };
         if (!instantiation.Bindings.IsEmpty)
         {

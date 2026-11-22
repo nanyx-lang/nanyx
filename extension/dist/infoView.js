@@ -331,6 +331,10 @@ function page(webview) {
   code { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); color: var(--vscode-editor-foreground); white-space: pre-wrap; word-break: break-word; }
   a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
   a:hover { text-decoration: underline; }
+  /* A name in code that links somewhere looks like the rest of the code until it is hovered. */
+  code a.name, summary a { color: inherit; }
+  code a.name:hover, summary a:hover { color: var(--vscode-textLink-foreground); }
+  code a.name:hover span { color: inherit !important; }
   .detail { color: var(--vscode-descriptionForeground); font-size: 0.9em; white-space: nowrap; }
   .empty, .message { color: var(--vscode-descriptionForeground); }
   li.error code { color: var(--vscode-errorForeground); }
@@ -356,46 +360,80 @@ function page(webview) {
     return node;
   }
 
-  // Code, as the extension highlighted it, a span for each token in its colour and font style; or else as it is.
-  function highlightedCode(text, highlighted) {
+  // Code, as the extension highlighted it, a span for each token in its colour and font style; or else as it is. The
+  // part of it that \`name\` says (its start and length) goes in \`link\`, a link element, splitting a token at its ends.
+  function highlightedCode(text, highlighted, name, link) {
     const node = element("code");
-    if (!highlighted) {
-      node.textContent = text;
-      return node;
-    }
-    highlighted.forEach((line, index) => {
-      if (index > 0) node.appendChild(document.createTextNode("\\n"));
+    const lines = highlighted || text.split("\\n").map((line) => [{ text: line }]);
+    const nameStart = name ? name.start : -1;
+    const nameEnd = name ? name.start + name.length : -1;
+    let offset = 0;
+    const place = (child, at) => {
+      if (link && at >= nameStart && at < nameEnd) {
+        if (!link.parentNode) node.appendChild(link);
+        link.appendChild(child);
+      } else {
+        node.appendChild(child);
+      }
+    };
+    lines.forEach((line, index) => {
+      if (index > 0) {
+        place(document.createTextNode("\\n"), offset);
+        offset += 1;
+      }
       line.forEach((token) => {
-        const span = element("span", "", token.text);
-        if (token.color) span.style.color = token.color;
-        if (token.bold) span.style.fontWeight = "bold";
-        if (token.italic) span.style.fontStyle = "italic";
-        const lines = [token.underline && "underline", token.strikethrough && "line-through"].filter(Boolean);
-        if (lines.length > 0) span.style.textDecoration = lines.join(" ");
-        node.appendChild(span);
+        // The token's pieces before, inside and after the name.
+        const cuts = [0, nameStart - offset, nameEnd - offset, token.text.length]
+          .filter((cut) => cut >= 0 && cut <= token.text.length)
+          .sort((a, b) => a - b);
+        for (let i = 0; i + 1 < cuts.length; i++) {
+          if (cuts[i] === cuts[i + 1]) continue;
+          const span = element("span", "", token.text.slice(cuts[i], cuts[i + 1]));
+          if (token.color) span.style.color = token.color;
+          if (token.bold) span.style.fontWeight = "bold";
+          if (token.italic) span.style.fontStyle = "italic";
+          const decorations = [token.underline && "underline", token.strikethrough && "line-through"].filter(Boolean);
+          if (decorations.length > 0) span.style.textDecoration = decorations.join(" ");
+          place(span, offset + cuts[i]);
+        }
+        offset += token.text.length;
       });
     });
     return node;
   }
 
-  function item(entry, expanded) {
+  // A link to \`location\`, which goes there when clicked.
+  function linkTo(location, className) {
+    const link = element("a", className);
+    link.title = "Go to " + location.uri + ":" + (location.range.start.line + 1);
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      vscode.postMessage({ type: "open", location });
+    });
+    return link;
+  }
+
+  // An item: its code, of which only the name it starts with, if any, links to where it is, and its detail, which is
+  // the link of a message. Under it, its doc comment and the items under it.
+  function item(entry, expanded, isMessage) {
     const li = element("li", entry.detail && entry.detail.startsWith("error") ? "error" : "");
-    const code = highlightedCode(entry.text, entry.code);
-    if (entry.location) {
-      const link = element("a");
-      link.title = "Go to " + entry.location.uri + ":" + (entry.location.range.start.line + 1);
-      link.addEventListener("click", () => vscode.postMessage({ type: "open", location: entry.location }));
-      link.appendChild(code);
-      li.appendChild(link);
-    } else {
-      li.appendChild(code);
+    const nameLink = entry.location && entry.name && !isMessage ? linkTo(entry.location, "name") : undefined;
+    li.appendChild(highlightedCode(entry.text, entry.code, nameLink && entry.name, nameLink));
+    if (entry.detail) {
+      if (isMessage && entry.location) {
+        const link = linkTo(entry.location, "detail");
+        link.textContent = entry.detail;
+        li.appendChild(link);
+      } else {
+        li.appendChild(element("span", "detail", entry.detail));
+      }
     }
-    if (entry.detail) li.appendChild(element("span", "detail", entry.detail));
     const doc = documentation(entry, expanded);
     if (doc) li.appendChild(doc);
     if (entry.children && entry.children.length > 0) {
       const children = element("ul", "children");
-      entry.children.forEach((child) => children.appendChild(item(child, expanded)));
+      entry.children.forEach((child) => children.appendChild(item(child, expanded, false)));
       li.appendChild(children);
     }
     return li;
@@ -449,7 +487,7 @@ function page(webview) {
       part.appendChild(element("p", "empty", "Nothing here."));
     } else {
       const list = element("ul");
-      data.items.forEach((entry) => list.appendChild(item(entry, expanded && data.id === "expression")));
+      data.items.forEach((entry) => list.appendChild(item(entry, expanded && data.id === "expression", data.id === "messages")));
       part.appendChild(list);
     }
     return part;

@@ -252,7 +252,11 @@ The code it shows, in the headings and the items, is highlighted as the editor h
 grammar and the token colours of the current colour theme, with your `editor.tokenColorCustomizations` on top, in the
 editor's font. It follows the theme when you change it. Messages are prose and are not highlighted.
 
-Click an item to go to it: a name to where it is declared, a context to the `use` or signature that gives it. **Pin**
+Only the names in the code are links, and they look like the rest of the code until you hover over them. Click one to go
+to it: a definition's, local's or parameter's name to where it is declared, a definition's name in its signature to the
+definition, a context's name to the `use` or signature that gives it, a call in the context flow to the call. A type on
+its own, such as the type of the expression at the cursor, is not a link. Click a message's code, such as
+`error NYX0201`, to go to where it is reported. **Pin**
 keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
 again. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
 the file does not parse, the view shows what the compiler knew the last time it did. It needs a compiler
