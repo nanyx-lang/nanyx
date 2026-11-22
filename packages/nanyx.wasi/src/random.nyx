@@ -1,0 +1,12 @@
+--| `wasi:random`, as `Random` draws from it.
+export module random
+
+import nanyx/host.runtime
+
+@extern("wasi:random/random@0.3.0", "get-random-u64")
+def getRandomU64: [HostRuntime] () -> I64
+
+--| 64 bits from the host's random source.
+export def bits: [HostRuntime] () -> int = { _ ->
+  getRandomU64()
+}

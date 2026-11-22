@@ -1,0 +1,30 @@
+--| `wasi:clocks`, as `Clock` reads them: the time of day and the monotonic clock, in milliseconds.
+export module clocks
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  abi as (aligned8)
+)
+
+@extern("wasi:clocks/system-clock@0.3.0", "now")
+def systemClockNow: [HostRuntime] I32 -> ()
+
+@extern("wasi:clocks/monotonic-clock@0.3.0", "now")
+def monotonicClockNow: [HostRuntime] () -> I64
+
+--| The time of day in milliseconds since 1970: `wasi:clocks/system-clock`'s `now` writes it as
+  seconds, then nanoseconds at 8.
+export def timeOfDay: [HostRuntime] () -> int = { _ ->
+  def block = allocate(24)
+  def instant = aligned8(block)
+  systemClockNow(instant)
+  def milliseconds = readI64(instant) * 1000 + I32.toInt(readI32(instant + 8)) / 1_000_000
+  free(block)
+  milliseconds
+}
+
+--| Milliseconds on `wasi:clocks/monotonic-clock`, which never goes backwards.
+export def ticks: [HostRuntime] () -> int = { _ ->
+  monotonicClockNow() / 1_000_000
+}
