@@ -15,7 +15,7 @@ The prelude, `nanyx/prelude`, is imported into every module, so what it defines 
 - [sequences](prelude-sequences): lazy sequences, `seq(a)`, and ranges
 - [maps and sets](prelude-maps): functions on `map(k, v)` and `set(a)`
 - [arrays](prelude-arrays): `array.at`, which calling an array is
-- [results and options](prelude-results): `Result(a, e)`, `proc`, and the helpers for option-like unions
+- [results and options](prelude-results): `proc`, and the helpers for option-like unions
 
 # Discarding a value
 

@@ -164,7 +164,7 @@ module ComponentInterface =
 
     /// The WIT type of a value of type `ty`, or why it has none. `name` is the WIT name of the named type `ty` is what
     /// it stands for, which a record or a union must be: WIT names each. A named type applied to arguments is named with
-    /// them, `result-string-s64` for `Result(string, int)`.
+    /// them, `outcome-string-s64` for `Outcome(string, int)`.
     let rec private witTypeOf (name: string option) (ty: Ty) : Result<WitType, Problem> =
         let rec hasVariable (ty: Ty) =
             match ty with

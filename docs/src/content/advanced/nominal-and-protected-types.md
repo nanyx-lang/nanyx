@@ -52,11 +52,11 @@ module email
 
 export type Email = protected string
 
-export def Email.parse: string -> Result(Email, #invalidEmail) = { value ->
+export def Email.parse: string -> #some(Email) | #invalidEmail = { value ->
   if value \contains("@") then
     #some(Email(value))
   else
-    #error(#invalidEmail)
+    #invalidEmail
 }
 ```
 
@@ -72,7 +72,7 @@ error NYX0260: 'Point' is protected: only the module 'Points' makes values of it
 When exactly one of them takes the fields in order and returns the type itself, an editor offers to rewrite the record as
 a call to it.
 
-The smart constructor can return whatever is appropriate: a `Result` when there is something useful to say about why the input was rejected, an [option-like type](./option-like-types) when there isn't, or the nominal type itself when construction cannot fail.
+The smart constructor can return whatever is appropriate: an [option-like type](./option-like-types) whose other tags say why the input was rejected, `#invalidEmail` above, or the nominal type itself when construction cannot fail.
 
 ## Assignability
 
@@ -151,9 +151,9 @@ module ids
 
 export type UserId = private int
 
-export def UserId.new: int -> Result(UserId, #invalidUserId) = { value ->
+export def UserId.new: int -> #some(UserId) | #invalidUserId = { value ->
   if value <= 0 then
-    #error(#invalidUserId)
+    #invalidUserId
   else
     #some(UserId(value))
 }
@@ -170,6 +170,20 @@ a < b              -- error: `<` is not defined for UserId
 a \math.sqrt       -- error: UserId is not assignable to float
 a * 2              -- error: UserId is not assignable to int
 ```
+
+A private record's fields are its representation too, so outside its module they are not read, destructured, matched
+or spread. Given `type Secret = private (key: string)`, each of these is error NYX0212 there, and allowed in the
+module:
+
+```nanyx
+s.key              -- error: the private type 'Secret' has no field 'key' outside the module that defines it
+def (key = k) = s  -- error: the private type 'Secret' can only be taken apart in the module that defines it
+(...s)             -- error: the same
+```
+
+The one thing that shows a private value's representation anywhere is `dbg`, which prints it as it is, because it is a
+debugging aid and is left out of a release build. `toString` and string interpolation stay closed: a private type is
+written only by the `toString` its module attaches.
 
 ## Accessors
 
