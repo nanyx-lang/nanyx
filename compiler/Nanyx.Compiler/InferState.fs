@@ -368,8 +368,12 @@ type InferState =
             /// `MemoryCells`).
             Cells: Map<SymbolId, Ty>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
-            /// starts, and the scopes the signatures around the call write (see `ScopedCalls`).
-            SupplyingCalls: Map<NodeId, (string * Ty) list * Ty list>;
+            /// starts, the scopes the signatures around the call write, and the names bound around the call whose types
+            /// are not yet known in full (see `ScopedCalls`).
+            SupplyingCalls: Map<NodeId, (string * Ty) list * Ty list * (Identifier * TypeScheme) list>;
+            /// The scoped contexts a call has been reported to let something that requires them escape (see
+            /// `ScopedCalls.leave`): what is then found to require them where nothing supplies them is that escape.
+            EscapedContexts: Set<Identifier>;
             /// The scopes of the calls whose arguments are being checked, innermost first (see `ScopedCalls`).
             OpenScopes: Ty list;
             /// Where each `:=` is written: a type mismatch there is the assignment's (see `MemoryCells.mismatchCode`).
@@ -485,6 +489,7 @@ let emptyState =
             DerivedCalls = Map.empty;
             Cells = Map.empty;
             SupplyingCalls = Map.empty;
+            EscapedContexts = Set.empty;
             OpenScopes = [];
             CellAssignments = Set.empty;
             LambdaContexts = [];

@@ -26,12 +26,29 @@ let isMemoryCall (env: TypeEnv) (state: InferState) (name: Identifier) =
 /// being a block's `Memory` named with `context m`, which may be an outer block's. That `use` starts no scope of its
 /// own. It is what tells a `mut` declaration that `Memory` is there, and which scope its cell belongs to.
 let withBlockScope (scope: Ty) (env: TypeEnv) : TypeEnv =
-    { env with BlockScope = Some scope }
+    { env with BlockScope = Some scope; BlockDepth = None }
 
 /// The environment the arguments of a call to `name` are checked in, where the call supplies `Memory` of `scope`: one
-/// where cells can be made, of that scope, for the prelude's `memory`.
+/// where cells can be made, of that scope, for the prelude's `memory`, whose block is the lambda inside the call.
 let aroundCall (env: TypeEnv) (state: InferState) (name: Identifier) (scope: Ty) : TypeEnv =
-    if isMemoryCall env state name then withBlockScope scope env else env
+    if isMemoryCall env state name then { withBlockScope scope env with BlockDepth = Some (state.LambdaContexts.Length + 1) }
+    else env
+
+/// `state` with each `Memory` the `memory` block `env` is in has used so far in its own lambda, but of a scope not yet
+/// known, made the block's own. The block's type makes them so once its lambda is inferred (see
+/// `FunctionContexts.agree`); a call inside it that starts a scope of its own needs it sooner, so that a value made
+/// before the call, as `def outer = MRef.new([])` is, is not taken to be of the call's scope.
+let settleBlock (env: TypeEnv) (state: InferState) : InferState =
+    match env.BlockScope, env.BlockDepth, state.LambdaContexts with
+    | Some scope, Some depth, used :: _ when depth = state.LambdaContexts.Length ->
+        let pending =
+            used
+            |> List.choose (function
+                | FunctionContexts.ScopedContext(name, own) when name = context -> Some own
+                | _ -> None)
+            |> List.filter (resolveSoFar state >> FunctionContexts.isCallScope >> not)
+        pending |> List.fold (fun current own -> addConstraint own scope current) state
+    | _ -> state
 
 /// The scope of the `memory` block `env` is in, whose cell a `mut` there makes: none outside a block.
 let blockScope (env: TypeEnv) : Ty option =
