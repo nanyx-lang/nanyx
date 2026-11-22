@@ -42,7 +42,7 @@ a number in turn, so `__describe` goes on until every type numbered has one. The
 types its `Type` values name and of the types of their parts, and of no others.
 
 A type is numbered as seen from the file of the `type X` that names it (`CoreIrTypeIds`), and a description's parts
-are seen from there too: a nominal type seen from outside its home module (`Compiler.sourceFileName` of its home is
+are seen from there too: a nominal type seen from outside its home module (`ModuleOrigins.sourceFileName` of its home is
 not the file) is described as `#nominal`. So a function specialised at a nominal type can't pick its arm at compile
 time: it keeps every arm that could match, its structure's and `#nominal`'s, and matches on `__describe`. A
 description's `name` and `parameters` come from the alias or nominal type, its `doc` and its fields' `attributes`
