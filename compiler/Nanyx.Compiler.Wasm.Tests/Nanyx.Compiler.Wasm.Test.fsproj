@@ -32,6 +32,7 @@
     <Compile Include="Features\ControlFlow\ControlFlowFixtureTests.fs" />
     <Compile Include="Features\ControlFlow\DoBlockTests.fs" />
     <Compile Include="Features\Commands\CheckCommandTests.fs" />
+    <Compile Include="Features\Commands\ParseCommandTests.fs" />
     <Compile Include="Features\Commands\DiagnosticExcerptTests.fs" />
     <Compile Include="Features\Commands\ExitCodeTests.fs" />
     <Compile Include="Features\Commands\RunBoxTests.fs" />
