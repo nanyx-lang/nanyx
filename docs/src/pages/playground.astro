@@ -6,29 +6,16 @@ import Header from "@/components/Header.astro";
 import SearchDialog from "@/components/SearchDialog";
 import { getAllPages } from "@/lib/nav";
 import { defaultExample, tourExampleGroups } from "../../site/playground-examples.mjs";
-import nyxGrammar from "../../../extension/syntaxes/nanyx.tmLanguage.json";
 import "@/styles/playground.css";
+import "@/styles/playground-shared.css";
 
 const groups = tourExampleGroups(
   import.meta.glob<string>("../content/tour/*.md", { query: "?raw", import: "default", eager: true }),
 );
 
-/** The words of the grammar's keyword pattern named `scope`, a `\b(a|b|c)\b`. */
-function keywordsOf(scope: string): string[] {
-  const pattern = nyxGrammar.repository.keywords.patterns.find((p: { name: string }) => p.name === scope);
-  const match = pattern && /^\\b\(([\w|]+)\)\\b$/.exec(pattern.match);
-  if (!match) throw new Error(`The Nanyx grammar has no keyword pattern ${scope} the playground can read.`);
-  return match[1].split("|");
-}
-
 const data = {
   groups,
   defaultExample: defaultExample(groups),
-  keywords: {
-    declaration: keywordsOf("keyword.declaration.nanyx"),
-    control: [...keywordsOf("keyword.control.nanyx"), ...keywordsOf("keyword.control.workflow.nanyx")],
-    logical: keywordsOf("keyword.operator.logical.nanyx"),
-  },
 };
 
 const searchItems = (await getAllPages()).map(({ page, section }) => ({
@@ -84,7 +71,7 @@ const searchItems = (await getAllPages()).map(({ page, section }) => ({
             <span>Output</span>
             <button type="button" class="pg-link-button" data-clear>Clear</button>
           </div>
-          <div class="pg-output" data-output aria-live="polite">
+          <div class="pg-output pg-terminal" data-output aria-live="polite">
             <div data-log></div>
             <label class="pg-input-line" data-input-line hidden>
               <span aria-hidden="true">›</span>

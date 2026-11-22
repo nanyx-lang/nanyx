@@ -1,0 +1,77 @@
+/* The bar under a runnable tour example, its output and its editor (src/lib/playground/tour.ts). The output's colours
+   are the playground's (playground-shared.css). */
+
+.tour-run {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: -0.75rem;
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+}
+
+.tour-run-button,
+.tour-run-reset {
+  height: 1.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  color: hsl(var(--foreground));
+}
+
+.tour-run-button {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 500;
+}
+
+.tour-run-button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.tour-run-reset:hover {
+  background: hsl(var(--accent));
+}
+
+.tour-run-open {
+  margin-left: auto;
+  color: hsl(var(--muted-foreground));
+}
+
+.prose a.tour-run-open:not(.heading-anchor) {
+  color: hsl(var(--muted-foreground));
+  text-decoration: none;
+}
+
+.prose a.tour-run-open:not(.heading-anchor):hover {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+
+.tour-run-output {
+  max-height: 20rem;
+  overflow: auto;
+  margin: -0.5rem 0 1rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid hsl(var(--code-border));
+  border-radius: 0.5rem;
+  background: hsl(var(--card));
+}
+
+.tour-run-output[hidden] {
+  display: none;
+}
+
+.prose pre[title="Click to edit"] {
+  cursor: text;
+}
+
+.tour-run-editor {
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+  border: 1px solid hsl(var(--primary) / 0.5);
+  border-radius: 0.5rem;
+  background: hsl(var(--code-bg));
+}

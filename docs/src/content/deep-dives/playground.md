@@ -13,10 +13,13 @@ built. What is still planned is on [Playground](../work-in-progress/playground) 
 
 `docs/src/pages/playground.astro` is the page, at `/playground`, and its scripts are in `docs/src/lib/playground`:
 
-- `main.ts` loads the compiler, runs programs and wires the toolbar;
+- `main.ts` wires the page: the toolbar, the editor, the output and the divider;
+- `compiler.ts` loads the compiler and the runner, once per page, and runs a program into an output (`compileAndRun`);
 - `editor.ts` is the editor, CodeMirror 6;
 - `terminal.ts` is the output pane;
 - `share.ts` reads and writes share links.
+
+The tour's examples run with the same modules, from `tour.ts` (see [The tour's examples](#the-tours-examples)).
 
 The page has the site's header (`Header.astro`, without the docs' sidebar), and under it a toolbar and the editor and
 the output, side by side on a wide window, the editor with 60% of the width, and stacked, the editor above, below 900
@@ -24,10 +27,10 @@ pixels (`docs/src/styles/playground.css`). The divider between them can be dragg
 it is is kept in the browser's storage. The editor and the output follow the site's light or dark theme, which follows
 the system's.
 
-**Loading.** As the page opens, `main.ts` checks that the browser validates a module that uses `return_call`, which the
+**Loading.** As the page opens, `main.ts` calls `loadPlayground` (`compiler.ts`), which checks that the browser validates a module that uses `return_call`, which the
 backend emits for [tail calls](./tail-calls), and says the browser can't run Nanyx programs when it doesn't. It reads
-`/playground/compiler/release.json`, which the docs build writes beside the compiler (below), for the release it names
-at the right of the toolbar, linked to the release's notes on GitHub; when there is no such file, the site has no
+`/playground/compiler/release.json`, which the docs build writes beside the compiler (below), for the release the page
+names at the right of the toolbar, linked to the release's notes on GitHub; when there is no such file, the site has no
 compiler, and the page says so. Then it imports `compiler.js` and the playground host's runner,
 `packages/nanyx.playground/runner/playground.js`, from beside it, loads the compiler, and compiles the default example
 at once: the first compile is most of the wait (see [the measurement](#the-measurement)), so the first Run is quick.
@@ -44,10 +47,10 @@ into the site's. A page that isn't isolated says that its programs can't read in
 
 **The editor.** CodeMirror 6, with a highlighter of its own (`StreamLanguage`) for comments, strings, numbers, tags,
 attributes, directives and type names, whose keywords are the TextMate grammar's
-(`extension/syntaxes/nanyx.tmLanguage.json`): the page reads its `keywords` patterns at build time. Its colours are the
+(`extension/syntaxes/nanyx.tmLanguage.json`): `editor.ts` imports the grammar and reads its `keywords` patterns. Its colours are the
 docs' code blocks' (`site/shiki-themes.mjs`). Ctrl+Enter, or ⌘+Enter, runs the program.
 
-**Running.** Run compiles the editor's code with `BrowserCompiler.Compile` (through `compiler.js`); when it gives a
+**Running.** Run compiles the editor's code (`compileAndRun`) with `BrowserCompiler.Compile` (through `compiler.js`); when it gives a
 module, the runner's `run` runs it with a `Random` seeded from `crypto.getRandomValues`, and Stop, which takes Run's
 place while it runs, calls the runner's `stop`. `terminal.ts` shows, in one stream, what the program writes to
 standard output and, in the error colour, to standard error, each `dbg` dimmed after its place, and the end as
@@ -73,15 +76,44 @@ page in the tour's order, and named by the heading it is under. `docs/site/playg
 is runnable when it is fenced ` ```nanyx ` with nothing after `nanyx` and has no `-- error` comment, which are the
 blocks [the tests run](./compilation#tour-examples). As those tests do, it adds `import nanyx/text` to each that doesn't
 import it or turn a linter on, after its module declaration or else after its directives. Choosing an example asks
-before it replaces code that was changed since it was opened. The same module's `remarkPlaygroundLinks` puts an "Open
-in the playground" link, a share link the build writes (`shareFragment`), under each of those blocks in the tour.
+before it replaces code that was changed since it was opened. What a runnable block is (`isRunnable`) and the code it
+runs as (`playgroundCode`) are in `docs/site/playground-code.mjs`, which the tour's pages read in the browser too.
 
 **The test.** `docs/site/playground-test.mjs` serves the built site with the playground's headers and drives the page
 in headless Chromium with Playwright: it waits for the compiler, runs hello world, types two lines of input and
 Ctrl+D, checks that runs keep the output before them, that a compile error links its code, that Share's link opens the
 code without running it, that a bad link opens hello world, that a reload keeps the code, that a tour link opens its
-example in an isolated page, and runs every example in the menu, checking that none fails. The Compiler workflow's
+example in an isolated page, and runs every example in the menu, checking that none fails; and the tour's examples
+(below). The Compiler workflow's
 `Browser test` job builds the site with the compiler it published and runs it.
+
+# The tour's examples
+
+Each runnable example in the [language tour](../tour/variables) is a small playground where it is
+([#2248](https://github.com/nanyx-lang/nanyx/issues/2248)). `remarkPlaygroundLinks`, in
+`docs/site/playground-examples.mjs`, puts a bar under each block, `<div data-tour-run>`, with an "Open in the playground"
+link, a share link the build writes (`shareFragment`). `src/lib/playground/tour.ts`, which every docs page loads
+(`DocsLayout.astro`), wires each bar on `astro:page-load`, since the tour's pages are swapped in by the client router:
+
+- It adds **Run**, which loads the compiler and the runner through `loadPlayground` on the first Run on the page, not
+  with the page, saying "Loading the compiler…" until they are ready, and then runs the example with `compileAndRun`
+  into an output under the bar, a `Terminal` like the playground's, which keeps each run under a divider. Run becomes
+  Stop while the program runs; a run that prints nothing says `(no output)`, since most of the tour's examples only
+  define things. The example runs as `playgroundCode` makes it, with `import nanyx/text` added, as the
+  playground opens it. A swap to another page stops what is running.
+- **The code is editable where it is.** Clicking the block, or Enter on it, puts the playground's editor in its place
+  (`editor.ts`, imported then, so a page that isn't edited doesn't download CodeMirror), without line numbers, with
+  the caret where it was clicked; a click that ends a selection leaves the text to copy. Ctrl+Enter runs it. **Reset**
+  shows once the code has changed, and puts the example back.
+- **"Open in the playground"** opens the code as it is: edited, it builds the share link of the edited code.
+- **An example that reads input** (`readsInput`: one that calls `readLine` or `readToEnd`) gets only the link, with
+  `data-reads-input`: a tour page isn't cross-origin isolated, since those headers would put every resource the site
+  loads under `require-corp`, so a program on it can't read input.
+
+The output's styles, and the editor's colours, are shared with the playground (`playground-shared.css`); the bar's are
+in `tour-run.css`. The page test checks that a tour page fetches nothing of the compiler until Run, that an example
+runs where it is, that an edited example runs as edited and Reset gives its code back, that "Open in the playground"
+opens the edited code, and that an example that reads input gets no Run.
 
 # Where the compiler runs
 
