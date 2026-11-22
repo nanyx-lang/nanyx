@@ -198,6 +198,11 @@ and links to it: a lambda by its parameters and line, `{ message -> … } (line 
 so does every scope after the third, since the side bar is narrow. A `memory` block or a `use` is part of the scope it
 is in.
 
+Types and contexts are named as the code at the cursor would name them, so a signature reads as you would write it:
+inside `module Points`, which declares `Point`, it is `Point`, not `Points.Point`; elsewhere in the file it is `Point`
+after `import Points` and `q.Point` after `import Points as q`. Where a type can be named more than one way, the view
+uses the name with the fewest dots.
+
 - **At the cursor**:
   - **Expression**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it
     shows the function's declared signature first (its annotation, or the generic type it was inferred to have), then

@@ -27,18 +27,9 @@ let typesWithContexts (typeDefs: Map<string, TypeDefInfo>) (names: TypeNotation)
 let typeWithContexts (typeDefs: Map<string, TypeDefInfo>) (names: TypeNotation) (ty: Ty) (contexts: Ty list) =
     fst (typesWithContexts typeDefs names ty contexts [])
 
-/// `ty` with each type and context it names given the name a module writes it by, from the module's `typeDefs` and
-/// `symbols`: a type a module imports under an alias is named through the alias, `s.Circle`, though the compiler
-/// knows it as `Circle`; any other keeps its name. What an annotation an editor inserts writes, with `Source`.
-let writable (typeDefs: Map<string, TypeDefInfo>) (symbols: Map<SymbolId, Symbol>) (ty: Ty) : Ty =
-    let aliases =
-        symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = ImportedModule) |> Seq.map (fun symbol -> symbol.Name) |> Set.ofSeq
-    let written (isIt: TypeDefInfo -> bool) (name: string) =
-        typeDefs
-        |> Map.tryFindKey (fun key info ->
-            let dot = key.LastIndexOf '.'
-            dot > 0 && aliases.Contains(key.Substring(0, dot)) && isIt info)
-        |> Option.defaultValue name
+/// `ty` with the name of each type and context it names replaced by `written`, given a test for the definitions that
+/// define the same type and the name it has.
+let private renamed (written: (TypeDefInfo -> bool) -> string -> string) (ty: Ty) : Ty =
     let rec rename (ty: Ty) =
         match ty with
         | TyVar _
@@ -58,3 +49,49 @@ let writable (typeDefs: Map<string, TypeDefInfo>) (symbols: Map<SymbolId, Symbol
         | TyScope scope -> TyScope(rename scope)
         | TyContexts contexts -> TyContexts(List.map rename contexts)
     rename ty
+
+/// `ty` with each type and context it names given the name a module writes it by, from the module's `typeDefs` and
+/// `symbols`: a type a module imports under an alias is named through the alias, `s.Circle`, though the compiler
+/// knows it as `Circle`; any other keeps its name. What an annotation an editor inserts writes, with `Source`.
+let writable (typeDefs: Map<string, TypeDefInfo>) (symbols: Map<SymbolId, Symbol>) (ty: Ty) : Ty =
+    let aliases =
+        symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = ImportedModule) |> Seq.map (fun symbol -> symbol.Name) |> Set.ofSeq
+    let written (isIt: TypeDefInfo -> bool) (name: string) =
+        typeDefs
+        |> Map.tryFindKey (fun key info ->
+            let dot = key.LastIndexOf '.'
+            dot > 0 && aliases.Contains(key.Substring(0, dot)) && isIt info)
+        |> Option.defaultValue name
+    renamed written ty
+
+/// The paths of the module blocks around `offset` in `syntax`, innermost first: `Points.Inner`, then `Points`.
+let private moduleBlocksAt (syntax: Parser.Program.Module) (offset: int) : string list =
+    let rec around (prefix: string) (items: Parser.Program.TopLevelItem list) =
+        items
+        |> List.tryPick (fun item ->
+            match item.Kind with
+            | Parser.Program.ModuleBlock(name, inner) when item.Span.Start <= offset && offset < item.Span.End ->
+                let path = if prefix = "" then name else $"{prefix}.{name}"
+                Some (around path inner @ [ path ])
+            | _ -> None)
+        |> Option.defaultValue []
+    around "" syntax
+
+/// `ty` with each type and context it names written by the simplest name the code at `offset` in `syntax` can write it
+/// by, from the module's `typeDefs`: one an import brings in (`Point` after `import Points`, `s.Circle` through an
+/// alias), or, inside a module block, the name the block's own code writes (`Point` inside `module Points`, which
+/// declares it), rather than the name the compiler knows it by, `Points.Point`: the one with the fewest dots, then the
+/// shortest, then the first by name. What the info view writes.
+let relativeAt (typeDefs: Map<string, TypeDefInfo>) (syntax: Parser.Program.Module) (offset: int) (ty: Ty) : Ty =
+    let blocks = moduleBlocksAt syntax offset
+    let written (isIt: TypeDefInfo -> bool) (name: string) =
+        let names = name :: (typeDefs |> Map.filter (fun _ info -> isIt info) |> Map.keys |> List.ofSeq)
+        let withinBlocks =
+            names
+            |> List.collect (fun candidate ->
+                blocks
+                |> List.choose (fun block ->
+                    if candidate.StartsWith(block + ".") then Some (candidate.Substring(block.Length + 1)) else None))
+        names @ withinBlocks
+        |> List.minBy (fun candidate -> candidate |> Seq.filter ((=) '.') |> Seq.length, candidate.Length, candidate)
+    renamed written ty

@@ -113,9 +113,10 @@ let private entriesAt (typed: TypedModule) (syntax: Module) (offset: int) =
         name, entries, calls)
 
 
-/// The flow of contexts through the def `entriesAt` found, with made-up type variables named by `names`.
-let private flowOf (names: TypeNotation) (name: string, entries, _) : Flow =
-    let written = Unifier.tysToDisplayStrings names (entries |> List.map (fun ((context, _, _), _, _) -> context))
+/// The flow of contexts through the def `entriesAt` found, with made-up type variables named by `names`, and the
+/// contexts named by `rename` (see `Signatures.relativeAt`).
+let private flowOf (names: TypeNotation) (rename: Ty -> Ty) (name: string, entries, _) : Flow =
+    let written = Unifier.tysToDisplayStrings names (entries |> List.map (fun ((context, _, _), _, _) -> rename context))
     { Def = name
       Entries =
         List.map2
@@ -143,13 +144,14 @@ let private highlightsOf (syntax: Module) (offset: int) (_, entries, calls) : Hi
         | None -> { Providers = []; Calls = [] }
 
 /// The flow of contexts through the innermost def around `offset` in the compiled root module, with made-up type
-/// variables named by `names`, and what the editor highlights at `offset`, from one search of the def. No flow and
+/// variables named by `names` and contexts named as the code at `offset` can name them (see `Signatures.relativeAt`),
+/// and what the editor highlights at `offset`, from one search of the def. No flow and
 /// nothing highlighted outside any def, or when the module did not type-check.
 let at (names: TypeNotation) (result: CompileResult) (offset: int) : View =
     let none = { Flow = None; Highlights = { Providers = []; Calls = [] } }
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         match entriesAt typed syntax offset with
-        | Some found -> { Flow = Some (flowOf names found); Highlights = highlightsOf syntax offset found }
+        | Some found -> { Flow = Some (flowOf names (Signatures.relativeAt typed.TypeDefs syntax offset) found); Highlights = highlightsOf syntax offset found }
         | None -> none
     | _ -> none
