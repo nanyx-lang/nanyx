@@ -204,9 +204,10 @@ after `import Points` and `q.Point` after `import Points as q`. Where a type can
 uses the name with the fewest dots.
 
 A signature too long for the view is laid out as the formatter lays out a definition's, at the view's width: the name
-on its own line, then its type on the next, after `: `. It is laid out again when you resize the view. A type still
-too long for its line wraps; the formatter does not yet break a long union or parameter list
-([#2270](https://github.com/nanyx-lang/nanyx/issues/2270)).
+on its own line, then its type on the next, after `: `, broken where it is still too long: its parameters one per
+line, its result's union one case per line, and its contexts on a line of their own
+([Definitions](formatter#definitions)). It is laid out again when you resize the view. A line still too long for the
+view, such as a long parameter's, wraps.
 
 - **At the cursor**:
   - **Expression**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it

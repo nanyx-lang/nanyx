@@ -58,7 +58,10 @@ def lineIn: StringSlice -> #some(string, StringSlice) | #malformed = { text ->
 --| The headers written in `text`, `count` of them, after `headers` (the latest first), in order,
   with what follows them.
 def headersIn
-  : StringSlice, int, list((string, string)) -> #some(list((string, string)), StringSlice) | #malformed
+  : StringSlice,
+    int,
+    list((string, string))
+    -> #some(list((string, string)), StringSlice) | #malformed
   = { text, count, headers ->
     if count <= 0 then #some(headers \reverse, text) else
       match lineIn(text)

@@ -94,6 +94,41 @@ def priceLine
   }
 ```
 
+A type that doesn't fit on its `: ` line breaks too, each line after the first starting at the column after the `: `.
+The parameters go one per line, each but the last followed by `,`, then `->` and the result on a line of their own. A
+result that is a union still too long for its line has one case per line, each after a `|`, as a long union type's
+cases are:
+
+```nanyx
+def lookup
+  : string,
+    Index
+    -> | #some(Entry)
+       | #notFound
+       | #expired(Entry, Timestamp)
+       | #locked(user: string, until: Timestamp)
+       | #error(string)
+  = { key, index ->
+    find(index, key)
+  }
+```
+
+A list of contexts goes on a line of its own, with the rest of the type on the next, and breaks one context per line,
+under the first, if it still doesn't fit:
+
+```nanyx
+def serve
+  : [Console, FileSystem, Http, Clock, Random, Environment, Log, Metrics]
+    Request, ServerOptions -> Response
+  = { request, options ->
+    respond(request)
+  }
+```
+
+Each part breaks only if it doesn't fit once the parts around it have broken, so above, the parameters stay on one
+line. A type inside a parameter, such as a function's, is never broken: the parameter keeps a line of its own. The
+[info view](vs-code-extension#info-view) lays a signature out this way at its own width.
+
 A def with a type annotation whose value is a lambda puts the lambda's body on the line after the `->`, unless the
 body is only a name or a literal, or a statement couldn't hold it without brackets, as with a range:
 
