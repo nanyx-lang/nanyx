@@ -12,15 +12,15 @@ open Nanyx.Compiler.Tests.TestSupport
 let private withInts =
     normalized """def name: #some(int) | #empty = #some(1)
 def called = mapSome(name, { n -> n + 1 })
-def r: Result(int, string) = #error("x")
-def mapped = r \ Result.map({ n -> 1.5 })
+def r: #some(int) | #failed(string) = #failed("x")
+def mapped = r \ mapSome({ n -> 1.5 })
 def listed = name \ someToList"""
 
 let private withStrings =
     normalized """def name: #some(string) | #empty = #some("a")
 def called = mapSome(name, { s -> true })
-def r: Result(string, int) = #error(1)
-def mapped = r \ Result.map({ s -> [s] })
+def r: #some(string) | #failed(int) = #failed(1)
+def mapped = r \ mapSome({ s -> [s] })
 def listed = name \ someToList"""
 
 let private withAnError =
@@ -45,10 +45,10 @@ let ``Compilations in a row that use the same generic prelude functions each get
     let _, intTypes, _ = ints
     let _, stringTypes, _ = strings
     Assert.Equal<(string * string) list>(
-        [ "called", "#some(int) | #empty"; "listed", "list(int)"; "mapped", "Result(float, string)"; "name", "#some(int) | #empty"; "r", "Result(int, string)" ],
+        [ "called", "#some(int) | #empty"; "listed", "list(int)"; "mapped", "#some(float) | #failed(string)"; "name", "#some(int) | #empty"; "r", "#some(int) | #failed(string)" ],
         intTypes |> List.filter (fun (name, _) -> List.contains name [ "called"; "listed"; "mapped"; "name"; "r" ]))
     Assert.Equal<(string * string) list>(
-        [ "called", "#some(bool) | #empty"; "listed", "list(string)"; "mapped", "Result(list(string), int)"; "name", "#some(string) | #empty"; "r", "Result(string, int)" ],
+        [ "called", "#some(bool) | #empty"; "listed", "list(string)"; "mapped", "#some(list(string)) | #failed(int)"; "name", "#some(string) | #empty"; "r", "#some(string) | #failed(int)" ],
         stringTypes |> List.filter (fun (name, _) -> List.contains name [ "called"; "listed"; "mapped"; "name"; "r" ]))
     let errors, _, _ = error
     Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], errors |> List.map (fun (code, _, _) -> code))

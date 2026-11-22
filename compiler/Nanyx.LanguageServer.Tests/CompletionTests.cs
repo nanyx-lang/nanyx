@@ -186,7 +186,7 @@ public sealed class CompletionTests : LanguageServerTestBase
             import nanyx/math
             def s = "abc"
             def r = s
-            def m = Result.map
+            def m = mapSome
 
             """.ReplaceLineEndings("\n");
 

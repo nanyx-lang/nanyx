@@ -183,8 +183,6 @@ def shout = t.string.uppercase("hi")"""
     // A dotted export is offered a segment at a time.
     Assert.Contains(("string", Completion.Prefix, None), members [ "t" ])
     Assert.Contains("uppercase", members [ "t"; "string" ] |> List.map (fun (name, _, _) -> name))
-    // The prelude's definitions attached to a type.
-    Assert.Contains("map", members [ "Result" ] |> List.map (fun (name, _, _) -> name))
 
 [<Fact>]
 let ``A module block offers only what it exports`` () =
@@ -262,7 +260,7 @@ def r = s
     Assert.Empty(reserved (Completion.namesInScope result at |> List.map _.Name))
     Assert.Empty(reserved (Completion.typedNamesInScope Unicode result at |> List.map _.Symbol.Name))
     Assert.Empty(reserved (Completion.pipeTargetsAt Unicode result at [ "s" ] |> List.map _.Name))
-    for path in [ [ "s" ]; [ "string" ]; [ "String" ]; [ "int" ]; [ "float" ]; [ "list" ]; [ "Result" ] ] do
+    for path in [ [ "s" ]; [ "string" ]; [ "String" ]; [ "int" ]; [ "float" ]; [ "list" ] ] do
         Assert.Empty(reserved (Completion.membersAt Unicode result at path |> List.map _.Name))
 
 [<Fact>]

@@ -218,20 +218,20 @@ The block above never calls `return`, so its value is the context's `zero`. A bu
 A block that uses no keyword is still the call of its builder: `proc { #some(1) }` is `proc({ #some(1) })`, and its value is what the block's lambda returns.
 # Error and option chaining
 
-A workflow can provide a `try` keyword to short-circuit on errors. This is useful for `Result` or option-like chaining.
+A workflow can provide a `try` keyword to short-circuit on errors. This is useful for chaining [option-like](option-like-types) steps.
 
 ```nanyx
-def getCustomer: int -> Result(Customer, #customerNotFound) = ...
-def getLastOrder: Customer -> Result(Order, #orderNotFound) = ...
+def getCustomer: int -> #some(Customer) | #customerNotFound = ...
+def getLastOrder: Customer -> #some(Order) | #orderNotFound = ...
 
-def lastOrderTotal: () -> Result(Money, #customerNotFound | #orderNotFound) = proc {
+def lastOrderTotal: () -> #some(Money) | #customerNotFound | #orderNotFound = proc {
   def customer = try getCustomer(5)
   def order = try getLastOrder(customer)
   return order.total
 }
 ```
 
-`proc` is the standard library's result workflow: the function `proc` runs the block under the context `Proc`. Its `try` calls the continuation with the payload of `#some`, and returns any `#error` value directly without calling the continuation, which is what makes the rest of the block skip. See [Option chaining](../cookbook/option-chaining) for a worked example of writing such a builder.
+`proc` is the standard library's result workflow: the function `proc` runs the block under the context `Proc`. Its `try` calls the continuation with the payload of `#some`, and returns any other tag, a failure, directly without calling the continuation, which is what makes the rest of the block skip. See [Option chaining](../cookbook/option-chaining) for a worked example of writing such a builder.
 
 # Early return and defer
 
