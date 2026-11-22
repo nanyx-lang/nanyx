@@ -384,7 +384,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
         let contextGroups = contexts |> List.map (fun (ty, _, _, _, _) -> [ ty ])
         let callGroups = callContexts |> List.map (fun (ty, _, _, _) -> [ ty ])
         let groups = localGroups @ lambdaGroups @ contextGroups @ callGroups
-        let written = splitAs groups (Unifier.tysToDisplayStrings names (List.concat groups |> List.map rename))
+        let written = splitAs groups (Unifier.tysToDisplayStringsIn typed.TypeDefs names (List.concat groups |> List.map rename))
         let localsWritten, written = List.splitAt locals.Length written
         let lambdasWritten, written = List.splitAt lambdas.Length written
         let contextsWritten, callWritten = List.splitAt contexts.Length written
