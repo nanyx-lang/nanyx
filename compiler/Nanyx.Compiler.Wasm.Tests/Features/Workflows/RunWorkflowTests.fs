@@ -291,23 +291,23 @@ show(run(7))
     runSource source |> assertRan "found\nnot found\nnil\n"
 
 [<Fact>]
-let ``Run - the prelude's proc, Result and Option helpers need no import`` () =
+let ``Run - the prelude's proc and option helpers need no import`` () =
     let source =
-        normalized """def half: int -> Result(int, string) = { n -> if n % 2 == 0 then #some(n / 2) else #error("odd") }
+        normalized """def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
 def quarter = { n -> proc {
   def h = try half(n)
   return try half(h)
 } }
 
-def show: [Console] Result(int, string) -> () = {
+def show: [Console] (#some(int) | #odd) -> () = {
   | #some(n) -> println("some {n}")
-  | #error(e) -> println("error {e}")
+  | #odd -> println("odd")
 }
 
 show(quarter(8))
-show(quarter(6) \ Result.mapError({ e -> "ERR: " ++ e }))
-show(half(4) \ map({ n -> n * 10 }))
-def fallback = Result.defaultValue(half(3), 0)
+show(quarter(6))
+show(half(4) \ mapSome({ n -> n * 10 }))
+def fallback = someOr(half(3), 0)
 println("{fallback}")
 def name: #some(string) | #empty = #some("abc")
 def shouted = name \ mapSome({ s -> s ++ "!" })
@@ -318,7 +318,7 @@ def seven = someOr(#none, 7)
 def three = mapSomeOr(name, 0, { _s -> 3 })
 println("{seven} {three}")
 """
-    runSource source |> assertRan "some 2\nerror ERR: odd\nsome 20\n0\nabc!\n7 3\n"
+    runSource source |> assertRan "some 2\nodd\nsome 20\n0\nabc!\n7 3\n"
 
 [<Fact>]
 let ``Run - a proc block that ends without return runs for what it does and is #some()`` () =

@@ -1,6 +1,6 @@
 ---
 title: "Error handling"
-description: "Working with Result and Option types"
+description: "Failures as tags, and option-like types"
 order: 16
 ---
 
@@ -14,35 +14,37 @@ def half: int -> int = { n ->
 }
 ```
 
-Where a missing value can only be a bug, `orCrash` unwraps it: it gives the value in a `#some`, and crashes with its message on anything else, so it works on options and results alike. It reads well at the end of a pipeline:
+Where a missing value can only be a bug, `orCrash` unwraps it: it gives the value in a `#some`, and crashes with its message on anything else, so it works on any option-like value, whatever its failures. It reads well at the end of a pipeline:
 
 ```nanyx
 def n = "42" \int.fromString \orCrash("not a number")
 println(n + 1)
 ```
 
-# Result types
+# Failures are tags
 
-In Nanyx, functions that can fail return a result type using tag unions:
+A function that can fail gives `#some` with its value when it succeeds, and a tag of its own for each way it can fail:
 
 ```nanyx fragment
 -- A function that might fail
-def getCustomer: CustomerId -> #some(Customer) | #error(#notFound | #databaseError)
+def getCustomer: CustomerId -> #some(Customer) | #notFound | #databaseError
   = { id -> ... }
 ```
 
-Handle the result with pattern matching:
+Handle each case with pattern matching:
 
 ```nanyx fragment
 match getCustomer(someId)
   | #some(customer) -> println("Found: {customer.name}")
-  | #error(#notFound) -> println("Customer not found")
-  | #error(#databaseError) -> println("Database error")
+  | #notFound -> println("Customer not found")
+  | #databaseError -> println("Database error")
 ```
+
+A failure that has something to say carries it as its payload, under a tag named for what went wrong: `#invalidPattern(RegexError)`, `#unreadable(string)`. A type alias can name a group of failures that several functions share, as the [`nanyx.fs`](../stdlib/filesystem) package's `FsError` does, and a signature writes it beside `#some`: `#some(string) | FsError`. A function that succeeds with nothing to give back has `#ok` in place of `#some`: `#ok | FsError`.
 
 # The `try` keyword
 
-`proc` is the standard library's result [workflow](../advanced/workflows). Inside a `proc` block, `try` short-circuits on errors and `return` wraps the final value in `#some`:
+`proc` is the standard library's result [workflow](../advanced/workflows). Inside a `proc` block, `try` continues with the value of a `#some` and short-circuits on any other tag, and `return` wraps the final value in `#some`:
 
 ```nanyx fragment
 def result = proc {
@@ -50,12 +52,12 @@ def result = proc {
   def latestOrder = try getLatestOrder(customer)
   return latestOrder.total
 }
--- `result` has type `#some(int) | #error(#notFound | #databaseError | #noOrders)`
+-- `result` has type `#some(int) | #notFound | #databaseError | #noOrders`
 ```
 
-If any step returns an error, the function immediately returns that error.
+If any step fails, the block immediately gives back that failure.
 
-The steps' errors are joined: one that fails with `#error(#notFound | #databaseError)` and one that fails with `#error(#noOrders)` make the block fail with all three, and a match on the result must handle each. `Result.bind` chains steps the same way. Errors that aren't tags, such as a `string` and an `int`, must be the same type: bring them to one with `Result.mapError`.
+The steps' failures are joined: one that fails with `#notFound | #databaseError` and one that fails with `#noOrders` make the block fail with all three, and a match on the result must handle each. [`bindSome`](../stdlib/prelude-results#bindsome) chains steps the same way. Two failures with the same tag must carry the same type, unless both payloads are tags, which are joined too.
 
 A `proc` block that is only run for what it does doesn't need a `return`. A block that ends without one is `#some()`, the `proc` workflow's `zero`:
 
@@ -128,25 +130,25 @@ def parseNumber = { s ->
 To handle several cases, write the arms on the lines after `except`, as a `match` has them. An arm may bind the parts of what it matches, and may list alternatives:
 
 ```nanyx fragment
-def load: string -> #some(Config) | #error(#notFound | #unreadable(string) | #denied) = ...
+def load: string -> #some(Config) | #notFound | #unreadable(string) | #denied = ...
 
 def config = load(path) except
-  | #error(#notFound) -> #some(Config.default)
-  | #error(#unreadable(reason)) -> #some(Config.default with note = reason)
--- `config` is `#some(Config) | #error(#denied)`
+  | #notFound -> #some(Config.default)
+  | #unreadable(reason) -> #some(Config.default with note = reason)
+-- `config` is `#some(Config) | #denied`
 ```
 
-A pattern can reach inside a tag. Handling `#error(#notFound)` takes `#notFound` out of the error's payload and leaves the other errors. When every error is handled, `#error` leaves the union altogether.
+A pattern can reach inside a tag. When a failure's payload is a union of tags, as in `#invalid(#tooShort | #tooLong)`, handling `#invalid(#tooShort)` takes `#tooShort` out of the payload and leaves `#invalid(#tooLong)`. When every tag of the payload is handled, the failure leaves the union altogether.
 
 Because the narrowed type often has a single case left, `except` combines naturally with a destructuring binding, which requires its pattern to be total:
 
 ```nanyx fragment
 def g = {
-  def f: () -> #some(int) | #error(#notFound) = ...
+  def f: () -> #some(int) | #notFound = ...
 
   -- After `except`, the only remaining case is `#some(int)`, so the
   -- pattern `#some(result)` is total and `result` has type `int`
-  def #some(result) = f() except #error(#notFound) -> #some(0)
+  def #some(result) = f() except #notFound -> #some(0)
 
   result
 }
@@ -155,12 +157,12 @@ def g = {
 In a builder block such as `proc { ... }`, the replacement can end the block instead, with `return` (see [Workflows](../advanced/workflows#keywords-in-branches-loops-and-lambdas)):
 
 ```nanyx
-def find: int -> #some(int) | #error(#notFound) = { id ->
-  if id > 0 then #some(id * 10) else #error(#notFound)
+def find: int -> #some(int) | #notFound = { id ->
+  if id > 0 then #some(id * 10) else #notFound
 }
 
 def lookup = { id -> proc {
-    def #some(result) = find(id) except #error(#notFound) -> return 0
+    def #some(result) = find(id) except #notFound -> return 0
     return result + 1
   }
 }
@@ -185,7 +187,7 @@ A pattern that the value can never match is a type error, as it is in a `match`.
 
 # Chaining with pipelines
 
-The helpers in the prelude's `Option` and `Result` modules take the value first, so a chain of steps reads as a pipeline:
+The prelude's option helpers take the value first, so a chain of steps reads as a pipeline:
 
 ```nanyx
 def doubled: string -> int = { input ->
@@ -196,7 +198,7 @@ def doubled: string -> int = { input ->
 }
 ```
 
-`int.fromString` gives `#some(int) | #invalidInt`, so the `Option` helpers apply: they work on any union with a `#some` case. The `Result` helpers are for `#some(a) | #error(e)`. See [results and options](../stdlib/prelude-results).
+`int.fromString` gives `#some(int) | #invalidInt`, so the option helpers apply: they work on any union with a `#some` case, and keep its other tags as they are. See [results and options](../stdlib/prelude-results).
 
 # Deferred errors
 

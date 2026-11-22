@@ -129,7 +129,7 @@ Tag unions (also called sum types or discriminated unions) represent values that
 
 ```nanyx
 -- Simple tag union
-type Result(a, e) = #some(a) | #error(e)
+type Lookup(a) = #some(a) | #notFound
 
 -- Multiple variants
 type Shape = #circle(float) | #rectangle(float, float) | #triangle(float, float)
@@ -209,7 +209,7 @@ Type variables are automatically created when used in a function definition.
 
 The first letter of a name in a type says what kind of name it is:
 
-- **A capital letter starts a type's name**, such as `Shape`, `UserId` or `Result(a, e)`. Every type and context you define must start with one: `type point` is an error ([NYX0116](../standard-tools/errors#nyx0116)).
+- **A capital letter starts a type's name**, such as `Shape`, `UserId` or `Lookup(a)`. Every type and context you define must start with one: `type point` is an error ([NYX0116](../standard-tools/errors#nyx0116)).
 - **A single lowercase letter**, such as `a`, `b` or `c`, is a type variable. The parameters of a type or a [context](../advanced/contexts) are type variables, so each of them is a single lowercase letter too: `type Pair(a, b)`, `context Store(c, i)`. A longer name, `type Box(item)`, is an error where it is written.
 - **Longer lowercase names** are reserved for [associated types](../advanced/contexts#associated-types), so one written in a type that no context in scope has as an associated type is an error too.
 

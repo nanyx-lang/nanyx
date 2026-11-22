@@ -10,7 +10,7 @@ open Nanyx.Compiler.Tests.TestSupport
 [<Fact>]
 let ``The prelude is in scope with no imports`` () =
     let source =
-        normalized """def f: int -> Result(int, string) = { n -> if n > 5 then #error("big") else #some(n) }
+        normalized """def f: int -> #some(int) | #tooBig = { n -> if n > 5 then #tooBig else #some(n) }
 def run = { x -> proc {
   def a = try f(x)
   return a + 1
@@ -18,41 +18,49 @@ def run = { x -> proc {
 def name: #some(string) | #empty = #some("abc")
 def called = mapSome(name, { s -> 1 })
 def piped = name \ mapSome({ s -> 1 })
-def mapped = f(1) \ Result.mapError({ e -> 0 })"""
+def fallback = f(1) \ someOr(0)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf = typeIn result.Typed.Value
     Assert.Equal("#some(int) | #empty", typeOf "called")
     Assert.Equal("#some(int) | #empty", typeOf "piped")
-    Assert.Equal("Result(int, int)", typeOf "mapped")
+    Assert.Equal("int", typeOf "fallback")
 
 [<Fact>]
-let ``A pipe finds the prelude's Result helpers by the Result alias`` () =
+let ``A pipe finds the functions attached to an alias by the alias's name`` () =
     let source =
-        normalized """def r: Result(int, string) = #error("x")
-def mapped = r \ mapError({ e -> 0 })
-def fallback = r \ defaultValue(3)"""
+        normalized """type Outcome(a, e) = #some(a) | #failed(e)
+def Outcome.mapFailure: Outcome(a, e), (e -> f) -> Outcome(a, f) = {
+  | #some(value), _ -> #some(value)
+  | #failed(why), f -> #failed(f(why))
+}
+def Outcome.valueOr: Outcome(a, e), a -> a = {
+  | #some(value), _ -> value
+  | #failed(_), fallback -> fallback
+}
+def r: Outcome(int, string) = #failed("x")
+def mapped = r \ mapFailure({ e -> 0 })
+def fallback = r \ valueOr(3)"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
-    Assert.Equal("Result(int, int)", Unifier.tyToString result.Typed.Value.Types.["mapped"])
+    Assert.Equal("Outcome(int, int)", Unifier.tyToString result.Typed.Value.Types.["mapped"])
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["fallback"])
 
 [<Fact>]
-let ``The prelude's toList, values, mapOr and orElse keep the option's and result's types`` () =
+let ``The prelude's someToList, somes, mapSomeOr and orElseSome keep the option's types`` () =
     let source =
         normalized """def name: #some(string) | #notFound = #some("abc")
-def r: Result(int, string) = #error("x")
 def listed = name \ someToList
 def present = somes([name, name])
-def described = Result.mapOr(r, "none", { n -> "n" })
-def recovered = Result.orElse(r, { e -> #error(1.5) })"""
+def described = mapSomeOr(name, "none", { n -> "n" })
+def recovered = orElseSome(name, { #some("default") })"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let typeOf = typeIn result.Typed.Value
     Assert.Equal("list(string)", typeOf "listed")
     Assert.Equal("list(string)", typeOf "present")
     Assert.Equal("string", typeOf "described")
-    Assert.Equal("Result(int, float)", typeOf "recovered")
+    Assert.Equal("#some(string)", typeOf "recovered")
 
 [<Fact>]
 let ``Int.fromString is in the prelude`` () =
