@@ -112,3 +112,28 @@ let ``So it is in inlay hints and in error messages`` () =
     let diagnostic = Assert.Single result.Diagnostics
     Assert.Contains("Memory₁", diagnostic.Message)
     Assert.Contains("Memory₂", diagnostic.Message)
+
+// A scoped context may have members. A `use` of its instance supplies it as one without members is supplied, and a
+// lambda passed to the call that supplies it requires it without its members being in scope there.
+
+let private withMember = """scoped context Tx = protected (n: int)
+
+def transaction: [c] ([Tx, c] () -> a) -> a = { block -> use Tx(n = 7) in block() }
+def get: [Tx] () -> int = { -> n }
+"""
+
+[<Fact>]
+let ``A use of a scoped context with members supplies it`` () =
+    let typed = compileClean ((withMember + "def one = transaction { 1 }\n").ReplaceLineEndings "\n")
+    Assert.Equal("int", Unifier.tyToString typed.Types.["one"])
+
+[<Fact>]
+let ``A lambda passed to the call that supplies a scoped context with members may require it`` () =
+    let typed = compileClean ((withMember + "def eight = transaction { get() + 1 }\n").ReplaceLineEndings "\n")
+    Assert.Equal("int", Unifier.tyToString typed.Types.["eight"])
+
+[<Fact>]
+let ``A scoped context with members is still unsupplied outside the call`` () =
+    let code, text = singleError ((withMember + "def wrong: int = get()\n").ReplaceLineEndings "\n")
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("get", text)
