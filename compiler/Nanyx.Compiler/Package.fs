@@ -574,6 +574,11 @@ module Package =
     /// `buildReporting`, telling nobody.
     let build (package: Package) : PackageBuild = buildReporting CompileListener.none package
 
+    /// `package` as a component build builds it, if its host has a component root: with that root's `run` in place of
+    /// its host's (see `Host.AsComponent`).
+    let asComponent (package: Package) : Package option =
+        package.Host |> Option.bind _.AsComponent |> Option.map (fun host -> { package with Host = Some host })
+
     /// The compile of the package's `@entry` file, if it has one.
     let entryResult (build: PackageBuild) : CompileResult option =
         build.Package.Entry |> Option.bind (fun entry -> build.Results |> List.tryFind (fst >> (=) entry) |> Option.map snd)

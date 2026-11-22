@@ -3,7 +3,11 @@
     name = "nanyx.console"
     version = "0.32.0"
     sources = ["src/**/*.nyx"]
-    host = (root = "console.host", prelude = "console.prelude")
+    host = (
+      root = "console.host"
+      prelude = "console.prelude"
+      component = (root = "console.host.wasi", world = "wasi:cli/command@0.3.0")
+    )
   )
   dependencies = [
     (package = "nanyx.console.core", version = "0.32.0")

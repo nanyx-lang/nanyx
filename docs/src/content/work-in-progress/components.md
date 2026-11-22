@@ -6,8 +6,9 @@ order: 4
 
 This page is the design for [#2182](https://github.com/nanyx-lang/nanyx/issues/2182): emitting WebAssembly components
 that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or any runtime that implements WASI 0.3, and
-not only under `nanyx`'s own runtime. Stage 0 is built, and described on [Components](../deep-dives/components) in
-Deep dives; nothing a user can see is yet. The page sets out what was found, the
+not only under `nanyx`'s own runtime. Stage 0 and the first half of stage 1 are built, and described on
+[Components](../deep-dives/components) in Deep dives: a console program that needs no `FileSystem` or `Http` builds as
+a component. The page sets out what was found, the
 [design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
 whose stages are filed as issues.
 
@@ -205,8 +206,11 @@ host = (
 )
 ```
 
-- **The component root is written against `wasi:*`.** The two roots must provide the same contexts, which the compiler
-  checks. Programs and libraries see only contexts, so they never know which root they ran on.
+- **The component root is written against `wasi:*`.** It provides no context the core root doesn't, which the compiler
+  checks (`NYX0275`), and may provide fewer while it is built: the console host's lacks `FileSystem` until stage 1b and
+  `Http` until stage 2. A program that needs one it lacks is an error naming it when it is built as a component.
+  Once a component root provides everything its core root does, the check becomes that they provide the same contexts.
+  Programs and libraries see only contexts, so they never know which root they ran on.
 - **`nanyx build` writes a component** when the host has a component root, and `--core` writes a core module.
   `nanyx run` always runs the core root.
 - **CI tests the component roots** by building the examples as components and running them under `wasmtime run` (46 or
@@ -331,7 +335,8 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 | Stage | What it builds | What users can do then |
 |---|---|---|
 | 0. The componentizer ([#2236](https://github.com/nanyx-lang/nanyx/issues/2236)), done | A small Rust crate on wit-component, built to `wasm32-wasip1` by Cargo when the runtime builds, and embedded in `Nanyx.Compiler.Runtime`. A `cabi_realloc` export. The entry exported under a world's name. The runtime's own imports on `wasi:cli` | Nothing visible yet |
-| 1. Console components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)) | `nanyx.console`'s component root on `wasi:cli`, `wasi:filesystem`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the examples under `wasmtime run` | Build a command-line program once, and run it with `wasmtime run` or any WASI 0.3 runtime |
+| 1a. Console components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `nanyx.console`'s component root on `wasi:cli`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the example packages under `wasmtime run` | Build a command-line program that needs no `FileSystem` or `Http` once, and run it with `wasmtime run` or any WASI 0.3 runtime |
+| 1b. Files in components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)) | `FileSystem` on `wasi:filesystem`, in the console host's component root | The same, for programs that read and write files |
 | 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)) | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
 | 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)) | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
 | 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |

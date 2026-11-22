@@ -1,6 +1,6 @@
 /// The core module of a WASI 0.3 component (`WasmOptions.Component`, see `ComponentAbi`), and the componentizer that
-/// wraps it (`Nanyx.Runtime.Componentizer`), with WASI 0.3.0's own WIT: `wit/` here is `wasi:cli@0.3.0` as WASI's
-/// v0.3.0 tag has it, with the packages it uses under `wit/deps`.
+/// wraps it (`Nanyx.Runtime.Componentizer`), with WASI 0.3.0's own WIT: the console host's `wit/`, which is
+/// `wasi:cli@0.3.0` as WASI's v0.3.0 tag has it, with the packages it uses under `wit/deps`.
 module TranspilerWasmTests.Features.Components.Component
 
 open System
@@ -13,7 +13,7 @@ open TranspilerWasmTestHelpers
 let private componentOptions = { WasmOptions.Default with Component = true }
 
 /// `wasi:cli`'s package, whose world `command` the tests wrap modules as.
-let private wit = Path.Combine(AppContext.BaseDirectory, "Features", "Components", "wit")
+let private wit = Path.Combine(NyxCompiler.ShippedPackages.directoryOf NyxCompiler.Hosts.consolePackage, "wit")
 
 /// The modules a module's text imports from.
 let private importedModules (wat: string) =

@@ -220,7 +220,9 @@ let ``The checked library has the shipped packages' modules, with paths beside t
           "nanyx.console.core/src/env.nyx"
           // A module split across files is checked, and kept, under the first of them by name.
           "nanyx.console/src/console.host.files.nyx"
+          "nanyx.console/src/console.host.wasi.nyx"
           "nanyx.console/src/console.prelude.nyx"
+          "nanyx.console/src/console.stdin.nyx"
           "nanyx.fs/src/dir.nyx"
           "nanyx.fs/src/file.nyx"
           "nanyx.fs/src/filesystem.nyx"

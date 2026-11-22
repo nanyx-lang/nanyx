@@ -1,0 +1,314 @@
+--| The console host's component root: what `nanyx build` builds a WASI 0.3 component from, of the
+  world `wasi:cli/command@0.3.0`, which `wasmtime run`, or any runtime that implements WASI 0.3,
+  runs.
+
+  Its [`run`] runs the program's entry point as `console.host`'s does, in the contexts it can write
+  on WASI 0.3 alone: [`Console`] on `wasi:cli`'s stdin, stdout and stderr, [`Env`] on
+  `wasi:cli/environment` and `exit`, [`Clock`] on `wasi:clocks` and [`Random`] on `wasi:random`,
+  and `Async`. A program that needs another, such as `FileSystem` or `Http`, is an error when it is
+  built as a component, and runs under `nanyx run`, or is built with `--core`.
+
+  It calls WASI 0.3 through `@extern`s named as wit-component expects, and passes their values in
+  the canonical ABI by hand, with `nanyx/host.memory`. A call that waits is lowered async and waited
+  on at once, so the program blocks in it, as it does under `nanyx run`.
+export module console.host.wasi
+
+import (
+  nanyx/async as (Async)
+  nanyx/clock as (Clock)
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx/random as (Random)
+  nanyx/text
+  console.stdin as (bufferOffset, bufferSize, readLineAfter, readToEndAfter, stateAt)
+  nanyx.console.core/console as (Console, IoError)
+  nanyx.console.core/env as (Env)
+)
+
+-- The host keeps its state in the block the module sets aside for it (see `hostState`): at 4 and 8,
+-- where what is left of the standard input it has read starts and ends in its buffer (see
+-- `console.stdin`); at 16, the readable end of standard input's stream, once it is open, and at 20
+-- its future; from 24, what a call that gives its result in memory writes there; at 40, the event a
+-- wait had, its code at 44; and from 64 to the end of the block, the buffer standard input is read
+-- into.
+
+-- Waiting ----------------------------------------------------------------------------------------
+
+@extern("$root", "[waitable-set-new]")
+def waitableSetNew: [HostRuntime] () -> I32
+
+@extern("$root", "[waitable-join]")
+def waitableJoin: [HostRuntime] I32, I32 -> ()
+
+@extern("$root", "[waitable-set-wait]")
+def waitableSetWait: [HostRuntime] I32, I32 -> I32
+
+@extern("$root", "[waitable-set-drop]")
+def waitableSetDrop: [HostRuntime] I32 -> ()
+
+--| What an async built-in gives when it hasn't finished yet: the canonical ABI's BLOCKED.
+def blocked: I32 = -1
+
+--| Waits for `handle` in a waitable set of its own, and gives the code its event came with: for a
+  stream's read or write, how many bytes it took, times 16, plus 0 when the stream goes on.
+def waitFor: [HostRuntime] I32 -> I32 = { handle ->
+  def set = waitableSetNew()
+  waitableJoin(handle, set)
+  ignore(waitableSetWait(set, stateAt(40)))
+  waitableJoin(handle, 0)
+  waitableSetDrop(set)
+  readI32(stateAt(44))
+}
+
+--| What a stream's read or write that may block gave, once it hasn't: `status` itself, or what
+  waiting for `handle` gave.
+def settled: [HostRuntime] I32, I32 -> I32 = { handle, status ->
+  if status == blocked then waitFor(handle) else status
+}
+
+--| The readable end of a new stream, of the two that the `I64` `ends` holds, and its writable end.
+def readableEnd: int -> I32 = { ends ->
+  I32.fromInt(ends % 4294967296)
+}
+
+def writableEnd: int -> I32 = { ends ->
+  I32.fromInt(ends / 4294967296)
+}
+
+-- Console ----------------------------------------------------------------------------------------
+
+@extern("wasi:cli/stdout@0.3.0", "[stream-new-0]write-via-stream")
+def stdoutStreamNew: [HostRuntime] () -> I64
+
+@extern("wasi:cli/stdout@0.3.0", "write-via-stream")
+def stdoutWriteViaStream: [HostRuntime] I32 -> I32
+
+@extern("wasi:cli/stdout@0.3.0", "[async-lower][stream-write-0]write-via-stream")
+def stdoutStreamWrite: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("wasi:cli/stdout@0.3.0", "[stream-drop-writable-0]write-via-stream")
+def stdoutStreamDropWritable: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/stdout@0.3.0", "[async-lower][future-read-1]write-via-stream")
+def stdoutFutureRead: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi:cli/stdout@0.3.0", "[future-drop-readable-1]write-via-stream")
+def stdoutFutureDropReadable: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/stderr@0.3.0", "[stream-new-0]write-via-stream")
+def stderrStreamNew: [HostRuntime] () -> I64
+
+@extern("wasi:cli/stderr@0.3.0", "write-via-stream")
+def stderrWriteViaStream: [HostRuntime] I32 -> I32
+
+@extern("wasi:cli/stderr@0.3.0", "[async-lower][stream-write-0]write-via-stream")
+def stderrStreamWrite: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("wasi:cli/stderr@0.3.0", "[stream-drop-writable-0]write-via-stream")
+def stderrStreamDropWritable: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/stderr@0.3.0", "[async-lower][future-read-1]write-via-stream")
+def stderrFutureRead: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi:cli/stderr@0.3.0", "[future-drop-readable-1]write-via-stream")
+def stderrFutureDropReadable: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/stdin@0.3.0", "read-via-stream")
+def stdinReadViaStream: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/stdin@0.3.0", "[async-lower][stream-read-0]read-via-stream")
+def stdinStreamRead: [HostRuntime] I32, I32, I32 -> I32
+
+--| The imports that write to one of the standard output streams, stdout or stderr: each a
+  `stream<u8>` given to that stream's `write-via-stream`.
+type Output = (
+  streamNew: [HostRuntime] () -> I64
+  writeViaStream: [HostRuntime] I32 -> I32
+  streamWrite: [HostRuntime] (I32, I32, I32) -> I32
+  streamDropWritable: [HostRuntime] I32 -> ()
+  futureRead: [HostRuntime] (I32, I32) -> I32
+  futureDropReadable: [HostRuntime] I32 -> ()
+)
+
+def stdout: Output = (
+  streamNew = stdoutStreamNew
+  writeViaStream = stdoutWriteViaStream
+  streamWrite = stdoutStreamWrite
+  streamDropWritable = stdoutStreamDropWritable
+  futureRead = stdoutFutureRead
+  futureDropReadable = stdoutFutureDropReadable
+)
+
+def stderr: Output = (
+  streamNew = stderrStreamNew
+  writeViaStream = stderrWriteViaStream
+  streamWrite = stderrStreamWrite
+  streamDropWritable = stderrStreamDropWritable
+  futureRead = stderrFutureRead
+  futureDropReadable = stderrFutureDropReadable
+)
+
+--| Writes the `length` bytes at `address` to the writable end `writer`, until the host has taken them
+  all, or has dropped its end.
+def writeAll: [HostRuntime] Output, I32, I32, I32 -> () = { output, writer, address, length ->
+  if length <= 0 then () else
+    def status = settled(writer, output.streamWrite(writer, address, length))
+    def taken = status / 16
+
+    if status % 16 != 0
+      then ()
+      else writeAll(output, writer, I32.wrappingAdd(address, taken), length - taken)
+}
+
+--| Writes `text` to `output`, through a stream of its own, and waits until the host has written it,
+  so that what goes to stdout and stderr comes out in the order it was written.
+def writeTo: [HostRuntime] Output, string -> () = { output, text ->
+  def ends = output.streamNew()
+  def written = output.writeViaStream(readableEnd(ends))
+  def writer = writableEnd(ends)
+  writeAll(output, writer, addressOf(text), byteLength(text))
+  keepAlive(text)
+  output.streamDropWritable(writer)
+  ignore(settled(written, output.futureRead(written, stateAt(24))))
+  output.futureDropReadable(written)
+}
+
+--| Standard input's stream, opened the first time it is read: `wasi:cli/stdin`'s `read-via-stream`
+  gives it, and the future that says how reading it ended, which the host never reads.
+def stdinStream: [HostRuntime] () -> I32 = { _ ->
+  if readI32(stateAt(16)) == 0 then stdinReadViaStream(stateAt(16)) else ()
+  readI32(stateAt(16))
+}
+
+--| How many bytes of standard input are left in the buffer, read into it when none are; 0 when the
+  input has ended, or cannot be read.
+def fill: [HostRuntime] () -> I32 = { _ ->
+  def start = readI32(stateAt(4))
+  def end = readI32(stateAt(8))
+
+  if start < end then end - start else
+    def reader = stdinStream()
+    def status = settled(reader, stdinStreamRead(reader, stateAt(bufferOffset), bufferSize))
+    def read = status / 16
+    writeI32(stateAt(4), 0)
+    writeI32(stateAt(8), read)
+    read
+}
+
+-- Env --------------------------------------------------------------------------------------------
+
+@extern("wasi:cli/environment@0.3.0", "get-arguments")
+def getArguments: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/environment@0.3.0", "get-environment")
+def getEnvironment: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/exit@0.3.0", "exit-with-code")
+def exitWithCode: [HostRuntime] I32 -> ()
+
+--| The string the canonical ABI describes at `at`, an address and a length, copied out of memory the
+  host allocated, which it frees.
+def takeString: [HostRuntime] I32 -> string = { at ->
+  def address = readI32(at)
+  def text = stringAt(address, readI32(at + 4))
+  free(address)
+  text
+}
+
+--| The list the canonical ABI describes at `at`, of `count` elements of `size` bytes from `address`,
+  each read by `read`, in front of `acc`.
+def elementsBefore
+  : [HostRuntime] I32, I32, I32, ([HostRuntime] I32 -> a), list(a) -> list(a)
+  = { address, count, size, read, acc ->
+    if count == 0 then acc else
+      def element = read(I32.wrappingAdd(address, (count - 1) * size))
+      elementsBefore(address, count - 1, size, read, [element, ...acc])
+  }
+
+--| The list `get` writes at the address it is given, as the canonical ABI lays out a list: the
+  address and count of its elements, each `size` bytes, read by `read`. The host allocated the
+  elements, which it frees.
+def listFrom
+  : [HostRuntime] ([HostRuntime] I32 -> ()), I32, ([HostRuntime] I32 -> a) -> list(a)
+  = { get, size, read ->
+    get(stateAt(24))
+    def address = readI32(stateAt(24))
+    def elements = elementsBefore(address, readI32(stateAt(28)), size, read, [])
+    free(address)
+    elements
+  }
+
+--| The value of the environment variable `name` in `variables`, or `#notSet` when it has none.
+def variableIn: list((string, string)), string -> #some(string) | #notSet = {
+  | [], _ -> #notSet
+  | [(variable, value), ...rest], name -> if variable == name
+    then #some(value)
+    else variableIn(rest, name)
+}
+
+--| The program's command-line arguments, after its name.
+def arguments: [HostRuntime] () -> list(string) = { _ ->
+  match listFrom(getArguments, 8, takeString)
+    | [] -> []
+    | [_, ...rest] -> rest
+}
+
+--| The value of the environment variable `name`, or `#notSet` when it has none.
+def environmentVariable: [HostRuntime] string -> #some(string) | #notSet = { name ->
+  def variables = listFrom(getEnvironment, 16, { at -> (takeString(at), takeString(at + 8)) })
+  variableIn(variables, name)
+}
+
+--| Ends the program with the exit code `code`, or 1 for a code that isn't 0 to 255, which is all an
+  exit code can be. `exit-with-code` never returns: the call after it only gives the function its
+  type.
+def exitProcess: [HostRuntime] int -> undefined = { code ->
+  def exitCode = if code >= 0 and code <= 255 then I32.fromInt(code) else 1
+  exitWithCode(exitCode)
+  exitProcess(code)
+}
+
+-- Random and Clock -------------------------------------------------------------------------------
+
+@extern("wasi:random/random@0.3.0", "get-random-u64")
+def getRandomU64: [HostRuntime] () -> I64
+
+@extern("wasi:clocks/system-clock@0.3.0", "now")
+def systemClockNow: [HostRuntime] I32 -> ()
+
+@extern("wasi:clocks/monotonic-clock@0.3.0", "now")
+def monotonicClockNow: [HostRuntime] () -> I64
+
+--| The time of day in milliseconds since 1970: `wasi:clocks/system-clock`'s `now` writes it as
+  seconds, then nanoseconds at 8.
+def timeOfDay: [HostRuntime] () -> int = { _ ->
+  systemClockNow(stateAt(24))
+  readI64(stateAt(24)) * 1000 + I32.toInt(readI32(stateAt(32))) / 1_000_000
+}
+
+--| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
+  streams, an `Env` that reads what the program was started with, a `Clock` that reads the host's
+  clocks, a `Random` that draws from its random source, and `Async`, so that it may wait. What
+  `entry` returns is ignored.
+export def run
+  : [HostRuntime, Async] ([Async, Clock, Console, Env, Random] () -> a) -> ()
+  = { entry ->
+    use Console(
+      write = { text -> writeTo(stdout, text) }
+      writeError = { text -> writeTo(stderr, text) }
+      readLine = { _ -> readLineAfter(fill, []) }
+      readToEnd = { _ -> #some(readToEndAfter(fill, [])) }
+      flush = { _ -> () }
+    )
+
+    use Env(
+      args = { _ -> arguments() }
+      variable = { name -> environmentVariable(name) }
+      exit = { code -> exitProcess(code) }
+    )
+
+    use Random(bits = { _ -> getRandomU64() })
+    use Clock(now = { _ -> timeOfDay() }, ticks = { _ -> monotonicClockNow() / 1_000_000 })
+
+    ignore(entry())
+  }

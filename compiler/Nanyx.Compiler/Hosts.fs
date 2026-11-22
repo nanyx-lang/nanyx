@@ -2,6 +2,18 @@ namespace NyxCompiler
 
 open Parser.Program
 
+/// The root module a host builds a WASI 0.3 component from, beside the root it runs core modules from, and the world it
+/// is written against (see the Components page of the docs).
+type HostComponent =
+    { /// The component root, which exports `run` as the core root does: `console.host.wasi`.
+      Root: string
+      /// The world, as WIT names it: `wasi:cli/command@0.3.0`. Its WIT is the package in the host's `wit` directory, with
+      /// the packages it uses under `wit/deps`.
+      World: string
+      /// The host's core root, beside which the component root is built: its `run` provides every context the
+      /// component root's does (see `Hosts.componentRootErrors`).
+      CoreRoot: string }
+
 /// A host: a package whose manifest declares that it is one (see `HostPackages`), with the module that runs the
 /// program's entry point, under `use`s of the contexts it provides, and the prelude that brings what it provides into
 /// scope in every module of the program (see the Hosts page of the docs). The program's `@entry` is passed to the
@@ -18,13 +30,25 @@ type Host =
       Directory: string
       /// The settings it takes, each with its default: a program's manifest may set them in its `host`'s `settings`,
       /// and may set no others. The HTTP host's `port` is one.
-      Settings: Parser.Program.DataValues.DataField list }
+      Settings: Parser.Program.DataValues.DataField list
+      /// The root it builds a component from, if it has one. A host whose `Module` is this root is the host as a
+      /// component build sees it (see `asComponent`).
+      Component: HostComponent option }
 
     /// The host's root module as an import names it: `nanyx.console/console.host`.
     member host.Import = $"{host.Package}/{host.Module}"
 
     /// The host's prelude as an import names it, if it has one: `nanyx.console/console.prelude`.
     member host.PreludeImport = host.Prelude |> Option.map (fun prelude -> $"{host.Package}/{prelude}")
+
+    /// The host as a component build sees it, if it has a component root: its `run` is the component root's.
+    member host.AsComponent = host.Component |> Option.map (fun built -> { host with Module = built.Root })
+
+    /// Whether this is the host as a component build sees it (see `AsComponent`).
+    member host.IsComponent = host.Component |> Option.exists (fun built -> built.Root = host.Module)
+
+    /// The directory of the WIT the host's component root is written against.
+    member host.WitDirectory = System.IO.Path.Combine(host.Directory, "wit")
 /// A definition marked `@entry`, and the call of its host's `run` with it that `Attributes.applyAttributes` made up.
 type EntryPoint =
     { /// The node of the `@entry` attribute.
@@ -60,25 +84,65 @@ module Hosts =
     /// The context a host is written on: raw reads and writes, which only a host may require.
     let runtimeContext = "HostRuntime"
 
-    /// Whether the module `origin` may require `HostRuntime`: the host, whose files `isHost` tells apart, or a module a
-    /// host is written on (see `runtimeModules`).
+    /// Whether the module `origin` may require `HostRuntime`: a module of the build host's own package, whose files
+    /// `isHost` tells apart, or a module a host is written on (see `runtimeModules`).
     let mayRequireRuntime (isHost: string -> bool) (origin: ModuleOrigin) =
         match origin with
         | StandardLibraryModule name -> List.contains name runtimeModules
         | SourceFile path -> isHost path
         | InMemory -> false
 
-    /// The error for an entry point that does not fit its host's `run`: `found` is the entry point's type, `expected`
-    /// the type of `run`'s parameter, where they are known.
-    let entryMismatch (entry: EntryPoint) (found: Ty option) (expected: Ty option) =
+    /// The error for an entry point that does not fit its host's `run`: `found` is the entry point's type, `required`
+    /// the contexts it requires, and `expected` the type of `run`'s parameter, where they are known. It names each context
+    /// the entry point requires that `run` doesn't provide.
+    let entryMismatch (entry: EntryPoint) (found: Ty option) (required: Ty list) (expected: Ty option) =
         let unknown = TyPrimitive "?error"
         // Shown together, so that the variables are named alike in both.
         let shown = Unifier.tysToDisplayStrings Source [ defaultArg expected unknown; defaultArg found unknown ]
+        // The contexts the entry point requires that the host's `run` doesn't provide, by name.
+        let namesOf (contexts: Ty list) =
+            contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source
+        let contextsOf (ty: Ty option) =
+            match ty |> Option.map Unifier.unalias with
+            | Some(TyFunc(_, _, contexts)) -> contexts
+            | _ -> []
+        let provided = namesOf (contextsOf expected) |> Set.ofList
+        let missing = namesOf (contextsOf found @ required) |> List.distinct |> List.filter (provided.Contains >> not)
+        let missingLines =
+            if missing.IsEmpty then ""
+            else
+                let names = missing |> List.map (fun name -> $"'{name}'") |> String.concat ", "
+                let built = if entry.Host.IsComponent then $" in a component: build with --core for a core module" else ""
+                $"\n  it doesn't provide {names}{built}"
         Diagnostics.at
             DiagnosticCodes.EntryDoesNotFitHost
             entry.Argument
-            $"It doesn't fit the host '{entry.Host.Import}'\n  expected: {shown.[0]}\n  found:    {shown.[1]}"
+            $"It doesn't fit the host '{entry.Host.Import}'\n  expected: {shown.[0]}\n  found:    {shown.[1]}{missingLines}"
         |> Diagnostics.about entry.Name
+
+    /// The errors for a host's component root whose `run`, of type `componentRun`, declared at `span`, provides a
+    /// context that its core root's `run`, of type `coreRun`, doesn't: a program that runs under the one would not run
+    /// under the other. The component root may provide fewer, which a program that needs one it lacks is told when it is
+    /// built as a component (see `entryMismatch`).
+    let componentRootErrors (host: Host) (span: SourceSpan) (componentRun: Ty) (coreRun: Ty) =
+        let provided (run: Ty) =
+            match Unifier.unalias run with
+            | TyFunc(parameter, _, _) ->
+                match Unifier.unalias parameter with
+                | TyFunc(_, _, contexts) ->
+                    contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source
+                | _ -> []
+            | _ -> []
+        let core = provided coreRun |> Set.ofList
+        match provided componentRun |> List.filter (core.Contains >> not) with
+        | [] -> []
+        | extra ->
+            let names = extra |> List.map (fun name -> $"'{name}'") |> String.concat ", "
+            let root = host.Component |> Option.map _.CoreRoot |> Option.defaultValue host.Module
+            [ Diagnostics.at
+                  DiagnosticCodes.ComponentRootProvidesMore
+                  span
+                  $"The component root's '{runFunction}' provides {names}, which the core root '{host.Package}/{root}' doesn't: a component root provides no context its core root doesn't" ]
 
     /// Whether `ty` is the context `HostRuntime`, as the module names it (`HostRuntime`, or `r.HostRuntime` under an
     /// alias).
@@ -96,7 +160,7 @@ module Hosts =
         Diagnostics.at
             DiagnosticCodes.HostRuntimeOutsideHost
             span
-            $"{what} requires the context '{runtimeContext}', which only a host may require: use the contexts the host provides, such as 'Console'"
+            $"{what} requires the context '{runtimeContext}', which only a host's package may require: use the contexts the host provides, such as 'Console'"
 
     /// The errors for each place a module that is not a host (see `mayRequireRuntime`, with `isHost`) requires `HostRuntime`: each of
     /// its top-level defs that requires it, as `contextTypes` (by symbol) has its contexts or a call in it does, other
