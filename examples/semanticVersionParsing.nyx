@@ -17,15 +17,15 @@ def cut: string, string -> (string, (#some(string) | #none)) = { s, separator ->
     | #notFound -> (s, #none)
 }
 
-def parseNumber: string -> #some(int) | #error(#invalidVersionNumber) = { s ->
+def parseNumber: string -> #some(int) | #invalidVersionNumber = { s ->
   match int.fromString(s)
     | #some(n) -> #some(n)
-    | #invalidInt -> #error(#invalidVersionNumber)
+    | #invalidInt -> #invalidVersionNumber
 }
 
 -- "1.2.3-beta+build42" has core "1.2.3-beta" and build metadata "build42";
 -- the core has numbers "1.2.3" and tag "beta"
-export def parse: string -> #some(SemanticVersion) | #error(#invalidVersionNumber) = { value ->
+export def parse: string -> #some(SemanticVersion) | #invalidVersionNumber = { value ->
   def (core, buildMetadata) = cut(value, "+")
   def (numbers, tag) = cut(core, "-")
 
@@ -39,7 +39,7 @@ export def parse: string -> #some(SemanticVersion) | #error(#invalidVersionNumbe
         buildMetadata = buildMetadata
       )
     }
-    | _ -> #error(#invalidVersionNumber)
+    | _ -> #invalidVersionNumber
 }
 
 @entry
@@ -47,5 +47,5 @@ def main = {
   for ["1.2.3", "1.2.3-beta+build42", "1.2", "x.y.z"] | input ->
     match parse(input)
       | #some(v) -> println("{input}: major {v.major}, minor {v.minor}, patch {v.patch}")
-      | #error(#invalidVersionNumber) -> println("{input}: not a version number")
+      | #invalidVersionNumber -> println("{input}: not a version number")
 }

@@ -28,9 +28,9 @@ def Element.subtagBinary: (Element, string) -> #some(Binary) | #notFound = { el,
 def Element.attr: (Element, string) -> #some(string) | #notFound = { el, name -> el.attrs(name) }
 
 -- A missing required element is an extraction failure
-def required: (#some(a) | #notFound) -> #some(a) | #error(#extractionFailed) = {
+def required: (#some(a) | #notFound) -> #some(a) | #extractionFailed = {
   | #some(value) -> #some(value)
-  | #notFound -> #error(#extractionFailed)
+  | #notFound -> #extractionFailed
 }
 
 type CompanionRegistration = (
@@ -62,7 +62,7 @@ def keyIndexListTs: Element -> #some(int) | #notFound = { el ->
   el \subtag("key_index_list") \bindSome { .attr("ts") } \bindSome(int.fromString)
 }
 
-export def extractPairDevicePayload: (Element, Context) -> #some(Payload) | #error(#extractionFailed) = {
+export def extractPairDevicePayload: (Element, Context) -> #some(Payload) | #extractionFailed = {
   | el, #companionRegistration -> proc {
       def pubKey = try required(el \subtagText("pub_key"))
       def ref = try required(el \subtagBinary("ref"))

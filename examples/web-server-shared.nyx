@@ -27,7 +27,7 @@ export type UpdateResult = #updated(Todo) | #updateError(TodoError)
 -- server implementation and the client proxy.
 export type TodoProtocol = (
   allTodos: () -> Async(list(Todo))
-  addTodo: string -> Async(#some(Todo) | #error(TodoError))
+  addTodo: string -> Async(#some(Todo) | TodoError)
   toggleCompleted: TodoId -> Async(UpdateResult)
   deleteTodo: TodoId -> Async(DeleteResult)
 )

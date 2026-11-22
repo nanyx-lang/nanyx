@@ -41,7 +41,7 @@ Exhaustive pattern matching on records, tag unions, literals, and more:
 ```nanyx
 match result
   | #some(value) -> process(value)
-  | #error(msg) -> logError(msg)
+  | #invalid(reason) -> logError(reason)
 ```
 
 ## Strong static typing with inference

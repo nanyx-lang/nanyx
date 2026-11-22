@@ -80,7 +80,7 @@ Only tags are collected this way. Branches of other types still have to agree, s
 An annotation still makes sense when you want the union fixed up front, for example to let a branch you have not written yet return a tag that no current branch produces:
 
 ```nanyx
-def getMessage: () -> #some(string) | #noMessage | #error(string) = {
+def getMessage: () -> #some(string) | #noMessage | #unreadable(string) = {
   if false then #some("Hello") else #noMessage
 }
 ```
@@ -145,7 +145,7 @@ def add: int, _ -> _ = { a, b ->
 
 -- inferred as int, int -> int
 
-def answer: #ok(_) | #error(string) = #ok(42)
+def answer: #ok(_) | #failed(string) = #ok(42)
 -- the payload of #ok is inferred as int
 ```
 

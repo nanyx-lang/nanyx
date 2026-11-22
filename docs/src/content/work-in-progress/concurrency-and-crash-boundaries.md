@@ -172,8 +172,8 @@ task, so the code returns through its ordinary error handling:
 ```nanyx fragment
 match http.get(url)
   | #some(response) -> response
-  | #error(#cancelled) -> ...      -- only after the task was cancelled; usually just passed on with try
-  | #error(e) -> ...
+  | #cancelled -> ...      -- only after the task was cancelled; usually just passed on with try
+  | e -> ...
 ```
 
 The task unwinds by returning, so reference counts are dropped as usual and nothing leaks. A loop that never waits

@@ -26,10 +26,10 @@ def y: #mySecondTag = #mySecondTag
 
 # Tag unions
 
-Tag types are most useful when combined into unions. A tag union is a type that can be one of several tagged cases, and can be used anywhere a type is expected. For example, a function that can return either an `#ok` or an `#error` tag can be typed as follows:
+Tag types are most useful when combined into unions. A tag union is a type that can be one of several tagged cases, and can be used anywhere a type is expected. For example, a function that can return either an `#ok` or a `#notFound` tag can be typed as follows:
 
 ```nanyx fragment
-def f: string -> #ok | #error = { s ->
+def f: string -> #ok | #notFound = { s ->
   ...
 }
 ```
@@ -65,7 +65,7 @@ type AuthResult = #authenticated(username: string) | #rejected(#invalidCredentia
 A tag that carries the unit value `()` is written with empty brackets, in values and in types alike, just as a function that takes nothing is called `f()`. `#some()` is `#some(())`:
 
 ```nanyx
-def saved: #some() | #error(string) = #some()
+def saved: #some() | #rejected(string) = #some()
 ```
 
 # Tags for function flags

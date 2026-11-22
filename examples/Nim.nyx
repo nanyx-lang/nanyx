@@ -94,16 +94,16 @@ def exampleGameTree = { gameTree(3) \show } -- figure 1 in the paper
 type Outcome = #won(Player) | #cheated(Player)
 
 -- Check a move before playing it, so an illegal move ends the game
-def checkedMove: [Move] Player, int -> #some(int) | #error(#cheated(Player)) = { player, n ->
+def checkedMove: [Move] Player, int -> #some(int) | #cheated(Player) = { player, n ->
   def m = move(player, n)
-  if validMoves(n) \contains(m) then #some(m) else #error(#cheated(player))
+  if validMoves(n) \contains(m) then #some(m) else #cheated(player)
 }
 
 def checkedTurn: [Move] Player, int -> Outcome = { player, n ->
   if n <= 0 then #won(player \other) else
     match checkedMove(player, n)
       | #some(m) -> checkedTurn(player \other, n - m)
-      | #error(#cheated(p)) -> #cheated(p)
+      | #cheated(p) -> #cheated(p)
 }
 
 def checkedGame: [Move] int -> Outcome = { n ->

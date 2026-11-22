@@ -35,7 +35,7 @@ export def AddressType.isTestnet: AddressType -> bool = {
 }
 
 -- A pay-to-public-key-hash output script wraps the 20-byte hash of the key
-export def addressToP2PKH: string -> #some(string) | #error(#invalidAddress) = { address ->
+export def addressToP2PKH: string -> #some(string) | #invalidAddress = { address ->
   proc {
     def decoded = try Base58Check.decode(address) \Result.mapError { _ -> #invalidAddress }
     def hash160 = decoded \Hex.encode \drop(2) -- drop the version byte
@@ -51,10 +51,10 @@ export def scriptHash: Binary -> string = { script ->
 type ScriptInfo = (output: string, scriptHash: string, address: string)
 
 export def detectAddressTypeToScriptHash
-  : string -> #some(ScriptInfo) | #error(#unrecognizedAddress | #invalidAddress)
+  : string -> #some(ScriptInfo) | #unrecognizedAddress | #invalidAddress
   = { address ->
     match addressType(address)
-      | #unknown -> #error(#unrecognizedAddress)
+      | #unknown -> #unrecognizedAddress
       | #p2pkh | #p2pkhTestnet -> proc {
         def output = try addressToP2PKH(address)
 

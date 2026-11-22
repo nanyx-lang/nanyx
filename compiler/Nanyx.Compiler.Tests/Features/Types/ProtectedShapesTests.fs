@@ -17,9 +17,9 @@ import Points
 
 let private checkedNew =
     """
-  export def Point.new: int, int -> #error(string) | #some(Points.Point) = { x, y ->
+  export def Point.new: int, int -> #negative | #some(Points.Point) = { x, y ->
     if x < 0 or y < 0
-      then #error("Coordinates must be non-negative")
+      then #negative
       else #some(Point(x = x, y = y))
   }
 """
