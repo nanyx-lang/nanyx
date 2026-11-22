@@ -45,7 +45,10 @@ type Diagnostic =
       Fixes: Fix list
       /// For a diagnostic in a module the compiled one imports, directly or through others: the import in the
       /// compiled module that brings that module in. The editor shows it there as well as in the imported file.
-      Import: SourceSpan option }
+      Import: SourceSpan option
+      /// Whether the code it is about does nothing and can be removed, such as a context nothing uses: the editor draws
+      /// it faded.
+      Unnecessary: bool }
 
 /// A kind of compiler diagnostic: its code, title and severity.
 type DiagnosticCode =
@@ -255,7 +258,8 @@ module Diagnostics =
           Related = []
           Suggestions = []
           Fixes = []
-          Import = None }
+          Import = None
+          Unnecessary = false }
 
     /// A diagnostic about the node written at `span`. A node the compiler made up has no span (`SourceSpan.none`),
     /// and gives a diagnostic without one.
