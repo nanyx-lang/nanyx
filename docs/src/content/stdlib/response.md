@@ -11,7 +11,7 @@ one whatever case it is asked for in:
 ```nanyx fragment
 match http.get("https://example.com")
   | #some(response) -> println(Response.header(response, "Content-Type"))
-  | #error(_) -> println("The request failed")
+  | _ -> println("The request failed")
 ```
 # Reference
 

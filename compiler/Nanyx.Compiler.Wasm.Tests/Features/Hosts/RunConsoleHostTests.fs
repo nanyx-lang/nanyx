@@ -16,13 +16,13 @@ def greet: [Console] string -> () = { name -> println("hello {name}") }
 def main: [Console] () -> () = {
   match readLine()
     | #some(line) -> greet(line)
-    | #error(_) -> eprintln("no input")
+    | _ -> eprintln("no input")
   match readToEnd()
     | #some(rest) -> print("rest: {rest}")
-    | #error(_) -> eprintln("no input")
+    | _ -> eprintln("no input")
   match readLine()
     | #some(_) -> println("more")
-    | #error(#endOfInput) -> println("ended")
+    | #endOfInput -> println("ended")
 }
 """
     runSourceWithInput "Ada\r\nb\nc" source |> assertRan "hello Ada\nrest: b\ncended\n"
@@ -87,7 +87,7 @@ def greet = { name -> println("hello {name}") }
 def main = {
   match readLine()
     | #some(line) -> greet(line)
-    | #error(_) -> eprintln("no input")
+    | _ -> eprintln("no input")
 }
 """
     let wat = transpileWatNotInlined source

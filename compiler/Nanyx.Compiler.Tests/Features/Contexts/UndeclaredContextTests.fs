@@ -105,8 +105,8 @@ def quiet: () -> () = {
   use Console(
     write = { _ -> () }
     writeError = { _ -> () }
-    readLine = { #error(#endOfInput) }
-    readToEnd = { #error(#endOfInput) }
+    readLine = { #endOfInput }
+    readToEnd = { #endOfInput }
     flush = { () }
   ) in sayHello()
 }

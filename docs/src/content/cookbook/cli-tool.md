@@ -42,8 +42,8 @@ def main = {
         \filter { != "" }
 
       println("Word count: {words.length}")
-    | #error(#notFound) -> println("There is no input.txt here")
-    | #error(err) -> println("Error reading file: {err}")
+    | #notFound -> println("There is no input.txt here")
+    | err -> println("Error reading file: {err}")
 }
 ```
 
@@ -57,6 +57,6 @@ nanyx run
 
 # Key Concepts
 
-- **File I/O** — `nanyx.fs`'s `file` module returns `#some(text)` or `#error(FsError)`, and `nanyx run` lets the program read only the current directory (see [file](../stdlib/file))
+- **File I/O** — `nanyx.fs`'s `file` module returns `#some(text)` or `FsError`, and `nanyx run` lets the program read only the current directory (see [file](../stdlib/file))
 - **Pipelines** — chain transformations with `\` for readable data processing
 - **Pattern matching** — handle success and failure cases explicitly

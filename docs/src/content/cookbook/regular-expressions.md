@@ -23,7 +23,7 @@ A script names it in a `::dependency` line instead:
 ```
 
 Write a pattern as a raw, single-quoted string, `'\d+'`, so its backslashes need no escaping. `Regex.parse` gives back
-`#some(Regex)`, or `#error(RegexError)` for a pattern that is wrong. A pattern written in the program is right or not
+`#some(Regex)`, or `#invalidPattern(RegexError)` for a pattern that is wrong. A pattern written in the program is right or not
 for good, so `orCrash` is the usual way to take it.
 
 # Testing a whole string
@@ -165,7 +165,7 @@ import nanyx.regex/regex
 for ['[a-z]+', '(open', 'a{3,1}'] | pattern ->
   match Regex.parse(pattern)
     | #some(_) -> println("{pattern}: fine")
-    | #error(e) -> println("{pattern}: column {e.column}: {e.message}")
+    | #invalidPattern(e) -> println("{pattern}: column {e.column}: {e.message}")
 
 -- [a-z]+: fine
 -- (open: column 1: There is no ')' to close this '('

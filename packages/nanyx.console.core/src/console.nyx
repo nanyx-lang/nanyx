@@ -19,11 +19,11 @@ export context Console = (
   write: string -> ()
   --| Writes `text` to standard error, as it is.
   writeError: string -> ()
-  --| The next line of standard input, without its line break, or `#error(#endOfInput)` when the
+  --| The next line of standard input, without its line break, or `#endOfInput` when the
     input has ended.
-  readLine: () -> #some(string) | #error(IoError)
+  readLine: () -> #some(string) | IoError
   --| Everything left on standard input (the empty string when nothing is).
-  readToEnd: () -> #some(string) | #error(IoError)
+  readToEnd: () -> #some(string) | IoError
   --| Writes out anything the streams hold back. The console host holds nothing back, so there it
     does nothing.
   flush: () -> ()

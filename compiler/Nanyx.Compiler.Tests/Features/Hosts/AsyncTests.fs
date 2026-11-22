@@ -105,7 +105,7 @@ import (
 
 def contents = { name: string -> file.read(path.of(name)) }"""
         )
-    Assert.Equal(Some "[Async, FileSystem] string -> #some(string) | #error(FsError)", ty)
+    Assert.Equal(Some "[Async, FileSystem] string -> #some(string) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)", ty)
 
 [<Fact>]
 let ``Only the module that declares Async can make one with use`` () =

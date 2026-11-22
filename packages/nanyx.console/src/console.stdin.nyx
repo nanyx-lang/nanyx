@@ -58,12 +58,12 @@ def joined: list(string) -> string = { parts ->
 --| The rest of the current line of standard input, after `parts`, the pieces of it read so far (the
   latest first), each of them not empty.
 export def readLineAfter
-  : [HostRuntime] ([HostRuntime] () -> I32), list(string) -> #some(string) | #error(IoError)
+  : [HostRuntime] ([HostRuntime] () -> I32), list(string) -> #some(string) | IoError
   = { fill, parts ->
     def part = readStdin(fill, true)
 
     if string.isEmpty(part)
-      then (if list.isEmpty(parts) then #error(#endOfInput) else #some(joined(parts)))
+      then (if list.isEmpty(parts) then #endOfInput else #some(joined(parts)))
       else if string.endsWith(part, "\n")
         then #some(
           string.removeSuffix(joined([string.take(part, string.length(part) - 1), ...parts]), "\r")

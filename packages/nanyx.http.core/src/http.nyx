@@ -13,18 +13,16 @@ import (
 )
 
 --| Sends `request`, and gives its response.
-export def send: [Async, Http] Request -> #some(Response) | #error(HttpError) = { request ->
+export def send: [Async, Http] Request -> #some(Response) | HttpError = { request ->
   sendRequest(request)
 }
 
 --| Gets `url`, and gives the response.
-export def get: [Async, Http] string -> #some(Response) | #error(HttpError) = { url ->
+export def get: [Async, Http] string -> #some(Response) | HttpError = { url ->
   sendRequest(Request.of(#get, url))
 }
 
 --| Posts `body` to `url`, and gives the response.
-export def post
-  : [Async, Http] string, string -> #some(Response) | #error(HttpError)
-  = { url, body ->
-    sendRequest(Request.of(#post, url) with body = body)
-  }
+export def post: [Async, Http] string, string -> #some(Response) | HttpError = { url, body ->
+  sendRequest(Request.of(#post, url) with body = body)
+}

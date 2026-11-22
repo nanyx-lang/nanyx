@@ -60,8 +60,8 @@ def errorOf: I32 -> FsError = { errno ->
 }
 
 --| The preopen, from the descriptor `fd` up, that `text` is in, with the path relative to it.
-def locatedFrom: [HostRuntime] I32, string -> #some(I32, string) | #error(FsError) = { fd, text ->
-  if fdPrestatGet(fd, stateAt(24)) != 0 then #error(#permissionDenied) else
+def locatedFrom: [HostRuntime] I32, string -> #some(I32, string) | FsError = { fd, text ->
+  if fdPrestatGet(fd, stateAt(24)) != 0 then #permissionDenied else
     def length = readI32(stateAt(28))
     def buffer = allocate(length)
     ignore(fdPrestatDirName(fd, buffer, length))
@@ -74,17 +74,16 @@ def locatedFrom: [HostRuntime] I32, string -> #some(I32, string) | #error(FsErro
 }
 
 --| The preopen `at` is in, with the path relative to it.
-def located: [HostRuntime] Path -> #some(I32, string) | #error(FsError) = { at ->
+def located: [HostRuntime] Path -> #some(I32, string) | FsError = { at ->
   locatedFrom(3, Path.toString(at))
 }
 
 --| Opens `at` with the WASI open flags `openFlags`, the rights `rights` and the descriptor flags
   `descriptorFlags`, and gives its descriptor.
 def openAt
-  : [HostRuntime] Path, I32, I64, I32 -> #some(I32) | #error(FsError)
+  : [HostRuntime] Path, I32, I64, I32 -> #some(I32) | FsError
   = { at, openFlags, rights, descriptorFlags ->
     match located(at)
-      | #error(e) -> #error(e)
       | #some(directory, relative) ->
         def errno = pathOpen(
           directory
@@ -99,38 +98,37 @@ def openAt
         )
 
         keepAlive(relative)
-        if errno == 0 then #some(readI32(stateAt(32))) else #error(errorOf(errno))
+        if errno == 0 then #some(readI32(stateAt(32))) else errorOf(errno)
+      | e -> e
   }
 
 --| Calls `action` with the preopen `at` is in and the path relative to it, which it passes to WASI
   as an address and a length, and gives what it gives: `#ok` for 0, and the `FsError` of any other
   WASI error number.
 def atPath
-  : [HostRuntime] Path, ([HostRuntime] I32, I32, I32 -> I32) -> #ok | #error(FsError)
+  : [HostRuntime] Path, ([HostRuntime] I32, I32, I32 -> I32) -> #ok | FsError
   = { at, action ->
     match located(at)
-      | #error(e) -> #error(e)
       | #some(directory, relative) ->
         def errno = action(directory, addressOf(relative), byteLength(relative))
         keepAlive(relative)
-        if errno == 0 then #ok else #error(errorOf(errno))
+        if errno == 0 then #ok else errorOf(errno)
+      | e -> e
   }
 
 --| How many bytes of the file `fd` it reads into the `size` bytes at `buffer`, after the `done` it
   has read: until the buffer is full or the file ends.
-def readInto
-  : [HostRuntime] I32, I32, I32, I32 -> #some(I32) | #error(FsError)
-  = { fd, buffer, size, done ->
-    if done >= size then #some(done) else
-      writeI32(stateAt(12), I32.wrappingAdd(buffer, done))
-      writeI32(stateAt(16), size - done)
-      def errno = fdRead(fd, stateAt(12), 1, stateAt(20))
-      def read = readI32(stateAt(20))
+def readInto: [HostRuntime] I32, I32, I32, I32 -> #some(I32) | FsError = { fd, buffer, size, done ->
+  if done >= size then #some(done) else
+    writeI32(stateAt(12), I32.wrappingAdd(buffer, done))
+    writeI32(stateAt(16), size - done)
+    def errno = fdRead(fd, stateAt(12), 1, stateAt(20))
+    def read = readI32(stateAt(20))
 
-      if errno != 0
-        then #error(errorOf(errno))
-        else if read == 0 then #some(done) else readInto(fd, buffer, size, done + read)
-  }
+    if errno != 0
+      then errorOf(errno)
+      else if read == 0 then #some(done) else readInto(fd, buffer, size, done + read)
+}
 
 --| The first address from `address` on that is a multiple of 8, where WASI writes a file's
   description (a filestat): a block of 72 bytes has 64 from there on.
@@ -142,39 +140,39 @@ def aligned: I32 -> I32 = { address ->
 def directoryKind: I32 = 3
 
 --| The kind and the size of the file `fd`, from its description.
-def described: [HostRuntime] I32 -> #some(I32, int) | #error(FsError) = { fd ->
+def described: [HostRuntime] I32 -> #some(I32, int) | FsError = { fd ->
   def block = allocate(72)
   def stat = aligned(block)
   def errno = fdFilestatGet(fd, stat)
   def kind = readByte(stat + 16)
   def size = readI64(stat + 32)
   free(block)
-  if errno == 0 then #some(kind, size) else #error(errorOf(errno))
+  if errno == 0 then #some(kind, size) else errorOf(errno)
 }
 
 --| What `contents` makes of the bytes of the file `fd`, given their address and how many there are.
 def readOpen
-  : [HostRuntime] I32, ([HostRuntime] I32, I32 -> a) -> #some(a) | #error(FsError)
+  : [HostRuntime] I32, ([HostRuntime] I32, I32 -> a) -> #some(a) | FsError
   = { fd, contents ->
     match described(fd)
-      | #error(e) -> #error(e)
       | #some(kind, size) ->
-        if kind == directoryKind then #error(#isDirectory) else
+        if kind == directoryKind then #isDirectory else
           match int.toI32(size)
             | #some(fits) -> readSized(fd, fits, contents)
-            | #outOfRange -> #error(#other("the file is too large to read at once"))
+            | #outOfRange -> #other("the file is too large to read at once")
+      | e -> e
   }
 
 --| What `contents` makes of the bytes of the file `fd`, `size` of them, given their address and
   how many there are.
 def readSized
-  : [HostRuntime] I32, I32, ([HostRuntime] I32, I32 -> a) -> #some(a) | #error(FsError)
+  : [HostRuntime] I32, I32, ([HostRuntime] I32, I32 -> a) -> #some(a) | FsError
   = { fd, size, contents ->
     def buffer = allocate(size + 1)
 
     def result = match readInto(fd, buffer, size, 0)
       | #some(read) -> #some(contents(buffer, read))
-      | #error(e) -> #error(e)
+      | e -> e
 
     free(buffer)
     result
@@ -183,20 +181,20 @@ def readSized
 --| What `contents` makes of the bytes of the file at `at`, given their address and how many there
   are.
 def readWith
-  : [HostRuntime] Path, ([HostRuntime] I32, I32 -> a) -> #some(a) | #error(FsError)
+  : [HostRuntime] Path, ([HostRuntime] I32, I32 -> a) -> #some(a) | FsError
   = { at, contents ->
     match openAt(at, 0, 2, 0)
-      | #error(e) -> #error(e)
       | #some(fd) ->
         def result = readOpen(fd, contents)
         ignore(fdClose(fd))
         result
+      | e -> e
   }
 
 --| How many bytes of the file `fd`, from byte `offset` on, it reads into the `size` bytes at
   `buffer`, after the `done` it has read: until the buffer is full or the file ends.
 def readAt
-  : [HostRuntime] I32, int, I32, I32, I32 -> #some(I32) | #error(FsError)
+  : [HostRuntime] I32, int, I32, I32, I32 -> #some(I32) | FsError
   = { fd, offset, buffer, size, done ->
     if done >= size then #some(done) else
       writeI32(stateAt(12), I32.wrappingAdd(buffer, done))
@@ -205,79 +203,67 @@ def readAt
       def read = readI32(stateAt(20))
 
       if errno != 0
-        then #error(errorOf(errno))
+        then errorOf(errno)
         else if read == 0 then #some(done) else readAt(fd, offset, buffer, size, done + read)
   }
 
 --| Up to `size` bytes of the file `fd`, from byte `offset` on, as a string.
-def readChunk
-  : [HostRuntime] I32, int, I32 -> #some(string) | #error(FsError)
-  = { fd, offset, size ->
-    def buffer = allocate(size + 1)
+def readChunk: [HostRuntime] I32, int, I32 -> #some(string) | FsError = { fd, offset, size ->
+  def buffer = allocate(size + 1)
 
-    def result = match readAt(fd, offset, buffer, size, 0)
-      | #some(read) -> #some(stringAt(buffer, read))
-      | #error(e) -> #error(e)
+  def result = match readAt(fd, offset, buffer, size, 0)
+    | #some(read) -> #some(stringAt(buffer, read))
+    | e -> e
 
-    free(buffer)
-    result
-  }
+  free(buffer)
+  result
+}
 
 --| Up to `length` bytes of the file at `at`, from byte `offset` on, or an error for an `offset` past
   its end: the file is opened, read and closed again, so nothing is left open between one chunk and
   the next.
-def chunkAt
-  : [HostRuntime] Path, int, int -> #some(string) | #error(FsError)
-  = { at, offset, length ->
-    match int.toI32(length)
-      | #outOfRange -> #error(#other("a chunk that large can't be read at once"))
-      | #some(size) ->
-        match openAt(at, 0, 6, 0)
-          | #error(e) -> #error(e)
-          | #some(fd) ->
-            def result = match described(fd)
-              | #error(e) -> #error(e)
-              | #some(kind, fileSize) ->
-                if kind == directoryKind
-                  then #error(#isDirectory)
-                  else if offset > fileSize
-                    then #error(
-                      #other(
-                        "it is shorter than it was: it ends at byte {fileSize}, before {offset}"
-                      )
-                    )
-                    else readChunk(fd, offset, size)
+def chunkAt: [HostRuntime] Path, int, int -> #some(string) | FsError = { at, offset, length ->
+  match int.toI32(length)
+    | #outOfRange -> #other("a chunk that large can't be read at once")
+    | #some(size) ->
+      match openAt(at, 0, 6, 0)
+        | #some(fd) ->
+          def result = match described(fd)
+            | #some(kind, fileSize) ->
+              if kind == directoryKind
+                then #isDirectory
+                else if offset > fileSize then
+                  #other("it is shorter than it was: it ends at byte {fileSize}, before {offset}")
+                else readChunk(fd, offset, size)
+            | e -> e
 
-            ignore(fdClose(fd))
-            result
-  }
+          ignore(fdClose(fd))
+          result
+        | e -> e
+}
 
 --| Writes the `size` bytes at `buffer` to the file `fd`, after the `done` it has written.
-def writeFrom
-  : [HostRuntime] I32, I32, I32, I32 -> #ok | #error(FsError)
-  = { fd, buffer, size, done ->
-    if done >= size then #ok else
-      writeI32(stateAt(12), I32.wrappingAdd(buffer, done))
-      writeI32(stateAt(16), size - done)
-      def errno = fdWrite(fd, stateAt(12), 1, stateAt(20))
+def writeFrom: [HostRuntime] I32, I32, I32, I32 -> #ok | FsError = { fd, buffer, size, done ->
+  if done >= size then #ok else
+    writeI32(stateAt(12), I32.wrappingAdd(buffer, done))
+    writeI32(stateAt(16), size - done)
+    def errno = fdWrite(fd, stateAt(12), 1, stateAt(20))
 
-      if errno != 0
-        then #error(errorOf(errno))
-        else writeFrom(fd, buffer, size, done + readI32(stateAt(20)))
-  }
+    if errno != 0 then errorOf(errno) else writeFrom(fd, buffer, size, done + readI32(stateAt(20)))
+}
 
 --| Writes `text` to the file at `at`, which it opens with the WASI open flags `openFlags` and
   descriptor flags `descriptorFlags`.
 def writeWith
-  : [HostRuntime] Path, string, I32, I32 -> #ok | #error(FsError)
+  : [HostRuntime] Path, string, I32, I32 -> #ok | FsError
   = { at, text, openFlags, descriptorFlags ->
     match openAt(at, openFlags, 64, descriptorFlags)
-      | #error(e) -> #error(e)
       | #some(fd) ->
         def result = writeFrom(fd, addressOf(text), byteLength(text), 0)
         keepAlive(text)
         ignore(fdClose(fd))
         result
+      | e -> e
   }
 
 --| How many bytes a directory listing is read in at a time.
@@ -286,16 +272,16 @@ def listingSize: I32 = 4096
 --| The names in the directory `fd`, read into the `listingSize` bytes at `buffer` from the entry
   `cookie` on, after `names`.
 def namesFrom
-  : [HostRuntime] I32, I32, I64, list(string) -> #some(list(string)) | #error(FsError)
+  : [HostRuntime] I32, I32, I64, list(string) -> #some(list(string)) | FsError
   = { fd, buffer, cookie, names ->
     def errno = fdReaddir(fd, buffer, listingSize, cookie, stateAt(36))
-    if errno != 0 then #error(errorOf(errno)) else namesIn(fd, buffer, 0, cookie, names)
+    if errno != 0 then errorOf(errno) else namesIn(fd, buffer, 0, cookie, names)
   }
 
 --| The names in the entries in the listing at `buffer` from `offset` on, after `names`, then those
   read from the entry `cookie` on when the listing filled its buffer.
 def namesIn
-  : [HostRuntime] I32, I32, I32, I64, list(string) -> #some(list(string)) | #error(FsError)
+  : [HostRuntime] I32, I32, I32, I64, list(string) -> #some(list(string)) | FsError
   = { fd, buffer, offset, cookie, names ->
     def used = readI32(stateAt(36))
     def entry = I32.wrappingAdd(buffer, offset)
@@ -310,19 +296,19 @@ def namesIn
   }
 
 --| The names of what the directory at `at` holds.
-def namesAt: [HostRuntime] Path -> #some(list(string)) | #error(FsError) = { at ->
+def namesAt: [HostRuntime] Path -> #some(list(string)) | FsError = { at ->
   match openAt(at, 2, 16386, 0)
-    | #error(e) -> #error(e)
     | #some(fd) ->
       def buffer = allocate(listingSize)
       def names = namesFrom(fd, buffer, 0, [])
       free(buffer)
       ignore(fdClose(fd))
       names
+    | e -> e
 }
 
 --| The kind of file at `at`, from its description.
-def kindAt: [HostRuntime] Path -> #some(I32) | #error(FsError) = { at ->
+def kindAt: [HostRuntime] Path -> #some(I32) | FsError = { at ->
   def block = allocate(72)
   def stat = aligned(block)
 
@@ -336,25 +322,25 @@ def kindAt: [HostRuntime] Path -> #some(I32) | #error(FsError) = { at ->
 
   match found
     | #ok -> #some(kind)
-    | #error(e) -> #error(e)
+    | e -> e
 }
 
 --| Whether there is anything at `at` that the program may reach.
 def existsAt: [HostRuntime] Path -> bool = { at ->
   match kindAt(at)
     | #some(_) -> true
-    | #error(_) -> false
+    | _ -> false
 }
 
 --| Deletes the file at `at`: a directory is `#isDirectory`, whatever the system says.
-def deleteAt: [HostRuntime] Path -> #ok | #error(FsError) = { at ->
+def deleteAt: [HostRuntime] Path -> #ok | FsError = { at ->
   match kindAt(at)
-    | #error(e) -> #error(e)
     | #some(kind) ->
       if kind == directoryKind
-        then #error(#isDirectory)
+        then #isDirectory
         else atPath(
           at
           { directory, address, length -> pathUnlinkFile(directory, address, length) }
         )
+    | e -> e
 }
