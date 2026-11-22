@@ -76,6 +76,25 @@ let updatedOutside (state: InferState) (names: (string * TypeScheme) list) (nomi
     | [] -> $"The {kind} type '{name}' can only be updated with `with` in the module that defines it: use a function that module exports instead"
     | found -> $"The {kind} type '{name}' can only be updated with `with` in the module that defines it{makeOne found}"
 
+/// The private type `ty` is, if it is one whose representation code at `span` cannot see: outside its home module a
+/// private type has no shape, so its fields are not read, matched or spread there (see "Private (opaque) types").
+let hiddenRepresentation (state: InferState) (span: SourceSpan) (ty: Ty) : NominalId option =
+    match Unifier.unalias ty with
+    | TyNominal(nominal, _, _, true) when not (Visibility.inNominalHome state nominal span) -> Some nominal
+    | _ -> None
+
+/// The error (NYX0212) for taking a value of the private type `nominal` apart at `span`, outside its home module: by a
+/// pattern that names its fields, or by spreading it into a record.
+let takenApartOutside (nominal: NominalId) (span: SourceSpan) =
+    Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule span
+        $"The private type '{lastPart nominal.Name}' can only be taken apart in the module that defines it: use a function that module exports instead"
+
+/// The error (NYX0212) for reading the field `fieldName` of a value of the private type `nominal` at `span`, outside its
+/// home module.
+let fieldReadOutside (nominal: NominalId) (fieldName: string) (span: SourceSpan) =
+    Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule span
+        $"The private type '{lastPart nominal.Name}' has no field '{fieldName}' outside the module that defines it: use a function that module exports instead"
+
 /// The module that makes values of `nominal`, as a reader knows it: the `module name =` block it is defined in, or its
 /// file's module.
 let private homeModule (nominal: NominalId) =

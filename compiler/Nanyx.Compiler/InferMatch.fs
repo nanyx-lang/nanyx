@@ -207,6 +207,9 @@ let internal inferMatch
                 let constrained = addConstraint scrutineeTy anyRecord nextState
                 inferPatterns armBody env' constrained (List.zip patterns itemTypes)
                 |> Result.map (fun (innerEnv, innerState, _) -> innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
+            | RecordMemberPattern _ when (ProtectedShapes.hiddenRepresentation state' pattern.Span (resolveSoFar state' scrutineeTy)).IsSome ->
+                let nominal = (ProtectedShapes.hiddenRepresentation state' pattern.Span (resolveSoFar state' scrutineeTy)).Value
+                Error [ ProtectedShapes.takenApartOutside nominal pattern.Span ]
             | RecordMemberPattern(members, hasRest) ->
                 let mutable innerEnv = env'
                 let mutable innerState = state'
