@@ -39,7 +39,10 @@ type PackageModules =
       Script: bool
       /// For a package in the package cache, which never changes, the file its checked modules are kept in (see
       /// `CheckedPackages`); none for any other, whose files can change.
-      CheckedFile: string option }
+      CheckedFile: string option
+      /// Whether the package is a host library, whose modules may require `HostRuntime` when the build host's package
+      /// depends on it (see `HostLibraries.field`).
+      HostLibrary: bool }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
@@ -123,6 +126,7 @@ module PackageModules =
           Referenced = []
           Script = false
           CheckedFile = None
+          HostLibrary = false
           Modules = Map.empty }
         |> declaring (files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file)))
 

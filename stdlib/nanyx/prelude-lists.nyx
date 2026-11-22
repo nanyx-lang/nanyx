@@ -11,6 +11,14 @@
 -- works on a list of any length. Those that build a list build it in reverse and reverse it at the
 -- end, until tail recursion modulo cons exists (see docs/src/content/work-in-progress/tail-calls.md).
 
+--| `xs` itself: a list is already one. With it, code written over any collection's `toList` works
+  for a list too.
+export def list.toList: list(a) -> list(a) = { xs -> xs }
+
+--| `xs` itself: a list is already one. With it, code written over any collection's `fromList` works
+  for a list too.
+export def list.fromList: list(a) -> list(a) = { xs -> xs }
+
 --| `step` applied to `initial` and the first element, then to that result and the second, and so on.
 export def list.fold: [c] list(a), b, ([c] b, a -> b) -> b = {
   | [], acc, _ -> acc

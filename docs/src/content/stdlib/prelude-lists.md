@@ -25,6 +25,24 @@ println(scores \list.fold(0) { + })
 
 <!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
+## `list.toList`
+
+```nanyx fragment
+def list.toList: list(a) -> list(a)
+```
+
+`xs` itself: a list is already one. With it, code written over any collection's `toList` works
+for a list too.
+
+## `list.fromList`
+
+```nanyx fragment
+def list.fromList: list(a) -> list(a)
+```
+
+`xs` itself: a list is already one. With it, code written over any collection's `fromList` works
+for a list too.
+
 ## `list.fold`
 
 ```nanyx fragment

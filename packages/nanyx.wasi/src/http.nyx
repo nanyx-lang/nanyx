@@ -1,8 +1,18 @@
--- Part of the console host's component root, console.host.wasi.nyx and this file: its HTTP client,
--- which the Http it provides is written on.
-@partial export module console.host.wasi
+--| `wasi:http/client`, as `Http` sends requests through it, for the hosts' component roots.
+export module http
 
--- HTTP ------------------------------------------------------------------------------------------
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx/text
+  abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, settled, takeString, waitFor, writableEnd, writeAll)
+  nanyx.http.core/client as (HttpError)
+  nanyx.http.core/request as (Method, Request)
+  nanyx.http.core/response as (Response)
+)
+
+--| How many bytes of a response's body are read at a time.
+def chunkSize: I32 = 4096
 
 -- `Http` is written on `wasi:http/client`'s `send`. A request is a `wasi:http/types` `request`: its
 -- headers a `fields`, its body a `stream<u8>`, its trailers a future, always `ok(none)`, and its
@@ -271,7 +281,7 @@ def awaitReturn: [HostRuntime] I32 -> () = { subtask ->
 --| The blocks of the body stream `reader`, each read into the `entriesAtOnce`-sized buffer at
   `buffer`, after `blocks` (the latest first), until it ends.
 def bodyFrom: [HostRuntime] I32, I32, list(string) -> list(string) = { reader, buffer, blocks ->
-  def status = settled(reader, responseStreamRead(reader, buffer, bufferSize))
+  def status = settled(reader, responseStreamRead(reader, buffer, chunkSize))
   def read = status / 16
   def kept = if read > 0 then [stringAt(buffer, read), ...blocks] else blocks
   if status % 16 != 0 then kept else bodyFrom(reader, buffer, kept)
@@ -307,7 +317,7 @@ def responseOf: [HostRuntime] I32 -> Response = { response ->
   def reader = readI32(ends)
   def trailers = readI32(ends + 4)
   free(ends)
-  def buffer = allocate(bufferSize)
+  def buffer = allocate(chunkSize)
   def body = string.concat(list.reverse(bodyFrom(reader, buffer, [])))
   free(buffer)
   responseStreamDropReadable(reader)
@@ -328,14 +338,16 @@ def writeConsumed: [HostRuntime] I32 -> () = { writer ->
 }
 
 --| Sends `request` through `wasi:http/client`, and gives its response, or why there is none.
-def sendThroughWasi: [HostRuntime] Request -> #some(Response) | #error(HttpError) = { request ->
-  match urlParts(request.url)
-    | #invalidUrl -> #error(#invalidUrl)
-    | #some(scheme, authority, pathWithQuery) ->
-      match fieldsOf(withContentLength(request))
-        | #error(e) -> #error(e)
-        | #some(fields) -> sendWith(request, fields, scheme, authority, pathWithQuery)
-}
+export def sendThroughWasi
+  : [HostRuntime] Request -> #some(Response) | #error(HttpError)
+  = { request ->
+    match urlParts(request.url)
+      | #invalidUrl -> #error(#invalidUrl)
+      | #some(scheme, authority, pathWithQuery) ->
+        match fieldsOf(withContentLength(request))
+          | #error(e) -> #error(e)
+          | #some(fields) -> sendWith(request, fields, scheme, authority, pathWithQuery)
+  }
 
 --| Sends `request`, its headers in `fields`, to the URL of `scheme`, `authority` and
   `pathWithQuery`.

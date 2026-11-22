@@ -163,6 +163,34 @@ export def map.filter: [c] map(k, v), ([c] k, v -> bool) -> map(k, v) = { m, kee
   __nanyx_map_of_entries(list.filter(__nanyx_map_entries(m), { entry -> keep(entry.0, entry.1) }))
 }
 
+--| The entries of `m` whose key and value `f` gives `#some` for, each with the new value it gives,
+  in the same order: a [`map.filter`] and a [`map.map`] in one walk. Keys `f` gives `#skip` for
+  are left out.
+export def map.filterMap: [c] map(k, v), ([c] k, v -> #some(w) | #skip) -> map(k, w) = { m, f ->
+  __nanyx_map_of_entries(
+    list.filterMap(
+      __nanyx_map_entries(m)
+      { entry ->
+        match f(entry.0, entry.1)
+          | #some(value) -> #some(entry.0, value)
+          | #skip -> #skip
+      }
+    )
+  )
+}
+
+--| Whether `test` holds for any key and its value (so `false` for an empty map). It stops at the
+  first entry it holds for.
+export def map.any: [c] map(k, v), ([c] k, v -> bool) -> bool = { m, test ->
+  list.any(__nanyx_map_entries(m), { entry -> test(entry.0, entry.1) })
+}
+
+--| Whether `test` holds for every key and its value (so `true` for an empty map). It stops at the
+  first entry it fails for.
+export def map.all: [c] map(k, v), ([c] k, v -> bool) -> bool = { m, test ->
+  list.all(__nanyx_map_entries(m), { entry -> test(entry.0, entry.1) })
+}
+
 --| Whether the maps `m` and `n` hold the same keys, compared with `==`, and equal values for each,
   as `same` compares two values, whatever order their keys were added in. The `==` the compiler
   derives for a map calls it.
@@ -328,6 +356,34 @@ export def set.map: [Eq(b), Hash(b), c] set(a), ([c] a -> b) -> set(b) = { s, f 
 --| The elements of `s` that pass `keep`, in the same order.
 export def set.filter: [c] set(a), ([c] a -> bool) -> set(a) = { s, keep ->
   __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), keep))
+}
+
+--| The set of the values `f` gives as `#some`, leaving out the elements it gives `#skip` for: a
+  [`set.filter`] and a [`set.map`] in one walk. Values that come out equal are kept once, where the
+  first of them was.
+export def set.filterMap
+  : [Eq(b), Hash(b), c] set(a), ([c] a -> #some(b) | #skip) -> set(b)
+  = { s, f ->
+    set.fromList(list.filterMap(__nanyx_set_elements(s), f))
+  }
+
+--| The set of the values `f` yields for each element in turn. Values that come out equal are kept
+  once, where the first of them was. A lambda with `yield` in it is a sequence (see [`Yield`]), as
+  in [`list.select`].
+export def set.select: [Eq(b), Hash(b), c, d] set(a), ([c] a -> [d] seq(b)) -> set(b) = { s, f ->
+  set.fromList(list.select(__nanyx_set_elements(s), f))
+}
+
+--| Whether `test` holds for any element (so `false` for an empty set). It stops at the first element
+  it holds for.
+export def set.any: [c] set(a), ([c] a -> bool) -> bool = { s, test ->
+  list.any(__nanyx_set_elements(s), test)
+}
+
+--| Whether `test` holds for every element (so `true` for an empty set). It stops at the first
+  element it fails for.
+export def set.all: [c] set(a), ([c] a -> bool) -> bool = { s, test ->
+  list.all(__nanyx_set_elements(s), test)
 }
 
 --| Whether `t` holds every element of `s`.

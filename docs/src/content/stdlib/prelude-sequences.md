@@ -148,6 +148,24 @@ def list.toSeq: list(a) -> seq(a)
 
 The elements of `xs`, in order.
 
+## `seq.fromList`
+
+```nanyx fragment
+def seq.fromList: list(a) -> seq(a)
+```
+
+The elements of `xs`, in order: `seq.fromList([1, 2, 3]) \seq.toList` is `[1, 2, 3]`. The same
+as [`list.toSeq`](#listtoseq).
+
+## `seq.fromArray`
+
+```nanyx fragment
+def seq.fromArray: array(a) -> seq(a)
+```
+
+The elements of `xs`, in order, each read when the sequence is pulled. What a literal builds a
+sequence with, `Seq[1, 2, 3]`. The same as [`array.toSeq`](prelude-arrays#arraytoseq).
+
 ## `seq.map`
 
 ```nanyx fragment
