@@ -89,6 +89,7 @@ let ``An export's core name is its interface's and its own, as wit-component exp
 [<InlineData("export def answer: int = 42", "a value that isn't a function can't cross")>]
 [<InlineData("export def origin: () -> (x: int, y: int) = { -> (x = 0, y = 0) }", "a record with no name can't cross")>]
 [<InlineData("export def flip: () -> #heads | #tails = { -> #heads }", "a tag union with no name can't cross")>]
+[<InlineData("export def pick: int | string -> int = { x -> 1 }", "a union of types other than tags can't cross")>]
 let ``A type that can't cross a component's boundary is an error at the def`` (def: string, message: string) =
     let source = normalized $"@component\n{def}\n"
     let code, text = singleError source
@@ -97,8 +98,6 @@ let ``A type that can't cross a component's boundary is an error at the def`` (d
     Assert.Contains(message, (diagnosticOf source).Message)
 
 [<Theory>]
-[<InlineData("type Point = (x: int, y: int)\n\n@component\nexport def origin: () -> Point = { -> (x = 0, y = 0) }", "a record")>]
-[<InlineData("@component\nexport def sum: list(int) -> int = { xs -> 0 }", "a list")>]
 [<InlineData("@component\nexport def log: [Console] string -> () = { s -> println(s) }", "a function that requires contexts")>]
 let ``A type the compiler can't take across a component's boundary yet is an error that says so`` (source: string, what: string) =
     let diagnostic = diagnosticOf (normalized source)
@@ -113,3 +112,53 @@ let ``@component marks only an exported def, and takes no argument`` () =
     let code, _ = singleError (normalized "@component(1)\nexport def area: float -> float = { r -> r }\n")
     Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, code)
 
+
+[<Fact>]
+let ``A named record or tag union is a WIT record or variant of its name, with its fields and cases as they are written`` () =
+    let functions =
+        exported
+            """module shapes
+
+export type Point = (y: float, x: float)
+
+export type Shape = #circle(float) | #rect(Point, Point) | #empty
+
+export type Pair(a) = (left: a, right: a)
+
+@component
+export def area: Shape -> float = { s -> 0.0 }
+
+@component
+export def corners: list(Pair(Point)) -> (int, list(string)) = { xs -> (0, []) }
+"""
+    let expected =
+        """/// Written by `nanyx build` from the program's definitions marked `@component`.
+package acme:shapes@0.1.0;
+
+interface shapes {
+  record point {
+    y: f64,
+    x: f64,
+  }
+
+  variant shape {
+    circle(f64),
+    rect(tuple<point, point>),
+    empty,
+  }
+
+  record pair-point {
+    left: point,
+    right: point,
+  }
+
+  area: func(s: shape) -> f64;
+  corners: func(xs: list<pair-point>) -> tuple<s64, list<string>>;
+}
+
+world component {
+  include nanyx:console/command;
+  export shapes;
+}
+"""
+    Assert.Equal(expected, ComponentInterface.render "acme:shapes@0.1.0" "nanyx:console/command" functions)

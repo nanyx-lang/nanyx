@@ -19,6 +19,29 @@ type WitType =
     | F32
     | F64
     | String
+    /// A record of a named type, by its WIT name, with its fields in the order they are written, by their Nanyx names.
+    | Record of name: string * fields: (string * WitType) list
+    | Tuple of WitType list
+    /// A variant of a named tag union, by its WIT name, with a case for each tag, by its Nanyx name, in the order they
+    /// are written, each with its payload's type if it has one.
+    | Variant of name: string * cases: (string * WitType option) list
+    | List of WitType
+
+module WitType =
+    /// The types `ty` is made of, one level down.
+    let children (ty: WitType) =
+        match ty with
+        | WitType.Record(_, fields) -> List.map snd fields
+        | WitType.Tuple items -> items
+        | WitType.Variant(_, cases) -> List.choose snd cases
+        | WitType.List item -> [ item ]
+        | _ -> []
+
+    /// The names of the tags of every variant `ty` is made of, itself included.
+    let rec tags (ty: WitType) =
+        match ty with
+        | WitType.Variant(_, cases) -> List.map fst cases @ (cases |> List.choose snd |> List.collect tags)
+        | ty -> children ty |> List.collect tags
 
 /// A function a component exports (see `ComponentExport`): its parameters, by their WIT names, and its result, none for
 /// a function that returns `()`.
@@ -96,9 +119,46 @@ module ComponentInterface =
         | Never of what: string * fix: string
         | NotYet of what: string
 
-    /// The WIT type of a value of type `ty`, or why it has none. `named` says whether `ty` is what a named type stands
-    /// for, which a record or a union must be: WIT names each.
-    let rec private witTypeOf (named: bool) (ty: Ty) : Result<WitType, Problem> =
+    /// A WIT type as WIT writes it where it is used: a record or a variant by its name.
+    let rec witTypeText (ty: WitType) =
+        match ty with
+        | WitType.Bool -> "bool"
+        | WitType.S8 -> "s8"
+        | WitType.S16 -> "s16"
+        | WitType.S32 -> "s32"
+        | WitType.S64 -> "s64"
+        | WitType.U8 -> "u8"
+        | WitType.U16 -> "u16"
+        | WitType.U32 -> "u32"
+        | WitType.U64 -> "u64"
+        | WitType.F32 -> "f32"
+        | WitType.F64 -> "f64"
+        | WitType.String -> "string"
+        | WitType.Record(name, _)
+        | WitType.Variant(name, _) -> name
+        | WitType.Tuple items -> $"""tuple<{items |> List.map witTypeText |> String.concat ", "}>"""
+        | WitType.List item -> $"list<{witTypeText item}>"
+
+    /// A WIT type as a part of the name of a generic type applied to it: `list-s64` for `list<s64>`.
+    let rec private label (ty: WitType) =
+        match ty with
+        | WitType.Tuple items -> "tuple-" + (items |> List.map label |> String.concat "-")
+        | WitType.List item -> $"list-{label item}"
+        | ty -> witTypeText ty
+
+    /// Whether `fields` are a tuple's, by position.
+    let private positional (fields: Map<string, Ty>) = fields |> Map.forall (fun key _ -> fst (Int32.TryParse key))
+
+    /// The first error of `results`, or their values.
+    let private all (results: Result<'T, Problem> list) =
+        match results |> List.tryPick (function Error problem -> Some problem | Ok _ -> None) with
+        | Some problem -> Error problem
+        | None -> Ok (results |> List.choose Result.toOption)
+
+    /// The WIT type of a value of type `ty`, or why it has none. `name` is the WIT name of the named type `ty` is what
+    /// it stands for, which a record or a union must be: WIT names each. A named type applied to arguments is named with
+    /// them, `result-string-s64` for `Result(string, int)`.
+    let rec private witTypeOf (name: string option) (ty: Ty) : Result<WitType, Problem> =
         let rec hasVariable (ty: Ty) =
             match ty with
             | TyVar _
@@ -106,8 +166,8 @@ module ComponentInterface =
             | ty -> Ty.children ty |> List.exists hasVariable
         match ty with
         | ty when hasVariable ty -> Error (Never("a type variable", "write the type it stands for"))
-        | TyAlias(_, _, underlying)
-        | TyNominal(_, _, underlying, _) -> witTypeOf true underlying
+        | TyAlias(typeName, args, underlying) -> namedType typeName args underlying
+        | TyNominal(id, args, underlying, _) -> namedType id.Name args underlying
         | TyPrimitive "bool" -> Ok WitType.Bool
         | TyPrimitive "int" -> Ok WitType.S64
         | TyPrimitive "float" -> Ok WitType.F64
@@ -125,20 +185,47 @@ module ComponentInterface =
                 | SizedInteger.U64 -> WitType.U64)
         | TyFunc _ -> Error (Never("a function", "pass the values it would compute instead"))
         | TyContexts _ -> Error (Never("a context", "pass the values it would give instead"))
-        | TyRecord(fields, _) when not named && not (fields |> Map.forall (fun key _ -> fst (Int32.TryParse key))) ->
-            Error (Never("a record with no name", "name it with a `type`, which names it in the WIT"))
+        | TyRecursive _
+        | TySelf _ -> Error (Never("a recursive type", "pass its values in a list instead: WIT has no recursive types"))
+        | TyRecord(fields, _) when positional fields ->
+            fields |> Map.toList |> List.sortBy (fst >> int) |> List.map (snd >> witTypeOf None) |> all |> Result.map WitType.Tuple
+        | TyRecord(fields, FieldOrder order) ->
+            match name with
+            | None -> Error (Never("a record with no name", "name it with a `type`, which names it in the WIT"))
+            | Some name ->
+                let written = order |> List.filter fields.ContainsKey
+                let names = written @ (fields.Keys |> Seq.filter (fun field -> not (List.contains field written)) |> List.ofSeq)
+                names
+                |> List.map (fun field -> witTypeOf None fields.[field] |> Result.map (fun wit -> field, wit))
+                |> all
+                |> Result.map (fun fields -> WitType.Record(name, fields))
         | TyTag _
-        | TyUnion _ when not named -> Error (Never("a tag union with no name", "name it with a `type`, which names it in the WIT"))
-        | TyRecord(fields, _) when fields |> Map.forall (fun key _ -> fst (Int32.TryParse key)) -> Error (NotYet "a tuple")
-        | TyRecord _ -> Error (NotYet "a record")
-        | TyTag _
-        | TyUnion _ -> Error (NotYet "a tag union")
-        | TyApply("list", _) -> Error (NotYet "a list")
+        | TyUnion _ ->
+            let members = match ty with TyUnion members -> members | single -> [ single ]
+            let isTag (member': Ty) = match Unifier.unalias member' with TyTag _ -> true | _ -> false
+            match name with
+            | _ when not (List.forall isTag members) ->
+                Error (Never("a union of types other than tags", "tag each of its members, as `#circle(float) | #square(float)`"))
+            | None -> Error (Never("a tag union with no name", "name it with a `type`, which names it in the WIT"))
+            | Some name ->
+                members
+                |> List.map (fun member' ->
+                    match Unifier.unalias member' with
+                    | TyTag(tag, None) -> Ok (tag, None)
+                    | TyTag(tag, Some payload) -> witTypeOf None payload |> Result.map (fun wit -> tag, Some wit)
+                    | _ -> Error (Never("a union of types other than tags", "tag each of its members, as `#circle(float) | #square(float)`")))
+                |> all
+                |> Result.map (fun cases -> WitType.Variant(name, cases))
+        | TyApply("list", [ item ]) -> witTypeOf None item |> Result.map WitType.List
         | TyPrimitive "unit" -> Error (NotYet "`()` as a value")
         | other -> Error (NotYet $"'{TypePrinting.tyToString other}'")
 
-    /// The most values a function's parameters are passed as before the canonical ABI passes them in memory instead.
-    let private maxFlatParameters = 16
+    /// The WIT type of a value of the type named `typeName` applied to `args`, which stands for `underlying`.
+    and private namedType (typeName: string) (args: Ty list) (underlying: Ty) =
+        args
+        |> List.map (witTypeOf None)
+        |> all
+        |> Result.bind (fun args -> witTypeOf (Some (witName typeName :: List.map label args |> String.concat "-")) underlying)
 
     /// The parameters of a def's lambda, `value`, by name, if its value is a lambda.
     let private lambdaParameters (value: Expression) =
@@ -167,15 +254,12 @@ module ComponentInterface =
                 match names with
                 | Some names when names.Length = inputs.Length -> names
                 | _ -> inputs |> List.mapi (fun index _ -> $"p{index}")
-            let parameters = List.zip names inputs |> List.map (fun (name, ty) -> witTypeOf false ty |> Result.map (fun wit -> witName name, wit))
+            let parameters = List.zip names inputs |> List.map (fun (name, ty) -> witTypeOf None ty |> Result.map (fun wit -> witName name, wit))
             let result =
                 match Unifier.unalias output with
                 | TyPrimitive "unit" -> Ok None
-                | _ -> witTypeOf false output |> Result.map Some
+                | _ -> witTypeOf None output |> Result.map Some
             let contextProblems = if contexts.IsEmpty && not requiresContexts then [] else [ NotYet "a function that requires contexts" ]
-            // The canonical ABI passes more values than this in memory, which the compiler doesn't yet.
-            let flatValues = parameters |> List.sumBy (function Ok (_, WitType.String) -> 2 | _ -> 1)
-            let contextProblems = contextProblems @ (if flatValues > maxFlatParameters then [ NotYet $"more than {maxFlatParameters} values as its parameters" ] else [])
             let problems = (parameters @ [ result |> Result.map (fun _ -> "", WitType.Bool) ]) |> List.choose (function Error problem -> Some problem | Ok _ -> None)
             match contextProblems @ problems with
             | [] -> Ok { Export = export; Parameters = parameters |> List.choose Result.toOption; Result = result |> Result.toOption |> Option.flatten }
@@ -225,22 +309,6 @@ module ComponentInterface =
             |> Map.tryFind export.Definition
             |> Option.bind (fun ty -> functionOf export ty (values |> Map.tryFind export.Definition) false |> Result.toOption))
 
-    /// A WIT type as WIT writes it.
-    let witTypeText (ty: WitType) =
-        match ty with
-        | WitType.Bool -> "bool"
-        | WitType.S8 -> "s8"
-        | WitType.S16 -> "s16"
-        | WitType.S32 -> "s32"
-        | WitType.S64 -> "s64"
-        | WitType.U8 -> "u8"
-        | WitType.U16 -> "u16"
-        | WitType.U32 -> "u32"
-        | WitType.U64 -> "u64"
-        | WitType.F32 -> "f32"
-        | WitType.F64 -> "f64"
-        | WitType.String -> "string"
-
     /// The name of the world a package's WIT (see `render`) gives a component built from it: `component`, unless an
     /// interface of the package is named that, when it is `component-world`.
     let worldName (functions: ComponentFunction list) =
@@ -253,6 +321,35 @@ module ComponentInterface =
             functions
             |> List.groupBy (fun func -> witName func.Export.Module)
             |> List.sortBy fst
+        // The records and variants each interface's functions are made of, each named once, after those it is made of.
+        let typeDefinitions (members: ComponentFunction list) =
+            let defined = Collections.Generic.HashSet<string>()
+            let rec definitions (ty: WitType) =
+                let inner = WitType.children ty |> List.collect definitions
+                match ty with
+                | WitType.Record(name, _)
+                | WitType.Variant(name, _) when defined.Add name -> inner @ [ ty ]
+                | _ -> inner
+            members
+            |> List.collect (fun func -> (List.map snd func.Parameters @ Option.toList func.Result) |> List.collect definitions)
+            |> List.collect (fun ty ->
+                match ty with
+                | WitType.Record(name, fields) ->
+                    [ $"  record {name} {{"
+                      yield! fields |> List.map (fun (field, ty) -> $"    {witName field}: {witTypeText ty},")
+                      "  }"
+                      "" ]
+                | WitType.Variant(name, cases) ->
+                    [ $"  variant {name} {{"
+                      yield!
+                          cases
+                          |> List.map (fun (case, payload) ->
+                              match payload with
+                              | Some ty -> $"    {witName case}({witTypeText ty}),"
+                              | None -> $"    {witName case},")
+                      "  }"
+                      "" ]
+                | _ -> [])
         let signature (func: ComponentFunction) =
             let parameters = func.Parameters |> List.map (fun (name, ty) -> $"{name}: {witTypeText ty}") |> String.concat ", "
             let result = func.Result |> Option.map (fun ty -> $" -> {witTypeText ty}") |> Option.defaultValue ""
@@ -262,6 +359,7 @@ module ComponentInterface =
           for name, members in interfaces do
               ""
               $"interface {name} {{"
+              yield! typeDefinitions members
               yield! members |> List.distinctBy (fun func -> func.Export.Name) |> List.map signature
               "}"
           ""

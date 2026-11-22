@@ -1142,7 +1142,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     // The tags, strings and dbg forms of exactly the functions emitted below.
     let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
-    let tagIdMap = facts.Tags |> List.mapi (fun index name -> name, index + 1) |> Map.ofList
+    // With the tags of the types a component's exports take and give, which their functions may never write.
+    let exportTags = options.ComponentExports |> List.collect (fun (_, func) -> List.map snd func.Parameters @ Option.toList func.Result) |> List.collect WitType.tags
+    let tagIdMap = facts.Tags @ exportTags |> List.distinct |> List.sort |> List.mapi (fun index name -> name, index + 1) |> Map.ofList
     // A checked module lays out what its memory checks write with its own literals.
     let literals =
         if options.CheckMemory then facts.Strings @ (MemoryChecks.messages |> List.except facts.Strings)
@@ -1266,8 +1268,22 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         usedHelpers.Add Helpers.writeStderr |> ignore
         usedHelpers.Add Helpers.procExit |> ignore
     if options.Component.IsSome then
-        for helper in ComponentAbi.reallocHelpers @ ComponentExports.helpers options.ComponentExports do
+        for helper in ComponentAbi.reallocHelpers do
             usedHelpers.Add helper |> ignore
+    // The functions a component exports for the program's definitions, which note the helpers they call.
+    let exportFunctions =
+        let target (definition: string) : ComponentExports.ExportTarget =
+            let name = exportTargets.[definition]
+            let func = definitionFunctions |> List.find (fun func -> func.Name = name)
+            { Function = name
+              Parameters = func.Params |> List.map _.Type
+              Result = func.Result
+              TakesOver = fun index -> CoreIrCounting.parameterUse ownership name index = Owned }
+        let exportContext: ComponentExports.ExportContext =
+            { TagCode = context.TagId >> Wat.tagCode
+              RecordLayout = context.RecordLayoutId
+              UseHelper = usedHelpers.Add >> ignore }
+        ComponentExports.functions exportContext options.ComponentExports target
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     // Exiting is not a stream, but its WASI import is declared with stderr's.
     let moduleUsesStandardStreams = [ Helpers.writeStderr; Helpers.procExit ] |> List.exists usedHelperSet.Contains
@@ -1309,13 +1325,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           match options.Component with
           | Some entry ->
               yield ComponentAbi.functions entry CoreIrEmit.importName
-              let target (definition: string) : ComponentExports.ExportTarget =
-                  let name = exportTargets.[definition]
-                  let func = definitionFunctions |> List.find (fun func -> func.Name = name)
-                  { Function = name
-                    Arity = func.Params.Length
-                    TakesOver = fun index -> CoreIrCounting.parameterUse ownership name index = Owned }
-              yield ComponentExports.functions options.ComponentExports target
+              yield exportFunctions
           | None -> ()
           if checksMemory then
               yield memoryCheckFunctions heapBase (fun message -> stringLiteralMap |> Map.find message)
