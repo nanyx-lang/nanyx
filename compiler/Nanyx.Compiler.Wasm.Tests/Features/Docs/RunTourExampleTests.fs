@@ -2,7 +2,8 @@
 /// (docs/src/content/getting-started), the standard library's pages (docs/src/content/stdlib), the custom patterns page (docs/src/content/advanced/custom-patterns.md) and the JSON and regular expressions cookbook pages (docs/src/content/cookbook/json-parsing.md and regular-expressions.md), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
 /// does. The words after `nanyx` on a block's opening fence say what kind of example it is; the conventions are in
 /// docs/src/content/deep-dives/compilation.md#tour-examples. A standard-library page's generated reference is
-/// left out: its blocks are signatures, and its doc comments' examples are checked where they are written.
+/// left out: its blocks are signatures, and its doc comments' examples are checked where they are written. The home
+/// page's examples (docs/src/home/*.nyx) are whole programs, run as they are.
 module TranspilerWasmTests.Features.Docs.RunTourExamples
 
 open System
@@ -52,6 +53,12 @@ let regexCookbookExamples () : obj array seq =
     examplesOf "cookbook" "regular-expressions.md"
     |> Map.keys
     |> Seq.map (fun line -> [| box "regular-expressions.md"; box line |])
+
+/// The docs site's home page's examples, the `.nyx` files in docs/src/home.
+let private homePageDirectory = Path.GetFullPath(Path.Combine(docsContentDirectory, "..", "home"))
+
+let homePageExamples () : obj array seq =
+    Directory.GetFiles(homePageDirectory, "*.nyx") |> Array.sort |> Seq.map (fun path -> [| box (Path.GetFileName path) |])
 
 /// The tour's examples work on strings with `nanyx/text` without importing it, as though each imported it: after its
 /// directives and its module declaration, if it has them, and before its first line of code. They print with the
@@ -145,3 +152,13 @@ let ``JSON cookbook example compiles and runs`` (page: string, line: int) = chec
 [<Theory>]
 [<MemberData(nameof regexCookbookExamples)>]
 let ``Regular expressions cookbook example compiles and runs`` (page: string, line: int) = check "cookbook" page line
+
+/// A home page example runs as it is, with no import added, since the page's "Run in the playground" link opens it so,
+/// and prints what its last comments say.
+[<Theory>]
+[<MemberData(nameof homePageExamples)>]
+let ``Home page example compiles and runs`` (file: string) =
+    let code = File.ReadAllText(Path.Combine(homePageDirectory, file)).ReplaceLineEndings "\n"
+    let outcome = runSourceWith false "" code
+    Assert.True((outcome.ExitCode = 0 && outcome.StandardError = ""), $"{file} failed with exit code {outcome.ExitCode}:\n{outcome.StandardError}")
+    Assert.Equal(expectedOutput code, outcome.StandardOutput.ReplaceLineEndings("\n").TrimEnd())

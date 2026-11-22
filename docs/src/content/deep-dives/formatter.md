@@ -127,8 +127,8 @@ disagree. `nanyx lsp --no-format-hints` turns them off.
 # The repository's Nanyx
 
 `stdlib/` and `packages/` are checked by `nanyx format --check` in CI
-([#223](https://github.com/nanyx-lang/nanyx/issues/223)). The examples that parse, and the docs' code blocks fenced
-` ```nanyx `, are checked by a test that CI runs (`CorpusTests`, "The examples and the docs' code blocks are
+([#223](https://github.com/nanyx-lang/nanyx/issues/223)). The examples that parse, the docs site's home page's examples
+(`docs/src/home`), and the docs' code blocks fenced ` ```nanyx `, are checked by a test that CI runs (`CorpusTests`, "The examples and the docs' code blocks are
 formatted"), which names each one that isn't formatted and shows what it should be. A test rather than a CLI step,
 because some examples are written in syntax the parser doesn't take yet, and the command can't read a Markdown file.
 A block fenced ` ```nanyx fragment `, ` ```nanyx skip=#<issue> ` or ` ```nanyx unformatted ` (code shown before

@@ -1,0 +1,9 @@
+-- Pipes thread a value through calls, left to right.
+"the quick brown fox jumps over the lazy dog"
+  \split(on = " ")
+  \filter { .length > 4 }
+  \map { word -> "{word}!" }
+  \string.join(" ")
+  \println
+
+-- quick! brown! jumps!

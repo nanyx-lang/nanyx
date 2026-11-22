@@ -1,6 +1,17 @@
 // Shiki themes for the docs. These mirror the light and dark palettes used
 // across the site and target the scopes emitted by the Nanyx TextMate grammar
-// in ../../extension/syntaxes/nanyx.tmLanguage.json.
+// in ../../extension/syntaxes/nanyx.tmLanguage.json, which `nanyxLanguage` registers with Shiki. The docs' Markdown and
+// the home page's `<Code>` blocks both highlight with these.
+
+import nyxGrammar from "../../extension/syntaxes/nanyx.tmLanguage.json";
+
+/** The Nanyx grammar, as Shiki takes a language: ```nanyx and ```nyx blocks use it. */
+export const nanyxLanguage = {
+  ...nyxGrammar,
+  name: "nanyx",
+  scopeName: nyxGrammar.scopeName ?? "source.nanyx",
+  aliases: ["nyx"],
+};
 
 const punctuationScopes = [
   "punctuation.section",
