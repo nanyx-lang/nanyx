@@ -59,7 +59,7 @@ directories the host gave the program is `#permissionDenied`. Import the module 
 ## `read`
 
 ```nanyx fragment
-def read: [Async, FileSystem] Path -> #some(string) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+def read: [Async, FileSystem] Path -> #some(string) | FsError
 ```
 
 The text of the file at `at`, read as UTF-8.
@@ -67,7 +67,7 @@ The text of the file at `at`, read as UTF-8.
 ## `readBytes`
 
 ```nanyx fragment
-def readBytes: [Async, FileSystem] Path -> #some(array(U8)) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+def readBytes: [Async, FileSystem] Path -> #some(array(U8)) | FsError
 ```
 
 The bytes of the file at `at`.
@@ -75,7 +75,7 @@ The bytes of the file at `at`.
 ## `write`
 
 ```nanyx fragment
-def write: [Async, FileSystem] Path, string -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+def write: [Async, FileSystem] Path, string -> #ok | FsError
 ```
 
 Writes `text` to the file at `at` in UTF-8, in place of what it held, and makes the file when
@@ -84,7 +84,7 @@ there is none. Its directory must be there already.
 ## `append`
 
 ```nanyx fragment
-def append: [Async, FileSystem] Path, string -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+def append: [Async, FileSystem] Path, string -> #ok | FsError
 ```
 
 Writes `text` to the end of the file at `at` in UTF-8, and makes the file when there is none.
@@ -100,7 +100,7 @@ Whether there is a file or a directory at `at` that the program may reach.
 ## `delete`
 
 ```nanyx fragment
-def delete: [Async, FileSystem] Path -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+def delete: [Async, FileSystem] Path -> #ok | FsError
 ```
 
 Deletes the file at `at`. A directory is `#isDirectory`: this deletes only files.
@@ -108,7 +108,7 @@ Deletes the file at `at`. A directory is `#isDirectory`: this deletes only files
 ## `lines`
 
 ```nanyx fragment
-def lines: [Async, FileSystem] Path -> #some([Async, FileSystem] seq(string)) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+def lines: [Async, FileSystem] Path -> #some([Async, FileSystem] seq(string)) | FsError
 ```
 
 The lines of the file at `at`, read lazily, a chunk at a time: a file larger than memory is

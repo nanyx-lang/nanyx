@@ -30,7 +30,7 @@ Each function requires [`FileSystem`](filesystem), and gives what went wrong as 
 ## `list`
 
 ```nanyx fragment
-def list: [Async, FileSystem] Path -> #some(list(Path)) | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+def list: [Async, FileSystem] Path -> #some(list(Path)) | FsError
 ```
 
 The paths of what the directory at `at` holds, its files and directories, each `at` joined with
@@ -39,7 +39,7 @@ its name, sorted by name.
 ## `create`
 
 ```nanyx fragment
-def create: [Async, FileSystem] Path -> #ok | #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+def create: [Async, FileSystem] Path -> #ok | FsError
 ```
 
 Makes the directory `at`. Its parent must be there already, and `#alreadyExists` says
