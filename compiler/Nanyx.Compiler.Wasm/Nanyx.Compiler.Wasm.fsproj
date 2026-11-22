@@ -18,7 +18,6 @@
     <Compile Include="WasmRuntime.fs" />
     <Compile Include="ComponentEntry.fs" />
     <Compile Include="ComponentAbi.fs" />
-    <Compile Include="ComponentExports.fs" />
     <Compile Include="Interpolation.fs" />
     <Compile Include="Wat.fs" />
     <Compile Include="CoreIr.fs" />
@@ -62,6 +61,8 @@
     <Compile Include="CoreIrReach.fs" />
     <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CoreIrCachedValues.fs" />
+    <Compile Include="ComponentValues.fs" />
+    <Compile Include="ComponentExports.fs" />
     <Compile Include="CodeGen.fs" />
     <Compile Include="WatSyntax.fs" />
     <Compile Include="WasmBinary.fs" />

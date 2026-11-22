@@ -1,139 +1,125 @@
 /// The functions a component's core module exports for the definitions the program marks `@component` (see
 /// `NyxCompiler.ComponentInterface`): for each, a function that takes its arguments as the canonical ABI passes them,
 /// calls the definition's function, and gives its result back as the canonical ABI returns it, and a post-return
-/// function that frees what the result held once the host has copied it (see the Components page of the Deep dives).
+/// function that frees what the result points to once the host has copied it (see the Components page of the Deep
+/// dives). Values are lifted and lowered by `ComponentValues`.
 module internal Transpiler.Wasm.ComponentExports
 
 open NyxCompiler
-open Transpiler.Wasm.WasmAllocator
+open Transpiler.Wasm.CoreIr
+open Transpiler.Wasm.ComponentValues
 open Transpiler.Wasm.WasmRuntime
 
-/// The core types a value of `ty` is passed as: a string as its address and its length in bytes.
-let private flat (ty: WitType) =
-    match ty with
-    | WitType.S64
-    | WitType.U64 -> [ "i64" ]
-    | WitType.F32 -> [ "f32" ]
-    | WitType.F64 -> [ "f64" ]
-    | WitType.String -> [ "i32"; "i32" ]
-    | WitType.Bool
-    | WitType.S8
-    | WitType.S16
-    | WitType.S32
-    | WitType.U8
-    | WitType.U16
-    | WitType.U32 -> [ "i32" ]
+/// The most core values an export's parameters are passed as before the canonical ABI passes them in memory instead.
+let private maxFlatParameters = 16
 
-/// The function an export of the definition `definition` calls, as the backend lowered it: its name, how many
-/// parameters it takes, and whether it takes over its parameter at each index (see `CoreIrCounting`).
+/// The function an export of a definition calls, as the backend lowered it: its name, the Nanyx types of its
+/// parameters and its result, and whether it takes over its parameter at each index (see `CoreIrCounting`).
 type ExportTarget =
     { Function: string
-      Arity: int
+      Parameters: IrType list
+      Result: IrType
       TakesOver: int -> bool }
 
-/// The code that drops the string `$local` holds: gives up its reference, and frees it if that was the last.
-let private dropString (local: string) =
-    [ $"  local.get {local}"
-      $"  i32.const {Header.withInfo}"
-      "  i32.sub"
-      $"  call ${Helpers.release}"
-      "  if"
-      $"    local.get {local}"
-      $"    i32.const {Header.withInfo}"
-      "    i32.sub"
-      $"    call ${Helpers.free}"
-      "  end" ]
+/// How the functions write tags and records, and note the runtime helpers they call.
+type ExportContext =
+    { TagCode: string -> int
+      RecordLayout: string list -> int
+      UseHelper: string -> unit }
 
-/// The functions that export `func` under `name`, calling `target`, numbered `index` among the module's exports. A
-/// string argument arrives in a block the host allocated through `cabi_realloc`, which the module owns: it is copied
-/// into a string, and the block freed. A string result is returned in a block of its address and length, which
-/// `cabi_post_` frees once the host has copied the string, giving up its reference to the string too.
-let private exportFunctions (index: int) (name: string) (func: ComponentFunction) (target: ExportTarget) =
+let private indented (lines: string list) = lines |> List.map (fun line -> "  " + line)
+
+/// The functions that export `func` under `name`, calling `target`, numbered `index` among the module's exports.
+///
+/// Its arguments are lifted to Nanyx values: from the core values they are passed as, or, when those come to more than
+/// `maxFlatParameters`, from a block the host allocated through `cabi_realloc`, which is freed. The blocks a string or
+/// a list points to are the module's too, and are freed once they are copied. Each argument the function doesn't take
+/// over is dropped after the call. A result passed as at most one core value is returned as it; any other is written
+/// to a new block, whose address is returned, and `cabi_post_` and the export's name frees it, with the blocks it
+/// points to, once the host has copied it. The Nanyx result is dropped once it has been lowered.
+let private exportFunctions (context: ExportContext) (index: int) (name: string) (func: ComponentFunction) (target: ExportTarget) =
+    let generator = Generator(context.TagCode, context.RecordLayout, context.UseHelper)
     let wrapper = $"$__nanyx_export_{index}"
-    let parameters = func.Parameters |> List.mapi (fun position (_, ty) -> position, ty)
+    let types = func.Parameters |> List.map snd
+    // A function of no parameters takes `()`.
+    let parameterIrs = if types.IsEmpty then [] else target.Parameters
+    let flatParameters = types |> List.collect flat
+    let inMemory = flatParameters.Length > maxFlatParameters
     let header =
-        [ for position, ty in parameters do
-              match ty with
-              | WitType.String -> $"(param $p{position} i32) (param $p{position}_len i32)"
-              | ty -> $"(param $p{position} {List.head (flat ty)})"
-          match func.Result with
-          | Some WitType.String -> "(result i32)"
-          | Some ty -> $"(result {List.head (flat ty)})"
-          | None -> ()
-          for position, ty in parameters do
-              if ty = WitType.String then $"(local $s{position} i32)"
-          match func.Result with
-          | Some WitType.String -> "(local $result i32) (local $area i32)"
-          | Some ty -> $"(local $result {List.head (flat ty)})"
-          | None -> () ]
-        |> String.concat " "
+        if inMemory then [ "(param $args i32)" ]
+        else flatParameters |> List.mapi (fun position core -> $"(param $p{position} {core})")
+    let arguments = parameterIrs |> List.map (fun ir -> generator.Local(CoreIrLayout.valueType ir))
     let lift =
-        [ for position, ty in parameters do
-              if ty = WitType.String then
-                  $"  local.get $p{position}"
-                  $"  local.get $p{position}_len"
-                  $"  call ${Helpers.stringFromMemory}"
-                  $"  local.set $s{position}"
-                  // An empty string's block may be none at all.
-                  $"  local.get $p{position}_len"
-                  "  if"
-                  $"    local.get $p{position}"
-                  $"    call ${Helpers.free}"
-                  "  end" ]
+        if inMemory then
+            [ for (ty, ir), argument, offset in List.zip3 (List.zip types parameterIrs) arguments (offsets types) do
+                  yield! generator.LiftMemory ty ir "$args" offset
+                  $"local.set {argument}"
+              "local.get $args"
+              generator.Call Helpers.free ]
+        else
+            let starts = types |> List.scan (fun start ty -> start + (flat ty).Length) 0
+            [ for ((ty, ir), argument), start in List.zip (List.zip (List.zip types parameterIrs) arguments) (List.take types.Length starts) do
+                  let values = flat ty |> List.mapi (fun offset core -> $"$p{start + offset}", core)
+                  yield! generator.LiftFlat ty ir values
+                  $"local.set {argument}" ]
     let call =
-        [ for position, ty in parameters do
-              if ty = WitType.String then $"  local.get $s{position}" else $"  local.get $p{position}"
-          // A function of no parameters takes `()`.
-          if parameters.IsEmpty && target.Arity = 1 then "  i32.const 0"
-          $"  call ${target.Function}" ]
+        [ for argument in arguments do
+              $"local.get {argument}"
+          if types.IsEmpty && target.Parameters.Length = 1 then "i32.const 0"
+          $"call ${target.Function}" ]
     let released =
-        [ for position, ty in parameters do
-              if ty = WitType.String && not (target.TakesOver position) then yield! dropString $"$s{position}" ]
-    let result =
+        List.zip parameterIrs arguments
+        |> List.indexed
+        |> List.collect (fun (position, (ir, argument)) -> if target.TakesOver position then [] else generator.Drop ir argument)
+    let result = generator.Local(CoreIrLayout.valueType target.Result)
+    let resultType, returned =
         match func.Result with
-        | None -> [ "  drop"; yield! released ]
-        | Some WitType.String ->
-            [ "  local.set $result"
+        | None -> "", [ "drop"; yield! released ]
+        | Some ty when (flat ty).Length <= 1 ->
+            let core = List.head (flat ty)
+            let lowered = generator.Local core
+            $"(result {core})",
+            [ $"local.set {result}"
+              yield! generator.LowerFlat ty target.Result result
+              $"local.set {lowered}"
+              yield! generator.Drop target.Result result
               yield! released
-              "  i32.const 8"
-              $"  call ${Helpers.alloc}"
-              "  local.tee $area"
-              "  local.get $result"
-              "  i32.store"
+              $"local.get {lowered}" ]
+        | Some ty ->
+            let area = generator.Local "i32"
+            "(result i32)",
+            [ $"local.set {result}"
+              yield! generator.Alloc (alignment ty) [ $"i32.const {size ty}" ]
+              $"local.set {area}"
+              yield! generator.LowerMemory ty target.Result result area 0
+              yield! generator.Drop target.Result result
+              yield! released
+              $"local.get {area}" ]
+    let body = lift @ call @ returned
+    let post =
+        match func.Result with
+        | Some ty when (flat ty).Length > 1 ->
+            let freeing = Generator(context.TagCode, context.RecordLayout, context.UseHelper)
+            let frees = freeing.FreeMemory ty "$area" 0
+            let free = freeing.Call Helpers.free
+            let declarations = freeing.Declarations |> String.concat " "
+            [ $"(func {wrapper}_post (export \"cabi_post_{name}\") (param $area i32) {declarations}"
+              yield! indented frees
               "  local.get $area"
-              "  local.get $result"
-              $"  call ${Helpers.stringLength}"
-              "  i32.store offset=4"
-              "  local.get $area" ]
-        | Some _ -> [ "  local.set $result"; yield! released; "  local.get $result" ]
-    [ $"(func {wrapper} (export \"{name}\") {header}"
-      yield! lift
-      yield! call
-      yield! result
+              $"  {free}"
+              ")" ]
+        | _ -> []
+    let parameters = String.concat " " header
+    let declarations = generator.Declarations |> String.concat " "
+    [ $"(func {wrapper} (export \"{name}\") {parameters} {resultType} {declarations}"
+      yield! indented body
       ")"
-      match func.Result with
-      | Some WitType.String ->
-          $"(func {wrapper}_post (export \"cabi_post_{name}\") (param $area i32) (local $result i32)"
-          "  local.get $area"
-          "  i32.load"
-          "  local.set $result"
-          yield! dropString "$result"
-          "  local.get $area"
-          $"  call ${Helpers.free}"
-          ")"
-      | _ -> () ]
+      yield! post ]
     |> String.concat "\n"
 
 /// The functions that export each of `exports`, a function with the name the module exports it under, which calls the
 /// function `target` gives for its definition.
-let functions (exports: (string * ComponentFunction) list) (target: string -> ExportTarget) =
+let functions (context: ExportContext) (exports: (string * ComponentFunction) list) (target: string -> ExportTarget) =
     exports
-    |> List.mapi (fun index (name, func) -> exportFunctions index name func (target func.Export.Definition))
+    |> List.mapi (fun index (name, func) -> exportFunctions context index name func (target func.Export.Definition))
     |> String.concat "\n"
-
-/// The runtime helpers the functions of `exports` call.
-let helpers (exports: (string * ComponentFunction) list) =
-    let strings =
-        exports
-        |> List.exists (fun (_, func) -> func.Result = Some WitType.String || func.Parameters |> List.exists (snd >> (=) WitType.String))
-    if strings then [ Helpers.stringFromMemory; Helpers.stringLength; Helpers.release; Helpers.alloc; Helpers.free ] else []
