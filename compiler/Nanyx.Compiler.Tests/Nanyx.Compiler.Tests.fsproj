@@ -39,6 +39,7 @@
     <Compile Include="Features\Contexts\ContextTests.fs" />
     <Compile Include="Features\Contexts\ContextEscapeTests.fs" />
     <Compile Include="Features\Contexts\ScopedContextTests.fs" />
+    <Compile Include="Features\Contexts\KeywordOrderTests.fs" />
     <Compile Include="Features\Contexts\ScopedTypeTests.fs" />
     <Compile Include="Features\Contexts\ContextGenericTypeTests.fs" />
     <Compile Include="Features\Contexts\RecursiveCarriedContextTests.fs" />

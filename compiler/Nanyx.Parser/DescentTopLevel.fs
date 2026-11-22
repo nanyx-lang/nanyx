@@ -148,7 +148,7 @@ let private afterEquals (c: Cursor) =
     c.Expect Equals |> ignore
     c.Across(fun c -> c.Token.IsSome) |> ignore
 
-/// A type's or a context's definition: `scoped export context Name(a) = protected ...` or
+/// A type's or a context's definition: `export scoped context Name(a) = protected ...` or
 /// `export type Name(a) = [Tx] private ...`. Its body declares its name.
 let typeDefinition (c: Cursor) : Definition =
     let defStart = c.Start
@@ -164,12 +164,16 @@ let typeDefinition (c: Cursor) : Definition =
         | first :: rest -> first :: modifiers @ rest
         | [] -> modifiers
     let contextDefinition () =
+        let takeExport () = if c.IsKeyword "export" then (c.Take() |> ignore; true) else false
+        let exportFirst = takeExport ()
         let scoped =
             if c.Is(Name, "scoped") then
                 let token = c.Take()
                 [ Scoped(c.SpanOf token) ]
             else []
-        let exported = if c.IsKeyword "export" then (c.Take() |> ignore; [ Export ]) else []
+        // `scoped export context`, the order of earlier versions, is read too, and reported with a fix (see
+        // `NyxCompiler.KeywordOrder`).
+        let exported = if exportFirst || (not scoped.IsEmpty && takeExport ()) then [ Export ] else []
         c.Expect(Keyword, "context") |> ignore
         noDollar c
         let name, nameSpan = identifierWithSpan c
@@ -311,7 +315,7 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
         match c.Attempt(fun () -> DescentControl.statementValue c) with
         | Some value -> single (Expr value)
         | None -> c.Report start "A `use` belongs in a block, where it loads an instance for the rest of the block: put it in the body of a def such as `def main = { ... }`"
-    elif c.IsKeyword "type" || c.IsKeyword "context" || (c.IsKeyword "export" && (nextText = "type" || nextText = "context")) || (c.Is(Name, "scoped") && (nextText = "export" || nextText = "context")) then
+    elif c.IsKeyword "type" || c.IsKeyword "context" || (c.IsKeyword "export" && (nextText = "type" || nextText = "context" || nextText = "scoped")) || (c.Is(Name, "scoped") && (nextText = "export" || nextText = "context")) then
         single (Def(typeDefinition c))
     elif not inBlock && (c.IsKeyword "pattern" || (c.IsKeyword "export" && nextText = "pattern")) then
         patternDefinition c start

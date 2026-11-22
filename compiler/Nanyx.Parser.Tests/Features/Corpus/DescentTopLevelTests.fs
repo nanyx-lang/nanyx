@@ -17,7 +17,7 @@ open ParserTestHelpers
 [<InlineData("type Email = protected string\ntype Id = private int\ntype Cursor = [Tx] protected (row: int)\n")>]
 [<InlineData("type Pair(a, b :: Show) = (a, b)\ntype Bag.elem = int\n")>]
 [<InlineData("type Positive = int where { > 0 }\n")>]
-[<InlineData("context Show(a) = (show: a -> string)\nscoped export context Memory = protected ()\n")>]
+[<InlineData("context Show(a) = (show: a -> string)\nexport scoped context Memory = protected ()\n")>]
 [<InlineData("pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }\n")>]
 [<InlineData("def f: int -> int\ndef g: [HostRuntime] I32 -> I32  -- a foreign function\n")>]
 [<InlineData("def (a, b) = (1, 2)\nexport def (low, high) = (1, 2)\n")>]

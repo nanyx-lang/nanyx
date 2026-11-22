@@ -30,7 +30,8 @@ module Compiler =
 
     /// The source of the file at `filePath` parsed past its mistakes, with its doc comments and the diagnostics for the
     /// syntax errors found, which may be none (see `parseModuleFileWithDocsRecovering`), or the errors for contexts
-    /// joined with `&` or `+` rather than separated by `,` (see `ContextSeparators`), after the syntax errors.
+    /// joined with `&` or `+` rather than separated by `,` (see `ContextSeparators`) and keywords written in an old
+    /// order (see `KeywordOrder`), after the syntax errors.
     let private parseWithDocs (filePath: string) (source: string) =
         let (items, _, _) as parsedModule, docComments, errors = parseModuleFileWithDocsRecovering filePath source
         let parsed = parsedModule, docComments
@@ -46,9 +47,9 @@ module Compiler =
                     else found @ syntaxErrors filePath source error)
                 []
             |> List.distinctBy (fun diagnostic -> diagnostic.Code, diagnostic.Span)
-        match ContextSeparators.check (normalizeSource source) items with
+        match ContextSeparators.check (normalizeSource source) items @ KeywordOrder.check (normalizeSource source) items with
         | [] -> Ok (parsed, syntax)
-        | separators -> Error (syntax @ separators)
+        | oldForms -> Error (syntax @ oldForms)
 
     /// The source of the file at `filePath` parsed, or the errors it has (see `parseWithDocs`).
     let private parseWithDiagnostics (filePath: string) (source: string) : Result<Module * DeclaredNames * (ModuleName * SourceSpan) list, Diagnostic list> =

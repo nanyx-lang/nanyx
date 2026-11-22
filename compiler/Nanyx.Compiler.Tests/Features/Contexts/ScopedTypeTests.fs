@@ -12,7 +12,7 @@ let private transactions =
     """
 module mod
 
-scoped export context Tx = private ()
+export scoped context Tx = private ()
 
 export type Cursor = [Tx] protected (query: string, row: int)
 

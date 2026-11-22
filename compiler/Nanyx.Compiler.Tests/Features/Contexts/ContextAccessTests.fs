@@ -60,11 +60,11 @@ let ``Only a protected or private context's home module can construct it in a us
 
 [<Fact>]
 let ``The rules are the same for a scoped context`` () =
-    let scopedPrivate = dbBlock "scoped export context Tx = private (commit: () -> ())"
+    let scopedPrivate = dbBlock "export scoped context Tx = private (commit: () -> ())"
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.PrivateContextMember.Code, "commit" ],
         codesAt (scopedPrivate + "def f: [Tx] () -> () = { commit() }\n"))
-    let scopedProtected = dbBlock "scoped export context Tx = protected (commit: () -> ())"
+    let scopedProtected = dbBlock "export scoped context Tx = protected (commit: () -> ())"
     Assert.Empty(codesAt (scopedProtected + "def f: [Tx] () -> () = { commit() }\n"))
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.NominalConstructedOutsideItsModule.Code, "Tx" ],

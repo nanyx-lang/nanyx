@@ -469,7 +469,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             elif List.contains Protected modifiers then [ text "protected" ]
             else []
         // `context Name = ...` and `context type Name = ...` both give `[Context]`; the modifiers' order is kept.
-        // `scoped` only comes before `context`, and is written first.
+        // `scoped` only comes before `context`, and after `export`: `export scoped context`.
         let scoped = if List.exists TypeDefModifier.isScoped modifiers then text "scoped " else Doc.empty
         // `[Tx] protected (...)`: the contexts whose scope a value belongs to come before the kind.
         let inScopeOf =
@@ -489,7 +489,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         let head =
             match modifiers |> List.filter isHeadModifier with
             | [ Context ] -> cat [ scoped; text $"context {name}" ]
-            | [ Context; Export ] -> cat [ scoped; text $"export context {name}" ]
+            | [ Context; Export ] -> cat [ text "export "; scoped; text $"context {name}" ]
             | others ->
                 let modifier m =
                     match m with

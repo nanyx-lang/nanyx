@@ -122,7 +122,7 @@ let ``A doc comment documents what a def, a cell, a destructuring def or a field
 export def (first, second) = (1, 2)
 
 --| A scope.
-scoped export context Memory = protected ()
+export scoped context Memory = protected ()
 
 --| A record.
 type Counter = (

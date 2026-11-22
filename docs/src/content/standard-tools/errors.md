@@ -858,6 +858,17 @@ error NYX0049: Package file that isn't UTF-8
 
 To fix it, save the file as UTF-8.
 
+# NYX0050: Keywords in the wrong order
+
+An exported scoped context is written `export scoped context`: `export` comes first, as on every definition, and
+`scoped` beside `context`. Earlier versions of the language wrote `scoped export context`, which is an error.
+
+```nanyx
+scoped export context Tx = protected ()  -- error NYX0050: Write `export` before `scoped`: `export scoped context`
+```
+
+To fix it, write `export scoped`, which the error's fix does; `nanyx format` writes it too.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
