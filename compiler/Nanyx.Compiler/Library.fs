@@ -75,7 +75,7 @@ module Compiler =
                 |> List.map (fun v -> v.Id, TyUnion [])
                 |> Map.ofList
             if closed.IsEmpty then ty else Unifier.apply closed ty
-        let resolvedTypes = types |> Map.map (fun name ty -> Unifier.apply subst ty |> closeOutputRests name)
+        let resolvedTypes = types |> Map.map (fun name ty -> Unifier.applySolved subst ty |> closeOutputRests name)
         let resolvedTypeDefs =
             typeDefs
             |> Map.map (fun _ info ->
@@ -86,7 +86,7 @@ module Compiler =
                 { info with Underlying = Unifier.apply ownSubst info.Underlying })
         let rec applyTypedExpr (typedExpr: TypedExpr) =
             { typedExpr with
-                Type = Unifier.apply subst typedExpr.Type
+                Type = Unifier.applySolved subst typedExpr.Type
                 Body = typedExpr.Body |> Option.map applyTypedExpr
                 Statements = typedExpr.Statements |> Option.map (List.map applyTypedStatement)
                 MatchArms = typedExpr.MatchArms |> Option.map (List.map applyTypedMatchArm)
@@ -101,7 +101,7 @@ module Compiler =
             | TypedTypeDefStatement _ -> statement
         and applyTypedMatchArm (patterns, expr) =
             let mappedPatterns =
-                patterns |> List.map (fun pattern -> { pattern with Type = Unifier.apply subst pattern.Type })
+                patterns |> List.map (fun pattern -> { pattern with Type = Unifier.applySolved subst pattern.Type })
             (mappedPatterns, applyTypedExpr expr)
         let resolvedItems =
             items
@@ -1042,7 +1042,7 @@ module Compiler =
         | Result.Ok checkedModule ->
             // Types by node are only read for the root module, so only its are resolved: not those of every
             // imported module (the standard library included) on every compile.
-            let resolve = Map.map (fun _ ty -> Unifier.apply checkedModule.Subst ty)
+            let resolve = Map.map (fun _ ty -> Unifier.applySolved checkedModule.Subst ty)
             // Nor are an imported module's resolved but for the nodes of its definitions that are inlined here, each by the
             // substitution of the module it came from.
             let inlinedNodes = System.Collections.Generic.HashSet<NodeId>()
@@ -1076,8 +1076,8 @@ module Compiler =
                     CalleeTypes = resolve checkedModule.RawCalleeTypes
                     SymbolTypes = resolve checkedModule.RawSymbolTypes
                     InferredContextTypes =
-                        checkedModule.Typed.InferredContextTypes |> Map.map (fun _ tys -> tys |> List.map (Unifier.apply checkedModule.Subst))
-                    ContextTypes = checkedModule.Typed.ContextTypes |> Map.map (fun _ tys -> tys |> List.map (Unifier.apply checkedModule.Subst))
+                        checkedModule.Typed.InferredContextTypes |> Map.map (fun _ tys -> tys |> List.map (Unifier.applySolved checkedModule.Subst))
+                    ContextTypes = checkedModule.Typed.ContextTypes |> Map.map (fun _ tys -> tys |> List.map (Unifier.applySolved checkedModule.Subst))
                     InlinedExprTypes = resolveInlined _.RawExprTypes
                     InlinedCalleeTypes = resolveInlined _.RawCalleeTypes }
             // Callers that stop at errors (`nanyx run`, say) look at the diagnostics, and the typed module is still
