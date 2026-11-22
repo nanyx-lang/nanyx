@@ -1,8 +1,9 @@
 // The tour's runnable examples, each a small playground where it is: the docs build puts a bar under each
 // (`remarkPlaygroundLinks` in `site/playground-examples.mjs`), and this gives it a Run button and an output, as the
 // playground's, and makes the example's code editable in place. The compiler loads on the first Run on the page, not
-// with the page, and the editor when an example is first edited. An example that reads input keeps only its "Open in
-// the playground" link: a tour page isn't cross-origin isolated, so its programs can't read input.
+// with the page, and the editor when an example is first edited. Two kinds of example keep only their "Open in the
+// playground" link: one that only declares things (`data-no-output`), since running it would print nothing, and one
+// that reads input (`data-reads-input`), since a tour page isn't cross-origin isolated, so its programs can't read input.
 
 import type { EditorView } from "@codemirror/view";
 import { playgroundCode } from "../../../site/playground-code.mjs";
@@ -57,7 +58,7 @@ function wire(bar: HTMLElement) {
     event.preventDefault();
     location.href = await shareLink(playgroundCode(code()));
   });
-  if (bar.dataset.readsInput !== undefined) return;
+  if (bar.dataset.noOutput !== undefined || bar.dataset.readsInput !== undefined) return;
 
   const run = button("Run", "tour-run-button");
   const reset = button("Reset", "tour-run-reset");
@@ -94,7 +95,8 @@ function wire(bar: HTMLElement) {
         run.disabled = false;
       },
     });
-    // Most of the tour's examples only define things: say so, rather than leave the run empty.
+    // An example edited to only define things, or one whose code runs but prints nothing: say so, rather than leave the
+    // run empty.
     if (exit?.code === 0 && terminal.runIsEmpty()) terminal.line("(no output)", "note");
     if (program) running.delete(program);
     program = null;

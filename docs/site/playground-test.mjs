@@ -3,7 +3,8 @@
 // compiler, runs hello world, gives a program its input, keeps each run's output, and opens share links and the
 // tour's links without running them; and that every example in its menu, the tour's runnable ones, runs under the
 // playground host; and that a tour page loads the compiler only on an example's first Run, runs an example where it is,
-// edits and runs it again, and opens it in the playground as edited. From `docs/`, with a compiler built for the browser:
+// edits and runs it again, and opens it in the playground as edited; and that an example that only declares things gets
+// only its playground link. From `docs/`, with a compiler built for the browser:
 //
 //   NANYX_BROWSER_ZIP=<nanyx-browser.zip> npm run build
 //   node site/playground-test.mjs
@@ -107,6 +108,9 @@ const setEditor = async (code) => {
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.insertText(code);
 };
+/** The code of the tour page's first example that has a Run button: the block before its bar. */
+const firstRunnableCode = () =>
+  page.locator("[data-tour-run]:has(.tour-run-button)").first().locator("xpath=preceding-sibling::*[1]").locator("xpath=descendant-or-self::pre").first();
 const helloWorld = JSON.parse(readFileSync(join(dist, "playground.html"), "utf8").match(/<script id="playground-data" type="application\/json">(.*?)<\/script>/s)[1]).defaultExample.code;
 
 const tests = [
@@ -218,8 +222,9 @@ const tests = [
     assert.equal(await output.locator(".pg-diagnostic, .pg-stderr, .pg-end").count(), 0);
   }],
   ["a tour example is edited in place, runs as edited, and Reset gives back its code", async () => {
-    const original = await page.locator(".prose pre").first().textContent();
-    await page.locator(".prose pre").first().click();
+    const code = firstRunnableCode();
+    const original = await code.textContent();
+    await code.click();
     const editor = page.locator(".tour-run-editor .cm-content").first();
     await editor.waitFor();
     await page.keyboard.press("ControlOrMeta+a");
@@ -238,10 +243,26 @@ const tests = [
     await page.locator(".tour-run-editor .cm-content").first().click();
     await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.insertText('println("opened as edited")\n');
-    await page.locator(".tour-run-open").first().click();
+    await page.locator("[data-tour-run]:has(.tour-run-button) .tour-run-open").first().click();
     await page.waitForURL(/\/playground$/);
     await ready();
     assert.match(await editorText(), /println\("opened as edited"\)/);
+  }],
+  ["an example that only declares things gets only the playground link, and isn't editable", async () => {
+    const tree = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value: "type Point = (x: int, y: int)\n\ndef origin = (x = 0, y = 0)" }] };
+    remarkPlaygroundLinks()(tree, { path: "/docs/src/content/tour/example.md" });
+    assert.match(tree.children[1].value, /data-no-output/);
+    // The piping page's examples only define things.
+    await page.goto(`${origin}/docs/tour/piping`);
+    const bar = page.locator("[data-tour-run]").first();
+    await bar.waitFor();
+    assert.equal(await bar.getAttribute("data-no-output"), "");
+    assert.equal(await page.locator(".tour-run-button").count(), 0);
+    assert.equal(await bar.locator(".tour-run-open").count(), 1);
+    await page.locator(".prose pre").first().click();
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator(".tour-run-editor").count(), 0);
+    assert.equal(await page.locator(".tour-run-output").count(), 0);
   }],
   ["an example that reads input gets only the playground link", async () => {
     const tree = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value: "match readLine()\n  | #some(line) -> println(line)\n  | #error(_) -> ()" }] };
