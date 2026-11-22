@@ -46,9 +46,10 @@ To **build** the compiler from source you need the
 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0); `dotnet --version` should print
 `10.x`. The build restores everything else from NuGet, including the `Wasmtime` package that ships
 the native engine for every platform above, so no separate Wasmtime, wat2wasm or wasm runtime
-install is needed. It also needs [Rust](https://rustup.rs) with the `wasm32-wasip1` target
-(`rustup target add wasm32-wasip1`): the runtime embeds the componentizer, which is wit-component compiled to
-WebAssembly from the crate in `Nanyx.Componentizer/`, and the build runs Cargo for it.
+install is needed. Rust is not needed either: the runtime embeds the componentizer, wit-component compiled to
+WebAssembly from the crate in `Nanyx.Componentizer/`, from the `.wasm` committed beside it. Only a change to that crate
+needs [Rust](https://rustup.rs) with the `wasm32-wasip1` target, to rebuild it with
+`dotnet build -p:BuildComponentizer=true` and then run `.github/scripts/componentizer-sources.sh --write`.
 
 ## Building
 

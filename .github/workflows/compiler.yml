@@ -47,15 +47,24 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # The runtime embeds the componentizer, which Cargo builds for this target (see Nanyx.Compiler.Runtime.fsproj).
-      - name: Add Rust's wasm32-wasip1 target
-        run: rustup target add wasm32-wasip1
-
       - name: Restore
         run: dotnet restore Nyx.Compiler.slnx
 
       - name: Build
         run: dotnet build Nyx.Compiler.slnx --no-restore --configuration Release
+
+      # The componentizer's .wasm is committed (see Nanyx.Compiler.Runtime.fsproj): a change to its crate must come with
+      # the rebuilt .wasm and the new hash of its sources.
+      - name: Check the committed componentizer was built from its sources
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: .
+        run: |
+          expected=$(cat compiler/Nanyx.Componentizer/nanyx-componentizer.wasm.sources)
+          actual=$(.github/scripts/componentizer-sources.sh)
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::compiler/Nanyx.Componentizer changed: rebuild nanyx-componentizer.wasm with 'dotnet build -p:BuildComponentizer=true' and run .github/scripts/componentizer-sources.sh --write"
+            exit 1
+          fi
 
       # Once is enough, and Linux checkouts keep the repository's line endings as they are.
       - name: Check the standard library and the shipped packages are formatted
@@ -166,10 +175,6 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # The runtime embeds the componentizer, which Cargo builds for this target (see Nanyx.Compiler.Runtime.fsproj).
-      - name: Add Rust's wasm32-wasip1 target
-        run: rustup target add wasm32-wasip1
-
       - name: Restore
         run: dotnet restore ${{ env.PROJECT }}
 
@@ -250,10 +255,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-
-      # The runtime embeds the componentizer, which Cargo builds for this target (see Nanyx.Compiler.Runtime.fsproj).
-      - name: Add Rust's wasm32-wasip1 target
-        run: rustup target add wasm32-wasip1
 
       - name: Read the compiler version
         id: version
