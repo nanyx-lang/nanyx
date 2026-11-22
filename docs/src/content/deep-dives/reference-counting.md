@@ -1,7 +1,7 @@
 ---
 title: "Reference counting (Perceus)"
 description: "How Nanyx frees memory without a garbage collector, and reuses it in place"
-order: 12
+order: 3.5
 ---
 
 Nanyx has no garbage collector. A compiled program counts the references to each value it keeps on the heap (a
@@ -118,4 +118,4 @@ Reference counting and reuse are in the WebAssembly backend, the one `nanyx run`
 runs a program with an allocator that checks its counts. It stops the program at an object freed twice or used after
 it was freed, and fails the run if anything is left unfreed at the end. A way to ask the compiler to
 check that a function runs entirely in place, as Koka's `fip` functions do, is an open question. The design, with
-how values are laid out in memory, is in [Memory management](../deep-dives/memory-management).
+how values are laid out in memory, is in [Memory management](./memory-management).
