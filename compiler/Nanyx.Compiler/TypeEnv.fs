@@ -20,7 +20,9 @@ type InstanceBinding =
 /// The names in scope, each with its type, and the instances of parameterised contexts in scope, nearest first.
 /// `Unquantified` holds the free type variables of each name whose scheme has any, by name: few of them do (a
 /// parameter, a def not yet generalised), so `freeEnvVars` looks at those, not at every name in scope (#1266).
-/// `BlockScope` is the scope of the `memory` block the code is in, whose cells a `mut` there makes (see `MemoryCells`).
+/// `BlockScope` is the scope of the `memory` block the code is in, whose cells a `mut` there makes (see `MemoryCells`),
+/// and `BlockDepth` how many lambdas deep the block's own lambda is, while that scope is the block's, not one a `use`
+/// loads.
 /// `Supplied` holds the contexts with no members that are supplied here, which no member's name says (see
 /// `Contexts.withSupplied`).
 type TypeEnv =
@@ -28,10 +30,11 @@ type TypeEnv =
       Instances: InstanceBinding list
       Unquantified: Map<string, Set<int>>
       BlockScope: Ty option
+      BlockDepth: int option
       Supplied: Set<NominalId> }
 
 module TypeEnv =
-    let empty : TypeEnv = { Names = Map.empty; Instances = []; Unquantified = Map.empty; BlockScope = None; Supplied = Set.empty }
+    let empty : TypeEnv = { Names = Map.empty; Instances = []; Unquantified = Map.empty; BlockScope = None; BlockDepth = None; Supplied = Set.empty }
 
     let rec freeTyVars (ty: Ty) : Set<int> =
         match ty with
