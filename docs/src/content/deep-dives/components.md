@@ -10,6 +10,9 @@ are on [Components](../work-in-progress/components) in Work in progress. `nanyx 
 whose host has a component root, as the console and HTTP hosts do; `--core` writes a core module, which is all `nanyx run`,
 `nanyx test`, the debugger and the profiler run.
 
+A program can export functions of its own from its component, marked `@component`, for components in other languages
+to call ([A program's own exports](#a-programs-own-exports)).
+
 A component is built in three steps:
 
 1. The program is checked under its host's component root (`Package.asComponent`, see [Component roots](#component-roots)).
@@ -191,3 +194,75 @@ componentizer needs as the root of the directory, and `wit/deps` holds WASI 0.3'
   `stream<u8>` and a new future for its trailers, whose readable ends go to the host with it, and its status set with
   `set-status-code`. The future `response.new` gives, which says how sending the response went, is dropped. A response
   whose headers can't be sent is a 500 with no headers and no body.
+
+# A program's own exports
+
+A program exports functions of its own from its component, for a component in another language to call, by marking
+them `@component` ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)). The component's WIT is generated from
+their Nanyx types: Nanyx is the source of truth, and the WIT is written for other languages to generate their bindings
+from.
+
+```nanyx fragment
+module shapes
+
+@component
+export def areaOf: float, float -> float = { width, height -> width * height }
+```
+
+## Which defs
+
+- **`@component` comes before an exported def,** with no argument (`Attributes.applyAttributes`); before a def its
+  module doesn't export, it is `NYX0008`. The def is exported in the WIT interface its module names: the name its file
+  declares with `module`, or else its file's name, or `main`.
+- **A program exports the defs of every module it imports,** directly or not, and its own. Each module's checked form
+  keeps its own and those its imports carry (`TypedModule.ComponentExports`), each by the name it is inlined under in
+  the importer (`ModuleLinking.componentExportsForImport`), and inlining keeps them though the program never calls
+  them (`ModuleLinking.reachedItems`). A module the program doesn't import exports nothing.
+- **Its type must cross a component's boundary** (`ComponentInterface.errors`, run as each module is checked). A
+  function, a context, a type variable, a record or tag union with no name, which WIT must name, and a def that isn't a
+  function at all are `NYX0277`. What the compiler can't take across yet is `NYX0301`, naming it: records, tuples,
+  tag unions, lists, a function that requires contexts, and parameters that come to more than 16 core values, which
+  the canonical ABI passes in memory.
+
+## The WIT
+
+`ComponentInterface` writes each type as the WIT type it is, and each name in kebab case (`areaOf` is `area-of`, the
+module `geo.shapes` the interface `geo-shapes`), escaping a WIT keyword with `%`:
+
+| Nanyx | WIT |
+|---|---|
+| `bool` | `bool` |
+| `I8`, `I16`, `I32`, `int` | `s8`, `s16`, `s32`, `s64` |
+| `U8`, `U16`, `U32`, `U64` | `u8`, `u16`, `u32`, `u64` |
+| `F32`, `float` | `f32`, `f64` |
+| `string` | `string` |
+| a function's `()` | no parameters, or no result |
+
+A named type that stands for one of these is written as it. A parameter is named as the def's lambda names it.
+
+The package's WIT package is named from its manifest (`ComponentInterface.packageName`): `acme.shapes` at 0.1.0 is
+`acme:shapes@0.1.0`, the first segment the namespace, and a name of one segment is both, `greeter:greeter@0.1.0`. For a
+program that exports anything, `nanyx build` writes its WIT to `out/wit` beside the component
+(`ComponentInterface.write`): `component.wit`, with an interface for each module and a world, `component`, that includes
+the host's world and exports them; and under `deps`, the host's own package (`deps/host`) and the packages its world is
+made of. The componentizer is given that directory and world, rather than the host's.
+
+## The core module
+
+The backend gets the functions and the names they are exported under (`WasmOptions.ComponentExports`), each the
+interface's qualified name, `#` and the function's, `acme:shapes/shapes@0.1.0#area-of`. The function of each export's
+def is a root for inlining and for what the module keeps (`CoreIrInline.inlineCalls`, `CoreIrReach.reachedFrom`), and
+`ComponentExports` writes a function that the module exports under that name, lifted synchronously:
+
+- **Numbers and bools** are passed and returned as they are: Nanyx holds each in the core type the canonical ABI
+  passes it as, a sized integer narrower than 32 bits extended from its width.
+- **A string argument** comes as the address and length of a block the host allocated through `cabi_realloc`, which
+  the module then owns. It is copied into a string (`stringFromMemory`), and the block freed. If the def's function
+  doesn't take the string over (`CoreIrCounting`), its reference is given up after the call.
+- **A string result** is returned as the address of a block of its address and length, whose bytes are the string's own.
+  The module exports `cabi_post_` and the export's name too, which the host calls once it has copied the string: it
+  gives up the reference to the string and frees the block. A string literal is never freed.
+
+An export runs on whatever the instance has set up: a top-level value is built the first time something reads it,
+and the start function tears it down again at the end of `run`, so an export called before `run`, after it, or with no
+`run` at all works as one called during it.

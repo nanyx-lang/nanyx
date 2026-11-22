@@ -8,7 +8,8 @@ This page is the design for [#2182](https://github.com/nanyx-lang/nanyx/issues/2
 that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or any runtime that implements WASI 0.3, and
 not only under `nanyx`'s own runtime. Stages 0 to 3 are built, and described on
 [Components](../deep-dives/components) in Deep dives: every console program builds as a component, and every HTTP
-handler as a `wasi:http/service` component. The page sets out what was found, the
+handler as a `wasi:http/service` component. Stage 5 has begun: a program exports functions of numbers and strings,
+marked `@component` ([A program's own exports](../deep-dives/components#a-programs-own-exports)). The page sets out what was found, the
 [design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
 whose stages are filed as issues.
 
@@ -328,13 +329,39 @@ user declares: a record as a record, a tag union as a variant, `list` as `list`,
 - **#2164 isn't needed for components at all.** Stack switching would make the stackful ABI possible, but the callback
   ABI does the same job with the state machines. #2164 stays about running tasks on stacks.
 
+## User components (stage 5)
+
+Settled by the maintainer on 2026-11-22 ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)):
+
+- **The WIT is generated from Nanyx declarations.** Nanyx is the source of truth; no WIT is written by hand or read.
+- **Exports are marked per def,** `@component export def area: Shape -> float`, the interface being the def's module.
+  Names are written in kebab case: `areaOf` is `area-of`, the module `geo.shapes` the interface `geo-shapes`.
+- **Imports are bodiless defs, as `@extern` is:** `@import("acme:geometry/shapes@1.0.0", "area") def area: Shape -> float`,
+  naming the interface's full WIT name and the function, whose name defaults to the def's, kebab-cased. The WIT of the
+  imported interface is generated from these declarations too: component types are checked structurally, by field
+  and case names, so no foreign WIT is read. Under `nanyx run` and `nanyx test`, which run core modules, an imported
+  def reachable from the entry or a test is an error naming it.
+- **`nanyx build` writes `out/<name>.wasm` and `out/wit/`,** a complete WIT directory: the program's package, with a
+  world that includes the host's and exports and imports the program's interfaces, and under `deps/` the packages it
+  uses. A package with exports and no `@entry` is a library component, with no `run`.
+- **The WIT package is named from the manifest:** `acme.shapes` 0.1.0 is `acme:shapes@0.1.0`, and `greeter` is
+  `greeter:greeter@0.1.0`.
+- **Types are written literally.** Scalars, strings, lists, records and tuples map directly. Every tag union is a WIT
+  `variant` with the same case names, `#some`/`#none` and `#ok`/`#error` included (no `option` or `result`), and nominal
+  types are written out structurally. A named generic type is named with its arguments appended (`Result(string, int)`
+  is the variant `result-string-s64`). A function, a context, a type variable, and a record or tag union with no name
+  in an exported or imported signature are a compile error, asking for a `type` where one would do.
+- **An export may require only contexts the host's component root provides,** which it runs under, as the entry does;
+  any other is `NYX0237`.
+
 # Open questions
 
 - **Requests at once in one instance.** An instance serves one request at a time, and others in turn. Whether requests
   may interleave in one instance, and so share its memory and crashes, once the callback ABI lets them, belongs with
   tasks and processes on [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#3-tasks-and-processes).
-- **User components (stage 5).** How a program declares its own exports and imports (written WIT, or WIT generated
-  from Nanyx declarations), and which Nanyx types map to which WIT types where the match isn't one to one.
+- **Exporting a module the program doesn't import.** A program exports the `@component` defs of the modules it
+  imports, directly or not; a library component, which has no entry to import them, will need a root that imports
+  each module with one.
 - **Running 0.3 in process (stage 6).** Whether Wasmtime's C API and wasmtime-dotnet will add WASI 0.3, or we build a
   native library of our own.
 
@@ -350,5 +377,5 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 | 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)), done | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
 | 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)), done | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request at a time per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
 | 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
-| 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)) | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types | Write plugins and libraries that other languages' components call, and call theirs |
+| 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)), begun | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types. Built: exports of numbers, bools and strings, with `out/wit`. Still to come: records, tuples, lists and variants; exports that require contexts; `@import`; library components; a test in CI with a component in another language | Write plugins and libraries that other languages' components call, and call theirs |
 | 6. One root per host ([#2242](https://github.com/nanyx-lang/nanyx/issues/2242)) | Run 0.3 components in `nanyx run`, once an embedding supports it (upstream or our own), and delete the core roots | One implementation of each host |

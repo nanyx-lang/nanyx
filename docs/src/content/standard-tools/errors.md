@@ -127,7 +127,7 @@ A definition is marked with an attribute the compiler does not know, or a local 
 the only attribute a block can hold. The attributes are listed in [Attributes](../tour/attributes).
 
 ```nanyx
-@inline  -- error NYX0007: A definition can have '@entry', '@extern' or '@allow'
+@inline  -- error NYX0007: A definition can have '@entry', '@extern', '@component' or '@allow'
 def double: int -> int = { x -> x * 2 }
 ```
 
@@ -2299,6 +2299,21 @@ def argument: [HostRuntime] () -> I32
 ```
 
 To fix it, import from another module: the one whose function you mean.
+
+# NYX0277: Type that can't cross a component's boundary
+
+A def marked `@component`, which the component `nanyx build` writes exports, has a type that no component can pass:
+a function, a context, a type variable, or a record or tag union with no name, which WIT names. Or it isn't a function
+at all, and a WIT interface exports only functions and types
+([Components](../deep-dives/components#a-programs-own-exports)). It is reported at the def.
+
+```nanyx
+@component
+export def apply: (int -> int) -> int = { f -> f(1) }  -- error NYX0277: A component can't export 'apply': a function can't cross a component's boundary. ...
+```
+
+To fix it, pass the values the function would compute instead, name a record or tag union with a `type`, and write
+the type a type variable stands for.
 
 # NYX0301: Not supported by the WebAssembly backend
 

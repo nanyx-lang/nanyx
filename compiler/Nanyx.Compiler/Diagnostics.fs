@@ -209,6 +209,7 @@ module DiagnosticCodes =
     let PackagedTypeEscapes = code 274 "A packaged type leaves the function that opened it" Severity.Error
     let ComponentRootContextsDiffer = code 275 "Component root provides other contexts than its core root" Severity.Error
     let ReservedExternModule = code 276 "Foreign function of the compiler's own module" Severity.Error
+    let ComponentBoundaryType = code 277 "Type that can't cross a component's boundary" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error

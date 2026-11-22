@@ -74,6 +74,22 @@ def argsSizesGet: [HostRuntime] I32, I32 -> I32
 
 See [Foreign functions](../advanced/hosts#foreign-functions).
 
+## `@component`
+
+Exports a function from the component that `nanyx build` writes, for a component written in another language to call.
+The def must be exported from its module, whose name is the WIT interface it is exported in, and its type is written
+into the component's WIT as it is: a `float` is an `f64` and a `string` a `string`. A function, a context or a type
+variable can't cross a component's boundary, so a type that has one is an error.
+
+```nanyx fragment
+module shapes
+
+@component
+export def area: float, float -> float = { width, height -> width * height }
+```
+
+See [Components](../deep-dives/components#a-programs-own-exports).
+
 ## `@allow(...)`
 
 Lets a definition break [linter](../standard-tools/official-linter) rules: before a def, a local one too, or a top-level type, it suppresses the diagnostics of the rules it names inside that definition. Each rule is written as its linter and its name, with no spaces around the `/`, and several are separated by commas. It is the only attribute a block can hold.

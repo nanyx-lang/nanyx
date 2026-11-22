@@ -348,11 +348,12 @@ type private Inliner
 /// `functions` with calls inlined into each. The start function, `start`, is never inlined itself, and nor are the
 /// functions in `kept`: a cached value's (see `CoreIrCachedValues`), which a call reads rather than computes.
 ///
-/// With a start, only the functions it reaches once calls are inlined into it are gone over, and the others are left as
+/// With a start, only the functions it, and the functions a component exports (`exported`), reach once calls are inlined
+/// into them are gone over, and the others are left as
 /// they are, for `CoreIrReach` to leave out. A host's instance makes a closure over each member of its contexts, which
 /// inlining shows most programs never call: hello world reaches 1 function of the 148 it is lowered to. A function is
 /// inlined into before any call to it is looked at, so each is inlined into as it would be if all were.
-let inlineCalls (start: string option) (kept: Set<string>) (functions: Function list) : Function list =
+let inlineCalls (start: string option) (exported: string list) (kept: Set<string>) (functions: Function list) : Function list =
     let byName = functions |> List.map (fun f -> f.Name, f) |> Map.ofList
     let edges = byName |> Map.map (fun _ f -> references f.Body)
     let cyclic = inCycles byName edges + kept + Set.ofList (Option.toList start)
@@ -389,7 +390,7 @@ let inlineCalls (start: string option) (kept: Set<string>) (functions: Function 
             inlineInto name
     | Some start ->
         let reached = HashSet<string>()
-        let pending = Stack<string>([ start ])
+        let pending = Stack<string>(start :: exported)
         while pending.Count > 0 do
             let name = pending.Pop()
             if current.ContainsKey name && reached.Add name then
