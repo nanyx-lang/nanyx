@@ -1,0 +1,22 @@
+<Project>
+  <!--
+    The shipped packages are copied beside the compiler (see NanyxCompiler.fsproj), and the compiler ships whatever
+    package directories it finds there (see ShippedPackages.fs). A build only adds and overwrites files, so a package or
+    a source file that has left packages/ would stay in an old build's output and still be shipped. This removes them.
+  -->
+  <Target Name="RemoveStaleShippedPackageFiles" AfterTargets="CopyFilesToOutputDirectory" Condition="Exists('$(OutDir)packages')">
+    <PropertyGroup>
+      <_ShippedPackagesSource>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'packages'))</_ShippedPackagesSource>
+      <_ShippedPackagesOutput>$([MSBuild]::NormalizeDirectory('$(ProjectDir)', '$(OutDir)', 'packages'))</_ShippedPackagesOutput>
+    </PropertyGroup>
+    <ItemGroup>
+      <_ShippedPackageSourceFile Include="$(_ShippedPackagesSource)**\*" />
+      <_ShippedPackageExpectedFile Include="@(_ShippedPackageSourceFile->'$(_ShippedPackagesOutput)%(RecursiveDir)%(Filename)%(Extension)')" />
+      <_ShippedPackageStaleFile Include="$(_ShippedPackagesOutput)**\*" Exclude="@(_ShippedPackageExpectedFile)" />
+      <_ShippedPackageOutputDirectory Include="$([System.IO.Directory]::GetDirectories('$(_ShippedPackagesOutput)'))" />
+      <_ShippedPackageStaleDirectory Include="@(_ShippedPackageOutputDirectory)" Condition="!Exists('$(_ShippedPackagesSource)%(Filename)%(Extension)')" />
+    </ItemGroup>
+    <Delete Files="@(_ShippedPackageStaleFile)" />
+    <RemoveDir Directories="@(_ShippedPackageStaleDirectory)" />
+  </Target>
+</Project>
