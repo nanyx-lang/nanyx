@@ -51,7 +51,7 @@ let private bracketed (ty: Ty) =
     | TyPrimitive "unit" -> true
     | _ -> false
 
-/// The tags of a union, each once, with their payloads' types. The rest of a union that nothing closed is unit by now,
+/// The tags of a union, each once, with their payloads' types. The rest of a union that nothing closed is a variable,
 /// and adds no tags.
 let rec private tagsOf (ty: Ty) : (string * Ty option) list =
     match Unifier.unalias ty with

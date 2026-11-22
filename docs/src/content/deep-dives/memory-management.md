@@ -246,8 +246,8 @@ definition whose type is concrete is lowered as it is. A call to a generic defin
 variables to the types at the call, and asks for the specialisation at those type arguments (`id__int`,
 `id__string`), which is lowered in turn with the variables replaced. Each specialisation is lowered once, however
 many calls ask for it, and a definition can have at most 32 (polymorphic recursion would otherwise never end).
-A type variable that nothing constrains (the element of `[]`, the rest of an open union no use closes) is `unit`:
-nothing can make or inspect a value of such a type.
+A type variable that nothing constrains (the element of `[]`) is `unit`: nothing can make or inspect a value of such a
+type. The rest of an open union that no use closes adds no tags.
 A definition that reads fields of any record that has them is specialised per record layout, so each specialisation
 reads its fields from where they are stored. A generic definition exists only as its specialisations: it is neither
 compiled nor exported as it is.
