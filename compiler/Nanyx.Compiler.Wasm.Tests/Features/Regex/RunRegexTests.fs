@@ -19,7 +19,7 @@ import nanyx.regex/regex
 def re = { pattern ->
   match Regex.parse(pattern)
     | #some(r) -> r
-    | #error(e) -> crash("{pattern}: {e.message}")
+    | #invalidPattern(e) -> crash("{pattern}: {e.message}")
 }
 
 def show = { pattern, text ->
@@ -31,7 +31,7 @@ def show = { pattern, text ->
 def bad = { pattern ->
   match Regex.parse(pattern)
     | #some(_) -> println("ok")
-    | #error(e) -> println("{e.column}: {e.message}")
+    | #invalidPattern(e) -> println("{e.column}: {e.message}")
 }
 
 """

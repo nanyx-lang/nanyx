@@ -41,7 +41,7 @@ const echo = `def echo: [Console] () -> () = { _ ->
     | #some(line) ->
       println("echo: " ++ line)
       echo()
-    | #error(_) -> println("end of input")
+    | _ -> println("end of input")
 }
 
 echo()
@@ -108,11 +108,11 @@ const tests = [
   ["readToEnd gives the rest of the input, and a line longer than the buffer arrives whole", async (_, page) => {
     const source = `match readLine()
   | #some(line) -> println("{string.length(line)} {string.take(line, 4)}")
-  | #error(_) -> println("no line")
+  | _ -> println("no line")
 
 match readToEnd()
   | #some(rest) -> print("[" ++ rest ++ "]")
-  | #error(_) -> println("no input")
+  | _ -> println("no input")
 `;
     // 100,000 bytes: more than the 64 KiB the runner passes at a time.
     const long = "é".repeat(50_000);

@@ -20,7 +20,7 @@ match Regex.parse('(\d+)-(\d+)')
     match "pages 10-20" \Regex.find(range)
       | #some(m) -> println("{m.text} from {m.start}: {m \group(1)} to {m \group(2)}")
       | #notFound -> println("no range")
-  | #error(e) -> println("bad pattern at {e.column}: {e.message}")
+  | #invalidPattern(e) -> println("bad pattern at {e.column}: {e.message}")
 
 -- 10-20 from 6: #some(10) to #some(20)
 ```
@@ -35,7 +35,7 @@ import nanyx.regex/regex
 
 match Regex.parse('(\d+')
   | #some(_) -> println("ok")
-  | #error(e) -> println("{e.column}: {e.message}")
+  | #invalidPattern(e) -> println("{e.column}: {e.message}")
 
 -- 1: There is no ')' to close this '('
 ```
@@ -46,9 +46,9 @@ match Regex.parse('(\d+')
 
 Regular expressions: patterns that find, test, replace and split text.
 
-[`Regex.parse`](#regexparse) reads a pattern into a [`Regex`](#regex), or says where it is wrong and why, as a
-[`RegexError`](#regexerror). The functions attached to `Regex` take the text first, so they pipe:
-`"a1b22" \Regex.find(digits)`. [`Regex.isMatch`](#regexismatch) says whether a regex matches anywhere in a text,
+[`Regex.parse`](#regexparse) reads a pattern into a [`Regex`](#regex), or says where it is wrong and why, as an
+`#invalidPattern` carrying a [`RegexError`](#regexerror). The functions attached to `Regex` take the text
+first, so they pipe: `"a1b22" \Regex.find(digits)`. [`Regex.isMatch`](#regexismatch) says whether a regex matches anywhere in a text,
 [`Regex.find`](#regexfind) finds the first match, [`Regex.findAll`](#regexfindall) each in turn, [`Regex.replace`](#regexreplace) and
 [`Regex.replaceWith`](#regexreplacewith) replace them, and [`Regex.split`](#regexsplit) splits a text where they are. A program
 names `nanyx.regex` in its manifest's `dependencies`, or a script in a `::dependency` line, and
@@ -95,10 +95,10 @@ points from 1, and what is wrong there.
 ## `Regex.parse`
 
 ```nanyx fragment
-def Regex.parse: string -> #some(Regex) | #error(RegexError)
+def Regex.parse: string -> #some(Regex) | #invalidPattern(RegexError)
 ```
 
-The regex of `pattern`, or where it goes wrong and why.
+The regex of `pattern`, or `#invalidPattern` with where it goes wrong and why.
 
 ## `Regex.toString`
 

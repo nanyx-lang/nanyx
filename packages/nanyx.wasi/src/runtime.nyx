@@ -22,27 +22,25 @@ def httpReceive: [HostRuntime] I32 -> ()
 -- at the address it is given.
 
 --| Sends `request` through `nanyx:http`, and gives its response, or why there is none.
-export def sendThroughRuntime
-  : [HostRuntime] Request -> #some(Response) | #error(HttpError)
-  = { request ->
-    def wire = writeRequest(request)
-    def kind = allocate(4)
-    def length = httpSend(addressOf(wire), byteLength(wire), kind)
-    keepAlive(wire)
-    def buffer = allocate(length + 1)
-    httpReceive(buffer)
-    def answer = stringAt(buffer, length)
-    free(buffer)
-    def answered = readI32(kind)
-    free(kind)
+export def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | HttpError = { request ->
+  def wire = writeRequest(request)
+  def kind = allocate(4)
+  def length = httpSend(addressOf(wire), byteLength(wire), kind)
+  keepAlive(wire)
+  def buffer = allocate(length + 1)
+  httpReceive(buffer)
+  def answer = stringAt(buffer, length)
+  free(buffer)
+  def answered = readI32(kind)
+  free(kind)
 
-    match answered
-      | 0 ->
-        match readResponse(answer)
-          | #some(response) -> #some(response)
-          | #malformed -> #error(#other("the runtime's answer to the request was malformed"))
-      | 1 -> #error(#timeout)
-      | 2 -> #error(#connectionFailed(answer))
-      | 3 -> #error(#invalidUrl)
-      | _ -> #error(#other(answer))
-  }
+  match answered
+    | 0 ->
+      match readResponse(answer)
+        | #some(response) -> #some(response)
+        | #malformed -> #other("the runtime's answer to the request was malformed")
+    | 1 -> #timeout
+    | 2 -> #connectionFailed(answer)
+    | 3 -> #invalidUrl
+    | _ -> #other(answer)
+}

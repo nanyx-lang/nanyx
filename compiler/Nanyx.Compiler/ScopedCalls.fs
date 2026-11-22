@@ -1,5 +1,5 @@
 /// Keeping what requires a scoped context inside the call that supplies it (see "Values cannot escape memory scope" on the docs' Memory page). A function
-/// _supplies_ a scoped context to a parameter when the parameter's type requires it and the function's own contexts
+/// _supplies_ a scoped context to a parameter when the parameter's type requires it, or takes a value of a type in its scope, and the function's own contexts
 /// don't: `memory: [c] ([Memory, c] () -> a) -> a` supplies `Memory` to its block. Each call to such a function
 /// starts a scope of its own, a variable that stands where the callee's type has its scope, and every requirement of
 /// the context its arguments make belongs to it. Once the arguments are checked, the scope must not be one of the
@@ -22,8 +22,9 @@ let rec private pairScopes (general: Ty) (instantiated: Ty) : (string * Ty * Ty)
     | TyAlias(_, gs, _), TyAlias(_, ss, _)
     | TyUnion gs, TyUnion ss -> all gs ss
     | TyRecord(gf, _), TyRecord(sf, _) when Set.ofSeq gf.Keys = Set.ofSeq sf.Keys -> all (List.ofSeq gf.Values) (List.ofSeq sf.Values)
-    | TyTag(_, Some g), TyTag(_, Some s)
-    | TyNominal(_, _, g, _), TyNominal(_, _, s, _) -> pairScopes g s
+    | TyTag(_, Some g), TyTag(_, Some s) -> pairScopes g s
+    // A value of a scoped type, `MRef(a)`, holds its scope in its arguments, not in what it is made from.
+    | TyNominal(_, gs, g, _), TyNominal(_, ss, s, _) -> all (gs @ [ g ]) (ss @ [ s ])
     | _ -> []
 
 /// The names of the scoped contexts among `written`, contexts as a def's type writes them.
@@ -41,10 +42,13 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
     let own = required |> List.choose (function FunctionContexts.PlainContext name -> Some name | _ -> None) |> Set.ofList
     let supplied =
         match Unifier.unalias scheme.Type, Unifier.unalias calleeTy with
-        | TyFunc(general, _, _), TyFunc(input, _, _) ->
+        | TyFunc(general, _, generalContexts), TyFunc(input, _, _) ->
+            // A scope the callee requires itself is the caller's, though its parameter's type has it too.
+            let required = generalContexts |> List.choose (function FunctionContexts.ScopedContext(_, scope) -> Some scope | _ -> None)
             pairScopes general input
             |> List.filter (fun (name, generalScope, _) ->
                 not (own.Contains name)
+                && not (List.contains generalScope required)
                 && match generalScope with
                    | TyVar v -> scheme.Quantified.Contains v.Id
                    | _ -> false)

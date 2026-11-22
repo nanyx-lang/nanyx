@@ -197,20 +197,18 @@ def withContentLength: [HostRuntime] Request -> list((string, string)) = { reque
 }
 
 --| A new `fields` with `headers`, each a name and a value, or the first that can't be set.
-export def fieldsOf
-  : [HostRuntime] list((string, string)) -> #some(I32) | #error(HttpError)
-  = { headers ->
-    def fields = newFields()
+export def fieldsOf: [HostRuntime] list((string, string)) -> #some(I32) | HttpError = { headers ->
+  def fields = newFields()
 
-    match appendAll(fields, headers)
-      | #ok -> #some(fields)
-      | #error(e) ->
-        dropFields(fields)
-        #error(e)
-  }
+  match appendAll(fields, headers)
+    | #ok -> #some(fields)
+    | e ->
+      dropFields(fields)
+      e
+}
 
 --| Appends each of `headers` to `fields`.
-def appendAll: [HostRuntime] I32, list((string, string)) -> #ok | #error(HttpError) = {
+def appendAll: [HostRuntime] I32, list((string, string)) -> #ok | HttpError = {
   | _, [] -> #ok
   | fields, [(name, value), ...rest] ->
     def block = allocate(24)
@@ -230,7 +228,7 @@ def appendAll: [HostRuntime] I32, list((string, string)) -> #ok | #error(HttpErr
     if readByte(block + 4) == 4 then freeOptionalString(block + 8) else ()
     free(block)
 
-    if failed then #error(#other("the header '{name}' can't be sent")) else appendAll(fields, rest)
+    if failed then #other("the header '{name}' can't be sent") else appendAll(fields, rest)
 }
 
 --| `request-options` that wait `timeout` milliseconds to connect and for the first byte of the
@@ -342,21 +340,19 @@ def writeConsumed: [HostRuntime] I32 -> () = { writer ->
 }
 
 --| Sends `request` through `wasi:http/client`, and gives its response, or why there is none.
-export def sendThroughWasi
-  : [HostRuntime] Request -> #some(Response) | #error(HttpError)
-  = { request ->
-    match urlParts(request.url)
-      | #invalidUrl -> #error(#invalidUrl)
-      | #some(scheme, authority, pathWithQuery) ->
-        match fieldsOf(withContentLength(request))
-          | #error(e) -> #error(e)
-          | #some(fields) -> sendWith(request, fields, scheme, authority, pathWithQuery)
-  }
+export def sendThroughWasi: [HostRuntime] Request -> #some(Response) | HttpError = { request ->
+  match urlParts(request.url)
+    | #invalidUrl -> #invalidUrl
+    | #some(scheme, authority, pathWithQuery) ->
+      match fieldsOf(withContentLength(request))
+        | #some(fields) -> sendWith(request, fields, scheme, authority, pathWithQuery)
+        | e -> e
+}
 
 --| Sends `request`, its headers in `fields`, to the URL of `scheme`, `authority` and
   `pathWithQuery`.
 def sendWith
-  : [HostRuntime] Request, I32, I32, string, string -> #some(Response) | #error(HttpError)
+  : [HostRuntime] Request, I32, I32, string, string -> #some(Response) | HttpError
   = { request, fields, scheme, authority, pathWithQuery ->
     def hasBody = not string.isEmpty(request.body)
     def body = if hasBody then bodyStreamNew() else 0
@@ -395,7 +391,7 @@ def sendWith
 
     def answered = if readByte(answer) == 0
       then #some(responseOf(readI32(answer + 8)))
-      else #error(httpErrorAt(answer + 8))
+      else httpErrorAt(answer + 8)
 
     free(result)
     answered

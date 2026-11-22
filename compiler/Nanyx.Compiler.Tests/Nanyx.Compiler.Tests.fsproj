@@ -154,6 +154,7 @@
     <Compile Include="Features\Memory\MRefTests.fs" />
     <Compile Include="Features\Memory\MutableCollectionTests.fs" />
     <Compile Include="Features\Memory\MArrayTests.fs" />
+    <Compile Include="Features\Memory\EscapeTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
     <Compile Include="Features\Matches\MissingArmFixTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
@@ -218,6 +219,7 @@
     <Compile Include="Features\Types\BottomTypeTests.fs" />
     <Compile Include="Features\Types\GenericNominalsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
+    <Compile Include="Features\Types\NominalUpdatesTests.fs" />
     <Compile Include="Features\Types\ProtectedShapesTests.fs" />
     <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
