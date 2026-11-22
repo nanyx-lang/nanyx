@@ -79,9 +79,12 @@ let private docsPrograms =
         |> List.map (fun piece -> piece.Name, piece.Source)
 
 [<Fact>]
+/// The examples, the docs site's home page's examples (docs/src/home) and the docs' code blocks.
 let ``The examples and the docs' code blocks are formatted`` () =
     let examples =
-        Directory.EnumerateFiles(Path.Combine(repositoryRoot, "examples"), "*.nyx", SearchOption.AllDirectories) |> List.ofSeq
+        [ "examples"; Path.Combine("docs", "src", "home") ]
+        |> List.collect (fun directory ->
+            Directory.EnumerateFiles(Path.Combine(repositoryRoot, directory), "*.nyx", SearchOption.AllDirectories) |> List.ofSeq)
     let unformattedExamples =
         FormatCommand.run Settings.forFile FormatCommand.Check examples
         |> List.choose (fun (file, result) ->

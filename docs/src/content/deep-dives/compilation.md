@@ -124,3 +124,7 @@ The tour's examples print with the console host's prelude, which every program s
 importing `nanyx/text`, so the test adds that import to every block that doesn't have it, after its module's doc comment
 and declaration if it has them, but for a block that turns a linter on with `::linter`, which would report the import
 unused. Anything else a block uses, such as `nanyx/math`, it imports itself.
+
+The examples on the docs site's home page are files of their own, `docs/src/home/*.nyx`, which the page reads and
+highlights as the docs' code blocks are highlighted. The same test runs each as it is, with no import added, since the
+page's **Run in the playground** link opens it so, and checks it prints what its last comments say.

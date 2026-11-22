@@ -1,0 +1,9 @@
+-- Tagged unions, matched exhaustively.
+type Shape = #circle(float) | #rect(float, float)
+
+def area: Shape -> float = {
+  | #circle(r) -> 3.14 * r * r
+  | #rect(w, h) -> w * h
+}
+
+println(area(#rect(3.0, 4.5))) -- 13.5

@@ -1,10 +1,38 @@
 ---
-import { ArrowRight } from "lucide-react";
+import { Code } from "astro:components";
+import { ArrowRight, Play } from "lucide-react";
 import Base from "@/layouts/Base.astro";
 import { getNav } from "@/lib/nav";
 import { sectionIcon } from "@/lib/icons";
 
 const nav = await getNav();
+import { inkNight, nanyxLanguage, paperWhite } from "../../site/shiki-themes.mjs";
+import { shareFragment } from "../../site/playground-examples.mjs";
+import { installSteps, type InstallOs } from "@/lib/install";
+
+const themes = { light: paperWhite as any, dark: inkNight as any };
+
+// The examples, the .nyx files in src/home, in this order. `RunTourExampleTests.fs` runs each, and checks it prints
+// what its last comments say; the playground link opens it as it is.
+const order = ["contexts", "patterns", "pipes"];
+const sources = import.meta.glob<string>("../home/*.nyx", { query: "?raw", import: "default", eager: true });
+const examples = Object.entries(sources)
+  .map(([path, code]) => {
+    const file = path.split("/").pop()!;
+    const name = file.replace(/\.nyx$/, "");
+    return { name, file, code: code.replace(/\r\n/g, "\n").trimEnd(), playground: "/playground#" + shareFragment(code) };
+  })
+  .sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+
+const oses: { key: InstallOs; label: string }[] = [
+  { key: "windows", label: "Windows" },
+  { key: "macos", label: "macOS" },
+  { key: "linux", label: "Linux" },
+];
+// Shown until the page's script finds the visitor's operating system, and when it can't.
+const defaultOs: InstallOs = "linux";
+const steps = installSteps();
+
 const gettingStarted = nav.find((s) => s.dir === "getting-started")?.pages[0]?.path ?? "/docs";
 ---
 
@@ -12,7 +40,7 @@ const gettingStarted = nav.find((s) => s.dir === "getting-started")?.pages[0]?.p
   <div class="min-h-screen bg-background">
     <header class="relative overflow-hidden">
       <div class="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5"></div>
-      <div class="relative max-w-5xl mx-auto px-6 py-24 md:py-32 text-center">
+      <div class="relative max-w-5xl mx-auto px-4 sm:px-6 pt-20 pb-12 md:pt-28 md:pb-16 text-center">
         <div class="inline-flex items-center gap-2.5 mb-8">
           <div class="h-12 w-12 rounded-xl flex items-center justify-center shadow-lg shadow-primary/25">
             <img src="/nanyx.svg" alt="" width="48" height="48" />
@@ -20,46 +48,153 @@ const gettingStarted = nav.find((s) => s.dir === "getting-started")?.pages[0]?.p
           <h1 class="text-4xl md:text-5xl font-bold tracking-tight">Nanyx</h1>
         </div>
         <p class="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-          A type-safe, expressive language for building reliable software.
-          <br class="hidden md:block" />
-          Simple to learn. Powerful to use.
+          <span class="md:block">A type-safe, expressive language for building reliable software.</span>
+          {" "}
+          <span>Simple to learn. Powerful to use.</span>
         </p>
-        <div class="flex items-center justify-center gap-4">
+        <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-center gap-3 max-w-xs sm:max-w-none mx-auto">
           <a
             href={gettingStarted}
-            class="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shadow-md shadow-primary/20"
+            class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shadow-md shadow-primary/20"
           >
-            Get Started
+            Get started
             <ArrowRight className="h-4 w-4" />
           </a>
           <a
             href="/docs/tour/variables"
-            class="inline-flex items-center gap-2 px-6 py-3 rounded-lg border border-border text-foreground font-medium hover:bg-accent transition-colors"
+            class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-border text-foreground font-medium hover:bg-accent transition-colors"
           >
-            Language Tour
+            Language tour
+          </a>
+          <a
+            href="/playground"
+            data-astro-reload
+            class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-border text-foreground font-medium hover:bg-accent transition-colors"
+          >
+            Playground
           </a>
         </div>
-
-        <div class="mt-16 max-w-lg mx-auto text-left">
-          <div class="rounded-xl bg-[#111827] border border-border/50 shadow-2xl overflow-hidden">
-            <div class="flex items-center gap-1.5 px-4 py-3 border-b border-white/10">
-              <div class="h-3 w-3 rounded-full bg-red-500/70"></div>
-              <div class="h-3 w-3 rounded-full bg-yellow-500/70"></div>
-              <div class="h-3 w-3 rounded-full bg-green-500/70"></div>
-              <span class="ml-2 text-xs text-white/40 font-mono">hello.nx</span>
-            </div>
-            <pre
-              class="p-5 text-sm leading-relaxed font-mono text-white"><code><span class="text-purple-400">import</span> <span class="text-cyan-300">nanyx/io</span>
-
-<span class="text-purple-400">def</span> <span class="text-yellow-300">main</span> = {"{"}
-  <span class="text-yellow-300">println</span>(<span class="text-green-400">"Hello, Nanyx! 🚀"</span>)
-{"}"}</code></pre>
-          </div>
-        </div>
       </div>
+
+    <section class="relative max-w-5xl mx-auto px-4 sm:px-6 pb-16 grid gap-6 lg:grid-cols-[3fr_2fr] items-start">
+      <div class="home-tabs rounded-xl border border-border shadow-xl overflow-hidden min-w-0" data-tabs>
+        <div class="flex items-end gap-1 px-2 pt-2 border-b border-border bg-muted/50 overflow-x-auto" role="tablist" aria-label="Examples">
+          {
+            examples.map((example, index) => (
+              <button
+                type="button"
+                role="tab"
+                id={`example-tab-${example.name}`}
+                aria-controls={`example-${example.name}`}
+                aria-selected={index === 0 ? "true" : "false"}
+                data-tab={example.name}
+                class="tab px-3 py-1.5 text-xs font-mono rounded-t-md border border-transparent whitespace-nowrap"
+              >
+                {example.file}
+              </button>
+            ))
+          }
+        </div>
+        {
+          examples.map((example, index) => (
+            <div
+              role="tabpanel"
+              id={`example-${example.name}`}
+              aria-labelledby={`example-tab-${example.name}`}
+              data-panel={example.name}
+              hidden={index !== 0}
+            >
+              <Code code={example.code} lang={nanyxLanguage as any} themes={themes} class="home-code" />
+              <div class="flex justify-end px-4 py-2 border-t border-border">
+                <a
+                  href={example.playground}
+                  data-astro-reload
+                  class="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  Run in the playground
+                </a>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+
+      <div class="home-tabs rounded-xl border border-border p-5 min-w-0" data-tabs data-os-tabs>
+        <h2 class="font-semibold text-lg mb-3">Install</h2>
+        <div class="flex gap-1 p-1 mb-4 rounded-lg bg-muted" role="tablist" aria-label="Operating system">
+          {
+            oses.map((os) => (
+              <button
+                type="button"
+                role="tab"
+                id={`install-tab-${os.key}`}
+                aria-controls={`install-${os.key}`}
+                aria-selected={os.key === defaultOs ? "true" : "false"}
+                data-tab={os.key}
+                class="pill flex-1 px-3 py-1.5 text-sm rounded-md"
+              >
+                {os.label}
+              </button>
+            ))
+          }
+        </div>
+        {
+          oses.map((os) => (
+            <div role="tabpanel" id={`install-${os.key}`} aria-labelledby={`install-tab-${os.key}`} data-panel={os.key} hidden={os.key !== defaultOs}>
+              <ol class="install-steps list-decimal pl-5 space-y-3 text-sm marker:text-muted-foreground">
+                {steps[os.key].map((step) => (
+                  <li>
+                    <p class="mb-1.5" set:html={step.text} />
+                    {step.code && <Code code={step.code.code} lang={step.code.lang as any} themes={themes} class="home-code home-code-small" />}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))
+        }
+        <p class="mt-4 text-sm text-muted-foreground">
+          Or let the <a class="text-primary hover:underline" href="/docs/standard-tools/vs-code-extension">VS Code extension</a> download it for you.
+          See <a class="text-primary hover:underline" href="/docs/getting-started/installation">Installation</a> for the details.
+        </p>
+      </div>
+    </section>
     </header>
 
-    <section class="max-w-5xl mx-auto px-6 pb-24">
+    <script is:inline>
+      (function () {
+        // Each [data-tabs] box shows the panel of its selected tab.
+        function select(box, key) {
+          box.querySelectorAll("[data-tab]").forEach(function (tab) {
+            tab.setAttribute("aria-selected", tab.dataset.tab === key ? "true" : "false");
+          });
+          box.querySelectorAll("[data-panel]").forEach(function (panel) {
+            panel.hidden = panel.dataset.panel !== key;
+          });
+        }
+        // The visitor's operating system, as the install box names it, or null when it can't tell.
+        function detectOs() {
+          var platform = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "") + " " + navigator.userAgent;
+          if (/Win/i.test(platform)) return "windows";
+          if (/Mac|iPhone|iPad|iPod/i.test(platform)) return "macos";
+          if (/Linux|X11|Android|CrOS/i.test(platform)) return "linux";
+          return null;
+        }
+        document.querySelectorAll("[data-tabs]").forEach(function (box) {
+          box.querySelectorAll("[data-tab]").forEach(function (tab) {
+            tab.addEventListener("click", function () {
+              select(box, tab.dataset.tab);
+            });
+          });
+          if (box.hasAttribute("data-os-tabs")) {
+            var os = detectOs();
+            if (os) select(box, os);
+          }
+        });
+      })();
+    </script>
+
+    <section class="max-w-5xl mx-auto px-4 sm:px-6 pb-24">
       <div class="grid gap-4 md:grid-cols-2">
         {
           nav.map((section) => {
@@ -91,3 +226,55 @@ const gettingStarted = nav.find((s) => s.dir === "getting-started")?.pages[0]?.p
     </section>
   </div>
 </Base>
+
+<style is:global>
+  .home-tabs .tab {
+    color: hsl(var(--muted-foreground));
+  }
+  .home-tabs .tab[aria-selected="true"] {
+    color: hsl(var(--foreground));
+    background: hsl(var(--code-bg));
+    border-color: hsl(var(--border));
+    border-bottom-color: hsl(var(--code-bg));
+    margin-bottom: -1px;
+  }
+  .home-tabs .pill {
+    color: hsl(var(--muted-foreground));
+  }
+  .home-tabs .pill[aria-selected="true"] {
+    color: hsl(var(--foreground));
+    background: hsl(var(--background));
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  }
+  .home-code {
+    background: hsl(var(--code-bg)) !important;
+    padding: 1.25rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+  @media (max-width: 640px) {
+    .home-code {
+      padding: 1rem;
+      font-size: 0.8125rem;
+    }
+  }
+  .home-code-small {
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid hsl(var(--code-border));
+    font-size: 0.8125rem;
+  }
+  .install-steps a {
+    color: hsl(var(--primary));
+  }
+  .install-steps a:hover {
+    text-decoration: underline;
+  }
+  .install-steps code:not(pre code) {
+    font-size: 0.8125rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.25rem;
+    background: hsl(var(--muted));
+  }
+</style>
