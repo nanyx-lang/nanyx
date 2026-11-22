@@ -185,7 +185,7 @@ def codeAt: Text, int -> int = { text, i ->
 
   match points(i)
     | #some(c) -> c
-    | #none -> -1
+    | #notFound -> -1
 }
 
 --| The byte the code point at `i` starts at.
@@ -194,7 +194,7 @@ def byteAt: Text, int -> int = { text, i ->
 
   match offsets(i)
     | #some(b) -> b
-    | #none -> 0
+    | #notFound -> 0
 }
 
 --| The text's code points from `start` up to `end`, as a string.
@@ -225,7 +225,7 @@ def inRanges: array((int, int)), int, int, int -> bool = { ranges, c, low, high 
         if c < first
           then inRanges(ranges, c, low, middle)
           else if c > last then inRanges(ranges, c, middle + 1, high) else true
-      | #none -> false
+      | #notFound -> false
 }
 
 -- The VM ----------------------------------------------------------------------------------------
@@ -239,7 +239,7 @@ def instAt: Program, int -> Inst = { program, pc ->
 
   match insts(pc)
     | #some(inst) -> inst
-    | #none -> #match
+    | #notFound -> #match
 }
 
 --| `slots` with slot `k` set to `value`.
@@ -251,7 +251,7 @@ def withSlot: array(int), int, int -> array(int) = { slots, k, value ->
         then value
         else match slots(j)
           | #some(v) -> v
-          | #none -> -1
+          | #notFound -> -1
     }
   )
 }

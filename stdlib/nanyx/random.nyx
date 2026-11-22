@@ -58,9 +58,9 @@ export def coinToss: [Random] () -> bool = { _ ->
 --| An element of `xs` chosen at random, each as likely as the others, or `#empty` when it has none.
 export def choose: [Random] list(a) -> #some(a) | #empty = { xs ->
   if list.isEmpty(xs) then #empty else
-    match list.get(xs, below(list.length(xs)))
+    match list.at(xs, below(list.length(xs)))
       | #some(x) -> #some(x)
-      | #outOfRange -> #empty
+      | #notFound -> #empty
 }
 
 --| The elements of `xs` in a random order, each order as likely as any other.

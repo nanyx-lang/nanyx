@@ -39,7 +39,7 @@ println("{Slice.toArray(xs \slice(-5, 100))}")
 println(Slice.isEmpty(xs \slice(2, 1)))
 println(Slice.length(Slice.slice(xs \slice(1, 3), 1, 10)))
 """
-    |> assertRan "#some(2)\n#none\n#none\n[1, 2, 3]\ntrue\n1\n"
+    |> assertRan "#some(2)\n#notFound\n#notFound\n[1, 2, 3]\ntrue\n1\n"
 
 [<Fact>]
 let ``Run - a slice keeps the array it views alive as long as it is used`` () =

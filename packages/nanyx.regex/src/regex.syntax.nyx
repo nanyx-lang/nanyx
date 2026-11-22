@@ -150,7 +150,7 @@ type ReadChars = #chars(list((int, int)), Reader) | #failed(int, string)
 def pointAt: Reader, int -> int = { r, i ->
   match r.points(i)
     | #some(c) -> c
-    | #none -> -1
+    | #notFound -> -1
 }
 
 --| The code point the reader is at, or -1 at the end of the pattern.

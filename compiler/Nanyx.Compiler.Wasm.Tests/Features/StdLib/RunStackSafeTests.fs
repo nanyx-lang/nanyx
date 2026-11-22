@@ -93,11 +93,11 @@ let ``Run - List.skipWhile works on 20,000 elements`` () =
     runSource (withList "println(show(list.skipWhile(xs, { x -> x < 20000 })))\n") |> assertRan "1 20000 20000\n"
 
 [<Fact>]
-let ``Run - List.get works on 20,000 elements`` () =
+let ``Run - List.at works on 20,000 elements`` () =
     let body =
-        normalized """match list.get(xs, 19999)
+        normalized """match list.at(xs, 19999)
   | #some(x) -> println("{x}")
-  | #outOfRange -> println("out of range")
+  | #notFound -> println("not found")
 """
     runSource (withList body) |> assertRan "20000\n"
 

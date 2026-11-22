@@ -13,11 +13,11 @@ The part of an array's functions that is in the [prelude](prelude), so no import
 ## `array.at`
 
 ```nanyx fragment
-def array.at: array(a), int -> #some(a) | #none
+def array.at: array(a), int -> #some(a) | #notFound
 ```
 
-The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
-end. Calling the array, `xs(index)`, is the same.
+The element of `xs` at `index`, counting from 0, or `#notFound` when `index` is negative or past
+the end. Calling the array, `xs(index)`, is the same.
 
 ## `array.fromArray`
 

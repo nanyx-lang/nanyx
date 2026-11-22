@@ -25,7 +25,7 @@ def main = {
   println(result)
 }
 """
-    runSource (source.ReplaceLineEndings "\n") |> assertRan "([20, 99, 0], #some(99), #none, #none, 3, #ok, #outOfRange, #outOfRange, #ok, #outOfRange)\n"
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "([20, 99, 0], #some(99), #notFound, #notFound, 3, #ok, #outOfRange, #outOfRange, #ok, #outOfRange)\n"
 
 [<Fact>]
 let ``Run - sets of strings give up the strings they replace, and converting copies`` () =

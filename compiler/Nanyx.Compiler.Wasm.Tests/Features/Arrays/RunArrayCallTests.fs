@@ -22,7 +22,7 @@ println(shelf.books(1))
     runSource (source.ReplaceLineEndings "\n") |> assertRan "#some(10)\n#some(30)\n#some(b)\n"
 
 [<Fact>]
-let ``Run - calling an array past its end or before its start is none, never a trap`` () =
+let ``Run - calling an array past its end or before its start is notFound, never a trap`` () =
     let source =
         """
 import nanyx/array
@@ -33,14 +33,14 @@ println(xs(3))
 println(xs(-1))
 println(xs(5) ?? 0)
 """
-    runSource (source.ReplaceLineEndings "\n") |> assertRan "#none\n#none\n0\n"
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "#notFound\n#notFound\n0\n"
 
 [<Fact>]
 let ``Run - an array is callable in a module that doesn't import nanyx/array`` () =
     let source =
         """
 module reader =
-  export def second: array(int) -> #some(int) | #none = { ys -> ys(1) }
+  export def second: array(int) -> #some(int) | #notFound = { ys -> ys(1) }
 
 import reader
 import nanyx/array

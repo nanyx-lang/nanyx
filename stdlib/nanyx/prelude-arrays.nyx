@@ -8,12 +8,12 @@
 -- `toString` calls these, which every module can reach, and calling an array, `xs(i)`, calls
 -- `array.at`.
 
---| The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
-  end. Calling the array, `xs(index)`, is the same.
-export def array.at: array(a), int -> #some(a) | #none = { xs, index ->
+--| The element of `xs` at `index`, counting from 0, or `#notFound` when `index` is negative or past
+  the end. Calling the array, `xs(index)`, is the same.
+export def array.at: array(a), int -> #some(a) | #notFound = { xs, index ->
   if index >= 0 and index < __nanyx_array_length(xs)
     then #some(__nanyx_array_get(xs, index))
-    else #none
+    else #notFound
 }
 
 --| Whether the arrays `xs` and `ys` hold equal elements in the same order, as `same` compares two

@@ -30,7 +30,7 @@ with for good. It belongs to the `memory` block it was made in: every operation 
 block's `Memory`, and the array can't leave the block, so give back [`MArray.toArray`](#marraytoarray) of it.
 
 [`MArray.fromArray`](#marrayfromarray) and [`MArray.toArray`](#marraytoarray) copy, so an `Array` never changes, whatever happens
-to the `MArray` it was copied into or from. An index out of range is `#none` or `#outOfRange`,
+to the `MArray` it was copied into or from. An index out of range is `#notFound` or `#outOfRange`,
 never a trap. A mutable array has no `==`, order, hash or `toString`: compare or write what
 [`MArray.toArray`](#marraytoarray) gives instead.
 
@@ -141,11 +141,11 @@ How many elements `xs` holds.
 ## `MArray.at`
 
 ```nanyx fragment
-def MArray.at: [Memory] MArray(a), int -> #some(a) | #none
+def MArray.at: [Memory] MArray(a), int -> #some(a) | #notFound
 ```
 
-The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
-end.
+The element of `xs` at `index`, counting from 0, or `#notFound` when `index` is negative or past
+the end.
 
 ## `MArray.set`
 

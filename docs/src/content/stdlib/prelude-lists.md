@@ -126,14 +126,14 @@ def list.last: list(a) -> #some(a) | #emptyList
 
 The last element, or `#emptyList`.
 
-## `list.get`
+## `list.at`
 
 ```nanyx fragment
-def list.get: list(a), int -> #some(a) | #outOfRange
+def list.at: list(a), int -> #some(a) | #notFound
 ```
 
-The element at position `index`, counting from 0, or `#outOfRange` when `index` is negative or past
-the end.
+The element at position `index`, counting from 0, or `#notFound` when `index` is negative or past
+the end. It walks to the element, in time proportional to `index`.
 
 ## `list.contains`
 

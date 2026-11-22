@@ -219,6 +219,7 @@
     <Compile Include="Features\StdLib\RunSeqZipToSeqTests.fs" />
     <Compile Include="Features\StdLib\RunTrieTests.fs" />
     <Compile Include="Features\StdLib\RunCollectionLengthTests.fs" />
+    <Compile Include="Features\StdLib\RunCollectionAtTests.fs" />
     <Compile Include="Features\StdLib\RunSetMapQueryTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />

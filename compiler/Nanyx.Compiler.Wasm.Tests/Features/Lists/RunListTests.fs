@@ -312,14 +312,14 @@ no last
 0""")
 
 [<Fact>]
-let ``Run - List.skipWhile, partition, unzip and get`` () =
+let ``Run - List.skipWhile, partition, unzip and at`` () =
     let source =
         showInts +
         normalized """def xs = [1, 2, 3, 4]
 def empty: list(int) = []
-def describe: #some(int) | #outOfRange -> string = {
+def describe: #some(int) | #notFound -> string = {
   | #some(n) -> "some {n}"
-  | #outOfRange -> "out of range"
+  | #notFound -> "not found"
 }
 println(show(xs \ skipWhile { < 3 }))
 println(show(list.skipWhile([1, 5, 1], { x -> x < 3 })))
@@ -335,12 +335,12 @@ def (numbers, names) = list.unzip([(1, "a"), (2, "b")])
 println(show(numbers) ++ string.join(names, ","))
 def (firsts, seconds) = list.unzip(list.zip(xs, [5, 6, 7, 8]))
 println(show(firsts) ++ show(seconds))
-println(describe([10, 20, 30] \ list.get(1)))
-println(describe([10, 20, 30] \ get(0)))
-println(describe(list.get([10, 20, 30], 2)))
-println(describe(list.get([10, 20, 30], -1)))
-println(describe(list.get([10, 20, 30], 3)))
-println(describe(list.get(empty, 0)))
+println(describe([10, 20, 30] \ list.at(1)))
+println(describe([10, 20, 30] \ at(0)))
+println(describe(list.at([10, 20, 30], 2)))
+println(describe(list.at([10, 20, 30], -1)))
+println(describe(list.at([10, 20, 30], 3)))
+println(describe(list.at(empty, 0)))
 """
     runSource source
     |> assertRan (
@@ -356,6 +356,6 @@ println(describe(list.get(empty, 0)))
 some 20
 some 10
 some 30
-out of range
-out of range
-out of range""")
+not found
+not found
+not found""")
