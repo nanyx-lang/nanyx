@@ -77,13 +77,13 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
         | TyAlias(name, [], _)
         | TyApply(name, []) -> state.TypeDefs |> Map.tryFind name |> Option.filter plain
         | _ -> None
+    let env = context |> Option.fold (fun acc info -> withSupplied info acc) env
     let addFields fields =
         fields
         |> Map.fold (fun acc name fieldTy ->
             let symbol = context |> Option.bind (fun info -> info.Members |> Map.tryFind name)
             let quantified = if context.IsSome then TypeEnv.freeTyVars fieldTy else Set.empty
             TypeEnv.extend name { TypeEnv.mono fieldTy with Quantified = quantified; Symbol = symbol; ProvidedBy = Some provider } acc) env
-    let env = context |> Option.fold (fun acc info -> withSupplied info acc) env
     match Unifier.unalias ty with
     | TyRecord(fields, _) -> addFields fields
     | RecursiveNominals.Nominal(_, _, underlying, _) ->
@@ -770,11 +770,17 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                 | TypeName ctxName, Some provider -> recordProvider call ctxName provider current
                 | _ -> current) current
         | None -> current
+    // A scoped context is available where something supplies it, whether or not its members are in scope (see
+    // `unsupplied` below).
+    let isScopedContext (ctx: TypeExpr) =
+        match ctx.Kind with
+        | TypeName ctxName -> WrittenContexts.isScoped state ctxName
+        | _ -> false
     // Each context with a member not in scope at all, with those members, and each with no members that nothing
     // supplies (see `withSupplied`).
     let missing =
         requiredMembers
-        |> List.filter (fun (ctx, _) -> not (isCarried ctx) && not (fromHost ctx))
+        |> List.filter (fun (ctx, _) -> not (isCarried ctx) && not (fromHost ctx) && not (isScopedContext ctx))
         |> List.choose (fun (ctx, members) ->
             let unsupplied =
                 match ctx.Kind with
