@@ -81,6 +81,9 @@ type Manifest =
       Host: HostEntry option
       /// The host this package is, if its `package` declares one (see `HostPackages`).
       Declares: Host option
+      /// Whether its `package` declares it a host library, whose modules may require `HostRuntime` (see
+      /// `HostLibraries.field`).
+      HostLibrary: bool
       /// The whole manifest as it is written, for tools that read the rest (see `toJson`).
       Value: DataValue }
 
@@ -92,7 +95,7 @@ module Manifest =
     /// The fields a manifest may have. `formatter` is the formatter's, which checks what is in it.
     let private fields = [ "package"; "dependencies"; "linters"; "host"; "formatter" ]
 
-    let private packageFields = [ "name"; "version"; "sources"; "repository"; HostPackages.field ]
+    let private packageFields = [ "name"; "version"; "sources"; "repository"; HostPackages.field; HostLibraries.field ]
 
     /// The fields of an entry of `linters`.
     let private entryFields = [ "package"; "version"; "settings" ]
@@ -623,6 +626,11 @@ module Manifest =
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
                     let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version, `1.2.0`"
                     DataValue.field HostPackages.field fields |> Option.iter (fun field -> checkHostDeclaration problems field.Value)
+                    match DataValue.field HostLibraries.field fields with
+                    | Some { DataField.Value = { DataValue.Data = DataBool _ } }
+                    | None -> ()
+                    | Some field ->
+                        problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"`{HostLibraries.field}` is `true` for a package hosts are written on, or `false`, not {DataValue.describe field.Value}"
                     let repository =
                         problems.Text "package" fields "repository" repositoryPattern "a GitHub repository, `owner/name`, as `acme/web`"
                         |> Option.map (fun text -> let found = repositoryPattern.Match text in { Owner = found.Groups["owner"].Value; Name = found.Groups["name"].Value })
@@ -647,6 +655,7 @@ module Manifest =
                       // No `host` means a library: an application names the host it runs under.
                       Host = host
                       Declares = HostPackages.ofManifest (defaultArg name "") (Path.GetDirectoryName path) manifest
+                      HostLibrary = HostLibraries.declares manifest
                       Value = manifest }
             | problems -> Result.Error problems
 

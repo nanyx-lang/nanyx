@@ -26,12 +26,16 @@ module ShippedPackages =
 
     let private modules = ConcurrentDictionary<string, PackageModules option>()
 
+    /// The manifest of the shipped package `name`, as data.
+    let private manifestOf (name: string) =
+        let path = Path.Combine(directoryOf name, name + ".nyxp")
+        DataValue.read path (File.ReadAllText path)
+
     /// The packages the shipped package `name` depends on, as its manifest lists them: a shipped package depends only on
     /// others the compiler ships, by name. The manifest is checked as any other is (see `Manifest`) by the tests of the
     /// packages the compiler ships.
     let private dependenciesOf (name: string) : string list =
-        let path = Path.Combine(directoryOf name, name + ".nyxp")
-        match DataValue.read path (File.ReadAllText path) with
+        match manifestOf name with
         | Ok { Data = DataRecord top } ->
             match DataValue.field "dependencies" top with
             | Some { DataField.Value = { Data = DataList entries } } ->
@@ -53,7 +57,10 @@ module ShippedPackages =
             let sources = Path.Combine(directoryOf name, "src")
             if Directory.Exists sources then
                 let files = Directory.GetFiles(sources, "*.nyx", SearchOption.AllDirectories) |> Array.sort |> List.ofArray
-                Some { PackageModules.ofFiles name (directoryOf name) None files with Dependencies = dependenciesOf name |> List.choose tryModules }
+                Some
+                    { PackageModules.ofFiles name (directoryOf name) None files with
+                        Dependencies = dependenciesOf name |> List.choose tryModules
+                        HostLibrary = manifestOf name |> Result.map HostLibraries.declares |> Result.defaultValue false }
             else
                 None)
 

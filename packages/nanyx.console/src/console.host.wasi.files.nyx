@@ -142,18 +142,6 @@ def writeFlag: I32 = 2
 
 def followSymlinks: I32 = 1
 
---| The first address from `address` on that is a multiple of 8, where the canonical ABI lays out a
-  value with a 64-bit field: a block of 8 bytes more than the value has the value from there on.
-def aligned8: I32 -> I32 = { address ->
-  address + (8 - address % 8) % 8
-}
-
---| Frees the string that an `option<string>` at `at` holds, if it holds one: an address and a length
-  at 4 and 8, which the host allocated.
-def freeOptionalString: [HostRuntime] I32 -> () = { at ->
-  if readByte(at) == 1 then free(readI32(at + 4)) else ()
-}
-
 --| The `FsError` the `wasi:filesystem` `error-code` at `at` stands for: its case, by its place in the
   variant, and for `other`, the `option<string>` at 4, which is freed.
 def errorAt: [HostRuntime] I32 -> FsError = { at ->
@@ -375,9 +363,12 @@ def writeWith
     match openAt(at, openFlags, writeFlag)
       | #error(e) -> #error(e)
       | #some(descriptor) ->
-        writeTo(outputOf(descriptor), text)
+        def result = allocate(24)
+        writeTo(outputOf(descriptor), text, result)
         dropDescriptor(descriptor)
-        resultAt(stateAt(24))
+        def written = resultAt(result)
+        free(result)
+        written
   }
 
 --| A file's `write-via-stream`, from its start, as an `Output`.

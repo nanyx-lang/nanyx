@@ -127,7 +127,8 @@ requests has no `wasi:http` import. It is Nanyx, on
     `other`'s `option<string>` at 4, whose string the host allocated and the root frees.
   - An `error-code` becomes the `FsError` the core root gives for the same WASI error: `no-entry` is `#notFound`, and so
     on (`errorAt`).
-- **HTTP requests** are `wasi:http/client`'s `send`, in `console.host.wasi.http.nyx`. A `Request` becomes a
+- **HTTP requests** are `wasi:http/client`'s `send`, in the host library `nanyx.wasi` (`nanyx.wasi/http`), which the
+  HTTP host's component root will share. A `Request` becomes a
   `wasi:http/types` `request`: its headers a `fields`, with a `Content-Length` for a body that doesn't name one, its body
   a `stream<u8>`, its trailers a future written `ok(none)`, its timeout `request-options`' connect and first-byte
   timeouts, and its URL split into scheme, authority and path with query (`urlParts`).

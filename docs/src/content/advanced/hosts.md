@@ -244,7 +244,7 @@ It prints `HELLO!`. A call to `println` in it is an unknown function, since this
 
 ## `HostRuntime`
 
-`run` and the functions it calls require [`HostRuntime`](../stdlib/host-runtime), a context with no members that marks the host. The toolchain provides it only to the modules of the host's own package: its root, its component root, and the modules they share; anywhere else, including the packages the host depends on, a function that requires it, or calls one that does, is an error (`NYX0238`). Foreign functions and host memory require it, so only the host can call them, and a library can only reach the outside world through the contexts the host chose to provide.
+`run` and the functions it calls require [`HostRuntime`](../stdlib/host-runtime), a context with no members that marks the host. The toolchain provides it only to the modules of the host's own package (its root, its component root, and the modules they share) and of the [host libraries](#host-libraries) it depends on; anywhere else, including the other packages the host depends on, a function that requires it, or calls one that does, is an error (`NYX0238`). Foreign functions and host memory require it, so only the host can call them, and a library can only reach the outside world through the contexts the host chose to provide.
 
 ## Foreign functions
 
@@ -274,6 +274,18 @@ A foreign function deals in addresses in the module's linear memory: WASI's `fd_
 
 These are the only unchecked operations a host performs. A read or a write outside the module's memory traps, but one inside it where the host has no block reads or overwrites the program's own data.
 
+## Host libraries
+
+Hosts share what they are written on through _host libraries_: packages whose manifest says `hostLibrary = true` in its `package`. A host library's modules may require `HostRuntime`, as a host's own do, when the build host's package depends on it, so two hosts call the same foreign functions without each declaring them:
+
+```nanyx fragment
+(
+  package = (name = "acme.platform", version = "0.1.0", sources = ["src/**/*.nyx"], hostLibrary = true)
+)
+```
+
+A program that depends on a host library can import it, but can't call what requires `HostRuntime` there, since the program's own code may not require it. The compiler ships one, `nanyx.wasi`, which the console host and the HTTP host are written on.
+
 # Packages the compiler ships
 
 The compiler ships the packages every program needs beside itself, in a `packages` directory next to the `nanyx` executable, so a program builds and runs with nothing downloaded:
@@ -283,6 +295,7 @@ The compiler ships the packages every program needs beside itself, in a `package
 - `nanyx.fs`, the interface package of the file system, which declares `FileSystem`, `Path` and the functions on them;
 - `nanyx.http.core`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
 - `nanyx.http`, the HTTP host;
+- `nanyx.wasi`, the [host library](#host-libraries) the console and HTTP hosts are written on: WASI's random source and clocks, the runtime's `nanyx:http`, and the component model's canonical ABI and WASI 0.3 interfaces their component roots use;
 - `nanyx.playground`, the playground host, which runs a console program in a web page;
 - `nanyx.regex`, for [regular expressions](../stdlib/regex).
 
