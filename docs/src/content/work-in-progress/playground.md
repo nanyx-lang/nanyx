@@ -14,19 +14,14 @@ examples](../deep-dives/playground#the-tours-examples) in Deep dives). This page
 
 # Plan
 
-1. **A release with the compiler.** The docs build takes the compiler from the `nanyx-browser.zip` of the release named
-   by `playgroundRelease` in `docs/site/playground-compiler.mjs`. No release has the asset yet, so until the first
-   release after 0.32.0 is named there, the deployed page says its compiler isn't on the site yet
-   ([#2152](https://github.com/nanyx-lang/nanyx/issues/2152)). Until then the tour's examples have no compiler either,
-   and their Run says so.
-2. **Diagnostics in the editor**, underlined as you type with the same messages and codes as the CLI, each code linked
+1. **Diagnostics in the editor**, underlined as you type with the same messages and codes as the CLI, each code linked
    to its section of [Compiler errors](../standard-tools/errors); with [deferred errors](./deferred-errors), a program
    with errors still runs up to the first one, as `nanyx run` does. Then a pane that shows the WebAssembly text the
    program compiled to, for people curious about the backend, and for bug reports
    ([#2154](https://github.com/nanyx-lang/nanyx/issues/2154)).
-3. **A trap's stack.** A trap shows the message the program wrote, but not the stack the CLI shows, which needs the
+2. **A trap's stack.** A trap shows the message the program wrote, but not the stack the CLI shows, which needs the
    module's table of places read in the page.
-4. **Later:** hover types and inlay hints as in the [editor](../standard-tools/vs-code-extension), from the same
+3. **Later:** hover types and inlay hints as in the [editor](../standard-tools/vs-code-extension), from the same
    compile; files and HTTP emulated in the page; a choice of compiler version; examples beyond the tour's, such as the
    [Nim demo](./nim-demo), which reads input; and more done for phones than the stacked layout.
 
