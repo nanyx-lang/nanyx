@@ -430,13 +430,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
             this.Complex scope value k
-        // A `box` (see `Boxes`) is made on the region of the `Memory` it is made under, which every function that
-        // requires `Memory` is given as a member (see `CoreIrRegions`), and read and changed as a captured cell is.
+        // A `box` (see `Boxes`) is made on the region of the outermost `memory` block running (see `CoreIrRegions`), and
+        // read and changed as a captured cell is.
         | FunctionCall(name, _, [ value ]) when name = Intrinsics.boxNew && not (scope.Vars.ContainsKey name) ->
-            let region =
-                match scope.Members |> Map.tryFind (NamedMember FunctionContexts.regionMember) with
-                | Some region -> region
-                | None -> internalError "a box made where no `Memory` is in scope"
             this.Atoms scope [ value ] (fun atoms ->
                 let link = ASized(SizedInteger.I32, 0L)
                 let fields =
@@ -448,7 +444,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 let box = newVar (uniqueName "__box") Local boxTy
                 let tracked = newVar (uniqueName "__tracked") Local IrUnit
                 let body = k (Expr.make (Atom(AVar box)) boxTy)
-                let track = Expr.make (CallRuntime(WasmRegions.Names.regionTrack, [ AVar box; AVar region ], false)) IrUnit
+                let track = Expr.make (CallRuntime(WasmRegions.Names.regionTrack, [ AVar box ], false)) IrUnit
                 Expr.make (Let(box, Expr.make (MakeRecord fields) boxTy, Expr.make (Let(tracked, track, body)) body.Type)) body.Type)
         | FunctionCall(name, _, [ box ]) when name = Intrinsics.boxGet && not (scope.Vars.ContainsKey name) ->
             this.Atoms scope [ box ] (fun atoms ->

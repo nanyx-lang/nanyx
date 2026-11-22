@@ -129,10 +129,11 @@ module Intrinsics =
     /// one block.
     let marrayNew = prefix + "marray_new"
     let marrayWrite = prefix + "marray_write"
-    /// A new region, which a `memory` block's mutable objects are made in, and the end of one, which drops what each object
-    /// still in it holds and frees it (see `CoreIrRegions` in the backend).
-    let regionNew = prefix + "region_new"
-    let regionEnd = prefix + "region_end"
+    /// The start and the end of a `memory` block. The outermost block running has a region, which every mutable object
+    /// made while it runs is on, and when it ends, the region drops what each object still on it holds and frees it (see
+    /// `CoreIrRegions` in the backend).
+    let regionEnter = prefix + "region_enter"
+    let regionExit = prefix + "region_exit"
     /// Whether a value is held exclusively: it takes over a reference to the value and gives it up, and says whether that
     /// was the only one, as Lean's `isExclusive` does. A caller that holds the only reference can hand over what the value
     /// holds instead of copying it, as `MList.toList` does. The value is one that is always on the heap, such as a box.
@@ -256,8 +257,8 @@ module Intrinsics =
           marrayWrite, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ MutableArrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           arrayNew, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, Arrays.ofType element, []); Symbol = None; ProvidedBy = None }
           arrayWrite, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Arrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
-          regionNew, TypeEnv.mono (TyFunc(unitTy, i32Ty, []))
-          regionEnd, TypeEnv.mono (TyFunc(i32Ty, unitTy, []))
+          regionEnter, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
+          regionExit, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }
           listSetTail, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; listOf element ], unitTy, []); Symbol = None; ProvidedBy = None }
           listSetHead, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; element ], unitTy, []); Symbol = None; ProvidedBy = None }

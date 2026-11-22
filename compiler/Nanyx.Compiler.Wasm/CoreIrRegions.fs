@@ -1,9 +1,8 @@
-/// The mutable objects a `memory` block frees when it ends (#2232). A block makes a region (`__nanyx_region_new`), which
-/// `Memory` carries as its member `FunctionContexts.regionMember`, so every function that requires `Memory` is given
-/// it. Each mutable object made under a block's `Memory` is on its region's list: counting still frees it as soon as
-/// nothing refers to it, and it comes off the list then, and when the block ends (`__nanyx_region_end`) it drops what
-/// each object still on the list holds and frees it, which breaks any cycle through them. The layout and the helpers are
-/// described in "Regions" in `docs/src/content/deep-dives/memory-management.md`.
+/// The mutable objects a `memory` block frees when it ends (#2232). The outermost `memory` block running has a region
+/// (see `WasmRegions`), and each mutable object made while it runs is on the region's list: counting still frees it as
+/// soon as nothing refers to it, and it comes off the list then, and when the block ends it drops what each object still
+/// on the list holds and frees it, which breaks any cycle through them. The layout and the helpers are described in
+/// "Regions" in `docs/src/content/deep-dives/memory-management.md`.
 module internal Transpiler.Wasm.CoreIrRegions
 
 open Transpiler.Wasm.CoreIr

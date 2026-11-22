@@ -160,18 +160,14 @@ let private layoutOf (typeLayouts: Map<string, string list>) (name: string) : st
     | None when name.Contains '.' -> typeLayouts |> Map.tryFind (name.Substring(name.LastIndexOf '.' + 1))
     | None -> None
 
-/// The keys of the members of the contexts each definition in `defs` requires (`contextTypesOf` it), by the
-/// definition's name, from the members of each context in `typeLayouts`. For a parameterised context the key is the instance's member (`toString`
+/// The keys of the members of the contexts each definition in `defs` requires, by the definition's name, from the
+/// members of each context in `typeLayouts`. For a parameterised context the key is the instance's member (`toString`
 /// of `ToString(a)`), and for a plain one it is the member's name (`println`).
-let private contextMemberKeys
-    (contextTypesOf: string * TypeExpr option * Expression -> TypeExpr list)
-    (defs: (string * TypeExpr option * Expression) list)
-    (typeLayouts: Map<string, string list>)
-    : Map<string, ContextMemberKey list> =
+let private contextMemberKeys (defs: (string * TypeExpr option * Expression) list) (typeLayouts: Map<string, string list>) : Map<string, ContextMemberKey list> =
     defs
-    |> List.choose (fun ((name, _, _) as def) ->
+    |> List.choose (fun (name, typeOpt, value) ->
         let keys =
-            contextTypesOf def
+            extractContextTypes typeOpt value
             |> List.collect (fun ctxType ->
                 let baseName =
                     match ctxType.Kind with
@@ -788,22 +784,11 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
             | Some (InstanceDerived(_, definition, _)) -> Some [ definition ]
             | _ -> None) >> List.concat)
         |> Set.ofSeq
-    // The contexts a def's annotation requires (`TypeWithContext`), and `Memory` where its type was inferred to require
-    // it, as a def that writes no type may be: `Memory` holds the region its block frees its mutable objects with (see
-    // `CoreIrRegions`), which the def is passed.
-    let contextTypesOf (name: string) (typeOpt: TypeExpr option) (value: Expression) =
-        let written = extractContextTypes typeOpt value
-        let writesMemory = written |> List.exists (fun ctx -> match ctx.Kind with TypeName n -> n = FunctionContexts.cellContext | _ -> false)
-        match typed.Types |> Map.tryFind name |> Option.map Unifier.unalias with
-        | Some (TyFunc(_, _, contexts)) when not writesMemory
-                                            && contexts |> List.exists (function FunctionContexts.ScopedContext(n, _) -> n = FunctionContexts.cellContext | _ -> false) ->
-            written @ [ TypeExpr.at value.Span (TypeName FunctionContexts.cellContext) ]
-        | _ -> written
     // A lambda lifted out of a function that requires contexts captures the function's members it may call, by the names
     // of the parameters they come in, so that it can call them and pass them on.
     let memberCaptures =
         let defs = module' |> List.choose (function Kind (Def (ValueDef(_, name, typeOpt, expr))) -> Some(name, typeOpt, expr) | _ -> None)
-        contextMemberKeys (fun (name, typeOpt, value) -> contextTypesOf name typeOpt value) defs (fst (extractTypeLayouts module'))
+        contextMemberKeys defs (fst (extractTypeLayouts module'))
     // A function that is passed context members where it is called: one whose type requires contexts, or context variables,
     // or a local function that requires parameterised ones, whose call may be passed one the def around it has.
     let localsRequiringContexts =
@@ -859,12 +844,12 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
     let functionContextTypes =
         defs
         |> List.choose (fun (name, typeOpt, value) ->
-            match contextTypesOf name typeOpt value with
+            match extractContextTypes typeOpt value with
             | [] -> None
             | contextTypes -> Some (name, contextTypes))
         |> Map.ofList
 
-    let functionContextRequirements = contextMemberKeys (fun (name, typeOpt, value) -> contextTypesOf name typeOpt value) defs typeLayouts
+    let functionContextRequirements = contextMemberKeys defs typeLayouts
 
     // The ambient context instance: the definition the type checker found for each member of an ambient context
     // (`TypedModule.AmbientMembers`) stands in for that member whenever a callee requires the context and the caller
@@ -1326,7 +1311,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let importFunctions = ComponentImports.functions exportContext componentImports
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     // Ending a region calls what drops each of its objects' contents through the function table (see `WasmRegions`).
-    if usedHelperSet.Contains WasmRegions.Names.regionEnd then
+    if usedHelperSet.Contains WasmRegions.Names.regionExit then
         functionTable.IndirectSignatures.Add([ "i32" ], "i32") |> ignore
     // Exiting is not a stream, but its WASI import is declared with stderr's.
     let moduleUsesStandardStreams = [ Helpers.writeStderr; Helpers.procExit ] |> List.exists usedHelperSet.Contains

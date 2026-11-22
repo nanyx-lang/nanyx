@@ -43,15 +43,16 @@ export def bool.fromString: string -> #some(bool) | #invalidBool = { s ->
 --| The context mutation needs: a cell can be declared with `mut` only where it is, and a lambda that uses a cell
   needs it too. It is nominal, so `memory` is the only way to get one, and scoped, so nothing that needs it
   can leave the `memory` block that supplies it.
-export scoped context Memory = private (__memory_region: I32)
+export scoped context Memory = protected ()
 
 --| Runs `block` with `Memory`, so that it can declare cells with `mut` and change them with `:=`, and
   gives back its result. Nothing that uses a cell can leave the block: only what the cells hold. The block can
   name its `Memory`, `memory { context m -> ... }`, and `use m` in an inner block makes the cells after it belong
-  to this one.
+  to this one. When the outermost block running ends, it frees the references made while it ran, so a cycle
+  through one is freed too.
 export def memory: [c] ([Memory, c] () -> a) -> a = { block ->
-  def region = __nanyx_region_new()
-  def result = use Memory(__memory_region = region) in block()
-  __nanyx_region_end(region)
+  __nanyx_region_enter()
+  def result = use Memory() in block()
+  __nanyx_region_exit()
   result
 }

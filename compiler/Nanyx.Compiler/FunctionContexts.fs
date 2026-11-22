@@ -20,11 +20,6 @@ module FunctionContexts =
     /// The context a cell's type is of (see `cellType`): `Memory`, as the prelude declares it.
     let cellContext = "Memory"
 
-    /// The member of `Memory`, as the prelude declares it, that holds the region its `memory` block frees its mutable
-    /// objects with when it ends (#2232): the backend passes it, as any context's member, to every function that requires
-    /// `Memory`, and gives it to each mutable object made there.
-    let regionMember = "__memory_region"
-
     /// The type of a cell that holds `held`, of the `memory` block of the scope `scope` (see `CellPassingSyntax`): a
     /// reader sees `mut T`, without the scope.
     let cellType (held: Ty) (scope: Ty) : Ty = TyApply(CellPassingSyntax.typeName, [ held; scopeType scope ])
