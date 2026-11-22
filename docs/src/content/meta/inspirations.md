@@ -69,7 +69,7 @@ Nanyx has no garbage collector: values are reference-counted, and freed as soon 
 - From **Lean 4**: inferring which parameters a function only borrows, so reading a shared value counts nothing, and
   updating an array in place when it's held only once.
 
-See [Reference counting](./reference-counting).
+See [Reference counting](../deep-dives/reference-counting).
 
 # Look and feel, workflows, and pipes
 
