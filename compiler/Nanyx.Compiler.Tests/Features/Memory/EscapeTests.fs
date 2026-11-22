@@ -71,3 +71,76 @@ def read: [Memory] () -> int = { run({ r -> MRef.get(r) }) }
 def total = memory { read() }
 """
     Assert.Equal<string list>([], codes source)
+
+/// An outer block whose inner block stores the inner block's reference in `holder`, declared by `declaration`, with
+/// `store` (#2295).
+let private storedOutside (declaration: string) (store: string) =
+    $"""
+import nanyx/mref
+
+def total = memory {{
+  {declaration}
+  memory {{
+    def r = MRef.new(5)
+    {store}
+  }}
+  0
+}}
+"""
+
+[<Fact>]
+let ``An inner block's reference can't be stored in an outer block's cell`` () =
+    let source =
+        """
+import nanyx/mref
+
+def total = memory {
+  mut holder = []
+  memory {
+    def r = MRef.new(5)
+    holder := [r]
+  }
+  match holder
+    | [r] -> MRef.get(r)
+    | _ -> 0
+}
+"""
+    let code, text = singleError (normalized source)
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, code)
+    Assert.Equal("holder", text)
+
+[<Fact>]
+let ``Nor in an outer block's reference`` () =
+    let source =
+        """
+import nanyx/mref
+
+def total = memory {
+  def outer = MRef.new([])
+  memory {
+    def r = MRef.new(5)
+    MRef.set(outer, [r])
+  }
+  match MRef.get(outer)
+    | [r] -> MRef.get(r)
+    | _ -> 0
+}
+"""
+    let code, text = singleError (normalized source)
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, code)
+    Assert.Equal("outer", text)
+
+[<Theory>]
+[<InlineData("mut holder: #some(MRef(int)) | #none = #none", "holder := #some(r)")>]
+[<InlineData("mut holder = []", "holder := [{ MRef.get(r) }]")>]
+[<InlineData("def outer = MRef.new([])", "MRef.set(outer, [(ref = r)])")>]
+[<InlineData("def outer = MRef.new([])", "MRef.set(outer, [{ MRef.get(r) }])")>]
+[<InlineData("def outer = MRef.new([])", "def put = { x -> MRef.set(outer, x) }\n    put([r])")>]
+let ``Nor what holds it, nor a lambda over it`` (declaration: string) (store: string) =
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes (storedOutside declaration store))
+
+[<Theory>]
+[<InlineData("mut holder = 0", "holder := MRef.get(r)")>]
+[<InlineData("def outer = MRef.new(0)", "MRef.set(outer, MRef.get(r))")>]
+let ``An inner block may store what its reference holds in an outer block's cell or reference`` (declaration: string) (store: string) =
+    Assert.Equal<string list>([], codes (storedOutside declaration store))

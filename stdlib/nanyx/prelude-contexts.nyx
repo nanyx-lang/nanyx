@@ -7,7 +7,7 @@
 --| How two values of type `a` are compared. `x == y` is read through it, and `x != y` is
   `not (x == y)`. The compiler has its own for every type that holds no function, which compares
   by structure: records field by field, lists element by element, tags by name and then payload.
-  Functions have no equality. A function that compares values of one of its type variables
+  Functions have no equality, and a private type has only the `==` it attaches. A function that compares values of one of its type variables
   requires it: `def same: [Eq(a)] a, a -> bool`.
 export context Eq(a) = (`==`: (a, a) -> bool)
 
@@ -66,7 +66,7 @@ export def list.`++`: list(a), list(a) -> list(a) = { xs, ys ->
   through it, so the four cannot disagree. The compiler has its own for numbers, `bool` (`false`
   first), `string` (by bytes, which is the order of code points), and tuples and lists of them
   (position by position, and a list that is a prefix of another first). Records and tags have no
-  order: a nominal type gets one by attaching `compare`, and a list of records is sorted by a key
+  order: a nominal type gets one by attaching `compare`, and a private type has no other, and a list of records is sorted by a key
   with [`list.sortBy`]. A function that orders values of one of its type variables requires it:
   `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
   should keep them consistent.
@@ -177,7 +177,7 @@ export def string.compare: string, string -> #less | #equal | #greater = { x, y 
 
 --| How a value of type `a` is hashed: an `int` that is the same for any two values `==` finds equal,
   so that a map can find a key by its hash. The compiler has its own for every type it has its own
-  `Eq` for, which hashes by structure. A nominal type that attaches its own `==` must attach a
+  `Eq` for, which hashes by structure. A private type has only the `hash` it attaches. A nominal type that attaches its own `==` must attach a
   `hash` that agrees with it, or it has none: `def Email.hash = { e -> string.hash(lower(e)) }`
   for an `==` that ignores case. A function that hashes values of one of its type variables
   requires it: `def bucket: [Hash(a)] a, int -> int`.

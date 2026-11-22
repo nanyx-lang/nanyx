@@ -49,7 +49,14 @@ module internal WellKnownContexts =
             offendingPart kindOf partTy |> Option.map (fun (rest, kind) -> (part, plural) :: rest, kind)
         match kindOf ty with
         | _ when covered ty -> None
-        | Some kind -> Some ([], kind)
+        // A private type that is a part with no instance itself, a mutable reference, is reported as that part.
+        | Some kind ->
+            match ty with
+            | TyNominal(_, _, underlying, true) ->
+                match offendingPart kindOf underlying with
+                | Some ([], representation) -> Some ([], representation)
+                | _ -> Some ([], kind)
+            | _ -> Some ([], kind)
         | None ->
             match ty with
             | TyFunc _
@@ -97,10 +104,19 @@ module internal WellKnownContexts =
     /// as the standard library's `MRef`.
     let private mutableReference = Some ("a mutable reference", "mutable references")
 
-    /// `Eq`: every type that holds no function and no box has the compiler's own, which compares by structure. A box
-    /// changes, so it has none, by identity or by what it holds then. A map or a set, or a structure that holds one, is
-    /// compared by a definition derived from its parts, whatever order the entries were added in (see
-    /// `StructuralInstances`).
+    /// What a private type is called where a message says why it has no instance of the context whose member is
+    /// `memberName`: outside its home module its representation is hidden, so nothing is derived from it, anywhere,
+    /// and it has only the member it attaches (see "Private (opaque) types" in the docs).
+    let private privateType (memberName: Identifier) (ty: Ty) =
+        match ty with
+        | TyNominal(_, _, _, true) ->
+            Some ($"the private type '{Unifier.tyToDisplayString Ascii ty}'", $"private types without their own {memberName}")
+        | _ -> None
+
+    /// `Eq`: every type that holds no function, no box and no private type without its own `==` has the compiler's
+    /// own, which compares by structure. A box changes, so it has none, by identity or by what it holds then. A map or
+    /// a set, or a structure that holds one, is compared by a definition derived from its parts, whatever order the
+    /// entries were added in (see `StructuralInstances`).
     let equality =
         { Context = "Eq"
           Member = "=="
@@ -111,7 +127,7 @@ module internal WellKnownContexts =
                 | TyFunc _ -> Some ("a function", "functions")
                 | Boxes.BoxType _ -> mutableReference
                 | MutableArrays.MutableArrayType _ -> Some ("a mutable array", "mutable arrays")
-                | _ -> None)
+                | ty -> privateType "==" ty)
           ListHelpers = Map.ofList [ "==", "__listEquals"; "!=", "__listEquals" ]
           AgreesWith = None
           Verb = "compares"
@@ -119,7 +135,7 @@ module internal WellKnownContexts =
           Participle = "compared" }
 
     /// `Ord`: numbers, bools, strings, and tuples and lists of them, have the compiler's own, which orders by
-    /// structure. Records and tags have none: their fields and tags have no order of their own in their type, so any
+    /// structure. A private type has only the `compare` it attaches. Records and tags have none: their fields and tags have no order of their own in their type, so any
     /// derived order would be alphabetical by accident.
     let ordering =
         { Context = "Ord"
@@ -139,7 +155,7 @@ module internal WellKnownContexts =
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
                 | TyUnion _ -> Some ("a tag", "tags")
-                | _ -> None) (fun _ -> false)
+                | ty -> privateType "compare" ty) (fun _ -> false)
           ListHelpers =
             Map.ofList [ "<", "__listLess"; "<=", "__listLessOrEqual"; ">", "__listGreater"; ">=", "__listGreaterOrEqual" ]
           AgreesWith = None
@@ -148,7 +164,7 @@ module internal WellKnownContexts =
           Participle = "ordered" }
 
     /// `Hash`: every type that has the compiler's own `Eq` has the compiler's own `Hash`, which hashes by structure, so
-    /// that values equal by their structure have the same hash. It has no operators. A type that attaches its own `==`
+    /// that values equal by their structure have the same hash. A private type has only the `hash` it attaches. It has no operators. A type that attaches its own `==`
     /// must attach `hash` too. A map or a set has none yet: hashing the list of its entries would give equal maps
     /// different hashes. Nor has an array yet, nor a box, which has no `Eq`.
     let hashing =
@@ -164,7 +180,7 @@ module internal WellKnownContexts =
                 | Arrays.ArrayType _ -> Some ("an array", "arrays")
                 | Boxes.BoxType _ -> mutableReference
                 | MutableArrays.MutableArrayType _ -> Some ("a mutable array", "mutable arrays")
-                | _ -> None)
+                | ty -> privateType "hash" ty)
           ListHelpers = Map.empty
           AgreesWith = Some equality.Member
           Verb = "hashes"

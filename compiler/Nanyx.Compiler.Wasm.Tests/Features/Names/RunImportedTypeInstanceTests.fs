@@ -23,7 +23,7 @@ export type Pair = (a: int, b: int)
 
 export type Shape = #circle(float) | #group(list(Shape))
 
-export type Id = private int
+export type Id = protected int
 
 export def pair: Pair = Pair(a = 1, b = 2)
 
@@ -73,7 +73,7 @@ let ``Run - a nominal type imported under an alias is compared as itself, not as
         things
         """import things as t
 
-type Id = private string
+type Id = protected string
 
 def mine: Id = Id("x")
 
