@@ -126,6 +126,7 @@ These are all of Nanyx's operators, tightest first. An operator binds tighter th
 | `==` `!=` | none | equality (`Eq`) |
 | `>>=` | left | spare |
 | `=<<` | right | spare |
+| `is` | none | [pattern test](../tour/pattern-matching#tests-anywhere): `x is #some(v)` |
 | `and` | left | logical and |
 | `or` | left | logical or |
 | `+=` | none | spare |
@@ -134,9 +135,9 @@ A **spare** operator has no built-in meaning: it means only what a definition of
 
 An operator that groups to the left reads `a - b - c` as `(a - b) - c`, and one that groups to the right reads `a ++ b ++ c` as `a ++ (b ++ c)`. One that does not group can't be written twice in a row: `a < b < c` is an error, which asks for `a < b and b < c`, and so is `a == b == c`. Two operators of one precedence that group different ways can't be written side by side either: `f >> g << h` needs brackets around one of them.
 
-Boolean operations are the keywords `and`, `or` and `not`. `&&` and `||` are not operators, and neither is a prefix `!`: the compiler tells you to write the keyword instead. `<<` and `>>` are composition only; bitwise operations on integers are named functions. Likewise, testing a value against a pattern in an `if` condition uses the keyword `is` (`if x is #some(v) then ...`), not an operator.
+Boolean operations are the keywords `and`, `or` and `not`. `&&` and `||` are not operators, and neither is a prefix `!`: the compiler tells you to write the keyword instead. `<<` and `>>` are composition only; bitwise operations on integers are named functions. Likewise, testing a value against a pattern uses the keyword `is`, as in `x is #some(v)`. That is a `bool` expression usable anywhere, which binds like an operator between `==` and `and` in the table above, and the names its pattern binds are in scope for the rest of an `and` chain after it (see [Tests anywhere](../tour/pattern-matching#tests-anywhere)).
 
-The characters `|`, `&`, `?`, `#`, `@`, `$`, `:` and `\` are not operator characters; they are syntax (see below). `??` is built in, like `and` and `or`: its right operand runs only when it is needed, so it is not a function, and it cannot be defined or attached to a type.
+The characters `|`, `&`, `?`, `#`, `@`, `$`, `:` and `\` are not operator characters; they are syntax (see below). `??` is built in, like `and` and `or`: its right operand runs only when it is needed, so it is not a function, and it cannot be defined or attached to a type. Neither can `is`, whose right side is a pattern, not a value.
 
 ## Reserved spellings
 

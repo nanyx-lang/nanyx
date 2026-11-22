@@ -30,6 +30,7 @@
     <Compile Include="Features\Lexical\LexicalTests.fs" />
     <Compile Include="Features\Loops\LoopTests.fs" />
     <Compile Include="Features\Matches\MatchTests.fs" />
+    <Compile Include="Features\Matches\IsExpressionTests.fs" />
     <Compile Include="Features\Memory\MemoryTests.fs" />
     <Compile Include="Features\Pipes\PipePrecedenceTests.fs" />
     <Compile Include="Features\Pipes\PipeTests.fs" />

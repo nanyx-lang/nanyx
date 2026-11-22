@@ -25,10 +25,16 @@ open.
   expressions; literals, with a `+` or `-` written straight before a number as its sign and `1.` as a float, though the
   lexer reads both apart; patterns, with a guard's lambda and a custom pattern's arguments read as expressions;
   expressions, with the binary operators and ranges read by precedence climbing over `binaryOperators`, either going
-  on after an operator at the end of a line (`Crossing`) or, for a statement, not (`Inline`); lambdas, a def's value
+  on after an operator at the end of a line (`Crossing`) or, for a statement, not (`Inline`), and `value is pattern`
+  read there as an operator too (`isOperator`), made a match whose arm is `true` and whose wildcard arm, made up at the
+  pattern, is `false` (`IsSyntax.test`), with what an `and` after it chains put in that arm in place of `true`, so the
+  pattern's names are in scope there (`IsSyntax.andThen`); lambdas, a def's value
   written as an indented block, a match's arms and the statements of a block, with destructuring defs desugared by
   `Destructuring.fs`; what starts with a keyword (`match`, `if`, `for`, `while`, `do`, `use ... in`, `return`, `try`,
-  `yield`, `name!`, `mut x` as an argument and `type T`); and the top level, with its directives blanked
+  `yield`, `name!`, `mut x` as an argument and `type T`), where `if value is pattern` is a match of the value against
+  the pattern and `_`, and an `if` whose condition's chain of tests binds names stays an `if`, which the compiler
+  checks and compiles as the match `IsSyntax.asMatch` makes of it, so the names are in scope in the `then` branch and
+  the `else` branch is written once; and the top level, with its directives blanked
   (`Directives.fs`). The files before `DescentControl.fs` read lambdas, expressions, arms and what starts with a keyword
   through forward references (`DescentCursor.Forward`), which `DescentTopLevel.fill` fills before anything is read.
   `Api.runModuleParser` reads a whole file (`DescentTopLevel.tryReadModuleWithState`), and `parseTypeSignature`, which

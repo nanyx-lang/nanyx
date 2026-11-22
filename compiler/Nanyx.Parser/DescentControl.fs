@@ -49,29 +49,23 @@ let private branch (c: Cursor) =
     | Code _ -> sameLineBody c (expression Crossing)
     | _ -> c.GiveUp "a branch the layout pass doesn't open"
 
-/// An if's head: `value is pattern`, or a condition.
-let private ifHead (c: Cursor) : Choice<Expression, Pattern * Expression> =
-    let value = expression Crossing c
-    if c.IsKeyword "is" then
-        c.Take() |> ignore
-        Choice2Of2(DescentPatterns.pattern c, value)
-    else Choice1Of2 value
-
-/// A head and the branch `readBranch` reads after it, which declares the names the head's pattern binds.
+/// A condition and the branch `readBranch` reads after it, which declares the names the tests along the condition's
+/// `and` chain bind (see `IsSyntax.chainNames`).
 let private headThen (c: Cursor) (readBranch: unit -> Expression) =
-    let head, names = c.Collecting(fun () -> ifHead c)
+    let head = expression Crossing c
     let body = readBranch ()
-    c.Declare ArmBody body.Id names
+    c.Declare ArmBody body.Id (IsSyntax.chainNames head)
     head, body
 
-/// An if spanning `span`: a condition's, or an if-match, a match whose second arm's wildcard is made up at the else
-/// branch. A left-out `else` is `()` made up at the then branch.
-let private desugarIf (span: SourceSpan) head (thenExpr: Expression) (elseOpt: Expression option) =
+/// An if spanning `span`. An if-match, `if value is pattern`, is a match whose second arm's wildcard is made up at the
+/// else branch; any other condition is an `IfExpr`, which is checked as a match when its tests bind names (see
+/// `IsSyntax.asMatch`). A left-out `else` is `()` made up at the then branch.
+let private desugarIf (span: SourceSpan) (head: Expression) (thenExpr: Expression) (elseOpt: Expression option) =
     let elseExpr = elseOpt |> Option.defaultWith (fun () -> Expression.from thenExpr UnitExpr)
-    match head with
-    | Choice1Of2 condition -> Expression.at span (IfExpr(condition, thenExpr, elseExpr))
-    | Choice2Of2(pattern, value) ->
+    match head.Kind with
+    | IsSyntax.Test(value, pattern, None) ->
         Expression.at span (Match([ value ], [ [ pattern ], thenExpr; [ Pattern.at elseExpr.Span WildcardPattern ], elseExpr ]))
+    | _ -> Expression.at span (IfExpr(head, thenExpr, elseExpr))
 
 /// `if head then a else b`, or with arms, `if | head -> a | else -> b`, nested ifs.
 let private ifExpression (c: Cursor) =

@@ -73,6 +73,9 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Pipe _ -> position.Prec >= prefixPrecedence
         // `(r with (x = 1)).x`: nothing follows a `with` but an operator, though its updates are bracketed.
         | WithSyntax.Call(_, updates) when sourceText.StartsWith updates.Span "(" -> position.Prec >= prefixPrecedence
+        // A test binds as `is` does, and one with an `and` chain after it as `and` does.
+        | IsSyntax.Test(_, _, None) -> isOperator.Precedence < position.Prec
+        | IsSyntax.Test(_, _, Some _) -> precedence "and" < position.Prec
         | _ when isOpenEnded e -> not position.Tail || position.Prec >= prefixPrecedence
         | _ -> false
 
@@ -156,6 +159,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ exprBare full callee; callArguments call callee.Span.End args ]
         // A block where a def's value, an arm's body or a branch would not take one is a `do` block.
         | Block _ -> cat [ text "do"; nest (cat [ hard; block e ]) ]
+        | IsSyntax.Test(value, p, rest) -> isTestDoc position value p rest
         | Match([ scrutinee ], arms) when sourceText.IsPipedMatch e scrutinee -> pipeChain position e
         | Match(scrutinees, arms) ->
             match (branches ()).IfArm e with
@@ -212,6 +216,17 @@ let format (options: Options) (parsed: SourceModule) : string =
     and operators () : OperatorPrinter = OperatorPrinter(options.IndentSize, source, sourceText, placement, parts (), calls ())
 
     and binary (position: Position) (op: string) (l: Expression) (r: Expression) : Doc = (operators ()).Binary position op l r
+
+    /// `value is pattern`, and the rest of the `and` chain after it, which the test's names are in scope in, if any.
+    /// The chain breaks as a chain of `and`s does (see `OperatorPrinter.Binary`).
+    and isTestDoc (position: Position) (value: Expression) (p: Pattern) (rest: Expression option) : Doc =
+        let test = cat [ expr { position with Tail = false; Prec = isOperator.Precedence + 1 } value; text " is "; pattern p ]
+        match rest with
+        | None -> test
+        | Some rest ->
+            let restDoc = expr { position with Prec = precedence "and" } rest
+            if position.Inline then cat [ test; text " and "; restDoc ]
+            else nest (Doc.Fill [ cat [ test; text " and" ]; Doc.line; restDoc ])
 
     and spreadSegments (e: Expression) : Choice<Expression list, Expression> list option = (operators ()).SpreadSegments e
 
