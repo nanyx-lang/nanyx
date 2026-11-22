@@ -232,7 +232,14 @@ let ``The checked library has the shipped packages' modules, with paths beside t
           "nanyx.http.core/src/http.nyx"
           "nanyx.http.core/src/request.nyx"
           "nanyx.http.core/src/response.nyx"
-          "nanyx.http.core/src/wire.nyx" ],
+          "nanyx.http.core/src/wire.nyx"
+          "nanyx.wasi/src/abi.nyx"
+          "nanyx.wasi/src/cli.nyx"
+          "nanyx.wasi/src/clocks.nyx"
+          "nanyx.wasi/src/http.nyx"
+          "nanyx.wasi/src/preview1.nyx"
+          "nanyx.wasi/src/random.nyx"
+          "nanyx.wasi/src/runtime.nyx" ],
         shipped |> List.choose (fun entry -> ShippedPackages.tryDisplay entry.Key) |> List.sort)
     for entry in shipped do
         for file, _ in entry.Read do

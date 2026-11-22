@@ -4,6 +4,7 @@ export module preview1
 import (
   nanyx/host.memory
   nanyx/host.runtime
+  abi as (aligned8)
 )
 
 @extern("wasi_snapshot_preview1", "random_get")
@@ -24,9 +25,11 @@ export def systemBits: [HostRuntime] () -> int = { _ ->
 --| The time in milliseconds on WASI's clock `clock`: 0, the time of day, or 1, the monotonic clock,
   which never goes backwards. `clock_time_get` gives nanoseconds.
 export def millisecondsOn: [HostRuntime] I32 -> int = { clock ->
-  def at = allocate(8)
+  -- WASI writes the time to an address that is a multiple of 8, which a block needn't start at.
+  def block = allocate(16)
+  def at = aligned8(block)
   ignore(clockTimeGet(clock, 1_000_000, at))
   def nanoseconds = readI64(at)
-  free(at)
+  free(block)
   nanoseconds / 1_000_000
 }
