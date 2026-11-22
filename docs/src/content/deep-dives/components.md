@@ -219,10 +219,9 @@ export def areaOf: float, float -> float = { width, height -> width * height }
   the importer (`ModuleLinking.componentExportsForImport`), and inlining keeps them though the program never calls
   them (`ModuleLinking.reachedItems`). A module the program doesn't import exports nothing.
 - **Its type must cross a component's boundary** (`ComponentInterface.errors`, run as each module is checked). A
-  function, a context, a type variable, a record or tag union with no name, which WIT must name, and a def that isn't a
-  function at all are `NYX0277`. What the compiler can't take across yet is `NYX0301`, naming it: records, tuples,
-  tag unions, lists, a function that requires contexts, and parameters that come to more than 16 core values, which
-  the canonical ABI passes in memory.
+  function, a context, a type variable, a record or tag union with no name, which WIT must name, a union of types
+  other than tags, a recursive type, which WIT can't write, and a def that isn't a function at all are `NYX0277`. What
+  the compiler can't take across yet is `NYX0301`, naming it: a function that requires contexts.
 
 ## The WIT
 
@@ -236,9 +235,20 @@ module `geo.shapes` the interface `geo-shapes`), escaping a WIT keyword with `%`
 | `U8`, `U16`, `U32`, `U64` | `u8`, `u16`, `u32`, `u64` |
 | `F32`, `float` | `f32`, `f64` |
 | `string` | `string` |
+| `list(a)` | `list<a>` |
+| a tuple, `(int, string)` | `tuple<s64, string>` |
+| a named record, `type Point = (x: int, y: int)` | `record point { x: s64, y: s64 }` |
+| a named tag union, `type Shape = #circle(float) \| #empty` | `variant shape { circle(f64), empty }` |
 | a function's `()` | no parameters, or no result |
 
-A named type that stands for one of these is written as it. A parameter is named as the def's lambda names it.
+- **A record or tag union is named by the type that names it,** and defined in the interface of each function that
+  uses it, once, after the types it is made of. A generic one is named with its arguments, so `Pair(int)` is
+  `pair-s64`, and `Pair(list(Point))` is `pair-list-point`. A named type that stands for anything else, such as
+  `type Id = int`, is written as what it stands for, and so is a nominal type.
+- **Every tag union is a `variant`,** with a case for each tag, as written, and a payload of the tag's type, a tuple
+  for a tag of several. `#some(a) | #none` is a variant too, not an `option`, and `#ok(a) | #error(e)` not a `result`.
+- **A record's fields are in the order they are written,** and a variant's cases in the order its tags are.
+- **A parameter is named as the def's lambda names it.**
 
 The package's WIT package is named from its manifest (`ComponentInterface.packageName`): `acme.shapes` at 0.1.0 is
 `acme:shapes@0.1.0`, the first segment the namespace, and a name of one segment is both, `greeter:greeter@0.1.0`. For a
@@ -254,14 +264,27 @@ interface's qualified name, `#` and the function's, `acme:shapes/shapes@0.1.0#ar
 def is a root for inlining and for what the module keeps (`CoreIrInline.inlineCalls`, `CoreIrReach.reachedFrom`), and
 `ComponentExports` writes a function that the module exports under that name, lifted synchronously:
 
-- **Numbers and bools** are passed and returned as they are: Nanyx holds each in the core type the canonical ABI
-  passes it as, a sized integer narrower than 32 bits extended from its width.
-- **A string argument** comes as the address and length of a block the host allocated through `cabi_realloc`, which
-  the module then owns. It is copied into a string (`stringFromMemory`), and the block freed. If the def's function
-  doesn't take the string over (`CoreIrCounting`), its reference is given up after the call.
-- **A string result** is returned as the address of a block of its address and length, whose bytes are the string's own.
-  The module exports `cabi_post_` and the export's name too, which the host calls once it has copied the string: it
-  gives up the reference to the string and frees the block. A string literal is never freed.
+`ComponentValues` writes the code that lifts a value of each WIT type into a Nanyx value of the type the backend
+lowered its Nanyx type to, and lowers one back, following the canonical ABI's layout in memory and its flattening to
+core values ([CanonicalABI.md](https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md)).
+A WIT record's fields are a Nanyx record's by name, a tuple's by position, and a variant's cases a union's tags by
+name, so the two needn't be in the same order.
+
+- **The arguments** come as core values: numbers as they are, since Nanyx holds each in the core type the canonical
+  ABI passes it as, a sized integer narrower than 32 bits extended from its width; a string or a list as an address
+  and a length; a record or a tuple as its items' values in turn; and a variant as its discriminant, then the values
+  of its payload in places its cases share, each the type that holds what each case puts there, an `f64` in an `i64`
+  read back with `f64.reinterpret_i64`. Arguments that come to more than 16 core values come in a block the host
+  allocated, laid out as a tuple of them, which is freed once they are lifted.
+- **A string's bytes and a list's elements** are in blocks the host allocated through `cabi_realloc`, which the module
+  then owns. Each is copied into a Nanyx string (`stringFromMemory`) or list, made from its last element, and the
+  block freed with what its elements point to.
+- **An argument the def's function doesn't take over** (`CoreIrCounting`) is dropped after the call.
+- **A result** that comes to at most one core value is returned as it: a number, or a variant whose tags have no
+  payloads, as its discriminant. Any other is written into a new block, its strings and lists into new blocks of their
+  own, and the block's address returned. The Nanyx result is dropped once it is written. The module exports
+  `cabi_post_` and the export's name too, which the host calls once it has copied the result, and which frees the
+  block and every block it points to.
 
 An export runs on whatever the instance has set up: a top-level value is built the first time something reads it,
 and the start function tears it down again at the end of `run`, so an export called before `run`, after it, or with no
