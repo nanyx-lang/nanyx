@@ -240,7 +240,7 @@ module DiagnosticCodes =
           UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests; ProtectedShape; PatternInsidePattern; PatternRequiresContexts; NoMatchOutsidePattern; PatternArguments
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
-          ComponentRootContextsDiffer; ReservedExternModule
+          ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as
