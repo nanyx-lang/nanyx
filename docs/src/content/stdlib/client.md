@@ -19,8 +19,8 @@ import nanyx.http.core/http as http
 def status: [Async, Http] string -> string = { url ->
   match http.get(url)
     | #some(response) -> "{response.status}"
-    | #error(#timeout) -> "no answer"
-    | #error(_) -> "unreachable"
+    | #timeout -> "no answer"
+    | _ -> "unreachable"
 }
 
 println(status("https://example.com"))
@@ -54,7 +54,7 @@ reason, described.
 
 ```nanyx fragment
 context Http = (
-  sendRequest: [Async] Request -> #some(Response) | #error(HttpError)
+  sendRequest: [Async] Request -> #some(Response) | #timeout | #connectionFailed(string) | #invalidUrl | #other(string)
 )
 ```
 

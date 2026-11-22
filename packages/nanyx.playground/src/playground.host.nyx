@@ -46,13 +46,13 @@ def writeWith: [HostRuntime] ([HostRuntime] I32, I32 -> ()), string -> () = { wr
   keepAlive(text)
 }
 
---| The next line of input, without its line break, or `#error(#endOfInput)` once the input has
+--| The next line of input, without its line break, or `#endOfInput` once the input has
   ended. The page's `readLine` waits for the line and gives its length in bytes, or -1 at the end of
   the input, and its `takeLine` writes the line's bytes at the address it is given.
-def readPageLine: [HostRuntime] () -> #some(string) | #error(IoError) = { _ ->
+def readPageLine: [HostRuntime] () -> #some(string) | IoError = { _ ->
   def length = pageReadLine()
 
-  if length < 0 then #error(#endOfInput) else
+  if length < 0 then #endOfInput else
     def buffer = allocate(length + 1)
     pageTakeLine(buffer)
     def line = stringAt(buffer, length)
@@ -65,12 +65,12 @@ def readPageLine: [HostRuntime] () -> #some(string) | #error(IoError) = { _ ->
 def readToEndAfter: [HostRuntime] list(string) -> string = { lines ->
   match readPageLine()
     | #some(line) -> readToEndAfter([line, ...lines])
-    | #error(_) -> string.concat(list.map(list.reverse(lines), { line -> line ++ "\n" }))
+    | _ -> string.concat(list.map(list.reverse(lines), { line -> line ++ "\n" }))
 }
 
 --| Runs `entry`, the program's entry point, with a `Console` that writes to the page, a `Random`
   that draws from the page's generator, which the page seeds, and a `Clock` that reads the
-  browser's time. Reading waits for a line typed in the page, and gives `#error(#endOfInput)` once
+  browser's time. Reading waits for a line typed in the page, and gives `#endOfInput` once
   you end the input, or at once when the page can't pass input to the program (see the runner's
   `playground.js`). What `entry` returns is ignored.
 export def run: [HostRuntime] ([Clock, Console, Random] () -> a) -> () = { entry ->

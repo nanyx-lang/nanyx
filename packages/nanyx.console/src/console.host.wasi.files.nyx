@@ -163,8 +163,8 @@ def errorAt: [HostRuntime] I32 -> FsError = { at ->
 }
 
 --| What a `result<_, error-code>` at `at` holds: `#ok`, or the `FsError` of its error, at 4.
-def resultAt: [HostRuntime] I32 -> #ok | #error(FsError) = { at ->
-  if readByte(at) == 0 then #ok else #error(errorAt(at + 4))
+def resultAt: [HostRuntime] I32 -> #ok | FsError = { at ->
+  if readByte(at) == 0 then #ok else errorAt(at + 4)
 }
 
 --| The address of the list of preopens, read the first time they are needed: each a descriptor then
@@ -183,9 +183,9 @@ def readPreopens: [HostRuntime] () -> () = { _ ->
 --| The preopen, from the `index`th of the `count` in the list at `list` on, that `text` is in, with
   the path relative to it.
 def locatedFrom
-  : [HostRuntime] I32, I32, I32, string -> #some(I32, string) | #error(FsError)
+  : [HostRuntime] I32, I32, I32, string -> #some(I32, string) | FsError
   = { list, index, count, text ->
-    if index >= count then #error(#permissionDenied) else
+    if index >= count then #permissionDenied else
       def entry = I32.wrappingAdd(list, index * 12)
       def name = stringAt(readI32(entry + 4), readI32(entry + 8))
 
@@ -195,7 +195,7 @@ def locatedFrom
   }
 
 --| The preopen `at` is in, with the path relative to it.
-def located: [HostRuntime] Path -> #some(I32, string) | #error(FsError) = { at ->
+def located: [HostRuntime] Path -> #some(I32, string) | FsError = { at ->
   def list = preopens()
   locatedFrom(list, 0, readI32(stateAt(60)), Path.toString(at))
 }
@@ -208,11 +208,10 @@ def withResult
     Path,
     I32,
     ([HostRuntime] I32, I32, I32, I32 -> ()),
-    ([HostRuntime] I32 -> #ok | #error(FsError))
-    -> #ok | #error(FsError)
+    ([HostRuntime] I32 -> #ok | FsError)
+    -> #ok | FsError
   = { at, size, call, read ->
     match located(at)
-      | #error(e) -> #error(e)
       | #some(directory, relative) ->
         def block = allocate(size + 8)
         def result = aligned8(block)
@@ -221,15 +220,15 @@ def withResult
         def made = read(result)
         free(block)
         made
+      | e -> e
   }
 
 --| Opens `at` with the `open-flags` `openFlags` and the `descriptor-flags` `descriptorFlags`, and
   gives its descriptor.
 def openAt
-  : [HostRuntime] Path, I32, I32 -> #some(I32) | #error(FsError)
+  : [HostRuntime] Path, I32, I32 -> #some(I32) | FsError
   = { at, openFlags, descriptorFlags ->
     match located(at)
-      | #error(e) -> #error(e)
       | #some(directory, relative) ->
         def block = allocate(24)
 
@@ -245,24 +244,23 @@ def openAt
 
         keepAlive(relative)
 
-        def opened = if readByte(block) == 0
-          then #some(readI32(block + 4))
-          else #error(errorAt(block + 4))
+        def opened = if readByte(block) == 0 then #some(readI32(block + 4)) else errorAt(block + 4)
 
         free(block)
         opened
+      | e -> e
   }
 
 --| The kind and the size of the file `descriptor`, from its `descriptor-stat`: its `size` is at 24
   in it, after the result's 8 bytes.
-def described: [HostRuntime] I32 -> #some(I32, int) | #error(FsError) = { descriptor ->
+def described: [HostRuntime] I32 -> #some(I32, int) | FsError = { descriptor ->
   def block = allocate(120)
   def stat = aligned8(block)
   statDescriptor(descriptor, stat)
 
   def found = match kindIn(stat)
     | #some(kind) -> #some(kind, readI64(stat + 32))
-    | #error(e) -> #error(e)
+    | e -> e
 
   free(block)
   found
@@ -270,8 +268,8 @@ def described: [HostRuntime] I32 -> #some(I32, int) | #error(FsError) = { descri
 
 --| The kind of file a `result<descriptor-stat, error-code>` at `stat` says, or its error: the
   `descriptor-stat`'s `type` at 8, a variant whose `other` may hold a string, which is freed.
-def kindIn: [HostRuntime] I32 -> #some(I32) | #error(FsError) = { stat ->
-  if readByte(stat) != 0 then #error(errorAt(stat + 8)) else
+def kindIn: [HostRuntime] I32 -> #some(I32) | FsError = { stat ->
+  if readByte(stat) != 0 then errorAt(stat + 8) else
     freeOptionalString(stat + 12)
     #some(readByte(stat + 8))
 }
@@ -307,66 +305,54 @@ def readFrom
 --| What `contents` makes of the bytes of the file at `at`, given their address and how many there
   are.
 def readWith
-  : [HostRuntime] Path, ([HostRuntime] I32, I32 -> a) -> #some(a) | #error(FsError)
+  : [HostRuntime] Path, ([HostRuntime] I32, I32 -> a) -> #some(a) | FsError
   = { at, contents ->
     match openAt(at, 0, readFlag)
-      | #error(e) -> #error(e)
       | #some(descriptor) ->
         def result = match described(descriptor)
-          | #error(e) -> #error(e)
           | #some(kind, size) ->
-            if kind == directoryType then #error(#isDirectory) else
+            if kind == directoryType then #isDirectory else
               match int.toI32(size)
                 | #some(fits) -> #some(readFrom(descriptor, 0, fits, contents))
-                | #outOfRange -> #error(#other("the file is too large to read at once"))
+                | #outOfRange -> #other("the file is too large to read at once")
+          | e -> e
 
         dropDescriptor(descriptor)
         result
+      | e -> e
   }
 
 --| Up to `length` bytes of the file at `at`, from byte `offset` on, or an error for an `offset` past
   its end: the file is opened, read and closed again, so nothing is left open between one chunk and
   the next.
-def chunkAt
-  : [HostRuntime] Path, int, int -> #some(string) | #error(FsError)
-  = { at, offset, length ->
-    match int.toI32(length)
-      | #outOfRange -> #error(#other("a chunk that large can't be read at once"))
-      | #some(size) ->
-        match openAt(at, 0, readFlag)
-          | #error(e) -> #error(e)
-          | #some(descriptor) ->
-            def result = match described(descriptor)
-              | #error(e) -> #error(e)
-              | #some(kind, fileSize) ->
-                if kind == directoryType
-                  then #error(#isDirectory)
-                  else if offset > fileSize
-                    then #error(
-                      #other(
-                        "it is shorter than it was: it ends at byte {fileSize}, before {offset}"
-                      )
-                    )
-                    else #some(
-                      readFrom(
-                        descriptor
-                        offset
-                        size
-                        { address, count -> stringAt(address, count) }
-                      )
-                    )
+def chunkAt: [HostRuntime] Path, int, int -> #some(string) | FsError = { at, offset, length ->
+  match int.toI32(length)
+    | #outOfRange -> #other("a chunk that large can't be read at once")
+    | #some(size) ->
+      match openAt(at, 0, readFlag)
+        | #some(descriptor) ->
+          def result = match described(descriptor)
+            | #some(kind, fileSize) ->
+              if kind == directoryType
+                then #isDirectory
+                else if offset > fileSize then
+                  #other("it is shorter than it was: it ends at byte {fileSize}, before {offset}")
+                else #some(
+                  readFrom(descriptor, offset, size, { address, count -> stringAt(address, count) })
+                )
+            | e -> e
 
-            dropDescriptor(descriptor)
-            result
-  }
+          dropDescriptor(descriptor)
+          result
+        | e -> e
+}
 
 --| Writes `text` to the file at `at`, which it opens with the `open-flags` `openFlags`, through
   `output`, the descriptor's `write-via-stream` or `append-via-stream` as `outputOf` gives them.
 def writeWith
-  : [HostRuntime] Path, string, I32, ([HostRuntime] I32 -> Output) -> #ok | #error(FsError)
+  : [HostRuntime] Path, string, I32, ([HostRuntime] I32 -> Output) -> #ok | FsError
   = { at, text, openFlags, outputOf ->
     match openAt(at, openFlags, writeFlag)
-      | #error(e) -> #error(e)
       | #some(descriptor) ->
         def result = allocate(24)
         writeTo(outputOf(descriptor), text, result)
@@ -374,6 +360,7 @@ def writeWith
         def written = resultAt(result)
         free(result)
         written
+      | e -> e
   }
 
 --| A file's `write-via-stream`, from its start, as an `Output`.
@@ -425,9 +412,8 @@ def namesFrom: [HostRuntime] I32, I32, list(string) -> list(string) = { reader, 
 }
 
 --| The names of what the directory at `at` holds.
-def namesAt: [HostRuntime] Path -> #some(list(string)) | #error(FsError) = { at ->
+def namesAt: [HostRuntime] Path -> #some(list(string)) | FsError = { at ->
   match openAt(at, directoryFlag, readFlag)
-    | #error(e) -> #error(e)
     | #some(descriptor) ->
       def ends = allocate(8)
       readDirectory(descriptor, ends)
@@ -441,12 +427,12 @@ def namesAt: [HostRuntime] Path -> #some(list(string)) | #error(FsError) = { at 
       directoryFutureDropReadable(done)
       dropDescriptor(descriptor)
       #some(list.reverse(names))
+    | e -> e
 }
 
 --| The kind of file at `at`, from its `descriptor-stat`.
-def kindAt: [HostRuntime] Path -> #some(I32) | #error(FsError) = { at ->
+def kindAt: [HostRuntime] Path -> #some(I32) | FsError = { at ->
   match located(at)
-    | #error(e) -> #error(e)
     | #some(directory, relative) ->
       def block = allocate(120)
       def stat = aligned8(block)
@@ -455,26 +441,25 @@ def kindAt: [HostRuntime] Path -> #some(I32) | #error(FsError) = { at ->
       def found = kindIn(stat)
       free(block)
       found
+    | e -> e
 }
 
 --| Whether there is anything at `at` that the program may reach.
 def existsAt: [HostRuntime] Path -> bool = { at ->
   match kindAt(at)
     | #some(_) -> true
-    | #error(_) -> false
+    | _ -> false
 }
 
 --| Deletes the file at `at`: a directory is `#isDirectory`, whatever the system says.
-def deleteAt: [HostRuntime] Path -> #ok | #error(FsError) = { at ->
+def deleteAt: [HostRuntime] Path -> #ok | FsError = { at ->
   match kindAt(at)
-    | #error(e) -> #error(e)
     | #some(kind) ->
-      if kind == directoryType
-        then #error(#isDirectory)
-        else withResult(at, 24, unlinkFileAtPath, resultAt)
+      if kind == directoryType then #isDirectory else withResult(at, 24, unlinkFileAtPath, resultAt)
+    | e -> e
 }
 
 --| Makes the directory `at`.
-def createDirectoryAt: [HostRuntime] Path -> #ok | #error(FsError) = { at ->
+def createDirectoryAt: [HostRuntime] Path -> #ok | FsError = { at ->
   withResult(at, 24, createDirectoryAtPath, resultAt)
 }

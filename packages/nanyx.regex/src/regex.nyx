@@ -1,8 +1,8 @@
 --| Regular expressions: patterns that find, test, replace and split text.
 
-  [`Regex.parse`] reads a pattern into a [`Regex`], or says where it is wrong and why, as a
-  [`RegexError`]. The functions attached to `Regex` take the text first, so they pipe:
-  `"a1b22" \Regex.find(digits)`. [`Regex.isMatch`] says whether a regex matches anywhere in a text,
+  [`Regex.parse`] reads a pattern into a [`Regex`], or says where it is wrong and why, as an
+  `#invalidPattern` carrying a [`RegexError`]. The functions attached to `Regex` take the text
+  first, so they pipe: `"a1b22" \Regex.find(digits)`. [`Regex.isMatch`] says whether a regex matches anywhere in a text,
   [`Regex.find`] finds the first match, [`Regex.findAll`] each in turn, [`Regex.replace`] and
   [`Regex.replaceWith`] replace them, and [`Regex.split`] splits a text where they are. A program
   names `nanyx.regex` in its manifest's `dependencies`, or a script in a `::dependency` line, and
@@ -41,12 +41,12 @@ export type Regex = protected (pattern: string, program: Program)
   points from 1, and what is wrong there.
 export type RegexError = (column: int, message: string)
 
---| The regex of `pattern`, or where it goes wrong and why.
-export def Regex.parse: string -> #some(Regex) | #error(RegexError) = { pattern ->
+--| The regex of `pattern`, or `#invalidPattern` with where it goes wrong and why.
+export def Regex.parse: string -> #some(Regex) | #invalidPattern(RegexError) = { pattern ->
   match parsePattern(pattern)
     | #parsed(node, groups, names) ->
       #some(Regex(pattern = pattern, program = compile(node, groups, names)))
-    | #failed(at, message) -> #error(RegexError(column = at + 1, message = message))
+    | #failed(at, message) -> #invalidPattern(RegexError(column = at + 1, message = message))
 }
 
 --| A regex's pattern, as it was written.
@@ -315,7 +315,9 @@ export def Regex.split: string, Regex -> list(string) = { text, regex ->
 def regexOrCrash: string -> Regex = { pattern ->
   match Regex.parse(pattern)
     | #some(regex) -> regex
-    | #error(e) -> crash("The regex '{pattern}' is wrong at column {e.column}: {e.message}")
+    | #invalidPattern(e) -> crash(
+      "The regex '{pattern}' is wrong at column {e.column}: {e.message}"
+    )
 }
 
 --| Matches a string that the regex of `pattern` matches anywhere in, with the [`Match`] as its

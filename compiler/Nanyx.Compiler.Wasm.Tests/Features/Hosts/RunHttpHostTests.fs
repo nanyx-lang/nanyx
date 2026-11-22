@@ -156,7 +156,7 @@ def main: [Async, Http] Request -> Response = {{ request ->
     | "/proxy" ->
       match http.get("http://localhost:{port}/inner")
         | #some(inner) -> Response.text(200, "proxied: {{inner.body}}")
-        | #error(_) -> Response.text(502, "Bad Gateway")
+        | _ -> Response.text(502, "Bad Gateway")
     | _ -> Response.text(200, "inner")
 }}
 """
@@ -227,7 +227,7 @@ def main = {{ request: Request ->
     | "/wait" ->
       match http.get("http://localhost:{slowPort}/")
         | #some(answer) -> Response.text(200, answer.body)
-        | #error(_) -> Response.text(502, "Bad Gateway")
+        | _ -> Response.text(502, "Bad Gateway")
     | _ -> Response.text(200, "quick")
 }}
 """

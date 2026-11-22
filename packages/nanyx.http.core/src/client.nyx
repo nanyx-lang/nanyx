@@ -22,5 +22,5 @@ export type HttpError = #timeout | #connectionFailed(string) | #invalidUrl | #ot
   functions of [`http`](http), which are written on it.
 export context Http = (
   --| Sends `request`, waiting for its response. Only the instance that sends it waits.
-  sendRequest: [Async] Request -> #some(Response) | #error(HttpError)
+  sendRequest: [Async] Request -> #some(Response) | HttpError
 )

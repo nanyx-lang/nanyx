@@ -179,5 +179,5 @@ def respondWith: [HostRuntime] int, I32, string -> () = { status, fields, text -
 export def respond: [HostRuntime] Response -> () = { response ->
   match fieldsOf(response.headers)
     | #some(fields) -> respondWith(response.status, fields, response.body)
-    | #error(_) -> respond(Response(status = 500, headers = [], body = ""))
+    | _ -> respond(Response(status = 500, headers = [], body = ""))
 }

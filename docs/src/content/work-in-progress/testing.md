@@ -97,7 +97,7 @@ The code under test often needs more, such as `FileSystem` or `Clock`. A test pr
 ```nanyx
 @test
 def `loads the defaults when there is no config file` = {
-  use FileSystem(read = { _ -> #error(#notFound) })
+  use FileSystem(read = { _ -> #notFound })
   assert(config.load("app.toml") == Config.default)
 }
 ```
