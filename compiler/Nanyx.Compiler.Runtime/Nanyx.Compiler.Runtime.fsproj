@@ -17,22 +17,25 @@
   </ItemGroup>
 
   <!--
-    The componentizer (Componentizer.fs) is wit-component compiled to WebAssembly: the Rust crate in
-    ../Nanyx.Componentizer, built with Cargo for wasm32-wasip1 and embedded in this assembly. Building it needs Rust, with
-    `rustup target add wasm32-wasip1`; using it doesn't.
+    The componentizer (Componentizer.fs) is wit-component compiled to WebAssembly from the Rust crate in
+    ../Nanyx.Componentizer, for wasm32-wasip1. The built .wasm is committed beside the crate and embedded in this
+    assembly, so building the compiler doesn't need Rust. After changing the crate, rebuild it with
+    `dotnet build -p:BuildComponentizer=true` (which needs Rust, with `rustup target add wasm32-wasip1`) and run
+    `.github/scripts/componentizer-sources.sh` with its write flag; the Compiler workflow fails when the committed .wasm is older than
+    the crate's sources.
   -->
   <PropertyGroup>
     <ComponentizerDirectory>$(MSBuildThisFileDirectory)../Nanyx.Componentizer/</ComponentizerDirectory>
-    <ComponentizerWasm>$(ComponentizerDirectory)target/wasm32-wasip1/release/nanyx-componentizer.wasm</ComponentizerWasm>
+    <ComponentizerWasm>$(ComponentizerDirectory)nanyx-componentizer.wasm</ComponentizerWasm>
   </PropertyGroup>
 
   <ItemGroup>
-    <ComponentizerSource Include="$(ComponentizerDirectory)Cargo.toml;$(ComponentizerDirectory)Cargo.lock;$(ComponentizerDirectory)src/**/*.rs" />
     <EmbeddedResource Include="$(ComponentizerWasm)" LogicalName="nanyx-componentizer.wasm" />
   </ItemGroup>
 
-  <Target Name="BuildComponentizer" BeforeTargets="PrepareForBuild" Inputs="@(ComponentizerSource)" Outputs="$(ComponentizerWasm)">
+  <Target Name="BuildComponentizer" BeforeTargets="PrepareForBuild" Condition="'$(BuildComponentizer)' == 'true'">
     <Exec Command="cargo build --release --locked --target wasm32-wasip1" WorkingDirectory="$(ComponentizerDirectory)" />
+    <Copy SourceFiles="$(ComponentizerDirectory)target/wasm32-wasip1/release/nanyx-componentizer.wasm" DestinationFiles="$(ComponentizerWasm)" />
   </Target>
 
   <ItemGroup>
