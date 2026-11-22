@@ -42,41 +42,35 @@ of the program while restoring, so that building or publishing one project alone
 is reported as reused, `nanyx/prelude (cached)` under `--timings`. The file is used only where it is what checking
 would give: by the build of the compiler that wrote it (`CheckedLibrary.build`, the id of the compiler's assembly, which
 changes with its code and with the library files it embeds), and for a module only with the source it was checked
-from. Anything else, as the editor's unsaved prelude, is checked as before.
+from. Anything else, as the editor's unsaved prelude, is checked from its source.
 
 The file is read on demand ([#1852](https://github.com/nanyx-lang/nanyx/issues/1852)). It holds a list of the modules,
 each with the hash of its source and the keys of what it imports, and then each module checked, once, in a part of its
 own: `BinaryData` writes a `Lazy` as a part that a read skips, and reads it the first time the `Lazy` is asked for, from
 the file's bytes, which it keeps. A part may refer back to what was written before it, but nothing refers into a part,
-so a module that refers to another's types holds a copy of them, and the file is larger (7.4 MB against 4.7 MB). A
-process reads the list the first time it imports a library module, in about 20 ms and 8 MB against 330 ms and 245 MB
-when it read every module, and then only the modules it imports. The modules those import, all the way down, come into
-the compilation as pending (`CheckedModules.AddImported`), each read only when an import of it, or the type of a node
-inlined from it, first needs it: `def x = 1` under the console host used to read fifteen modules and now reads those
-it imports itself. A module's typed items (`TypedModule.Items`), about half of what the file holds of it, are a `Lazy`
-too, since only tools ask for them. The first compile of `def x = 1` in a process allocates about 260 MB against
-410 MB, and a one-line `nanyx check` takes a median of 1.00 s against 1.34 s on the same busy machine (Release, 15
-runs of each, interleaved).
+so a module that refers to another's types holds a copy of them, and the file is larger than one written whole. A
+process reads the list the first time it imports a library module, and then only the modules it imports. The modules
+those import, all the way down, come into the compilation as pending (`CheckedModules.AddImported`), each read only when
+an import of it, or the type of a node inlined from it, first needs it: `def x = 1` under the console host reads only
+the modules it imports itself. A module's typed items (`TypedModule.Items`), about half of what the file holds of it,
+are a `Lazy` too, since only tools ask for them.
 
 The file also holds what every compile needs that would otherwise take parsing many files: the standard-library modules
 that export each name (`CheckedLibraryFile.Exports`), for the hint an unknown name gets and the definitions a library
 module attaches to a built-in type (`CheckedLibrary.standardLibraryExportPaths`), and the module each source file of
 the shipped packages declares, with the file's text (`CheckedLibraryFile.Files`), which `buildHostOf` hands to
 `PackageModules.knowDeclaration` before it reads the console host's modules, so that a file that reads the same is not
-parsed for its name. Without them the first compile of `def x = 1` parsed every library source and every file of the
-console host's packages: with them it allocates about 146 MB against 261 MB, and a one-line `nanyx check` takes a
-median of 1.22 s against 1.61 s on a slower machine (Release, 15 runs of each, interleaved).
+parsed for its name. So the first compile of `def x = 1` parses no library source and no file of the console host's
+packages.
 
 `BinaryData` reads each type with a reader of its own, which it emits as IL (a `DynamicMethod`) the first time a read
 meets the type, and keeps for the process: the reader reads each field straight from the file's bytes, a primitive
-without boxing it, and calls the record's constructor or the union case's with them, where reading through reflection
-boxed each primitive and made an array of the fields for each value. A list is built from its items as they are read.
-A map or set is written in order, so its tree is built from its items straight away, balanced, with FSharp.Core's own
-(internal) tree types (`SortedMaps`, `SortedSets`), where adding the items one by one made a new path to each; items
-read out of order, which a key compared differently from when it was written would give, are added one by one. That
-takes the first `nanyx check` of `def x = 1` from about 114 MB allocated to 83 MB, in the same time. The first `nanyx check` of `def x = 1` in a process allocates about 114 MB against 138 MB, and takes a
-median of 1.28 s against 1.39 s (Release, 9 runs of each, interleaved); in the browser, under the runtime's
-interpreter, the playground's first compile takes 3.2 s against 4.5 s.
+without boxing it, and calls the record's constructor or the union case's with them, rather than going through
+reflection, which would box each primitive and make an array of the fields for each value. A list is built from its
+items as they are read. A map or set is written in order, so its tree is built from its items straight away, balanced,
+with FSharp.Core's own (internal) tree types (`SortedMaps`, `SortedSets`), rather than by adding the items one by one,
+which would make a new path to each; items read out of order, which a key compared differently from when it was
+written would give, are added one by one.
 
 Each standard-library module the file does not have is checked once per process, the first time a compile imports
 it, and every later compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the
@@ -90,9 +84,8 @@ so the file names a path there relative to that directory, and a path read back 
 (`BinaryData.write` and `read` take a function over each string). A compile takes such a module from the file when the
 file is in its build's host package or one that package depends on, so it resolves its imports as the writer's check
 did, and while every file the check read reads the same through the compile's reader; else it checks it as a user's
-module. Under `--timings`, `nanyx.console/src/console.prelude.nyx (cached)`. With them, a one-line `nanyx check` checks
-nothing but the file itself: 0.86 s against 1.00 s, and 0.91 s against 1.22 s for `dbg("hello")`, which imports the host
-too (Release build, medians of 9). The file grew from 1.8 MB to 2.2 MB.
+module. Under `--timings`, `nanyx.console/src/console.prelude.nyx (cached)`. So a one-line `nanyx check`, even of
+`dbg("hello")`, which imports the host, checks nothing but the file itself.
 
 A user's own
 module that a compile imports is kept too, once it checks without errors (`checkedSourceFiles`), with the text of

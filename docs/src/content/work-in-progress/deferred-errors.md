@@ -5,20 +5,10 @@ order: 22
 ---
 
 What deferred errors do, which errors are deferred, and debug and release builds are described in
-[Deferred errors](../tour/error-handling#deferred-errors) in the tour. This page keeps the
+[Deferred errors](../tour/error-handling#deferred-errors) in the tour, and how the compiler defers them in
+[Deferred errors](../deep-dives/compilation#deferred-errors) in the Deep dives section. This page keeps the
 [wider deferral](#plan) and [questions](#open-questions) still open. It is part of the [compilation](./compilation)
 workstream, and its issues carry the `compilation` label with `type checker` or `wasm backend` as they apply.
-
-The approach is the one GHC takes with `-fdefer-type-errors`, and a pragmatic cousin of Hazel's marked holes: the
-error becomes a node in the typed program, with a type that fits anywhere (`???`), and evaluating it fails. The
-deferral pass is `DeferredErrors.deferErrors` in `DeferredErrors.fs`.
-
-A failed call keeps its callee's declared result. A call that fails for a reason outside its callee's type (a missing
-context, a callee a module block doesn't export, an argument passed by position for a named parameter) is recorded as
-failed in `inferCall` and checked on with the callee's type, and one given an argument of the wrong type or the wrong
-number of them is checked against the callee's type as any call is (#1947). Only what a failed argument would have
-decided is `???`: `list.map(xs, 5)` is a `list(???)`. A call whose callee is unknown, ambiguous or a context instance is
-`???` whole.
 
 # Plan
 
@@ -30,11 +20,6 @@ Wider deferral, if it is wanted:
   later version could defer the names the import brings in.
 - **Syntax errors**, with parser recovery ([compilation](./compilation#plan)): a top-level definition that does not
   parse. The [principles](../meta/principles) say syntax errors stop a build.
-- **Conflicts among constraints** bind to the error type only the variables of a failed constraint's expected side
-  that nothing else fixes, solved after everything else once the module is checked (`Solving.solveLeavingUnknown`):
-  a failed argument leaves unknown what it would have decided of the call's result. The expressions where a conflict
-  was found are otherwise typed by their other constraints, and the deferral pass replaces the outermost expression at
-  the conflict's span.
 
 # Tests
 

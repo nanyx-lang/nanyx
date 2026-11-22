@@ -22,7 +22,7 @@ println("Hello, {fetchName("https://example.com/name")}")
 The console and HTTP hosts provide it, and their preludes bring it into every module of a program. A library that
 names it in a type imports it from `nanyx/async`. A function whose type is inferred gets it from what it calls, and
 a function that takes a lambda generic in its contexts, as `list.map` does, takes one that requires it with no second
-version. The design, and what comes next, is in
+version. How it is built, and why, is in [Async](../deep-dives/async), and what comes next in
 [Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries).
 
 # Reference

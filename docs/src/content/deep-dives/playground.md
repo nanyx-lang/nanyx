@@ -28,7 +28,7 @@ it is is kept in the browser's storage. The editor and the output follow the sit
 the system's.
 
 **Loading.** As the page opens, `main.ts` calls `loadPlayground` (`compiler.ts`), which checks that the browser validates a module that uses `return_call`, which the
-backend emits for [tail calls](./tail-calls), and says the browser can't run Nanyx programs when it doesn't. It reads
+backend emits for [tail calls](./tail-calls) (Safari has it from 18.2), and says the browser can't run Nanyx programs when it doesn't. It reads
 `/playground/compiler/release.json`, which the docs build writes beside the compiler (below), for the release the page
 names at the right of the toolbar, linked to the release's notes on GitHub; when there is no such file, the site has no
 compiler, and the page says so. Then it imports `compiler.js` and the playground host's runner,
@@ -173,10 +173,10 @@ decompressed; the page and the examples are a few kilobytes of it. The largest p
 and 0.09 for a second compile of the same program: the first check reads the checked standard library (`CheckedLibrary.fs`), 2.9 MB that
 `BinaryData` reads back under the runtime's interpreter, with the readers it emits as IL for each type. Without the checked library
 (`?library=none`) the download is 0.5 MB smaller and the first compile takes 4.1 s, checking the library from its
-source, so the library is worth its download. The page can hide most of the wait by compiling a hello world as soon as
-the compiler is ready, while you read the example or start typing.
+source, so the library is worth its download. The page hides most of the wait by compiling the default example as
+soon as the compiler is ready (see [The page](#the-page)), while you read it or start typing.
 
-**What had to change.**
+**What differs in the browser.**
 
 - **Threads.** `LargeStack.run` runs the checker on a thread with a 1 GB stack. The browser runs .NET on one thread
   and can't start another, so in the browser it runs the work on the calling thread instead. That thread's stack is
@@ -190,12 +190,12 @@ the compiler is ready, while you read the example or start typing.
   without anyone listing it ([#2142](https://github.com/nanyx-lang/nanyx/issues/2142)). The standard library's sources are
   embedded in the compiler, as they are for the CLI.
 - **Trimming.** Only the framework is trimmed (`TrimMode` `partial`). Reading the checked library reflects over the
-  compiler's F# types, which trimming the compiler's assemblies would break. Trimming them, with what `BinaryData`
-  reads kept, would shrink `NanyxCompiler`, the backend and FSharp.Core; how much hasn't been measured.
+  compiler's F# types, which trimming the compiler's assemblies would break.
 - **No `wasm-tools`.** The build needs only the .NET SDK. Without the `wasm-tools` workload the compiler runs under the
-  runtime's interpreter, and the runtime isn't relinked to drop what the compiler doesn't use. With it, ahead-of-time
-  compilation (`RunAOTCompilation`) would make compiles several times faster and the download larger. That is the
-  next thing to try if the first compile is too slow, and it wasn't measured here.
+  runtime's interpreter, and the runtime isn't relinked to drop what the compiler doesn't use.
+
+Trimming the compiler's assemblies and ahead-of-time compilation are on
+[Playground](../work-in-progress/playground#making-it-faster) in Work in progress.
 - **Globalization.** The compiler runs with invariant globalization, so no culture data is downloaded.
 
 **Reproducing it.** From `compiler/`, with the .NET 10 SDK:

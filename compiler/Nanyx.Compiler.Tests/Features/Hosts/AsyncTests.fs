@@ -1,5 +1,5 @@
-/// `Async`, the context of the functions that can wait, which only a host provides (#1889, see
-/// docs/src/content/work-in-progress/concurrency-and-crash-boundaries.md).
+/// `Async`, the context of the functions that can wait, which only a host provides (see
+/// docs/src/content/deep-dives/async.md).
 module Nanyx.Compiler.Tests.Features.Hosts.Async
 
 open Xunit

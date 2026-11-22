@@ -149,8 +149,7 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
 - **Sizes.** `alloc(n)` rounds `n` up to a multiple of 4 (and at least 4), so blocks stay 4-byte aligned and
   pointers stay even.
 - **Size word.** A block's rounded size is stored in the word just before the block `alloc` returns, so
-  `free(b)` needs only the pointer. The object header is part of the block: once objects have one, a block holds
-  the count, then the info word (if any), then the fields, so the size word sits just before the count. For a
+  `free(b)` needs only the pointer. The object header is part of the block: a block holds the count, then the info word (if any), then the fields, so the size word sits just before the count. For a
   string, say, that puts the count at `p - 8`, the length at `p - 4`, and the size at `p - 12`; for a list cell,
   the count at `p - 4` and the size at `p - 8`.
   The word keeps `free` independent of types, and lets the large list hand out a bigger block than asked for and
@@ -295,7 +294,7 @@ its first read (`CoreIrCachedValues.fs`, [#1257](https://github.com/nanyx-lang/n
 is a getter that calls it the first time, keeps the value in a global, and hands each read one more reference to it.
 So a `dbg` in a value prints once, at the value's first read rather than where it is written, and a list or record a
 value builds is allocated once. The inliner leaves the getters alone (it would put the building back at each read). A
-value that is a constant (a literal, a closure that captures nothing) is not cached, and is inlined as before. A value
+value that is a constant (a literal, a closure that captures nothing) is not cached, and is inlined where it is read. A value
 that takes a context's members as parameters is built at each read, as a function is. The start function ends by
 dropping each value that was built and marking it unbuilt, so a program run with memory checks frees everything. A
 script's values that need a context are not top-level values by then: they are local defs of its entry point
@@ -367,7 +366,7 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
   borrows the parameter when none of them is taken over (a call that borrows them in turn, the function's own tail call
   included, does not take them over) and no arm could reuse its block (none allocates a block of that size, see
   `CoreIrReuseSites.fs`). So a sum or an evaluator over a shared list or tree counts nothing. The cost accepted: a fold
-  over a list held once no longer frees each cell as it passes it, which doesn't change peak memory, since the list was
+  over a list held once doesn't free each cell as it passes it, which doesn't change peak memory, since the list was
   built whole first.
 - **Closures have two entries** ([#1298](https://github.com/nanyx-lang/nanyx/issues/1298), `CoreIrClosureEntries.fs`).
   Each function a closure is over is in the closure's table slot, borrowing its environment, and a copy of it that
@@ -441,9 +440,9 @@ and counts that check themselves (`checkedRuntimeHelpers` in `WasmRuntime.fs` an
   instantiation, so the CLI can read the count once the program has finished. A count above 0 fails the run.
 - `free` sets the low bit of a block's size word (sizes are multiples of 4), and `alloc` clears it when it hands
   the block out again. Freeing a marked block, or a `retain` or `release` of an object on the heap whose block is
-  marked, writes what went wrong to stderr and exits with 70. A check uses WASI `proc_exit`, not a trap: a trap
-  raised inside the Wasm test host used to crash it, until the test host was kept off the CET shadow stack as the
-  CLI is (`CetCompat` in both projects).
+  marked, writes what went wrong to stderr and exits with 70. A check uses WASI `proc_exit`, not a trap. The Wasm test
+  host and the CLI both run Wasmtime off the CET shadow stack (`CetCompat` in both projects), so a trap raised inside
+  either doesn't crash it.
 - `free` fills a block after its free-list link with `0xDEADBEEF`, so a field read after the block was freed is a
   pointer far outside memory, and following it traps.
 

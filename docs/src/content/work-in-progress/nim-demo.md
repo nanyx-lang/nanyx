@@ -6,12 +6,12 @@ order: 3
 
 This page proposes a small demo: the game of Nim, played in the browser, with each player's strategy chosen from a
 menu. It shows what contexts are for better than any explanation does: the game's rules are written once, and a
-strategy, including a human clicking buttons, is a context the game is run with. It comes after the
-[playground](./playground), and its full version needs the [browser host](./hosts#a-browser-host).
+strategy, including a human clicking buttons, is a context the game is run with. Its first version runs in the
+[playground](../standard-tools/playground), and its full version needs the [browser host](./hosts#a-browser-host).
 
 # Where it starts
 
-`examples/Nim.nyx` already has the game, after the Nim examples in Hillerström and Lindley's "Liberating effects with
+`examples/Nim.nyx` has the game, after the Nim examples in Hillerström and Lindley's "Liberating effects with
 rows and handlers" (TyDe 2016), reworked for Nanyx contexts:
 
 - A strategy is a context, `context Move = (move: (Player, int) -> int)`: how many sticks a player takes from a heap.
@@ -25,15 +25,15 @@ rows and handlers" (TyDe 2016), reworked for Nanyx contexts:
 - A scoreboard plays a round for each of Bob's choices and counts wins. Bob flips a coin for each choice, with
   [`random.coinToss`](../stdlib/random).
 
-It compiles and runs with `nanyx run examples/Nim.nyx`. The strategies were once named instances of `Move`
-(`def perfect = Move(move = ...)`, then `use perfect`), but since [contexts are not types](../advanced/contexts#declaring-a-context),
-a named instance is an error ([#1447](https://github.com/nanyx-lang/nanyx/issues/1447)), and a reusable strategy is a
-handler function.
+It runs with `nanyx run examples/Nim.nyx`. Since [contexts are not types](../advanced/contexts#declaring-a-context),
+a reusable strategy is a handler function, not a named instance of `Move`. It needs only `Console` and `Random`, both of
+which the [playground host](../advanced/hosts#the-playground-host) provides.
 
 # The demo
 
-**In the playground** (a console program): the example as it is, fixed, as one of the playground's examples. You edit
-a strategy, press Run and see who wins, the game tree and the scoreboard. This needs only the playground.
+**In the playground** (a console program): the example as it is, as one of the playground's examples. You edit
+a strategy, press Run and see who wins, the game tree and the scoreboard. The playground's Examples menu holds only
+the tour's examples, so this needs examples from elsewhere in it ([Playground](./playground#plan)).
 
 **In a page of its own** (a browser app): `nanyx.dev/demos/nim`.
 
@@ -63,20 +63,16 @@ click. So the page version is a state machine:
 This is a useful thing for the demo to show in itself: the strategies don't change between the console and the page,
 only the loop around them.
 
-**`Random` in a page.** The console and HTTP hosts provide [`Random`](../stdlib/random) from the operating system; the
-browser host will provide it from `crypto.getRandomValues`.
+**`Random` in a page.** The console and HTTP hosts provide [`Random`](../stdlib/random) from the operating system, and
+the playground host from a seed the page gives it; the browser host would provide it from `crypto.getRandomValues`.
 
 **Small pieces of `Dom` and `Clock`**: buttons, text, a few shapes for the sticks and the tree, and a timer.
 
 # Plan
 
-1. ~~**Make `examples/Nim.nyx` compile and run** on the current language, without `Random` at first (Bob chooses from
-   a fixed list)~~ ([#1238](https://github.com/nanyx-lang/nanyx/issues/1238)). Done.
-2. ~~**A `Random` context** in the standard library, supplied by the CLI's host and seedable in tests~~
-   ([#1237](https://github.com/nanyx-lang/nanyx/issues/1237)). Done, and the coin-flip scoreboard is back.
-3. **Nim in the playground**, as one of its examples, once the playground exists.
-4. **The page version**, on the browser host: the menus, human moves, the "Check moves" switch and the scoreboard.
-5. **The game tree view**, and the source pane with its playground link.
+1. **Nim in the playground**, as one of its examples.
+2. **The page version**, on the browser host: the menus, human moves, the "Check moves" switch and the scoreboard.
+3. **The game tree view**, and the source pane with its playground link.
 
 # Open questions
 

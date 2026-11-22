@@ -26,6 +26,10 @@ A call in tail position has the type of the function it is in, so a tail call al
 The module's start function, which runs top-level expressions and returns nothing, makes no tail calls. Calls to
 runtime helpers and host functions stay plain calls; they do not recurse into Nanyx code.
 
+The guarantee holds in browsers too, in the [playground](../standard-tools/playground) and the tour's examples:
+`return_call` is in Chrome, Edge and Firefox, and in Safari from 18.2. A browser without WebAssembly tail calls gets a
+message saying so, not a program that runs out of stack ([Playground](./playground#the-page)).
+
 # Reference counting
 
 [Perceus](./memory-management) inserts a `drop` after a variable's last use. A drop placed after a call takes the call

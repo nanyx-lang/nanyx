@@ -5,9 +5,9 @@ order: 10
 ---
 
 Foreign functions (`@extern`) and host memory (`nanyx/host.memory`) are described for users in
-[Hosts](../advanced/hosts#foreign-functions). This page says how the compiler builds them. The reasoning behind them,
-what is planned and the open questions are on [Foreign functions](../work-in-progress/foreign-functions) in Work in
-progress. They are what [hosts](./hosts) are built on.
+[Hosts](../advanced/hosts#foreign-functions). This page says how the compiler builds them, and why they are gated by
+`HostRuntime`. What is planned and the open questions are on [Foreign functions](../work-in-progress/foreign-functions)
+in Work in progress. They are what [hosts](./hosts) are built on.
 
 # What's built
 
@@ -34,11 +34,11 @@ progress. They are what [hosts](./hosts) are built on.
 - **Running it.** `nanyx run` links Wasmtime's WASI, so an extern of a WASI preview 1 function runs, and the runtime's
   own imports (below). Any other import fails when the module is instantiated, with Wasmtime's message naming it.
 - **The runtime's own imports.** What WASI preview 1 lacks, the `nanyx` runtime supplies under a module name of its
-  own, `nanyx:<area>`, until the backend emits components and can use the standard interface instead. A program that
-  imports one runs under `nanyx run`, and fails to load under another WASI runtime, which is accurate: it needs what
-  only this runtime gives it. There are two so far. One is `nanyx:http` (`Nanyx.Runtime.HttpImport`), which the console host
-  implements `Http` on ([#1785](https://github.com/nanyx-lang/nanyx/issues/1785)), and which `wasi:http` replaces later
-  with no change to programs, since they see only `Http`:
+  own, `nanyx:<area>`. A component, which `nanyx build` writes, uses the standard WASI 0.3 interface instead
+  ([Components](./components)). A core module that imports one runs under `nanyx run`, and fails to load under another
+  WASI runtime, which is accurate: it needs what only this runtime gives it. There are two. One is `nanyx:http`
+  (`Nanyx.Runtime.HttpImport`), which the console host implements `Http` on in a core module; in a component,
+  `Http` is on `wasi:http/client`, with no change to programs, since they see only `Http`:
   - `send(request: i32, length: i32, kind: i32) -> i32` makes the request written in the `length` bytes at `request`
     with .NET's `HttpClient`, blocking until it is answered or its timeout passes, keeps the answer, writes what kind
     of answer it is at `kind` (0 a response, 1 a timeout, 2 a connection that failed, 3 a URL that isn't an absolute
@@ -79,5 +79,27 @@ progress. They are what [hosts](./hosts) are built on.
   anywhere in a module that isn't a host. The runtime imports `fd_write` and `proc_exit` itself only for `dbg`, a
   deferred error and the memory checks, and a foreign function of a WASI function shares the runtime's name for it
   (`CoreIrEmit.importName`), so the module imports it once. A component's core module defines both functions itself on `wasi:cli` instead of
-  importing them ([Components](./components)). Hello world's WebAssembly text went from 49,990 bytes to
-  41,824, and a program that reads its arguments and an environment variable from 74,568 to 68,181.
+  importing them ([Components](./components)).
+
+# Why it's built this way
+
+A program reaches outside itself in two ways:
+
+- **Intrinsics** are operations the compiler implements itself, such as `__nanyx_string_length` or
+  `__nanyx_memory_allocate`. They are private to the standard library and change whenever the compiler does. The standard
+  library exposes stable functions over them, such as `nanyx/text`'s `string.length`.
+- **Foreign functions** are imports the embedder provides: WASI's `args_get` and `fd_write` under the CLI, or a page's
+  JavaScript. This is the boundary a host lives on.
+
+Other languages draw the same line:
+
+- **Rust** keeps `core::intrinsics` private to its standard library, behind unstable feature gates. `extern "C"`
+  functions are open to everyone, behind `unsafe`.
+- **GHC** keeps primops inside its base library; `foreign import` is open to everyone, in `IO`.
+- **Roc** lets only a platform declare "hosted" functions, implemented in another language.
+- **Elm** allows kernel JavaScript only in packages from its own organisations. That stopped anyone else writing a
+  platform, and it was resented.
+
+Nanyx keeps intrinsics private, and gates foreign functions by a capability, `HostRuntime`, rather than by who wrote
+the code. That is the capability rule Nanyx already has, not a list of privileged modules, so a host written by anyone,
+in any package, works the same way as the console host. `HostRuntime` has no members, so requiring it costs nothing.

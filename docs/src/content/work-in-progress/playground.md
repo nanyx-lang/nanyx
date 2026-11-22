@@ -4,13 +4,9 @@ description: "What is still planned for the playground, the page on nanyx.dev wh
 order: 3
 ---
 
-The [playground](/playground) is built: a page of the docs site with an editor, Run and Stop, the program's output, its
-input, the tour's examples and share links, with the compiler and the program running in the browser
-([#2153](https://github.com/nanyx-lang/nanyx/issues/2153)). How to use it is on
-[Playground](../standard-tools/playground) in Standard tools, and how it works on [Playground](../deep-dives/playground)
-in Deep dives. The tour's examples are small playgrounds too: each runnable one runs, and can be edited, where it is,
-with the playground's editor and output ([#2248](https://github.com/nanyx-lang/nanyx/issues/2248); [The tour's
-examples](../deep-dives/playground#the-tours-examples) in Deep dives). This page is what is still planned.
+The [playground](/playground) and the runnable examples in the tour are built. How to use them is on
+[Playground](../standard-tools/playground) in Standard tools, and how they work on
+[Playground](../deep-dives/playground) in Deep dives. This page is what is still planned.
 
 # Plan
 
@@ -23,7 +19,7 @@ examples](../deep-dives/playground#the-tours-examples) in Deep dives). This page
    module's table of places read in the page.
 3. **Later:** hover types and inlay hints as in the [editor](../standard-tools/vs-code-extension), from the same
    compile; files and HTTP emulated in the page; a choice of compiler version; examples beyond the tour's, such as the
-   [Nim demo](./nim-demo), which reads input; and more done for phones than the stacked layout.
+   [Nim demo](./nim-demo); and more done for phones than the stacked layout.
 
 # Making it faster
 
@@ -39,7 +35,7 @@ page doesn't respond while it compiles. Ways to do better, none of them measured
 
 # Open questions
 
-- **Packages.** A program that imports a package needs its source. The first version supports only the standard
-  library and the packages the compiler ships.
+- **Packages.** A program that imports a package needs its source. The playground supports only the standard library
+  and the packages the compiler ships.
 - **Sharing long programs.** A URL holds a few kilobytes of compressed code comfortably. Longer programs could be
   shared as a GitHub gist instead.

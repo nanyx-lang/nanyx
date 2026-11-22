@@ -5,7 +5,7 @@ open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
 // `Iterable(c)`, the prelude's context of what can be iterated, with the associated type `elem`: a type gets it by
-// attaching `toSeq`, whose type fixes `elem` (#1802, see docs/src/content/work-in-progress/lazy-sequences.md).
+// attaching `toSeq`, whose type fixes `elem` (see docs/src/content/deep-dives/lazy-sequences.md).
 
 let private bag =
     """type Bag(a) = protected (items: list(a))

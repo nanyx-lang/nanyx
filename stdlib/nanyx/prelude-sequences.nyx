@@ -7,7 +7,7 @@
 -- Attached to `seq`, so they are called as `seq.map(s, f)`, or as `s \map(f)` when `s` is known to
 -- be a sequence. A sequence is lazy: nothing is worked out until it is pulled, and a function that
 -- gives back a sequence runs its callbacks when that is pulled, so the result requires their
--- contexts (see docs/src/content/work-in-progress/lazy-sequences.md).
+-- contexts (see docs/src/content/deep-dives/lazy-sequences.md).
 
 --| A lazy sequence of `a`s: a function that, when called, gives back the first element and the rest
   of the sequence, `#next(x, rest)`, or `#done`. Calling it changes nothing, so a sequence can be

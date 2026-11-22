@@ -4,10 +4,6 @@ description: "Lazy sequences, and walking them"
 order: 6
 ---
 
-> **Being built.** `seq(a)` and its functions are in the [prelude](../stdlib/prelude-sequences). Taking anything that
-> can be iterated, `Iterable`, and the `seq { }` builder are designed in
-> [Lazy sequences](../work-in-progress/lazy-sequences) but not built yet.
-
 Nanyx has one lazy sequence type, `seq(a)`. A sequence is worked out only as far as it is pulled, so it may never end:
 the range `0..` counts up forever. Pulling one changes nothing, so it can be passed around, stored and pulled again.
 

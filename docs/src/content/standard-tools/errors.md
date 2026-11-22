@@ -552,8 +552,8 @@ at the compiler's version, which `nanyx new` writes, or remove the `@entry` if t
 
 # NYX0032: Contexts joined with `&` or `+`
 
-The contexts a function requires are separated by `,`: `[Eq(a), Hash(a)]`. Earlier versions of the language joined
-them with `&`, and before that with `+`, and either between two contexts is an error.
+The contexts a function requires are separated by `,`: `[Eq(a), Hash(a)]`. An `&` or a `+` between two contexts is an
+error.
 
 ```nanyx
 def both: [Eq(a) & Hash(a)] a, a -> bool = { x, y -> x == y }  -- error NYX0032: Separate contexts with `,`, not `&`: `[Eq(a), Hash(a)]`
@@ -582,7 +582,7 @@ application, which names its host, needn't export anything.
 
 # NYX0034: Manifest written as TOML
 
-A package's `.nyxp` manifest was once written in TOML, and is now a Nanyx record. A manifest whose first line is a TOML
+A package's `.nyxp` manifest is a Nanyx record, not TOML. A manifest whose first line is a TOML
 table header, `[package]`, or a key, `name = "shop"`, is reported as TOML, at that line. A source file of the package
 reports it too, from `nanyx check`, `nanyx run` and the editor, since the package can't be read without its manifest.
 
@@ -609,8 +609,8 @@ To fix it, write the manifest as a record:
 
 # NYX0035: Directive written in the old form
 
-A script's directives were once a manifest's dotted key with a TOML value, `::host.nanyx.console = "0.28.0"`. They
-are now a name and words: `::host nanyx.console`. A directive in the old form is an error.
+A script's directive is a name and words: `::host nanyx.console`. A directive written as a manifest's dotted key with a
+TOML value, `::host.nanyx.console = "0.28.0"`, is an error.
 
 ```nanyx
 ::formatter.lineWidth = 80  -- error NYX0035: Directives are lines of words now, not a manifest's key and a TOML value: write `::format lineWidth 80`
@@ -861,7 +861,7 @@ To fix it, save the file as UTF-8.
 # NYX0050: Keywords in the wrong order
 
 An exported scoped context is written `export scoped context`: `export` comes first, as on every definition, and
-`scoped` beside `context`. Earlier versions of the language wrote `scoped export context`, which is an error.
+`scoped` beside `context`. `scoped export context` is an error.
 
 ```nanyx
 scoped export context Tx = protected ()  -- error NYX0050: Write `export` before `scoped`: `export scoped context`

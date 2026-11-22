@@ -6,7 +6,7 @@ order: 7.5
 
 `seq(a)` is a lazy sequence: a function that, when pulled, gives back its first element and the rest of the sequence, or `#done`. Nothing is worked out until it is pulled, and pulling it changes nothing, so a sequence can be passed around, stored and pulled again. Ranges are sequences: `1..10` is a `seq(int)`, and `0..` is one that never ends. The functions here are [attached definitions](../advanced/attached-definitions) on `seq`, so `s \map(f)` resolves to `seq.map` when `s` is a sequence, and are in the [prelude](prelude), so no import is needed.
 
-A function that gives back a sequence, such as `seq.map`, runs its callback when the sequence is pulled, not when it is called, so the sequence carries the callback's contexts: mapping with a function that prints gives a `[Console] seq(b)`, which can be pulled only where `Console` is (see [Lazy sequences](../work-in-progress/lazy-sequences)). A function that pulls the whole sequence now, such as `seq.toList`, needs them where it is called.
+A function that gives back a sequence, such as `seq.map`, runs its callback when the sequence is pulled, not when it is called, so the sequence carries the callback's contexts: mapping with a function that prints gives a `[Console] seq(b)`, which can be pulled only where `Console` is (see [Lazy sequences](../deep-dives/lazy-sequences#effects)). A function that pulls the whole sequence now, such as `seq.toList`, needs them where it is called.
 
 ```nanyx
 println((1..10) \seq.map { * 2 } \seq.toList)
