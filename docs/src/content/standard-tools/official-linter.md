@@ -18,6 +18,7 @@ Each rule's diagnostics have the code `default/<rule>`, such as `default/unusedB
 | [`unusedBindings`](#unused-local-value) | warning | a local, a lambda's argument or a pattern variable that is never used |
 | [`unusedImports`](#unused-import) | warning | an import nothing uses |
 | [`unusedPrivateDefinitions`](#unused-private-definition) | warning | a definition the module does not export and does not use |
+| [`unusedContexts`](#unused-context) | warning | a context a def's signature requires that its body does not use |
 | [`unreachableArms`](#unreachable-match-branch) | warning | a match arm the arms before it already cover |
 | [`noTagInCommon`](#comparison-that-is-always-false) | warning | `==` or `!=` on two unions with no tag in common |
 | [`useInBraces`](#use--in-with-a-body-in-braces) | warning | `use ... in { ... }`, whose body is a function, not a block |
@@ -104,6 +105,22 @@ export def area = { w, h -> w * h }
 The rule (`unusedPrivateDefinitions`) reports a top-level def, type or context that the module does not export, and a member of such a context, when nothing in the module uses it. Only the module can name what it does not export, so an unused one is dead code. A use from within the definition itself, such as a function calling itself or a type naming itself, does not count. In a `module name =` block, the defs the block does not export are private to it, and are reported in the same way.
 
 It is a rule of its own, apart from `unusedBindings`, so a project can keep one and turn the other off. It leaves alone `@entry`'s def, which the runtime calls; a definition attached to a type that an instance picks up, such as a `Point.toString` that string interpolation uses; and names starting with `_`. Its fix removes the definition's lines. An unused context member has no fix, since removing it means editing the context's type.
+
+## Unused context
+
+```nanyx
+context Log = (log: string -> ())
+
+def greet: [Log] string -> () = { name -> log("Hello, {name}") }
+def answer: [Log] () -> int = { () -> 42 } -- Linter warning: Unused context 'Log'
+```
+
+The rule (`unusedContexts`) reports a context written in a def's signature that nothing in the def's body uses: the
+body reads none of its members, an operator among them, and calls nothing that requires it. Every caller must supply
+the context all the same, for nothing. It is reported at the context, which an editor draws faded, and its fix removes
+it, with the `[` `]` around it when it is the only one. Only a def whose value is a function is looked at, a local one
+too. An exported def is not reported: what it requires is part of what its module offers, and may be there for a later
+version to use. A context variable, such as the `c` of `[c]`, is not a context.
 
 ## Unreachable match branch
 

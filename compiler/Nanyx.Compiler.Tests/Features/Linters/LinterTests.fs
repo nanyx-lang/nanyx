@@ -8,7 +8,7 @@ open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
 let private rule id severity =
-    { Id = id; Title = $"Title of {id}"; DefaultSeverity = severity; Description = "" }
+    { Id = id; Title = $"Title of {id}"; DefaultSeverity = severity; Unnecessary = false; Description = "" }
 
 /// Reports every top-level def under `everyDef`, at a warning unless configured otherwise.
 let private everyDef =
@@ -36,7 +36,7 @@ let ``The official linter is registered, and runs only when turned on`` () =
     let official = Assert.Single(Linters.all)
     Assert.Equal("default", official.Name)
     Assert.Equal<string list>(
-        [ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports"; "noTagInCommon"; "unusedPrivateDefinitions"; "unreachableCode"; "useInBraces"; "strayDocComments"; "unannotatedExports"; "unusedResults"; "uselessExpressions"; "shadowedPreludeNames"; "semicolons"; "unconstructibleType"; "unusedAllows" ],
+        [ "unusedBindings"; "nonTailRecursion"; "unreachableArms"; "unusedImports"; "noTagInCommon"; "unusedPrivateDefinitions"; "unreachableCode"; "useInBraces"; "strayDocComments"; "unannotatedExports"; "unusedResults"; "uselessExpressions"; "shadowedPreludeNames"; "semicolons"; "unconstructibleType"; "unusedContexts"; "unusedAllows" ],
         official.Rules |> List.map (fun rule -> rule.Id))
     // Linters are opt-in: compiling without saying which to run runs none.
     Assert.Empty((Compiler.compile "def f = { x -> 1 }").Diagnostics)
