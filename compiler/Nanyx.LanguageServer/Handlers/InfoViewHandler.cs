@@ -76,12 +76,14 @@ public sealed record InfoViewSection
 /// what it names, as Markdown with its links written out, as hover shows it: for an import, that of the module it
 /// brings in. <see cref="Name"/> is the part of the text that links to <see cref="Location"/>: the name it starts with
 /// (a def's, a local's, a parameter's, a context's, a callee's); an item without one, such as a type or a message, has
-/// no link in its text. <see cref="Children"/> are the items under it: the calls a provider in the flow serves.
+/// no link in its text. <see cref="Links"/> are the other parts of it that link: the names of types, each to its
+/// definition (see <see cref="InfoViewTypeLinks"/>). <see cref="Children"/> are the items under it: the calls a provider in the flow serves.
 /// </summary>
 public sealed record InfoViewItem
 {
     public required string Text { get; init; }
     public InfoViewName? Name { get; init; }
+    public IReadOnlyList<InfoViewLink>? Links { get; init; }
     public string? Detail { get; init; }
     public Location? Location { get; init; }
     public string? Documentation { get; init; }
@@ -308,11 +310,29 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             });
         }
 
+        // Each type's name links to its definition, in every item but a message, which is prose.
+        var types = new Dictionary<string, Location>();
+        foreach (var (name, symbol) in info?.TypeNames.Select(entry => (entry.Item1, entry.Item2)) ?? [])
+        {
+            if (Locate(symbol.Declaration) is { } definition)
+            {
+                types.TryAdd(name, definition);
+            }
+        }
+
         return new InfoViewResult
         {
             // The side bar is narrow: past the third scope they start closed, as the module always does.
             Scopes = scopes
-                .Select((scope, index) => scope with { Collapsed = index >= 3 || scope.Kind == "module" })
+                .Select((scope, index) => scope with
+                {
+                    Collapsed = index >= 3 || scope.Kind == "module",
+                    Sections = scope.Sections
+                        .Select(section => section.Id == "messages"
+                            ? section
+                            : section with { Items = section.Items.Select(item => InfoViewTypeLinks.WithLinks(item, types)).ToList() })
+                        .ToList()
+                })
                 .ToList(),
             Highlights = highlights is null
                 ? []
