@@ -83,6 +83,32 @@ jobs:
       - name: Test
         run: dotnet test Nyx.Compiler.slnx --no-build --configuration Release -p:SkipWasmTests=true
 
+      # A WASI 0.3 component must run outside nanyx too: each example package is built as one and run under Wasmtime,
+      # which must print what nanyx run does (see docs/src/content/deep-dives/components.md).
+      - name: Install Wasmtime
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          curl -sSfL https://github.com/bytecodealliance/wasmtime/releases/download/v51.0.0/wasmtime-v51.0.0-x86_64-linux.tar.xz | tar -xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/wasmtime-v51.0.0-x86_64-linux" >> "$GITHUB_PATH"
+
+      - name: Run the example packages as components under Wasmtime
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          project="$PWD/Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj"
+          nanyx() { dotnet run --project "$project" --no-build --configuration Release -- "$@"; }
+          for manifest in ../examples/*/*.nyxp; do
+            package=$(dirname "$manifest")
+            component="$RUNNER_TEMP/$(basename "$package").wasm"
+            nanyx build "$package" --out "$component"
+            expected=$(cd "$package" && nanyx run < /dev/null)
+            actual=$(wasmtime run "$component" < /dev/null)
+            if [ "$expected" != "$actual" ]; then
+              echo "::error::$package prints something else under wasmtime run"
+              diff <(echo "$expected") <(echo "$actual")
+              exit 1
+            fi
+          done
+
   # The Wasm tests take the longest by far (most of them compile and run a program), so they get a
   # runner to themselves rather than share its cores with the other test projects.
   wasm-test:

@@ -1,7 +1,7 @@
 --| The capability a host is written on: what lets it call the foreign functions its embedder provides
   (those declared with `@extern`) and reach the module's linear memory (with `nanyx/host.memory`).
 
-  [`HostRuntime`] is provided only to the host, the module that runs the program's entry point (as
+  [`HostRuntime`] is provided only to the host, the package whose modules run the program's entry point (as
   the console host, `nanyx.console`, does). Anywhere else, requiring it is an error, so a library can only reach
   the outside world through the contexts the host chose to provide.
 module host.runtime

@@ -318,13 +318,21 @@ module Manifest =
                     | None -> None
             | None, _ -> None)
 
-    /// Checks the `host` field of the manifest's `package`, which declares the package a host: its root module, and its
-    /// prelude, if it has one (see `HostPackages`).
+    /// Checks the `host` field of the manifest's `package`, which declares the package a host: its root module, its
+    /// prelude and its component root, if it has them (see `HostPackages`).
     let private checkHostDeclaration (problems: Problems) (value: DataValue) =
-        problems.Record "the package's host" [ HostPackages.rootField; HostPackages.preludeField; HostPackages.settingsField ] value
+        problems.Record "the package's host" [ HostPackages.rootField; HostPackages.preludeField; HostPackages.settingsField; HostPackages.componentField ] value
         |> Option.iter (fun fields ->
             problems.RequiredText "the package's host" value.Location fields HostPackages.rootField anyText "" |> ignore
             problems.Text "the package's host" fields HostPackages.preludeField anyText "" |> ignore
+            // Its component root, which a component is built from, and the world it is written against.
+            match DataValue.field HostPackages.componentField fields with
+            | Some field ->
+                problems.Record "the host's component" [ HostPackages.rootField; HostPackages.worldField ] field.Value
+                |> Option.iter (fun built ->
+                    problems.RequiredText "the host's component" field.Value.Location built HostPackages.rootField anyText "" |> ignore
+                    problems.RequiredText "the host's component" field.Value.Location built HostPackages.worldField anyText "" |> ignore)
+            | None -> ()
             match DataValue.field HostPackages.settingsField fields with
             | Some { DataField.Value = { DataValue.Data = DataRecord _ } }
             | None -> ()

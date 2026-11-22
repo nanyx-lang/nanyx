@@ -46,7 +46,7 @@ def peek = { address -> readByte(address) }
 """
     let code, message, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.HostRuntimeOutsideHost.Code, code)
-    Assert.StartsWith("'peek' requires the context 'HostRuntime', which only a host may require", message)
+    Assert.StartsWith("'peek' requires the context 'HostRuntime', which only a host's package may require", message)
     Assert.Equal("peek", text)
 
 [<Fact>]
