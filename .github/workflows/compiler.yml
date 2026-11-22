@@ -11,6 +11,10 @@ on:
       - "examples/**"
       # One of the tests formats the docs' code blocks.
       - "docs/src/content/**/*.md"
+      # The Browser test job tests the playground page with the compiler it publishes.
+      - "docs/src/pages/playground.astro"
+      - "docs/src/lib/playground/**"
+      - "docs/site/playground-*.mjs"
       - ".github/workflows/compiler.yml"
   # Pull requests run nothing: the tests take too long. Run them on your branch before you merge, locally or with
   # `gh workflow run Compiler --ref <branch>`.
@@ -136,9 +140,9 @@ jobs:
         run: dotnet test ${{ env.PROJECT }} --no-build --configuration Release
 
   # The playground host's runner, in headless Chromium: the compiler built for the browser compiles programs under the
-  # playground host, and the runner runs them in a web worker (see compiler/Nanyx.Browser/playground-test.mjs). The
-  # build it tested is the release's nanyx-browser.zip, which the docs site's playground runs
-  # (docs/site/playground-compiler.mjs).
+  # playground host, and the runner runs them in a web worker (see compiler/Nanyx.Browser/playground-test.mjs). Then
+  # the docs site, built with that compiler, and its playground page (docs/site/playground-test.mjs). The build it
+  # tested is the release's nanyx-browser.zip, which the docs site's playground runs (docs/site/playground-compiler.mjs).
   browser-test:
     name: Browser test
     runs-on: ubuntu-latest
@@ -173,6 +177,16 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/compiler/dist"
           zip -qr "$GITHUB_WORKSPACE/compiler/dist/nanyx-browser.zip" . -x '*.br' -x '*.gz'
           unzip -l "$GITHUB_WORKSPACE/compiler/dist/nanyx-browser.zip" packages/nanyx.playground/runner/playground.js compiler.js _framework/dotnet.js
+
+      - name: Test the playground page
+        working-directory: docs
+        env:
+          NANYX_BROWSER_ZIP: ${{ github.workspace }}/compiler/dist/nanyx-browser.zip
+        run: |
+          npm ci
+          npm install --no-save playwright@1.49.1
+          npm run build
+          node site/playground-test.mjs
 
       - uses: actions/upload-artifact@v4
         with:

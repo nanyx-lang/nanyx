@@ -8,6 +8,7 @@ import { inkNight, paperWhite } from "./site/shiki-themes.mjs";
 import { rehypeDiagnosticCodeIds, rehypeHeadingAnchors, rehypeShiftHeadings } from "./site/rehype-plugins.mjs";
 import { sectionRedirects } from "./site/sections.mjs";
 import { unpackPlaygroundCompiler } from "./site/playground-compiler.mjs";
+import { rehypePlaygroundReload, remarkPlaygroundLinks } from "./site/playground-examples.mjs";
 
 export default defineConfig({
   site: "https://nanyx.dev",
@@ -41,7 +42,14 @@ export default defineConfig({
   ],
   markdown: {
     processor: unified({
-      rehypePlugins: [rehypeShiftHeadings, rehypeDiagnosticCodeIds, rehypeHeadingIds, rehypeHeadingAnchors],
+      remarkPlugins: [remarkPlaygroundLinks],
+      rehypePlugins: [
+        rehypeShiftHeadings,
+        rehypeDiagnosticCodeIds,
+        rehypeHeadingIds,
+        rehypeHeadingAnchors,
+        rehypePlaygroundReload,
+      ],
     }),
     shikiConfig: {
       themes: {

@@ -17,7 +17,7 @@ public sealed class SemanticTokensTests : LanguageServerTestBase
         var legend = _client.ServerSettings.Capabilities.SemanticTokensProvider?.Legend;
         Assert.NotNull(legend);
         Assert.Equal(
-            ["function", "parameter", "variable", "property", "enumMember", "type", "interface", "namespace", "operator", "keyword"],
+            ["function", "parameter", "variable", "property", "enumMember", "type", "interface", "namespace", "operator", "keyword", "unresolved"],
             legend.TokenTypes.Select(type => type.ToString()));
         Assert.Equal(
             ["declaration", "readonly", "defaultLibrary", "mutable", "nominal", "private"],
@@ -164,7 +164,7 @@ public sealed class SemanticTokensTests : LanguageServerTestBase
     }
 
     [Fact]
-    public async Task A_shadowing_name_is_what_it_refers_to_and_an_unresolved_name_has_no_token()
+    public async Task A_shadowing_name_is_what_it_refers_to_and_an_unresolved_name_is_marked_unresolved()
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("shadow.nyx"));
         var source = """
@@ -177,7 +177,52 @@ public sealed class SemanticTokensTests : LanguageServerTestBase
 
         var tokens = (await TokensIn(uri, source)).Select(token => (token.Line, token.Text, token.Type, token.Modifiers)).ToList();
         Assert.Contains((1, "n", "parameter", ""), tokens);
-        Assert.DoesNotContain(tokens, token => token.Text == "missing");
+        Assert.Contains((1, "missing", "unresolved", ""), tokens);
+    }
+
+    [Fact]
+    public async Task Each_kind_of_unknown_name_is_unresolved_and_the_names_around_it_keep_their_tokens()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("unknown.nyx"));
+        var source = """
+            def p = (name = "x", age = 3)
+            def a = undefinedValue
+            def b = undefinedFunction(1)
+            def c: Strnig = "x"
+            def d: [Consol] () -> () = { () }
+            def e = nomodule.thing
+            def f = p.nmae
+            def Missing.g = { (x: int) -> x }
+            """.ReplaceLineEndings("\n") + "\n";
+        Open(uri, source);
+        Assert.NotEmpty((await NextPublished(uri)).Diagnostics!);
+
+        var tokens = (await TokensIn(uri, source)).Select(token => (token.Line, token.Text, token.Type)).ToList();
+        Assert.Equal(
+            [(1, "undefinedValue"), (2, "undefinedFunction"), (3, "Strnig"), (4, "Consol"), (5, "nomodule"), (6, "nmae"), (7, "Missing")],
+            tokens.Where(token => token.Type == "unresolved").Select(token => (token.Line, token.Text)));
+        Assert.Contains((0, "p", "variable"), tokens);
+        Assert.Contains((0, "name", "property"), tokens);
+        Assert.Contains((5, "e", "variable"), tokens);
+        Assert.Contains((6, "f", "variable"), tokens);
+    }
+
+    [Fact]
+    public async Task A_module_with_a_type_error_elsewhere_keeps_its_tokens_and_marks_an_unknown_name()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("mismatch.nyx"));
+        var source = """
+            def twice = { (n: int) -> n * 2 }
+            def wrong: string = twice(2)
+            def lost = twcie(3)
+            """.ReplaceLineEndings("\n") + "\n";
+        Open(uri, source);
+        Assert.Contains((await NextPublished(uri)).Diagnostics!, diagnostic => diagnostic.Code?.String == "NYX0201");
+
+        var tokens = (await TokensIn(uri, source)).Select(token => (token.Line, token.Text, token.Type)).ToList();
+        Assert.Contains((0, "twice", "function"), tokens);
+        Assert.Contains((1, "twice", "function"), tokens);
+        Assert.Contains((2, "twcie", "unresolved"), tokens);
     }
 
     [Fact]

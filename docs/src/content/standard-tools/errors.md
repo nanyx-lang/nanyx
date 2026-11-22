@@ -900,6 +900,14 @@ def point = (x = 1, y = 2)
 def moved = point with (z = 3)  -- error NYX0103: The record has no member 'z' to update
 ```
 
+When one of the record's fields has a name close to the one written, the error suggests it, and the editor offers a
+fix that writes it:
+
+```nanyx
+def person = (name = "Ada", age = 36)
+def greeting = person.nmae  -- error NYX0103: The record 'person' has no member 'nmae': did you mean 'name'?
+```
+
 To fix it, use one of the record's fields, or add the field to its type.
 
 # NYX0104: Not exported

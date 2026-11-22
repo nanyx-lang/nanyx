@@ -10,7 +10,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files and package m
   next line, and each compiler error's code (such as `NYX0201`) a link to its section of [Compiler errors](./errors). An error in a file the document imports is shown in that file, and the import that
   brings the file in gets one diagnostic linking to each of its errors. A change to a file, in the editor or on disk,
   checks again the open files that import it
-- every name coloured by [what it is](#semantic-highlighting): a function, a parameter, a variable, a field, a tag, a type, a context or a module, as your theme colours other languages' names, and the names of [nominal types](#nominal-types) in italics
+- every name coloured by [what it is](#semantic-highlighting): a function, a parameter, a variable, a field, a tag, a type, a context or a module, as your theme colours other languages' names, the names of [nominal types](#nominal-types) in italics, and a name that names nothing in scope as an error
 - the inferred type of whatever is under the pointer, on hover, after the name on a name (`def name: [Console] string -> ()`, `n: int`), with the doc comment of the name there. On a type's name it shows the type's definition, and for a nominal type whether it is protected or private and which module declares it. On a module's name, in its `module` line, an import (its path or its alias) or an alias that qualifies a name (`m` in `m.foo`), hover shows the module's doc comment, the `--|` comment before its `module` line. On a `_` in a type, as in `def xs: list(_) = [1, 2]`, it shows what the `_` was inferred to be, and on an operator that calls a definition, such as a `+` a type defines, it shows that definition. While a file has type errors, hover and the type hints still show what did check, with `???` where an error left a type unknown; while it does not parse, they show what the compiler knew the last time it did, or, in a file that hasn't parsed since it was opened, what it knows of the definitions around the mistake, as the compiler reads past it
 - inferred types in a lens above each top-level definition that does not write its type, and as inlay hints after locals, lambda parameters and pattern variables
 - go to definition (from a name, or from a `` [`name`] `` link in a doc comment), find references (in every file of the package, for a file in one), the outline view, and **Go to Symbol in Workspace** (Ctrl+T), which finds a def, type, context or `module name =` block in any `.nyx` file under the workspace folders, open or not (outside `bin`, `obj`, `node_modules` and hidden folders), from the files as they are written, so a file with type errors still has its symbols
@@ -79,10 +79,13 @@ the standard types, so your colour theme colours Nanyx's names as it colours oth
 | `namespace` | a module's name in its `module` line, an import's path and alias, and the alias before a name it qualifies | `declaration` |
 | `operator` | an operator that calls a definition: an attached one, or a context's member | `defaultLibrary` |
 | `keyword` | a workflow keyword, `try` or `return` | |
+| `unresolved` | a name that names nothing in scope, such as a misspelt one: an unknown value, function, field, type, context or module, and the type an attached definition is attached to if there is none | |
 
-`mutable`, `nominal` and `private` are the extension's own modifiers; the others are standard. A name that did not
-resolve, such as a misspelt one, gets no token, and keeps the colour the extension's grammar gives it. A file with type
-errors still has tokens for what did resolve; while a file does not parse, it keeps those of its last text that did,
+`unresolved` is the extension's own token type, and `mutable`, `nominal` and `private` its own modifiers; the others
+are standard. The extension maps `unresolved` to the scope `invalid.illegal`, which themes colour as an error, so an
+unresolved name is red in most themes, besides the squiggle and the error in the Problems view. To colour it otherwise,
+write a rule for `"unresolved:nanyx"` under `editor.semanticTokenColorCustomizations`. A file with type errors still
+has tokens for what did resolve; while a file does not parse, it keeps those of its last text that did,
 outside what you have edited since. To colour one kind of name your own way, write a rule for it under
 `editor.semanticTokenColorCustomizations` in `settings.json`, such as `"variable.mutable:nanyx": { "underline": true }`.
 
