@@ -26,7 +26,7 @@ those files workable. Problems with the code's structure are tracked as GitHub i
 
 - **Name built-in syntax once.** The parser desugars some syntax into calls with reserved names (`__for`,
   `__with`, `__range`, `__rec`, `dbg`, `not`). Don't add new string matches on these names. Use or extend
-  the shared constants and active patterns, the `...Syntax` modules in the parser's `Ast.fs`
+  the shared constants and active patterns, the `...Syntax` modules in the parser's `Ast.fs` and `IsSyntax.fs`
   ([#367](https://github.com/nanyx-lang/nanyx/issues/367)).
 - **Layout and reserved words live in one place each.** Where a block, a match or a pipeline ends is decided by the
   layout pass (`Layout.fs`), whose rules are numbered on the
