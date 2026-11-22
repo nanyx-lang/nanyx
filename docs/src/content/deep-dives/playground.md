@@ -224,7 +224,7 @@ downloads it from the release named by `playgroundRelease` in `docs/site/playgro
 named, and unpacks it into `public/playground/compiler`, so the site serves the compiler at `/playground/compiler/`;
 `compiler.js` fetches its files from beside itself, so it works from there. Moving the playground on to a newer
 release is changing that line, after the release is published: a build that names a release without the asset fails.
-No release has the asset yet, so `playgroundRelease` is `null`, the build unpacks nothing, and the page says its
-compiler isn't on the site yet; it names the first release after 0.32.0. To build the site with a compiler you built
+It names 0.33.0, the first release with the asset. When it is `null`, the build unpacks nothing and the page says its
+compiler isn't on the site. To build the site with a compiler you built
 yourself, set `NANYX_BROWSER_ZIP` to its zip.
 
