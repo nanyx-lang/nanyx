@@ -43,13 +43,21 @@ let ``--core builds a core module, which the runtime runs`` () =
     Assert.Equal<byte array>([| 0x00uy; 0x61uy; 0x73uy; 0x6duy; 0x01uy; 0x00uy; 0x00uy; 0x00uy |], wasm.[.. 7])
 
 [<Fact>]
+let ``A program that reads and writes files is built as a component`` () =
+    use app = consoleApp "module main\n\n@entry\ndef main: [Async, Console, FileSystem] () -> () = { println(1) }\n"
+    let built = nanyxIn app.Path [ "build"; "--release" ]
+    Assert.Equal("", built.StandardError)
+    Assert.Equal(0, built.ExitCode)
+    Assert.Equal<byte array>(componentPreamble, preamble (Path.Combine(app.Path, "out", "app.wasm")))
+
+[<Fact>]
 let ``An entry that needs a context the component root doesn't provide is an error naming it`` () =
-    use app = consoleApp "module main\n\n@entry\ndef main: [Console, FileSystem] () -> () = { println(1) }\n"
+    use app = consoleApp "module main\n\n@entry\ndef main: [Console, Http] () -> () = { println(1) }\n"
     let built = nanyxIn app.Path [ "build"; "--release" ]
     Assert.Equal(1, built.ExitCode)
     Assert.Contains(DiagnosticCodes.EntryDoesNotFitHost.Code, built.StandardOutput)
     Assert.Contains("It doesn't fit the host 'nanyx.console/console.host.wasi'", built.StandardOutput)
-    Assert.Contains("it doesn't provide 'FileSystem' in a component: build with --core for a core module", built.StandardOutput)
+    Assert.Contains("it doesn't provide 'Http' in a component: build with --core for a core module", built.StandardOutput)
     // The core root provides it.
     Assert.Equal(0, (nanyxIn app.Path [ "build"; "--release"; "--core" ]).ExitCode)
 

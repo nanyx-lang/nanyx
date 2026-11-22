@@ -94,8 +94,9 @@ is: `wasmtime run out/greet.wasm Ada`. `nanyx run` runs the program as it always
 core module, as before.
 
 A component is built from the host's _component root_, `console.host.wasi`, which provides what WASI 0.3 can:
-`Console`, `Env`, `Clock`, `Random` and `Async`. `FileSystem` comes next, and `Http` after it
-([Components](../work-in-progress/components#plan)). An entry point that needs a context the component root doesn't
+`Console`, `Env`, `FileSystem`, `Clock`, `Random` and `Async`. `Http` comes next
+([Components](../work-in-progress/components#plan)). A component reaches only the directories the runtime that runs it
+opens for it: `wasmtime run --dir . out/greet.wasm` opens the current directory, where a relative path is found. An entry point that needs a context the component root doesn't
 provide is an error (`NYX0237`) naming it, when it is built as a component; `--core` builds it.
 
 # The HTTP host
