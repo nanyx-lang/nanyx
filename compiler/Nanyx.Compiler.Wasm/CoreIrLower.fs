@@ -544,13 +544,25 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // `C(T).m`: the member of that instance of the context as a value.
             let key = contextMemberKey (Some contextType) memberName
             match scope.Members |> Map.tryFind key with
-            | Some memberVar -> k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
+            | Some memberVar -> this.MemberValue expr key memberVar k
             | None -> cannot $"the context member '{ContextMemberKey.text key}', which is not in scope"
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
         | InterpolatedString parts -> this.Interpolation scope expr parts k
         | Lambda _ -> cannot "a lambda"
         | _ -> cannot "this kind of expression"
+
+    /// The context member of the key `key`, `memberVar` in scope, named as a value at `expr`. A function member requires
+    /// its context where it is called, so it is a closure that calls the member it is then passed, and holds nothing of
+    /// this instance (see `CoreIrLowerLifted.memberCalling`).
+    member private this.MemberValue (expr: Expression) (key: ContextMemberKey) (memberVar: Var) (k: Expr -> Expr) : Expr =
+        match input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst >> toIrType) with
+        | Some (IrFunction(_, _, wanted) as expected) when wanted |> List.exists (fst >> (=) key) ->
+            let functionName =
+                this.MemberTools.Request (SpecKey.plain $"__member_{sanitizeIdentifier (ContextMemberKey.text key)}_{IrType.mangle expected}" []) (this.MemberTools.Subst ()) (MemberCalling(key, expected))
+            let arity = 1 + (adaptedValueTypes memberVar.Type expected).Length + wanted.Length
+            k (Expr.make (MakeClosure(functionName, arity, [])) expected)
+        | _ -> k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
 
     /// The name `name`, at `expr`: a local, a context member in scope, or a top-level value.
     member private this.Identifier (scope: Scope) (expr: Expression) (name: string) (k: Expr -> Expr) : Expr =
@@ -565,17 +577,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | _ -> k (Expr.make (Atom(AVar var)) var.Type)
         // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
         | None when scope.Members.ContainsKey (NamedMember name) && not (namesOwnDefinition input expr) ->
-            let memberVar = scope.Members.[NamedMember name]
-            match input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst >> toIrType) with
-            // A function member named as a value requires its context where it is called, so it is a closure that
-            // calls the member it is then passed, and holds nothing of this instance (see `CoreIrLowerLifted.memberCalling`).
-            | Some (IrFunction(_, _, wanted) as expected) when wanted |> List.exists (fst >> (=) (NamedMember name)) ->
-                let key = NamedMember name
-                let functionName =
-                    this.MemberTools.Request (SpecKey.plain $"__member_{sanitizeIdentifier name}_{IrType.mangle expected}" []) (this.MemberTools.Subst ()) (MemberCalling(key, expected))
-                let arity = 1 + (adaptedValueTypes memberVar.Type expected).Length + wanted.Length
-                k (Expr.make (MakeClosure(functionName, arity, [])) expected)
-            | _ -> k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
+            this.MemberValue expr (NamedMember name) scope.Members.[NamedMember name] k
         | None when definitions.ContainsKey name && not (isFunction name) ->
             // A top-level value is compiled to a function of no parameters: evaluate it. One of a type generic in
             // contexts named where one that carries more is expected is made at its own type, and adapted (see

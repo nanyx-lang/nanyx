@@ -5,7 +5,8 @@ open NyxCompiler
 open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
-// `C(T).member` written as a value, without a call, has the member's type in the context's definition (#925).
+// `C(T).member` written as a value, without a call, has the member's type in the context's definition (#925), and a
+// function member requires `C(T)` where it is called.
 
 let private contextSource =
     """context ToText(a) = (textlen: a -> int)
@@ -24,14 +25,14 @@ let private memberValueTypes (source: string) =
 let ``A context member as a value has the member's type`` () =
     let source =
         contextSource
-        + """def apply: (int -> int), int -> int = { f, x -> f(x) }
+        + """def apply: [c] ([c] int -> int), int -> int = { f, x -> f(x) }
 def viaApply: [ToText(int)] int -> int = { n -> apply(ToText(int).textlen, n) }
-def kept: [ToText(int)] () -> (int -> int) = { () ->
+def kept: [ToText(int)] () -> ([ToText(int)] int -> int) = { () ->
   def g = ToText(int).textlen
   g
 }
 """
-    Assert.Equal<string list>([ "int -> int"; "int -> int" ], memberValueTypes source)
+    Assert.Equal<string list>([ "[ToText(int)] int -> int"; "[ToText(int)] int -> int" ], memberValueTypes source)
 
 [<Fact>]
 let ``A context member as a value is checked against what uses it`` () =
@@ -60,3 +61,13 @@ let ``So it can't be given back as a function that requires nothing`` () =
     let code, at = singleError (normalized (wrapping "[Holder] () -> (() -> int)"))
     Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
     Assert.Equal("get", at)
+
+[<Fact>]
+let ``So can't a parameterised context's`` () =
+    let source =
+        contextSource
+        + """def kept: [ToText(int)] () -> (int -> int) = { ToText(int).textlen }
+"""
+    let code, at = singleError source
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+    Assert.Equal("ToText(int).textlen", at)

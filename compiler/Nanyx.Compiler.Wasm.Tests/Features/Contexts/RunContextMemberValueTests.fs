@@ -11,7 +11,7 @@ let ``Run - a context member passed as a value to a function, in a hole`` () =
 
 def int.textlen: int -> int = { n -> n * 2 }
 
-def apply: (int -> int), int -> int = { f, x -> f(x) }
+def apply: [c] ([c] int -> int), int -> int = { f, x -> f(x) }
 
 def viaApply: [ToText(int)] int -> string = { n -> "{apply(ToText(int).textlen, n)}" }
 
@@ -65,3 +65,25 @@ def main = {
 """
             .ReplaceLineEndings "\n"
     runSource source |> assertRan "2\n"
+
+[<Fact>]
+let ``Run - a parameterised context's member named as a value calls the instance where it is called`` () =
+    let source =
+        """context ToText(a) = (textlen: a -> int)
+
+def kept: [ToText(int)] () -> ([ToText(int)] int -> int) = { ToText(int).textlen }
+
+def made = {
+  use ToText(int)(textlen = { n -> n + 1 })
+  kept()
+}
+
+@entry
+def main = {
+  def f = made()
+  use ToText(int)(textlen = { n -> n * 10 })
+  println(f(4))
+}
+"""
+            .ReplaceLineEndings "\n"
+    runSource source |> assertRan "40\n"
