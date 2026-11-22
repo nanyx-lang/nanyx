@@ -21,3 +21,15 @@ let ``An and chain of 200 is tests compiles and runs`` () =
     let tests = [ for i in 1 .. 200 -> $"m is #some(v{i})" ] |> String.concat " and "
     let source = $"def f = {{ m: #some(int) | #none -> {tests} and v200 == 7 }}\nprintln(f(#some(7)))\nprintln(f(#none))\n"
     runSource source |> assertRan "true\nfalse\n"
+
+// The backend writes each level of a chain without copying the code of the levels inside it, and its passes look at
+// each level once, so a chain compiles in time that grows with its length (#2351). 10,000 additions took 30 s to
+// compile in a Release build when each level copied the code inside it.
+[<Fact>]
+let ``A chain of 10,000 additions compiles and runs in time that grows with its length`` () =
+    let source = "def x = 1" + String.replicate 9_999 " + 1" + "\nprintln(x)\n"
+    let clock = System.Diagnostics.Stopwatch.StartNew()
+    let outcome = runSource source
+    clock.Stop()
+    outcome |> assertRan "10000\n"
+    Assert.True(clock.ElapsedMilliseconds < 20_000L, $"10,000 additions took {clock.ElapsedMilliseconds} ms")

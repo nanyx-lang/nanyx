@@ -6,8 +6,19 @@ open Parser.Program
 
 /// Whether lowering `expr` stores to a local before its value is ready: a block with statements before its last
 /// expression, a `match` (which holds its scrutinees in locals), an interpolated string (which holds its holes), and
-/// so on. Such an operand is lowered whole into one temporary (see `Atoms`).
-let rec storesBeforeValue (expr: Expression) =
+/// so on. Such an operand is lowered whole into one temporary (see `Atoms`). What it finds of each expression it looks
+/// at is kept in `found`, so that asking it of each operand of a long chain in turn looks at each part of the chain
+/// once (#2351).
+let rec storesBeforeValue (found: System.Collections.Generic.Dictionary<Expression, bool>) (expr: Expression) =
+    match found.TryGetValue expr with
+    | true, stores -> stores
+    | _ ->
+        let stores = storesBeforeValueOf found expr
+        found.[expr] <- stores
+        stores
+
+and private storesBeforeValueOf found (expr: Expression) =
+    let storesBeforeValue = storesBeforeValue found
     match expr.Kind with
     | Block [ Kind (ExprStatement last) ] -> storesBeforeValue last
     | Block _
