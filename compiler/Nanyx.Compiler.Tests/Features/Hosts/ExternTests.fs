@@ -133,3 +133,16 @@ let ``A foreign function of the compiler's own module outside a host is an error
 let ``A host may declare a foreign function of the compiler's own module`` () =
     let result = compileAsHost Linters.none (withRuntime "@extern(\"nanyx:component\", \"argument\")\ndef argument: [HostRuntime] () -> I32\n")
     Assert.Empty(result.Diagnostics)
+
+[<Fact>]
+let ``A foreign function can't take a memory block's reference, so none leaves its block through the embedder`` () =
+    let source =
+        withRuntime
+            """import nanyx/mref
+
+@extern("test", "keep")
+def keep: [HostRuntime] MRef(I32) -> ()
+"""
+    let code, _, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.InvalidExtern.Code, code)
+    Assert.Equal("MRef(I32)", text)
