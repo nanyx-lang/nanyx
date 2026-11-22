@@ -44,7 +44,9 @@ call does: once the def around it is inferred if that def doesn't write its type
 in `def u: Point = apply(des, "ab")`, where only the type `u` writes settles `des`'s `Decode(a)`
 ([#2017](https://github.com/nanyx-lang/nanyx/issues/2017)). One whose type is still open then finds none
 (`InferState.PendingReferences`), as at a type nothing constrains (below). So is a function named point-free as
-a def's value, at the type the def writes (`resolveValueInstances`): `def g: [Console] int -> () = println`. Such a
+a def's value, at the type the def writes (`resolveValueInstances`): `def g: [Console] int -> () = println`, and so
+is one a record or tuple literal there holds, at its field's type, as `use Log(log = println)` gives `println` as a
+`string -> ()` with `ToString(string)` ([#2323](https://github.com/nanyx-lang/nanyx/issues/2323)). Such a
 def is not run in the contexts it writes, as a lambda is: its value is a function that requires them, so they are
 part of its type, as they are of `def k = say` (`Contexts.extractDefContexts`, which the backend reads too). A context
 it requires at a type nothing constrains, as `dbg(twice)` names `twice: [Show(a)] a -> string`, needs no instance:

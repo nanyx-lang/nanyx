@@ -5,6 +5,6 @@ def greet: [Log] string -> () = { name ->
   log("Hello, {name}!")
 }
 
-use Log(log = { s -> println(s) }) in greet("Nanyx")
+use Log(log = println) in greet("Nanyx")
 use Log(log = { _ -> () }) in greet("nobody")
 -- Hello, Nanyx!
