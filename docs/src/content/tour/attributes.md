@@ -78,8 +78,9 @@ See [Foreign functions](../advanced/hosts#foreign-functions).
 
 Exports a function from the component that `nanyx build` writes, for a component written in another language to call.
 The def must be exported from its module, whose name is the WIT interface it is exported in, and its type is written
-into the component's WIT as it is: a `float` is an `f64` and a `string` a `string`. A function, a context or a type
-variable can't cross a component's boundary, so a type that has one is an error.
+into the component's WIT as it is: a `float` is an `f64`, a `string` a `string`, a named record a `record` and a
+named tag union a `variant`. A function, a context or a type variable can't cross a component's boundary, so a type
+that has one is an error.
 
 ```nanyx fragment
 module shapes
