@@ -643,8 +643,9 @@ type TestServer(answer: string -> string -> (string * string) list -> string -> 
             listener.Stop()
             listener.Close()
 
-/// The core module `wat`, of a component, instantiated on Wasmtime with each of its imports a function that traps.
-let instantiateCore (wat: string) =
+/// The core module `wat`, of a component, instantiated on Wasmtime with each of its imports the function `implement`
+/// gives for it, or else a function that traps.
+let instantiateCoreWith (implement: Wasmtime.FunctionImport -> Wasmtime.Function.UntypedCallbackDelegate option) (wat: string) =
     let engine = new Wasmtime.Engine()
     let store = new Wasmtime.Store(engine)
     use module' = Wasmtime.Module.FromText(engine, "component", wat)
@@ -653,6 +654,10 @@ let instantiateCore (wat: string) =
         match import with
         | :? Wasmtime.FunctionImport as func ->
             let trap = Wasmtime.Function.UntypedCallbackDelegate(fun _ _ _ -> failwith $"{func.ModuleName} {func.Name} was called")
-            linker.Define(func.ModuleName, func.Name, Wasmtime.Function.FromCallback(store, trap, func.Parameters, func.Results))
+            let callback = implement func |> Option.defaultValue trap
+            linker.Define(func.ModuleName, func.Name, Wasmtime.Function.FromCallback(store, callback, func.Parameters, func.Results))
         | _ -> ()
     engine, store, linker.Instantiate(store, module')
+
+/// The core module `wat`, of a component, instantiated on Wasmtime with each of its imports a function that traps.
+let instantiateCore (wat: string) = instantiateCoreWith (fun _ -> None) wat

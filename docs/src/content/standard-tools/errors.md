@@ -127,7 +127,7 @@ A definition is marked with an attribute the compiler does not know, or a local 
 the only attribute a block can hold. The attributes are listed in [Attributes](../tour/attributes).
 
 ```nanyx
-@inline  -- error NYX0007: A definition can have '@entry', '@extern', '@component' or '@allow'
+@inline  -- error NYX0007: A definition can have '@entry', '@extern', '@component', '@import' or '@allow'
 def double: int -> int = { x -> x * 2 }
 ```
 
@@ -2315,6 +2315,23 @@ export def apply: (int -> int) -> int = { f -> f(1) }  -- error NYX0277: A compo
 
 To fix it, pass the values the function would compute instead, name a record or tag union with a `type`, tag the
 members of a union, and write the type a type variable stands for.
+
+# NYX0278: Component import called outside a component
+
+A program calls a def marked `@import`, a function another component exports, in a program that isn't built as a
+component: `nanyx run`, `nanyx test`, or `nanyx build --core`. Only the component `nanyx build` writes imports the
+function, and a runtime that runs it gives the other component's
+([Components](../deep-dives/components#a-programs-own-imports)). It is reported at the def.
+
+```nanyx
+@import("acme:geometry/shapes@1.0.0")
+def area: float -> float  -- error NYX0278: 'area' imports 'area' from acme:geometry/shapes@1.0.0, ...
+
+println(area(2.0))
+```
+
+To fix it, build the program with `nanyx build` and run the component, or test what calls the import by passing the
+function in.
 
 # NYX0301: Not supported by the WebAssembly backend
 

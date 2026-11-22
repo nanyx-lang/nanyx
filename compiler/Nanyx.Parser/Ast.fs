@@ -901,6 +901,24 @@ module ExternSyntax =
         let literal text = Expression.from value (LiteralExpr(StringLit text))
         { value with Kind = FunctionCall(builtIn, None, [ literal importModule; literal importName ]) }
 
+/// The value of a def marked `@import`, a function another component exports, which the component built from the program
+/// imports: a call of `builtIn` with the WIT interface's full name and the function's.
+module ComponentImportSyntax =
+    let builtIn = "__componentImport"
+
+    /// The WIT interface and the function a component import names.
+    let (|Import|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ Kind (LiteralExpr(StringLit witInterface)); Kind (LiteralExpr(StringLit functionName)) ]) when name = builtIn ->
+            Some (witInterface, functionName)
+        | _ -> None
+
+    /// `value`, the bodiless value of a def, as the value of a component import of `functionName` from `witInterface`.
+    /// It is the same node, so the def's name is still declared by it.
+    let import (witInterface: string) (functionName: string) (value: Expression) =
+        let literal text = Expression.from value (LiteralExpr(StringLit text))
+        { value with Kind = FunctionCall(builtIn, None, [ literal witInterface; literal functionName ]) }
+
 /// A linter rule as an attribute's argument names it, `default/unusedBindings`: the linter's name and the rule's,
 /// written with no spaces around the `/`, which the parser reads as a division of the two names. `@allow` takes rules
 /// separated by `,`, which are a tuple of them.

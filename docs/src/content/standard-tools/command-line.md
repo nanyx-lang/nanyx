@@ -135,8 +135,9 @@ browsers, Wasmtime and other WebAssembly runtimes load. A package with no `@entr
 A program whose host has a component root, as the console host does, is written as a WASI 0.3 component, which
 `wasmtime run` or any runtime that implements WASI 0.3 runs ([Hosts](../advanced/hosts#built-as-a-component)).
 `--core` writes a core module instead, which only `nanyx` runs. A program with functions marked
-[`@component`](../tour/attributes#component) exports them from its component, and its WIT, which another language's
-bindings are generated from, is written to `out/wit` beside it
+[`@component`](../tour/attributes#component) exports them from its component, one with defs marked
+[`@import`](../tour/attributes#import) imports those, and its WIT, which another language's bindings are generated
+from, is written to `out/wit` beside it
 ([Components](../deep-dives/components#a-programs-own-exports)).
 
 When the manifest asks for something `nanyx.lock` doesn't lock (a new dependency, or a requirement that no longer

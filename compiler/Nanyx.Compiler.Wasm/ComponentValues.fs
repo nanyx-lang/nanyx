@@ -165,6 +165,27 @@ let private convert (from: string) (into: string) =
     | "i64", "f64" -> [ "f64.reinterpret_i64" ]
     | from, into -> internalError $"a {from} read as a {into}"
 
+/// The Nanyx type a value of `ty` is held as, as the backend lowers the Nanyx type it was written from
+/// (`CoreIrLowerTypes`): a record's fields in the order they are stored, and a union's tags by name.
+let rec irTypeOf (ty: WitType) : IrType =
+    match ty with
+    | WitType.Bool -> IrBool
+    | WitType.S8 -> IrSized SizedInteger.I8
+    | WitType.S16 -> IrSized SizedInteger.I16
+    | WitType.S32 -> IrSized SizedInteger.I32
+    | WitType.S64 -> IrInt
+    | WitType.U8 -> IrSized SizedInteger.U8
+    | WitType.U16 -> IrSized SizedInteger.U16
+    | WitType.U32 -> IrSized SizedInteger.U32
+    | WitType.U64 -> IrSized SizedInteger.U64
+    | WitType.F32 -> IrF32
+    | WitType.F64 -> IrFloat
+    | WitType.String -> IrString
+    | WitType.List item -> IrList(irTypeOf item)
+    | WitType.Record(_, fields) -> IrRecord(fields |> List.map (fun (name, item) -> name, irTypeOf item) |> CoreIrLowerTypes.sortFields)
+    | WitType.Tuple items -> IrRecord(items |> List.mapi (fun index item -> string index, irTypeOf item) |> CoreIrLowerTypes.sortFields)
+    | WitType.Variant(_, cases) -> IrTags(cases |> List.map (fun (tag, payload) -> tag, Option.map irTypeOf payload) |> List.sortBy fst)
+
 /// The fields of a Nanyx record, as the backend stores them.
 let private recordFields (ir: IrType) =
     match IrType.unfold ir with
@@ -554,6 +575,56 @@ type Generator(tagCode: string -> int, recordLayout: string list -> int, useHelp
         | WitType.String
         | WitType.List _ -> internalError "a string or a list passed as one core value"
         | _ -> [ $"local.get {value}" ]
+
+    /// The code that leaves the core values the value of `ty` at `offset` past the address in `address` is passed as
+    /// (`flat ty`) on the stack: a variant's discriminant, then each place of its payload, which holds the value its case
+    /// puts there widened to the place's type, or 0.
+    member this.FlatFromMemory (ty: WitType) (address: string) (offset: int) : string list =
+        match ty with
+        | WitType.String
+        | WitType.List _ -> [ $"local.get {address}"; at "i32.load" offset; $"local.get {address}"; at "i32.load" (offset + 4) ]
+        | WitType.Record _
+        | WitType.Tuple _ ->
+            let items = WitType.children ty
+            List.zip items (offsets items) |> List.collect (fun (item, itemOffset) -> this.FlatFromMemory item address (offset + itemOffset))
+        | WitType.Variant(_, cases) ->
+            let discriminant = this.Local "i32"
+            let places = flat ty |> List.tail |> List.map (fun core -> this.Local core, core)
+            let widen (from: string) (into: string) =
+                match from, into with
+                | from, into when from = into -> []
+                | "i32", "i64" -> [ "i64.extend_i32_u" ]
+                | "f32", "i32" -> [ "i32.reinterpret_f32" ]
+                | "f32", "i64" -> [ "i32.reinterpret_f32"; "i64.extend_i32_u" ]
+                | "f64", "i64" -> [ "i64.reinterpret_f64" ]
+                | from, into -> internalError $"a {from} put in a place of a {into}"
+            [ $"local.get {address}"
+              at (loadDiscriminant cases) offset
+              $"local.set {discriminant}"
+              for place, core in places do
+                  $"{core}.const 0"
+                  $"local.set {place}"
+              for index, (_, case) in List.indexed cases do
+                  match case with
+                  | Some item ->
+                      let own = flat item |> List.map (fun core -> this.Local core, core)
+                      $"local.get {discriminant}"
+                      $"i32.const {index}"
+                      "i32.eq"
+                      "if"
+                      yield! this.FlatFromMemory item address (offset + payloadOffset cases) |> List.map (fun line -> "  " + line)
+                      for local, _ in List.rev own do
+                          $"  local.set {local}"
+                      for (local, from), (place, into) in List.zip own (List.take own.Length places) do
+                          $"  local.get {local}"
+                          yield! widen from into |> List.map (fun line -> "  " + line)
+                          $"  local.set {place}"
+                      "end"
+                  | None -> ()
+              $"local.get {discriminant}"
+              for place, _ in places do
+                  $"local.get {place}" ]
+        | scalar -> [ $"local.get {address}"; at (loadScalar scalar) offset ]
 
     /// The code that frees the blocks the value of `ty` at `offset` past the address in `address` points to, which
     /// `LowerMemory` made.

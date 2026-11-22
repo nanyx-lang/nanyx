@@ -566,7 +566,7 @@ module Compiler =
                         | _ -> []
                     | _ -> []
                 // A def marked `@component` has a type that can cross a component's boundary.
-                let componentErrors = ComponentInterface.errors (fun name -> types |> Map.tryFind name |> Option.map (Unifier.apply subst)) (fun name -> state.ContextRequirements |> Map.tryFind name |> Option.exists (List.isEmpty >> not)) desugared components
+                let componentErrors = ComponentInterface.errors (fun name -> types |> Map.tryFind name |> Option.map (Unifier.apply subst)) (fun name -> state.ContextRequirements |> Map.tryFind name |> Option.exists (List.isEmpty >> not)) desugared components.Exports components.Imports
                 let moduleErrors = componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
@@ -662,7 +662,7 @@ module Compiler =
                                 |> Option.orElse (Some (System.IO.Path.GetFileNameWithoutExtension(checkedModules.FileName origin)))
                                 |> Option.filter (fun name -> ComponentInterface.witName name <> "")
                                 |> Option.defaultValue "main"
-                            let own = components |> List.map (fun (name, _) -> { Module = moduleName; Name = name; Definition = name })
+                            let own = components.Exports |> List.map (fun (name, _) -> { Module = moduleName; Name = name; Definition = name })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.

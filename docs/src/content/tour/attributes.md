@@ -91,6 +91,20 @@ export def area: float, float -> float = { width, height -> width * height }
 
 See [Components](../deep-dives/components#a-programs-own-exports).
 
+## `@import(...)`
+
+Declares a function another component exports, which the component that `nanyx build` writes imports and calls. Its
+arguments are the WIT interface's full name, with its version, and the function's name, which is the def's in kebab case
+if it is left out. The def has a type and no value, and its type crosses a component's boundary as `@component`'s does.
+
+```nanyx fragment
+@import("acme:geometry/shapes@1.0.0", "area")
+def area: float, float -> float
+```
+
+Only a component can call it, so `nanyx run` and `nanyx test` report an error where a program calls one. See
+[Components](../deep-dives/components#a-programs-own-imports).
+
 ## `@allow(...)`
 
 Lets a definition break [linter](../standard-tools/official-linter) rules: before a def, a local one too, or a top-level type, it suppresses the diagnostics of the rules it names inside that definition. Each rule is written as its linter and its name, with no spaces around the `/`, and several are separated by commas. It is the only attribute a block can hold.

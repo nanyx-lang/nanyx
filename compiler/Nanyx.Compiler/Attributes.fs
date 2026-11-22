@@ -4,6 +4,12 @@ open Parser.Program
 
 /// The `@attribute` lines of a module, which the compiler resolves before inference.
 module Attributes =
+    /// The defs of a module marked `@component`, which a component exports, and `@import`, which it imports, each by name
+    /// with where it is written.
+    type ComponentDefs =
+        { Exports: (string * SourceSpan) list
+          Imports: (string * SourceSpan) list }
+
     /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
     let entryAttribute = "entry"
 
@@ -11,6 +17,41 @@ module Attributes =
     /// `@component export def area: Shape -> float = ...`, in the WIT interface its module names (see
     /// `ComponentInterface`).
     let componentAttribute = "component"
+
+    /// The attribute that declares a function another component exports, which a component built from the program
+    /// imports: `@import("acme:geometry/shapes@1.0.0", "area")` before a def written with a type and no value, naming
+    /// the WIT interface and the function, whose name is the def's in kebab case if the attribute doesn't give it.
+    let componentImportAttribute = "import"
+
+    /// The component import `@import` with `argument`, at `attributeSpan`, declares of the def `name` with `typeOpt`
+    /// and `value`, as its interface and function, or the errors in it.
+    let private componentImport (attributeSpan: SourceSpan) (argument: Expression option) (name: string) (defSpan: SourceSpan) (typeOpt: TypeExpr option) (value: Expression) =
+        let about (diagnostic: Diagnostic) = diagnostic |> Diagnostics.about $"@{componentImportAttribute}"
+        let named =
+            match argument with
+            | Some (Kind (LiteralExpr(StringLit witInterface))) -> Ok (witInterface, ComponentInterface.witName name)
+            | Some (Kind (TupleExpr [ Kind (LiteralExpr(StringLit witInterface)); Kind (LiteralExpr(StringLit functionName)) ])) -> Ok (witInterface, functionName)
+            | _ ->
+                Error [ Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument attributeSpan
+                            $"It takes the WIT interface the function is exported from, and the function's name if it isn't the def's in kebab case, as `@{componentImportAttribute}(\"acme:geometry/shapes@1.0.0\", \"area\")`"
+                        |> about ]
+        let named =
+            named
+            |> Result.bind (fun (witInterface, functionName) ->
+                if ComponentInterface.isInterfaceName witInterface then Ok (witInterface, functionName)
+                else
+                    Error [ Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument attributeSpan
+                                $"'{witInterface}' isn't a WIT interface's full name, which is its package's namespace and name, then its own, as `acme:geometry/shapes`, and its version, as `@1.0.0`, if it has one"
+                            |> about ])
+        let bodiless =
+            match value.Kind, typeOpt with
+            | ExternSyntax.Bodiless, Some _ -> Ok ()
+            | ExternSyntax.Bodiless, None ->
+                Error [ Diagnostics.at DiagnosticCodes.MisplacedAttribute defSpan $"The import '{name}' needs its type written, as `def {name}: string -> int`" |> about ]
+            | _ -> Error [ Diagnostics.at DiagnosticCodes.MisplacedAttribute value.Span $"The import '{name}' has a value: another component provides it, so write only its type" |> about ]
+        match named, bodiless with
+        | Ok named, Ok () -> Ok named
+        | _ -> Error ((match named with Error errors -> errors | Ok _ -> []) @ (match bodiless with Error errors -> errors | Ok _ -> []))
 
     /// The import of `host` itself, under an alias of its own, which a module that runs under it gets.
     let internal hostImport (host: Host) =
@@ -266,14 +307,16 @@ module Attributes =
     /// `ExternSyntax`). Any other attribute, an attribute that does not precede a value definition, or a definition with
     /// no value and no `@extern`, is an error. `@entry` takes no argument. `@component`, which takes none either, marks an
     /// exported def as one a component built from the program exports: it is left as it is, and given back by name, with
-    /// where it is written. The host is `host`: the package's, or the
+    /// where it is written. `@import("interface", "name")` on a def written with a type and no value makes it a function
+    /// another component exports: its value becomes the interface and the function (see `ComponentImportSyntax`). The host is `host`: the package's, or the
     /// console host for a file in no package. A package with no host is a library, so an `@entry` in it is an error. With the module, each entry point (see `EntryPoint`) and each def marked `@component`. An attribute before
     /// a member of a context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`), as is
     /// one in a block (see `statementAttributeErrors`). `@allow` is for the linters: it is checked and left out (see
     /// `withoutAllows`).
-    let applyAttributes (host: Host option) (module': Module) : Result<Module * EntryPoint list * (string * SourceSpan) list, Diagnostic list> =
-        // The defs marked `@component`, each with where it is written, as `loop` finds them.
+    let applyAttributes (host: Host option) (module': Module) : Result<Module * EntryPoint list * ComponentDefs, Diagnostic list> =
+        // The defs marked `@component` and `@import`, each with where it is written, as `loop` finds them.
         let components = ResizeArray<string * SourceSpan>()
+        let imports = ResizeArray<string * SourceSpan>()
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entries, List.rev externs, List.rev errors
@@ -295,10 +338,17 @@ module Attributes =
                     let imported = { def with Kind = Def (ValueDef(isExport, defName, typeOpt, ExternSyntax.import declared.Module declared.Name value)) }
                     loop rest (imported :: acc) entries ((defName, declared, def.Span) :: externs) errors
                 | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
-            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute && name <> componentAttribute ->
+            | Kind (Attribute(name, argument)) as attribute :: (Kind (Def (ValueDef(isExport, defName, typeOpt, value))) as def) :: rest when name = componentImportAttribute ->
+                match componentImport attribute.Span argument defName def.Span typeOpt value with
+                | Ok (witInterface, functionName) ->
+                    imports.Add((defName, def.Span))
+                    let imported = { def with Kind = Def (ValueDef(isExport, defName, typeOpt, ComponentImportSyntax.import witInterface functionName value)) }
+                    loop rest (imported :: acc) entries externs errors
+                | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
+            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute && name <> componentAttribute && name <> componentImportAttribute ->
                 let error =
                     Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span
-                        $"A definition can have '@{entryAttribute}', '@{Externs.attribute}', '@{componentAttribute}' or '@{allowAttribute}'"
+                        $"A definition can have '@{entryAttribute}', '@{Externs.attribute}', '@{componentAttribute}', '@{componentImportAttribute}' or '@{allowAttribute}'"
                     |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
             | Kind (Attribute(name, Some argument)) :: rest when name = entryAttribute ->
@@ -335,5 +385,5 @@ module Attributes =
             | [] ->
                 // The host's prelude is imported into every module of the program, not here (see `Library`).
                 let entryImport = match host with Some host when not entries.IsEmpty -> [ hostImport host ] | _ -> []
-                Ok (entryImport @ items @ List.map snd entries, List.map fst entries, List.ofSeq components)
+                Ok (entryImport @ items @ List.map snd entries, List.map fst entries, { Exports = List.ofSeq components; Imports = List.ofSeq imports })
             | errors -> Error errors

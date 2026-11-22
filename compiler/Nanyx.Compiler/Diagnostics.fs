@@ -210,6 +210,7 @@ module DiagnosticCodes =
     let ComponentRootContextsDiffer = code 275 "Component root provides other contexts than its core root" Severity.Error
     let ReservedExternModule = code 276 "Foreign function of the compiler's own module" Severity.Error
     let ComponentBoundaryType = code 277 "Type that can't cross a component's boundary" Severity.Error
+    let ComponentImportOutsideComponent = code 278 "Component import called outside a component" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -240,7 +241,7 @@ module DiagnosticCodes =
           UndeclaredTypeScope; NoFromArray; InvalidCollectionSpread; UnionWithTwoRests; ProtectedShape; PatternInsidePattern; PatternRequiresContexts; NoMatchOutsidePattern; PatternArguments
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
-          ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType
+          ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

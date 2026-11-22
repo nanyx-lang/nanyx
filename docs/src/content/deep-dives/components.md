@@ -11,7 +11,8 @@ whose host has a component root, as the console and HTTP hosts do; `--core` writ
 `nanyx test`, the debugger and the profiler run.
 
 A program can export functions of its own from its component, marked `@component`, for components in other languages
-to call ([A program's own exports](#a-programs-own-exports)).
+to call ([A program's own exports](#a-programs-own-exports)), and import theirs, marked `@import`
+([A program's own imports](#a-programs-own-imports)).
 
 A component is built in three steps:
 
@@ -289,3 +290,36 @@ name, so the two needn't be in the same order.
 An export runs on whatever the instance has set up: a top-level value is built the first time something reads it,
 and the start function tears it down again at the end of `run`, so an export called before `run`, after it, or with no
 `run` at all works as one called during it.
+
+# A program's own imports
+
+A program calls a function another component exports by declaring it, marked `@import`, with its type and no value
+([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)):
+
+```nanyx fragment
+@import("acme:geometry/shapes@1.0.0", "area")
+def area: Shape -> float
+```
+
+- **The attribute names the WIT interface in full,** its package, its name and its version, and the function, whose
+  name is the def's in kebab case if it is left out (`Attributes.applyAttributes`). The def's value becomes a call of
+  `__componentImport` with the two (`ComponentImportSyntax`), which the type checker takes to be of the def's written
+  type, as it does a foreign function's. Its type must cross a component's boundary, as an export's does
+  (`ComponentInterface.errors`).
+- **A program imports what it calls.** An import is inlined into the modules that use it as any def is, so
+  `ComponentInterface.imports` finds those the program reaches. The world `nanyx build` writes imports each interface
+  they name, and the WIT of each interface's package is written from the program's declarations of it under
+  `out/wit/deps` (`ComponentInterface.importedPackages`): the component model checks types by their structure, by
+  the names of fields and cases, not by the names of types, so no WIT of the other component's is read.
+- **A call of one is a call of a foreign function** (`CallImport`), of the interface and the function, whose parameters
+  and result are the core types the Nanyx values are held in (`ComponentInterface.externOf`). The module defines that
+  function itself (`ComponentImports`), and imports the interface's function under another name, with the canonical
+  ABI's signature: the arguments as their core values, or the address of a block of them past 16, then the address of
+  a block for a result of more than one core value; and a result of one as it.
+- **The function lowers its arguments,** which it borrows, as an export lowers its result: into a new block, their
+  strings and lists into blocks of their own, passed as their core values (`Generator.FlatFromMemory`), a variant's
+  payload widened into the places its cases share, or by the block's address. It frees all of it after the call. It
+  lifts the result as an export lifts its arguments, from the core value or from the block it allocated for it, whose
+  strings and lists the callee allocated through `cabi_realloc`, and frees those blocks.
+- **Outside a component, nothing provides an import.** In a core module, as `nanyx run` and `nanyx test` run and
+  `nanyx build --core` writes, a call of one that the program reaches is `NYX0278`, naming it, at its def.
