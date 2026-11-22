@@ -182,6 +182,20 @@ def total = memory { context m ->
 """
     Assert.Equal<string list>([], codes source)
 
+[<Fact>]
+let ``A script that uses what escaped its block is told only of the escape`` () =
+    let source =
+        """
+import nanyx/mref
+def s = memory {
+  def r = MRef.new(10)
+  { MRef.get(r) }
+}
+
+println(s())
+"""
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
+
 /// A block that gives back `lambda`, made where `r`, a reference, and `c`, a cell, are in scope.
 let private capturing (lambda: string) =
     $"import nanyx/mref\n\ndef k = {{ a, b -> a }}\n\ndef x = memory {{\n  def r = MRef.new(1)\n  mut c = 0\n  c := 1\n  {lambda}\n}}\n"

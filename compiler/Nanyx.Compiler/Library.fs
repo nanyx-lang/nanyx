@@ -489,7 +489,8 @@ module Compiler =
                 let mismatchErrors =
                     mismatches
                     |> List.sortBy (fun (_, span, _) -> span.Start)
-                    |> List.map (fun (message, span, kind) ->
+                    |> List.map (fun (text, span, kind) ->
+                        let message = text (Unifier.tyToStringIn state.TypeDefs)
                         match entries |> List.tryFind (fun entry -> entry.Argument = span) with
                         | Some entry -> entryMismatch entry
                         | None ->
@@ -525,11 +526,13 @@ module Compiler =
                     ofDef @ ofType
                 let runtimeErrors =
                     Hosts.runtimeErrors isHost origin (entries @ (script |> Option.map fst |> Option.toList)) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
-                // A script whose statements need `HostRuntime` is told so where they need it: that its entry point, which
-                // has no span, then doesn't fit the host's `run` says nothing more.
+                // A script whose statements need `HostRuntime` is told so where they need it, and one whose statements use
+                // what escaped a scoped call is told of the escape (NYX0233): that its entry point, which has no span,
+                // then doesn't fit the host's `run` says nothing more.
                 let mismatchErrors =
-                    match script, runtimeErrors with
-                    | Some _, _ :: _ -> mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
+                    match script with
+                    | Some _ when not runtimeErrors.IsEmpty || not state.EscapedContexts.IsEmpty ->
+                        mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
                     | _ -> mismatchErrors
                 // What the file gives from its own blocks by re-exporting them, and what those blocks re-export of other
                 // files' modules, which is a re-export of each of those that selects what the block gives of it.
