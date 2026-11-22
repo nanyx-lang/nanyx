@@ -11,8 +11,9 @@ type ServedCall = { Callee: string; Span: SourceSpan }
 
 /// A provider of contexts in a def: a `use`, linked by the value it loads, a context the def's signature writes,
 /// linked by that context, or one the def was inferred to require, linked by the def's name. `Context` is written as
-/// hover writes it; `Calls` are the calls it serves, in source order. A `use` that serves none is unused.
-type FlowEntry = { Context: string; Source: InfoView.ContextSource; Span: SourceSpan; Calls: ServedCall list }
+/// hover writes it, and `Name` is its name as `Context` starts with it; `Calls` are the calls it serves, in source order.
+/// A `use` that serves none is unused.
+type FlowEntry = { Context: string; Name: string; Source: InfoView.ContextSource; Span: SourceSpan; Calls: ServedCall list }
 
 /// The flow of contexts through the innermost def around a position: the def's name, and its providers, those of its
 /// signature first, then those it was inferred to require, then its `use`s in source order.
@@ -120,8 +121,12 @@ let private flowOf (names: TypeNotation) (rename: Ty -> Ty) (name: string, entri
     { Def = name
       Entries =
         List.map2
-            (fun ((_, source, span), _, calls) contextWritten ->
-                { Context = contextWritten; Source = source; Span = span; Calls = calls |> List.map served })
+            (fun ((context, source, span), _, calls) contextWritten ->
+                { Context = contextWritten
+                  Name = InfoView.contextName (rename context) |> Option.defaultValue ""
+                  Source = source
+                  Span = span
+                  Calls = calls |> List.map served })
             entries
             written }
 

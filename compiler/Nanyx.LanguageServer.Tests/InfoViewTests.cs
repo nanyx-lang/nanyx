@@ -592,4 +592,50 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         Assert.Equal("made: q.Point", Assert.Single(Section(view, "function", "signature")).Text);
     }
+
+    [Fact]
+    public async Task Info_view_items_link_only_the_name_they_start_with()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-15");
+
+        Open(uri, """
+            context Log = (log: string -> ())
+            def note: [Log] string -> () = { message ->
+              log(message)
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 2, 6);
+
+        var signature = Assert.Single(Section(view, "function", "signature"));
+        Assert.Equal(("note: [Log] string -> ()", new InfoViewName(0, 4)), (signature.Text, signature.Name));
+        var parameter = Assert.Single(Section(view, "function", "names"), item => item.Detail == "parameter");
+        Assert.Equal(("message: string", new InfoViewName(0, 7)), (parameter.Text, parameter.Name));
+        var context = Assert.Single(Section(view, "function", "contexts"));
+        Assert.Equal(("Log", new InfoViewName(0, 3)), (context.Text, context.Name));
+        var flow = Assert.Single(Section(view, "function", "flow"));
+        Assert.Equal(new InfoViewName(0, 3), flow.Name);
+        Assert.Equal(("log", new InfoViewName(0, 3)), (Assert.Single(flow.Children!).Text, flow.Children![0].Name));
+        var expression = Assert.Single(Section(view, "cursor", "expression"));
+        Assert.Equal(("message: string", new InfoViewName(0, 7)), (expression.Text, expression.Name));
+    }
+
+    [Fact]
+    public async Task Info_view_links_no_name_in_a_bare_type()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-16");
+
+        Open(uri, """
+            def total = [1, 2]
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var expression = Assert.Single(Section(await InfoViewAt(uri, 0, 12), "cursor", "expression"));
+
+        Assert.Equal("list(int)", expression.Text);
+        Assert.Null(expression.Name);
+    }
 }
