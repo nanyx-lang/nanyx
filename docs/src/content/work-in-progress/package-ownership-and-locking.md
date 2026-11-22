@@ -67,7 +67,7 @@ something it doesn't satisfy, sorted by name with one package to a line, never u
 and `nanyx build --locked` makes a stale one an error. What is still planned:
 
 - **One lockfile per build.** A package on its own has `nanyx.lock` beside its `.nyxp`. In a [project](../tour/packages#projects) the lockfile is beside the `.nyxproj` and covers every package in it, because a build has [one version of each package](./packaging#versions-and-resolution) and packages built together must agree.
-- **`nanyx update`** upgrades a locked version on purpose, for one package or all of them.
+- **`nanyx update`** upgrades a locked version on purpose, for one package or all of them ([#2265](https://github.com/nanyx-lang/nanyx/issues/2265)).
 - **A dependant ignores a library's lockfile** and resolves for itself; a library commits its lockfile so that its own tests and CI build the same thing every time.
 - **Path dependencies and [project references](../tour/packages#packages-developed-together) are not locked.** Their source is on disk and changes with the code around it, so there is nothing to pin. Their own dependencies named by version are resolved and locked with the build's.
 - **GitHub references.** Every locked package comes from the index today, so an entry has no `source`. One is added when a GitHub reference with a tag in its `rev` is locked by its commit, and the lockfile records the SHA-256 of what was downloaded for a GitHub reference too.
