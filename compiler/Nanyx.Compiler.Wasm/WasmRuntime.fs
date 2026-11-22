@@ -1085,7 +1085,8 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "    br_if $digit"
             "  end"
             "  local.get $end"
-            ")" ] ]
+            ")" ]
+      yield! WasmRegions.helpers ]
     |> Map.ofList
 
 /// The WebAssembly helper functions, keyed by name, with the free-list heads at `heapBase` (see `helpersWith`).
@@ -1179,6 +1180,7 @@ let helperDependencies =
       Helpers.intTextLength, []
       Helpers.intTextWrite, [ Helpers.intTextLength ] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
+    @ WasmRegions.dependencies
 
 /// The helpers that read and write no linear memory themselves: they compute on their operands, or leave that to the
 /// helpers they call (see `helperDependencies`). Every other helper touches it, so a module that uses one (see
