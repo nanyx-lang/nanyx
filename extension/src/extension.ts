@@ -41,7 +41,7 @@ let declinedUpdate = false;
 export async function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel("Nanyx");
   context.subscriptions.push(outputChannel);
-  const view = new InfoView(() => client);
+  const view = new InfoView(() => client, context.extensionPath);
   infoView = view;
   const library = new LibraryView(() => client);
   libraryView = library;

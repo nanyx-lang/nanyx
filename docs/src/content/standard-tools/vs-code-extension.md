@@ -243,6 +243,10 @@ more than one paragraph shows its first, except at the cursor, where it shows in
 to cut it back. Its links go where the
 names they name are declared.
 
+The code it shows, in the headings and the items, is highlighted as the editor highlights it: with the extension's
+grammar and the token colours of the current colour theme, with your `editor.tokenColorCustomizations` on top, in the
+editor's font. It follows the theme when you change it. Messages are prose and are not highlighted.
+
 Click an item to go to it: a name to where it is declared, a context to the `use` or signature that gives it. **Pin**
 keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
 again. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While

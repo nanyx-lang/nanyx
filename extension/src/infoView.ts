@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/node";
 import { ContextLines, contextLinesMode } from "./contextLines";
+import { HighlightedCode, Highlighter } from "./highlighter";
 
 /** The language server's request for what the compiler knows at a position (see `InfoViewHandler` in the compiler). */
 const INFO_VIEW_REQUEST = "nanyx/infoView";
@@ -25,6 +26,8 @@ interface InfoViewItem {
   documentation?: string;
   /** `documentation` rendered to HTML by VS Code's Markdown renderer, filled in by the extension. */
   documentationHtml?: string;
+  /** `text` highlighted as code, filled in by the extension for an item that is code (not a message). */
+  code?: HighlightedCode;
   /** The items under it: the calls a provider in the context flow serves. */
   children?: InfoViewItem[];
 }
@@ -48,6 +51,8 @@ interface InfoViewScope {
   documentation?: string;
   /** `documentation` rendered to HTML by VS Code's Markdown renderer, filled in by the extension. */
   documentationHtml?: string;
+  /** `heading` highlighted as code, filled in by the extension for a lambda, def or module. */
+  headingCode?: HighlightedCode;
   collapsed?: boolean;
   sections: InfoViewSection[];
 }
@@ -81,7 +86,8 @@ interface Target {
  * the document does, once it has stayed put for a moment, and again when the server has compiled the document. Every item that has a place links to it, and shows the doc
  * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
  * while you edit elsewhere. While it is visible and not pinned, it highlights in the editor what the server says to: on
- * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts.
+ * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts. The code it shows is
+ * highlighted as the editor highlights it, in the current theme's colours (see `Highlighter`).
  */
 export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewId = "nanyx.infoView";
@@ -102,8 +108,10 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
   });
   /** The lines that join a provider to its calls, as `nanyx.infoView.contextLines` says. */
   private readonly contextLines = new ContextLines();
+  private readonly highlighter: Highlighter;
 
-  constructor(private readonly client: () => LanguageClient | undefined) {
+  constructor(private readonly client: () => LanguageClient | undefined, extensionPath: string) {
+    this.highlighter = new Highlighter(extensionPath);
     this.registration = vscode.window.registerWebviewViewProvider(InfoView.viewId, this, {
       webviewOptions: { retainContextWhenHidden: true }
     });
@@ -137,6 +145,16 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
       if (event.affectsConfiguration("nanyx.infoView.contextLines")) {
         this.schedule();
       }
+      if (["workbench.colorTheme", "workbench.preferredDarkColorTheme", "workbench.preferredLightColorTheme",
+        "workbench.preferredHighContrastColorTheme", "workbench.preferredHighContrastLightColorTheme",
+        "editor.tokenColorCustomizations"].some((setting) => event.affectsConfiguration(setting))) {
+        this.highlighter.themeChanged();
+        this.schedule();
+      }
+    }, undefined, this.listeners);
+    vscode.window.onDidChangeActiveColorTheme(() => {
+      this.highlighter.themeChanged();
+      this.schedule();
     }, undefined, this.listeners);
     this.schedule();
   }
@@ -237,7 +255,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
           position: client.code2ProtocolConverter.asPosition(target.position)
         });
         shown = result
-          ? { kind: "info", where, pinned, scopes: await withRenderedDocumentation(result.scopes) }
+          ? { kind: "info", where, pinned, scopes: await withHighlightedCode(this.highlighter, await withRenderedDocumentation(result.scopes)) }
           : { kind: "message", where, pinned, text: "The language server has not compiled this document yet." };
         // A pinned position is elsewhere than the cursor, so it highlights nothing.
         highlights = pinned ? [] : result?.highlights ?? [];
@@ -301,6 +319,26 @@ async function withRenderedDocumentation(scopes: InfoViewScope[]): Promise<InfoV
   })));
 }
 
+/**
+ * The scopes with their code highlighted: each heading but the cursor's, and the text of each item, and of the items
+ * under it, but the messages, which are prose.
+ */
+async function withHighlightedCode(highlighter: Highlighter, scopes: InfoViewScope[]): Promise<InfoViewScope[]> {
+  const highlighted = async (item: InfoViewItem): Promise<InfoViewItem> => ({
+    ...item,
+    code: await highlighter.highlight(item.text),
+    children: item.children && await Promise.all(item.children.map(highlighted))
+  });
+  return Promise.all(scopes.map(async (scope) => ({
+    ...scope,
+    headingCode: scope.kind === "cursor" ? undefined : await highlighter.highlight(scope.heading),
+    sections: await Promise.all(scope.sections.map(async (section) => ({
+      ...section,
+      items: section.id === "messages" ? section.items : await Promise.all(section.items.map(highlighted))
+    })))
+  })));
+}
+
 /** `markdown` rendered to HTML by VS Code's Markdown renderer, if there is any and the renderer is there. */
 async function rendered(markdown: string | undefined): Promise<string | undefined> {
   if (!markdown) {
@@ -345,7 +383,7 @@ function page(webview: vscode.Webview): string {
   .doc[title] { cursor: pointer; }
   .doc.collapsed > :not(:first-child) { display: none; }
   .doc .more { color: var(--vscode-textLink-foreground); }
-  code { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); white-space: pre-wrap; word-break: break-word; }
+  code { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); color: var(--vscode-editor-foreground); white-space: pre-wrap; word-break: break-word; }
   a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
   a:hover { text-decoration: underline; }
   .detail { color: var(--vscode-descriptionForeground); font-size: 0.9em; white-space: nowrap; }
@@ -373,9 +411,31 @@ function page(webview: vscode.Webview): string {
     return node;
   }
 
+  // Code, as the extension highlighted it, a span for each token in its colour and font style; or else as it is.
+  function highlightedCode(text, highlighted) {
+    const node = element("code");
+    if (!highlighted) {
+      node.textContent = text;
+      return node;
+    }
+    highlighted.forEach((line, index) => {
+      if (index > 0) node.appendChild(document.createTextNode("\\n"));
+      line.forEach((token) => {
+        const span = element("span", "", token.text);
+        if (token.color) span.style.color = token.color;
+        if (token.bold) span.style.fontWeight = "bold";
+        if (token.italic) span.style.fontStyle = "italic";
+        const lines = [token.underline && "underline", token.strikethrough && "line-through"].filter(Boolean);
+        if (lines.length > 0) span.style.textDecoration = lines.join(" ");
+        node.appendChild(span);
+      });
+    });
+    return node;
+  }
+
   function item(entry, expanded) {
     const li = element("li", entry.detail && entry.detail.startsWith("error") ? "error" : "");
-    const code = element("code", "", entry.text);
+    const code = highlightedCode(entry.text, entry.code);
     if (entry.location) {
       const link = element("a");
       link.title = "Go to " + entry.location.uri + ":" + (entry.location.range.start.line + 1);
@@ -461,7 +521,8 @@ function page(webview: vscode.Webview): string {
     // A def's and the module's headings say what they are; a lambda's is only its parameters.
     if (data.kind === "lambda") summary.appendChild(element("span", "kind", "lambda"));
     if (data.location) {
-      const link = element("a", "", data.heading);
+      const link = element("a");
+      link.appendChild(data.headingCode ? highlightedCode(data.heading, data.headingCode) : document.createTextNode(data.heading));
       link.title = "Go to " + data.location.uri + ":" + (data.location.range.start.line + 1);
       link.addEventListener("click", (event) => {
         event.preventDefault();
@@ -469,7 +530,7 @@ function page(webview: vscode.Webview): string {
       });
       summary.appendChild(link);
     } else {
-      summary.appendChild(document.createTextNode(data.heading));
+      summary.appendChild(data.headingCode ? highlightedCode(data.heading, data.headingCode) : document.createTextNode(data.heading));
     }
     details.appendChild(summary);
     const doc = documentation(data, false);
