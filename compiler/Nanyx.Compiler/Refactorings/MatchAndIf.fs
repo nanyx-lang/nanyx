@@ -156,7 +156,8 @@ let private ifToMatch (source: string) (indent: string) (step: string) (expr: Ex
 ///
 /// An `if ... else if ...` chain whose every condition compares one value with `==` against a literal or a tag becomes
 /// a match on that value, the last `else` a `_` arm, and any other `if` a match on its condition with arms `true` and
-/// `false`, an `else if` staying an `if` in the `false` arm. A left-out `else` is `()`. Refused where the conditions
+/// `false`, an `else if` staying an `if` in the `false` arm. A left-out `else` is `()`. Refused where the condition's
+/// `is` tests bind names for the `then` branch (see `IsSyntax.asMatch`), where the conditions
 /// compare different values, and, with more than one, where the value is not a name or a field of one, which the
 /// match would evaluate once instead of once for each condition. A multi-branch `if | ...` and an if-match
 /// (`if value is pattern`) are not offered.
@@ -183,6 +184,8 @@ let at
                 match expr.Kind with
                 | Match([ value ], arms) when onKeyword "match" expr -> Some (toIf, fun indent step -> matchToIf source indent step expr value arms)
                 | Match(_ :: _ :: _, _) when onKeyword "match" expr -> Some (toIf, fun _ _ -> Error "It matches several values")
+                | IsSyntax.BindingIf _ when onKeyword "if" expr ->
+                    Some (toMatch, fun _ _ -> Error "Its condition binds names for the `then` branch, which a match on `true` and `false` has no place for")
                 | IfExpr _ when onKeyword "if" expr && not (isMultiBranch source expr) -> Some (toMatch, fun indent step -> ifToMatch source indent step expr)
                 | _ -> None
                 |> Option.map (fun (title, convert) -> expr, title, convert))

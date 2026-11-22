@@ -432,6 +432,7 @@ module WorkflowDesugaring =
                         within InConditionalPart (fun () -> desugarExpr expr))
                 Match(mappedExprs, mappedArms)
             | Except(value, arms) -> desugarKind { expr with Kind = Except.asMatch expr value arms }
+            | IsSyntax.BindingIf asMatch -> desugarKind { expr with Kind = asMatch }
             | TupleExpr items -> TupleExpr(items |> List.map desugarExpr)
             | RecordExpr fields ->
                 let mappedFields =
@@ -603,6 +604,7 @@ module WorkflowDesugaring =
                 let kind =
                     match expr.Kind with
                     | Except(value, arms) -> Except.asMatch expr value arms
+                    | IsSyntax.BindingIf asMatch -> asMatch
                     | kind -> kind
                 match kind with
                 | IfExpr(cond, thenExpr, elseExpr) -> IfExpr(desugarExpr cond, branch thenExpr, branch elseExpr)

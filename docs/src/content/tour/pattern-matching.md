@@ -297,6 +297,40 @@ if | input is #some(n) -> println("Got {n}")
    | else -> println("Something else")
 ```
 
+## Tests anywhere
+
+`x is pattern` is not only for `if`: it is a `bool` expression, so it goes wherever an expression does, such as a lambda's body, a def's value, an argument, or an operand of `and`, `or` and `not`:
+
+```nanyx
+type Item = #foo(string) | #bar(string) | #baz | #quux
+
+def items: list(Item) = [#foo("one"), #bar("two"), #baz, #quux]
+
+println(items \list.find { x -> x is #quux })
+println(items \list.filter { x -> not (x is #foo(_)) })
+```
+
+The names a pattern binds are in scope for the rest of an `and` chain after the test, and in an `if` condition also in the `then` branch:
+
+```nanyx
+type MaybeInt = #some(int) | #none
+
+def big: MaybeInt -> bool = { o ->
+  o is #some(v) and v > 3
+}
+
+def add: MaybeInt, MaybeInt -> int = { a, b ->
+  if a is #some(x) and b is #some(y) then x + y else 0
+}
+
+println(big(#some(5)))
+println(add(#some(1), #some(2)))
+```
+
+They are not in scope anywhere else: not after an `or` (`o is #some(v) or v > 3`), not outside the brackets around a test, not in the `else` branch, and not outside a `not`. Using one there is an unknown-name error, as the test may not have matched.
+
+`is` binds more loosely than comparisons, equality, pipes and arithmetic, and more tightly than `and` and `or` (see [the operators](../tour/operators#the-operators)). So `xs \list.head is #some(h)` tests the head of `xs`, and `a and b is #some(v)` is `a and (b is #some(v))`. Only `and` or `or` may follow the pattern, so `x is v == 1` is an error that asks for brackets. A `not` binds more tightly than `is`, as it does with `==`, so `not x is #a` is an error too, and the test is negated as `not (x is #a)`.
+
 # Custom patterns
 
 Custom patterns are covered in detail in [Advanced: Custom patterns](../advanced/custom-patterns).
