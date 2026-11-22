@@ -212,7 +212,7 @@ let private moduleName (home: ModuleOrigin) =
     | InMemory -> ""
 
 /// Whether a nominal type whose home is `home` shows its structure to code in the file `view`: only to its home module's.
-let private shownTo (view: string) (home: ModuleOrigin) = Compiler.sourceFileName home = view
+let private shownTo (view: string) (home: ModuleOrigin) = ModuleOrigins.sourceFileName home = view
 
 /// The description of `ty`, a type with nothing left to settle, as code in the file `view` sees it, as a value of the
 /// description's IR type. Its parts are numbered as seen from there too.
