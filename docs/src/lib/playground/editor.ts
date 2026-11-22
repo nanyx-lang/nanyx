@@ -1,5 +1,5 @@
-// The playground's editor: CodeMirror 6, with a small Nanyx highlighter of its own whose keywords are the TextMate
-// grammar's (`extension/syntaxes/nanyx.tmLanguage.json`, which the page reads at build time), coloured as the docs'
+// The playground's editor, which the tour's examples edit in too: CodeMirror 6, with a small Nanyx highlighter of its
+// own whose keywords are the TextMate grammar's (`extension/syntaxes/nanyx.tmLanguage.json`), coloured as the docs'
 // code blocks are, in the site's light and dark themes.
 
 import { EditorState } from "@codemirror/state";
@@ -7,13 +7,21 @@ import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutt
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, StreamLanguage, bracketMatching, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
+import grammar from "../../../../extension/syntaxes/nanyx.tmLanguage.json";
 
-/** The grammar's keywords, by the kind it colours them as. */
-export interface Keywords {
-  declaration: string[];
-  control: string[];
-  logical: string[];
+/** The words of the grammar's keyword pattern named `scope`, a `\b(a|b|c)\b`. */
+function keywordsOf(scope: string): string[] {
+  const pattern = grammar.repository.keywords.patterns.find((p: { name: string }) => p.name === scope);
+  const match = pattern && /^\\b\(([\w|]+)\)\\b$/.exec(pattern.match);
+  if (!match) throw new Error(`The Nanyx grammar has no keyword pattern ${scope} the editor can read.`);
+  return match[1].split("|");
 }
+
+const keywords = {
+  declaration: keywordsOf("keyword.declaration.nanyx"),
+  control: [...keywordsOf("keyword.control.nanyx"), ...keywordsOf("keyword.control.workflow.nanyx")],
+  logical: keywordsOf("keyword.operator.logical.nanyx"),
+};
 
 interface State {
   inString: boolean;
@@ -33,7 +41,7 @@ function readString(stream: { next(): string | void }, state: State) {
   return "string";
 }
 
-function nanyx(keywords: Keywords) {
+function nanyx() {
   const declaration = new Set(keywords.declaration);
   const control = new Set(keywords.control);
   const logical = new Set(keywords.logical);
@@ -101,22 +109,19 @@ const theme = EditorView.theme({
 
 /**
  * An editor in `parent` holding `code`. `onRun` is called on Ctrl+Enter (⌘+Enter on a Mac), and `onChange` with the
- * code after each change.
+ * code after each change. `numbered` gives it line numbers, as the playground has and a tour example hasn't.
  */
 export function createEditor(
   parent: HTMLElement,
   code: string,
-  keywords: Keywords,
-  { onRun, onChange }: { onRun: () => void; onChange: (code: string) => void },
+  { onRun, onChange, numbered = true }: { onRun: () => void; onChange: (code: string) => void; numbered?: boolean },
 ) {
   return new EditorView({
     parent,
     state: EditorState.create({
       doc: code,
       extensions: [
-        lineNumbers(),
-        highlightActiveLineGutter(),
-        highlightActiveLine(),
+        ...(numbered ? [lineNumbers(), highlightActiveLineGutter(), highlightActiveLine()] : []),
         drawSelection(),
         history(),
         bracketMatching(),
@@ -134,7 +139,7 @@ export function createEditor(
           ...defaultKeymap,
           ...historyKeymap,
         ]),
-        nanyx(keywords),
+        nanyx(),
         syntaxHighlighting(highlighting),
         theme,
         EditorView.contentAttributes.of({ "aria-label": "Code" }),
