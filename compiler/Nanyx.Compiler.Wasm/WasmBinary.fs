@@ -796,180 +796,183 @@ let private constant (assembler: Assembler) (out: Bytes) (items: SExpr list) =
     CodeWriter(assembler, Dictionary(), out, ResizeArray(), ResizeArray()).Instructions items
     out.Add 0x0Buy
 
-/// The binary format of the module that the WebAssembly text `wat` writes.
+/// The binary format of the module that the WebAssembly text `wat` writes. It runs on a large stack (see
+/// `Nanyx.LargeStack`), as writing a folded instruction recurses once per level it nests, and an else-if chain of 2,000
+/// branches is 2,000 `if`s, each in the `else` of the one before: more than a 1 MB stack holds.
 let assemble (wat: string) : byte array =
-    let assembler = Assembler(read wat)
-    assembler.Read()
-    // The functions' code first: a `call_indirect` or a block may add a type.
-    let code = Bytes()
-    // Each place marker's frames, and where in `code` the code after it starts; and where each body starts, with no
-    // frames, so that code before a body's first marker has no place.
-    let places = ResizeArray<int * (string option * string * int) list>()
-    // Each probe's number and kind, and the frames of its place.
-    let probes = ResizeArray<int * string * string option * (string option * string * int) list>()
-    // Each function's name, as the name section gives it, with the file and line of its definition.
-    let definitions = ResizeArray<string * string * int>()
-    vector code assembler.Functions (fun out func ->
-        match func.Name, func.Body |> List.tryPick (function Defined(file, line) -> Some(file, line) | _ -> None) with
-        | Some id, Some(file, line) -> definitions.Add((id.Substring 1, file, line))
-        | _ -> ()
-        let body = Bytes()
-        let groups =
-            func.LocalTypes
-            |> List.fold (fun groups ty ->
-                match groups with
-                | (count, last) :: rest when last = ty -> (count + 1, ty) :: rest
-                | _ -> (1, ty) :: groups) []
-            |> List.rev
-        vector body groups (fun out (count, ty) ->
-            unsigned out (uint64 count)
-            out.Add ty)
-        let bodyPlaces = ResizeArray()
-        CodeWriter(assembler, func.Locals, body, bodyPlaces, probes).Instructions func.Body
-        body.Add 0x0Buy
-        unsigned out (uint64 body.Count)
-        places.Add((out.Count, []))
-        for offset, frames in bodyPlaces do
-            places.Add((out.Count + offset, frames))
-        out.AddRange body)
-    let globals = Bytes()
-    vector globals assembler.Globals (fun out global' ->
-        out.Add global'.Type
-        out.Add(if global'.Mutable then 1uy else 0uy)
-        constant assembler out global'.Init)
-    let elements = Bytes()
-    vector elements assembler.Elements (fun out (table, offset, functions) ->
-        if table = 0 then
-            out.Add 0x00uy
-        else
-            out.Add 0x02uy
-            unsigned out (uint64 table)
-        constant assembler out offset
-        if table <> 0 then out.Add 0x00uy
-        vector out functions (fun out reference ->
-            match reference with
-            | Atom reference -> unsigned out (uint64 (Assembler.Resolve(assembler.FunctionNames, reference, "function")))
-            | _ -> fail "an element that is not a function"))
-    let dataSegments = Bytes()
-    vector dataSegments assembler.Data (fun out (memory, offset, bytes) ->
-        if memory = 0 then
-            out.Add 0x00uy
-        else
-            out.Add 0x02uy
-            unsigned out (uint64 memory)
-        constant assembler out offset
-        unsigned out (uint64 bytes.Length)
-        out.AddRange bytes)
-    let out = Bytes()
-    out.AddRange [| 0x00uy; 0x61uy; 0x73uy; 0x6Duy; 0x01uy; 0x00uy; 0x00uy; 0x00uy |]
-    let types = Bytes()
-    vector types assembler.Types (fun out ty ->
-        out.Add 0x60uy
-        vector out ty.Parameters (fun out parameter -> out.Add parameter)
-        vector out ty.Results (fun out result -> out.Add result))
-    section out 1uy types
-    if assembler.Imports.Count > 0 then
-        let imports = Bytes()
-        vector imports assembler.Imports (fun out import ->
-            name out import.Module
-            name out import.Name
-            out.AddRange import.Description)
-        section out 2uy imports
-    if assembler.Functions.Count > 0 then
-        let declared = Bytes()
-        vector declared assembler.Functions (fun out func -> unsigned out (uint64 func.Type))
-        section out 3uy declared
-    if assembler.Tables.Count > 0 then
-        let tables = Bytes()
-        vector tables assembler.Tables (fun out (refType, least, most) ->
-            out.Add refType
-            writeLimits out (least, most))
-        section out 4uy tables
-    if assembler.Memories.Count > 0 then
-        let memories = Bytes()
-        vector memories assembler.Memories writeLimits
-        section out 5uy memories
-    if assembler.Globals.Count > 0 then section out 6uy globals
-    if assembler.Exports.Count > 0 then
-        let exports = Bytes()
-        vector exports assembler.Exports (fun out (exported, kind, index) ->
-            name out exported
-            out.Add kind.Code
-            unsigned out (uint64 index))
-        section out 7uy exports
-    match assembler.Start with
-    | Some index ->
-        let start = Bytes()
-        unsigned start (uint64 index)
-        section out 8uy start
-    | None -> ()
-    if assembler.Elements.Count > 0 then section out 9uy elements
-    // Where the code section's contents start, past its id and size.
-    let codeStart = out.Count + 1 + (let size = Bytes() in unsigned size (uint64 code.Count); size.Count)
-    if assembler.Functions.Count > 0 then section out 10uy code
-    if assembler.Data.Count > 0 then section out 11uy dataSegments
-    // The name section: the functions' names, so that a backtrace names them.
-    if assembler.FunctionNamesByIndex.Count > 0 then
-        let names = Bytes()
-        name names "name"
-        let functionNames = Bytes()
-        vector functionNames assembler.FunctionNamesByIndex (fun out (KeyValue(index, functionName)) ->
-            unsigned out (uint64 index)
-            name out functionName)
-        names.Add 0x01uy
-        unsigned names (uint64 functionNames.Count)
-        names.AddRange functionNames
-        section out 0uy names
-    // The table of places (see `spanTableName`).
-    if places |> Seq.exists (fun (_, frames) -> not frames.IsEmpty) || probes.Count > 0 || definitions.Count > 0 then
-        let strings = Dictionary<string, int>()
-        let stringNumber (text: string) =
-            match strings.TryGetValue text with
-            | true, number -> number
-            | _ ->
-                strings.[text] <- strings.Count + 1
-                strings.Count
-        // Each frame once, with the frame of the call it was inlined at, which is numbered first.
-        let frames = Dictionary<int * int * int * int, int>()
-        let rec frameNumber (place: (string option * string * int) list) =
-            match place with
-            | [] -> 0
-            | (functionName, file, line) :: outer ->
-                let key = (functionName |> Option.map stringNumber |> Option.defaultValue 0), stringNumber file, line, frameNumber outer
-                match frames.TryGetValue key with
+    Nanyx.LargeStack.run <| fun () ->
+        let assembler = Assembler(read wat)
+        assembler.Read()
+        // The functions' code first: a `call_indirect` or a block may add a type.
+        let code = Bytes()
+        // Each place marker's frames, and where in `code` the code after it starts; and where each body starts, with no
+        // frames, so that code before a body's first marker has no place.
+        let places = ResizeArray<int * (string option * string * int) list>()
+        // Each probe's number and kind, and the frames of its place.
+        let probes = ResizeArray<int * string * string option * (string option * string * int) list>()
+        // Each function's name, as the name section gives it, with the file and line of its definition.
+        let definitions = ResizeArray<string * string * int>()
+        vector code assembler.Functions (fun out func ->
+            match func.Name, func.Body |> List.tryPick (function Defined(file, line) -> Some(file, line) | _ -> None) with
+            | Some id, Some(file, line) -> definitions.Add((id.Substring 1, file, line))
+            | _ -> ()
+            let body = Bytes()
+            let groups =
+                func.LocalTypes
+                |> List.fold (fun groups ty ->
+                    match groups with
+                    | (count, last) :: rest when last = ty -> (count + 1, ty) :: rest
+                    | _ -> (1, ty) :: groups) []
+                |> List.rev
+            vector body groups (fun out (count, ty) ->
+                unsigned out (uint64 count)
+                out.Add ty)
+            let bodyPlaces = ResizeArray()
+            CodeWriter(assembler, func.Locals, body, bodyPlaces, probes).Instructions func.Body
+            body.Add 0x0Buy
+            unsigned out (uint64 body.Count)
+            places.Add((out.Count, []))
+            for offset, frames in bodyPlaces do
+                places.Add((out.Count + offset, frames))
+            out.AddRange body)
+        let globals = Bytes()
+        vector globals assembler.Globals (fun out global' ->
+            out.Add global'.Type
+            out.Add(if global'.Mutable then 1uy else 0uy)
+            constant assembler out global'.Init)
+        let elements = Bytes()
+        vector elements assembler.Elements (fun out (table, offset, functions) ->
+            if table = 0 then
+                out.Add 0x00uy
+            else
+                out.Add 0x02uy
+                unsigned out (uint64 table)
+            constant assembler out offset
+            if table <> 0 then out.Add 0x00uy
+            vector out functions (fun out reference ->
+                match reference with
+                | Atom reference -> unsigned out (uint64 (Assembler.Resolve(assembler.FunctionNames, reference, "function")))
+                | _ -> fail "an element that is not a function"))
+        let dataSegments = Bytes()
+        vector dataSegments assembler.Data (fun out (memory, offset, bytes) ->
+            if memory = 0 then
+                out.Add 0x00uy
+            else
+                out.Add 0x02uy
+                unsigned out (uint64 memory)
+            constant assembler out offset
+            unsigned out (uint64 bytes.Length)
+            out.AddRange bytes)
+        let out = Bytes()
+        out.AddRange [| 0x00uy; 0x61uy; 0x73uy; 0x6Duy; 0x01uy; 0x00uy; 0x00uy; 0x00uy |]
+        let types = Bytes()
+        vector types assembler.Types (fun out ty ->
+            out.Add 0x60uy
+            vector out ty.Parameters (fun out parameter -> out.Add parameter)
+            vector out ty.Results (fun out result -> out.Add result))
+        section out 1uy types
+        if assembler.Imports.Count > 0 then
+            let imports = Bytes()
+            vector imports assembler.Imports (fun out import ->
+                name out import.Module
+                name out import.Name
+                out.AddRange import.Description)
+            section out 2uy imports
+        if assembler.Functions.Count > 0 then
+            let declared = Bytes()
+            vector declared assembler.Functions (fun out func -> unsigned out (uint64 func.Type))
+            section out 3uy declared
+        if assembler.Tables.Count > 0 then
+            let tables = Bytes()
+            vector tables assembler.Tables (fun out (refType, least, most) ->
+                out.Add refType
+                writeLimits out (least, most))
+            section out 4uy tables
+        if assembler.Memories.Count > 0 then
+            let memories = Bytes()
+            vector memories assembler.Memories writeLimits
+            section out 5uy memories
+        if assembler.Globals.Count > 0 then section out 6uy globals
+        if assembler.Exports.Count > 0 then
+            let exports = Bytes()
+            vector exports assembler.Exports (fun out (exported, kind, index) ->
+                name out exported
+                out.Add kind.Code
+                unsigned out (uint64 index))
+            section out 7uy exports
+        match assembler.Start with
+        | Some index ->
+            let start = Bytes()
+            unsigned start (uint64 index)
+            section out 8uy start
+        | None -> ()
+        if assembler.Elements.Count > 0 then section out 9uy elements
+        // Where the code section's contents start, past its id and size.
+        let codeStart = out.Count + 1 + (let size = Bytes() in unsigned size (uint64 code.Count); size.Count)
+        if assembler.Functions.Count > 0 then section out 10uy code
+        if assembler.Data.Count > 0 then section out 11uy dataSegments
+        // The name section: the functions' names, so that a backtrace names them.
+        if assembler.FunctionNamesByIndex.Count > 0 then
+            let names = Bytes()
+            name names "name"
+            let functionNames = Bytes()
+            vector functionNames assembler.FunctionNamesByIndex (fun out (KeyValue(index, functionName)) ->
+                unsigned out (uint64 index)
+                name out functionName)
+            names.Add 0x01uy
+            unsigned names (uint64 functionNames.Count)
+            names.AddRange functionNames
+            section out 0uy names
+        // The table of places (see `spanTableName`).
+        if places |> Seq.exists (fun (_, frames) -> not frames.IsEmpty) || probes.Count > 0 || definitions.Count > 0 then
+            let strings = Dictionary<string, int>()
+            let stringNumber (text: string) =
+                match strings.TryGetValue text with
                 | true, number -> number
                 | _ ->
-                    frames.[key] <- frames.Count + 1
-                    frames.Count
-        let stretches = places |> Seq.map (fun (offset, place) -> codeStart + offset, frameNumber place) |> List.ofSeq
-        // Each probe, by its number, then its kind, the function's name for an entry, and its place.
-        let probed =
-            probes
-            |> Seq.sortBy (fun (id, _, _, _) -> id)
-            |> Seq.map (fun (id, kind, functionName, frames) ->
-                id, probeKindCode kind, (functionName |> Option.map stringNumber |> Option.defaultValue 0), frameNumber frames)
-            |> List.ofSeq
-        // Each function's name and the frame of its definition.
-        let defined = definitions |> Seq.map (fun (functionName, file, line) -> stringNumber functionName, frameNumber [ None, file, line ]) |> List.ofSeq
-        // The strings and frames are all numbered by now.
-        let table = Bytes()
+                    strings.[text] <- strings.Count + 1
+                    strings.Count
+            // Each frame once, with the frame of the call it was inlined at, which is numbered first.
+            let frames = Dictionary<int * int * int * int, int>()
+            let rec frameNumber (place: (string option * string * int) list) =
+                match place with
+                | [] -> 0
+                | (functionName, file, line) :: outer ->
+                    let key = (functionName |> Option.map stringNumber |> Option.defaultValue 0), stringNumber file, line, frameNumber outer
+                    match frames.TryGetValue key with
+                    | true, number -> number
+                    | _ ->
+                        frames.[key] <- frames.Count + 1
+                        frames.Count
+            let stretches = places |> Seq.map (fun (offset, place) -> codeStart + offset, frameNumber place) |> List.ofSeq
+            // Each probe, by its number, then its kind, the function's name for an entry, and its place.
+            let probed =
+                probes
+                |> Seq.sortBy (fun (id, _, _, _) -> id)
+                |> Seq.map (fun (id, kind, functionName, frames) ->
+                    id, probeKindCode kind, (functionName |> Option.map stringNumber |> Option.defaultValue 0), frameNumber frames)
+                |> List.ofSeq
+            // Each function's name and the frame of its definition.
+            let defined = definitions |> Seq.map (fun (functionName, file, line) -> stringNumber functionName, frameNumber [ None, file, line ]) |> List.ofSeq
+            // The strings and frames are all numbered by now.
+            let table = Bytes()
 
-        name table spanTableName
-        vector table (strings |> Seq.sortBy _.Value |> Seq.map _.Key) name
-        vector table (frames |> Seq.sortBy _.Value |> Seq.map _.Key) (fun out (functionName, file, line, outer) ->
-            for number in [ functionName; file; line; outer ] do
-                unsigned out (uint64 number))
-        let mutable last = 0
-        vector table stretches (fun out (offset, place) ->
-            unsigned out (uint64 (offset - last))
-            unsigned out (uint64 place)
-            last <- offset)
+            name table spanTableName
+            vector table (strings |> Seq.sortBy _.Value |> Seq.map _.Key) name
+            vector table (frames |> Seq.sortBy _.Value |> Seq.map _.Key) (fun out (functionName, file, line, outer) ->
+                for number in [ functionName; file; line; outer ] do
+                    unsigned out (uint64 number))
+            let mutable last = 0
+            vector table stretches (fun out (offset, place) ->
+                unsigned out (uint64 (offset - last))
+                unsigned out (uint64 place)
+                last <- offset)
 
-        vector table probed (fun out (id, kind, functionName, place) ->
-            for number in [ id; kind; functionName; place ] do
-                unsigned out (uint64 number))
-        vector table defined (fun out (functionName, place) ->
-            unsigned out (uint64 functionName)
-            unsigned out (uint64 place))
-        section out 0uy table
-    out.ToArray()
+            vector table probed (fun out (id, kind, functionName, place) ->
+                for number in [ id; kind; functionName; place ] do
+                    unsigned out (uint64 number))
+            vector table defined (fun out (functionName, place) ->
+                unsigned out (uint64 functionName)
+                unsigned out (uint64 place))
+            section out 0uy table
+        out.ToArray()
