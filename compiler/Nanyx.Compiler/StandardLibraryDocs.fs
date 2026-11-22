@@ -287,6 +287,36 @@ let withReference (pin: (string * SemanticVersion) option) (reference: string) (
         Ok (page.Substring(0, start + beginMarker.Length) + "\n\n" + reference + "\n\n" + page.Substring finish)
     | _ -> Error $"has no reference: it needs a line {beginMarker} and, after it, a line {endMarker}"
 
+/// The file beside the pages that lists the nominal types the standard library and the packages it documents export,
+/// for the docs site to show their names apart in code blocks, as the editor does (see `nominalTypes`).
+let nominalTypesFile = "nominal-types.json"
+
+/// The names of the protected and private types and contexts `compiled` exports, as JSON: each list sorted, a name once.
+/// A type's own name is listed, without its module: `Point`, not `geometry.Point`.
+let private nominalTypes (compiled: Documented list) : string =
+    let nominal =
+        compiled
+        |> List.collect (fun documented ->
+            let typed = documented.Result.Typed.Value
+            let files = Set.ofList documented.Files
+            typed.Symbols
+            |> Map.values
+            |> Seq.filter (fun symbol -> symbol.IsExported && symbol.Kind = TypeDefinition && files.Contains symbol.Declaration.File && not (ReservedNames.isHidden symbol))
+            |> Seq.choose (fun symbol ->
+                Definition.typeDefinitionOf typed symbol
+                |> Option.filter _.IsNominal
+                |> Option.map (fun info -> Names.written (Names.ownPart info.Name), info.IsPrivate))
+            |> List.ofSeq)
+    let listed (isPrivate: bool) =
+        nominal
+        |> List.filter (snd >> (=) isPrivate)
+        |> List.map fst
+        |> List.distinct
+        |> List.sort
+        |> List.map (fun name -> $"    \"{name}\"")
+        |> String.concat ",\n"
+    $"{{\n  \"protected\": [\n{listed false}\n  ],\n  \"private\": [\n{listed true}\n  ]\n}}\n"
+
 /// What `update` finds for one page.
 type PageUpdate =
     /// The page's reference is the library's.
@@ -298,7 +328,8 @@ type PageUpdate =
     | Unwritable of string
 
 /// What each page of the library's reference in `directory` (docs/src/content/stdlib) needs, by its path: its text with
-/// the library's reference, if that is not what it has. A page that pins a published package (see `pinOf`) has that
+/// the library's reference, if that is not what it has; and the same for the list of nominal types beside them (see
+/// `nominalTypesFile`). A page that pins a published package (see `pinOf`) has that
 /// package's reference, read from the package cache of `store`, or downloaded from its index.
 let update (store: PackageStore) (directory: string) : (string * PageUpdate) list =
     let pages =
@@ -309,7 +340,8 @@ let update (store: PackageStore) (directory: string) : (string * PageUpdate) lis
     let pins = pages |> Map.map (fun _ (_, text) -> pinOf text)
     let pinned = pins |> Map.values |> Seq.choose (function Ok pin -> pin | Error _ -> None) |> Seq.distinct |> List.ofSeq
     let fromPackages = published store directory pinned
-    let references = referencesOf (documented () @ (fromPackages |> List.collect (fun (_, modules) -> Result.defaultValue [] modules)))
+    let compiled = documented () @ (fromPackages |> List.collect (fun (_, modules) -> Result.defaultValue [] modules))
+    let references = referencesOf compiled
     let pinError (pin: (string * SemanticVersion) option) =
         match pin with
         | Some (name, version) ->
@@ -349,4 +381,8 @@ let update (store: PackageStore) (directory: string) : (string * PageUpdate) lis
                 | None when pin.IsSome -> Some(path, Unwritable $"pins {written pin}, but no file of it exports names for this page")
                 | None when text.Contains(beginMarkerOf pin) -> Some(path, Unwritable $"has a reference, but no file of {written pin} is its")
                 | None -> None)
-    ofLibrary @ stale
+    let nominal =
+        let path = Path.Combine(directory, nominalTypesFile)
+        let text = nominalTypes compiled
+        path, (if File.Exists path && (File.ReadAllText path).ReplaceLineEndings "\n" = text then UpToDate else OutOfDate text)
+    ofLibrary @ stale @ [ nominal ]

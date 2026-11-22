@@ -23,7 +23,12 @@ npm run check    # type-check .astro and .ts files
 - `site/shiki-themes.mjs` — the light and dark code themes. The Nanyx grammar
   comes from `../extension/syntaxes/nanyx.tmLanguage.json`, the same file the
   VS Code extension ships.
-- `site/rehype-plugins.mjs` — heading level shift and heading anchor links.
+- `site/rehype-plugins.mjs` — heading level shift, heading anchor links, and
+  the names of nominal types in code blocks, in italics as the editor shows
+  them (`rehypeNominalTypes`). Which names are nominal is read from the page's
+  code blocks and from `src/content/stdlib/nominal-types.json`, which
+  `nanyx stdlib-docs` writes; once the playground's browser compiler is
+  released, the build could ask it instead, which would be exact.
 - `src/pages/docs/[...slug].astro` — the doc page template.
 - `src/components/` — layout pieces. `SearchDialog.tsx` is the only React
   island; everything else is static HTML with small inline scripts.

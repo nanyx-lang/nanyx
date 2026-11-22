@@ -4,6 +4,8 @@ import Header from "@/components/Header.astro";
 import Sidebar from "@/components/Sidebar.astro";
 import SearchDialog from "@/components/SearchDialog";
 import { getAllPages } from "@/lib/nav";
+import "@/styles/playground-shared.css";
+import "@/styles/tour-run.css";
 
 interface Props {
   title: string;
@@ -32,6 +34,10 @@ const searchItems = (await getAllPages()).map(({ page, section }) => ({
     <SearchDialog client:idle transition:persist items={searchItems} />
   </div>
 </Base>
+
+<script>
+  import "@/lib/playground/tour";
+</script>
 
 <script>
   // Copy buttons on code blocks.

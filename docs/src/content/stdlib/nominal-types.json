@@ -1,0 +1,26 @@
+{
+  "protected": [
+    "Async",
+    "HostRuntime",
+    "Match",
+    "Memory",
+    "Path",
+    "Queue",
+    "Regex",
+    "Seq",
+    "Stack",
+    "StringTrie",
+    "Trie"
+  ],
+  "private": [
+    "Decoder",
+    "MArray",
+    "MList",
+    "MRef",
+    "MSlice",
+    "MStack",
+    "Member",
+    "Slice",
+    "StringSlice"
+  ]
+}

@@ -4,6 +4,10 @@ description: "Def bindings and immutability in Nanyx"
 order: 1
 ---
 
+The tour's examples that are whole programs can be run where they are: press **Run** under one to see what it prints,
+and click its code to change it and run it again. **Open in the playground** opens it in the
+[playground](../standard-tools/playground), with more room.
+
 In Nanyx, variables are immutable. You declare them using the `def` keyword.
 
 # Def bindings

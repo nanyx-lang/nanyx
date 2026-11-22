@@ -1,60 +1,17 @@
 // The playground's examples: every runnable example in the language tour, grouped by its page, and the links that
 // open one in the playground. A tour example is runnable when its block is fenced ```nanyx with nothing after it (not
 // a fragment, nor skipped) and it doesn't show an error: these are the blocks `RunTourExampleTests.fs` compiles and runs.
-// Plain JS so that both astro.config.mjs and the playground page can import it.
+// Plain JS so that both astro.config.mjs and the playground page can import it. What a runnable example is, and the
+// code it runs as, are in `playground-code.mjs`, which the tour's pages read in the browser too.
 
 import { deflateRawSync } from "node:zlib";
 import { visit } from "unist-util-visit";
+import { isRunnable, playgroundCode, readsInput } from "./playground-code.mjs";
 
 /**
  * @typedef {{ id: string; title: string; code: string }} PlaygroundExample
  * @typedef {{ page: string; title: string; examples: PlaygroundExample[] }} PlaygroundExampleGroup
  */
-
-/**
- * Whether a ```nanyx block, with `meta` the words after `nanyx` on its fence, is a whole program that runs: not a
- * fragment, not skipped, and not one that shows an error (`-- error NYX0201: ...`).
- *
- * @param {string} meta
- * @param {string} code
- */
-export function isRunnable(meta, code) {
-  return meta.trim() === "" && !/--.*\berror NYX\d{4}/i.test(code);
-}
-
-/**
- * The code the playground opens for a tour example: the example with `import nanyx/text` added, as the tests add it,
- * since the tour uses strings without importing it. It goes after the example's module declaration when it has one
- * (and the comments and directives before it), else after its directives, and isn't added to an example that already
- * imports it or turns a linter on, which would report it unused.
- *
- * @param {string} code
- */
-export function playgroundCode(code) {
-  const lines = code.replace(/\r\n/g, "\n").replace(/\n+$/, "").split("\n");
-  if (code.includes("import nanyx/text") || code.includes("::linter")) return lines.join("\n") + "\n";
-  const isDirective = (/** @type {string} */ line) => line.startsWith("::") || line.startsWith("#!") || line.trim() === "";
-  const isPreamble = (/** @type {string} */ line) => isDirective(line) || line.trim().startsWith("--");
-  // A doc comment's other lines are indented under its `--|`.
-  let index = 0;
-  let inDocComment = false;
-  while (index < lines.length && (isPreamble(lines[index]) || (inDocComment && lines[index].startsWith(" ")))) {
-    if (lines[index].trim() !== "") inDocComment = lines[index].trimStart().startsWith("--|") || (inDocComment && lines[index].startsWith(" "));
-    index++;
-  }
-  if (index < lines.length && lines[index].startsWith("module ") && !lines[index].includes("=")) {
-    index++;
-  } else {
-    index = 0;
-    while (index < lines.length && isDirective(lines[index])) index++;
-  }
-  // Keep a blank line between the import and what is around it, as the formatter writes it.
-  const before = lines.slice(0, index);
-  const after = lines.slice(index);
-  while (before.length > 0 && before[before.length - 1].trim() === "") before.pop();
-  while (after.length > 0 && after[0].trim() === "") after.shift();
-  return [...before, ...(before.length > 0 ? [""] : []), "import nanyx/text", "", ...after].join("\n") + "\n";
-}
 
 /**
  * The fragment of a share link to `code`: `code=` and the code, compressed with raw deflate and written in base64url.
@@ -145,9 +102,10 @@ export function defaultExample(/** @type {PlaygroundExampleGroup[]} */ groups) {
 }
 
 /**
- * A remark plugin that puts an "Open in the playground" link under each runnable example in the tour. The link loads
- * the page afresh (`data-astro-reload`), since a page the client router swaps in isn't cross-origin isolated, and a
- * program in it couldn't read input.
+ * A remark plugin that puts a bar under each runnable example in the tour, `<div data-tour-run>`, which
+ * `src/lib/playground/tour.ts` gives a Run button, unless the example reads input (`data-reads-input`), and an output.
+ * It holds an "Open in the playground" link, which loads the page afresh (`data-astro-reload`), since a page the client
+ * router swaps in isn't cross-origin isolated, and a program in it couldn't read input.
  */
 export function remarkPlaygroundLinks() {
   return (/** @type {any} */ tree, /** @type {any} */ file) => {
@@ -165,7 +123,9 @@ export function remarkPlaygroundLinks() {
       const code = parent.children[index].value + "\n";
       parent.children.splice(index + 1, 0, {
         type: "html",
-        value: `<p class="playground-link"><a href="${playgroundLink(code)}" data-astro-reload>Open in the playground</a></p>`,
+        value:
+          `<div class="tour-run" data-tour-run${readsInput(code) ? " data-reads-input" : ""}>` +
+          `<a class="tour-run-open" href="${playgroundLink(code)}" data-astro-reload>Open in the playground</a></div>`,
       });
     }
   };

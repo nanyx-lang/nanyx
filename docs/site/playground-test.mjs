@@ -1,8 +1,9 @@
-// The headless test of the playground page (#2153): it serves the built site as Vercel does, with the playground
+// The headless test of the playground page (#2153) and the tour's runnable examples (#2248): it serves the built site as Vercel does, with the playground
 // cross-origin isolated (`vercel.json`), opens `/playground` in headless Chromium, and checks that the page loads the
 // compiler, runs hello world, gives a program its input, keeps each run's output, and opens share links and the
 // tour's links without running them; and that every example in its menu, the tour's runnable ones, runs under the
-// playground host. From `docs/`, with a compiler built for the browser:
+// playground host; and that a tour page loads the compiler only on an example's first Run, runs an example where it is,
+// edits and runs it again, and opens it in the playground as edited. From `docs/`, with a compiler built for the browser:
 //
 //   NANYX_BROWSER_ZIP=<nanyx-browser.zip> npm run build
 //   node site/playground-test.mjs
@@ -16,6 +17,7 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { remarkPlaygroundLinks } from "./playground-examples.mjs";
 
 const docs = dirname(dirname(fileURLToPath(import.meta.url)));
 const dist = join(docs, "dist");
@@ -75,11 +77,19 @@ echo()
 const browser = await chromium.launch();
 const context = await browser.newContext();
 await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
-const page = await context.newPage();
+/** What the page fetched of the compiler, to check that a tour page fetches nothing of it until Run. */
+const compilerRequests = [];
 const errors = [];
-page.on("pageerror", (error) => errors.push(String(error)));
-// Choosing an example over changed code asks first; the test says yes.
-page.on("dialog", (dialog) => dialog.accept());
+const watch = (watched) => {
+  watched.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/playground/compiler/")) compilerRequests.push(request.url());
+  });
+  watched.on("pageerror", (error) => errors.push(String(error)));
+  // Choosing an example over changed code asks first; the test says yes.
+  watched.on("dialog", (dialog) => dialog.accept());
+};
+let page = await context.newPage();
+watch(page);
 
 /** The editor's code, from its lines (`innerText` doubles an empty line). */
 const linesOf = (target) => target.locator(".cm-line").allTextContents().then((lines) => lines.join("\n").replace(/\u00a0/g, " ").trimEnd());
@@ -121,6 +131,7 @@ const tests = [
     await page.waitForFunction(() => document.querySelector("[data-log]")?.textContent?.includes("echo: hello"));
     await input.waitFor({ state: "visible" });
     await input.press("Control+d");
+    await page.waitForFunction(() => document.querySelector("[data-log]")?.textContent?.includes("end of input"));
     await idle();
     assert.equal((await page.locator(".pg-run").last().innerText()).replace(/^Run 2.*\n/, "").trim(), "hello\necho: hello\nend of input");
   }],
@@ -164,7 +175,7 @@ const tests = [
   }],
   ["the tour's examples link to the playground, which opens them", async () => {
     await page.goto(`${origin}/docs/tour/attributes`);
-    const link = page.locator(".playground-link a").first();
+    const link = page.locator(".tour-run-open").first();
     assert.equal(await link.getAttribute("data-astro-reload"), "");
     await link.click();
     await page.waitForURL(/\/playground$/);
@@ -184,6 +195,68 @@ const tests = [
       if (problems.length > 0) failed.push(`${id}: ${problems.join(" ").trim()}`);
     }
     assert.deepEqual(failed, []);
+  }],
+  ["a tour page doesn't load the compiler until an example's Run is pressed", async () => {
+    // A page of its own, so that nothing the playground fetched is counted.
+    await page.close();
+    page = await context.newPage();
+    watch(page);
+    compilerRequests.length = 0;
+    await page.goto(`${origin}/docs/tour/variables`);
+    await page.locator(".tour-run-button").first().waitFor();
+    await page.waitForTimeout(1000);
+    assert.deepEqual(compilerRequests, []);
+    assert.equal(await page.evaluate(() => crossOriginIsolated), false);
+  }],
+  ["a tour example runs where it is", async () => {
+    const run = page.locator(".tour-run-button").first();
+    await run.click();
+    await page.waitForFunction(() => document.querySelector(".tour-run-button")?.textContent === "Run", null, { timeout: 180_000 });
+    assert.ok(compilerRequests.length > 0);
+    const output = page.locator(".tour-run-output").first();
+    assert.equal(await output.isVisible(), true);
+    assert.equal(await output.locator(".pg-diagnostic, .pg-stderr, .pg-end").count(), 0);
+  }],
+  ["a tour example is edited in place, runs as edited, and Reset gives back its code", async () => {
+    const original = await page.locator(".prose pre").first().textContent();
+    await page.locator(".prose pre").first().click();
+    const editor = page.locator(".tour-run-editor .cm-content").first();
+    await editor.waitFor();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.insertText('println("edited in place")\n');
+    await page.locator(".tour-run-button").first().click();
+    const output = page.locator(".tour-run-output").first();
+    await output.locator(".pg-stdout", { hasText: "edited in place" }).waitFor({ timeout: 60_000 });
+    assert.equal(await output.locator(".pg-run").count(), 2);
+    const reset = page.locator(".tour-run-reset").first();
+    assert.equal(await reset.isVisible(), true);
+    await reset.click();
+    assert.equal(await linesOf(page.locator(".tour-run-editor").first()), original.trimEnd());
+    assert.equal(await reset.isVisible(), false);
+  }],
+  ["Open in the playground opens an edited example as edited", async () => {
+    await page.locator(".tour-run-editor .cm-content").first().click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.insertText('println("opened as edited")\n');
+    await page.locator(".tour-run-open").first().click();
+    await page.waitForURL(/\/playground$/);
+    await ready();
+    assert.match(await editorText(), /println\("opened as edited"\)/);
+  }],
+  ["an example that reads input gets only the playground link", async () => {
+    const tree = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value: "match readLine()\n  | #some(line) -> println(line)\n  | #error(_) -> ()" }] };
+    remarkPlaygroundLinks()(tree, { path: "/docs/src/content/tour/example.md" });
+    const html = tree.children[1].value;
+    assert.match(html, /data-reads-input/);
+    await page.goto(`${origin}/docs/tour/variables`);
+    await page.locator(".tour-run-button").first().waitFor();
+    await page.evaluate((bar) => {
+      document.querySelector(".prose")?.insertAdjacentHTML("beforeend", "<pre><code>readLine()</code></pre>" + bar);
+      document.dispatchEvent(new Event("astro:page-load"));
+    }, html);
+    const added = page.locator("[data-tour-run]").last();
+    assert.equal(await added.locator(".tour-run-button").count(), 0);
+    assert.equal(await added.locator(".tour-run-open").count(), 1);
   }],
 ];
 
