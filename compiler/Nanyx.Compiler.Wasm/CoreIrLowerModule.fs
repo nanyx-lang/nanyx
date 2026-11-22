@@ -36,8 +36,18 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
     // Every function lowered, by its key, with the specialisations it calls; or why it could not be.
     let results = System.Collections.Generic.Dictionary<SpecKey, Result<Function * 'T, LowerFailure * SourceSpan option>>()
     let order = ResizeArray<SpecKey>()
+    // Where each function was first asked for, which is where it is reported if it can't be lowered and has no place
+    // of its own: a `dbg`'s printer, say.
+    let requestedAt = System.Collections.Generic.Dictionary<SpecKey, SourceSpan option>()
+
+    let requestSpan (key: SpecKey) =
+        match requestedAt.TryGetValue key with
+        | true, span -> span
+        | _ -> None
 
     let lowerOne (key: SpecKey) (subst: Map<int, Ty>) (how: Lowering) (functionName: string) =
+        // Where the expression being lowered is, once the lowering is made.
+        let currentSpan = ref (fun () -> None)
         let request (specKey: SpecKey) (bindings: Map<int, Ty>) (lowering: Lowering) =
             match names.TryGetValue specKey with
             | true, existing -> existing
@@ -54,10 +64,12 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
                         usedNames.Add candidate |> ignore
                         candidate
                 names.[specKey] <- candidate
+                requestedAt.[specKey] <- currentSpan.Value () |> Option.orElse (requestSpan key)
                 pending.Enqueue((specKey, bindings, lowering))
                 candidate
         order.Add key
         let lowering = FunctionLowering(input, definitions, subst, key, request)
+        currentSpan.Value <- fun () -> lowering.CurrentSpan
         let attempt () =
             try
                 let func = lowering.Function how key.Definition functionName key.TypeArguments
@@ -144,6 +156,8 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
         |> Seq.distinct
         |> Seq.choose (fun key ->
             match results.[key] with
-            | Error (reason, span) -> Some (key.Definition, reason, span |> Option.orElse (definitions |> Map.tryFind key.Definition |> Option.map _.Span))
+            | Error (reason, span) ->
+                let definitionSpan = definitions |> Map.tryFind key.Definition |> Option.map _.Span
+                Some (key.Definition, reason, span |> Option.orElse definitionSpan |> Option.orElse (requestSpan key))
             | Ok _ -> None)
         |> List.ofSeq }

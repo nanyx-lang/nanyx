@@ -316,3 +316,26 @@ let ``A module the runtime runs gives what dbg prints to nanyx:debug first; one 
     let elsewhere = transpileWat source
     Assert.DoesNotContain("nanyx:debug", elsewhere)
     Assert.Contains("call $dbg_str", elsewhere)
+
+[<Fact>]
+let ``Run - dbg of a call whose union is still open prints its tags, as it does once the value is named (#2280)`` () =
+    // `list.map`'s result leaves the rest of `allSome`'s union open, which adds no tags to print.
+    """
+dbg(["1", "2", "x"] \list.map(int.fromString) \allSome)
+dbg(allSome(list.map(["1"], { s -> int.fromString(s) })))
+def named = ["1", "2", "x"] \list.map(int.fromString) \allSome
+dbg(named)
+"""
+    |> printsAs """
+[main.nyx:2] #invalidInt
+[main.nyx:3] #some([1])
+[main.nyx:5] #invalidInt
+"""
+
+[<Fact>]
+let ``Run - dbg of a value no printer can write yet is reported at the dbg (#2280)`` () =
+    let source = normalized "type Point = (x: int, y: int)\n\ndbg(type Point)\n"
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    assertDiagnostic "NYX0301" "Not supported by the WebAssembly backend" ":3:1" "It can't compile `dbg` of a value of type 'Type(Point)' yet" outcome.StandardError
