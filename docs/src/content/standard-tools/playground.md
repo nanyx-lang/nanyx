@@ -42,9 +42,10 @@ empties the pane.
 
 The **Examples** menu holds every example in the [language tour](../tour/variables) that is a whole program, grouped by
 its page. Choosing one replaces the editor's code, after asking if you have changed it. Each of those examples in the
-tour can also be run where it is, with **Run** under it: click its code to edit it, and **Reset** puts it back. The tour
-loads the compiler on the first Run on a page. **Open in the playground** under it opens it here, as edited. An example
-that reads input has only that link: a tour page can't give a program input.
+tour that prints something can also be run where it is, with **Run** under it: click its code to edit it, and **Reset**
+puts it back. The tour loads the compiler on the first Run on a page. **Open in the playground** under it opens it here,
+as edited. An example that only defines things, with no code at its top level that runs, has only that link, as running
+it would print nothing; so has an example that reads input, since a tour page can't give a program input.
 
 The tour's examples use strings without importing `nanyx/text`, so the playground adds `import nanyx/text` to them, as
 the tests that run them do.
