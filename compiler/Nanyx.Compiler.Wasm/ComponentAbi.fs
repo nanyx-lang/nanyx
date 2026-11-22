@@ -106,7 +106,8 @@ let imports (entry: ComponentEntry) =
     [ yield! streamImports Stdout
       yield! streamImports Stderr
       match entry with
-      | CliRun -> $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
+      | CliRun
+      | Library -> $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
       | HttpHandler -> yield! handlerImports
       $"""  (import "$root" "[waitable-set-new]" (func {Waitables.setNew} (result i32)))"""
       $"""  (import "$root" "[waitable-join]" (func {Waitables.join} (param i32 i32)))"""
@@ -283,13 +284,15 @@ let private fdWriteFunction =
           "  i32.const 0"
           ")" ]
 
-/// WASI preview 1's `proc_exit`, which never returns either: on `wasi:cli/exit`'s `exit-with-code` for `CliRun`, and a
+/// WASI preview 1's `proc_exit`, which never returns either: on `wasi:cli/exit`'s `exit-with-code` for `CliRun` and
+/// `Library`, and a
 /// trap for `HttpHandler`, whose world can't exit, so that the host answers the request with an error.
 let private procExitFunction (entry: ComponentEntry) =
     lines
         [ $"(func ${Helpers.procExit} (param $code i32)"
           match entry with
-          | CliRun ->
+          | CliRun
+          | Library ->
               "  local.get $code"
               $"  call {exitWithCode}"
           | HttpHandler -> "  unreachable"
@@ -349,7 +352,8 @@ let private resultExtern = componentExtern "result" (List.replicate 5 ExternValu
 /// The foreign functions of `Hosts.componentModule` that the module defines for `entry`.
 let externs (entry: ComponentEntry) =
     match entry with
-    | CliRun -> []
+    | CliRun
+    | Library -> []
     | HttpHandler -> [ argumentExtern; resultExtern ]
 
 /// Where the handler keeps the request and what `result` was given, from `handle`'s call to its end.
@@ -493,7 +497,8 @@ let functions (entry: ComponentEntry) (functionName: Extern -> string) =
       procExitFunction entry
       cabiReallocFunction
       match entry with
-      | CliRun -> ()
+      | CliRun
+      | Library -> ()
       | HttpHandler ->
           componentFunctions functionName
           writeNoTrailersFunction ]
@@ -501,7 +506,8 @@ let functions (entry: ComponentEntry) (functionName: Extern -> string) =
 
 /// The entry, exported under its name for `entry`: `run` runs the program's start function, if it has one, and returns
 /// `ok` (0), and a program that crashes or exits stops in `proc_exit` instead, with its exit code; `handle` is
-/// `handleFunctions`.
+/// `handleFunctions`. A library has none: the root `nanyx build` makes for it only imports modules, so it has no start
+/// function, and each export builds the top-level values it reads when it first reads them.
 let entryFunction (entry: ComponentEntry) (start: string option) =
     match entry with
     | CliRun ->
@@ -513,3 +519,4 @@ let entryFunction (entry: ComponentEntry) (start: string option) =
               "  i32.const 0"
               ")" ]
     | HttpHandler -> handleFunctions start
+    | Library -> ""

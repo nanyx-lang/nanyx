@@ -6,7 +6,7 @@
     host = (
       root = "console.host"
       prelude = "console.prelude"
-      component = (root = "console.host.wasi", world = "nanyx:console/command")
+      component = (root = "console.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")
     )
   )
   dependencies = [

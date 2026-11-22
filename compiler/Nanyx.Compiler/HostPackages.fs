@@ -20,10 +20,15 @@ module HostPackages =
     let preludeField = "prelude"
 
     /// The field of a host's declaration that names its component root and the world it is written against:
-    /// `component = (root = "console.host.wasi", world = "wasi:cli/command@0.3.0")` (see `HostComponent`).
+    /// `component = (root = "console.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")`
+    /// (see `HostComponent`).
     let componentField = "component"
 
     let worldField = "world"
+
+    /// The field of a host's `component` that names the world a library component is built in:
+    /// `library = "nanyx:console/library"`.
+    let libraryField = "library"
 
     /// The field of a host's declaration that gives the settings it takes, each with its default:
     /// `settings = (port = 3000)`.
@@ -51,7 +56,7 @@ module HostPackages =
                         let built =
                             match DataValue.field componentField host with
                             | Some { DataField.Value = { DataValue.Data = DataRecord built } } ->
-                                Option.map2 (fun built world -> { Root = built; World = world; CoreRoot = root }) (text built rootField) (text built worldField)
+                                Option.map2 (fun componentRoot world -> { Root = componentRoot; World = world; Library = text built libraryField; CoreRoot = root }) (text built rootField) (text built worldField)
                             | _ -> None
                         { Package = name; Module = root; Prelude = text host preludeField; Directory = directory; Settings = settings; Component = built })
                 | _ -> None

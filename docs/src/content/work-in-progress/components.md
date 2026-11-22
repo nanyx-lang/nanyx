@@ -204,7 +204,7 @@ interleaving and a fresh instance per test or request. No embedding runs WASI 0.
 host = (
   root = "console.host"
   prelude = "console.prelude"
-  component = (root = "console.host.wasi", world = "nanyx:console/command")
+  component = (root = "console.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")
 )
 ```
 
@@ -345,7 +345,8 @@ Settled by the maintainer on 2026-11-22 ([#2241](https://github.com/nanyx-lang/n
   def reachable from the entry or a test is an error naming it.
 - **`nanyx build` writes `out/<name>.wasm` and `out/wit/`,** a complete WIT directory: the program's package, with a
   world that includes the host's and exports and imports the program's interfaces, and under `deps/` the packages it
-  uses. A package with exports and no `@entry` is a library component, with no `run`.
+  uses. A package with exports and no `@entry` is a library component, with no `run`, built from a root the compiler
+  makes, which imports each of its modules with a `@component` def, in a world for libraries that its host names.
 - **The WIT package is named from the manifest:** `acme.shapes` 0.1.0 is `acme:shapes@0.1.0`, and `greeter` is
   `greeter:greeter@0.1.0`.
 - **Types are written literally.** Scalars, strings, lists, records and tuples map directly. Every tag union is a WIT
@@ -361,9 +362,6 @@ Settled by the maintainer on 2026-11-22 ([#2241](https://github.com/nanyx-lang/n
 - **Requests at once in one instance.** An instance serves one request at a time, and others in turn. Whether requests
   may interleave in one instance, and so share its memory and crashes, once the callback ABI lets them, belongs with
   tasks and processes on [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#3-tasks-and-processes).
-- **Exporting a module the program doesn't import.** A program exports the `@component` defs of the modules it
-  imports, directly or not; a library component, which has no entry to import them, will need a root that imports
-  each module with one.
 - **Running 0.3 in process (stage 6).** Whether Wasmtime's C API and wasmtime-dotnet will add WASI 0.3, or we build a
   native library of our own.
 
@@ -379,5 +377,5 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 | 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)), done | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
 | 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)), done | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request at a time per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
 | 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
-| 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)), begun | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types. Built: exports and `@import`s of numbers, bools, strings, records, tuples, lists and variants, with `out/wit`, and a test in CI with Rust components under `wasmtime run`. Still to come: exports that require contexts; library components | Write plugins and libraries that other languages' components call, and call theirs |
+| 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)), begun | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types. Built: exports and `@import`s of numbers, bools, strings, records, tuples, lists and variants, with `out/wit`, and a test in CI with Rust components under `wasmtime run`. Library components ([#2326](https://github.com/nanyx-lang/nanyx/issues/2326)). Still to come: exports that require contexts | Write plugins and libraries that other languages' components call, and call theirs |
 | 6. One root per host ([#2242](https://github.com/nanyx-lang/nanyx/issues/2242)) | Run 0.3 components in `nanyx run`, once an embedding supports it (upstream or our own), and delete the core roots | One implementation of each host |
