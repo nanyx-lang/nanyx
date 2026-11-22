@@ -112,3 +112,32 @@ let ``A crash as a block's last statement, or in only one branch, is not reporte
   def y = if x > 0 then x else crash("no")
   y + 1
 }"""))
+
+[<Fact>]
+let ``The statements after a return in a workflow's block are reported, and the fix removes them`` () =
+    let source =
+        "def f: int -> #some(int) | #none = { n ->\n"
+        + "  proc {\n"
+        + "    return n\n"
+        + "    println(\"after\")\n"
+        + "  }\n"
+        + "}\n"
+    match diagnostics source with
+    | [ diagnostic, text ] ->
+        Assert.Equal("This code never runs: `return` ends the block", diagnostic.Message)
+        Assert.Equal("println(\"after\")", text)
+        let related = diagnostic.Related |> List.map (fun (span, message) -> source.Substring(span.Start, span.End - span.Start), message)
+        Assert.Equal<(string * string) list>([ "return n", "ends the block" ], related)
+        Assert.Equal("def f: int -> #some(int) | #none = { n ->\n  proc {\n    return n\n  }\n}\n", applyFix source (List.exactlyOne diagnostic.Fixes))
+    | other -> Assert.Fail($"Expected one report, got %A{other}")
+
+[<Fact>]
+let ``A return in a branch does not make what follows the branch unreachable`` () =
+    let source =
+        "def f: int -> #some(int) | #none = { n ->\n"
+        + "  proc {\n"
+        + "    if n > 2 then return n\n"
+        + "    return 0\n"
+        + "  }\n"
+        + "}\n"
+    Assert.Empty(reported source)
