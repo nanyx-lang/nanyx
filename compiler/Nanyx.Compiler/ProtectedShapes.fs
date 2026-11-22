@@ -66,6 +66,16 @@ let constructedOutside (state: InferState) (names: (string * TypeScheme) list) (
         | [] -> $"The {kind} type '{name}' can only be constructed in the module that defines it: use a function that module exports instead"
         | found -> $"The {kind} type '{name}' can only be constructed in the module that defines it{makeOne found}"
 
+/// The message for `with` on a value of `nominal`, private when `isPrivate`, outside the type's home module (NYX0212):
+/// a value the update makes is one the module never made, so only the module updates one. It names the ways among
+/// `names` to make one, if there are any.
+let updatedOutside (state: InferState) (names: (string * TypeScheme) list) (nominal: NominalId) (isPrivate: bool) =
+    let kind = if isPrivate then "private" else "protected"
+    let name = lastPart nominal.Name
+    match makers state.BlockAliases names nominal with
+    | [] -> $"The {kind} type '{name}' can only be updated with `with` in the module that defines it: use a function that module exports instead"
+    | found -> $"The {kind} type '{name}' can only be updated with `with` in the module that defines it{makeOne found}"
+
 /// The module that makes values of `nominal`, as a reader knows it: the `module name =` block it is defined in, or its
 /// file's module.
 let private homeModule (nominal: NominalId) =
