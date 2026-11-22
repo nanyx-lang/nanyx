@@ -115,13 +115,16 @@ let private calleesFirst (wanted: string -> bool) (edges: Map<string, string lis
     List.ofSeq order
 
 /// The functions that the whole module calls once and makes no closure over, by name: inlining one grows nothing, since
-/// its body only moves to where it is called (#1883).
-let private calledOnce (functions: Map<string, Function>) : Set<string> =
+/// its body only moves to where it is called (#1883). The calls of the functions a component exports (`exported`) are
+/// not counted: each of them inlines what it calls once anyway (see `Inliner.Round`), as an export that requires
+/// contexts does its host's `provide`, which the host's `run` calls too.
+let private calledOnce (exported: Set<string>) (functions: Map<string, Function>) : Set<string> =
     let calledAt = Dictionary<string, int>()
     let closedOver = HashSet<string>()
     for f in functions.Values do
         for e in allExprs f.Body do
             match e.Kind with
+            | Call _ when exported.Contains f.Name -> ()
             | Call(name, _) -> calledAt.[name] <- (match calledAt.TryGetValue name with | true, n -> n + 1 | _ -> 1)
             | MakeClosure(name, _, _) -> closedOver.Add name |> ignore
             | _ -> ()
@@ -137,7 +140,7 @@ let private calledOnce (functions: Map<string, Function>) : Set<string> =
 /// first time, and by the other rules after that, since the function it was inlined into may itself be inlined in
 /// several places.
 type private Inliner
-    (functions: Dictionary<string, Function>, cyclic: Set<string>, once: Set<string>, placed: HashSet<string>, prepare: string -> unit, f: Function) =
+    (functions: Dictionary<string, Function>, cyclic: Set<string>, once: Set<string>, placed: HashSet<string>, prepare: string -> unit, exported: Set<string>, f: Function) =
     let mutable nextId =
         let mutable highest = f.Params |> List.fold (fun acc p -> max acc p.Id) 0
         mapVars (fun v -> highest <- max highest v.Id; v) id f.Body |> ignore
@@ -249,12 +252,15 @@ type private Inliner
                     // A handler called once here is inlined whatever its size, and so is a lambda this body makes and
                     // calls once. A handler called more than once is inlined only up to `handlerLimit`: one that calls
                     // another twice would otherwise be copied twice at each level (#1664). A function the module calls
-                    // only here is inlined whatever its size, as an `@entry` is into the start function (#1883).
+                    // only here is inlined whatever its size, as an `@entry` is into the start function (#1883), and so
+                    // is one a function a component exports calls once, as an export that requires contexts calls its
+                    // host's `provide`: only the members of its contexts the export uses are then left in (#2326).
                     let onceHere = calls.[name] = 1
                     let always =
                         (isHandler callee && (onceHere || calleeSize <= handlerLimit))
                         || (closures.Contains name && onceHere)
                         || (once.Contains name && not (placed.Contains name))
+                        || (exported.Contains f.Name && onceHere)
                     if always || calleeSize <= sizeLimit then
                         placed.Add name |> ignore
                         grown <- grown + calleeSize
@@ -358,7 +364,8 @@ let inlineCalls (start: string option) (exported: string list) (kept: Set<string
     let edges = byName |> Map.map (fun _ f -> references f.Body)
     let cyclic = inCycles byName edges + kept + Set.ofList (Option.toList start)
     let callEdges = byName |> Map.map (fun _ f -> calls f.Body)
-    let once = calledOnce byName
+    let exportedNames = Set.ofList exported
+    let once = calledOnce exportedNames byName
     let placed = HashSet<string>()
     let current = Dictionary<string, Function>()
     for f in functions do
@@ -367,7 +374,7 @@ let inlineCalls (start: string option) (exported: string list) (kept: Set<string
     let rec inlineInto (name: string) =
         if inlined.Add name then
             let f = current.[name]
-            let inliner = Inliner(current, cyclic, once, placed, prepare, f)
+            let inliner = Inliner(current, cyclic, once, placed, prepare, exportedNames, f)
             let mutable body = f.Body
             let mutable round = 0
             let mutable changed = true

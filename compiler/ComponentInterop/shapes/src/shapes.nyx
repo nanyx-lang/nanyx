@@ -24,3 +24,8 @@ export def summarize: Shape -> Summary = { shape ->
 export def shift: list(Point), float -> list(Point) = { points, by ->
   list.map(points, { p -> (x = p.x + by, y = p.y) })
 }
+
+@component
+export def announce: [Console] string -> () = { what ->
+  println("shapes " ++ what)
+}

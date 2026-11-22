@@ -20,7 +20,8 @@ text to the binary format for `nanyx build` and `nanyx wasm` (below).
 - Top-level `def` values are exported as wasm functions, except one that declares contexts (see
   [Context calls](./context-calls)). Top-level expressions (and the `@entry` definition) run from a WebAssembly start
   function. A module with a start function emits only the functions the start reaches, through calls and closures,
-  and binds no static closure that nothing reads (`CoreIrReach.fs`); a module without one emits every definition.
+  and binds no static closure that nothing reads (`CoreIrReach.fs`); so does a library component, from its exports;
+  any other module without one emits every definition.
   With `WasmOptions.ExportStart` the start function is exported as `__nanyx_start` instead of run when the module is
   instantiated, so that an embedder such as a page can reach the module's memory first and call it itself
   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)); `WasmOptions.CheckMemory` exports it too.

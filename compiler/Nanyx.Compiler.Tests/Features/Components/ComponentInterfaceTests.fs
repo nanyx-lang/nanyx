@@ -97,12 +97,19 @@ let ``A type that can't cross a component's boundary is an error at the def`` (d
     Assert.Equal(def, text)
     Assert.Contains(message, (diagnosticOf source).Message)
 
-[<Theory>]
-[<InlineData("@component\nexport def log: [Console] string -> () = { s -> println(s) }", "a function that requires contexts")>]
-let ``A type the compiler can't take across a component's boundary yet is an error that says so`` (source: string, what: string) =
-    let diagnostic = diagnosticOf (normalized source)
+[<Fact>]
+let ``An export whose type writes the contexts it requires runs under the host's, with no error`` () =
+    let typed = compileClean (normalized "@component\nexport def log: [Console] string -> () = { s -> println(s) }\n")
+    let export = Assert.Single(typed.ComponentExports)
+    Assert.Equal(Hosts.providedExportName "log", export.Definition)
+    let func = Assert.Single(ComponentInterface.functions typed)
+    Assert.Equal<(string * WitType) list>([ "s", WitType.String ], func.Parameters)
+
+[<Fact>]
+let ``An export that requires contexts its type doesn't write is an error that asks for them`` () =
+    let diagnostic = diagnosticOf (normalized "@component\nexport def log = { s: string -> println(s) }\n")
     Assert.Equal(DiagnosticCodes.UnsupportedByBackend.Code, diagnostic.Code)
-    Assert.Contains($"{what} can't cross a component's boundary yet", diagnostic.Message)
+    Assert.Contains("it requires contexts its type doesn't write. To fix it, write them in its type", diagnostic.Message)
 
 [<Fact>]
 let ``@component marks only an exported def, and takes no argument`` () =

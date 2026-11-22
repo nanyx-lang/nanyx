@@ -650,6 +650,8 @@ let instantiateCoreWith (implement: Wasmtime.FunctionImport -> Wasmtime.Function
     let store = new Wasmtime.Store(engine)
     use module' = Wasmtime.Module.FromText(engine, "component", wat)
     use linker = new Wasmtime.Linker(engine)
+    // A module may import a function twice, as one whose exports run under the host's contexts does.
+    linker.AllowShadowing <- true
     for import in module'.Imports do
         match import with
         | :? Wasmtime.FunctionImport as func ->

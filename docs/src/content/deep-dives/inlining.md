@@ -37,7 +37,8 @@ In a program with a start function it goes over only the functions the start rea
 and leaves the rest for `CoreIrReach` to drop. A host's instance makes a closure over every member of its contexts,
 which inlining shows most programs never call: hello world is lowered to 148 functions and reaches 1. Before a call is
 looked at, the function it calls has been gone over, so each function is inlined into as it would be if every function
-were. A module with no start (a library) has every function gone over.
+were. A module with no start has every function gone over, and keeps every function unless a component exports some:
+a library component keeps what its exports reach (`CoreIrReach.reachedFrom`).
 
 It takes the functions so that each comes after those it calls, and goes over each one up to sixteen times, each time
 simplifying (`CoreIrSimplify.simplify`) and then inlining what the time before exposed, and simplifies it once more at
@@ -60,7 +61,9 @@ temporaries (`CoreIrSimplify.withTemporaries`).
   known, so its `println`s write directly and the code that reads standard input is never reached
   ([#1883](https://github.com/nanyx-lang/nanyx/issues/1883)). Only its first inlining is for this reason (`placed`):
   the function it was inlined into may itself be inlined in several places, and then the copies follow the other
-  rules.
+  rules. A function a component exports inlines whatever it calls once, whatever its size, too: an export that requires
+  contexts calls its host's `provide` once, which is inlined into it, so it keeps only the members it calls and imports
+  only what they call, as an entry does ([#2326](https://github.com/nanyx-lang/nanyx/issues/2326)).
 - **What is not.** A function in a cycle of calls, found with Tarjan's algorithm over calls and the closures a function
   makes. Nothing is inlined into a guard. A function stops taking more once it has 4,000 nodes. The start function
   takes inlining as any other does: the host's `run` is inlined into it, so the closure over the entry and the members

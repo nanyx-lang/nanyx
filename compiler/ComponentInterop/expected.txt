@@ -4,3 +4,4 @@ rect 12.000 ["from", "to"]
 polygon 0.000 ["corner", "corner", "corner"]
 [(1.5, 1.0), (2.5, 2.0)]
 0
+shapes done

@@ -233,7 +233,21 @@ export def areaOf: float, float -> float = { width, height -> width * height }
 - **Its type must cross a component's boundary** (`ComponentInterface.errors`, run as each module is checked). A
   function, a context, a type variable, a record or tag union with no name, which WIT must name, a union of types
   other than tags, a recursive type, which WIT can't write, and a def that isn't a function at all are `NYX0277`. What
-  the compiler can't take across yet is `NYX0301`, naming it: a function that requires contexts.
+  the compiler can't take across yet is `NYX0301`, naming it. An export that requires contexts its type doesn't write,
+  only inferred, is `NYX0301` too, asking for them to be written.
+- **An export that requires contexts runs under its host's** ([#2326](https://github.com/nanyx-lang/nanyx/issues/2326)),
+  as the entry point does. Each host's root may export `provide`, which calls a function under the contexts the root
+  provides and gives back what it returns; the console host's two roots do, and their `run` is `provide`'s result
+  ignored. For an export whose written type requires contexts, `Attributes.applyAttributes` imports the host, as for an
+  `@entry`, and makes up a def that calls it through `provide`, at the attribute: `@component export def later: [Clock]
+  int -> int = { delay -> ... }` gets `def __component_later = { delay -> __host.provide({ -> later(delay) }) }`
+  (`Hosts.providedExportName`). The component exports that def in its place (`ComponentExport.Definition`), with the
+  export's type less its contexts (`ComponentInterface.withoutContexts`), and its parameters' names, which are the
+  export's. It writes no type, so it requires what `provide` does, `Async` and `HostRuntime`, which no other module
+  may require: `Hosts.runtimeErrors` lets it, and its call of `provide`, as it does an entry point's call of `run`.
+  `HostRuntime` and `Async` have no members, so the def's function takes only the export's parameters. A context the
+  root doesn't provide is `NYX0237` at the attribute (`Hosts.exportMismatch`), and so is every such export under a host
+  whose root has no `provide`, as the HTTP host's hasn't (`Hosts.unprovidedExport`); the def is then left out.
 
 ## The WIT
 
@@ -347,7 +361,8 @@ them, as the other component's WIT does, and they are `p0`, `p1` and on if it do
 ## Testing with other languages
 
 `compiler/ComponentInterop` holds a Nanyx library component (`shapes`) and two Rust components: a command (`app`) that calls
-the Nanyx component's exports, and a component (`units`) whose exports the Nanyx component imports. `run.sh` builds the
+the Nanyx component's exports, one of which, `announce`, requires `Console` and prints under the console host's, and a
+component (`units`) whose exports the Nanyx component imports. `run.sh` builds the
 three, checks that the Rust components' WIT is what `nanyx build` wrote, composes them with `wac plug`, and runs the
 result under `wasmtime run`, which must print `expected.txt`. The Compiler workflow runs it on Linux, with Wasmtime,
 `wac` and Rust's `wasm32-wasip2` target installed at pinned versions.
