@@ -69,14 +69,14 @@ updated as [the work](#the-work) lands:
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `map` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – | – | – | ? | ? | ? |
 | `filter` | ✓ | **+** | **+** | ✓ | ✓ | ✓ | – | – | – | – | ? | ? | ? |
-| `filterMap` | ✓ | **+** | **+** | ✓ | **+** | **+** | – | – | – | – | ? | ? | ? |
+| `filterMap` | ✓ | **+** | **+** | ✓ | ✓ | ✓ | – | – | – | – | ? | ? | ? |
 | `fold` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `select` | ✓ | **+** | **+** | ✓ | **+** | ? | – | – | – | – | ? | ? | ? |
+| `select` | ✓ | **+** | **+** | ✓ | ✓ | ? | – | – | – | – | ? | ? | ? |
 | `selectOne` | ✓ | **+** | **+** | ✓ | ? | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
 | `find` | ✓ | **+** | **+** | ✓ | ? | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
 | `findIndex` | ✓ | **+** | **+** | ✓ | – | – | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `any` | ✓ | **+** | **+** | ✓ | **+** | **+** | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `all` | ✓ | **+** | **+** | ✓ | **+** | **+** | **+** | **+** | **+** | **+** | ? | ? | ? |
+| `any` | ✓ | **+** | **+** | ✓ | ✓ | ✓ | **+** | **+** | **+** | **+** | ? | ? | ? |
+| `all` | ✓ | **+** | **+** | ✓ | ✓ | ✓ | **+** | **+** | **+** | **+** | ? | ? | ? |
 | `contains` | ✓ | **+** | **+** | ✓ | ✓ | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
 | `length` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `isEmpty` | ✓ | **+** | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | ✓ | ✓ | ✓ | ✓ |
@@ -111,7 +111,7 @@ One issue per type, or per group of functions:
 | [#2188](https://github.com/nanyx-lang/nanyx/issues/2188) | `Array` functional but in place: `map`, `filter`, `reverse` and the sorts reuse an exclusive array's block | Ready, after #2187 |
 | [#2189](https://github.com/nanyx-lang/nanyx/issues/2189) | `Slice`: the core and ordered functions it is missing, and `ofArray` renamed `fromArray` | Ready |
 | [#2190](https://github.com/nanyx-lang/nanyx/issues/2190) | `list.toList`, `list.fromList`, `seq.fromList` and `seq.fromArray`, so `Seq[1, 2, 3]` builds a sequence | Done |
-| [#2191](https://github.com/nanyx-lang/nanyx/issues/2191) | `set` and `map`: `any`, `all` and `filterMap`, and `set.select` | Ready |
+| [#2191](https://github.com/nanyx-lang/nanyx/issues/2191) | `set` and `map`: `any`, `all` and `filterMap`, and `set.select` | Done |
 | [#2192](https://github.com/nanyx-lang/nanyx/issues/2192) | `MList`, `MArray`, `MStack` and `MSlice`: the read-only core functions, and in-place `sort`, `reverse` and `fill` | Ready |
 | [#2193](https://github.com/nanyx-lang/nanyx/issues/2193) | Which core functions `Stack`, `Queue` and the tries get | Planning |
 | [#2194](https://github.com/nanyx-lang/nanyx/issues/2194) | `map`'s `contains`, `at` and `select`, `find` on a set or map, and `list.count` | Planning |
