@@ -71,6 +71,10 @@ let private inferredScoped (defName: Identifier) (lambda: Expression) (state: In
 let leave (lambda: Expression) (state: InferState) : Ty list * InferState =
     match state.LambdaContexts, state.ContextScope with
     | used :: outer, _ when not (state.BodyLambdas.Contains lambda.Id) ->
+        // Two scoped contexts may be of one scope, or of two calls': an inner `memory` block's lambda that changes an
+        // outer block's reference requires the outer block's `Memory` besides its own, which the constraints say.
+        let scoped = used |> List.filter (function FunctionContexts.ScopedContext _ -> true | _ -> false)
+        let used = if scoped.Length > 1 then used |> List.map (resolveSoFar state) else used
         List.rev used |> List.distinct, { state with LambdaContexts = outer }
     | _, DefScope(defName, true) -> inferredScoped defName lambda state, state
     | _ -> [], state
