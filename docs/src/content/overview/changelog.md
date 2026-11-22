@@ -8,6 +8,43 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.33.0
+
+*22 November 2026*
+
+A release about running Nanyx in more places. The docs site gets a playground, and the tour's examples run and can be
+edited where they are. `nanyx build` writes a WASI 0.3 component for a console program, which runs on any host that
+runs WASI 0.3, such as `wasmtime run`. Packages build faster from the cache, and `nanyx publish` is safer to run again.
+
+**Language**
+
+- A range works for any type with an `Enumerable` (its `succ`) and an `Ord`: `a..b` is no longer only for `int`s
+  ([Ranges](../tour/ranges)).
+- An exported scoped context is written `export scoped context`. **This breaks code** that writes
+  `scoped export context`: it is now `NYX0050`, with a fix that rewrites it, and `nanyx format` rewrites it too
+  ([Errors](../standard-tools/errors)).
+
+**Tools**
+
+- The [playground](../standard-tools/playground) at `/playground`: an editor, Run and Stop, output that keeps each
+  run, every tour example in its Examples menu, input from a line in the page, and share links. Each runnable example
+  in the tour has a Run button, can be edited in place, and opens in the playground.
+- `nanyx build` writes a WASI 0.3 component of `wasi:cli/command` for a program under the console host, with its
+  `Console`, `Env`, `Clock`, `Random`, `Async` and `FileSystem` on the standard `wasi:*` interfaces; `--core` writes a
+  core module as before. `nanyx run`, `test`, the debugger and the profiler are unchanged
+  ([Command line](../standard-tools/command-line), [Hosts](../advanced/hosts)).
+- A package from the cache is checked once and its checked modules kept in the cache, so a later build reads them
+  instead of checking the package again.
+- `nanyx pack` gives the same bytes on every machine, whatever its line endings; a file that isn't UTF-8 is
+  `NYX0049`. `nanyx publish` checks access before it makes a release, registers through a branch of the index when it
+  can push to it, and run again finishes a publish that stopped half way ([Command line](../standard-tools/command-line)).
+- An unknown record field suggests the closest one, with a fix: `'lsat' is not a field of P: did you mean 'last'?`
+  ([Errors](../standard-tools/errors)).
+- The official linter's new `unusedContexts` rule warns on a context a def requires but doesn't use, with a fix, and
+  the editor draws it faint ([Official linter](../standard-tools/official-linter)).
+- The language server marks a name it can't resolve with an `unresolved` semantic token, drawn in the theme's error
+  colour.
+
 # 0.32.0
 
 *21 November 2026*

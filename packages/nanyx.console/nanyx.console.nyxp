@@ -1,7 +1,7 @@
 (
   package = (
     name = "nanyx.console"
-    version = "0.32.0"
+    version = "0.33.0"
     sources = ["src/**/*.nyx"]
     host = (
       root = "console.host"
@@ -10,8 +10,8 @@
     )
   )
   dependencies = [
-    (package = "nanyx.console.core", version = "0.32.0")
-    (package = "nanyx.fs", version = "0.32.0")
-    (package = "nanyx.http.core", version = "0.32.0")
+    (package = "nanyx.console.core", version = "0.33.0")
+    (package = "nanyx.fs", version = "0.33.0")
+    (package = "nanyx.http.core", version = "0.33.0")
   ]
 )
