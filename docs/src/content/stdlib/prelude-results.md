@@ -1,28 +1,28 @@
 ---
 title: "prelude: results and options"
-description: The Result type, the proc workflow, and helpers for option-like unions
+description: The proc workflow, and helpers for option-like unions
 order: 9
 ---
 
-The `Result(a, e)` type and its functions, the `proc` workflow, and the helpers for option-like unions. They are in the [prelude](prelude), so no import is needed. How to handle errors with them is in the tour's [Error handling](../tour/error-handling).
+The `proc` workflow, and the helpers for option-like unions. They are in the [prelude](prelude), so no import is needed. How to handle errors with them is in the tour's [Error handling](../tour/error-handling).
 
 # Results
 
-`Result(a, e)` is `#some(a) | #error(e)`: a success or an error. Its functions are attached to `Result`, and called as `Result.map(r, f)` or `r \Result.map(f)`.
+A function that can fail gives `#some` with its value, or `#ok` when it has none, on success, and a tag of its own for each way it fails, with what there is to say about it as the tag's payload. There is no `Result` type: the option helpers below work on any such union, and keep its failures as they are.
 
 ```nanyx
-def parse: string -> Result(int, string) = { s ->
-  int.fromString(s) \someToResult("not a number: {s}")
+def parse: string -> #some(int) | #notANumber(string) = { s ->
+  int.fromString(s) except #invalidInt -> #notANumber(s)
 }
 
-def half: int -> Result(int, string) = { n ->
-  if n % 2 == 0 then #some(n / 2) else #error("odd: {n}")
+def half: int -> #some(int) | #odd(int) = { n ->
+  if n % 2 == 0 then #some(n / 2) else #odd(n)
 }
 
-println(parse("42") \Result.bind(half))
-println(parse("7") \Result.bind(half))
+println(parse("42") \bindSome(half))
+println(parse("7") \bindSome(half))
 -- #some(21)
--- #error(odd: 7)
+-- #odd(7)
 ```
 
 # Options
@@ -41,14 +41,6 @@ The [`??` operator](../tour/error-handling#falling-back-with-) is `someOrElse`: 
 # Reference
 
 <!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
-
-## `Result`
-
-```nanyx fragment
-type Result(a, e) = #some(a) | #error(e)
-```
-
-A success carrying an `a`, or an error carrying an `e`.
 
 ## `Proc`
 
@@ -78,8 +70,8 @@ def proc: [c] ([Proc, c] () -> #some(b) | r) -> #some(b) | r
 ```
 
 The result workflow: inside `proc { ... }`, `try x` continues with the payload of `#some`, and
-gives back any `#error` as is without running the rest of the block, and `return x` wraps the
-value in `#some`.
+gives back any other tag, a failure, as is without running the rest of the block, and `return x`
+wraps the value in `#some`.
 
 ```nanyx
 def total = proc {
@@ -96,82 +88,16 @@ continuation, and each `return x` a call to its `return` member. A block that en
 `return` has `zero` as its value, `#some()`, so a `proc` that is only run for what it does
 needs no `return`.
 
-Every tag other than `#some` is a failure, not only `#error`, and the block collects them: a
-`try` on a `#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
+Every tag other than `#some` is a failure, and the block collects them: a `try` on a
+`#some(string) | #nil` and another on a `#some(int) | #notFound` make the block a
 `#some(...) | #nil | #notFound`. Two failures with the same tag whose payloads are tags combine
-too: `#error(#a)` and `#error(#b)` make `#error(#a | #b)`. Payloads of other types must agree.
+too: `#invalid(#empty)` and `#invalid(#tooLong)` make `#invalid(#empty | #tooLong)`. Payloads of
+other types must agree.
 
 A `for` loop over a list whose body uses `try` or `return` is run by `for`, item by item. A
 `try` that fails in the body ends the whole block with that failure, and a `return` ends it
 with its value, as they do outside the loop: the items after it, and what follows the loop,
 don't run.
-
-## `Result.map`
-
-```nanyx fragment
-def Result.map: [c] Result(a, e), ([c] a -> b) -> Result(b, e)
-```
-
-Applies `f` to a success, and leaves an error as it is.
-
-## `Result.mapError`
-
-```nanyx fragment
-def Result.mapError: [c] Result(a, e), ([c] e -> f) -> Result(a, f)
-```
-
-Applies `f` to an error, and leaves a success as it is.
-
-## `Result.bind`
-
-```nanyx fragment
-def Result.bind: [c] Result(a, e), ([c] a -> Result(b, e)) -> Result(b, e)
-```
-
-Continues with `f` on a success. Steps whose errors are tags chain with their errors joined: a
-step that fails with `#notFound` and one that fails with `#invalidInt` give a
-`Result(b, #notFound | #invalidInt)`, and a match on it handles both. Errors of other types
-must be the same type: bring them to one with [`Result.mapError`](#resultmaperror) first.
-
-## `Result.defaultValue`
-
-```nanyx fragment
-def Result.defaultValue: Result(a, e), a -> a
-```
-
-The success, or `fallback` for an error.
-
-## `Result.mapOr`
-
-```nanyx fragment
-def Result.mapOr: [c] Result(a, e), b, ([c] a -> b) -> b
-```
-
-`f` applied to the success, or `default` for an error.
-
-## `Result.orElse`
-
-```nanyx fragment
-def Result.orElse: [c] Result(a, e), ([c] e -> Result(a, f)) -> Result(a, f)
-```
-
-The success as it is, or `f` applied to the error.
-
-## `Result.isOk`
-
-```nanyx fragment
-def Result.isOk: Result(a, e) -> bool
-```
-
-Whether the result is a success.
-
-## `Result.isError`
-
-```nanyx fragment
-def Result.isError: Result(a, e) -> bool
-```
-
-Whether the result is an error.
 
 ## `mapSome`
 
@@ -225,14 +151,6 @@ def isNone: #some(a) | r -> bool
 
 Whether the option is any tag but `#some`.
 
-## `someToResult`
-
-```nanyx fragment
-def someToResult: #some(a) | r, e -> Result(a, e)
-```
-
-The value of `#some` as a success, or `error` for any other tag.
-
 ## `mapSomeOr`
 
 ```nanyx fragment
@@ -283,8 +201,8 @@ def allSome: list(#some(a) | r) -> #some(list(a)) | r
 ```
 
 The values of `options`, in order, if every element is `#some`; otherwise the first element that
-isn't, as it is. It works on results too, giving the first `#error`, and turns what parses a list
-of inputs into one result: `["1", "2", "x"] \list.map(int.fromString) \allSome` is `#invalidInt`.
-Stack-safe: it works on a list of any length.
+isn't, as it is: the first failure. It turns what parses a list of inputs into one result:
+`["1", "2", "x"] \list.map(int.fromString) \allSome` is `#invalidInt`. Stack-safe: it works on a
+list of any length.
 
 <!-- End of the generated reference. -->

@@ -186,7 +186,7 @@ Types and definitions are private to a module by default — this is what makes 
 module utils
 
 -- Public
-export def processData: Data -> Result = { data ->
+export def processData: Data -> Report = { data ->
   data \validate \transform
 }
 
@@ -330,8 +330,8 @@ Create hierarchies with dot notation:
 ```nanyx fragment
 module users.validation
 
-def validateEmail: string -> Result(Email, ValidationError) = { ... }
-def validateAge: int -> Result(Age, ValidationError) = { ... }
+def validateEmail: string -> #some(Email) | ValidationError = { ... }
+def validateAge: int -> #some(Age) | ValidationError = { ... }
 ```
 
 # Partial modules
@@ -448,7 +448,7 @@ import (
 )
 ```
 
-One module is never imported by name: the **prelude**, `nanyx/prelude`, is imported into every module automatically, so what it defines is in scope in a file with no imports at all. It holds `proc`, [`crash`](./error-handling), [`ignore`](../stdlib/prelude#ignore), the `Result(a, e)` type and the [`Result`](../stdlib/prelude-results#results) and [option](../stdlib/prelude-results#options) helpers. A module's own definitions and its explicit imports take precedence over the prelude's, so defining your own `proc` is fine.
+One module is never imported by name: the **prelude**, `nanyx/prelude`, is imported into every module automatically, so what it defines is in scope in a file with no imports at all. It holds `proc`, [`crash`](./error-handling), [`ignore`](../stdlib/prelude#ignore) and the [option helpers](../stdlib/prelude-results#options). A module's own definitions and its explicit imports take precedence over the prelude's, so defining your own `proc` is fine.
 
 # Example: User management module
 
@@ -468,19 +468,19 @@ export type ValidationError =
   | #emailTaken
 
 export def createUser
-  : [Random] (string, Email) -> Result(User, ValidationError) 
+  : [Random] (string, Email) -> #some(User) | ValidationError
   = { name, email ->
     if name.length < 3 then
-      #error(#nameTooShort)
+      #nameTooShort
     else
       def id = generateId()
       #some(id = id, name = name, email = email, role = #user)
   }
 
-def validateEmail: Email -> Result(Email, ValidationError) = { email ->
+def validateEmail: Email -> #some(Email) | ValidationError = { email ->
   if email \contains("@") then
     #some(email)
-  else #error(#invalidEmail)
+  else #invalidEmail
 }
 
 def generateId: [Random] () -> UserId = {

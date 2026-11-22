@@ -350,8 +350,8 @@ def sumList: list(int) -> int = {
 }
 
 -- Multiple arguments with patterns
-def divide: int, int -> Result(int, #divideByZero) = {
-  | _, 0 -> #error(#divideByZero)
+def divide: int, int -> #some(int) | #divideByZero = {
+  | _, 0 -> #divideByZero
   | x, y -> #some(x / y)
 }
 
@@ -481,7 +481,7 @@ def result = add(5)(10) -- 15
 With records, you can simulate partial application:
 
 ```nanyx fragment
-def process: (config: Config, data: Data) -> Result = { config, data ->
+def process: (config: Config, data: Data) -> Report = { config, data ->
   -- processing logic
 }
 
