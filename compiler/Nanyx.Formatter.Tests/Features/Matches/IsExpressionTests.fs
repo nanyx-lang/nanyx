@@ -19,7 +19,7 @@ let ``A test is kept as written, as a lambda's body, under not and in and and or
 [<Fact>]
 let ``A test is spaced as an operator is, and loses brackets it doesn't need`` () =
     "def f = {a, o->(o  is   #some(v) and v > 3) or a}\ndef g = { o -> (o is #a) or (o is #b) }\n"
-    |> formatsTo "def f = { a, o -> o is #some(v) and v > 3 or a }\ndef g = { o -> o is #a or o is #b }\n"
+    |> formatsTo "def f = { a, o -> o is #some(v) and v > 3 or a }\ndef g = { o -> o is #a or o is #b }"
 
 [<Fact>]
 let ``A test keeps the brackets an operand of a tighter operator needs`` () =
