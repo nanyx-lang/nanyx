@@ -33,7 +33,7 @@ An immutable list can be updated in place too, when nothing else can see the cha
 
 # Arrays and slices
 
-An `Array(a)` holds its elements in one block, so reading one by its index takes the same time wherever it is, where a list walks to it. It never changes, so it needs no `Memory`. Calling an array reads an element, and gives `#none` past the end rather than stopping the program:
+An `Array(a)` holds its elements in one block, so reading one by its index takes the same time wherever it is, where a list walks to it. It never changes, so it needs no `Memory`. Calling an array reads an element, and gives `#notFound` past the end rather than stopping the program:
 
 ```nanyx
 import nanyx/slice
@@ -49,7 +49,7 @@ def middle = xs \slice(1, 4)
 println(Slice.toArray(middle))
 ```
 
-This prints `#some(20)`, `#none`, `5` and `[20, 30, 40]`. To work on part of an array, or of a string, without copying it, take a slice: `xs \slice(1, 4)` is a [`Slice`](../stdlib/slice) that views the elements from index 1 up to but not including 4, and shares the array's storage. Bounds clamp, so a slice past the end is shorter, never an error. `Slice.toArray` copies the run into an array of its own. An [`MSlice`](../stdlib/mslice) does the same for a mutable array, so `ys \slice(0, 3) \sort` sorts part of it in place, and a [`StringSlice`](../stdlib/text#stringslice) views part of a string.
+This prints `#some(20)`, `#notFound`, `5` and `[20, 30, 40]`. To work on part of an array, or of a string, without copying it, take a slice: `xs \slice(1, 4)` is a [`Slice`](../stdlib/slice) that views the elements from index 1 up to but not including 4, and shares the array's storage. Bounds clamp, so a slice past the end is shorter, never an error. `Slice.toArray` copies the run into an array of its own. An [`MSlice`](../stdlib/mslice) does the same for a mutable array, so `ys \slice(0, 3) \sort` sorts part of it in place, and a [`StringSlice`](../stdlib/text#stringslice) views part of a string.
 
 The functions on arrays are on the [array](../stdlib/array) page. For an array whose elements change, see [Memory](../advanced/memory#mutable-collections).
 
@@ -62,7 +62,7 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 | `list(a)` | - | Indexable collections |
 | `set(a)` | - | Membership checks |
 | `map(k, v)` | - | Key/value lookup (a map is callable: `m(k)` gives `#some(v) \| #notFound`) |
-| `Array(a)` | - | Fixed length, read by index in constant time (`import nanyx/array`; an array is callable: `xs(i)` gives `#some(a) \| #none`) |
+| `Array(a)` | - | Fixed length, read by index in constant time (`import nanyx/array`; an array is callable: `xs(i)` gives `#some(a) \| #notFound`) |
 | `Stack(a)` | - | Last in, first out (`import nanyx/stack`) |
 | `Queue(a)` | - | First in, first out (`import nanyx/queue`) |
 | `Trie(k, v)`, `StringTrie(v)` | - | Lookup by a sequence of keys, and every key that starts with a prefix (`import nanyx/trie`) |

@@ -6,7 +6,7 @@
   block's `Memory`, and the array can't leave the block, so give back [`MArray.toArray`] of it.
 
   [`MArray.fromArray`] and [`MArray.toArray`] copy, so an `Array` never changes, whatever happens
-  to the `MArray` it was copied into or from. An index out of range is `#none` or `#outOfRange`,
+  to the `MArray` it was copied into or from. An index out of range is `#notFound` or `#outOfRange`,
   never a trap. A mutable array has no `==`, order, hash or `toString`: compare or write what
   [`MArray.toArray`] gives instead.
 
@@ -116,12 +116,12 @@ export def MArray.length: [Memory] MArray(a) -> int = { MArray(xs) ->
   __nanyx_marray_length(xs)
 }
 
---| The element of `xs` at `index`, counting from 0, or `#none` when `index` is negative or past the
-  end.
-export def MArray.at: [Memory] MArray(a), int -> #some(a) | #none = { MArray(xs), index ->
+--| The element of `xs` at `index`, counting from 0, or `#notFound` when `index` is negative or past
+  the end.
+export def MArray.at: [Memory] MArray(a), int -> #some(a) | #notFound = { MArray(xs), index ->
   if index >= 0 and index < __nanyx_marray_length(xs)
     then #some(__nanyx_marray_get(xs, index))
-    else #none
+    else #notFound
 }
 
 --| Changes the element of `xs` at `index`, counting from 0, to `value`: `#ok`, or `#outOfRange`

@@ -235,7 +235,7 @@ def sorted = memory {
 }
 ```
 
-An index out of range never traps: `set` gives `#outOfRange` and leaves the array as it was, and `at` gives `#none`. A mutable array or slice has no `==`, order, hash or `toString`, as a reference has none: compare or write the `Array` that `MArray.toArray` gives back.
+An index out of range never traps: `set` gives `#outOfRange` and leaves the array as it was, and `at` gives `#notFound`. A mutable array or slice has no `==`, order, hash or `toString`, as a reference has none: compare or write the `Array` that `MArray.toArray` gives back.
 
 # Which one to use
 

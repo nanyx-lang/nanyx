@@ -11,7 +11,7 @@
 
   Bounds clamp, as an [`Slice`](slice)'s do: `MArray.slice(xs, from, to)` is the elements from
   `from` up to but not including `to`, each moved into `0` to the length. Reading or setting one
-  element gives `#none` or `#outOfRange` past the end, never a trap.
+  element gives `#notFound` or `#outOfRange` past the end, never a trap.
 
   Each function is attached to `MSlice`, so with `import nanyx/mslice` it is called as
   `MSlice.sort(s)`, or as `s \sort`; `xs \slice(0, 3)` makes a slice of the mutable array `xs`.
@@ -49,10 +49,10 @@ export def MSlice.length: [Memory] MSlice(a) -> int = { s ->
   s.length
 }
 
---| The element of `s` at `index` now, counting from 0 at the start of `s`, or `#none` when `index`
-  is negative or past its end.
-export def MSlice.at: [Memory] MSlice(a), int -> #some(a) | #none = { s, index ->
-  if index >= 0 and index < s.length then MArray.at(s.items, s.start + index) else #none
+--| The element of `s` at `index` now, counting from 0 at the start of `s`, or `#notFound` when
+  `index` is negative or past its end.
+export def MSlice.at: [Memory] MSlice(a), int -> #some(a) | #notFound = { s, index ->
+  if index >= 0 and index < s.length then MArray.at(s.items, s.start + index) else #notFound
 }
 
 --| Changes the element of `s` at `index`, counting from 0 at the start of `s`, to `value`, in the
@@ -185,7 +185,7 @@ def runLength: int = 16
 def element: [Memory] MSlice(a), int -> a = { s, index ->
   match MSlice.at(s, index)
     | #some(x) -> x
-    | #none -> crash("MSlice.sortWith read past the end of a slice")
+    | #notFound -> crash("MSlice.sortWith read past the end of a slice")
 }
 
 --| Sorts each run of `runLength` elements of `s` from `start` by insertion.
@@ -303,7 +303,7 @@ export def MSlice.reduce: [Memory, c] MSlice(a), ([c] a, a -> a) -> #some(a) | #
 def toListFrom: [Memory] MSlice(a), int, list(a) -> list(a) = { s, index, acc ->
   match MSlice.at(s, index)
     | #some(element) -> toListFrom(s, index + 1, [element, ...acc])
-    | #none -> acc
+    | #notFound -> acc
 }
 
 --| A copy of the elements of `s` now, in order, as an `Array`, which later changes to the array `s`
@@ -318,5 +318,5 @@ def copyOutFrom: [Memory] MSlice(a), array(a), int -> array(a) = { s, made, inde
     | #some(element) ->
       __nanyx_array_write(made, index, element)
       copyOutFrom(s, made, index + 1)
-    | #none -> made
+    | #notFound -> made
 }

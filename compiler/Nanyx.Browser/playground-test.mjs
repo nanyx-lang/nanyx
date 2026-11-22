@@ -70,7 +70,7 @@ const tests = [
     assert.equal(result.stdout, "true\ntrue\n");
   }],
   ["a program that crashes shows its message, after what it printed, and ends with 1", async (playground) => {
-    const result = await playground('println("before")\ndef xs = [1, 2]\nprintln(list.get(xs, 5) \\orCrash("no fifth element"))\n');
+    const result = await playground('println("before")\ndef xs = [1, 2]\nprintln(list.at(xs, 5) \\orCrash("no fifth element"))\n');
     assert.deepEqual(result.diagnostics, []);
     assert.equal(result.stdout, "before\n");
     assert.match(result.stderr, /crash: no fifth element/);

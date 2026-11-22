@@ -30,7 +30,7 @@ own, which lets go of the larger one.
 
 Bounds clamp: `array.slice(xs, from, to)` is the elements from `from` up to but not including
 `to`, each bound moved into `0` to the length, and an empty slice when `to` is before `from`.
-Reading one element, [`Slice.at`](#sliceat), gives `#none` past the end, never a trap.
+Reading one element, [`Slice.at`](#sliceat), gives `#notFound` past the end, never a trap.
 
 Each function is attached to `Slice`, so with `import nanyx/slice` it is called as
 `Slice.length(s)`, or as `s \length`; `xs \slice(1, 4)` makes a slice of the array `xs`.
@@ -77,11 +77,11 @@ Whether `s` views no elements.
 ## `Slice.at`
 
 ```nanyx fragment
-def Slice.at: Slice(a), int -> #some(a) | #none
+def Slice.at: Slice(a), int -> #some(a) | #notFound
 ```
 
-The element of `s` at `index`, counting from 0 at the start of `s`, or `#none` when `index` is
-negative or past its end.
+The element of `s` at `index`, counting from 0 at the start of `s`, or `#notFound` when `index`
+is negative or past its end.
 
 ## `Slice.slice`
 

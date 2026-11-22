@@ -36,7 +36,7 @@ says so, `type MSlice(a) = [Memory] private (...)`, every operation requires the
 
 Bounds clamp, as an [`Slice`](slice)'s do: `MArray.slice(xs, from, to)` is the elements from
 `from` up to but not including `to`, each moved into `0` to the length. Reading or setting one
-element gives `#none` or `#outOfRange` past the end, never a trap.
+element gives `#notFound` or `#outOfRange` past the end, never a trap.
 
 Each function is attached to `MSlice`, so with `import nanyx/mslice` it is called as
 `MSlice.sort(s)`, or as `s \sort`; `xs \slice(0, 3)` makes a slice of the mutable array `xs`.
@@ -69,11 +69,11 @@ How many elements `s` views.
 ## `MSlice.at`
 
 ```nanyx fragment
-def MSlice.at: [Memory] MSlice(a), int -> #some(a) | #none
+def MSlice.at: [Memory] MSlice(a), int -> #some(a) | #notFound
 ```
 
-The element of `s` at `index` now, counting from 0 at the start of `s`, or `#none` when `index`
-is negative or past its end.
+The element of `s` at `index` now, counting from 0 at the start of `s`, or `#notFound` when
+`index` is negative or past its end.
 
 ## `MSlice.set`
 

@@ -70,13 +70,13 @@ export def list.last: list(a) -> #some(a) | #emptyList = {
   | [_, ...rest] -> list.last(rest)
 }
 
---| The element at position `index`, counting from 0, or `#outOfRange` when `index` is negative or past
-  the end.
-export def list.get: list(a), int -> #some(a) | #outOfRange = {
-  | [], _ -> #outOfRange
+--| The element at position `index`, counting from 0, or `#notFound` when `index` is negative or past
+  the end. It walks to the element, in time proportional to `index`.
+export def list.at: list(a), int -> #some(a) | #notFound = {
+  | [], _ -> #notFound
   | [x, ...rest], index -> if index < 0
-    then #outOfRange
-    else if index == 0 then #some(x) else list.get(rest, index - 1)
+    then #notFound
+    else if index == 0 then #some(x) else list.at(rest, index - 1)
 }
 
 --| Whether any element is equal to `x`. Elements are compared with `==`, by their structure.

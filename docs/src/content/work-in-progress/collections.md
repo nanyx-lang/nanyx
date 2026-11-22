@@ -50,10 +50,10 @@ those three fit is [open](#open-questions).
 ## `at` is the indexed read, and `#notFound` its missing case
 
 The indexed read is `at` on every collection, giving `#some(a) | #notFound`, the missing tag `map.get` already uses.
-`list.get` and `seq.get` are renamed `at`, with no alias, and every `at` that gives `#none` today (`array.at`,
-`Slice.at`, `MArray.at`, `MList.at` and `MSlice.at`) gives `#notFound` instead. Calling an array, `xs(i)`, is
-`array.at`, so it changes with it. The [Array](../stdlib/array) page's remark that `at` on a list walks to the element
-becomes true.
+This is done: [#2186](https://github.com/nanyx-lang/nanyx/issues/2186) renamed `list.get` and `seq.get` to `at`, with
+no alias, and every `at` that gave `#none` (`array.at`, `Slice.at`, `MArray.at`, `MList.at` and `MSlice.at`) gives
+`#notFound` instead, for a negative index and one past the end. Calling an array, `xs(i)`, is `array.at`, so it gives
+`#notFound` too.
 
 # Which type has which function
 
@@ -82,7 +82,7 @@ On `main` at 4f63f796, from the attached definitions in `stdlib/nanyx/*.nyx` (`e
 | `toList` | **+** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `fromList` | **+** | ✓ | **+** | **+** | ✓ | ✓ | ✓ | ✓ | **+** | ✓ | ✓ | ✓ | ✓ |
 | `fromArray` | ✓ | ✓ | **+** | **+** | ✓ | ✓ | ✓ | ✓ | **+** | ✓ | ✓ | ✓ | ✓ |
-| `at` | `get` | ✓ | ✓ | `get` | – | ? | ✓ | ✓ | ✓ | ? | ? | ? | ? |
+| `at` | ✓ | ✓ | ✓ | ✓ | – | ? | ✓ | ✓ | ✓ | ? | ? | ? | ? |
 | `reverse` | ✓ | **+** | **+** | – | – | – | **+** | **+** | ✓ | **+** | ? | ? | ? |
 | `sort` | ✓ | **+** | **+** | – | – | – | **+** | ✓ | ✓ | **+** | ? | ? | ? |
 | `sortBy` | ✓ | **+** | **+** | – | – | – | **+** | ✓ | ✓ | **+** | ? | ? | ? |
@@ -93,8 +93,8 @@ On `main` at 4f63f796, from the attached definitions in `stdlib/nanyx/*.nyx` (`e
 | `scan` | ✓ | **+** | **+** | ✓ | – | – | – | – | – | – | ? | ? | ? |
 | `fill` | – | – | – | – | – | – | **+** | **+** | ✓ | **+** | – | – | – |
 
-The `Trie` column stands for `StringTrie` too, which has the same functions. Every `at` marked ✓ or `get` changes its
-missing tag to `#notFound` ([#2186](https://github.com/nanyx-lang/nanyx/issues/2186)). `Slice` has `fromArray` under
+The `Trie` column stands for `StringTrie` too, which has the same functions. Every `at` marked ✓ gives `#notFound` for
+an index out of range ([#2186](https://github.com/nanyx-lang/nanyx/issues/2186), done). `Slice` has `fromArray` under
 another name, `Slice.ofArray`, which is renamed. The table leaves out what isn't in the core set, such as `list`'s
 `groupBy`, `windows` and `sum`, `set`'s `union`, or `MArray`'s `swap`; `reduce` is changing on every type at once in
 [#2080](https://github.com/nanyx-lang/nanyx/issues/2080).
@@ -105,7 +105,7 @@ One issue per type, or per group of functions:
 
 | Issue | What | Stage |
 |---|---|---|
-| [#2186](https://github.com/nanyx-lang/nanyx/issues/2186) | `at` on every collection, giving `#notFound`; `list.get` and `seq.get` renamed | Ready |
+| [#2186](https://github.com/nanyx-lang/nanyx/issues/2186) | `at` on every collection, giving `#notFound`; `list.get` and `seq.get` renamed | Done |
 | [#2187](https://github.com/nanyx-lang/nanyx/issues/2187) | `Array`: the core and ordered functions it is missing | Ready |
 | [#2188](https://github.com/nanyx-lang/nanyx/issues/2188) | `Array` functional but in place: `map`, `filter`, `reverse` and the sorts reuse an exclusive array's block | Ready, after #2187 |
 | [#2189](https://github.com/nanyx-lang/nanyx/issues/2189) | `Slice`: the core and ordered functions it is missing, and `ofArray` renamed `fromArray` | Ready |
