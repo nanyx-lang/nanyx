@@ -600,17 +600,35 @@ and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOpera
     let mutable left = operand lines c
     let mutable previous = parent
     let mutable going = true
+    let sideBySide (op: BinaryOperator) =
+        match previous with
+        | Some p when p.Precedence = op.Precedence && (p.Associativity <> op.Associativity || op.Associativity = NonAssociative) ->
+            let message =
+                if isComparison p.Text && isComparison op.Text then
+                    $"Comparisons do not chain: write `a {p.Text} b and b {op.Text} c`, or put one comparison in parentheses"
+                else $"`{p.Text}` and `{op.Text}` cannot be written side by side: put one of them in parentheses"
+            c.Report c.Start message
+        | Some p when p = isOperator && op.Precedence > p.Precedence ->
+            c.Report c.Start $"`{op.Text}` binds tighter than `is`, so it can't follow a pattern: put the `is` test in parentheses"
+        | _ -> ()
     while going do
         match operatorAt lines c with
-        | Some op when op.Precedence >= minimum ->
-            match previous with
-            | Some p when p.Precedence = op.Precedence && (p.Associativity <> op.Associativity || op.Associativity = NonAssociative) ->
-                let message =
-                    if isComparison p.Text && isComparison op.Text then
-                        $"Comparisons do not chain: write `a {p.Text} b and b {op.Text} c`, or put one comparison in parentheses"
-                    else $"`{p.Text}` and `{op.Text}` cannot be written side by side: put one of them in parentheses"
-                c.Report c.Start message
+        | _ when c.OnSameLine && c.IsKeyword IsSyntax.keyword && isOperator.Precedence >= minimum ->
+            sideBySide isOperator
+            let value, valueText = left
+            // `not x is p` is `(not x) is p`, as `not a == b` is `(not a) == b`.
+            match value.Kind with
+            | FunctionCall(name, _, [ _ ]) when name = NotSyntax.builtIn && c.Source.AsSpan(valueText.Start).StartsWith("not") ->
+                c.Report valueText.Start "`not` binds tighter than `is`: write `not (x is p)` to negate the test"
             | _ -> ()
+            let isSpan = c.SpanOf(c.Take())
+            if not c.OnSameLine then raise NoMatch
+            let pattern, _ = c.Collecting(fun () -> DescentPatterns.pattern c)
+            let span = SourceSpan.between valueText pattern.Span
+            left <- IsSyntax.test span isSpan value pattern None, span
+            previous <- Some isOperator
+        | Some op when op.Precedence >= minimum ->
+            sideBySide op
             let token = c.Take()
             let opSpan = c.SpanOf token
             if op.Text <> ".." then
@@ -626,10 +644,12 @@ and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOpera
             let right, rightText = climb lines c next (Some op)
             let leftExpr, leftText = left
             let span = SourceSpan.between leftText rightText
-            let kind =
-                if op.Text = ".." then FunctionCall(RangeSyntax.builtIn, None, [ leftExpr; right ])
-                else BinaryOp(op.Text, Some opSpan, leftExpr, right)
-            left <- Expression.at span kind, span
+            let combined =
+                if op.Text = ".." then Expression.at span (FunctionCall(RangeSyntax.builtIn, None, [ leftExpr; right ]))
+                // The names an `is` test in `leftExpr` binds are in scope in `right` (see `IsSyntax.andThen`).
+                elif op.Text = "and" then IsSyntax.andThen (fun body names -> c.Declare ArmBody body.Id names) span opSpan leftExpr right
+                else Expression.at span (BinaryOp(op.Text, Some opSpan, leftExpr, right))
+            left <- combined, span
             previous <- Some op
         | _ -> going <- false
     left

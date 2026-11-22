@@ -151,6 +151,17 @@ def get = { (o: #none | #some(int)) ->
 """)
 
 [<Fact>]
+let ``An if whose condition binds names for its then branch is refused`` () =
+    Assert.Equal(
+        "Its condition binds names for the `then` branch, which a match on `true` and `false` has no place for",
+        refusal
+            """
+def get = { (o: #none | #some(int)) ->
+  $$if o is #some(n) and n > 1 then n else 0
+}
+""")
+
+[<Fact>]
 let ``An arm with a guard is refused`` () =
     Assert.Equal(
         "An arm has a guard, which an `if` has no place for",

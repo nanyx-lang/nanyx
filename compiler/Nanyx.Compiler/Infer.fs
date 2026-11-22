@@ -331,6 +331,8 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             match inferred with
             | Ok (payloadExpr, next) -> Ok (mkTypedExpr expr (TyTag(name, Some payloadExpr.Type)) None None None, next)
             | Error err -> Error err
+    // An `if` whose condition's `is` tests bind names is checked as the match it stands for.
+    | IsSyntax.BindingIf asMatch -> inferExprKind env state { expr with Kind = asMatch }
     | IfExpr(condition, thenExpr, elseExpr) ->
         match inferExpr env state condition with
         | Error err -> Error err

@@ -65,8 +65,15 @@ type OperatorPrinter(indentSize: int, source: string, sourceText: SourceText, pl
                 match operand.Kind with
                 | BinaryOp(op', _, _, _) -> precedence op' = p && associativity op' <> grouping
                 | _ -> false
+            // A test with the rest of an `and` chain after it ends the chain it is the last operand of: `a and x is
+            // #some(v) and v > 1` is `a and (x is #some(v) and v > 1)`, as `and` groups either way alike.
+            let endsAndChain =
+                match operand.Kind with
+                | IsSyntax.Test(_, _, Some _) -> isLast && op = "and"
+                | _ -> false
             let prec =
                 match grouping with
+                | _ when endsAndChain -> p
                 | _ when groupsAnotherWay -> p + 1
                 | RightAssociative -> if isLast then p else p + 1
                 | LeftAssociative -> if index = 0 then p else p + 1

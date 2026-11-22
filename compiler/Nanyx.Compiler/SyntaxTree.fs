@@ -366,6 +366,7 @@ module SyntaxTree =
             | Lambda(parameters, body, _) -> free (parameters |> List.fold (fun acc (name, _) -> Set.add name acc) bound) body
             | Match(values, arms) -> (values |> List.collect (free bound)) @ inArms arms
             | Except(value, arms) -> free bound value @ inArms arms
+            | IsSyntax.BindingIf asMatch -> free bound { expr with Kind = asMatch }
             | Block statements ->
                 statements
                 |> List.fold (fun (bound: Set<Identifier>, names) statement ->
