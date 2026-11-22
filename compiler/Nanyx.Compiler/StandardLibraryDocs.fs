@@ -92,16 +92,17 @@ let private defSignature (typed: TypedModule) (symbol: Symbol) =
 
 /// A type's definition, as hover writes it, but for a context's members: one to a line, in the order it declares them.
 let private typeSignature (typed: TypedModule) (symbol: Symbol) (info: TypeDefInfo) (members: Symbol list) =
+    let typeDefs = Definition.typeDefsBesides info typed.TypeDefs
     let writeShape (shape: Ty) =
         match shape with
         | TyRecord(fields, _) when info.IsContext && not members.IsEmpty ->
             let written = members |> List.choose (fun memberSymbol -> fields |> Map.tryFind memberSymbol.Name |> Option.map (fun ty -> memberSymbol.Name, ty))
-            let types = Unifier.tysToDisplayStrings Source (List.map snd written)
+            let types = Unifier.tysToDisplayStringsIn typeDefs Source (List.map snd written)
             // A context's associated types come first, as it declares them (see `AssociatedTypes`).
             let associated = info.AssociatedTypes |> List.map (fun name -> $"  {name}: type")
             let lines = associated @ List.map2 (fun (name, _) ty -> $"  {writtenName name}: {ty}") written types
             "(\n" + String.concat "\n" lines + "\n)"
-        | _ -> Unifier.tyToDisplayString Source shape
+        | _ -> Unifier.tyToDisplayStringIn typeDefs Source shape
     fst (Definition.writtenTypeDefinition writeShape symbol info true)
 
 /// The compile of the standard-library module `moduleName`, as an import of it checks it: from the checked library (see

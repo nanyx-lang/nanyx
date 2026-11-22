@@ -489,7 +489,8 @@ module Compiler =
                 let mismatchErrors =
                     mismatches
                     |> List.sortBy (fun (_, span, _) -> span.Start)
-                    |> List.map (fun (message, span, kind) ->
+                    |> List.map (fun (text, span, kind) ->
+                        let message = text (Unifier.tyToStringIn state.TypeDefs)
                         match entries |> List.tryFind (fun entry -> entry.Argument = span) with
                         | Some entry -> entryMismatch entry
                         | None ->
