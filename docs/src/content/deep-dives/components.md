@@ -94,8 +94,11 @@ The wrapper around the core module is wit-component's, the library nearly every 
   directory and a world's name, it embeds the world's types in the module (`embed_component_metadata`) and builds the
   component (`ComponentEncoder`), validating what it builds. It is a WASI preview 1 command, built for
   `wasm32-wasip1`, about 2 MB.
-- **`Nanyx.Compiler.Runtime.fsproj` builds it with Cargo** before it compiles, and embeds the `.wasm` in the assembly.
-  So building the compiler needs Rust and the `wasm32-wasip1` target; using it doesn't.
+- **The built `.wasm` is committed** beside the crate, as `nanyx-componentizer.wasm`, and
+  `Nanyx.Compiler.Runtime.fsproj` embeds it in the assembly, so building the compiler doesn't need Rust. After a change
+  to the crate, `dotnet build -p:BuildComponentizer=true` rebuilds it with Cargo (which needs Rust and the
+  `wasm32-wasip1` target) and `.github/scripts/componentizer-sources.sh --write` records the hash of the sources it was
+  built from in `nanyx-componentizer.wasm.sources`. The Compiler workflow fails when that hash isn't the sources'.
 - **`Componentizer.componentize`** runs it on the Wasmtime the runtime already embeds, with WASI preview 1: the core
   module in a temporary directory it may write to, and the WIT directory read-only. It gives the component, or
   wit-component's message saying why it can't build one, such as an import the world doesn't have.

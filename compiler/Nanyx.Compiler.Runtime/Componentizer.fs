@@ -9,7 +9,8 @@ open Wasmtime
 /// `WasmOptions.Component`, as a WASI 0.3 component.
 ///
 /// The wrapping is wit-component's own: `Nanyx.Componentizer`, a small Rust crate in the repository, built to
-/// `wasm32-wasip1` when this assembly is built and embedded in it, run here as a WASI command on the embedded Wasmtime.
+/// `wasm32-wasip1`, committed beside the crate and embedded in this assembly, run here as a WASI command on the embedded
+/// Wasmtime.
 /// It validates the component it writes. Compiling it takes a second or two, so the compiled module is kept in the
 /// user's cache (`cacheDirectory`) and read back from there.
 module Componentizer =
@@ -63,7 +64,7 @@ module Componentizer =
     /// packages it uses under `wit/deps`), or why it can't be: wit-component's message.
     let componentize (core: byte array) (wit: string) (world: string) : Result<byte array, string> =
         match componentizerBytes.Force() with
-        | None -> Error $"This build of nanyx has no componentizer ({resourceName}): it was built without Rust's wasm32-wasip1 target"
+        | None -> Error $"This build of nanyx has no componentizer: the resource {resourceName} is missing from it"
         | Some componentizer ->
             let work = Directory.CreateTempSubdirectory "nanyx-componentize-"
             try

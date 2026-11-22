@@ -273,8 +273,8 @@ Each import of the console and HTTP hosts maps onto a WASI 0.3 interface, or ont
 
 **wit-component ships as WebAssembly** and runs on the Wasmtime the runtime already embeds, as the spike did.
 
-- It is built from a small Rust crate in the repository to `wasm32-wasip1` by Cargo when the runtime builds, and embedded in
-  `Nanyx.Compiler.Runtime`. Rust is needed to build the CLI, but not to use it.
+- It is built from a small Rust crate in the repository to `wasm32-wasip1`, committed beside the crate, and embedded in
+  `Nanyx.Compiler.Runtime`. Rust is needed only to change the crate, not to build or use the CLI.
 - It adds about 2 MB to the CLI, plus a one-off compile that is cached as a serialized module.
 - wit-component validates what it builds and keeps up with the spec; we follow the spec by bumping a crate.
 
