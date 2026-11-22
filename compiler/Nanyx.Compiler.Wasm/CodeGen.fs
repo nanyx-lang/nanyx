@@ -546,14 +546,21 @@ type BackendReport =
       /// The specialisations among them, each with the definition it specialises.
       Specialisations: (string * string) list }
 
-/// The foreign functions `typed` declares (see `ExternSyntax`), by name, and its items without them: each is an import
-/// of the module, not a function it defines. Two that import one function with different types are an error, which
+/// The foreign functions `typed` declares (see `ExternSyntax`), and its component imports (see `ComponentImports`), by
+/// name, and its items without them: each is an import of the module, not a function it defines, or a function the
+/// module defines for a component import. Two that import one function with different types are an error, which
 /// the type checker reports only for two in one module.
 let private foreignFunctions (typed: TypedModule) : Map<string, Extern> * TopLevelItem list =
+    let imports = ComponentInterface.imports typed
     let declared =
         typed.Module
         |> List.choose (fun item ->
             match item.Kind with
+            // A component import is a foreign function the module defines itself (see `ComponentImports`).
+            | Def (ValueDef(_, name, _, ({ Kind = ComponentImportSyntax.Import _ } as value))) ->
+                match imports |> List.tryFind (fun func -> func.Export.Definition = name) with
+                | Some func -> Some (name, ComponentInterface.externOf func, value.Span)
+                | None -> raise (BackendFailure (internalErrorDiagnostic $"the import '{name}' has a type that can't cross a component's boundary" (Some value.Span)))
             | Def (ValueDef(_, name, _, ({ Kind = ExternSyntax.Import(importModule, importName) } as value))) ->
                 match typed.Types |> Map.tryFind name |> Option.bind Externs.signatureOfType with
                 | Some (parameters, result) ->
@@ -1283,7 +1290,25 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             { TagCode = context.TagId >> Wat.tagCode
               RecordLayout = context.RecordLayoutId
               UseHelper = usedHelpers.Add >> ignore }
-        ComponentExports.functions exportContext options.ComponentExports target
+        ComponentExports.functions exportContext options.ComponentExports target, exportContext
+    let exportFunctions, exportContext = exportFunctions
+    // The functions a component imports for the program's definitions that the program calls, each with the function
+    // a call of it calls, which the module defines (see `ComponentImports`). Outside a component, nothing can call one.
+    let componentImports =
+        let all = ComponentInterface.imports typed |> List.map (fun func -> ComponentInterface.externOf func, func)
+        all |> List.filter (fun (declared, _) -> facts.Imports |> List.contains declared)
+    match options.Component, componentImports with
+    | None, (_, func) :: _ ->
+        let span =
+            typed.Module
+            |> List.tryPick (function
+                | Kind (Def (ValueDef(_, name, _, value))) when name = func.Export.Definition -> Some value.Span
+                | _ -> None)
+        let message =
+            $"'{func.Export.Definition}' imports '{func.Export.Name}' from {func.Export.Module}, which only a component built from the program can call: `nanyx build` builds one, and `nanyx run` and `nanyx test` can't run it"
+        raise (BackendFailure(match span with Some span -> Diagnostics.at DiagnosticCodes.ComponentImportOutsideComponent span message | None -> Diagnostics.general DiagnosticCodes.ComponentImportOutsideComponent message))
+    | _ -> ()
+    let importFunctions = ComponentImports.functions exportContext componentImports
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     // Exiting is not a stream, but its WASI import is declared with stderr's.
     let moduleUsesStandardStreams = [ Helpers.writeStderr; Helpers.procExit ] |> List.exists usedHelperSet.Contains
@@ -1297,8 +1322,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           if usedHelperSet.Contains Helpers.procExit || options.Component.IsSome then CoreIrEmit.wasiProcExit ]
     // The foreign functions a component's core module defines itself (see `ComponentAbi.externs`).
     let definedExterns = options.Component |> Option.map ComponentAbi.externs |> Option.defaultValue []
+    let isComponentImport (declared: Extern) = componentImports |> List.exists (fst >> (=) declared)
     let foreignImports =
         facts.Imports
+        |> List.filter (isComponentImport >> not)
         |> List.filter (fun declared ->
             match definedExterns |> List.tryFind (fun defined -> defined.Module = declared.Module && defined.Name = declared.Name) with
             | Some defined when defined = declared -> false
@@ -1326,6 +1353,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           | Some entry ->
               yield ComponentAbi.functions entry CoreIrEmit.importName
               yield exportFunctions
+              yield importFunctions
           | None -> ()
           if checksMemory then
               yield memoryCheckFunctions heapBase (fun message -> stringLiteralMap |> Map.find message)
@@ -1337,7 +1365,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let dbgPrelude =
         if moduleUsesIoHelpers then
             [ match options.Component with
-              | Some entry -> ComponentAbi.imports entry
+              | Some entry ->
+                  ComponentAbi.imports entry
+                  if not componentImports.IsEmpty then ComponentImports.declarations componentImports
               | None -> yield! runtimeImports |> List.map CoreIrEmit.importDeclaration
 
               memoryDirective

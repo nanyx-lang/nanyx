@@ -101,6 +101,13 @@ module ComponentInterface =
             | _ -> name, name
         $"{witName ``namespace``}:{witName rest}@{version}"
 
+    /// Whether `name` is a WIT interface's full name, as an import names it: `acme:geometry/shapes`, with its
+    /// version after an `@` if it has one.
+    let isInterfaceName (name: string) =
+        let colon = name.IndexOf ':'
+        let slash = name.IndexOf '/'
+        colon > 0 && slash > colon + 1 && slash < name.Length - 1 && not (name.Substring(slash + 1).StartsWith "@")
+
     /// The name the WIT package `package` (`acme:shapes@0.1.0`) gives an item of its own, `name`:
     /// `acme:shapes/name@0.1.0`.
     let qualified (package: string) (name: string) =
@@ -274,14 +281,15 @@ module ComponentInterface =
             | _ -> None)
         |> Map.ofList
 
-    /// The errors in the defs `module'` marks `@component`, each by name with where it is written, of the types
+    /// The errors in the defs `module'` marks `@component`, `exports`, and `@import`, `imports`, each by name with where
+    /// it is written, of the types
     /// `typeOf` gives, and whether `requiresContexts` says they require contexts: each type that can't cross a component's
     /// boundary, `NYX0277`, or that the compiler can't take across yet, `NYX0301`. A def whose type is unknown, after an
     /// error of its own, has none.
-    let errors (typeOf: string -> Ty option) (requiresContexts: string -> bool) (module': Module) (exports: (string * SourceSpan) list) : Diagnostic list =
+    let errors (typeOf: string -> Ty option) (requiresContexts: string -> bool) (module': Module) (exports: (string * SourceSpan) list) (imports: (string * SourceSpan) list) : Diagnostic list =
         let values = valuesOf module'
-        exports
-        |> List.collect (fun (name, span) ->
+        (exports |> List.map (fun (name, span) -> "export", name, span)) @ (imports |> List.map (fun (name, span) -> "import", name, span))
+        |> List.collect (fun (verb, name, span) ->
             match typeOf name with
             | None -> []
             | Some ty ->
@@ -294,9 +302,9 @@ module ComponentInterface =
                     |> List.map (fun problem ->
                         match problem with
                         | Never(what, fix) ->
-                            Diagnostics.at DiagnosticCodes.ComponentBoundaryType span $"A component can't export '{name}': {what} can't cross a component's boundary. To fix it, {fix}"
+                            Diagnostics.at DiagnosticCodes.ComponentBoundaryType span $"A component can't {verb} '{name}': {what} can't cross a component's boundary. To fix it, {fix}"
                         | NotYet what ->
-                            Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"A component can't export '{name}' yet: {what} can't cross a component's boundary yet"
+                            Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"A component can't {verb} '{name}' yet: {what} can't cross a component's boundary yet"
                         |> Diagnostics.about name))
 
     /// The functions a component built from `typed` exports (see `TypedModule.ComponentExports`), each of the type it
@@ -314,22 +322,17 @@ module ComponentInterface =
     let worldName (functions: ComponentFunction list) =
         if functions |> List.exists (fun func -> witName func.Export.Module = "component") then "component-world" else "component"
 
-    /// The WIT of the package `package` that a program's `functions` are exported from: an interface for each module
-    /// they are in, and a world (`worldName`) that includes its host's world, `hostWorld`, and exports them all.
-    let render (package: string) (hostWorld: string) (functions: ComponentFunction list) =
-        let interfaces =
-            functions
-            |> List.groupBy (fun func -> witName func.Export.Module)
-            |> List.sortBy fst
-        // The records and variants each interface's functions are made of, each named once, after those it is made of.
-        let typeDefinitions (members: ComponentFunction list) =
-            let defined = Collections.Generic.HashSet<string>()
-            let rec definitions (ty: WitType) =
-                let inner = WitType.children ty |> List.collect definitions
-                match ty with
-                | WitType.Record(name, _)
-                | WitType.Variant(name, _) when defined.Add name -> inner @ [ ty ]
-                | _ -> inner
+    /// The lines of the WIT interface `name` with the functions `members`, after the records and variants they are
+    /// made of, each named once, after those it is made of.
+    let private interfaceLines (name: string) (members: ComponentFunction list) =
+        let defined = Collections.Generic.HashSet<string>()
+        let rec definitions (ty: WitType) =
+            let inner = WitType.children ty |> List.collect definitions
+            match ty with
+            | WitType.Record(name, _)
+            | WitType.Variant(name, _) when defined.Add name -> inner @ [ ty ]
+            | _ -> inner
+        let typeDefinitions =
             members
             |> List.collect (fun func -> (List.map snd func.Parameters @ Option.toList func.Result) |> List.collect definitions)
             |> List.collect (fun ty ->
@@ -354,28 +357,65 @@ module ComponentInterface =
             let parameters = func.Parameters |> List.map (fun (name, ty) -> $"{name}: {witTypeText ty}") |> String.concat ", "
             let result = func.Result |> Option.map (fun ty -> $" -> {witTypeText ty}") |> Option.defaultValue ""
             $"  {witName func.Export.Name}: func({parameters}){result};"
-        [ "/// Written by `nanyx build` from the program's definitions marked `@component`."
-          $"package {package};"
-          for name, members in interfaces do
-              ""
-              $"interface {name} {{"
-              yield! typeDefinitions members
-              yield! members |> List.distinctBy (fun func -> func.Export.Name) |> List.map signature
-              "}"
-          ""
-          $"world {worldName functions} {{"
-          $"  include {hostWorld};"
-          for name, _ in interfaces do
-              $"  export {name};"
+        [ $"interface {name} {{"
+          yield! typeDefinitions
+          yield! members |> List.distinctBy (fun func -> func.Export.Name) |> List.map signature
           "}" ]
-        |> List.map (fun line -> line + "\n")
-        |> String.concat ""
+
+    let private text (lines: string list) = lines |> List.map (fun line -> line + "\n") |> String.concat ""
+
+    /// The package of the WIT interface whose full name is `name`, and the interface's own name:
+    /// `acme:geometry/shapes@1.0.0` is the interface `shapes` of `acme:geometry@1.0.0`.
+    let private splitInterface (name: string) =
+        let slash = name.IndexOf '/'
+        match name.IndexOf('@', slash) with
+        | at when at > slash -> name.Substring(0, slash) + name.Substring at, name.Substring(slash + 1, at - slash - 1)
+        | _ -> name.Substring(0, slash), name.Substring(slash + 1)
+
+    /// The WIT of the package `package` that a program's `functions` are exported from: an interface for each module
+    /// they are in, and a world (`worldName`) that includes its host's world, `hostWorld`, imports the interfaces of
+    /// `imports`, and exports its own.
+    let render (package: string) (hostWorld: string) (functions: ComponentFunction list) (imports: ComponentFunction list) =
+        let interfaces =
+            functions
+            |> List.groupBy (fun func -> witName func.Export.Module)
+            |> List.sortBy fst
+        text
+            [ "/// Written by `nanyx build` from the program's definitions marked `@component` and `@import`."
+              $"package {package};"
+              for name, members in interfaces do
+                  ""
+                  yield! interfaceLines name members
+              ""
+              $"world {worldName functions} {{"
+              $"  include {hostWorld};"
+              for name in imports |> List.map _.Export.Module |> List.distinct |> List.sort do
+                  $"  import {name};"
+              for name, _ in interfaces do
+                  $"  export {name};"
+              "}" ]
+
+    /// The WIT of each package that `imports` are imported from, by the package's name, as the program's declarations
+    /// write it: an interface for each interface they are in, with their functions and the types they are made of.
+    let importedPackages (imports: ComponentFunction list) =
+        imports
+        |> List.groupBy (fun func -> fst (splitInterface func.Export.Module))
+        |> List.sortBy fst
+        |> List.map (fun (package, members) ->
+            package,
+            text
+                [ "/// Written by `nanyx build` from the program's definitions marked `@import`."
+                  $"package {package};"
+                  for name, functions in members |> List.groupBy (fun func -> snd (splitInterface func.Export.Module)) |> List.sortBy fst do
+                      ""
+                      yield! interfaceLines name functions ])
 
     /// Writes the WIT of a component built from a program whose `functions` are exported from `package` into the
     /// directory `target`, as wit-component and other languages' bindings generators read it: the package's own WIT
-    /// (`render`), and under `deps`, the packages its host's world is made of, from the host's WIT directory, `hostWit`.
-    /// A file already in `target` from an earlier build is replaced. Gives the name of the component's world.
-    let write (hostWit: string) (hostWorld: string) (package: string) (functions: ComponentFunction list) (target: string) =
+    /// (`render`), and under `deps`, the packages its host's world is made of, from the host's WIT directory, `hostWit`,
+    /// and the packages of the functions it `imports` (`importedPackages`). A file already in `target` from an earlier
+    /// build is replaced. Gives the name of the component's world.
+    let write (hostWit: string) (hostWorld: string) (package: string) (functions: ComponentFunction list) (imports: ComponentFunction list) (target: string) =
         let deps = IO.Path.Combine(target, "deps")
         if IO.Directory.Exists target then IO.Directory.Delete(target, true)
         IO.Directory.CreateDirectory deps |> ignore
@@ -394,5 +434,37 @@ module ComponentInterface =
         if IO.Directory.Exists hostDeps then
             for directory in IO.Directory.GetDirectories hostDeps do
                 copy directory (IO.Path.Combine(deps, IO.Path.GetFileName directory))
-        IO.File.WriteAllText(IO.Path.Combine(target, "component.wit"), render package hostWorld functions)
+        for imported, wit in importedPackages imports do
+            let directory = IO.Path.Combine(deps, "imported-" + witName (imported.Replace(':', '-').Replace('@', '-')))
+            IO.Directory.CreateDirectory directory |> ignore
+            IO.File.WriteAllText(IO.Path.Combine(directory, "package.wit"), wit)
+        IO.File.WriteAllText(IO.Path.Combine(target, "component.wit"), render package hostWorld functions imports)
         qualified package (worldName functions)
+
+    /// The functions a component built from `typed` imports: its defs marked `@import` that the program uses, each in
+    /// the interface it names (`ComponentExport.Module`, for an import), by the function's name there, and of the type
+    /// it has. One whose type can't cross the boundary, which `errors` reported, is left out.
+    let imports (typed: TypedModule) : ComponentFunction list =
+        typed.Module
+        |> List.choose (function
+            | Kind (Def (ValueDef(_, name, _, ({ Kind = ComponentImportSyntax.Import(witInterface, functionName) } as value)))) ->
+                let import = { Module = witInterface; Name = functionName; Definition = name }
+                typed.Types |> Map.tryFind name |> Option.bind (fun ty -> functionOf import ty (Some value) false |> Result.toOption)
+            | _ -> None)
+
+    /// The foreign function the backend calls a component import as, `func`: its interface and name, and the core value
+    /// type each Nanyx value it takes and gives is held in, a record, a string or a list by its address. The module
+    /// defines the function itself, lowering its arguments to the canonical ABI's and lifting its result (see
+    /// `ComponentImports` in the backend).
+    let externOf (func: ComponentFunction) : Extern =
+        let valueOf (ty: WitType) =
+            match ty with
+            | WitType.S64
+            | WitType.U64 -> ExternValue.I64
+            | WitType.F32 -> ExternValue.F32
+            | WitType.F64 -> ExternValue.F64
+            | _ -> ExternValue.I32
+        { Module = func.Export.Module
+          Name = func.Export.Name
+          Parameters = func.Parameters |> List.map (snd >> valueOf)
+          Result = func.Result |> Option.map valueOf }
