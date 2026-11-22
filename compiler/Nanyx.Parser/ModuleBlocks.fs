@@ -39,7 +39,11 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
             | Some qualifiedType -> qualifiedType
             | None -> rewriteQualifiedHead name
 
+    // A pattern that takes a block's nominal value apart, `UserId(n)`, names the type as the block's code does.
+    let qualifyType (name: string) = typeMap |> Map.tryFind name |> Option.defaultValue name
+
     let rec rewrite (e: Expression) = { e with Kind = rewriteKind e }
+    and rewritePattern (pattern: Pattern) = pattern |> Pattern.mapExpressions rewrite |> Pattern.mapTypeNames qualifyType
     and rewriteKind e =
         match e.Kind with
         | IdentifierExpr name -> IdentifierExpr(rewriteName name)
@@ -50,8 +54,8 @@ let private rewriteExpressionInModule (valueMap: Map<string, string>) (typeMap: 
         | BinaryOp(op, opSpan, left, right) -> BinaryOp(op, opSpan, rewrite left, rewrite right)
         | Pipe(value, funcName, range, args) -> Pipe(rewrite value, rewriteName funcName, range, args |> List.map rewrite)
         | Block statements -> Block (statements |> List.map (fun statement -> { statement with Kind = rewriteStatement statement.Kind }))
-        | Match(values, arms) -> Match(values |> List.map rewrite, arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions rewrite), rewrite body))
-        | Except(value, arms) -> Except(rewrite value, arms |> List.map (fun (patterns, body) -> patterns |> List.map (Pattern.mapExpressions rewrite), rewrite body))
+        | Match(values, arms) -> Match(values |> List.map rewrite, arms |> List.map (fun (patterns, body) -> patterns |> List.map rewritePattern, rewrite body))
+        | Except(value, arms) -> Except(rewrite value, arms |> List.map (fun (patterns, body) -> patterns |> List.map rewritePattern, rewrite body))
         | TupleExpr items -> TupleExpr (items |> List.map rewrite)
         | RecordExpr fields ->
             RecordExpr (
