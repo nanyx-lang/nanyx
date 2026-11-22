@@ -62,8 +62,9 @@ temporaries (`CoreIrSimplify.withTemporaries`).
   ([#1883](https://github.com/nanyx-lang/nanyx/issues/1883)). Only its first inlining is for this reason (`placed`):
   the function it was inlined into may itself be inlined in several places, and then the copies follow the other
   rules. A function a component exports inlines whatever it calls once, whatever its size, too: an export that requires
-  contexts calls its host's `provide` once, which is inlined into it, so it keeps only the members it calls and imports
-  only what they call, as an entry does ([#2326](https://github.com/nanyx-lang/nanyx/issues/2326)).
+  contexts calls its host's `provide` once, which is inlined into it, so it keeps only the contexts it uses and imports
+  only what their members call ([#2326](https://github.com/nanyx-lang/nanyx/issues/2326)). It keeps every member of
+  those contexts, since the export is passed the instance; an entry, inlined into the start, keeps only those it calls.
 - **What is not.** A function in a cycle of calls, found with Tarjan's algorithm over calls and the closures a function
   makes. Nothing is inlined into a guard. A function stops taking more once it has 4,000 nodes. The start function
   takes inlining as any other does: the host's `run` is inlined into it, so the closure over the entry and the members

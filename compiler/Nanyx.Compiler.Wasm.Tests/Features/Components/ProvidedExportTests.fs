@@ -71,7 +71,7 @@ let ``An export that requires contexts in a package with no host is an error tha
     Assert.Contains("its package names no host to provide them", output)
 
 [<Fact>]
-let ``An export that requires contexts, and the entry, import only what the members they call need`` () =
+let ``An export that requires contexts, and the entry, import only what the contexts they use need`` () =
     let stamp =
         "module stamp\n\n@entry\ndef main = { println(\"hi\") }\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() }\n"
     use time = package consoleHostEntry stamp
@@ -80,5 +80,5 @@ let ``An export that requires contexts, and the entry, import only what the memb
     let wat = File.ReadAllText(Path.Combine(time.Path, "out", "acme.time.wat"))
     Assert.Contains("(import \"wasi:clocks/monotonic-clock@0.3.0\" \"now\"", wat)
     Assert.Contains("(import \"wasi:cli/stdout@0.3.0\"", wat)
-    for unused in [ "wasi:http"; "wasi:filesystem"; "wasi:random"; "wasi:clocks/system-clock"; "wasi:cli/environment" ] do
+    for unused in [ "wasi:http"; "wasi:filesystem"; "wasi:random"; "wasi:cli/environment" ] do
         Assert.DoesNotContain($"(import \"{unused}", wat)

@@ -254,7 +254,7 @@ type private Inliner
                     // another twice would otherwise be copied twice at each level (#1664). A function the module calls
                     // only here is inlined whatever its size, as an `@entry` is into the start function (#1883), and so
                     // is one a function a component exports calls once, as an export that requires contexts calls its
-                    // host's `provide`: only the members of its contexts the export uses are then left in (#2326).
+                    // host's `provide`: only the contexts the export uses are then left in (#2326).
                     let onceHere = calls.[name] = 1
                     let always =
                         (isHandler callee && (onceHere || calleeSize <= handlerLimit))
