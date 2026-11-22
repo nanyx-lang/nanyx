@@ -184,6 +184,17 @@ export def UserId.value: UserId -> int = { UserId(n) -> n }
 
 The accessor is a deliberate choice about which operations make sense for the type. `UserId.value` says "you may read the number out"; it does not say "you may add two of them together", and the type system will continue to reject that.
 
+## Equality, order and hashing
+
+No `==`, order or hash is derived from a private type's representation, in its home module or out of it, so `a == b`, sorting a list of them and making a set of them are errors, and so is comparing a record or a list that holds one. A private type has `==`, `compare` and `hash` only when its module attaches them. It is then compared, ordered and hashed through them everywhere, and a structure that holds it is compared and hashed through them too (see [Contexts](./contexts#when-synthesis-applies)):
+
+```nanyx
+export def UserId.`==`: UserId, UserId -> bool = { a, b -> a.value == b.value }
+export def UserId.hash: UserId -> int = { id -> id.value }
+```
+
+A protected type keeps the `==`, order and hash of its shape, which code outside its module can see anyway.
+
 # Choosing between them
 
 The difference comes down to one question: is a value of your type still a value of the underlying type?

@@ -218,6 +218,7 @@
     <Compile Include="Features\Types\BottomTypeTests.fs" />
     <Compile Include="Features\Types\GenericNominalsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
+    <Compile Include="Features\Types\PrivateInstancesTests.fs" />
     <Compile Include="Features\Types\ProtectedShapesTests.fs" />
     <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
