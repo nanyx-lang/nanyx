@@ -183,7 +183,9 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
                 recordTypeField field
             ])
 
-    and contextSet (items: TypeExpr list) : Doc =
+    and contextSet (items: TypeExpr list) : Doc = cat [ text "["; commaJoin (contextItems items); text "]" ]
+
+    and contextItems (items: TypeExpr list) : Doc list =
         let item (t: TypeExpr) =
             match t.Kind with
             | TypeApply(n, args) -> cat [ text n; text "("; typeArguments args; text ")" ]
@@ -193,10 +195,54 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
                 let requirement = cat [ text (Names.written n); text ": "; typeList memberType ]
                 if items.Length > 1 then cat [ text "("; requirement; text ")" ] else requirement
             | _ -> typeExpr t
-        cat [ text "["; commaJoin (List.map item items); text "]" ]
+        List.map item items
+
+    /// A def's annotation, as `signature` writes it on one line where it fits after the `: ` it follows, and otherwise
+    /// broken, each line after the first indented to the column after the `: `:
+    ///
+    ///   : [Console, FileSystem]      contexts on a line of their own, one per line if they still don't fit
+    ///     string,                    parameters one per line, each but the last followed by `,`
+    ///     int
+    ///     -> | #ok(Conn)             `->` and the result on a line of their own, and a union in the result one case
+    ///        | #error(string)        per line, each after a `|`, as a type definition's are
+    ///
+    /// A part that fits on its line once the parts around it are broken stays on it. A type inside a parameter is not
+    /// broken.
+    and brokenSignature (t: TypeExpr) : Doc =
+        let separatedByLines (docs: Doc list) = Doc.join (cat [ text ","; Doc.line ]) docs
+        let union (t: TypeExpr) =
+            match t.Kind with
+            | TypeUnion(first :: rest) ->
+                Doc.group (cat [ Doc.IfBreak(text "| ", Doc.empty); unionCase first; cat [ for case in rest -> cat [ Doc.line; text "| "; unionCase case ] ] ])
+            | _ -> typeExpr t
+        let arrow (parameters: Doc list) (result: TypeExpr) =
+            Doc.group (cat [ separatedByLines parameters; Doc.line; text "-> "; Doc.nest "-> ".Length (union result) ])
+        let typeList (t: TypeExpr) =
+            match t.Kind with
+            | TypeTuple _ -> typeList t
+            | TypeFunc(parameter, result) ->
+                match parameter.Kind with
+                | TypeTuple items -> arrow (List.map listItem items) result
+                | TypeFunc _
+                | TypeWithContext _
+                | TypeUnion _ -> arrow [ parenType parameter ] result
+                | _ -> arrow [ unionType parameter ] result
+            | TypeUnion _ -> union t
+            | _ -> typeExpr t
+        let broken =
+            match t.Kind with
+            | TypeWithContext(contexts, inner) ->
+                let rest = match inner.Kind with TypeTuple _ -> parenType inner | _ -> typeList inner
+                let contexts = Doc.group (cat [ text "["; Doc.nest 1 (separatedByLines (contextItems contexts)); text "]" ])
+                Doc.group (cat [ contexts; Doc.line; rest ])
+            | _ -> typeList t
+        Doc.nest ": ".Length broken
 
     /// A def's annotation, or anywhere the parser reads a list of types.
     member _.Signature t = signature t
+
+    /// A def's annotation after its `: `, broken where it doesn't fit (see `brokenSignature`).
+    member _.BrokenSignature t = brokenSignature t
 
     /// One case of a union, as `UnionType` writes it between its `|`s.
     member _.UnionCase t = unionCase t

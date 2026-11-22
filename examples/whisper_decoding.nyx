@@ -124,7 +124,8 @@ def suppressBlank: [Tokenizer] int -> LogitFilter = { sampleBegin ->
 
 -- Extend every sequence by one token until all have ended or the limit is reached
 def mainLoop
-  : [Model, Tokenizer] (list(Tokens), AudioFeatures, Decoder, list(LogitFilter), sampleLen: int) -> list(Tokens)
+  : [Model, Tokenizer]
+    (list(Tokens), AudioFeatures, Decoder, list(LogitFilter), sampleLen: int) -> list(Tokens)
   = { initial, audio, decoder, filters, sampleLen ->
     rec step = { sequences, i ->
       def completed = sequences \all { s -> s \last == #some(eot) }
@@ -142,7 +143,8 @@ def mainLoop
   }
 
 export def transcribe
-  : [Model, Tokenizer, Random] AudioFeatures, DecodingOptions -> #some(string) | #error(OptionsError)
+  : [Model, Tokenizer, Random]
+    AudioFeatures, DecodingOptions -> #some(string) | #error(OptionsError)
   = { audio, options ->
     proc {
       def options = try verifyOptions(options)

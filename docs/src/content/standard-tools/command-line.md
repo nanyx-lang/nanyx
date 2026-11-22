@@ -90,7 +90,7 @@ program is answered with a 500, and the reason is written to standard error. See
 
 The report of `--memory` says how many blocks of memory the program allocated and freed, how many were still in use
 when it stopped, how many objects it built in the memory of one it had finished with rather than allocating (see
-[Reference counting](../meta/reference-counting)), how many bytes it allocated in all, the most it had in use
+[Reference counting](../deep-dives/reference-counting)), how many bytes it allocated in all, the most it had in use
 at once, and the highest address its heap reached, with the memory's size in 64 KiB pages:
 
 ```text

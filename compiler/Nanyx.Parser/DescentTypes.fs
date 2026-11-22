@@ -345,8 +345,27 @@ and internal typeUnion (c: Cursor) =
     // A `|` before the first type is no part of the union's span, which starts at that type.
     if c.Is Bar then bar c
     let start = c.Start
-    sepBy1 c (fun () -> typeIntersection c) (fun () -> if across c Bar None then bar c else raise NoMatch)
-    |> singleOrCombined c start TypeUnion
+    // A case on a line of its own, indented past the line before, starts a block of arms (layout rule 3), as a def's
+    // long result does: `-> | #some(Entry)` and its other cases under the first `|`. The block ends after the last
+    // case, and its `Dedent` is the union's.
+    let next () =
+        let before = c.Index
+        if not (across c Bar None) then raise NoMatch
+        let opensBlock = c.Index > before && (match c.At(before - c.Index) with Indent _ -> true | _ -> false)
+        bar c
+        opensBlock, typeIntersection c
+    let first = typeIntersection c
+    let rest = ResizeArray()
+    let mutable inBlock = false
+    let mutable going = true
+    while going do
+        match c.Attempt next with
+        | Some(opensBlock, case) ->
+            inBlock <- inBlock || opensBlock
+            rest.Add case
+        | None -> going <- false
+    if inBlock && (match c.At 0 with Dedent _ -> true | _ -> false) then c.Index <- c.Index + 1
+    first :: List.ofSeq rest |> singleOrCombined c start TypeUnion
 
 and private typeArrow (c: Cursor) =
     let start = c.Start

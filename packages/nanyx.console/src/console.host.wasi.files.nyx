@@ -204,7 +204,12 @@ def located: [HostRuntime] Path -> #some(I32, string) | FsError = { at ->
   and a block of `size` bytes, aligned to 8, where it gives its result; and gives what `read` makes
   of that result.
 def withResult
-  : [HostRuntime] Path, I32, ([HostRuntime] I32, I32, I32, I32 -> ()), ([HostRuntime] I32 -> #ok | FsError) -> #ok | FsError
+  : [HostRuntime]
+    Path,
+    I32,
+    ([HostRuntime] I32, I32, I32, I32 -> ()),
+    ([HostRuntime] I32 -> #ok | FsError)
+    -> #ok | FsError
   = { at, size, call, read ->
     match located(at)
       | #some(directory, relative) ->

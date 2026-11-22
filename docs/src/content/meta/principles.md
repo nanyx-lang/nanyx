@@ -105,9 +105,9 @@ Don't make the user write things they don't care about.
 
 Defaults should be efficient and predictable. When performance matters, the language should give you clear paths to control it.
 
-This is why Nanyx frees memory by [reference counting](../meta/reference-counting) rather than with a garbage collector: a value is freed at a point the program determines, as soon as nothing refers to it, and there are no collector pauses.
+This is why Nanyx frees memory by [reference counting](../deep-dives/reference-counting) rather than with a garbage collector: a value is freed at a point the program determines, as soon as nothing refers to it, and there are no collector pauses.
 
-Nanyx is cautious about implementing compiler optimizations that can make program performance less predictable (and that the user can't control). We don't want developers to accidentally tank the performance of their code by making an innocuous change that causes an object in a tight loop to be allocated on the heap instead of the stack.
+Nanyx is cautious about implementing compiler optimizations that can make program performance less predictable (and that the user can't control). We don't want developers to accidentally tank the performance of their code by making an innocuous change. In languages whose compilers decide by escape analysis whether an object lives on the stack or the heap, passing a value to one more function can move it to the heap in a tight loop, with nothing in the code to show it. Where Nanyx's own performance depends on something unseen, the rule is local and stated: [reuse in place](../deep-dives/reference-counting#reuse-in-place) needs the value held once where it's rebuilt, so keeping a second reference to a list makes `list.map` copy it rather than rewrite it, and nothing else changes.
 
 Having said that, in the interests of productivity and the approachability of the language we do want to allow users to "not care" about performance in individual cases and just let the language decide. As a compromise between these two viewpoints, we prefer to provide clear, explicit tools for performance when needed, while keeping the common case straightforward and efficient.
 

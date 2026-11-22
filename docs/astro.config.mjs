@@ -26,7 +26,7 @@ export default defineConfig({
   redirects: {
     ...sectionRedirects(),
     // Pages that have moved to another section.
-    "/docs/advanced/reference-counting": "/docs/meta/reference-counting",
+    "/docs/advanced/reference-counting": "/docs/deep-dives/reference-counting",
     "/docs/advanced/associated-types-and-constraints": "/docs/advanced/contexts#associated-types",
     "/docs/work-in-progress/type-arguments-and-reflection": "/docs/deep-dives/type-descriptions",
     "/docs/work-in-progress/sized-numbers": "/docs/advanced/sized-numbers",
