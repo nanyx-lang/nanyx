@@ -214,6 +214,34 @@ def map.filter: [c] map(k, v), ([c] (k, v) -> bool) -> map(k, v)
 
 The entries of `m` whose key and value pass `keep`, in the same order.
 
+## `map.filterMap`
+
+```nanyx fragment
+def map.filterMap: [c] map(k, v), ([c] (k, v) -> #some(w) | #skip) -> map(k, w)
+```
+
+The entries of `m` whose key and value `f` gives `#some` for, each with the new value it gives,
+in the same order: a [`map.filter`](#mapfilter) and a [`map.map`](#mapmap) in one walk. Keys `f` gives `#skip` for
+are left out.
+
+## `map.any`
+
+```nanyx fragment
+def map.any: [c] map(k, v), ([c] (k, v) -> bool) -> bool
+```
+
+Whether `test` holds for any key and its value (so `false` for an empty map). It stops at the
+first entry it holds for.
+
+## `map.all`
+
+```nanyx fragment
+def map.all: [c] map(k, v), ([c] (k, v) -> bool) -> bool
+```
+
+Whether `test` holds for every key and its value (so `true` for an empty map). It stops at the
+first entry it fails for.
+
 ## `map.update`
 
 ```nanyx fragment
@@ -374,6 +402,44 @@ def set.filter: [c] set(a), ([c] a -> bool) -> set(a)
 ```
 
 The elements of `s` that pass `keep`, in the same order.
+
+## `set.filterMap`
+
+```nanyx fragment
+def set.filterMap: [Eq(b), Hash(b), c] set(a), ([c] a -> #some(b) | #skip) -> set(b)
+```
+
+The set of the values `f` gives as `#some`, leaving out the elements it gives `#skip` for: a
+[`set.filter`](#setfilter) and a [`set.map`](#setmap) in one walk. Values that come out equal are kept once, where the
+first of them was.
+
+## `set.select`
+
+```nanyx fragment
+def set.select: [Eq(b), Hash(b), c, d] set(a), ([c] a -> [d] seq(b)) -> set(b)
+```
+
+The set of the values `f` yields for each element in turn. Values that come out equal are kept
+once, where the first of them was. A lambda with `yield` in it is a sequence (see `Yield`), as
+in [`list.select`](prelude-lists#listselect).
+
+## `set.any`
+
+```nanyx fragment
+def set.any: [c] set(a), ([c] a -> bool) -> bool
+```
+
+Whether `test` holds for any element (so `false` for an empty set). It stops at the first element
+it holds for.
+
+## `set.all`
+
+```nanyx fragment
+def set.all: [c] set(a), ([c] a -> bool) -> bool
+```
+
+Whether `test` holds for every element (so `true` for an empty set). It stops at the first
+element it fails for.
 
 ## `set.isSubset`
 
