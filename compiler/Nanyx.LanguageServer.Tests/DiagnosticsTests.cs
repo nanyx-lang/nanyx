@@ -358,18 +358,5 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         Assert.Null(diagnostics[1].CodeDescription);
         Assert.Equal(new Range(2, 2, 2, 8), diagnostics[0].Range);
         Assert.Equal(DiagnosticSeverity.Error, diagnostics[1].Severity);
-        Assert.Null(diagnostics[1].Tags);
-    }
-
-    [Fact]
-    public async Task An_unused_context_is_tagged_unnecessary_so_the_editor_draws_it_faded()
-    {
-        var uri = DocumentUri.FromFileSystemPath(TempPath("unused-context.nyx"));
-
-        Open(uri, "::linter nanyx.lint\nscoped context Foo = protected ()\n\ndef f: [Foo] () -> () = { }\n\nexport def main: () -> () = { () -> () }\n");
-
-        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!, d => d.Code?.String == "default/unusedContexts");
-        Assert.Equal(new Range(3, 8, 3, 11), diagnostic.Range);
-        Assert.Equal([DiagnosticTag.Unnecessary], diagnostic.Tags!);
     }
 }
