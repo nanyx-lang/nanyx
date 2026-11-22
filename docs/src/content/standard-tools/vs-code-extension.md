@@ -260,8 +260,9 @@ editor's font. It follows the theme when you change it. Messages are prose and a
 
 Only the names in the code are links, and they look like the rest of the code until you hover over them. Click one to go
 to it: a definition's, local's or parameter's name to where it is declared, a definition's name in its signature to the
-definition, a context's name to the `use` or signature that gives it, a call in the context flow to the call. A type on
-its own, such as the type of the expression at the cursor, is not a link. Click a message's code, such as
+definition, a context's name to the `use` or signature that gives it, a call in the context flow to the call, and the
+name of a type or context with a definition, wherever the code writes it, to that definition (`Point` in
+`#some(Point)`). A type with no name to follow, such as `int -> string`, has no link. Click a message's code, such as
 `error NYX0201`, to go to where it is reported. **Pin**
 keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
 again. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
