@@ -1,9 +1,9 @@
 (
   package = (
     name = "nanyx.playground"
-    version = "0.33.0"
+    version = "0.34.0"
     sources = ["src/**/*.nyx"]
     host = (root = "playground.host", prelude = "playground.prelude")
   )
-  dependencies = [(package = "nanyx.console.core", version = "0.33.0")]
+  dependencies = [(package = "nanyx.console.core", version = "0.34.0")]
 )
