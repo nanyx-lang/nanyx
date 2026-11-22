@@ -1,0 +1,36 @@
+// The WIT `nanyx build` writes for the Nanyx component's exports of `acme:shapes/shapes` (../../../run.sh checks the
+// interface is the same).
+
+package acme:shapes@0.1.0;
+
+interface shapes {
+  variant unit {
+    metres,
+    feet,
+  }
+
+  record length {
+    value: f64,
+    unit: unit,
+  }
+
+  record point {
+    x: f64,
+    y: f64,
+  }
+
+  variant shape {
+    circle(length),
+    rect(tuple<point, point>),
+    polygon(list<point>),
+  }
+
+  record summary {
+    name: string,
+    area: f64,
+    corners: list<string>,
+  }
+
+  summarize: func(shape: shape) -> summary;
+  shift: func(points: list<point>, by: f64) -> list<point>;
+}

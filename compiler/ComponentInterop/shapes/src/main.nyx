@@ -1,0 +1,8 @@
+module main
+
+import shapes as shapes
+
+@entry
+def main = {
+  println("shapes")
+}

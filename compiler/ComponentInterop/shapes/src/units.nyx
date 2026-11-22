@@ -1,0 +1,11 @@
+module units
+
+export type Unit = #metres | #feet
+
+export type Length = (value: float, unit: Unit)
+
+@import("acme:units/units@0.1.0")
+export def toMetres: Length -> float
+
+@import("acme:units/units@0.1.0")
+export def label: Unit -> string
