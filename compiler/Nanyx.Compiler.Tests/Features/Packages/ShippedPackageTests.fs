@@ -34,10 +34,10 @@ let ``The console's interface package is shipped beside the compiler, and the co
     Assert.Equal<string list>([ "console"; "env" ], (ShippedPackages.tryModules "nanyx.console.core").Value.PublicModules)
     Assert.Equal(None, core.Declares)
     let host = manifestOf Hosts.consolePackage
-    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs"; "nanyx.http.core" ], host.Dependencies |> List.map _.Name)
+    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs"; "nanyx.http.core"; "nanyx.wasi" ], host.Dependencies |> List.map _.Name)
     // A script's build reads the host's package with the shipped packages it depends on.
     let modules = (ShippedPackages.tryModules Hosts.consolePackage).Value
-    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs"; "nanyx.http.core" ], modules.Dependencies |> List.map _.Package)
+    Assert.Equal<string list>([ "nanyx.console.core"; "nanyx.fs"; "nanyx.http.core"; "nanyx.wasi" ], modules.Dependencies |> List.map _.Package)
     Assert.Equal<string list>([ "console"; "env" ], modules.Dependencies.Head.PublicModules)
 
 [<Fact>]
@@ -63,7 +63,7 @@ let ``The HTTP host is shipped beside the compiler, and takes a port, 3000 by de
         Assert.Equal(("http.host", Some "http.prelude"), (host.Module, host.Prelude))
         Assert.Equal(3000, HostSettings.port (Some host) None)
     | Error message -> failwith message
-    Assert.Equal<string list>([ "nanyx.http.core" ], (manifestOf "nanyx.http").Dependencies |> List.map _.Name)
+    Assert.Equal<string list>([ "nanyx.http.core"; "nanyx.wasi" ], (manifestOf "nanyx.http").Dependencies |> List.map _.Name)
 
 [<Fact>]
 let ``The playground host is shipped beside the compiler, and depends only on the console's interface package`` () =

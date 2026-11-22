@@ -1,0 +1,63 @@
+--| `wasi:cli`'s standard output streams, as `abi.writeTo` writes them: stdout and stderr.
+export module cli
+
+import (
+  nanyx/host.runtime
+  abi as (Output)
+)
+
+@extern("wasi:cli/stdout@0.3.0", "[stream-new-0]write-via-stream")
+def stdoutStreamNew: [HostRuntime] () -> I64
+
+@extern("wasi:cli/stdout@0.3.0", "write-via-stream")
+def stdoutWriteViaStream: [HostRuntime] I32 -> I32
+
+@extern("wasi:cli/stdout@0.3.0", "[async-lower][stream-write-0]write-via-stream")
+def stdoutStreamWrite: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("wasi:cli/stdout@0.3.0", "[stream-drop-writable-0]write-via-stream")
+def stdoutStreamDropWritable: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/stdout@0.3.0", "[async-lower][future-read-1]write-via-stream")
+def stdoutFutureRead: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi:cli/stdout@0.3.0", "[future-drop-readable-1]write-via-stream")
+def stdoutFutureDropReadable: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/stderr@0.3.0", "[stream-new-0]write-via-stream")
+def stderrStreamNew: [HostRuntime] () -> I64
+
+@extern("wasi:cli/stderr@0.3.0", "write-via-stream")
+def stderrWriteViaStream: [HostRuntime] I32 -> I32
+
+@extern("wasi:cli/stderr@0.3.0", "[async-lower][stream-write-0]write-via-stream")
+def stderrStreamWrite: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("wasi:cli/stderr@0.3.0", "[stream-drop-writable-0]write-via-stream")
+def stderrStreamDropWritable: [HostRuntime] I32 -> ()
+
+@extern("wasi:cli/stderr@0.3.0", "[async-lower][future-read-1]write-via-stream")
+def stderrFutureRead: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi:cli/stderr@0.3.0", "[future-drop-readable-1]write-via-stream")
+def stderrFutureDropReadable: [HostRuntime] I32 -> ()
+
+--| Standard output, as an `Output`.
+export def stdout: Output = (
+  streamNew = stdoutStreamNew
+  writeViaStream = stdoutWriteViaStream
+  streamWrite = stdoutStreamWrite
+  streamDropWritable = stdoutStreamDropWritable
+  futureRead = stdoutFutureRead
+  futureDropReadable = stdoutFutureDropReadable
+)
+
+--| Standard error, as an `Output`.
+export def stderr: Output = (
+  streamNew = stderrStreamNew
+  writeViaStream = stderrWriteViaStream
+  streamWrite = stderrStreamWrite
+  streamDropWritable = stderrStreamDropWritable
+  futureRead = stderrFutureRead
+  futureDropReadable = stderrFutureDropReadable
+)

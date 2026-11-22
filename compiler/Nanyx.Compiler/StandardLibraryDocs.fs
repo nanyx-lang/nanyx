@@ -185,7 +185,7 @@ let private publicModules (pin: (string * SemanticVersion) option) (modules: Pac
         | [] -> None)
 
 /// The modules whose reference is written: each of the standard library's, and each public module of a package the
-/// compiler ships but for the hosts', compiled as a program that imports it checks it.
+/// compiler ships but for the hosts' and the host libraries', compiled as a program that imports it checks it.
 let private documented () : Documented list =
     let library =
         StandardLibrary.preludeModuleName :: StandardLibrary.moduleNames
@@ -198,6 +198,8 @@ let private documented () : Documented list =
         ShippedPackages.names ()
         |> List.filter (fun name -> Result.isError (HostPackages.tryShipped name))
         |> List.choose ShippedPackages.tryModules
+        // A host library is what hosts are written on, which a program can't call (see `HostLibraries`).
+        |> List.filter (fun modules -> not modules.HostLibrary)
         |> List.collect (publicModules None)
     library @ packages
 

@@ -1,0 +1,48 @@
+--| The `nanyx` runtime's own `nanyx:http`, which the hosts' core roots send requests through, since
+  WASI preview 1 has no networking.
+export module runtime
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx.http.core/client as (HttpError)
+  nanyx.http.core/request as (Request)
+  nanyx.http.core/response as (Response)
+  nanyx.http.core/wire as (readResponse, writeRequest)
+)
+
+@extern("nanyx:http", "send")
+def httpSend: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("nanyx:http", "receive")
+def httpReceive: [HostRuntime] I32 -> ()
+
+-- A request is passed to `nanyx:http` written as `nanyx.http.core/wire` writes it, and its response comes
+-- back written the same way. What kind of answer `send` had, a response or why there is none, it writes
+-- at the address it is given.
+
+--| Sends `request` through `nanyx:http`, and gives its response, or why there is none.
+export def sendThroughRuntime
+  : [HostRuntime] Request -> #some(Response) | #error(HttpError)
+  = { request ->
+    def wire = writeRequest(request)
+    def kind = allocate(4)
+    def length = httpSend(addressOf(wire), byteLength(wire), kind)
+    keepAlive(wire)
+    def buffer = allocate(length + 1)
+    httpReceive(buffer)
+    def answer = stringAt(buffer, length)
+    free(buffer)
+    def answered = readI32(kind)
+    free(kind)
+
+    match answered
+      | 0 ->
+        match readResponse(answer)
+          | #some(response) -> #some(response)
+          | #malformed -> #error(#other("the runtime's answer to the request was malformed"))
+      | 1 -> #error(#timeout)
+      | 2 -> #error(#connectionFailed(answer))
+      | 3 -> #error(#invalidUrl)
+      | _ -> #error(#other(answer))
+  }

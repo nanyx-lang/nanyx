@@ -1,0 +1,150 @@
+--| The component model's canonical ABI, by hand, for the hosts' component roots: waiting on what an
+  async call gives, the strings and lists the host gives back, and writing a `stream<u8>`.
+
+  A host library's modules may require `HostRuntime`, as a host's own do: only a host, or another
+  host library, can call them.
+export module abi
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+)
+
+@extern("$root", "[waitable-set-new]")
+def waitableSetNew: [HostRuntime] () -> I32
+
+@extern("$root", "[waitable-join]")
+def waitableJoin: [HostRuntime] I32, I32 -> ()
+
+@extern("$root", "[waitable-set-wait]")
+def waitableSetWait: [HostRuntime] I32, I32 -> I32
+
+@extern("$root", "[waitable-set-drop]")
+def waitableSetDrop: [HostRuntime] I32 -> ()
+
+--| What an async built-in gives when it hasn't finished yet: the canonical ABI's BLOCKED.
+export def blocked: I32 = -1
+
+--| Waits for `handle` in a waitable set of its own, and gives the code its event came with: for a
+  stream's read or write, how many bytes it took, times 16, plus 0 when the stream goes on; for a
+  subtask, the state it is in.
+export def waitFor: [HostRuntime] I32 -> I32 = { handle ->
+  def set = waitableSetNew()
+  def event = allocate(8)
+  waitableJoin(handle, set)
+  ignore(waitableSetWait(set, event))
+  waitableJoin(handle, 0)
+  waitableSetDrop(set)
+  def code = readI32(event + 4)
+  free(event)
+  code
+}
+
+--| What a stream's read or write that may block gave, once it hasn't: `status` itself, or what
+  waiting for `handle` gave.
+export def settled: [HostRuntime] I32, I32 -> I32 = { handle, status ->
+  if status == blocked then waitFor(handle) else status
+}
+
+--| The readable end of a new stream or future, of the two that the `I64` `ends` holds.
+export def readableEnd: int -> I32 = { ends ->
+  I32.fromInt(ends % 4294967296)
+}
+
+--| The writable end of a new stream or future, of the two that the `I64` `ends` holds.
+export def writableEnd: int -> I32 = { ends ->
+  I32.fromInt(ends / 4294967296)
+}
+
+--| The first address from `address` on that is a multiple of 8, where the canonical ABI lays out a
+  value with a 64-bit field: a block of 8 bytes more than the value has the value from there on.
+export def aligned8: I32 -> I32 = { address ->
+  address + (8 - address % 8) % 8
+}
+
+--| The string the canonical ABI describes at `at`, an address and a length, copied out of memory the
+  host allocated, which it frees.
+export def takeString: [HostRuntime] I32 -> string = { at ->
+  def address = readI32(at)
+  def text = stringAt(address, readI32(at + 4))
+  free(address)
+  text
+}
+
+--| Frees the string that an `option<string>` at `at` holds, if it holds one: an address and a length
+  at 4 and 8, which the host allocated.
+export def freeOptionalString: [HostRuntime] I32 -> () = { at ->
+  if readByte(at) == 1 then free(readI32(at + 4)) else ()
+}
+
+--| The list the canonical ABI describes at `at`, of `count` elements of `size` bytes from `address`,
+  each read by `read`, in front of `acc`.
+def elementsBefore
+  : [HostRuntime] I32, I32, I32, ([HostRuntime] I32 -> a), list(a) -> list(a)
+  = { address, count, size, read, acc ->
+    if count == 0 then acc else
+      def element = read(I32.wrappingAdd(address, (count - 1) * size))
+      elementsBefore(address, count - 1, size, read, [element, ...acc])
+  }
+
+--| The list `get` writes at the address it is given, as the canonical ABI lays out a list: the
+  address and count of its elements, each `size` bytes, read by `read`. The host allocated the
+  elements, which it frees.
+export def listFrom
+  : [HostRuntime] ([HostRuntime] I32 -> ()), I32, ([HostRuntime] I32 -> a) -> list(a)
+  = { get, size, read ->
+    def described = allocate(8)
+    get(described)
+    def address = readI32(described)
+    def elements = elementsBefore(address, readI32(described + 4), size, read, [])
+    free(described)
+    free(address)
+    elements
+  }
+
+--| The imports that write a `stream<u8>` somewhere: a standard output stream, a file, a request's
+  body. `writeViaStream` gives the stream's readable end to where it goes, and gives the future that
+  says how writing it ended, which `futureRead` reads.
+export type Output = (
+  streamNew: [HostRuntime] () -> I64
+  writeViaStream: [HostRuntime] I32 -> I32
+  streamWrite: [HostRuntime] (I32, I32, I32) -> I32
+  streamDropWritable: [HostRuntime] I32 -> ()
+  futureRead: [HostRuntime] (I32, I32) -> I32
+  futureDropReadable: [HostRuntime] I32 -> ()
+)
+
+--| Writes the `length` bytes at `address` to the writable end `writer`, until the host has taken them
+  all, or has dropped its end.
+export def writeAll
+  : [HostRuntime] Output, I32, I32, I32 -> ()
+  = { output, writer, address, length ->
+    if length <= 0 then () else
+      def status = settled(writer, output.streamWrite(writer, address, length))
+      def taken = status / 16
+
+      if status % 16 != 0
+        then ()
+        else writeAll(output, writer, I32.wrappingAdd(address, taken), length - taken)
+  }
+
+--| Writes `text` to `output`, through a stream of its own, and waits until the host has written it,
+  so that what goes to stdout and stderr comes out in the order it was written. How writing it
+  ended, the future's value, is read into the 24 bytes at `result`.
+export def writeTo: [HostRuntime] Output, string, I32 -> () = { output, text, result ->
+  def ends = output.streamNew()
+  def written = output.writeViaStream(readableEnd(ends))
+  def writer = writableEnd(ends)
+  writeAll(output, writer, addressOf(text), byteLength(text))
+  keepAlive(text)
+  output.streamDropWritable(writer)
+  ignore(settled(written, output.futureRead(written, result)))
+  output.futureDropReadable(written)
+}
+
+--| `writeTo`, for a stream whose result doesn't matter, as stdout's doesn't.
+export def writeOut: [HostRuntime] Output, string -> () = { output, text ->
+  def result = allocate(24)
+  writeTo(output, text, result)
+  free(result)
+}

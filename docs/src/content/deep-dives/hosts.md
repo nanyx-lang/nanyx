@@ -53,7 +53,8 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
 - **`HostRuntime`** is declared in `nanyx/host.runtime`, a context with no members: the capability that lets code
   call [foreign functions](./foreign-functions) and use `nanyx/host.memory`. With no members, a function that requires
   it is passed nothing, and the type checker treats it as available wherever it is required, so `Hosts.runtimeErrors`
-  reports `NYX0238` in any module but one of the build host's own package (`isHost` in `Library.checkModule`),
+  reports `NYX0238` in any module but one of the build host's own package or of a host library it depends on (`isHost`
+  in `Library.checkModule`, `PackageModules.HostLibrary`),
   `nanyx/host.runtime` and `nanyx/host.memory`, by what each call calls: at
   each top-level def that requires it, as its written contexts say or a call in it does, other than a foreign function,
   which any module may declare, and at each call at the top level that requires it, other than the call of `run` that
@@ -164,8 +165,8 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   [Foreign functions](./foreign-functions#whats-built)). `nanyx.http.core`'s module `wire` writes and reads requests
   and responses as the runtime's imports pass them, so the console host and the HTTP host share it.
 - **`Random`** is declared in the standard library's `nanyx/random`, and both hosts' preludes re-export it. Each host
-  writes its one member, `bits`, on WASI's `random_get`, which fills 8 bytes of the host's state that `readI64` then
-  reads; only a host's own package may call a foreign function, so the two hosts each have their own `systemBits`.
+  writes its one member, `bits`, on WASI's `random_get`, which fills 8 bytes that `readI64` then reads: both call
+  `systemBits` in the host library `nanyx.wasi` (`nanyx.wasi/preview1`), which their packages depend on.
   `random.seeded` is the library's own `Random`, SplitMix64 over a `mut` cell, so a test host, when there is one, can
   give its tests a fixed seed by running each under it.
 - **`Clock`** is declared in the standard library's `nanyx/clock`, with `now`, Unix milliseconds, and `ticks`,

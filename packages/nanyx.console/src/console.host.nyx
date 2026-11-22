@@ -7,7 +7,9 @@
   require. `Console`, `Env`, `FileSystem`, `Random` and `Clock` are written on WASI's
   functions, and `Http` on the `nanyx` runtime's own `nanyx:http`, since WASI preview 1 has no
   networking. The host declares them with `@extern` and calls them with the [`HostRuntime`] the
-  toolchain provides to it, passing their buffers in memory with `nanyx/host.memory`.
+  toolchain provides to it, passing their buffers in memory with `nanyx/host.memory`; what it
+  shares with the HTTP host, the random source, the clocks and `nanyx:http`, is in the host library
+  `nanyx.wasi`.
 @partial export module console.host
 
 import (
@@ -25,10 +27,9 @@ import (
   nanyx.fs/filesystem as (FileSystem, FsError)
   nanyx.fs/path as (Path)
   nanyx.fs/path as path
-  nanyx.http.core/client as (Http, HttpError)
-  nanyx.http.core/request as (Request)
-  nanyx.http.core/response as (Response)
-  nanyx.http.core/wire as (readResponse, writeRequest)
+  nanyx.http.core/client as (Http)
+  nanyx.wasi/preview1 as (millisecondsOn, systemBits)
+  nanyx.wasi/runtime as (sendThroughRuntime)
 )
 
 @extern("wasi_snapshot_preview1", "fd_write")
@@ -52,17 +53,10 @@ def environGet: [HostRuntime] I32, I32 -> I32
 @extern("wasi_snapshot_preview1", "proc_exit")
 def procExit: [HostRuntime] I32 -> ()
 
-@extern("wasi_snapshot_preview1", "random_get")
-def randomGet: [HostRuntime] I32, I32 -> I32
-
-@extern("wasi_snapshot_preview1", "clock_time_get")
-def clockTimeGet: [HostRuntime] I32, I64, I32 -> I32
-
 -- The host keeps its state in the block the module sets aside for it (see `hostState`): at 4 and 8,
 -- where what is left of the standard input it has read starts and ends in its buffer; at 12, an
 -- iovec, the address and length of the bytes to write or read; at 20, the count of bytes written or
--- read; at 24, the bits `random_get` last gave; at 32, the time `clock_time_get` last gave; at 40, what kind of answer an HTTP request had; and
--- from 64 to the end of the block, the buffer standard input is read into (see `console.stdin`).
+-- read; and from 64 to the end of the block, the buffer standard input is read into (see `console.stdin`).
 
 --| Writes `text` to the file descriptor `fd`, as it is.
 def writeTo: [HostRuntime] I32, string -> () = { fd, text ->
@@ -151,50 +145,6 @@ def exitProcess: [HostRuntime] int -> undefined = { code ->
 
   procExit(exitCode)
   exitProcess(code)
-}
-
---| 64 bits from the operating system's random source, through WASI's `random_get`.
-def systemBits: [HostRuntime] () -> int = { _ ->
-  ignore(randomGet(stateAt(24), 8))
-  readI64(stateAt(24))
-}
-
---| The time in milliseconds on WASI's clock `clock`: 0, the time of day, or 1, the monotonic clock,
-  which never goes backwards. `clock_time_get` gives nanoseconds.
-def millisecondsOn: [HostRuntime] I32 -> int = { clock ->
-  ignore(clockTimeGet(clock, 1_000_000, stateAt(32)))
-  readI64(stateAt(32)) / 1_000_000
-}
-
-@extern("nanyx:http", "send")
-def httpSend: [HostRuntime] I32, I32, I32 -> I32
-
-@extern("nanyx:http", "receive")
-def httpReceive: [HostRuntime] I32 -> ()
-
--- A request is passed to `nanyx:http` written as `nanyx.http.core/wire` writes it, and its response comes
--- back written the same way. What kind of answer `send` had, a response or why there is none, it writes
--- at 40 in the host's state.
-
---| Sends `request` through `nanyx:http`, and gives its response, or why there is none.
-def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | #error(HttpError) = { request ->
-  def wire = writeRequest(request)
-  def length = httpSend(addressOf(wire), byteLength(wire), stateAt(40))
-  keepAlive(wire)
-  def buffer = allocate(length + 1)
-  httpReceive(buffer)
-  def answer = stringAt(buffer, length)
-  free(buffer)
-
-  match readI32(stateAt(40))
-    | 0 ->
-      match readResponse(answer)
-        | #some(response) -> #some(response)
-        | #malformed -> #error(#other("the runtime's answer to the request was malformed"))
-    | 1 -> #error(#timeout)
-    | 2 -> #error(#connectionFailed(answer))
-    | 3 -> #error(#invalidUrl)
-    | _ -> #error(#other(answer))
 }
 
 --| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard

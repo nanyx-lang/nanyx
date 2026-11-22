@@ -1675,8 +1675,9 @@ expects: for a command-line program, a function that takes nothing.
 # NYX0238: HostRuntime required outside a host
 
 A definition or call requires `HostRuntime`, the context a host is written on. The toolchain provides it only to the
-modules of the host's package, the package whose `run` runs the program's entry point, so that a library can only reach
-the outside world through the contexts the host provides.
+modules of the host's package, the package whose `run` runs the program's entry point, and of the
+[host libraries](../advanced/hosts#host-libraries) it depends on, so that a library can only reach the outside world
+through the contexts the host provides.
 
 ```nanyx
 import (
@@ -1684,7 +1685,7 @@ import (
   nanyx/host.runtime
 )
 
-def peek = { address -> readByte(address) }  -- error NYX0238: 'peek' requires the context 'HostRuntime', which only a host's package may require: ...
+def peek = { address -> readByte(address) }  -- error NYX0238: 'peek' requires the context 'HostRuntime', which only a host's package, and the host libraries it depends on, may require: ...
 ```
 
 To fix it, require the context the host provides instead, such as `Console`, and call its members.
