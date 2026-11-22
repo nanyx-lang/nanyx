@@ -141,7 +141,8 @@ onmessage = async ({ data: { wasm, seed, input } }) => {
     return;
   }
   try {
-    instance.exports.__nanyx_start();
+    // A program with nothing to run at its top level, only definitions, has no start, and ends at once.
+    if (typeof instance.exports.__nanyx_start === "function") instance.exports.__nanyx_start();
     postMessage({ kind: "exit", code: 0 });
   } catch (error) {
     if (error instanceof Exit) postMessage({ kind: "exit", code: error.code });

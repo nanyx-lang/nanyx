@@ -5,11 +5,17 @@ import "@/styles/global.css";
 interface Props {
   title: string;
   description?: string;
+  /**
+   * Whether the client router swaps the next page in. The playground turns it off: a page the router swaps in, or
+   * swaps back in on Back, isn't cross-origin isolated, since the headers come with the page's own response.
+   */
+  clientRouter?: boolean;
 }
 
 const {
   title,
   description = "Nanyx is a type-safe, expressive language for building reliable software.",
+  clientRouter = true,
 } = Astro.props;
 
 const pathname = Astro.url.pathname.replace(/\.html$/, "").replace(/\/index$/, "/");
@@ -22,7 +28,7 @@ const ogImage = Astro.site ? new URL("/nanyx.svg", Astro.site).href : "/nanyx.sv
      between them doesn't flash. "none" swaps at once rather than cross-fading. -->
 <html lang="en" transition:animate="none">
   <head>
-    <ClientRouter />
+    {clientRouter && <ClientRouter />}
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>

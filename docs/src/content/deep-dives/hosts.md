@@ -206,7 +206,9 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   line, column and text, and says it has dealt with it), and WASI's `fd_write` (fd 1 is stdout, any other stderr) and
   `proc_exit`, which throws, so the program unwinds to the call of its start, which gives the exit code. A trap is
   exit code 1. The module is compiled with its start exported (`WasmOptions.ExportStart`) and `dbg` given to the page
-  (`WasmOptions.DbgToEmbedder`), so the worker instantiates it, then calls `__nanyx_start` once the memory can be read.
+  (`WasmOptions.DbgToEmbedder`), so the worker instantiates it, then calls `__nanyx_start` once the memory can be read;
+  a program with nothing to run at its top level, only definitions, has no start, and ends at once with 0. The
+  playground page uses it as [Playground](./playground) says.
 - **Input in the playground.** A program's `readLine` blocks, which a page's main thread can't, so the worker waits
   for the line: the page gives it a `SharedArrayBuffer`, three `Int32`s (answered, the line's length or -1 for the end
   of the input, and whether the line goes on) and then 64 KiB for the line's bytes. To read, the worker posts `read`
