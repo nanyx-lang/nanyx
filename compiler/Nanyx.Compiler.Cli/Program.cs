@@ -345,6 +345,30 @@ internal static partial class CliCommands
         }
 
         var entry = PackageModule.entryResult(build);
+        // A package with no @entry whose modules mark defs @component is a library component, built from a root that
+        // imports those modules, in the host's world for libraries.
+        var library = entry is null && component is not null ? PackageModule.libraryResult(build) : null;
+        if (library is not null)
+        {
+            if (component!.Library is null)
+            {
+                shell.Error.WriteLine($"{package.Manifest.Name} has @component defs and no @entry, so it is a library component, but its host {package.Host.Value.Package} has no world for libraries: name one in its manifest, as `component = (..., library = \"nanyx:console/library\")`, or build it with --core.");
+                return 1;
+            }
+
+            // The root is made up, so an error in it is the compiler's; the package's own were printed above.
+            if (!library.Value.Diagnostics.IsEmpty)
+            {
+                PrintDiagnostics(shell, library.Value.Diagnostics, shell.Out);
+                if (HasErrors(library.Value.Diagnostics))
+                {
+                    return 1;
+                }
+            }
+
+            entry = library;
+        }
+
         if (entry is null)
         {
             // With no program to write, the build is only a check, and errors fail it.
@@ -363,7 +387,7 @@ internal static partial class CliCommands
             ? FSharpList<ComponentFunction>.Empty
             : ComponentInterface.imports(entry.Value.Typed.Value);
         var exports = ListModule.OfSeq(functions.Select(function => Tuple.Create(ComponentInterface.exportName(witPackage, function.Export), function)));
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(ComponentEntryModule.ofWorld(component.World)), componentExports: exports), deferred, timings))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(library is null ? ComponentEntryModule.ofWorld(component.World) : ComponentEntry.Library), componentExports: exports), deferred, timings))
         {
             return 1;
         }
@@ -373,13 +397,13 @@ internal static partial class CliCommands
             : outputPath!;
         var written = component is null || format == ProgramFormat.Text
             ? WriteProgram(shell, wat, format, outputFile)
-            : WriteComponent(shell, wat, package.Host.Value, component, witPackage, functions, imports, outputFile);
+            : WriteComponent(shell, wat, package.Host.Value, library is null ? component.World : component.Library!.Value, witPackage, functions, imports, outputFile);
         if (written is null)
         {
             return 1;
         }
 
-        var world = component is null ? null : functions.IsEmpty && imports.IsEmpty ? component.World : ComponentInterface.qualified(witPackage, ComponentInterface.worldName(functions));
+        var world = component is null ? null : functions.IsEmpty && imports.IsEmpty && library is null ? component.World : ComponentInterface.qualified(witPackage, ComponentInterface.worldName(functions));
         var kind = world is null ? "" : $", a component of {world}";
         shell.Out.WriteLine($"Built {package.Manifest.Name} ({FileCount(package)}){WithDeferred(deferred, build.Diagnostics)}{kind}: {written}");
         return 0;
@@ -387,26 +411,27 @@ internal static partial class CliCommands
 
     /// <summary>
     /// Writes the program <paramref name="wat"/>, the core module of a component, to <paramref name="outputPath"/> as a
-    /// component of the world of <paramref name="host"/>'s component root, and gives the path as the shell shows it;
-    /// <c>null</c>, said on the shell's stderr, when it can't be built, with wit-component's reason. A program that exports
-    /// <paramref name="functions"/> of its own, or imports <paramref name="imports"/>, is a component of a world of <paramref name="witPackage"/>'s that includes
-    /// the host's, whose WIT is written to a wit directory beside the component.
+    /// component of <paramref name="hostWorld"/>, a world of <paramref name="host"/>'s component root, and gives the path
+    /// as the shell shows it; <c>null</c>, said on the shell's stderr, when it can't be built, with wit-component's
+    /// reason. A program that exports <paramref name="functions"/> of its own, or imports <paramref name="imports"/>, is a
+    /// component of a world of <paramref name="witPackage"/>'s that includes the host's, whose WIT is written to a wit
+    /// directory beside the component.
     /// </summary>
-    private static string? WriteComponent(Shell shell, string wat, Host host, HostComponent component, string witPackage, FSharpList<ComponentFunction> functions, FSharpList<ComponentFunction> imports, string outputPath)
+    private static string? WriteComponent(Shell shell, string wat, Host host, string hostWorld, string witPackage, FSharpList<ComponentFunction> functions, FSharpList<ComponentFunction> imports, string outputPath)
     {
         var fullPath = shell.FullPath(outputPath);
         var witDirectory = host.WitDirectory;
-        var world = component.World;
+        var world = hostWorld;
         if (!functions.IsEmpty || !imports.IsEmpty)
         {
             witDirectory = Path.Combine(Path.GetDirectoryName(fullPath)!, "wit");
-            world = ComponentInterface.write(host.WitDirectory, component.World, witPackage, functions, imports, witDirectory);
+            world = ComponentInterface.write(host.WitDirectory, hostWorld, witPackage, functions, imports, witDirectory);
         }
 
         var built = Componentizer.componentize(WasmBinary.assemble(wat), witDirectory, world);
         if (built.IsError)
         {
-            shell.Error.WriteLine($"The program can't be built as a component of {component.World}: {built.ErrorValue}");
+            shell.Error.WriteLine($"The program can't be built as a component of {hostWorld}: {built.ErrorValue}");
             shell.Error.WriteLine("Build it with --core for a core module, as nanyx run runs.");
             return null;
         }

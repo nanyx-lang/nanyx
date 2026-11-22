@@ -583,3 +583,29 @@ module Package =
     /// The compile of the package's `@entry` file, if it has one.
     let entryResult (build: PackageBuild) : CompileResult option =
         build.Package.Entry |> Option.bind (fun entry -> build.Results |> List.tryFind (fst >> (=) entry) |> Option.map snd)
+
+    /// The modules of the package `build` built that mark a def `@component`, by name, in the order of its files.
+    let componentModules (build: PackageBuild) : string list =
+        build.Results
+        |> List.choose (fun (_, result) ->
+            match result.ModuleName, result.Typed with
+            | Some name, Some typed when typed.ComponentExports |> List.exists (fun export -> export.Module = name) -> Some name
+            | _ -> None)
+
+    /// The source of the root a library component is built from: a module that imports each of `modules`, which a
+    /// component built from it exports the `@component` defs of, and does nothing else.
+    let libraryRootSource (modules: string list) =
+        modules |> List.mapi (fun index name -> $"import {name} as __component{index}\n") |> String.concat ""
+
+    /// The compile of the root a library component is built from, for a package `build` built that has no `@entry`
+    /// and whose modules mark defs `@component` (see `componentModules`); none for another. The root is no file of the
+    /// package's: it is compiled as `__component.nyx` in the package's directory, from `libraryRootSource`.
+    let libraryResult (build: PackageBuild) : CompileResult option =
+        match build.Package.Entry, componentModules build with
+        | None, (_ :: _ as names) ->
+            let path = Path.Combine(build.Package.Manifest.Root, "__component.nyx")
+            // It is a file of the package, so its imports name the package's modules.
+            let packageModules = modules build.Package
+            let packageModules = { packageModules with Files = packageModules.Files @ [ path ] }
+            Some (Compiler.compileSourceIn packageModules Linters.none path (libraryRootSource names))
+        | _ -> None

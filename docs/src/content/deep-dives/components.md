@@ -112,9 +112,10 @@ The WIT directory is a WIT package, with the packages it uses under `deps/`, as 
 
 # Component roots
 
-A host's manifest names its component root and the world it is written against beside its root
-(`component = (root = "console.host.wasi", world = "nanyx:console/command")`), and keeps the world's WIT in its `wit`
-directory. `HostPackages` reads it into `Host.Component`.
+A host's manifest names its component root and the world it is written against beside its root, and the world a
+library component is built in, if it has one
+(`component = (root = "console.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")`), and
+keeps the worlds' WIT in its `wit` directory. `HostPackages` reads it into `Host.Component`.
 
 - **A component build swaps the root.** `nanyx build` takes the package as `Package.asComponent` gives it, whose host's
   `Module` is the component root (`Host.AsComponent`). Everything after that is a build as any other: the entry point is
@@ -222,6 +223,13 @@ export def areaOf: float, float -> float = { width, height -> width * height }
   keeps its own and those its imports carry (`TypedModule.ComponentExports`), each by the name it is inlined under in
   the importer (`ModuleLinking.componentExportsForImport`), and inlining keeps them though the program never calls
   them (`ModuleLinking.reachedItems`). A module the program doesn't import exports nothing.
+- **A package with no `@entry` is a library component** if its modules mark defs `@component` ([#2326](https://github.com/nanyx-lang/nanyx/issues/2326)).
+  `nanyx build` builds it from a root of its own making (`Package.libraryResult`), `__component.nyx` in the package's
+  directory, which is no file on disk: it imports each module of the package with such a def
+  (`Package.componentModules`) and does nothing else, so the component exports them all. Its core module exports no
+  `run` (`ComponentEntry.Library`), and its world includes the host's world for libraries, which imports what the
+  host's other world does and exports nothing (`HostComponent.Library`): the console host's is `nanyx:console/library`,
+  `wasi:cli/imports@0.3.0` with `wasi:http/client@0.3.0`. A host that names none can't build one, and says so.
 - **Its type must cross a component's boundary** (`ComponentInterface.errors`, run as each module is checked). A
   function, a context, a type variable, a record or tag union with no name, which WIT must name, a union of types
   other than tags, a recursive type, which WIT can't write, and a def that isn't a function at all are `NYX0277`. What
@@ -337,7 +345,7 @@ WIT names them so too.
 
 ## Testing with other languages
 
-`compiler/ComponentInterop` holds a Nanyx component (`shapes`) and two Rust components: a command (`app`) that calls
+`compiler/ComponentInterop` holds a Nanyx library component (`shapes`) and two Rust components: a command (`app`) that calls
 the Nanyx component's exports, and a component (`units`) whose exports the Nanyx component imports. `run.sh` builds the
 three, checks that the Rust components' WIT is what `nanyx build` wrote, composes them with `wac plug`, and runs the
 result under `wasmtime run`, which must print `expected.txt`. The Compiler workflow runs it on Linux, with Wasmtime,

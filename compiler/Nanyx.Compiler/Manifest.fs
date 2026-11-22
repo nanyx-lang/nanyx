@@ -328,13 +328,15 @@ module Manifest =
         |> Option.iter (fun fields ->
             problems.RequiredText "the package's host" value.Location fields HostPackages.rootField anyText "" |> ignore
             problems.Text "the package's host" fields HostPackages.preludeField anyText "" |> ignore
-            // Its component root, which a component is built from, and the world it is written against.
+            // Its component root, which a component is built from, the world it is written against, and the world a
+            // library component is built in, if it has one.
             match DataValue.field HostPackages.componentField fields with
             | Some field ->
-                problems.Record "the host's component" [ HostPackages.rootField; HostPackages.worldField ] field.Value
+                problems.Record "the host's component" [ HostPackages.rootField; HostPackages.worldField; HostPackages.libraryField ] field.Value
                 |> Option.iter (fun built ->
                     problems.RequiredText "the host's component" field.Value.Location built HostPackages.rootField anyText "" |> ignore
-                    problems.RequiredText "the host's component" field.Value.Location built HostPackages.worldField anyText "" |> ignore)
+                    problems.RequiredText "the host's component" field.Value.Location built HostPackages.worldField anyText "" |> ignore
+                    problems.Text "the host's component" built HostPackages.libraryField anyText "" |> ignore)
             | None -> ()
             match DataValue.field HostPackages.settingsField fields with
             | Some { DataField.Value = { DataValue.Data = DataRecord _ } }
