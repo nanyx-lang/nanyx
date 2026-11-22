@@ -327,7 +327,7 @@ println(big(#some(5)))
 println(add(#some(1), #some(2)))
 ```
 
-They are not in scope anywhere else: not after an `or` (`o is #some(v) or v > 3`), not outside the brackets around a test, not in the `else` branch, and not outside a `not`. Using one there is an unknown-name error, as the test may not have matched.
+Brackets only group, so they don't end a chain: `(o is #some(v)) and v > 3` is the same chain as `o is #some(v) and v > 3`, and `if (o is #some(v)) then v else 0` has `v` in its `then` branch. The names are not in scope anywhere else: not after an `or` (`o is #some(v) or v > 3`), not in the `else` branch, not outside a `not`, and not outside a chain that is the operand of another operator, as in `(o is #some(v) and true) == v`. Using one there is an unknown-name error, as the test may not have matched.
 
 `is` binds more loosely than comparisons, equality, pipes and arithmetic, and more tightly than `and` and `or` (see [the operators](../tour/operators#the-operators)). So `xs \list.head is #some(h)` tests the head of `xs`, and `a and b is #some(v)` is `a and (b is #some(v))`. Only `and` or `or` may follow the pattern, so `x is v == 1` is an error that asks for brackets. A `not` binds more tightly than `is`, as it does with `==`, so `not x is #a` is an error too, and the test is negated as `not (x is #a)`.
 

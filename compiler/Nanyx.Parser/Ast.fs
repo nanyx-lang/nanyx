@@ -906,18 +906,21 @@ module ExternSyntax =
 module ComponentImportSyntax =
     let builtIn = "__componentImport"
 
-    /// The WIT interface and the function a component import names.
+    /// The WIT interface and the function a component import names, and the names it gives the function's parameters,
+    /// none if it gives none.
     let (|Import|_|) (kind: ExpressionKind) =
         match kind with
-        | FunctionCall(name, _, [ Kind (LiteralExpr(StringLit witInterface)); Kind (LiteralExpr(StringLit functionName)) ]) when name = builtIn ->
-            Some (witInterface, functionName)
+        | FunctionCall(name, _, Kind (LiteralExpr(StringLit witInterface)) :: Kind (LiteralExpr(StringLit functionName)) :: parameters) when name = builtIn ->
+            let names = parameters |> List.choose (function Kind (LiteralExpr(StringLit parameter)) -> Some parameter | _ -> None)
+            if names.Length = parameters.Length then Some (witInterface, functionName, names) else None
         | _ -> None
 
-    /// `value`, the bodiless value of a def, as the value of a component import of `functionName` from `witInterface`.
-    /// It is the same node, so the def's name is still declared by it.
-    let import (witInterface: string) (functionName: string) (value: Expression) =
+    /// `value`, the bodiless value of a def, as the value of a component import of `functionName` from `witInterface`,
+    /// whose parameters are named `parameters`, or not named if it is empty. It is the same node, so the def's name is
+    /// still declared by it.
+    let import (witInterface: string) (functionName: string) (parameters: string list) (value: Expression) =
         let literal text = Expression.from value (LiteralExpr(StringLit text))
-        { value with Kind = FunctionCall(builtIn, None, [ literal witInterface; literal functionName ]) }
+        { value with Kind = FunctionCall(builtIn, None, literal witInterface :: literal functionName :: List.map literal parameters) }
 
 /// A linter rule as an attribute's argument names it, `default/unusedBindings`: the linter's name and the rule's,
 /// written with no spaces around the `/`, which the parser reads as a division of the two names. `@allow` takes rules

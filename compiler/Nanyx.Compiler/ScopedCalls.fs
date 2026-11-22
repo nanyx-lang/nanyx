@@ -65,6 +65,14 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
             |> List.mapFold (fun (current: InferState) (context, id) ->
                 (id, TyVar { Id = current.NextId; Name = Some context; Kind = CallScope }),
                 { current with NextId = current.NextId + 1 }) state
+        let state =
+            { state with
+                CallDepths =
+                    ownScopes
+                    |> List.fold (fun depths (_, scope) ->
+                        match scope with
+                        | TyVar v -> depths |> Map.add v.Id state.LambdaContexts.Length
+                        | _ -> depths) state.CallDepths }
         let ownScopes = Map.ofList ownScopes
         let calleeTy = Unifier.apply ownScopes calleeTy
         let supplied = supplied |> List.map (fun (name, scope) -> name, Unifier.apply ownScopes scope)

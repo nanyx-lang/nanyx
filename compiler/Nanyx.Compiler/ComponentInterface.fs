@@ -125,6 +125,8 @@ module ComponentInterface =
     type private Problem =
         | Never of what: string * fix: string
         | NotYet of what: string
+        /// An import names as many parameters as `named`, and its function takes `taken`.
+        | Misnamed of named: int * taken: int
 
     /// A WIT type as WIT writes it where it is used: a record or a variant by its name.
     let rec witTypeText (ty: WitType) =
@@ -236,10 +238,12 @@ module ComponentInterface =
         |> all
         |> Result.bind (fun args -> witTypeOf (Some (witName typeName :: List.map label args |> String.concat "-")) underlying)
 
-    /// The parameters of a def's lambda, `value`, by name, if its value is a lambda.
-    let private lambdaParameters (value: Expression) =
+    /// The names of the parameters of the function a def's `value` is: its lambda's, or those its `@import` gives, if
+    /// it gives any, and whether they are an import's, which must name every parameter.
+    let private parameterNames (value: Expression) =
         match value.Kind with
-        | Lambda(parameters, _, _) -> Some (parameters |> List.map fst)
+        | Lambda(parameters, _, _) -> Some (parameters |> List.map fst, false)
+        | ComponentImportSyntax.Import(_, _, (_ :: _ as names)) -> Some (names, true)
         | _ -> None
 
     /// The types of the parameters of a function of type `input`, which takes `arity` parameters if its lambda says
@@ -257,12 +261,14 @@ module ComponentInterface =
     let private functionOf (export: ComponentExport) (ty: Ty) (value: Expression option) (requiresContexts: bool) : Result<ComponentFunction, Problem list> =
         match Unifier.unalias ty with
         | TyFunc(input, output, contexts) ->
-            let names = value |> Option.bind lambdaParameters
-            let inputs = parameterTypes (names |> Option.map List.length) input
-            let names =
-                match names with
-                | Some names when names.Length = inputs.Length -> names
-                | _ -> inputs |> List.mapi (fun index _ -> $"p{index}")
+            let named = value |> Option.bind parameterNames
+            let lambda = match named with Some (names, false) -> Some names.Length | _ -> None
+            let inputs = parameterTypes lambda input
+            let names, misnamed =
+                match named with
+                | Some (names, _) when names.Length = inputs.Length -> names, []
+                | Some (names, true) -> inputs |> List.mapi (fun index _ -> $"p{index}"), [ Misnamed(names.Length, inputs.Length) ]
+                | _ -> inputs |> List.mapi (fun index _ -> $"p{index}"), []
             let parameters = List.zip names inputs |> List.map (fun (name, ty) -> witTypeOf None ty |> Result.map (fun wit -> witName name, wit))
             let result =
                 match Unifier.unalias output with
@@ -270,7 +276,7 @@ module ComponentInterface =
                 | _ -> witTypeOf None output |> Result.map Some
             let contextProblems = if contexts.IsEmpty && not requiresContexts then [] else [ NotYet "a function that requires contexts" ]
             let problems = (parameters @ [ result |> Result.map (fun _ -> "", WitType.Bool) ]) |> List.choose (function Error problem -> Some problem | Ok _ -> None)
-            match contextProblems @ problems with
+            match misnamed @ contextProblems @ problems with
             | [] -> Ok { Export = export; Parameters = parameters |> List.choose Result.toOption; Result = result |> Result.toOption |> Option.flatten }
             | problems -> Error problems
         | _ -> Error [ Never("a value that isn't a function", "export a function: a WIT interface has only functions and types") ]
@@ -286,8 +292,9 @@ module ComponentInterface =
     /// The errors in the defs `module'` marks `@component`, `exports`, and `@import`, `imports`, each by name with where
     /// it is written, of the types
     /// `typeOf` gives, and whether `requiresContexts` says they require contexts: each type that can't cross a component's
-    /// boundary, `NYX0277`, or that the compiler can't take across yet, `NYX0301`. A def whose type is unknown, after an
-    /// error of its own, has none.
+    /// boundary, `NYX0277`, or that the compiler can't take across yet, `NYX0301`, and an import that names other than
+    /// as many parameters as its function takes, `NYX0013`. A def whose type is unknown, after an error of its own, has
+    /// none.
     let errors (typeOf: string -> Ty option) (requiresContexts: string -> bool) (module': Module) (exports: (string * SourceSpan) list) (imports: (string * SourceSpan) list) : Diagnostic list =
         let values = valuesOf module'
         (exports |> List.map (fun (name, span) -> "export", name, span)) @ (imports |> List.map (fun (name, span) -> "import", name, span))
@@ -307,6 +314,9 @@ module ComponentInterface =
                             Diagnostics.at DiagnosticCodes.ComponentBoundaryType span $"A component can't {verb} '{name}': {what} can't cross a component's boundary. To fix it, {fix}"
                         | NotYet what ->
                             Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"A component can't {verb} '{name}' yet: {what} can't cross a component's boundary yet"
+                        | Misnamed(named, taken) ->
+                            let parameters = if named = 1 then "parameter" else "parameters"
+                            Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument span $"The import '{name}' names {named} {parameters}, and its function takes {taken}"
                         |> Diagnostics.about name))
 
     /// The functions a component built from `typed` exports (see `TypedModule.ComponentExports`), each of the type it
@@ -449,7 +459,7 @@ module ComponentInterface =
     let imports (typed: TypedModule) : ComponentFunction list =
         typed.Module
         |> List.choose (function
-            | Kind (Def (ValueDef(_, name, _, ({ Kind = ComponentImportSyntax.Import(witInterface, functionName) } as value)))) ->
+            | Kind (Def (ValueDef(_, name, _, ({ Kind = ComponentImportSyntax.Import(witInterface, functionName, _) } as value)))) ->
                 let import = { Module = witInterface; Name = functionName; Definition = name }
                 typed.Types |> Map.tryFind name |> Option.bind (fun ty -> functionOf import ty (Some value) false |> Result.toOption)
             | _ -> None)

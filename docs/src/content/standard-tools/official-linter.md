@@ -12,18 +12,20 @@ Linters run during compilation and emit diagnostics. The official Nanyx style li
 
 Each rule's diagnostics have the code `default/<rule>`, such as `default/unusedBindings`. That is the name to use in [`@allow`](#suppressing-a-rule-in-one-place); in a manifest's `settings` and in a `::lint` directive, a rule is named on its own, `unusedBindings`. Many rules come with a fix, which the editor offers as a quick fix.
 
+The rules that report code which is unused or can never run also tell the editor so, and it draws that code faint, as well as showing the warning: `unusedBindings`, `unusedImports`, `unusedPrivateDefinitions`, `unusedContexts`, `unreachableArms` and `unreachableCode`, marked *faint* in the table below. An exported definition is never drawn faint, whether or not anything uses it, since an export is part of what its package offers. Turning a rule off turns off its faint drawing too.
+
 | Rule | Default | Reports |
 |------|---------|---------|
 | [`unannotatedExports`](#exported-annotations) | warning | an exported def that does not write its type |
-| [`unusedBindings`](#unused-local-value) | warning | a local, a lambda's argument or a pattern variable that is never used |
-| [`unusedImports`](#unused-import) | warning | an import nothing uses |
-| [`unusedPrivateDefinitions`](#unused-private-definition) | warning | a definition the module does not export and does not use |
-| [`unusedContexts`](#unused-context) | warning | a context a def's signature requires that its body does not use |
-| [`unreachableArms`](#unreachable-match-branch) | warning | a match arm the arms before it already cover |
+| [`unusedBindings`](#unused-local-value) | warning, faint | a local, a lambda's argument or a pattern variable that is never used |
+| [`unusedImports`](#unused-import) | warning, faint | an import nothing uses |
+| [`unusedPrivateDefinitions`](#unused-private-definition) | warning, faint | a definition the module does not export and does not use |
+| [`unusedContexts`](#unused-context) | warning, faint | a context a def's signature requires that its body does not use |
+| [`unreachableArms`](#unreachable-match-branch) | warning, faint | a match arm the arms before it already cover |
 | [`noTagInCommon`](#comparison-that-is-always-false) | warning | `==` or `!=` on two unions with no tag in common |
 | [`useInBraces`](#use--in-with-a-body-in-braces) | warning | `use ... in { ... }`, whose body is a function, not a block |
 | [`strayDocComments`](#doc-comment-that-documents-nothing) | warning | a doc comment that documents nothing |
-| [`unreachableCode`](#unreachable-code-path) | warning | statements, or a call's arguments, after one that never gives a value |
+| [`unreachableCode`](#unreachable-code-path) | warning, faint | statements, or a call's arguments, after one that never gives a value or a `return` |
 | [`nonTailRecursion`](#recursion-not-in-tail-position) | info | a function calling itself other than in tail position |
 | [`unusedResults`](#unused-return-value) | error | a statement whose value is thrown away |
 | [`uselessExpressions`](#expression-that-does-nothing) | error | a pure statement whose value is thrown away |
@@ -120,7 +122,7 @@ def answer: [Log] () -> int = { () -> 42 } -- Linter warning: 'Log' is required 
 
 The rule (`unusedContexts`) reports a context written in a def's signature that nothing in the def's body uses: the
 body reads none of its members, an operator among them, and calls nothing that requires it. Every caller must supply
-the context all the same, for nothing. It is reported at the context, which an editor draws faded, and its fix removes
+the context all the same, for nothing. It is reported at the context, which an editor draws faint, and its fix removes
 it, with the `[` `]` around it when it is the only one. Only a def whose value is a function is looked at, a local one
 too. An exported def is not reported: what it requires is part of what its module offers, and may be there for a later
 version to use. A context variable, such as the `c` of `[c]`, is not a context.
@@ -133,7 +135,7 @@ match n
   | 0 -> "never reached" -- Linter warning: this arm can never match: an arm before it matches every value it does
 ```
 
-The rule (`unreachableArms`) reports an arm that the arms before it already match every value of: one after a catch-all such as `_` or a name, one after an arm that matches everything it does (`#some(5)` after `#some(_)`, `5` after `1..10`), and one after arms that between them match every value it does: every tag of a union, both booleans, every length of list, every int of a range (`3..8` after `1..5` and `6..10`), or every combination of the values a match is on. It points at the arms that cover it, and its fix removes the arm. An arm with a guard (`{ > 0 }`) never counts as covering another, since whether it matches depends on more than the value's shape.
+The rule (`unreachableArms`) reports an arm that the arms before it already match every value of: one after a catch-all such as `_` or a name, one after an arm that matches everything it does (`#some(5)` after `#some(_)`, `5` after `1..10`), and one after arms that between them match every value it does: every tag of a union, both booleans, every length of list, every int of a range (`3..8` after `1..5` and `6..10`), or every combination of the values a match is on. It reports the whole arm, its patterns and its value, and points at the arms that cover it; its fix removes the arm. An arm with a guard (`{ > 0 }`) never counts as covering another, since whether it matches depends on more than the value's shape.
 
 ## Comparison that is always false
 
@@ -173,7 +175,7 @@ def f: int -> int = { x ->
 }
 ```
 
-The rule (`unreachableCode`) reports the statements of a block that come after one that never gives a value: a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), such as a call to `crash`, a call to a function you have annotated to return `undefined`, or an `if` whose every branch is one of those. It reports the first statement that never runs, through the end of the block, and points at the statement that stops the block. Its fix removes the statements that never run, unless the statement before them is a def, since a block can't end with a def.
+The rule (`unreachableCode`) reports the statements of a block that come after one that never gives a value: a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), such as a call to `crash`, a call to a function you have annotated to return `undefined`, or an `if` whose every branch is one of those, and those after a [`return`](../advanced/workflows), which ends the whole block. A `return` in a branch of an `if` or `match` ends the block only on that branch, so it makes nothing after the branch unreachable. It reports the first statement that never runs, through the end of the block, and points at the statement that stops the block. Its fix removes the statements that never run, unless the statement before them is a def, since a block can't end with a def.
 
 Arguments are evaluated left to right, so in `f(crash("a"), g())` neither `g()` nor the call to `f` ever runs. The rule reports the arguments of a call that come after one whose type is `undefined`, once per call, and points at the argument that stops it; in a pipe, `crash("a") \f(g())`, the piped value is the first argument. It has no fix, since leaving the arguments out would change the call.
 

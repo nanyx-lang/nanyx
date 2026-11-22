@@ -19,7 +19,7 @@ type Shape = #circle(float) | #rect(Point) | #empty
 @import("acme:geometry/shapes@1.0.0", "area")
 def area: Shape -> float
 
-@import("acme:geometry/shapes@1.0.0")
+@import("acme:geometry/shapes@1.0.0", "describe-all", ["prefix", "counts"])
 def describeAll: string, list(int) -> string
 
 @import("acme:geometry/shapes@1.0.0")
@@ -116,6 +116,9 @@ let ``The componentizer builds a component that imports the interfaces the progr
     let hostWit = IO.Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "wit")
     let world = ComponentInterface.write hostWit "nanyx:console/command" package functions imports target.Path
     Assert.Contains("  import acme:geometry/shapes@1.0.0;", IO.File.ReadAllText(IO.Path.Combine(target.Path, "component.wit")))
+    let imported = IO.File.ReadAllText(IO.Path.Combine(target.Path, "deps", "acme-geometry-1.0.0", "package.wit"))
+    Assert.Contains("  area: func(p0: shape) -> f64;", imported)
+    Assert.Contains("  describe-all: func(prefix: string, counts: list<s64>) -> string;", imported)
     match Nanyx.Runtime.Componentizer.componentize (WasmBinary.assemble wat) target.Path world with
     | Ok _ -> ()
     | Error message -> Assert.Fail message

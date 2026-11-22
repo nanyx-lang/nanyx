@@ -153,6 +153,8 @@ def total = memory {
 }
 ```
 
+A lambda that captures one of the block's references, or a value that holds one, requires the block's `Memory` as one that reads it does, so giving back `{ list.length([r]) }`, where `r` is one of the block's references, is an error too (NYX0233): once the block ends, what the lambda holds is gone.
+
 Nor may an inner block keep what requires its own `Memory` in an outer block's cell or reference, which outlives it. Storing what a reference holds is fine:
 
 ```nanyx

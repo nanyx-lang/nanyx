@@ -44,7 +44,7 @@ let withinLambda (state: InferState) : bool =
 /// `state` as the body of `lambda` starts to be inferred: what it uses is recorded for it, unless it is a def's body.
 let enter (lambda: Expression) (state: InferState) : InferState =
     if state.BodyLambdas.Contains lambda.Id then state
-    else { state with LambdaContexts = [] :: state.LambdaContexts }
+    else { state with LambdaContexts = [] :: state.LambdaContexts; LambdaStarts = (state.NextId, lambda.Span) :: state.LambdaStarts }
 
 /// The scoped contexts the body of the unannotated top-level def `defName`, `lambda`, requires outside any lambda (see
 /// `record`), but for the `Memory` of a cell it takes, which its type requires already (see
@@ -65,6 +65,30 @@ let private inferredScoped (defName: Identifier) (lambda: Expression) (state: In
         | FunctionContexts.ScopedContext(_, scope) -> not (List.contains (resolveSoFar state scope) cellScopes)
         | _ -> true)
 
+/// `state` with the scoped contexts among `scoped`, those the lambda `depth` lambdas deep that started making type
+/// variables at `start` uses, recorded as used by the lambda around it too, if their scope is one from outside the
+/// lambda: what the lambda uses of it, it captures, and the lambda around makes it with what it captures. A scope made
+/// inside the lambda is the lambda's own, and the scope of a call is given to the lambda the call is given, as a
+/// `memory` block is, so it goes no further out than that.
+let private capturedFrom (depth: int) (start: int) (scoped: Ty list) (state: InferState) : InferState =
+    if scoped.IsEmpty || state.LambdaContexts.IsEmpty then state
+    else
+        let fromOutside (context: Ty) =
+            match resolveSoFar state context with
+            | FunctionContexts.ScopedContext(_, TyVar v) as resolved ->
+                let outside =
+                    match v.Kind, state.CallDepths |> Map.tryFind v.Id with
+                    // Not into the lambda the call is given, which the call gives its scope.
+                    | CallScope, Some callDepth -> callDepth < depth - 2
+                    | CallScope, None -> false
+                    | _ -> v.Id < start
+                if outside then Some resolved else None
+            | _ -> None
+        match scoped |> List.choose fromOutside |> List.distinct, state.LambdaContexts with
+        | [], _
+        | _, [] -> state
+        | captured, used :: outer -> { state with LambdaContexts = (List.rev captured @ used) :: outer }
+
 /// The contexts `lambda`'s body used, each once in the order first used, and `state` as it is once the body has been
 /// inferred. The body of an unannotated top-level def uses the scoped contexts it requires outside any lambda (see
 /// `inferredScoped`): its type requires them, so its callers must supply them.
@@ -75,7 +99,10 @@ let leave (lambda: Expression) (state: InferState) : Ty list * InferState =
         // outer block's reference requires the outer block's `Memory` besides its own, which the constraints say.
         let scoped = used |> List.filter (function FunctionContexts.ScopedContext _ -> true | _ -> false)
         let used = if scoped.Length > 1 then used |> List.map (resolveSoFar state) else used
-        List.rev used |> List.distinct, { state with LambdaContexts = outer }
+        let start, starts = match state.LambdaStarts with (start, _) :: rest -> start, rest | [] -> System.Int32.MaxValue, []
+        let state = { state with LambdaContexts = outer; LambdaStarts = starts }
+        List.rev used |> List.distinct, capturedFrom (outer.Length + 1) start scoped state
+
     | _, DefScope(defName, true) -> inferredScoped defName lambda state, state
     | _ -> [], state
 
@@ -208,3 +235,25 @@ let contextOfMember (env: TypeEnv) (state: InferState) (name: Identifier) : Iden
                 if info.IsContext && info.Parameters.IsEmpty && info.Members |> Map.exists (fun _ id -> id = symbol) then Some ctxName
                 else None)
             |> Option.map (WrittenContexts.canonical state)
+
+/// The scoped contexts whose scope `ty` holds: each one a function type in it requires, each one a value of a scoped
+/// type in it belongs to, and `Memory` of each cell's.
+let rec private scopedIn (ty: Ty) : Ty list =
+    match ty with
+    | FunctionContexts.ScopedContext _ -> [ ty ]
+    | FunctionContexts.CellType(held, scope) -> FunctionContexts.scoped FunctionContexts.cellContext scope :: scopedIn held
+    | TyNominal(_, args, _, _) -> args |> List.collect scopedIn
+    | _ -> Ty.fold (fun found child -> found @ scopedIn child) [] ty
+
+/// `state` once the value `symbol`, of the type `ty` where it is named, is named inside the innermost lambda: a value
+/// bound outside it, in a block or by a lambda around, that holds what belongs to a scope, such as a block's reference, a lambda over a
+/// block's cells, or a value of a scoped type, is captured by a lambda that names it, which requires the scope's context
+/// as one that reads it does (see `leave`). A top-level value never holds one.
+let recordNamed (symbol: Symbol option) (ty: Ty) (state: InferState) : InferState =
+    match symbol with
+    | Some ({ Kind = LocalValue | Parameter | PatternVariable } as symbol)
+        when state.LambdaStarts |> List.tryHead |> Option.exists (fun (_, span) -> not (SourceSpan.contains span symbol.Declaration)) ->
+        match scopedIn ty |> List.distinct with
+        | [] -> state
+        | scoped -> record scoped state
+    | _ -> state

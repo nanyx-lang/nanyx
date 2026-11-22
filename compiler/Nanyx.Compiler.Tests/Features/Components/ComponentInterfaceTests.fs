@@ -202,6 +202,25 @@ interface shapes {
 """
     Assert.Equal<(string * string) list>([ "acme:geometry@1.0.0", expected ], ComponentInterface.importedPackages imports)
 
+[<Fact>]
+let ``An import's third argument names its function's parameters in the WIT`` () =
+    let source =
+        "module geometry\n\n@import(\"acme:geometry/shapes@1.0.0\", \"area\", [\"width\", \"heightOf\"])\nexport def area: float, float -> float\n"
+    let result = compileImporting (normalized source) "module main\n\nimport mod as m\n\ndef main = m.area(1.0, 2.0)\n"
+    Assert.Empty(result.Diagnostics)
+    let imports = ComponentInterface.imports result.Typed.Value
+    Assert.Equal<(string * WitType) list>([ "width", WitType.F64; "height-of", WitType.F64 ], imports.Head.Parameters)
+
+[<Theory>]
+[<InlineData("@import(\"acme:geometry/shapes\", \"area\", [\"width\"])\ndef area: float, float -> float", "The import 'area' names 1 parameter, and its function takes 2")>]
+[<InlineData("@import(\"acme:geometry/shapes\", \"area\", [\"width\", 2])\ndef area: float, float -> float", "named by a list of strings")>]
+[<InlineData("@import(\"acme:geometry/shapes\", \"area\", [\"width\", \"width\"])\ndef area: float, float -> float", "Two of the function's parameters are named 'width'")>]
+[<InlineData("@import(\"acme:geometry/shapes\", \"area\", [\"width\", \"?\"])\ndef area: float, float -> float", "'?' isn't a parameter's name")>]
+let ``An import names each of its function's parameters, once, by a WIT name`` (source: string, message: string) =
+    let diagnostic = diagnosticOf (normalized source)
+    Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, diagnostic.Code)
+    Assert.Contains(message, diagnostic.Message)
+
 [<Theory>]
 [<InlineData("@import(\"acme:geometry/shapes\")\ndef area = 1", "has a value")>]
 [<InlineData("@import(\"acme:geometry/shapes\")\ndef area", "needs its type written")>]

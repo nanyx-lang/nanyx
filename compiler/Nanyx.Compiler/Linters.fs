@@ -11,7 +11,7 @@ module UnusedBindings =
         { Id = "unusedBindings"
           Title = "Unused binding"
           DefaultSeverity = Severity.Warning
-          Unnecessary = false
+          Unnecessary = true
           Description =
             "A local def, a lambda's argument or a variable a pattern binds that is never used. Names starting with `_` are not reported." }
 
@@ -202,14 +202,14 @@ module NonTailRecursion =
         |> List.sortBy (fun report -> report.Span.Start)
 
 /// The official linter's `unreachableArms` rule: a match arm that can never be chosen, because the arms before it
-/// already match every value it matches (`PatternSpace.coveringArms`). An arm with a guard never counts as covering
+/// already match every value it matches (`PatternSpace.coveringArms`). It is reported at the whole arm. An arm with a guard never counts as covering
 /// another, since whether it matches depends on more than the value's shape.
 module UnreachableArms =
     let rule =
         { Id = "unreachableArms"
           Title = "Unreachable match arm"
           DefaultSeverity = Severity.Warning
-          Unnecessary = false
+          Unnecessary = true
           Description =
             "A match arm that can never be chosen, because the arms before it match every value it matches: it comes after a catch-all, after an arm that matches everything it does, or after arms that between them match every tag, boolean, int, length of list or combination of them it does." }
 
@@ -265,7 +265,8 @@ module UnreachableArms =
                                 | _ -> "This arm can never match: the arms before it match every value it does between them."
                             { Rule = rule.Id
                               Subject = None
-                              Span = spanOf patterns
+                              // The whole arm, which the editor draws faint: none of it can run.
+                              Span = if SourceSpan.isNone body.Span then spanOf patterns else SourceSpan.between (List.head patterns).Span body.Span
                               Message = message
                               Related =
                                 covering
@@ -287,7 +288,7 @@ module UnusedImports =
         { Id = "unusedImports"
           Title = "Unused import"
           DefaultSeverity = Severity.Warning
-          Unnecessary = false
+          Unnecessary = true
           Description =
             "An import that nothing in the module uses: no value, type or context it brings in is referred to, under its alias or unqualified. An alias starting with `_` is not reported." }
 
@@ -346,7 +347,7 @@ module UnusedPrivateDefinitions =
         { Id = "unusedPrivateDefinitions"
           Title = "Unused private definition"
           DefaultSeverity = Severity.Warning
-          Unnecessary = false
+          Unnecessary = true
           Description =
             "A top-level def, type or context that the module does not export, or a member of such a context, that nothing in the module uses. `@entry`'s def, defs an instance picks up from a type's attached definitions, and names starting with `_` are not reported." }
 
@@ -491,7 +492,7 @@ module NoTagInCommon =
             | _ -> None)
 
 /// The official linter's `unreachableCode` rule: the statements of a block after one that never gives a value, whose
-/// type is `undefined` (a call to `crash`, say). They can never run. It is reported once per block, at the statements
+/// type is `undefined` (a call to `crash`, say), or after a workflow's `return`, which ends the block. They can never run. It is reported once per block, at the statements
 /// from the first that never runs to the end of the block. The arguments of a call after one whose type is
 /// `undefined` are reported the same way, once per call.
 module UnreachableCode =
@@ -499,13 +500,14 @@ module UnreachableCode =
         { Id = "unreachableCode"
           Title = "Unreachable code"
           DefaultSeverity = Severity.Warning
-          Unnecessary = false
+          Unnecessary = true
           Description =
-            "Statements of a block after one that never gives a value, such as a call to `crash`, whose type is `undefined`, and the arguments of a call after one that never gives a value. They can never run." }
+            "Statements of a block after one that never gives a value, such as a call to `crash`, whose type is `undefined`, or after a `return`, and the arguments of a call after one that never gives a value. They can never run." }
 
-    /// Why `expr`, whose type is `undefined`, means what follows never runs.
+    /// Why `expr`, whose type is `undefined` or which is a `return`, means what follows never runs.
     let private whyNever (expr: Expression) =
         match expr.Kind with
+        | WorkflowReturnExpr _ -> "`return` ends the block"
         | FunctionCall(name, _, _)
         | Pipe(_, name, _, _) -> $"`{name}` never returns"
         | _ -> "the statement before it never gives a value"
@@ -543,6 +545,11 @@ module UnreachableCode =
     let lint (model: SemanticModel) : Report list =
         let never (expr: Expression) =
             model.Types |> Map.tryFind expr.Id |> Option.exists Unifier.isBottom
+        // A `return` ends its whole block, whatever its value's type.
+        let ends (expr: Expression) =
+            match expr.Kind with
+            | WorkflowReturnExpr _ -> true
+            | _ -> never expr
         let items = model.Syntax |> List.collect SyntaxTree.ofItem
         let ofArguments = items |> List.collect SyntaxTree.expressionsWithin |> List.choose (afterArguments never)
         items
@@ -552,7 +559,7 @@ module UnreachableCode =
             |> List.indexed
             |> List.tryPick (fun (index, statement) ->
                 match SyntaxTree.ofStatement statement with
-                | [ value ] when index < statements.Length - 1 && never value -> Some (index, statement, value)
+                | [ value ] when index < statements.Length - 1 && ends value -> Some (index, statement, value)
                 | _ -> None)
             |> Option.map (fun (index, diverging, value) ->
                 let unreachable = statements |> List.skip (index + 1)
@@ -566,7 +573,7 @@ module UnreachableCode =
                   Subject = None
                   Span = span
                   Message = $"This code never runs: {whyNever value}"
-                  Related = [ diverging.Span, "never gives a value" ]
+                  Related = [ diverging.Span, (match value.Kind with WorkflowReturnExpr _ -> "ends the block" | _ -> "never gives a value") ]
                   Fixes = fixes }))
         |> List.append ofArguments
         |> List.sortBy (fun report -> report.Span.Start)
