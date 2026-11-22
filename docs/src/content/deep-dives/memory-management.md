@@ -5,7 +5,7 @@ order: 4
 ---
 
 This page says how the WebAssembly backend lays values out, counts references and reuses memory. What a user sees is
-in [Reference counting](../meta/reference-counting), and what is still to do or open is on
+in [Reference counting](./reference-counting), and what is still to do or open is on
 [Memory management](../work-in-progress/memory-management) in Work in progress.
 
 # Summary

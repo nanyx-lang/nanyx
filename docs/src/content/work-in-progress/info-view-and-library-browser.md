@@ -34,8 +34,9 @@ label.
 
 # Open questions
 
-- Should the info view show types as trees, so each part can be hovered and followed to its definition, as Lean's
-  does? That changes the request from strings to a typed tree, and the type printer would need to emit one.
+- Should the info view show types as trees, so each part can be hovered, as Lean's does? Each type's name already
+  links to its definition, found by the name the view writes it by (`InfoViewTypeLinks`); a tree would change the
+  request from strings to a typed tree, and the type printer would need to emit one.
 - How loose should search be? Hoogle also matches a query in which an input is curried, or where a `list` could be
   a `maybe`. Each looser rule finds more, but buries the exact matches further down.
 - Should the browser also be a page on the docs site, generated from the same data, so the library's reference is

@@ -600,7 +600,7 @@ Memory is reference counted, and `nanyx new` starts a package.
 **Language**
 
 - Every heap object is reference counted, with cells reused in place
-  ([Reference counting](../meta/reference-counting)).
+  ([Reference counting](../deep-dives/reference-counting)).
 - And-patterns, `n & { > 100 }`, any predicate lambda as a guard, and patterns as lambda parameters
   ([Pattern matching](../tour/pattern-matching)).
 - The except operator handles some cases of a union.
