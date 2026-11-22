@@ -4,8 +4,8 @@ export type Unit = #metres | #feet
 
 export type Length = (value: float, unit: Unit)
 
-@import("acme:units/units@0.1.0", "to-metres", [ "length" ])
+@import("acme:units/units@0.1.0", "to-metres", ["length"])
 export def toMetres: Length -> float
 
-@import("acme:units/units@0.1.0", "label", [ "unit" ])
+@import("acme:units/units@0.1.0", "label", ["unit"])
 export def label: Unit -> string

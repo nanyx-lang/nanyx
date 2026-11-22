@@ -19,7 +19,7 @@ type Shape = #circle(float) | #rect(Point) | #empty
 @import("acme:geometry/shapes@1.0.0", "area")
 def area: Shape -> float
 
-@import("acme:geometry/shapes@1.0.0", "describe-all", [ "prefix", "counts" ])
+@import("acme:geometry/shapes@1.0.0", "describe-all", ["prefix", "counts"])
 def describeAll: string, list(int) -> string
 
 @import("acme:geometry/shapes@1.0.0")

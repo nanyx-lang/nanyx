@@ -300,7 +300,7 @@ A program calls a function another component exports by declaring it, marked `@i
 ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)):
 
 ```nanyx fragment
-@import("acme:geometry/shapes@1.0.0", "area", [ "shape" ])
+@import("acme:geometry/shapes@1.0.0", "area", ["shape"])
 def area: Shape -> float
 ```
 

@@ -99,7 +99,7 @@ if it is left out, and the names of the function's parameters, which are `p0`, `
 def has a type and no value, and its type crosses a component's boundary as `@component`'s does.
 
 ```nanyx fragment
-@import("acme:geometry/shapes@1.0.0", "area", [ "width", "height" ])
+@import("acme:geometry/shapes@1.0.0", "area", ["width", "height"])
 def area: float, float -> float
 ```
 
