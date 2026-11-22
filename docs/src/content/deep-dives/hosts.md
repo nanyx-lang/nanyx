@@ -42,7 +42,7 @@ in progress.
   of the standard library has no host (`checkModule` in `Library.fs`).
 - **The host's prelude.** A module with a host imports its prelude after the standard library's, as an implicit import
   that the module's own imports win over. The contexts the prelude re-exports are those the host provides
-  (`providesContexts` in `Library.fs`): importing the module that declares one, as the prelude does, binds the names
+  (`providesContexts` in `ImportMerging.fs`): importing the module that declares one, as the prelude does, binds the names
   of its members, so they are ambient (see below). An import that selects a context, as the prelude's
   `export nanyx.console.core/console (Console, ...)` does, selects its members too.
 - **`@entry` calls the host's `run`.** `Attributes.applyAttributes` imports the host under an alias of its own
@@ -91,7 +91,7 @@ in progress.
 - **`Console` only comes from the host.** `nanyx.console.core/console` declares the context and `print`, `println`, `eprint` and
   `eprintln`, but no instance: the line reading lives in the console host alone. Importing a module whose contexts
   the host provides (those its prelude re-exports) binds the names of its plain contexts' members, `readLine` and the
-  rest, each a symbol of its own (`Library.mergeImport`), so `Console` is still an ambient context: a script's
+  rest, each a symbol of its own (`ImportMerging.mergeImport`), so `Console` is still an ambient context: a script's
   statements and an unannotated def can call `readLine()`, and the def infers `Console`. A member of a context a def
   declares, or a `use` loads, shadows an imported function of the same name, and takes none of its contexts
   (`Contexts.contextRequirementsOf`): a def's own `println` member is not the prelude's `println`. A function named as a value carries it in its
@@ -103,7 +103,7 @@ in progress.
 - **A context the host doesn't provide.** An imported function may require a context the module can't name, as a
   library's `[Console]` function does under a host whose prelude doesn't bring `Console` in. Where the imported module
   has it as an ambient context, it is carried in (`InferState.CarriedAmbientContexts`). Under a host, one that isn't
-  carried in can only come from the host, which doesn't provide it, so `Library.mergeImport` records it in
+  carried in can only come from the host, which doesn't provide it, so `ImportMerging.mergeImport` records it in
   `InferState.UnprovidedContexts`, and a call to a function that requires it is `NYX0205`, naming the contexts and the
   host (`Contexts.ensureContextAvailable`, [#1811](https://github.com/nanyx-lang/nanyx/issues/1811)). `HostRuntime`,
   which only a host may require, is left out: it has an error of its own, `NYX0238`.

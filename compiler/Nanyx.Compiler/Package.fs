@@ -493,7 +493,7 @@ module Package =
         |> List.map (fun (file, source) ->
             listener.FileStarted file
             let origin = SourceFile (Path.GetFullPath file)
-            let key = Compiler.originKey origin
+            let key = ModuleOrigins.originKey origin
             let checkedModules = Compiler.CheckedModules(Some modules, None, listener, readFile)
             for KeyValue(checkedKey, checkedModule) in checkedOnce do
                 checkedModules.[checkedKey] <- Result.Ok checkedModule
