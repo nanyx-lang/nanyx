@@ -42,7 +42,7 @@ let ``A def cannot call a parameter that requires a scoped context without suppl
     let source = """
 module foos
 
-scoped export context Foo = private ()
+export scoped context Foo = private ()
 
 export def withFoo: ([Foo] () -> ()) -> () = { f ->
   f()

@@ -20,10 +20,12 @@ let ``A context's members are laid out the same way`` () =
         format "export context Console = (print: string -> (), println: string -> (), eprint: string -> (), flush: () -> ())")
 
 [<Fact>]
-let ``A scoped context keeps scoped, before export`` () =
+let ``A scoped context is written export scoped context`` () =
     unchanged "scoped context Tx = protected ()\n"
-    unchanged "scoped export context Memory = protected ()\n"
-    Assert.Equal("scoped export context Memory = protected ()\n", format "scoped   export   context Memory = protected ()")
+    unchanged "export scoped context Memory = protected ()\n"
+    Assert.Equal("export scoped context Memory = protected ()\n", format "export   scoped   context Memory = protected ()")
+    // The order of earlier versions is written in the order of this one.
+    Assert.Equal("export scoped context Memory = protected ()\n", format "scoped export context Memory = protected ()")
 
 [<Fact>]
 let ``Mutable, defaulted and positional fields keep what they say`` () =

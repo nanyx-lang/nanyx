@@ -23,7 +23,7 @@ let ``A protected record type keeps its fields`` () =
 
 [<Fact>]
 let ``A scoped context is declared protected after its =`` () =
-    match parsed "scoped export context Memory = protected ()" with
+    match parsed "export scoped context Memory = protected ()" with
     | [ Def (TypeDef ("Memory", modifiers, [], _)) ] ->
         Assert.Contains(Protected, modifiers)
         Assert.Contains(Context, modifiers)

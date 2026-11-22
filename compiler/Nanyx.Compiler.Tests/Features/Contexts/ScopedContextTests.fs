@@ -29,14 +29,14 @@ let ``A local scoped context that is neither protected nor private is an error a
 
 [<Fact>]
 let ``Any module may declare a scoped context, if it is protected`` () =
-    let typed = compileClean "scoped export context Transaction = protected (commit: () -> ())\n"
+    let typed = compileClean "export scoped context Transaction = protected (commit: () -> ())\n"
     let info = typed.TypeDefs |> Map.find "Transaction"
     Assert.True(info.IsContext)
     Assert.True(info.IsScoped)
 
 [<Fact>]
 let ``A scoped context may be private`` () =
-    let typed = compileClean "scoped export context Transaction = private (commit: () -> ())\n"
+    let typed = compileClean "export scoped context Transaction = private (commit: () -> ())\n"
     let info = typed.TypeDefs |> Map.find "Transaction"
     Assert.True(info.IsScoped)
     Assert.True(info.IsPrivate)

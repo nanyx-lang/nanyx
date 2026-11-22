@@ -68,10 +68,10 @@ def report: [Tx] () -> () = {
 
 This differs from leaving out `export`, which stops other modules naming the context at all.
 
-The full form of a context definition is `scoped export context Name(params) = protected ...`, where `scoped`, `export` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
+The full form of a context definition is `export scoped context Name(params) = protected ...`, where `export`, `scoped` and the parameters are each optional and the modifiers come in that order. A `scoped` context belongs to the scope that supplies it, as the prelude's `Memory` belongs to a `memory` block, and nothing that requires it may leave that scope:
 
 ```nanyx
-scoped export context Memory = protected ()
+export scoped context Memory = protected ()
 ```
 
 A scoped context must be either `protected` or `private`, so that each of its instances comes from the function its module provides to supply it: `scoped context Tx = (...)` is an error. That function loads an instance with `use` to call what it supplies, as `memory` does with `use Memory() in block()`: a parameter whose type requires the context doesn't give the function one, so calling it without the `use` is an error (NYX0211). Any module may declare one. What requires a scoped context leaving its scope is NYX0233.
@@ -81,7 +81,7 @@ A scoped context must be either `protected` or `private`, so that each of its in
 A protected or private type can belong to a scoped context's scope: its declaration writes the context before its kind. Each value of the type belongs to the scope of the context it was made under, so it can't leave the call that supplies that context, and neither can anything holding it:
 
 ```nanyx fragment
-scoped export context Tx = private ()
+export scoped context Tx = private ()
 
 export type Cursor = [Tx] protected (query: string, row: int)
 
