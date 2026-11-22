@@ -21,7 +21,7 @@ import { inflateRawSync } from "node:zlib";
  *
  * @type {string | null}
  */
-export const playgroundRelease = null;
+export const playgroundRelease = "0.33.0";
 
 const docs = dirname(dirname(fileURLToPath(import.meta.url)));
 const target = join(docs, "public", "playground", "compiler");
