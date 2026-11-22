@@ -25,7 +25,8 @@ type ScopedName = { Name: string; Type: string option; Kind: SymbolKind; Declara
 /// A context in scope, written as hover writes it, and the span of what provides it: the annotation, the `use`, or the
 /// name of the def that was inferred to require it. The runtime's has none. `Documented` are the symbols whose doc
 /// comment describes it, the first that has one first: for a `use`, the def it names or calls, then the context itself.
-type ScopedContext = { Context: string; Source: ContextSource; Span: SourceSpan; Documented: Symbol list }
+/// `Name` is the context's name as `Context` starts with it, which the info view links to what provides it.
+type ScopedContext = { Context: string; Name: string; Source: ContextSource; Span: SourceSpan; Documented: Symbol list }
 
 /// Where a call finds a context its callee requires (see `TypedModule.ContextInstances` and
 /// `TypedModule.ContextProviders`).
@@ -40,8 +41,9 @@ type CallSource =
     | BuiltIn
 
 /// A context the call at the position requires, written as hover writes it, with where the call finds it, and the span
-/// and documented symbols of what provides it, as `ScopedContext` has them. An instance the compiler builds has no span.
-type CallContext = { Context: string; Source: CallSource; Span: SourceSpan; Documented: Symbol list }
+/// and documented symbols of what provides it, and its name, as `ScopedContext` has them. An instance the compiler
+/// builds has no span.
+type CallContext = { Context: string; Name: string; Source: CallSource; Span: SourceSpan; Documented: Symbol list }
 
 /// What kind of scope around the position a `Scope` is.
 type ScopeKind =
@@ -385,6 +387,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
         let contextsWritten, callWritten = List.splitAt contexts.Length written
         let scoped (symbol: Symbol) typeWritten =
             { Name = symbol.Name; Type = typeWritten; Kind = symbol.Kind; Declaration = symbol.Declaration; Symbol = symbol }
+        let writtenName (ty: Ty) = contextName (rename ty) |> Option.defaultValue ""
         let documented (ty: Ty) (instance: Symbol option) = Option.toList instance @ Option.toList (contextSymbol typed ty)
         let localNames =
             List.map2
@@ -397,7 +400,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
         let scopedContexts =
             List.map2
                 (fun (ty, source, span, instance, owner) written ->
-                    owner, ({ Context = List.exactlyOne written; Source = source; Span = span; Documented = documented ty instance }: ScopedContext))
+                    owner, ({ Context = List.exactlyOne written; Name = writtenName ty; Source = source; Span = span; Documented = documented ty instance }: ScopedContext))
                 contexts
                 contextsWritten
         // The lambdas and defs around the position, innermost first, each with the span its names and contexts are in:
@@ -445,7 +448,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
           Call =
             List.map2
                 (fun (ty, source, span, instance) written ->
-                    ({ Context = List.exactlyOne written; Source = source; Span = span; Documented = documented ty instance }: CallContext))
+                    ({ Context = List.exactlyOne written; Name = writtenName ty; Source = source; Span = span; Documented = documented ty instance }: CallContext))
                 callContexts
                 callWritten }
     | _ -> { Expression = None; ExpressionSymbol = None; Instantiation = None; Scopes = []; Call = [] }
