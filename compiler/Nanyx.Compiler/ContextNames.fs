@@ -68,7 +68,7 @@ let bind (env: TypeEnv) (state: InferState) (lambda: Expression) (body: Expressi
                     info.Members
                     |> Map.toList
                     |> List.choose (fun (memberName, _) -> TypeEnv.tryFind memberName env |> Option.map (fun scheme -> memberName, scheme))
-                let ty = TyApply(ctxName, [])
+                let ty = scope |> Option.map (FunctionContexts.scoped ctxName) |> Option.defaultValue (TyApply(ctxName, []))
                 let symbol, next = declareSymbol LambdaParameters lambda.Id name Parameter false (Some lambda.Span.End) current
                 let next = next |> recordSymbolType symbol ty
                 let next =
@@ -87,9 +87,14 @@ let loaded (env: TypeEnv) (state: InferState) (value: Expression) : (TypeScheme 
             scheme.Symbol |> Option.bind (fun symbol -> state.ContextNames |> Map.tryFind symbol) |> Option.map (fun instance -> scheme, instance))
     | _ -> None
 
-/// `state` with `value`, the name a `use` loads, recorded as a reference to it (`scheme`'s), of its type.
-let recordLoad (value: Expression) (scheme: TypeScheme) (state: InferState) : InferState =
+/// `state` with `value`, the name a `use` loads, recorded as a reference to it (`scheme`'s), of its type. A lambda that
+/// loads a `memory` block's `Memory` requires it, as one over the block's cells does, so it can't leave the block.
+let recordLoad (value: Expression) (scheme: TypeScheme) (instance: ContextName) (state: InferState) : InferState =
     let state = recordReference value scheme state
+    let state =
+        match instance.Scope with
+        | Some scope -> LambdaContexts.record [ FunctionContexts.scoped instance.Context scope ] state
+        | None -> state
     { state with ExprTypes = state.ExprTypes |> Map.add value.Id scheme.Type }
 
 /// `env` with the members of `instance` bound again as they were where its lambda's body starts, and a `memory`
