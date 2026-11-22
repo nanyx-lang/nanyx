@@ -140,13 +140,14 @@ let wrapperCalling (tools: LiftedTools) (wrapped: string) (instanceTy: Ty) (capt
 /// a result boxed where the other type has the value, or the other way round, is converted (see
 /// `CoreIrLowerBoxes`): a box of unit is passed where the value takes one and the adapter is given nothing, and none
 /// where the adapter is given one and the value takes nothing.
-let adapter (tools: LiftedTools) (functionName: string) (givenTy: IrType) (expectedTy: IrType) : Function =
+let private adapting (tools: LiftedTools) (functionName: string) (fromMember: ContextMemberKey option) (givenTy: IrType) (expectedTy: IrType) : Function =
     let givenInput, givenOutput, given, result, wanted =
         match givenTy, expectedTy with
         | IrFunction(givenInput, givenOutput, given), IrFunction(_, result, wanted) -> givenInput, givenOutput, given, result, wanted
         | _ -> internalError $"an adapter from '{IrType.show givenTy}' to '{IrType.show expectedTy}'"
     let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
-    let environment = tools.NewVar ClosureSyntax.envParameter Param (IrRecord(("0", IrWord) :: ("1", givenTy) :: (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
+    let held = if fromMember.IsSome then [] else [ "1", givenTy ]
+    let environment = tools.NewVar ClosureSyntax.envParameter Param (IrRecord(("0", IrWord) :: held @ (missing |> List.mapi (fun index (_, ty) -> string (index + 2), ty))))
     let valueTys = adaptedValueTypes givenTy expectedTy
     let values = valueTys |> List.mapi (fun index ty -> tools.NewVar $"__arg{index + 1}" Param ty)
     let passed = wanted |> List.map (fun (key, ty) -> key, tools.NewVar (contextMemberParameter key) Param ty)
@@ -176,7 +177,11 @@ let adapter (tools: LiftedTools) (functionName: string) (givenTy: IrType) (expec
             match missing |> List.tryFindIndex (fst >> (=) key) with
             | Some index -> (if boxing then tools.BindLocal "__member" else tools.BindTemp) (Expr.make (Field(AVar environment, index + 2)) ty) next
             | None -> tools.Coerce scope (AVar scope.Members.[key]) ty next
-    let body = Expr.make (Let(adapted, Expr.make (Field(AVar environment, 1)) givenTy, call given [])) result
+    let value =
+        match fromMember with
+        | Some key -> Expr.make (Atom(AVar scope.Members.[key])) givenTy
+        | None -> Expr.make (Field(AVar environment, 1)) givenTy
+    let body = Expr.make (Let(adapted, value, call given [])) result
     { Name = functionName
       Source = functionName
       TypeArguments = []
@@ -184,3 +189,20 @@ let adapter (tools: LiftedTools) (functionName: string) (givenTy: IrType) (expec
       Result = result
       Body = body
       Place = None }
+
+/// The adapter `functionName` that lets a function value of type `givenTy` be called as one of `expectedTy` (see
+/// `adapting`), holding the value.
+let adapter (tools: LiftedTools) (functionName: string) (givenTy: IrType) (expectedTy: IrType) : Function =
+    adapting tools functionName None givenTy expectedTy
+
+/// The function `functionName` that a context's member of the key `key`, named as a value of type `expectedTy`, is a
+/// closure over: it holds nothing, and calls the member it is passed with that key, as a call of the member where the
+/// value is called would. What it calls is the instance where it is called, never one it was named under.
+let memberCalling (tools: LiftedTools) (functionName: string) (key: ContextMemberKey) (expectedTy: IrType) : Function =
+    match expectedTy with
+    | IrFunction(_, _, wanted) ->
+        match wanted |> List.tryFind (fst >> (=) key) with
+        | Some (_, memberTy) -> adapting tools functionName (Some key) memberTy expectedTy
+        | None -> internalError $"the member '{ContextMemberKey.text key}' named as a value of '{IrType.show expectedTy}', which doesn't take it"
+    | _ -> internalError $"the member '{ContextMemberKey.text key}' named as a value of '{IrType.show expectedTy}'"
+

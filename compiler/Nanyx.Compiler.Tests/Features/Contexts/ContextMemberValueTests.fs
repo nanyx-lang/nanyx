@@ -42,3 +42,21 @@ let ``A context member as a value is checked against what uses it`` () =
     let code, at = singleError source
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     Assert.Equal("ToText(int).textlen", at)
+
+// A plain context's function member named as a value requires the context where it is called, so what it holds of an
+// instance can't outlive the instance's `use`.
+
+/// `wrap`, of the type `wrapType`, giving back `Holder`'s member `get` as a value.
+let private wrapping (wrapType: string) =
+    $"context Holder = (get: () -> int)\n\ndef wrap: {wrapType} = {{ get }}\n"
+
+[<Fact>]
+let ``A plain context's member named as a value requires the context where it is called`` () =
+    let typed = compileClean (normalized (wrapping "[Holder] () -> ([Holder] () -> int)"))
+    Assert.Equal("() -> ([Holder] () -> int)", Unifier.tyToString typed.Types.["wrap"])
+
+[<Fact>]
+let ``So it can't be given back as a function that requires nothing`` () =
+    let code, at = singleError (normalized (wrapping "[Holder] () -> (() -> int)"))
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+    Assert.Equal("get", at)

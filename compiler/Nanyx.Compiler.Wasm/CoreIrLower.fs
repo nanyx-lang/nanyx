@@ -566,7 +566,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         // A context member in scope, named as a value (`` `0` ``, or a function member passed on).
         | None when scope.Members.ContainsKey (NamedMember name) && not (namesOwnDefinition input expr) ->
             let memberVar = scope.Members.[NamedMember name]
-            k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
+            match input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst >> toIrType) with
+            // A function member named as a value requires its context where it is called, so it is a closure that
+            // calls the member it is then passed, and holds nothing of this instance (see `CoreIrLowerLifted.memberCalling`).
+            | Some (IrFunction(_, _, wanted) as expected) when wanted |> List.exists (fst >> (=) (NamedMember name)) ->
+                let key = NamedMember name
+                let functionName =
+                    this.MemberTools.Request (SpecKey.plain $"__member_{sanitizeIdentifier name}_{IrType.mangle expected}" []) (this.MemberTools.Subst ()) (MemberCalling(key, expected))
+                let arity = 1 + (adaptedValueTypes memberVar.Type expected).Length + wanted.Length
+                k (Expr.make (MakeClosure(functionName, arity, [])) expected)
+            | _ -> k (Expr.make (Atom(AVar memberVar)) memberVar.Type)
         | None when definitions.ContainsKey name && not (isFunction name) ->
             // A top-level value is compiled to a function of no parameters: evaluate it. One of a type generic in
             // contexts named where one that carries more is expected is made at its own type, and adapted (see
@@ -1308,6 +1317,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         match lowering with
         | AsStart -> this.StartFunction ()
         | Adapting(givenTy, expectedTy) -> CoreIrLowerLifted.adapter this.LiftedTools functionName givenTy expectedTy
+        | MemberCalling(key, expectedTy) -> CoreIrLowerLifted.memberCalling this.LiftedTools functionName key expectedTy
         | ValueAdapting(givenTy, expectedTy) -> CoreIrLowerMembers.valueAdapter this.MemberTools emptyScope functionName givenTy expectedTy
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
@@ -1408,6 +1418,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | WrapperCalling(wrapped, instanceTy, captured) ->
             CoreIrLowerLifted.wrapperCalling this.LiftedTools wrapped instanceTy captured parameterNames make
         | Adapting _ -> internalError "an adapter lowered as a definition"
+        | MemberCalling _ -> internalError "a member's caller lowered as a definition"
         | ValueAdapting _ -> internalError "a value's adapter lowered as a definition"
         | BoxReading _ -> internalError "a box's function lowered as a definition"
         | StandingIn _ -> internalError "a stand-in lowered as a definition"
