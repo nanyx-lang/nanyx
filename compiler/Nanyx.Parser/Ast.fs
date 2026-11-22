@@ -1215,6 +1215,29 @@ module Pattern =
             | ElsePattern -> pattern.Kind
         { pattern with Kind = kind }
 
+    /// `pattern` with `f` applied to the type name of each pattern in it that takes a nominal value apart, `UserId(n)`.
+    let rec mapTypeNames (f: Identifier -> Identifier) (pattern: Pattern) : Pattern =
+        let recur = mapTypeNames f
+        let kind =
+            match pattern.Kind with
+            | RecordPattern(name, patterns) -> RecordPattern(f name, List.map recur patterns)
+            | TuplePattern patterns -> TuplePattern(List.map recur patterns)
+            | AndPattern patterns -> AndPattern(List.map recur patterns)
+            | RecordMemberPattern(members, hasRest) ->
+                RecordMemberPattern(members |> List.map (fun (name, p) -> name, recur p), hasRest)
+            | ListPattern(patterns, rest) -> ListPattern(List.map recur patterns, Option.map recur rest)
+            | ListSplatMiddle(before, after) -> ListSplatMiddle(List.map recur before, List.map recur after)
+            | TagPattern(name, payload) -> TagPattern(name, Option.map recur payload)
+            | ArgumentTagPattern(name, arguments, payload) -> ArgumentTagPattern(name, arguments, Option.map recur payload)
+            | GuardPattern _
+            | RangePattern _
+            | LiteralPattern _
+            | IdentifierPattern _
+            | WildcardPattern
+            | UnitPattern
+            | ElsePattern -> pattern.Kind
+        { pattern with Kind = kind }
+
     /// The names `pattern` binds, as `boundNames` gives them, each with the span of the pattern that binds it.
     let boundNamesWithSpans (pattern: Pattern) : (Identifier * SourceSpan) list =
         within pattern

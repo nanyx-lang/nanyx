@@ -174,3 +174,26 @@ let ``A module block's import that selects names brings in only those`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.NotExported.Code, "Coin"; DiagnosticCodes.UnknownFunction.Code, "Money.new" ],
         codesAt (moneyBlock + "import money as (Coin, zero)\n\ndef price = Money.new(1)\n"))
+
+[<Fact>]
+let ``A module block takes its own nominal value apart by its type's name`` () =
+    // The Nominal types page's accessor, as a lambda's parameter pattern and as a def's, in a block (#2342).
+    let source =
+        normalized
+            """module ids =
+  export type UserId = private int
+  export def UserId.new: int -> UserId = { n -> UserId(n) }
+  export def UserId.value: UserId -> int = { UserId(n) -> n }
+  export def UserId.next: UserId -> int = { u ->
+    def UserId(n) = u
+    n + 1
+  }
+  export def UserId.isZero: UserId -> bool = { u ->
+    match u
+      | UserId(0) -> true
+      | _ -> false
+  }
+
+println(ids.UserId.value(ids.UserId.new(3)))
+"""
+    Assert.Empty(codesAt source)

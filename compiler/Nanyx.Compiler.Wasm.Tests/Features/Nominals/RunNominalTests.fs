@@ -76,3 +76,14 @@ def row = transaction {
 println(row)
 """
     assertRan "42\n" (runSource (normalized source))
+[<Fact>]
+let ``Run - a private type's accessor takes it apart, at a file's top level and in a module block`` () =
+    let accessor = "def UserId.value: UserId -> int = { UserId(n) -> n }"
+    let topLevel =
+        normalized ($"type UserId = private int\n{accessor}\n\n" + "println(UserId.value(UserId(3)))\n")
+    runSource topLevel |> assertRan "3\n"
+    let inBlock =
+        normalized (
+            $"module ids =\n  export type UserId = private int\n  export def UserId.new: int -> UserId = {{ n -> UserId(n) }}\n  export {accessor}\n  export def UserId.next: UserId -> int = {{ u ->\n    def UserId(n) = u\n    n + 1\n  }}\n\n"
+            + "println(ids.UserId.value(ids.UserId.new(3)))\nprintln(ids.UserId.next(ids.UserId.new(3)))\n")
+    runSource inBlock |> assertRan "3\n4\n"
