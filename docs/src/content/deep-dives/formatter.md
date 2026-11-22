@@ -71,6 +71,12 @@ construct are written once, as documents, and the printer decides where to break
   on its own line is read as a statement, which takes every operator but `..`, so a range stays on the `->`'s line
   rather than being bracketed ([#312](https://github.com/nanyx-lang/nanyx/issues/312),
   [#960](https://github.com/nanyx-lang/nanyx/issues/960)).
+- A def's signature is printed by `TypePrinter.brokenSignature`, which writes on one line what `signature` writes, as
+  nested groups: the contexts and the rest of the type, then the parameters and `-> result`, then a result union's
+  cases. Each breaks only where it doesn't fit once the one around it has broken, and the lines after the first are
+  nested by the width of what they line up under (`: `, `-> `, `[`), not by an indent step
+  ([#2270](https://github.com/nanyx-lang/nanyx/issues/2270)). A union's cases on lines of their own after `-> |` are
+  a block of arms to the layout pass, whose `Dedent` the type parser takes, so the `=` after them still parses.
 
 # Never changing meaning
 

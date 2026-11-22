@@ -39,6 +39,27 @@ let ``def annotation can start an indented continuation line`` () =
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
+let ``a def annotation's union may have its cases on lines of their own before the def's equals`` () =
+    // #2270: the cases after the first open a block of arms (layout rule 3), which ends before the `=`.
+    let source =
+        normalized """def lookup
+  : string,
+    int
+    -> | #some(int)
+       | #notFound
+       | #error(string)
+  = { key, index -> #notFound }
+"""
+    let expected =
+        func
+            (tuple [ named "string"; named "int" ])
+            (ty (TypeUnion [ tag "some" (Some (named "int")); tag "notFound" None; tag "error" (Some (named "string")) ]))
+    match parseModule source with
+    | Result.Ok [ Kind (Def (ValueDef (_, "lookup", Some annotation, Kind (Lambda _)))) ] -> annotation |> should equal expected
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+
+[<Fact>]
 let ``bare parameters in a def annotation bind tighter than the arrow`` () =
     let annotationOf source =
         match parseModule source with

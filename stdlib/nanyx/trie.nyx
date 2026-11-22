@@ -49,7 +49,12 @@ def ownCount: (#some(v) | #none) -> int = {
   with the element of the key taken from it, the nearest first. `#none` when no key starts with
   `key`, unless `extend`, which takes a missing node to be an empty one.
 def descend
-  : [Eq(k), Hash(k)] Node(k, v), list(k), list((Node(k, v), k)), bool -> #some(Node(k, v), list((Node(k, v), k))) | #none
+  : [Eq(k), Hash(k)]
+    Node(k, v),
+    list(k),
+    list((Node(k, v), k)),
+    bool
+    -> #some(Node(k, v), list((Node(k, v), k))) | #none
   = { node, key, path, extend ->
     match key
       | [] -> #some(node, path)

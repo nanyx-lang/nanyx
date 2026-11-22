@@ -282,7 +282,15 @@ def addThread
   in front of `next`, last first, and the best match so far, `found`: a thread that reaches the
   end of the program is a match, better than any after it, which are dropped.
 def advance
-  : [Memory] Program, Text, MArray(int), int, list(Thread), list(Thread), (#some(array(int)) | #none) -> (list(Thread), (#some(array(int)) | #none))
+  : [Memory]
+    Program,
+    Text,
+    MArray(int),
+    int,
+    list(Thread),
+    list(Thread),
+    (#some(array(int)) | #none)
+    -> (list(Thread), (#some(array(int)) | #none))
   = { program, text, marks, pos, threads, next, found ->
     match threads
       | [] -> (next, found)
@@ -307,7 +315,14 @@ def advance
   `pos`, the threads at `pos` being `threads`, in priority order, and the best match so far
   `found`.
 def runFrom
-  : [Memory] Program, Text, MArray(int), int, list(Thread), (#some(array(int)) | #none) -> #some(array(int)) | #none
+  : [Memory]
+    Program,
+    Text,
+    MArray(int),
+    int,
+    list(Thread),
+    (#some(array(int)) | #none)
+    -> #some(array(int)) | #none
   = { program, text, marks, pos, threads, found ->
     -- Until a match is found, a thread starts at each code point, after those that started
     -- earlier, which have the higher priority.
