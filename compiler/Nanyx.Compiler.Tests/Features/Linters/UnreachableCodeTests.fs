@@ -136,8 +136,8 @@ let ``A return in a branch does not make what follows the branch unreachable`` (
     let source =
         "def f: int -> #some(int) | #none = { n ->\n"
         + "  proc {\n"
-        + "    if n > 2 then return n\n"
-        + "    return 0\n"
+        + "    def m = if n > 2 then return n else n * 2\n"
+        + "    return m\n"
         + "  }\n"
         + "}\n"
     Assert.Empty(reported source)
