@@ -1,0 +1,26 @@
+module shapes
+
+import units as units
+
+export type Point = (x: float, y: float)
+
+export type Shape = #circle(units.Length) | #rect(Point, Point) | #polygon(list(Point))
+
+export type Summary = (name: string, area: float, corners: list(string))
+
+@component
+export def summarize: Shape -> Summary = { shape ->
+  match shape
+    | #circle(radius) ->
+      def r = units.toMetres(radius)
+      (name = "circle of " ++ units.label(radius.unit), area = 3.0 * r * r, corners = [])
+    | #rect(from, to) ->
+      (name = "rect", area = (to.x - from.x) * (to.y - from.y), corners = ["from", "to"])
+    | #polygon(points) ->
+      (name = "polygon", area = 0.0, corners = list.map(points, { p -> "corner" }))
+}
+
+@component
+export def shift: list(Point), float -> list(Point) = { points, by ->
+  list.map(points, { p -> (x = p.x + by, y = p.y) })
+}

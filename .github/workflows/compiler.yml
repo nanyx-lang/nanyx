@@ -136,6 +136,18 @@ jobs:
           check "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/nowhere)" "404"
           check "$(curl -s -o /dev/null -w '%{http_code}' -X TRACE http://127.0.0.1:8080/)" "400"
 
+      # A Nanyx component and Rust components call each other: a Rust command calls the Nanyx component's exports,
+      # which call a Rust component's, composed with wac and run under Wasmtime (see ComponentInterop/run.sh).
+      - name: Install wac and Rust's wasm32-wasip2 target
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          rustup target add wasm32-wasip2
+          cargo install wac-cli --version 0.12.0 --locked
+
+      - name: Call between a Nanyx component and Rust components under Wasmtime
+        if: matrix.os == 'ubuntu-latest'
+        run: ComponentInterop/run.sh "$RUNNER_TEMP/interop"
+
   # The Wasm tests take the longest by far (most of them compile and run a program), so they get a
   # runner to themselves rather than share its cores with the other test projects.
   wasm-test:

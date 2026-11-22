@@ -216,3 +216,15 @@ let ``An import's type must cross a component's boundary too`` () =
     let diagnostic = diagnosticOf (normalized "@import(\"acme:geometry/shapes\")\ndef apply: (int -> int) -> int\n")
     Assert.Equal(DiagnosticCodes.ComponentBoundaryType.Code, diagnostic.Code)
     Assert.Contains("A component can't import 'apply': a function can't cross", diagnostic.Message)
+
+[<Fact>]
+let ``A type named through an import's alias is named in the WIT by its own name`` () =
+    let result =
+        compileImportingAll
+            [ "units.nyx", "module units\n\nexport type Length = (value: float)\n"
+              "mod.nyx", "module shapes\n\nimport units as u\n\n@component\nexport def grow: u.Length -> u.Length = { l -> l }\n" ]
+            "module main\n\nimport mod as m\n\ndef main = 1\n"
+    Assert.Empty(result.Diagnostics)
+    let wit = ComponentInterface.render "acme:shapes@0.1.0" "nanyx:console/command" (ComponentInterface.functions result.Typed.Value) []
+    Assert.Contains("  record length {", wit)
+    Assert.Contains("  grow: func(l: length) -> length;", wit)
