@@ -912,7 +912,7 @@ module Compiler =
                             | Error _ -> None))
                 let blockReExportErrors =
                     ModuleLinking.blockReExportClashes desugared merged.ReExports (blockReExports |> List.map (fun (blockImport, own) -> blockImport.Import, own))
-                // A host's component root, checked in a component build, provides no context its core root doesn't.
+                // A host's component root, checked in a component build, provides the contexts its core root does.
                 let componentRootErrors =
                     match buildHost, hostModules, origin with
                     | Some buildHost, Some modules, SourceFile path when buildHost.IsComponent && (modules.Modules |> Map.tryFind buildHost.Module |> Option.exists (List.exists (PackageModules.samePath path))) ->

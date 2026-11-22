@@ -75,7 +75,7 @@ The WIT directory is a WIT package, with the packages it uses under `deps/`, as 
 # Component roots
 
 A host's manifest names its component root and the world it is written against beside its root
-(`component = (root = "console.host.wasi", world = "wasi:cli/command@0.3.0")`), and keeps the world's WIT in its `wit`
+(`component = (root = "console.host.wasi", world = "nanyx:console/command")`), and keeps the world's WIT in its `wit`
 directory. `HostPackages` reads it into `Host.Component`.
 
 - **A component build swaps the root.** `nanyx build` takes the package as `Package.asComponent` gives it, whose host's
@@ -83,18 +83,19 @@ directory. `HostPackages` reads it into `Host.Component`.
   passed to that root's `run`, so it is checked against the contexts the component root provides, and the backend
   compiles the program with `WasmOptions.Component`. `Host.IsComponent` says whether a host is one a component build
   sees. The componentizer is given the host's `wit` directory and the world.
-- **What the component root lacks is named.** An entry point that requires a context the root's `run` doesn't provide
-  doesn't fit it (`NYX0237`, `Hosts.entryMismatch`), and the error names each such context, and says to build with
-  `--core` when the host is a component root.
-- **It provides no more than the core root.** When the component root's own module is checked, in a component build,
-  `Library.checkModule` imports the core root and compares the contexts the two `run`s provide; one only the component
-  root provides is `NYX0275` (`Hosts.componentRootErrors`). It may provide fewer, while it is being built.
+- **It provides what the core root does.** When the component root's own module is checked, in a component build,
+  `Library.checkModule` imports the core root and compares the contexts the two `run`s provide; one only one of them
+  provides is `NYX0275` (`Hosts.componentRootErrors`). So a program fits the one root when it fits the other, and an
+  entry point that requires a context neither provides is the same error, `NYX0237`, naming it, in either build.
 - **CI runs them.** The Compiler workflow builds each package in `examples/` as a component, runs it under
   `wasmtime run`, and checks that it prints what `nanyx run` does.
 
 ## The console host's component root
 
-`console.host.wasi` provides `Console`, `Env`, `FileSystem`, `Clock`, `Random` and `Async` on WASI 0.3 alone. It is Nanyx, on
+`console.host.wasi` provides `Console`, `Env`, `FileSystem`, `Http`, `Clock`, `Random` and `Async` on WASI 0.3 alone, in
+the world `nanyx:console/command`, which the package's `wit/console.wit` declares: `wasi:cli/command@0.3.0` with
+`wasi:http/client@0.3.0`. wit-component imports only the interfaces the core module uses, so a program that makes no
+requests has no `wasi:http` import. It is Nanyx, on
 `@extern`s named as wit-component expects, and it lowers the canonical ABI by hand with `nanyx/host.memory`:
 
 - **Writes** to stdout and stderr go as the runtime's own do ([The core module](#the-core-module)): a `stream<u8>`
@@ -126,6 +127,17 @@ directory. `HostPackages` reads it into `Host.Component`.
     `other`'s `option<string>` at 4, whose string the host allocated and the root frees.
   - An `error-code` becomes the `FsError` the core root gives for the same WASI error: `no-entry` is `#notFound`, and so
     on (`errorAt`).
+- **HTTP requests** are `wasi:http/client`'s `send`, in `console.host.wasi.http.nyx`. A `Request` becomes a
+  `wasi:http/types` `request`: its headers a `fields`, with a `Content-Length` for a body that doesn't name one, its body
+  a `stream<u8>`, its trailers a future written `ok(none)`, its timeout `request-options`' connect and first-byte
+  timeouts, and its URL split into scheme, authority and path with query (`urlParts`).
+  - `send` is lowered async (`[async-lower]send`), so that the root can write the body while the host sends it; the
+    root then writes the trailers and waits on the subtask until it has returned (`[subtask-drop]` after).
+  - The response's status and headers (`copy-all`) are read, and its body from the stream `consume-body` gives; the
+    future `consume-body` takes is written `ok` once the body is read, since a future's writable end can't be dropped
+    unwritten.
+  - An `error-code` becomes an `HttpError`: a timeout `#timeout`, a DNS or connection failure `#connectionFailed`, an
+    invalid URI `#invalidUrl`, and anything else `#other`.
 
 A wait blocks: each async-lowered call that returns BLOCKED is waited on at once, in a waitable set of its own, as
 the runtime's own writes are.

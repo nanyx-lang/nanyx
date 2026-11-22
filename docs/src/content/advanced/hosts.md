@@ -88,16 +88,18 @@ An application that depends on the library calls `greet` from its entry point, w
 
 ## Built as a component
 
-`nanyx build` writes a program under the console host as a [WebAssembly component](../deep-dives/components) of the
-world `wasi:cli/command@0.3.0`, which `wasmtime run` (46 or later), or any runtime that implements WASI 0.3, runs as it
-is: `wasmtime run out/greet.wasm Ada`. `nanyx run` runs the program as it always has, and `nanyx build --core` writes a
-core module, as before.
+`nanyx build` writes a program under the console host as a [WebAssembly component](../deep-dives/components), which
+`wasmtime run` (46 or later), or any runtime that implements WASI 0.3, runs as it is: `wasmtime run out/greet.wasm Ada`.
+`nanyx run` runs the program as it always has, and `nanyx build --core` writes a core module, as before.
 
-A component is built from the host's _component root_, `console.host.wasi`, which provides what WASI 0.3 can:
-`Console`, `Env`, `FileSystem`, `Clock`, `Random` and `Async`. `Http` comes next
-([Components](../work-in-progress/components#plan)). A component reaches only the directories the runtime that runs it
-opens for it: `wasmtime run --dir . out/greet.wasm` opens the current directory, where a relative path is found. An entry point that needs a context the component root doesn't
-provide is an error (`NYX0237`) naming it, when it is built as a component; `--core` builds it.
+A component is built from the host's _component root_, `console.host.wasi`, which provides everything the console host
+does, on WASI 0.3. Its world is `nanyx:console/command`, which is `wasi:cli/command@0.3.0` with
+`wasi:http/client@0.3.0`, and a component imports only what the program uses:
+
+- A program that makes no HTTP requests is a `wasi:cli/command` component, which any WASI 0.3 runtime runs.
+- One that does imports `wasi:http/client` too: `wasmtime run -S http out/greet.wasm` provides it.
+- A component reaches only the directories the runtime that runs it opens for it: `wasmtime run --dir . out/greet.wasm`
+  opens the current directory, where a relative path is found.
 
 # The HTTP host
 
@@ -177,8 +179,8 @@ Naming a package as a host when its manifest doesn't declare it one is an error.
 A host may also have a component root, which `nanyx build` builds a [WASI 0.3 component](../deep-dives/components)
 from: `component = (root = "shout.host.wasi", world = "wasi:cli/command@0.3.0")`, beside `root`. It exports `run` as the
 root does, written against the WIT of the world it names, which the package keeps in its `wit` directory, with the
-packages that WIT uses under `wit/deps`. It may provide fewer contexts than the root, but no other: one the root doesn't
-provide is an error at its `run` (`NYX0275`). The host here provides one context, `Log`, which writes a line in capitals. The context is declared in a module of its own:
+packages that WIT uses under `wit/deps`. It provides the contexts the root does: one more or fewer is an error at its
+`run` (`NYX0275`). The host here provides one context, `Log`, which writes a line in capitals. The context is declared in a module of its own:
 
 ```nanyx fragment
 --| What a program under the shouting host can do.
