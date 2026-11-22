@@ -8,14 +8,17 @@ The [playground](/playground) is built: a page of the docs site with an editor, 
 input, the tour's examples and share links, with the compiler and the program running in the browser
 ([#2153](https://github.com/nanyx-lang/nanyx/issues/2153)). How to use it is on
 [Playground](../standard-tools/playground) in Standard tools, and how it works on [Playground](../deep-dives/playground)
-in Deep dives. This page is what is still planned.
+in Deep dives. The tour's examples are small playgrounds too: each runnable one runs, and can be edited, where it is,
+with the playground's editor and output ([#2248](https://github.com/nanyx-lang/nanyx/issues/2248); [The tour's
+examples](../deep-dives/playground#the-tours-examples) in Deep dives). This page is what is still planned.
 
 # Plan
 
 1. **A release with the compiler.** The docs build takes the compiler from the `nanyx-browser.zip` of the release named
    by `playgroundRelease` in `docs/site/playground-compiler.mjs`. No release has the asset yet, so until the first
    release after 0.32.0 is named there, the deployed page says its compiler isn't on the site yet
-   ([#2152](https://github.com/nanyx-lang/nanyx/issues/2152)).
+   ([#2152](https://github.com/nanyx-lang/nanyx/issues/2152)). Until then the tour's examples have no compiler either,
+   and their Run says so.
 2. **Diagnostics in the editor**, underlined as you type with the same messages and codes as the CLI, each code linked
    to its section of [Compiler errors](../standard-tools/errors); with [deferred errors](./deferred-errors), a program
    with errors still runs up to the first one, as `nanyx run` does. Then a pane that shows the WebAssembly text the

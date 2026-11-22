@@ -80,7 +80,7 @@ export class Terminal {
   }
 
   /** Writes `text` as a line of its own. */
-  line(text: string, kind: "end" | "dbg" | "stderr") {
+  line(text: string, kind: "end" | "dbg" | "stderr" | "note") {
     this.write((this.atLineStart ? "" : "\n") + text + "\n", kind);
   }
 
@@ -133,6 +133,11 @@ export class Terminal {
       if (exit.trap) this.line(exit.trap, "stderr");
       if (exit.code !== 0) this.line(`exited with ${exit.code}`, "end");
     }
+  }
+
+  /** Whether the current run has shown nothing yet, its divider aside. */
+  runIsEmpty() {
+    return !this.run || [...this.run.children].every((child) => child.classList.contains("pg-divider"));
   }
 
   /** Shows the input line, as the pane's last line, while the program waits for a line. */

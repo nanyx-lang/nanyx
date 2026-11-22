@@ -3,9 +3,10 @@
 // with its runner, in a web worker. What the page holds and how it starts is on the Playground page in Deep dives.
 
 import type { EditorView } from "@codemirror/view";
-import { createEditor, setCode, type Keywords } from "./editor";
+import { PlaygroundUnavailable, compileAndRun, loadPlayground, releaseNotesUrl, type Playground, type Running } from "./compiler";
+import { createEditor, setCode } from "./editor";
 import { codeOf, shareLink } from "./share";
-import { Terminal, type Exit } from "./terminal";
+import { Terminal } from "./terminal";
 
 interface Example {
   id: string;
@@ -16,47 +17,10 @@ interface Example {
 interface PageData {
   groups: { page: string; title: string; examples: Example[] }[];
   defaultExample: Example;
-  keywords: Keywords;
 }
 
-interface Compiler {
-  compile(source: string): { wasm: Uint8Array | null; diagnostics: string[] };
-}
-
-interface Running {
-  done: Promise<Exit>;
-  stop(): void;
-  input(text: string): void;
-  closeInput(): void;
-}
-
-interface Runner {
-  canReadInput: boolean;
-  run(
-    wasm: Uint8Array,
-    callbacks: {
-      seed: number;
-      onStdout: (text: string) => void;
-      onStderr: (text: string) => void;
-      onDbg: (dbg: { file: string; line: number; text: string }) => void;
-      onRead: () => void;
-    },
-  ): Running;
-}
-
-/** Where the docs build unpacks the compiler (`site/playground-compiler.mjs`). */
-const compilerBase = "/playground/compiler/";
 const storageKey = "nanyx.playground.code";
 const splitKey = "nanyx.playground.split";
-
-/**
- * A module with one function that tail-calls itself (`return_call`), which the backend emits for tail calls: a browser
- * that doesn't validate it can't run Nanyx programs.
- */
-const tailCallModule = new Uint8Array([
-  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x06,
-  0x01, 0x04, 0x00, 0x12, 0x00, 0x0b,
-]);
 
 const stored = {
   get(key: string) {
@@ -85,8 +49,7 @@ const examples = element<HTMLSelectElement>("[data-examples]");
 const status = element("[data-status]");
 const release = element("[data-release]");
 
-let compiler: Compiler | null = null;
-let runner: Runner | null = null;
+let playground: Playground | null = null;
 let running: Running | null = null;
 /** The code last opened from an example or a link, unchanged: replacing it needs no asking. */
 let opened: string | null = null;
@@ -97,7 +60,7 @@ const terminal = new Terminal(element("[data-output]"), {
 });
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
-const editor: EditorView = createEditor(element("[data-editor]"), "", data.keywords, {
+const editor: EditorView = createEditor(element("[data-editor]"), "", {
   onRun: () => void runProgram(),
   onChange: (code) => {
     clearTimeout(saveTimer);
@@ -124,38 +87,22 @@ function setStatus(text: string) {
 function setRunning(isRunning: boolean) {
   runButton.hidden = isRunning;
   stopButton.hidden = !isRunning;
-  runButton.disabled = compiler === null;
+  runButton.disabled = playground === null;
 }
 
-const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
-
 async function runProgram() {
-  if (!compiler || !runner || running) return;
-  terminal.beginRun();
-  setStatus("Compiling…");
+  if (!playground || running) return;
   runButton.disabled = true;
-  await nextPaint();
-  const outcome = compiler.compile(code());
-  setStatus("");
-  if (!outcome.wasm) {
-    terminal.diagnostics(outcome.diagnostics, "diagnostic");
-    setRunning(false);
-    return;
-  }
-  terminal.diagnostics(outcome.diagnostics, "warning");
-  const seed = crypto.getRandomValues(new Int32Array(1))[0];
-  running = runner.run(outcome.wasm, {
-    seed,
-    onStdout: (text) => terminal.write(text, "stdout"),
-    onStderr: (text) => terminal.write(text, "stderr"),
-    onDbg: (dbg) => terminal.dbg(dbg),
-    onRead: () => terminal.showInput(),
+  await compileAndRun(playground, terminal, code(), {
+    onCompiling: () => setStatus("Compiling…"),
+    onStarted: (started) => {
+      running = started;
+      setStatus("");
+      setRunning(true);
+    },
   });
-  setRunning(true);
-  const exit = await running.done;
   running = null;
-  terminal.hideInput();
-  terminal.end(exit);
+  setStatus("");
   setRunning(false);
 }
 
@@ -250,13 +197,10 @@ function wireDivider() {
 }
 
 /** The compiler release the page runs, linked to its notes. */
-async function showRelease() {
-  const response = await fetch(compilerBase + "release.json");
-  if (!response.ok) return false;
-  const { release: name } = (await response.json()) as { release: string | null };
+function showRelease(name: string | null) {
   if (name) {
     const link = document.createElement("a");
-    link.href = `https://github.com/nanyx-lang/nanyx/releases/tag/compiler%2F${encodeURIComponent(name)}`;
+    link.href = releaseNotesUrl(name);
     link.target = "_blank";
     link.rel = "noopener";
     link.textContent = `Nanyx ${name}`;
@@ -264,33 +208,18 @@ async function showRelease() {
   } else {
     release.textContent = "Nanyx, built locally";
   }
-  return true;
 }
 
 async function loadCompiler() {
-  if (!WebAssembly.validate(tailCallModule)) {
+  try {
+    playground = await loadPlayground(data.defaultExample.code);
+  } catch (error) {
     setStatus("");
-    terminal.notice(
-      "This browser can't run Nanyx programs: they need WebAssembly tail calls, which Safari has had since 18.2, and Chrome, Edge and Firefox for longer.",
-      "diagnostic",
-    );
+    terminal.notice(error instanceof PlaygroundUnavailable ? error.message : `The compiler didn't load: ${error}`, "diagnostic");
     return;
   }
-  if (!(await showRelease())) {
-    setStatus("");
-    terminal.notice("The playground's compiler isn't on this site yet: it comes with the next compiler release.", "diagnostic");
-    return;
-  }
-  const [{ loadCompiler: load }, playground] = await Promise.all([
-    import(/* @vite-ignore */ compilerBase + "compiler.js"),
-    import(/* @vite-ignore */ compilerBase + "packages/nanyx.playground/runner/playground.js"),
-  ]);
-  const loaded: Compiler = await load();
-  // The first compile is the compiler's warm-up, most of the wait: done now, the first Run is quick.
-  loaded.compile(data.defaultExample.code);
-  compiler = loaded;
-  runner = playground as Runner;
-  if (!runner.canReadInput) {
+  showRelease(playground.release);
+  if (!playground.runner.canReadInput) {
     terminal.notice("This page isn't cross-origin isolated, so programs can't read input. Reload it to fix that.", "note");
   }
   setStatus("");
@@ -314,7 +243,4 @@ wireExamples();
 wireShare();
 wireDivider();
 await startingCode();
-loadCompiler().catch((error) => {
-  setStatus("");
-  terminal.notice(`The compiler didn't load: ${error}`, "diagnostic");
-});
+void loadCompiler();
