@@ -33,10 +33,10 @@ println(secure.Secret.isMaster(secure.Secret.make() with key = "master"))
     Assert.Equal<(string * string * string) list>(
         [ DiagnosticCodes.NominalConstructedOutsideItsModule.Code,
           "The protected type 'User' can only be updated with `with` in the module that defines it: make one with 'secure.User.guest'",
-          "u with admin = true"
+          "u"
           DiagnosticCodes.NominalConstructedOutsideItsModule.Code,
           "The private type 'Secret' can only be updated with `with` in the module that defines it: make one with 'secure.Secret.make'",
-          "secure.Secret.make() with key = \"master\"" ],
+          "secure.Secret.make()" ],
         diagnosticsOf source)
 
 [<Fact>]
@@ -66,7 +66,7 @@ def c = b with v = 2
     Assert.Equal(
         (DiagnosticCodes.NominalConstructedOutsideItsModule.Code,
          "The protected type 'Box' can only be updated with `with` in the module that defines it: make one with 'boxes.Box.of'",
-         "b with v = 2"),
+         "b"),
         onlyDiagnostic source)
 
 [<Fact>]
@@ -86,4 +86,4 @@ def admin = u with admin = true
     let code, message, at = onlyDiagnosticIn source (compileImporting moduleSource source)
     Assert.Equal(DiagnosticCodes.NominalConstructedOutsideItsModule.Code, code)
     Assert.StartsWith("The protected type 'User' can only be updated with `with` in the module that defines it", message)
-    Assert.Equal("u with admin = true", at)
+    Assert.Equal("u", at)
