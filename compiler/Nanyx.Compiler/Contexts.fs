@@ -195,6 +195,17 @@ let internal memberType (state: InferState) (ctxExpr: TypeExpr) (memberName: Ide
         | _ -> None
     | _ -> None
 
+/// The parameterised context `ctxExpr` is, applied to its types, as a function type requires it: `ToText(int)`.
+let internal contextTypeOf (state: InferState) (ctxExpr: TypeExpr) : (Ty * InferState) option =
+    match ctxExpr.Kind with
+    | TypeApply(name, args) ->
+        match tryFindTypeDef name state with
+        | Some info when info.IsContext && args.Length = info.Parameters.Length ->
+            let argTys, next = args |> List.mapFold typeExprToTy state
+            Some (TyApply(WrittenContexts.canonical state name, argTys), next)
+        | _ -> None
+    | _ -> None
+
 /// The type variables of the members of `ctx` that its instance fixes: those of the types a parameterised context is
 /// applied to (`a` in `Eq(a)`). None when every one of them is fixed, as for a parameterised context written without
 /// its arguments.

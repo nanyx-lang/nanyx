@@ -384,13 +384,17 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id read })
         | _ -> readMember env state expr baseExpr None memberName memberSpan
     | TypeValue written -> TypeArguments.infer state expr written
-    // `C(T).member` as a value has the member's type in the context's definition, as a call of it does. A member the
-    // context does not have leaves the value's type to what uses it.
+    // `C(T).member` as a value has the member's type in the context's definition, as a call of it does, and a function
+    // member requires `C(T)` where it is called, as a plain context's named as a value does. A member the context does
+    // not have leaves the value's type to what uses it.
     | ContextMemberAccess(ctxType, memberName) ->
         let state = recordContextMemberReference expr ctxType memberName state
         let ty, next =
             match Contexts.memberType state ctxType memberName with
-            | Some (memberTy, next) -> memberTy, next
+            | Some (memberTy, next) ->
+                match Unifier.unalias memberTy, Contexts.contextTypeOf next ctxType with
+                | TyFunc(input, output, own), Some (context, next) -> TyFunc(input, output, own @ [ context ] |> List.distinct), next
+                | _ -> memberTy, next
             | None -> freshVar state
         Ok (mkTypedExpr expr ty None None None, next)
     // `C(T).member(args)`: the arguments are checked against the member's type in the context's definition, and the
