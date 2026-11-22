@@ -1,0 +1,386 @@
+-- Part of the console host's component root, console.host.wasi.nyx and this file: its HTTP client,
+-- which the Http it provides is written on.
+@partial export module console.host.wasi
+
+-- HTTP ------------------------------------------------------------------------------------------
+
+-- `Http` is written on `wasi:http/client`'s `send`. A request is a `wasi:http/types` `request`: its
+-- headers a `fields`, its body a `stream<u8>`, its trailers a future, always `ok(none)`, and its
+-- timeout `request-options`. `send` is lowered async, so that the body can be written while the
+-- host sends it, and waited on once it has been. The response's headers are copied out of its
+-- `fields`, and its body read from the stream `consume-body` gives.
+--
+-- A call that gives its result in memory is given a block of its own, which it frees once it has
+-- read it.
+
+@extern("wasi:http/types@0.3.0", "[constructor]fields")
+def newFields: [HostRuntime] () -> I32
+
+@extern("wasi:http/types@0.3.0", "[method]fields.append")
+def appendField: [HostRuntime] I32, I32, I32, I32, I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]fields.copy-all")
+def copyAllFields: [HostRuntime] I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[resource-drop]fields")
+def dropFields: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[constructor]request-options")
+def newRequestOptions: [HostRuntime] () -> I32
+
+@extern("wasi:http/types@0.3.0", "[method]request-options.set-connect-timeout")
+def setConnectTimeout: [HostRuntime] I32, I32, I64, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]request-options.set-first-byte-timeout")
+def setFirstByteTimeout: [HostRuntime] I32, I32, I64, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[static]request.new")
+def newRequest: [HostRuntime] I32, I32, I32, I32, I32, I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]request.set-method")
+def setMethod: [HostRuntime] I32, I32, I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[method]request.set-scheme")
+def setScheme: [HostRuntime] I32, I32, I32, I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[method]request.set-authority")
+def setAuthority: [HostRuntime] I32, I32, I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[method]request.set-path-with-query")
+def setPathWithQuery: [HostRuntime] I32, I32, I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[stream-new-0][static]request.new")
+def bodyStreamNew: [HostRuntime] () -> I64
+
+@extern("wasi:http/types@0.3.0", "[async-lower][stream-write-0][static]request.new")
+def bodyStreamWrite: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[stream-drop-writable-0][static]request.new")
+def bodyStreamDropWritable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[future-new-1][static]request.new")
+def trailersFutureNew: [HostRuntime] () -> I64
+
+@extern("wasi:http/types@0.3.0", "[async-lower][future-write-1][static]request.new")
+def trailersFutureWrite: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[future-drop-writable-1][static]request.new")
+def trailersFutureDropWritable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[future-drop-readable-2][static]request.new")
+def sentFutureDropReadable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[method]response.get-status-code")
+def statusCode: [HostRuntime] I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[method]response.get-headers")
+def responseHeaders: [HostRuntime] I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[static]response.consume-body")
+def consumeBody: [HostRuntime] I32, I32, I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[future-new-0][static]response.consume-body")
+def consumedFutureNew: [HostRuntime] () -> I64
+
+@extern("wasi:http/types@0.3.0", "[async-lower][future-write-0][static]response.consume-body")
+def consumedFutureWrite: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[future-drop-writable-0][static]response.consume-body")
+def consumedFutureDropWritable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[async-lower][stream-read-1][static]response.consume-body")
+def responseStreamRead: [HostRuntime] I32, I32, I32 -> I32
+
+@extern("wasi:http/types@0.3.0", "[stream-drop-readable-1][static]response.consume-body")
+def responseStreamDropReadable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/types@0.3.0", "[future-drop-readable-2][static]response.consume-body")
+def trailersFutureDropReadable: [HostRuntime] I32 -> ()
+
+@extern("wasi:http/client@0.3.0", "[async-lower]send")
+def sendAsync: [HostRuntime] I32, I32 -> I32
+
+@extern("$root", "[subtask-drop]")
+def subtaskDrop: [HostRuntime] I32 -> ()
+
+--| The state a subtask has returned in: the canonical ABI's RETURNED.
+def returned: I32 = 2
+
+--| The scheme, the authority and the path with its query of `url`, or `#invalidUrl` when it isn't
+  an `http` or `https` URL: `http://localhost:3000/hello?name=ada` is `0`, `localhost:3000` and
+  `/hello?name=ada`, its fragment left out. `wasi:http`'s `scheme` is `HTTP`, 0, or `HTTPS`, 1.
+def urlParts: string -> #some(I32, string, string) | #invalidUrl = { url ->
+  def withoutFragment = match string.splitOnce(url, on = "#")
+    | #some(before, _) -> before
+    | #notFound -> url
+
+  match string.splitOnce(withoutFragment, on = "://")
+    | #notFound -> #invalidUrl
+    | #some(scheme, rest) ->
+      def lowered = string.lowercase(scheme)
+      def schemeCase = if lowered == "http" then 0 else if lowered == "https" then 1 else -1
+
+      if schemeCase < 0 or string.isEmpty(rest) then #invalidUrl else
+        def authorityEnd = match string.indexOf(rest, "/")
+          | #some(at) -> at
+          | #notFound -> match string.indexOf(rest, "?")
+            | #some(at) -> at
+            | #notFound -> string.length(rest)
+
+        def authority = string.take(rest, authorityEnd)
+        def path = string.skip(rest, authorityEnd)
+        def pathWithQuery = if string.startsWith(path, "/") then path else "/" ++ path
+
+        if string.isEmpty(authority)
+          then #invalidUrl
+          else #some(I32.fromInt(schemeCase), authority, pathWithQuery)
+}
+
+--| `wasi:http`'s `method` case for `method`, by its place in the variant.
+def methodCase: Method -> I32 = {
+  | #get -> 0
+  | #head -> 1
+  | #post -> 2
+  | #put -> 3
+  | #delete -> 4
+  | #options -> 6
+  | #patch -> 8
+}
+
+--| The `HttpError` the `wasi:http` `error-code` at `at` stands for: its case, by its place in the
+  variant. Only `internal-error`'s message is kept, and freed.
+def httpErrorAt: [HostRuntime] I32 -> HttpError = { at ->
+  def code = readByte(at)
+
+  if code == 0 or code == 8 or code == 9 or code == 10 or code == 33
+    then #timeout
+    else if code <= 7
+      then #connectionFailed(connectionFailure(code))
+      else if code == 19
+        then #invalidUrl
+        else if code == 38 and readByte(at + 8) == 1
+          then #other(takeString(at + 12))
+          else #other("wasi:http error {code}")
+}
+
+--| Why a connection failed, for the `error-code` cases from `DNS-error`, 1, to
+  `connection-terminated`, 7.
+def connectionFailure: I32 -> string = {
+  | 1 -> "the host's name can't be found"
+  | 2 -> "the destination can't be found"
+  | 3 -> "the destination is unavailable"
+  | 4 -> "the destination's address is prohibited"
+  | 5 -> "the destination's address can't be reached"
+  | 6 -> "the connection was refused"
+  | _ -> "the connection was closed"
+}
+
+--| `request`'s headers, with a `Content-Length` for its body when it has one and they don't, as the
+  core root's client sends it: a host may otherwise send the body in chunks, which not every server
+  reads.
+def withContentLength: [HostRuntime] Request -> list((string, string)) = { request ->
+  def named = list.any(request.headers, { (name, _) -> string.lowercase(name) == "content-length" })
+
+  if named or string.isEmpty(request.body)
+    then request.headers
+    else request.headers ++ [("Content-Length", I32.toString(byteLength(request.body)))]
+}
+
+--| A new `fields` with `headers`, each a name and a value, or the first that can't be set.
+def fieldsOf: [HostRuntime] list((string, string)) -> #some(I32) | #error(HttpError) = { headers ->
+  def fields = newFields()
+
+  match appendAll(fields, headers)
+    | #ok -> #some(fields)
+    | #error(e) ->
+      dropFields(fields)
+      #error(e)
+}
+
+--| Appends each of `headers` to `fields`.
+def appendAll: [HostRuntime] I32, list((string, string)) -> #ok | #error(HttpError) = {
+  | _, [] -> #ok
+  | fields, [(name, value), ...rest] ->
+    def block = allocate(24)
+
+    appendField(
+      fields
+      addressOf(name)
+      byteLength(name)
+      addressOf(value)
+      byteLength(value)
+      block
+    )
+
+    keepAlive(name)
+    keepAlive(value)
+    def failed = readByte(block) != 0
+    if readByte(block + 4) == 4 then freeOptionalString(block + 8) else ()
+    free(block)
+
+    if failed then #error(#other("the header '{name}' can't be sent")) else appendAll(fields, rest)
+}
+
+--| `request-options` that wait `timeout` milliseconds to connect and for the first byte of the
+  response. A host that doesn't support a timeout leaves it out.
+def optionsOf: [HostRuntime] int -> I32 = { timeout ->
+  def options = newRequestOptions()
+  def block = allocate(24)
+  setConnectTimeout(options, 1, timeout * 1_000_000, block)
+  if readByte(block) != 0 and readByte(block + 4) == 2 then freeOptionalString(block + 8) else ()
+  setFirstByteTimeout(options, 1, timeout * 1_000_000, block)
+  if readByte(block) != 0 and readByte(block + 4) == 2 then freeOptionalString(block + 8) else ()
+  free(block)
+  options
+}
+
+--| The request body's stream as an `Output`, as `writeAll` writes one.
+def bodyOutput: Output = (
+  streamNew = bodyStreamNew
+  writeViaStream = { readable -> readable }
+  streamWrite = bodyStreamWrite
+  streamDropWritable = bodyStreamDropWritable
+  futureRead = { _, _ -> 0 }
+  futureDropReadable = { _ -> () }
+)
+
+--| Writes `text`, the request's body, to the stream's writable end `writer`, and drops it.
+def writeBody: [HostRuntime] I32, string -> () = { writer, text ->
+  writeAll(bodyOutput, writer, addressOf(text), byteLength(text))
+  keepAlive(text)
+  bodyStreamDropWritable(writer)
+}
+
+--| Writes `ok(none)` to the trailers' future `writer`, and drops it: the request has no trailers. A
+  `result<option<trailers>, error-code>` is its case at 0 and, for `ok`, the option's at 8.
+def writeNoTrailers: [HostRuntime] I32 -> () = { writer ->
+  def block = allocate(56)
+  def value = aligned8(block)
+  writeI64(value, 0)
+  writeI64(value + 8, 0)
+  ignore(settled(writer, trailersFutureWrite(writer, value)))
+  trailersFutureDropWritable(writer)
+  free(block)
+}
+
+--| Waits until the subtask `subtask` has returned.
+def awaitReturn: [HostRuntime] I32 -> () = { subtask ->
+  if waitFor(subtask) >= returned then subtaskDrop(subtask) else awaitReturn(subtask)
+}
+
+--| The blocks of the body stream `reader`, each read into the `entriesAtOnce`-sized buffer at
+  `buffer`, after `blocks` (the latest first), until it ends.
+def bodyFrom: [HostRuntime] I32, I32, list(string) -> list(string) = { reader, buffer, blocks ->
+  def status = settled(reader, responseStreamRead(reader, buffer, bufferSize))
+  def read = status / 16
+  def kept = if read > 0 then [stringAt(buffer, read), ...blocks] else blocks
+  if status % 16 != 0 then kept else bodyFrom(reader, buffer, kept)
+}
+
+--| The `count` headers at `entries`, from the `index`th on, after `headers`. Each is 16 bytes: its
+  name, a string, and its value, a `list<u8>` read as text; the host allocated them, and they are
+  freed.
+def headersIn
+  : [HostRuntime] I32, I32, I32, list((string, string)) -> list((string, string))
+  = { entries, index, count, headers ->
+    if index >= count then list.reverse(headers) else
+      def entry = I32.wrappingAdd(entries, index * 16)
+      def header = (takeString(entry), takeString(entry + 8))
+      headersIn(entries, index + 1, count, [header, ...headers])
+  }
+
+--| The `response` the host gave: its status, its headers and its body, which it reads to the end.
+def responseOf: [HostRuntime] I32 -> Response = { response ->
+  def status = I32.toInt(statusCode(response))
+  def fields = responseHeaders(response)
+
+  def headers = listFrom(
+    { at -> copyAllFields(fields, at) }
+    16
+    { at -> (takeString(at), takeString(at + 8)) }
+  )
+
+  dropFields(fields)
+  def consumed = consumedFutureNew()
+  def ends = allocate(8)
+  consumeBody(response, readableEnd(consumed), ends)
+  def reader = readI32(ends)
+  def trailers = readI32(ends + 4)
+  free(ends)
+  def buffer = allocate(bufferSize)
+  def body = string.concat(list.reverse(bodyFrom(reader, buffer, [])))
+  free(buffer)
+  responseStreamDropReadable(reader)
+  trailersFutureDropReadable(trailers)
+  writeConsumed(writableEnd(consumed))
+  Response(status = status, headers = headers, body = body)
+}
+
+--| Writes `ok` to the future `writer` that `consume-body` was given, once the body is read, and
+  drops it: a `result<_, error-code>`, its case at 0.
+def writeConsumed: [HostRuntime] I32 -> () = { writer ->
+  def block = allocate(48)
+  def value = aligned8(block)
+  writeI64(value, 0)
+  ignore(settled(writer, consumedFutureWrite(writer, value)))
+  consumedFutureDropWritable(writer)
+  free(block)
+}
+
+--| Sends `request` through `wasi:http/client`, and gives its response, or why there is none.
+def sendThroughWasi: [HostRuntime] Request -> #some(Response) | #error(HttpError) = { request ->
+  match urlParts(request.url)
+    | #invalidUrl -> #error(#invalidUrl)
+    | #some(scheme, authority, pathWithQuery) ->
+      match fieldsOf(withContentLength(request))
+        | #error(e) -> #error(e)
+        | #some(fields) -> sendWith(request, fields, scheme, authority, pathWithQuery)
+}
+
+--| Sends `request`, its headers in `fields`, to the URL of `scheme`, `authority` and
+  `pathWithQuery`.
+def sendWith
+  : [HostRuntime] Request, I32, I32, string, string -> #some(Response) | #error(HttpError)
+  = { request, fields, scheme, authority, pathWithQuery ->
+    def hasBody = not string.isEmpty(request.body)
+    def body = if hasBody then bodyStreamNew() else 0
+    def trailers = trailersFutureNew()
+    def contents: I32 = if hasBody then 1 else 0
+    def made = allocate(8)
+
+    newRequest(
+      fields
+      contents
+      readableEnd(body)
+      readableEnd(trailers)
+      1
+      optionsOf(request.timeout)
+      made
+    )
+
+    def handle = readI32(made)
+    def sent = readI32(made + 4)
+    free(made)
+    ignore(setMethod(handle, methodCase(request.method), 0, 0))
+    ignore(setScheme(handle, 1, scheme, 0, 0))
+    ignore(setAuthority(handle, 1, addressOf(authority), byteLength(authority)))
+    ignore(setPathWithQuery(handle, 1, addressOf(pathWithQuery), byteLength(pathWithQuery)))
+    keepAlive(authority)
+    keepAlive(pathWithQuery)
+    def result = allocate(48)
+    def answer = aligned8(result)
+    def status = sendAsync(handle, answer)
+
+    if hasBody then writeBody(writableEnd(body), request.body) else ()
+
+    writeNoTrailers(writableEnd(trailers))
+    if status % 16 < returned then awaitReturn(status / 16) else ()
+    sentFutureDropReadable(sent)
+
+    def answered = if readByte(answer) == 0
+      then #some(responseOf(readI32(answer + 8)))
+      else #error(httpErrorAt(answer + 8))
+
+    free(result)
+    answered
+  }
