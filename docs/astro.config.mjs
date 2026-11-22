@@ -3,8 +3,7 @@ import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import { rehypeHeadingIds, unified } from "@astrojs/markdown-remark";
-import nyxGrammar from "../extension/syntaxes/nanyx.tmLanguage.json";
-import { inkNight, paperWhite } from "./site/shiki-themes.mjs";
+import { inkNight, nanyxLanguage, paperWhite } from "./site/shiki-themes.mjs";
 import nominalTypes from "./src/content/stdlib/nominal-types.json";
 import {
   rehypeDiagnosticCodeIds,
@@ -63,14 +62,7 @@ export default defineConfig({
         light: /** @type {any} */ (paperWhite),
         dark: /** @type {any} */ (inkNight),
       },
-      langs: [
-        /** @type {any} */ ({
-          ...nyxGrammar,
-          name: "nanyx",
-          scopeName: nyxGrammar.scopeName ?? "source.nanyx",
-          aliases: ["nyx"],
-        }),
-      ],
+      langs: [/** @type {any} */ (nanyxLanguage)],
     },
   },
   vite: {

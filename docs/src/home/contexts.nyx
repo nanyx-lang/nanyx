@@ -1,0 +1,10 @@
+-- greet needs a Log; its caller says what logging is.
+context Log = (log: string -> ())
+
+def greet: [Log] string -> () = { name ->
+  log("Hello, {name}!")
+}
+
+use Log(log = { s -> println(s) }) in greet("Nanyx")
+use Log(log = { _ -> () }) in greet("nobody")
+-- Hello, Nanyx!
