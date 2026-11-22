@@ -222,3 +222,63 @@ def x = memory {
 }
 """
     Assert.Equal<string list>([], codes source)
+
+/// A block that installs a `Holder` whose `get`, of the type `memberType`, is `memberValue`, and gives back `result`.
+let private holding (memberType: string) (memberValue: string) (result: string) =
+    $"import nanyx/mref\n\ncontext Holder = (get: {memberType})\n\ncontext Store(a) = (take: () -> a)\n\ndef taken: [Store(a)] () -> a = {{ take() }}\n\ndef x = memory {{\n  def r = MRef.new(1)\n  use Holder(get = {memberValue})\n  use Store(take = {{ 1 }})\n  {result}\n}}\n"
+
+[<Fact>]
+let ``A use can't install an instance whose member gives back the block's reference`` () =
+    let source =
+        """
+import nanyx/mref
+
+context Holder = (get: () -> MRef(int))
+
+def counter = memory {
+  def r = MRef.new(0)
+  use Holder(get = { r })
+  get()
+}
+"""
+    let code, text = singleError (normalized source)
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, code)
+    Assert.Equal("{ r }", text)
+
+[<Fact>]
+let ``Nor one of a generic context at the block's reference`` () =
+    let source =
+        """
+import nanyx/mref
+
+context Store(a) = (take: () -> a)
+
+def taken: [Store(a)] () -> a = { take() }
+
+def x = memory {
+  def r = MRef.new(1)
+  use Store(take = { r })
+  taken()
+}
+"""
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
+
+[<Theory>]
+[<InlineData("() -> int")>]
+[<InlineData("[Memory] () -> int")>]
+let ``A member that requires the block's Memory requires it on its name, so it can't be given back`` (memberType: string) =
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes (holding memberType "{ MRef.get(r) }" "get"))
+
+[<Fact>]
+let ``A member that requires the block's Memory is called inside the block`` () =
+    Assert.Equal<string list>([], codes (holding "() -> int" "{ MRef.get(r) }" "get() + get()"))
+
+[<Fact>]
+let ``A handler keeps its state in its block's cells`` () =
+    let source =
+        """
+import nanyx/random as random
+
+def dealt = random.seeded(42, { random.below(10) })
+"""
+    Assert.Equal<string list>([], codes source)

@@ -13,19 +13,21 @@ type Element = (
   text: string
 )
 
-def Element.subtag: (Element, string) -> #some(Element) | #notFound = { el, name ->
+def Element.subtag: Element, string -> #some(Element) | #notFound = { el, name ->
   el.children \find { .name == name }
 }
 
-def Element.subtagText: (Element, string) -> #some(string) | #notFound = { el, name ->
+def Element.subtagText: Element, string -> #some(string) | #notFound = { el, name ->
   el \subtag(name) \mapSome { .text }
 }
 
-def Element.subtagBinary: (Element, string) -> #some(Binary) | #notFound = { el, name ->
+def Element.subtagBinary: Element, string -> #some(Binary) | #notFound = { el, name ->
   el \subtagText(name) \mapSome(Base64.decode)
 }
 
-def Element.attr: (Element, string) -> #some(string) | #notFound = { el, name -> el.attrs(name) }
+def Element.attr: Element, string -> #some(string) | #notFound = { el, name ->
+  el.attrs(name)
+}
 
 -- A missing required element is an extraction failure
 def required: (#some(a) | #notFound) -> #some(a) | #extractionFailed = {
@@ -59,54 +61,57 @@ export type Payload =
 export type Context = #companionRegistration | #trustCircleOnboarding
 
 def keyIndexListTs: Element -> #some(int) | #notFound = { el ->
-  el \subtag("key_index_list") \bindSome { .attr("ts") } \bindSome(int.fromString)
+  el \subtag("key_index_list") \bindSome { key -> key \attr("ts") } \bindSome(int.fromString)
 }
 
-export def extractPairDevicePayload: (Element, Context) -> #some(Payload) | #extractionFailed = {
+export def extractPairDevicePayload: Element, Context -> #some(Payload) | #extractionFailed = {
   | el, #companionRegistration -> proc {
-      def pubKey = try required(el \subtagText("pub_key"))
-      def ref = try required(el \subtagBinary("ref"))
+    def pubKey = try required(el \subtagText("pub_key"))
+    def ref = try required(el \subtagBinary("ref"))
 
-      -- The remaining elements are optional: a missing one becomes `#none`
-      def deviceIdentity = el \subtagText("device_identity") except #notFound -> #none
-      def keyIndexList = el \subtagBinary("key_index_list") except #notFound -> #none
-      def ts = keyIndexListTs(el) except #notFound -> #none
-      def refCert = el \subtagBinary("ref_cert") except #notFound -> #none
+    -- The remaining elements are optional: a missing one becomes `#none`
+    def deviceIdentity = el \subtagText("device_identity") except #notFound -> #none
+    def keyIndexList = el \subtagBinary("key_index_list") except #notFound -> #none
+    def ts = keyIndexListTs(el) except #notFound -> #none
+    def refCert = el \subtagBinary("ref_cert") except #notFound -> #none
 
-      return #companion(CompanionRegistration(
+    return #companion(
+      CompanionRegistration(
         pubKey = pubKey
         ref = ref
         deviceIdentity = deviceIdentity
         keyIndexList = keyIndexList
         keyIndexListTs = ts
         refCert = refCert
-      ))
-    }
-
+      )
+    )
+  }
   | el, #trustCircleOnboarding -> proc {
-      return #trustCircle(TrustCircleOnboarding(
-        appId = try required(el \subtagText("app_id") \bindSome(int.fromString))
-        authKey = try required(el \subtagText("auth_key"))
-        deviceIdentity = try required(el \subtagText("device_identity"))
-        famDeviceId = try required(el \subtagBinary("fam_device_id"))
-        keyIndexList = try required(el \subtagBinary("key_index_list"))
-        keyIndexListTs = try required(keyIndexListTs(el))
+    return #trustCircle(
+      TrustCircleOnboarding(
+        appId = (try required(el \subtagText("app_id") \bindSome(int.fromString)))
+        authKey = (try required(el \subtagText("auth_key")))
+        deviceIdentity = (try required(el \subtagText("device_identity")))
+        famDeviceId = (try required(el \subtagBinary("fam_device_id")))
+        keyIndexList = (try required(el \subtagBinary("key_index_list")))
+        keyIndexListTs = (try required(keyIndexListTs(el)))
         ref = try required(el \subtagBinary("ref"))
-      ))
-    }
+      )
+    )
+  }
 }
 
 -- Building the reply --------------------------------------------------------
 
-def element: (string, list(Element)) -> Element = { name, children ->
+def element: string, list(Element) -> Element = { name, children ->
   Element(name = name, attrs = [], children = children, text = "")
 }
 
-def textElement: (string, string) -> Element = { name, text ->
+def textElement: string, string -> Element = { name, text ->
   Element(name = name, attrs = [], children = [], text = text)
 }
 
-export def pairSuccessReply: (deviceId: string, Payload) -> Element = { deviceId, payload ->
+export def pairSuccessReply: string, Payload -> Element = { deviceId, payload ->
   def device = Element(name = "device", attrs = ["id" => deviceId], children = [], text = "")
 
   def identity =
@@ -114,5 +119,5 @@ export def pairSuccessReply: (deviceId: string, Payload) -> Element = { deviceId
       | #companion(c) -> c.deviceIdentity \mapSome { id -> textElement("device_identity", id) }
       | #trustCircle(t) -> #some(textElement("device_identity", t.deviceIdentity))
 
-  element("pair_success", [device, ...(identity \someToList)])
+  element("pair_success", [device, ...identity \someToList])
 }

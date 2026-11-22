@@ -107,6 +107,9 @@ type internal AddressResults = Map<string, int list>
 let private addressFlow (addressResults: AddressResults) (fromParams: bool) (func: Function) : (Expr -> Var list) * (Atom -> Var list) =
     let temps = Dictionary<int, Expr>()
     let held = Dictionary<int, Var list>()
+    // What each temporary's value is an address in, once asked, so that asking of each temporary of a long chain in
+    // turn looks at each value of the chain once (#2351).
+    let ofTemps = Dictionary<int, Var list>()
     let rec ofValue (e: Expr) : Var list =
         match e.Kind with
         | CallRuntime(name, [ AVar text ], _) when name = NyxCompiler.Intrinsics.stringAddress && text.Kind <> Temp -> [ text ]
@@ -126,9 +129,15 @@ let private addressFlow (addressResults: AddressResults) (fromParams: bool) (fun
     and ofAtom (atom: Atom) : Var list =
         match atom with
         | AVar var when var.Kind = Temp ->
-            match temps.TryGetValue var.Id with
-            | true, value -> ofValue value
-            | _ -> []
+            match ofTemps.TryGetValue var.Id with
+            | true, strings -> strings
+            | _ ->
+                match temps.TryGetValue var.Id with
+                | true, value ->
+                    let strings = ofValue value
+                    ofTemps.[var.Id] <- strings
+                    strings
+                | _ -> []
         | AVar var ->
             match held.TryGetValue var.Id with
             | true, strings -> strings
