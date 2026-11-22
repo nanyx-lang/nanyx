@@ -6,6 +6,7 @@ module internal Transpiler.Wasm.WasmAllocator
 /// the rest of the backend).
 module Names =
     let alloc = "__nanyx_alloc"
+    let allocAligned8 = "__nanyx_alloc_aligned8"
     let free = "__nanyx_free"
     let release = "__nanyx_release"
     let retain = "__nanyx_retain"
@@ -17,7 +18,8 @@ module Names =
 let minimumHeapBase = 4096
 
 /// Where the table of free-list heads starts in a module whose data segments end at `dataEnd`: at `minimumHeapBase`,
-/// or past the data, 8-byte aligned so that the blocks `alloc` hands out stay 8-byte aligned.
+/// or past the data, 8-byte aligned. The blocks `alloc` hands out are only 4-byte aligned; `allocAligned8Helper`
+/// hands out 8-byte aligned ones.
 let heapBaseAfter (dataEnd: int) = max minimumHeapBase ((dataEnd + 7) &&& ~~~7)
 
 /// The largest block size, in bytes, with a free list of its own; larger blocks share one list, which `alloc` searches
@@ -551,6 +553,67 @@ let freeHelper (checks: bool) (heapBase: int) =
           yield $"  i32.const {largeHead}"
           yield "  local.get $ptr"
           yield "  i32.store"
+          yield ")" ]
+
+/// `allocAligned8`: a block of `$size` bytes at an address that is a multiple of 8, which `free` takes back like any
+/// other. `alloc` hands out blocks that are only 4-byte aligned, so it asks `alloc` for 12 bytes more. When that block
+/// is not 8-byte aligned, its first 8 bytes become a block of their own, which it frees, and the rest, after a size
+/// word of its own, starts 12 bytes on, at a multiple of 8. A block of 8 bytes is small, so the block after it is
+/// never told it follows a free large block. With `checks`, it counts the block it keeps as one more handed out and
+/// live, and takes the 4 bytes of its size word off the bytes counted.
+let allocAligned8Helper (checks: bool) =
+    lines
+        [ yield $"(func ${Names.allocAligned8} (param $size i32) (result i32)"
+          yield "  (local $ptr i32)"
+          yield "  (local $header i32)"
+          yield "  local.get $size"
+          yield "  i32.const 12"
+          yield "  i32.add"
+          yield $"  call ${Names.alloc}"
+          yield "  local.tee $ptr"
+          yield "  i32.const 4"
+          yield "  i32.and"
+          yield "  i32.eqz"
+          yield "  if"
+          yield "    local.get $ptr"
+          yield "    return"
+          yield "  end"
+          // The kept block's size word, 8 bytes on, holds what is left of the size; the first block's keeps the bits
+          // it has (whether the block before it is free and large) with a size of 8.
+          yield "  local.get $ptr"
+          yield "  i32.const 4"
+          yield "  i32.sub"
+          yield "  i32.load"
+          yield "  local.set $header"
+          yield "  local.get $ptr"
+          yield "  local.get $header"
+          yield $"  i32.const {SizeWordBits.size}"
+          yield "  i32.and"
+          yield "  i32.const 12"
+          yield "  i32.sub"
+          yield "  i32.store offset=8"
+          yield "  local.get $ptr"
+          yield "  i32.const 4"
+          yield "  i32.sub"
+          yield "  local.get $header"
+          yield $"  i32.const {~~~SizeWordBits.size}"
+          yield "  i32.and"
+          yield "  i32.const 8"
+          yield "  i32.or"
+          yield "  i32.store"
+          if checks then
+              yield! bump MemoryChecks.allocations 1
+              yield! bump MemoryChecks.liveBlocks 1
+              yield! bump MemoryChecks.liveBytes -4
+              yield $"  global.get ${MemoryChecks.bytesAllocated}"
+              yield "  i64.const 4"
+              yield "  i64.sub"
+              yield $"  global.set ${MemoryChecks.bytesAllocated}"
+          yield "  local.get $ptr"
+          yield $"  call ${Names.free}"
+          yield "  local.get $ptr"
+          yield "  i32.const 12"
+          yield "  i32.add"
           yield ")" ]
 
 // Gives up one reference to the object whose count is at `$count`: 1 when it was the last, and the caller then
