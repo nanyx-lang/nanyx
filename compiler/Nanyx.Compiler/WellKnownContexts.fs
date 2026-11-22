@@ -49,7 +49,14 @@ module internal WellKnownContexts =
             offendingPart kindOf partTy |> Option.map (fun (rest, kind) -> (part, plural) :: rest, kind)
         match kindOf ty with
         | _ when covered ty -> None
-        | Some kind -> Some ([], kind)
+        // A private type that is a part with no instance itself, a mutable reference, is reported as that part.
+        | Some kind ->
+            match ty with
+            | TyNominal(_, _, underlying, true) ->
+                match offendingPart kindOf underlying with
+                | Some ([], representation) -> Some ([], representation)
+                | _ -> Some ([], kind)
+            | _ -> Some ([], kind)
         | None ->
             match ty with
             | TyFunc _
