@@ -317,9 +317,11 @@ let private isLocal (symbol: Symbol) =
     | TypeDefinition
     | ContextMember -> false
 
-/// The type of a top-level def or import in scope, after the contexts it requires, as hover writes it.
-let private topLevelType (names: TypeNotation) (typed: TypedModule) (symbol: Symbol) : string option =
-    Hover.declaredType typed symbol |> Option.map (fun (ty, contexts) -> Signatures.typeWithContexts typed.TypeDefs names ty contexts)
+/// The type of a top-level def or import in scope, after the contexts it requires, as hover writes it, with the types
+/// and contexts it names named by `rename`.
+let private topLevelType (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (symbol: Symbol) : string option =
+    Hover.declaredType typed symbol
+    |> Option.map (fun (ty, contexts) -> Signatures.typeWithContexts typed.TypeDefs names (rename ty) (List.map rename contexts))
 
 /// `written` cut into runs of the lengths of `groups`.
 let rec private splitAs (groups: 'a list list) (written: string list) : string list list =
@@ -344,16 +346,18 @@ let private moduleScope (syntax: Module) : Scope =
 /// What the info view shows at `offset` in the compiled root module, compiled as `file` (empty for source compiled
 /// directly), with made-up type variables named by `names`. The expression is what hover shows there. The locals' types,
 /// the lambdas' and the contexts are named together, so an `α` in a parameter's type is the `α` of a context; a local
-/// def that writes its contexts shows them before its type. A name or context belongs to the innermost lambda or def
+/// def that writes its contexts shows them before its type. Every type and context is named as the code at `offset`
+/// can name it (see `Signatures.relativeAt`): `Point` inside `module Points`. A name or context belongs to the innermost lambda or def
 /// whose value it is declared or provided in, and to the module if there is none. Empty when the module did not
 /// type-check.
 let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int) : Info =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
+        let rename = Signatures.relativeAt typed.TypeDefs syntax offset
         let expression, instantiation =
             match Definition.typeDefinitionAt names file result offset with
             | Some info -> Some info, None
-            | None -> Hover.typeAndInstantiationAt names result offset
+            | None -> Hover.typeAndInstantiationAt names rename result offset
         let inScope = Completion.namesInScope result offset
         let locals =
             inScope
@@ -375,7 +379,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
         let contextGroups = contexts |> List.map (fun (ty, _, _, _, _) -> [ ty ])
         let callGroups = callContexts |> List.map (fun (ty, _, _, _) -> [ ty ])
         let groups = localGroups @ lambdaGroups @ contextGroups @ callGroups
-        let written = splitAs groups (Unifier.tysToDisplayStrings names (List.concat groups))
+        let written = splitAs groups (Unifier.tysToDisplayStrings names (List.concat groups |> List.map rename))
         let localsWritten, written = List.splitAt locals.Length written
         let lambdasWritten, written = List.splitAt lambdas.Length written
         let contextsWritten, callWritten = List.splitAt contexts.Length written
@@ -417,7 +421,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
                    { Kind = FunctionScope
                      Heading = $"def {name}"
                      Span = symbol.Declaration
-                     Type = topLevelType names typed symbol
+                     Type = topLevelType names rename typed symbol
                      Declared = annotation.IsSome
                      Symbol = Some symbol
                      Names = []
@@ -431,7 +435,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
             inScope
             |> List.filter (fun symbol -> (symbol.Kind = TopLevelValue || symbol.Kind = ImportedModule) && not (ReservedNames.isHidden symbol))
             |> List.sortBy (fun symbol -> symbol.Declaration.File <> file, symbol.Name)
-            |> List.map (fun symbol -> scoped symbol (topLevelType names typed symbol))
+            |> List.map (fun symbol -> scoped symbol (topLevelType names rename typed symbol))
         { Expression = expression
           ExpressionSymbol = expression |> Option.bind (fun _ -> Definition.symbolAt file result offset)
           Instantiation = instantiation
