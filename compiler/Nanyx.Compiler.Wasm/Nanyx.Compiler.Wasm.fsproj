@@ -18,6 +18,7 @@
     <Compile Include="WasmRuntime.fs" />
     <Compile Include="ComponentEntry.fs" />
     <Compile Include="ComponentAbi.fs" />
+    <Compile Include="ComponentExports.fs" />
     <Compile Include="Interpolation.fs" />
     <Compile Include="Wat.fs" />
     <Compile Include="CoreIr.fs" />

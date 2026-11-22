@@ -142,3 +142,20 @@ let ``A component root that doesn't provide a context its core root does is an e
     Assert.Equal(1, built.ExitCode)
     Assert.Contains(DiagnosticCodes.ComponentRootContextsDiffer.Code, built.StandardOutput)
     Assert.Contains("The component root's 'run' doesn't provide 'Extra', which the core root 'acme.extra/extra.host' does", built.StandardOutput)
+
+[<Fact>]
+let ``A package with defs marked @component is built as a component of its own world, whose WIT is written beside it`` () =
+    use app = consoleApp "module main\n\nimport shapes as shapes\n\n@entry\ndef main = { println(\"hello\") }\n"
+    let shapes = "module shapes\n\n@component\nexport def area: float, float -> float = { w, h -> w * h }\n"
+    File.WriteAllText(Path.Combine(app.Path, "src", "shapes.nyx"), shapes)
+    let built = nanyxIn app.Path [ "build"; "--release" ]
+    Assert.Equal("", built.StandardError)
+    Assert.Equal(0, built.ExitCode)
+    Assert.Contains("a component of app:app/component@0.1.0", built.StandardOutput)
+    Assert.Equal<byte array>(componentPreamble, preamble (Path.Combine(app.Path, "out", "app.wasm")))
+    let wit = File.ReadAllText(Path.Combine(app.Path, "out", "wit", "component.wit"))
+    Assert.Contains("package app:app@0.1.0;", wit)
+    Assert.Contains("  area: func(w: f64, h: f64) -> f64;", wit)
+    Assert.Contains("  include nanyx:console/command;", wit)
+    Assert.True(File.Exists(Path.Combine(app.Path, "out", "wit", "deps", "host", "console.wit")))
+    Assert.True(Directory.Exists(Path.Combine(app.Path, "out", "wit", "deps", "cli")))

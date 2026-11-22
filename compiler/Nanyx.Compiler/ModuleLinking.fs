@@ -116,8 +116,9 @@ module internal ModuleLinking =
     /// context is always kept, because the backend supplies it as the ambient instance of that context (the
     /// runtime's `Console`, say) without anything naming it. So is each attached definition an instance the type
     /// checker built for a call in `own`, or in a definition kept, is made of (`instances`, by the call's node), as
-    /// `int.toString` for a `ToString(int)`: the backend passes it where the instance is required, unnamed.
-    let internal reachedItems (instances: Map<NodeId, ContextInstance option list>) (own: Module) (inlined: TopLevelItem list) : TopLevelItem list =
+    /// `int.toString` for a `ToString(int)`: the backend passes it where the instance is required, unnamed. And so is
+    /// each definition a component exports (`exported`), which the program needn't name either.
+    let internal reachedItems (instances: Map<NodeId, ContextInstance option list>) (own: Module) (exported: string list) (inlined: TopLevelItem list) : TopLevelItem list =
         let bodies =
             inlined
             |> List.choose (function
@@ -157,7 +158,7 @@ module internal ModuleLinking =
             else
                 let referenced = newlyReached |> List.collect (fun (_, value) -> SyntaxTree.referencedNames value @ synthesizedMembersIn instances value) |> List.fold (fun acc name -> Set.add name acc) referenced
                 reach referenced (newlyReached |> List.fold (fun acc (name, _) -> Set.add name acc) reached)
-        let reached = reach (Set.ofList rootNames) Set.empty
+        let reached = reach (Set.ofList (rootNames @ exported)) Set.empty
         inlined
         |> List.filter (function
             | Kind (Def (ValueDef(_, name, _, _))) -> reached.Contains name
@@ -350,6 +351,13 @@ module internal ModuleLinking =
         checkedModule.Typed.AmbientMembers
         |> List.filter (fun ambient -> carried.Contains ambient.Context)
         |> List.map (fun ambient -> { ambient with Definition = renames |> Map.tryFind ambient.Definition |> Option.defaultValue ambient.Definition })
+
+    /// The definitions `checkedModule` exports from a component (see `TypedModule.ComponentExports`), by the names the
+    /// import `item` inlines them under.
+    let internal componentExportsForImport (item: ImportItem) (checkedModule: CheckedModule) : ComponentExport list =
+        let renames = inlinedRenames item checkedModule
+        checkedModule.Typed.ComponentExports
+        |> List.map (fun export -> { export with Definition = renames |> Map.tryFind export.Definition |> Option.defaultValue export.Definition })
 
     let internal inlinedItemsForImport (item: ImportItem) (checkedModule: CheckedModule) : TopLevelItem list =
         let renames = inlinedRenames item checkedModule

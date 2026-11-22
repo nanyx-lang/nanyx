@@ -642,3 +642,17 @@ type TestServer(answer: string -> string -> (string * string) list -> string -> 
         member _.Dispose() =
             listener.Stop()
             listener.Close()
+
+/// The core module `wat`, of a component, instantiated on Wasmtime with each of its imports a function that traps.
+let instantiateCore (wat: string) =
+    let engine = new Wasmtime.Engine()
+    let store = new Wasmtime.Store(engine)
+    use module' = Wasmtime.Module.FromText(engine, "component", wat)
+    use linker = new Wasmtime.Linker(engine)
+    for import in module'.Imports do
+        match import with
+        | :? Wasmtime.FunctionImport as func ->
+            let trap = Wasmtime.Function.UntypedCallbackDelegate(fun _ _ _ -> failwith $"{func.ModuleName} {func.Name} was called")
+            linker.Define(func.ModuleName, func.Name, Wasmtime.Function.FromCallback(store, trap, func.Parameters, func.Results))
+        | _ -> ()
+    engine, store, linker.Instantiate(store, module')

@@ -352,7 +352,14 @@ internal static partial class CliCommands
             return deferred ? 1 : 0;
         }
 
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(ComponentEntryModule.ofWorld(component.World))), deferred, timings))
+        // The functions the component exports, from the program's definitions marked @component, in the WIT package
+        // the manifest's name and version give.
+        var witPackage = ComponentInterface.packageName(package.Manifest.Name, package.Manifest.Version);
+        var functions = component is null || entry.Value.Typed is null
+            ? FSharpList<ComponentFunction>.Empty
+            : ComponentInterface.functions(entry.Value.Typed.Value);
+        var exports = ListModule.OfSeq(functions.Select(function => Tuple.Create(ComponentInterface.exportName(witPackage, function.Export), function)));
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(ComponentEntryModule.ofWorld(component.World)), componentExports: exports), deferred, timings))
         {
             return 1;
         }
@@ -362,13 +369,14 @@ internal static partial class CliCommands
             : outputPath!;
         var written = component is null || format == ProgramFormat.Text
             ? WriteProgram(shell, wat, format, outputFile)
-            : WriteComponent(shell, wat, package.Host.Value, component, outputFile);
+            : WriteComponent(shell, wat, package.Host.Value, component, witPackage, functions, outputFile);
         if (written is null)
         {
             return 1;
         }
 
-        var kind = component is null ? "" : $", a component of {component.World}";
+        var world = component is null ? null : functions.IsEmpty ? component.World : ComponentInterface.qualified(witPackage, ComponentInterface.worldName(functions));
+        var kind = world is null ? "" : $", a component of {world}";
         shell.Out.WriteLine($"Built {package.Manifest.Name} ({FileCount(package)}){WithDeferred(deferred, build.Diagnostics)}{kind}: {written}");
         return 0;
     }
@@ -376,11 +384,22 @@ internal static partial class CliCommands
     /// <summary>
     /// Writes the program <paramref name="wat"/>, the core module of a component, to <paramref name="outputPath"/> as a
     /// component of the world of <paramref name="host"/>'s component root, and gives the path as the shell shows it;
-    /// <c>null</c>, said on the shell's stderr, when it can't be built, with wit-component's reason.
+    /// <c>null</c>, said on the shell's stderr, when it can't be built, with wit-component's reason. A program that exports
+    /// <paramref name="functions"/> of its own is a component of a world of <paramref name="witPackage"/>'s that includes
+    /// the host's, whose WIT is written to a wit directory beside the component.
     /// </summary>
-    private static string? WriteComponent(Shell shell, string wat, Host host, HostComponent component, string outputPath)
+    private static string? WriteComponent(Shell shell, string wat, Host host, HostComponent component, string witPackage, FSharpList<ComponentFunction> functions, string outputPath)
     {
-        var built = Componentizer.componentize(WasmBinary.assemble(wat), host.WitDirectory, component.World);
+        var fullPath = shell.FullPath(outputPath);
+        var witDirectory = host.WitDirectory;
+        var world = component.World;
+        if (!functions.IsEmpty)
+        {
+            witDirectory = Path.Combine(Path.GetDirectoryName(fullPath)!, "wit");
+            world = ComponentInterface.write(host.WitDirectory, component.World, witPackage, functions, witDirectory);
+        }
+
+        var built = Componentizer.componentize(WasmBinary.assemble(wat), witDirectory, world);
         if (built.IsError)
         {
             shell.Error.WriteLine($"The program can't be built as a component of {component.World}: {built.ErrorValue}");
@@ -388,7 +407,6 @@ internal static partial class CliCommands
             return null;
         }
 
-        var fullPath = shell.FullPath(outputPath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllBytes(fullPath, built.ResultValue);
         return shell.DisplayPath(fullPath);
@@ -1194,7 +1212,7 @@ internal static partial class CliCommands
     private static int RunWasm(Shell shell, CompileResult result, string inputFile, string? outputPath, bool release, ProgramFormat format)
     {
         var deferred = !release && ErrorsDeferred(result);
-        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: null), deferred))
+        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty), deferred))
         {
             return 1;
         }

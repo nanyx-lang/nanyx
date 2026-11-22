@@ -33,6 +33,8 @@ module internal ImportMerging =
           HostImport: string option
           /// The members of the ambient contexts carried in with imported functions, with the definitions that stand in for them.
           CarriedAmbientMembers: AmbientMember list
+          /// The definitions the modules imported export from a component, by the names they are inlined under.
+          ComponentExports: ComponentExport list
           /// The modules that bring each name in unqualified, by the module's key, with the name of the module.
           /// The prelude is not one of them: a name it shares with an import is the import's, not ambiguous.
           UnqualifiedSources: Map<string, (string * string) list>
@@ -317,6 +319,7 @@ module internal ImportMerging =
                 |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.ImportedContextTypes
             CarriedAmbientMembers =
                 merged.CarriedAmbientMembers @ ModuleLinking.ambientMembersForImport item imported (carried |> List.map fst |> Set.ofList)
+            ComponentExports = merged.ComponentExports @ ModuleLinking.componentExportsForImport item imported
             UnqualifiedSources = unqualifiedSources
             ImportedFiles = importedFiles
             Merged = merged.Merged.Add importedKey },

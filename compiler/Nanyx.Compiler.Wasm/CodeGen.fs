@@ -91,7 +91,10 @@ type WasmOptions =
       /// entry's export rather than when the module is instantiated, `cabi_realloc` exported, and the runtime's own
       /// writes and exits on `wasi:cli` rather than WASI preview 1. Not with `CheckMemory`, `Probes` or `DbgToEmbedder`,
       /// whose imports and exports no WASI world has.
-      Component: ComponentEntry option }
+      Component: ComponentEntry option
+      /// The functions a component's core module exports for the program's definitions marked `@component`, each with
+      /// the name it exports it under (see `ComponentExports`). Only with `Component`.
+      ComponentExports: (string * ComponentFunction) list }
 
     static member Default =
         { CheckMemory = false
@@ -102,7 +105,8 @@ type WasmOptions =
           Probes = false
           DbgToEmbedder = false
           ExportStart = false
-          Component = None }
+          Component = None
+          ComponentExports = [] }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -958,18 +962,18 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
 
 /// The module's functions inlined, cut down to what the program can run, and reference counted, with the names of the
 /// owning entries kept (see `CoreIrClosureEntries`).
-let private optimised (options: WasmOptions) (cachedNames: Set<string>) (definitionFunctions: CoreIr.Function list) (startFunction: CoreIr.Function option) =
+let private optimised (options: WasmOptions) (cachedNames: Set<string>) (exported: string list) (definitionFunctions: CoreIr.Function list) (startFunction: CoreIr.Function option) =
     // Inlining, over the whole module at once, since a function is inlined as it is once calls are inlined into it.
     let definitionFunctions, startFunction =
         if options.Inline then
-            let inlined = CoreIrInline.inlineCalls (startFunction |> Option.map _.Name) cachedNames (definitionFunctions @ Option.toList startFunction)
+            let inlined = CoreIrInline.inlineCalls (startFunction |> Option.map _.Name) exported cachedNames (definitionFunctions @ Option.toList startFunction)
             List.take definitionFunctions.Length inlined, startFunction |> Option.map (fun _ -> List.last inlined)
         else definitionFunctions, startFunction
 
     // Only what the program can run (see `CoreIrReach`): a function inlined wherever it is called is not reached.
     let startFunction = startFunction |> Option.map CoreIrReach.withoutUnreadClosures
     let definitionFunctions =
-        definitionFunctions |> List.map CoreIrReach.withoutUnreadClosures |> CoreIrReach.reachedFrom startFunction
+        definitionFunctions |> List.map CoreIrReach.withoutUnreadClosures |> CoreIrReach.reachedFrom startFunction exported
 
     // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
     // the functions it calls; then drop specialisation and reuse. Each function a closure is over gets its owning entry
@@ -1124,7 +1128,17 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             |> Set.ofList
         definitionFunctions |> List.filter (CoreIrCachedValues.isCached values.Contains) |> List.map _.Name |> Set.ofList
 
-    let definitionFunctions, startFunction, owningEntries, ownership = optimised options cachedNames definitionFunctions startFunction
+    // The functions of the definitions a component exports, which the program needn't call (see `ComponentExports`).
+    let exportTargets =
+        options.ComponentExports
+        |> List.map (fun (_, func) ->
+            match lowered.Roots |> Map.tryFind func.Export.Definition with
+            | Some (target, _) -> func.Export.Definition, target.Name
+            | None -> CoreIr.internalError $"no function for the component's export '{func.Export.Definition}'")
+        |> Map.ofList
+
+    let definitionFunctions, startFunction, owningEntries, ownership =
+        optimised options cachedNames (exportTargets |> Map.values |> List.ofSeq) definitionFunctions startFunction
 
     // The tags, strings and dbg forms of exactly the functions emitted below.
     let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
@@ -1252,7 +1266,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         usedHelpers.Add Helpers.writeStderr |> ignore
         usedHelpers.Add Helpers.procExit |> ignore
     if options.Component.IsSome then
-        for helper in ComponentAbi.reallocHelpers do
+        for helper in ComponentAbi.reallocHelpers @ ComponentExports.helpers options.ComponentExports do
             usedHelpers.Add helper |> ignore
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     // Exiting is not a stream, but its WASI import is declared with stderr's.
@@ -1293,7 +1307,15 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               |> List.filter usedHelperSet.Contains
               |> List.map (fun name -> helpers |> Map.find name)
           match options.Component with
-          | Some entry -> yield ComponentAbi.functions entry CoreIrEmit.importName
+          | Some entry ->
+              yield ComponentAbi.functions entry CoreIrEmit.importName
+              let target (definition: string) : ComponentExports.ExportTarget =
+                  let name = exportTargets.[definition]
+                  let func = definitionFunctions |> List.find (fun func -> func.Name = name)
+                  { Function = name
+                    Arity = func.Params.Length
+                    TakesOver = fun index -> CoreIrCounting.parameterUse ownership name index = Owned }
+              yield ComponentExports.functions options.ComponentExports target
           | None -> ()
           if checksMemory then
               yield memoryCheckFunctions heapBase (fun message -> stringLiteralMap |> Map.find message)
