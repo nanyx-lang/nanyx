@@ -137,8 +137,8 @@ error NYX0205: 'file.read' requires the contexts 'Async' and 'FileSystem', which
 
 The compiler built for the browser runs a script under it unless the script's `::host` names another; elsewhere a
 script runs under it with `::host nanyx.playground`. The package ships the JavaScript that runs such a program in a web
-worker and passes what it prints, and what its `dbg`s print, to the page. Reading a line gives `#error(#endOfInput)`
-for now: the page has no input yet.
+worker and passes what it prints, and what its `dbg`s print, to the page. Reading a line waits for a line typed in the
+page, and gives `#error(#endOfInput)` once the input has ended.
 
 # Where `dbg` prints
 

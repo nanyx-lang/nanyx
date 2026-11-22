@@ -116,10 +116,10 @@ reaches code that didn't, with the error that code had. So you can try one part 
 broken. It had always seemed like something a strongly typed language couldn't reasonably do. Roc showed that it can,
 and gave Nanyx the nerve to try it.
 
-It has changed how writing Nanyx feels more than almost anything else. You no longer have to fix every error in a file
+It shapes how writing Nanyx feels more than almost anything else. You don't have to fix every error in a file
 before you can see whether the part you're working on does what you meant: you change a function, run the program,
 and look, while a half-finished refactor elsewhere waits its turn. The type checker stays strict, and every error is
-still reported, but it no longer stands between you and trying an idea. The loop from writing code to seeing it run is
+still reported, but it doesn't stand between you and trying an idea. The loop from writing code to seeing it run is
 as short in Nanyx as in a dynamic language. See [Deferred errors](../tour/error-handling#deferred-errors).
 
 # Error messages and tools

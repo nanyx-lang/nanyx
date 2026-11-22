@@ -1,14 +1,12 @@
 ---
 title: "The parser"
-description: "What is still open in the parser after the move from FParsec to a lexer and a recursive-descent parser"
+description: "What is still open in the parser: recovering inside an item, and a concrete syntax tree"
 order: 34
 ---
 
-The parser moved from FParsec combinators to a lexer, a layout pass and a hand-written recursive-descent parser in six
-stages, tracked in [#846](https://github.com/nanyx-lang/nanyx/issues/846). All six are done: the corpus and the
-differential test, the lexer, the layout pass, the new parser a part of the grammar at a time, the new parser as the
-default, error recovery at the top level, and the removal of FParsec. How the parser works now is
-[The parser](../deep-dives/parser) in the Deep dives section. This page is what is still open.
+How the lexer, the layout pass and the recursive-descent parser work, and how the parser reads past a mistake to the
+next top-level item, is in [The parser](../deep-dives/parser) in the Deep dives section. This page keeps what is still
+open.
 
 # Recovering inside an item
 
@@ -20,6 +18,6 @@ for the item being typed.
 
 # A concrete syntax tree
 
-Now that comments and whitespace travel with tokens, the formatter and the refactorings could work from a tree that
+Comments and whitespace travel with the lexer's tokens, so the formatter and the refactorings could work from a tree that
 keeps every token and its trivia, instead of re-attaching comments by position. That is to be decided once the
 [refactorings](./refactorings) show whether they need one.

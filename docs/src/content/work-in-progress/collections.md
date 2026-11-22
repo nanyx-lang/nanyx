@@ -4,26 +4,21 @@ description: "The same core functions on every collection type, and arrays that 
 order: 10
 ---
 
-> **Status: decided, being built.** The maintainer answered the three questions of
-> [#1672](https://github.com/nanyx-lang/nanyx/issues/1672) on 20 November: one name for a collection's size, one core
-> set of functions and which types get which, and one indexed read. The [table](#which-type-has-which-function) shows
-> what each type has today and what it is missing, and the gaps are [filed as issues](#the-work). A few names are
-> still [open](#open-questions).
-
 Someone who knows `list.select` should be able to expect `array.select`, with the same name, argument order and
-meaning. Today `list` and `seq` have about fifty functions each and the other collections far fewer, with different
-names for the same thing in places. This page is the plan to even them out.
+meaning. `list` and `seq` have about fifty functions each and the other collections far fewer, with different names
+for the same thing in places. This page is the plan to even them out. The maintainer decided its shape in
+[#1672](https://github.com/nanyx-lang/nanyx/issues/1672): one name for a collection's size, one core set of functions
+and which types get which, and one indexed read. The [table](#which-type-has-which-function) shows what each type has
+and what it is missing, and the gaps are [filed as issues](#the-work). A few names are [open](#open-questions).
 
 # The decisions
 
 ## `length` is the size
 
 `length` is the name for how many elements a collection holds, on every collection: `list`, `Array`, `Slice`, `set`,
-`map` (its entries), `MList`, `MArray`, `MStack`, `Stack`, `Queue`, the tries, and `seq` where it ends. `count` goes,
-with no alias. This is done: [#1769](https://github.com/nanyx-lang/nanyx/issues/1769) renamed the last size functions
-called `count`, and every collection has `length`. What is still called `count`, `list.count` and `seq.count`, counts
-the elements a test holds for, which is a different function; whether it stays is an
-[open question](#open-questions).
+`map` (its entries), `MList`, `MArray`, `MStack`, `Stack`, `Queue`, the tries, and `seq` where it ends. There is no
+`count` alias. `list.count` and `seq.count` count the elements a test holds for, which is a different function; whether
+they stay is an [open question](#open-questions).
 
 ## The core set, and which types get which
 
@@ -49,18 +44,15 @@ those three fit is [open](#open-questions).
 
 ## `at` is the indexed read, and `#notFound` its missing case
 
-The indexed read is `at` on every collection, giving `#some(a) | #notFound`, the missing tag `map.get` already uses.
-This is done: [#2186](https://github.com/nanyx-lang/nanyx/issues/2186) renamed `list.get` and `seq.get` to `at`, with
-no alias, and every `at` that gave `#none` (`array.at`, `Slice.at`, `MArray.at`, `MList.at` and `MSlice.at`) gives
-`#notFound` instead, for a negative index and one past the end. Calling an array, `xs(i)`, is `array.at`, so it gives
-`#notFound` too.
+The indexed read is `at` on every collection, giving `#some(a) | #notFound`, the missing tag `map.get` uses, for a
+negative index and one past the end. Calling an array, `xs(i)`, is `array.at`, so it gives `#notFound` too.
 
 # Which type has which function
 
 On `main` at 4f63f796, from the attached definitions in `stdlib/nanyx/*.nyx` (`export def list.map` and the like),
 updated as [the work](#the-work) lands:
 
-- ✓ it has it today;
+- ✓ it has it;
 - **+** it should have it, and doesn't yet: [filed](#the-work);
 - – it shouldn't have it;
 - ? not decided: see [open questions](#open-questions).
@@ -94,9 +86,8 @@ updated as [the work](#the-work) lands:
 | `scan` | ✓ | **+** | **+** | ✓ | – | – | – | – | – | – | ? | ? | ? |
 | `fill` | – | – | – | – | – | – | **+** | **+** | ✓ | **+** | – | – | – |
 
-The `Trie` column stands for `StringTrie` too, which has the same functions. Every `at` marked ✓ gives `#notFound` for
-an index out of range ([#2186](https://github.com/nanyx-lang/nanyx/issues/2186), done). `Slice` has `fromArray` under
-another name, `Slice.ofArray`, which is renamed. The table leaves out what isn't in the core set, such as `list`'s
+The `Trie` column stands for `StringTrie` too, which has the same functions. `Slice` has `fromArray` under another
+name, `Slice.ofArray`, which [#2189](https://github.com/nanyx-lang/nanyx/issues/2189) renames. The table leaves out what isn't in the core set, such as `list`'s
 `groupBy`, `windows` and `sum`, `set`'s `union`, or `MArray`'s `swap`; `reduce` is changing on every type at once in
 [#2080](https://github.com/nanyx-lang/nanyx/issues/2080).
 
@@ -106,12 +97,9 @@ One issue per type, or per group of functions:
 
 | Issue | What | Stage |
 |---|---|---|
-| [#2186](https://github.com/nanyx-lang/nanyx/issues/2186) | `at` on every collection, giving `#notFound`; `list.get` and `seq.get` renamed | Done |
 | [#2187](https://github.com/nanyx-lang/nanyx/issues/2187) | `Array`: the core and ordered functions it is missing | Ready |
 | [#2188](https://github.com/nanyx-lang/nanyx/issues/2188) | `Array` functional but in place: `map`, `filter`, `reverse` and the sorts reuse an exclusive array's block | Ready, after #2187 |
 | [#2189](https://github.com/nanyx-lang/nanyx/issues/2189) | `Slice`: the core and ordered functions it is missing, and `ofArray` renamed `fromArray` | Ready |
-| [#2190](https://github.com/nanyx-lang/nanyx/issues/2190) | `list.toList`, `list.fromList`, `seq.fromList` and `seq.fromArray`, so `Seq[1, 2, 3]` builds a sequence | Done |
-| [#2191](https://github.com/nanyx-lang/nanyx/issues/2191) | `set` and `map`: `any`, `all` and `filterMap`, and `set.select` | Done |
 | [#2192](https://github.com/nanyx-lang/nanyx/issues/2192) | `MList`, `MArray`, `MStack` and `MSlice`: the read-only core functions, and in-place `sort`, `reverse` and `fill` | Ready |
 | [#2193](https://github.com/nanyx-lang/nanyx/issues/2193) | Which core functions `Stack`, `Queue` and the tries get | Planning |
 | [#2194](https://github.com/nanyx-lang/nanyx/issues/2194) | `map`'s `contains`, `at` and `select`, `find` on a set or map, and `list.count` | Planning |
@@ -121,7 +109,7 @@ One issue per type, or per group of functions:
 An `Array` is one block, and every element sits in a slot of the same size, so a function that makes a new array from
 an old one can write into the old one's block when nothing else refers to it, and copy it otherwise, as Lean 4's
 `Array` does. That is what [Principles](../meta/principles#functional-but-in-place) promises. The standard library
-already checks this at run time with the `__nanyx_is_exclusive` intrinsic, for `MList.toList`
+checks this at run time with the `__nanyx_is_exclusive` intrinsic, for `MList.toList`
 ([#1671](https://github.com/nanyx-lang/nanyx/issues/1671)); [#2188](https://github.com/nanyx-lang/nanyx/issues/2188)
 uses it for `array.map`, `filter`, `reverse` and the sorts. It never changes what a program means, only what it
 allocates.
@@ -137,6 +125,6 @@ allocates.
   `map.select` give? Do a set and a map have `find` and `selectOne`, whose answer depends on the order when several
   elements pass?
 - **`list.count` and `seq.count`** ([#2194](https://github.com/nanyx-lang/nanyx/issues/2194)). They count the elements
-  a test holds for. `count` was to go everywhere; do these go too, for `xs \filter(test) \length`?
+  a test holds for. `count` is not a size anywhere; do these go too, for `xs \filter(test) \length`?
 - **Is `MArray` still needed?** Once arrays update in place when they are exclusive, much of what `MArray` is for can
   be written with `Array`. Lean has no mutable array at all. This isn't decided here.

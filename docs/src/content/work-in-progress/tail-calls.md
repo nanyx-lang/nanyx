@@ -12,10 +12,6 @@ keeps it is in [Tail calls](../deep-dives/tail-calls) in the Deep dives section.
 still planned and open. It is part of the [compilation](./compilation) workstream,
 and its issues carry the `compilation` and `wasm backend` labels.
 
-Nanyx runs in browsers, in the [playground](../standard-tools/playground) and the tour's examples, and keeps the
-guarantee there too: the backend emits `return_call`, which Chrome, Edge and Firefox support, and Safari since 18.2. A
-browser without WebAssembly tail calls gets a message saying so, not a program that runs out of stack.
-
 # Plan
 
 1. **`@tailrec`**, if per-function control turns out to be wanted: an opt-in attribute that makes the compiler report

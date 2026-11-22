@@ -4,9 +4,10 @@ description: "How the compiler builds hosts, the console host and the HTTP host"
 order: 9
 ---
 
-What works today, choosing a host, the console host, writing a host package, foreign functions and host memory, is
-described for users in [Hosts](../advanced/hosts). This page says how the compiler builds hosts. The hosts still to
-come, the design they follow and the open questions are on [Hosts](../work-in-progress/hosts) in Work in progress.
+Choosing a host, the console, HTTP and playground hosts, writing a host package, foreign functions and host memory are
+described for users in [Hosts](../advanced/hosts). This page says how the compiler builds hosts, and why they have
+the shape they do. The hosts still to come and the open questions are on [Hosts](../work-in-progress/hosts) in Work
+in progress.
 
 # How it's built
 
@@ -35,7 +36,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   (`PackageModules.Script`): it has no files of its own, so every file of the build in no package it depends on is the
   program's (`PackageModules.isProgramFile`), and its imports are found by path, but for an import of a dependency's
   public module, `acme.util/strings`. `Script.compileSourceReading` compiles a script in that build, for `nanyx run`
-  and the language server alike. A script with neither directive compiles as before, in no build.
+  and the language server alike. A script with neither directive compiles in no build.
 - **Which modules see the host.** A module of the program itself runs under the build's host: it sees the host's
   prelude and may declare the `@entry`. A module of a package the program depends on, of the host's own package, or
   of the standard library has no host (`checkModule` in `Library.fs`).
@@ -48,8 +49,8 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   (`__host`), so that it can't clash with the program's names, and appends `__host.run(main)` to the module as its
   start. The entry point passed to `run` is at the attribute's span, so a mismatch there is the entry not fitting the
   host: `NYX0237`, reported at `@entry`, with the type the host expects and the one the entry has.
-- **`run` ignores what the entry returns.** Its parameter is `[Console] () -> a`, not `() -> ()`, because an entry
-  whose block ends in an expression (`dbg(x)`) returned a value that the old `main()` call dropped.
+- **`run` ignores what the entry returns.** Its parameter is `[Console] () -> a`, not `() -> ()`, so that an entry
+  whose block ends in an expression (`dbg(x)`) fits, and its value is dropped.
 - **`HostRuntime`** is declared in `nanyx/host.runtime`, a context with no members: the capability that lets code
   call [foreign functions](./foreign-functions) and use `nanyx/host.memory`. With no members, a function that requires
   it is passed nothing, and the type checker treats it as available wherever it is required, so `Hosts.runtimeErrors`
@@ -72,7 +73,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   does).
   The lambda is not given `Console`'s members as a lambda passed to `run` would be
   (`Contexts.extendEnvForLambdaArgument`): its statements are the top level, and see the script's own names and
-  ambient contexts as before. A script's value that needs a context, directly or through the functions and values it
+  ambient contexts as top-level code does. A script's value that needs a context, directly or through the functions and values it
   names (`def line = readLine()`), is inferred in a scope of its own (`ScriptValueScope`) that records what it
   needs. A lambda written in the value is not run by building it, so what it calls is its own type's, not the value's
   (`def handlers = (log = { m -> println(m) })` needs nothing). Once the module is inferred, those values (`InferState.ScriptEntryValues`) move into the entry point as local
@@ -84,8 +85,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   only known once the module is inferred, so the lambda's type is given them then (`InferModule.withEntryContexts`),
   and the host passes their members. Once typed, the entry point is a def of its own, `def __script: [Console] = { ... }`,
   which `__host.run(__script)` names (`Scripts.asDefinition`), so a lambda in a statement captures its members as a
-  lambda in any def does. Statements beside an `@entry` are a script entry too, run before the `@entry`'s, as they ran
-  at the top level. A value that needs a context in a module with no statements, which nothing would run, is an error
+  lambda in any def does. Statements beside an `@entry` are a script entry too, run before the `@entry`'s. A value that needs a context in a module with no statements, which nothing would run, is an error
   at the value. A script carries only the members of the host's contexts that it calls, as an entry program does
   (see `Env` below).
 - **`Console` only comes from the host.** `nanyx.console.core/console` declares the context and `print`, `println`, `eprint` and
@@ -158,7 +158,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   `sendRequest` and `nanyx.fs`'s members, and the functions written on them, require it. Waits are blocking host
   calls, each in its instance's own thread: the console host has one instance, and the HTTP host runs each request's
   instance on a thread of its own (`WasmServer.serve`), so a handler that waits on an outbound request holds only its
-  own (see [Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#how-it-runs)).
+  own (see [Async](./async)).
 - **`Http`** is declared in the shipped package `nanyx.http.core`, which the console host depends on; its prelude
   re-exports `Http` and `HttpError`, with `Request`, `Method` and `Response`. Its one member, `sendRequest`, is written
   on the runtime's own import `nanyx:http`, not on WASI, which has no networking (see
@@ -223,7 +223,7 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   program's input has ended before it starts.
 - **The browser's default host.** `Script.compileUnder` compiles a script that runs under a shipped host of the
   caller's choosing unless its `::host` names another (`Script.readFromUnder`, and `Package.scriptModules`, which take
-  the default host); `nanyx run` and the language server pass the console host, as before. `BrowserCompiler.Compile`
+  the default host); `nanyx run` and the language server pass the console host. `BrowserCompiler.Compile`
   (`compiler/Nanyx.Browser`) passes the playground host (`Hosts.playgroundPackage`), compiling the page's program as
   the script `/playground/main.nyx` in the runtime's in-memory file system, with a store that finds only the packages
   the compiler ships. The build writes `package-files.txt`, the shipped packages' files the page hands the compiler
@@ -243,3 +243,74 @@ come, the design they follow and the open questions are on [Hosts](../work-in-pr
   program's manifest sets them in its `host`'s `settings`, and one the host doesn't take, or of another kind than its
   default, is an error at the setting (`HostSettings`, checked when `Package` reads the host). A script's `::host` has
   no settings, so it gets the defaults.
+
+# Why it's built this way
+
+A command-line tool, an HTTP service, a browser app and a test run are the same program model under different hosts.
+A host answers three questions for a program:
+
+1. What shape must the entry function have?
+2. Which contexts are available to it?
+3. Who owns the process: the main loop, concurrency, signals, shutdown and the exit code?
+
+Different kinds of program need different answers. An HTTP service wants its entry to be a `Request -> Response`
+handler and shouldn't have to write its own accept loop. A sandboxed plugin should get *fewer* capabilities than a
+CLI tool. A test run wants fake or recording implementations of the same contexts the real program uses. Hosts make
+these answers explicit and swappable, and let the compiler check them.
+
+- **A host is a function that takes the entry and runs it**, under `use`s of the contexts it provides. Checking an
+  entry against a host is checking it against `run`'s parameter type, and a library that requires a context the host
+  doesn't provide fails the same check. Nothing about hosts needs a check of its own.
+- **One entry shape per host.** The console host's is `() -> ()`. A program's arguments, environment and exit code
+  come from the `Env` context, not from a second shape. A handler may require fewer contexts than its host provides:
+  a function type with fewer contexts fits where one with more is expected.
+- **Capability security comes with it.** Libraries never assume a host. They declare what they need, such as
+  `[FileSystem]`, and a host that doesn't provide `FileSystem` guarantees that the program, and every library it uses,
+  can't touch the file system.
+- **Hosts are ordinary packages** that the compiler ships but doesn't treat specially, so anyone can write one.
+- **The HTTP handler is synchronous, and the host provides concurrency.** A server can block, so the host runs many
+  calls of the handler at once, one instance per request, as `wasmtime serve`, Spin and Fastly run components of the
+  `wasi:http` world. An outbound call waits in its request's instance only. A trap ends only that request.
+
+## Hosts are not frameworks
+
+A host owns the *process lifecycle*. A framework is something that needs effects or produces an entry:
+
+- The **HTTP host** listens on a socket, runs the request lifecycle, manages concurrency and shuts down. It expects a
+  `Request -> Response`.
+- A **web framework** provides routing, middleware and templating. It is a library that *produces* a
+  `Request -> Response`.
+
+The test is: **if it needs to own the main loop, it's a host; if it only needs effects, it's a library that requires
+contexts.** That way any framework runs on any HTTP host, and swapping hosts (local server, serverless, WASI) doesn't
+mean rewriting the application. Python's WSGI/ASGI and Ruby's Rack show how this split works out, and what happens
+without it.
+
+## Interface packages
+
+A library that only makes sense with a certain kind of host, such as middleware for the HTTP host, depends on what a
+host provides, its contexts and types, never on the host itself. So each host is two packages:
+
+- **An interface package** that declares the types and contexts: `nanyx.http.core` declares `Request`, `Response`
+  and `Http`; `nanyx.console.core` declares `Console` and `Env`. It has no code beyond those declarations and the
+  functions on them.
+- **The host** that implements it, its `run` built on [foreign functions](./foreign-functions). It depends on its
+  interface package.
+
+Middleware is a function from handler to handler, `(Request -> Response) -> (Request -> Response)`: it needs the
+types, not the host that serves them. A library depends only on the interface package, and the capability check does
+the rest. The same interface can have more than one host, so a third-party HTTP host is another implementation of the
+same interface, with every library already written for it. This is the split WASI makes between an interface (WIT)
+and its implementation, and that WSGI makes between a server and a framework.
+
+## Prior art
+
+- **Roc**: platforms and applications. This is the closest existing design. The platform owns `main` and all effects;
+  the application is pure. Roc's platforms are written in a systems language, and making effects available to
+  libraries in a platform-agnostic way was a long-running problem. Nanyx's contexts address that directly.
+- **Elm**: `Browser.sandbox`, `Browser.element` and `Browser.application` are hosts that each require a different
+  entry shape.
+- **WASI**: worlds describe the imports and exports an embedder provides, which corresponds to a host's contexts and
+  entry shape.
+- **WSGI / ASGI / Rack / OWIN**: the split between server and framework.
+- **.NET Generic Host**: host configuration, lifetime and composition of hosted services.

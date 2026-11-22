@@ -1,12 +1,13 @@
 ---
 title: "Compilation"
-description: "What the backend compiles, the binary format, and how the docs examples are tested"
+description: "What the backend compiles, how constraints are solved and errors deferred, the binary format, and how the docs examples are tested"
 order: 1
 ---
 
 This section says how the compiler and its tools work today. What is still open, undecided or planned is in
 [Work in progress](../work-in-progress/workstreams), where each workstream has a page. This page covers what the
-WebAssembly backend compiles, the binary format it writes, and how the docs' examples are tested; the compilation
+WebAssembly backend compiles, how the type checker solves constraints and defers errors, the binary format the backend
+writes, and how the docs' examples are tested; the compilation
 workstream's own page is [Compilation](../work-in-progress/compilation).
 
 # What the backend compiles
@@ -34,11 +35,43 @@ text to the binary format for `nanyx build` and `nanyx wasm` (below).
 - How values are laid out and freed is in [Memory management](./memory-management), and how context members are
   passed in [Context calls](./context-calls).
 
-A construct the backend cannot lower yet is reported as an `UnsupportedByBackend` error (`NYX0301`) where it is
+Every compiler error has a code and a title from one table, `DiagnosticCodes` in `Diagnostics.fs`, and the span of
+the node it is about; [Compiler errors](../standard-tools/errors) lists them. A construct the backend cannot lower yet
+is reported as an `UnsupportedByBackend` error (`NYX0301`) where it is
 written (see [Memory management](./memory-management#core-ir)). A broken invariant of the backend, such as a context
 member the type checker found but the backend cannot, is a bug in the compiler, not a missing feature. It is reported
 as a `BackendInternalError` (`NYX0302`) that asks for a bug report. The backend raises one with
 `CoreIr.internalError`, never a bare `failwith`.
+
+# Solving constraints
+
+The type checker holds one list of constraints for the whole module, adding new ones at its front, and solves it again
+as it goes (`Solving.unifyDetailed`). A list that ends in one solved lately, and that agreed, is solved on top of what
+that one solved to: only the constraints in front of it are solved. Once it has generalised a top-level def, the type
+checker marks the list it holds as a checkpoint (`Solving.checkpoint`); a later list whose newer constraints name none
+of the checkpoint's variables is solved on top of it, since the two share nothing and the order they are solved in
+can't show. Otherwise the whole list is solved afresh, newest first, so that the failure reported, and the order in
+which a union's tags are added, are what solving it afresh gives.
+
+# Deferred errors
+
+What deferred errors are for users is in [Deferred errors](../tour/error-handling#deferred-errors). The approach is the
+one GHC takes with `-fdefer-type-errors`, and a pragmatic cousin of Hazel's marked holes: the error becomes a node in
+the typed program, with a type that fits anywhere (`???`, `Unifier.errorType`), and evaluating it fails. The deferral
+pass is `DeferredErrors.deferErrors`, and the backend lowers what it leaves to a `crash` (see
+[Memory management](./memory-management#core-ir)).
+
+- **A failed call keeps its callee's declared result.** A call that fails for a reason outside its callee's type (a
+  missing context, a callee a module block doesn't export, an argument passed by position for a named parameter) is
+  recorded as failed (`FailedCalls`) and checked on with the callee's type. One given an argument of the wrong type, or
+  the wrong number of them, is checked against the callee's type as any call is. Only what a failed argument would have
+  decided is `???`: `list.map(xs, 5)` is a `list(???)`. A call whose callee is unknown, ambiguous or a context instance
+  is `???` whole.
+- **Conflicts among constraints.** Once the module is checked, its constraints are solved past each failure: the
+  constraints from where it failed are set aside and the rest solved again, until they agree. The variables of a
+  failed constraint's expected side that nothing else fixes are bound to the error type, solved after everything else
+  (`Solving.solveLeavingUnknown`). The expressions where a conflict was found are otherwise typed by their other
+  constraints, and the deferral pass replaces the outermost expression at the conflict's span.
 
 # The binary format
 

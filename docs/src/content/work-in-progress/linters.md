@@ -13,13 +13,13 @@ written in Nanyx, linting [code with errors](#code-with-errors), and the [open q
 # What a linter sees
 
 Linters, hover and go-to-definition all ask the same questions: what is the type of this node, and what does this
-name refer to. The compiler answers them for one module, in side tables keyed by node: in `TypedModule`
+name refer to. The public contract is to expose the compiler's answers, which it keeps for one module in side tables
+keyed by node: in `TypedModule`
 (`TypedAst.fs`), the type of each node (`ExprTypes`), each symbol, with its kind and declaration (`Symbols`), and the
 symbol each name refers to (`References`); and in the checked module (`CheckedModule.fs`), the module as written,
 before desugaring, and the nodes desugaring made for each node as written (`Lowered`). Beside them are what each call requires: the callee's type at the call (`CalleeTypes`), what provides
 each context to it (`ContextProviders`), the instances it finds (`ContextInstances`), and the contexts of the defs it
-may call (`ContextTypes`, `ImportedContextTypes`). The internal linters read these; the public contract is to expose
-them.
+may call (`ContextTypes`, `ImportedContextTypes`). The official linter reads these directly.
 
 # The public contract
 
@@ -42,8 +42,8 @@ written here:
 
 # Code with errors
 
-Linters only look at a module that type-checked. Since [deferred errors](./deferred-errors), a module with type or
-name errors is typed all the same, with what did check, so linters could run on it. The cost of not doing so is in
+Linters only look at a module that type-checked. A module with type or name errors is typed all the same, with what
+did check ([Deferred errors](../tour/error-handling#deferred-errors)), so linters could run on it. The cost of not doing so is in
 the editor: linter diagnostics disappear while the file has a type error, and reappear when it is fixed. A module
 that does not parse also needs parser error recovery. Linters that run on such code must not assume every node has
 a type: a missing entry means "unknown".

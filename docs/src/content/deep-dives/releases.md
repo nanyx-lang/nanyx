@@ -1,0 +1,52 @@
+---
+title: "Releases"
+description: "How the compiler is built for each platform, released on GitHub, and picked up by Scoop and the VS Code extension"
+order: 21
+---
+
+How to install the compiler is on [Installation](../getting-started/installation). This page says how a release is
+made and how it reaches users. The package managers still to come and the open questions are on
+[Distribution](../work-in-progress/distribution) in Work in progress.
+
+# The binaries
+
+The `Compiler` workflow (`.github/workflows/compiler.yml`) publishes `nanyx` for five runtime identifiers:
+`win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`. Each build is self-contained and a single file, so
+no .NET runtime is needed, and is packed as `nanyx-<version>-<rid>.zip` on Windows and `nanyx-<version>-<rid>.tar.gz`
+elsewhere. An archive holds the executable, `nanyx.exe` or `nanyx` (with its executable bit set), and beside it the
+files the compiler reads from there: the checked standard library and `packages/`, the
+[packages the compiler ships](../advanced/hosts#packages-the-compiler-ships) as source directories
+([Shipped packages](./shipped-packages)).
+
+The workflow smoke-tests the `linux-x64` binary: it runs `--help`, a one-line script, and a package `nanyx new` made,
+so an archive without its packages, or whose embedded Wasmtime library didn't survive single-file publishing, fails.
+
+# The release
+
+Merging a change to the compiler's `<Version>` on `main` is the release. The `Release` job, which runs only on `main`
+and after the tests, the browser test and the publish jobs, tags the commit `compiler/<version>` and attaches the
+archives it has just built and tested to a GitHub release named `Compiler <version>`, with the browser build,
+`nanyx-browser.zip`, that the docs site's playground runs ([Playground](./playground#the-measurement)). When that tag
+already exists, it does nothing, and releases are queued, not raced, so a second push of the same version sees the
+first one's tag. Nothing is rebuilt for a release.
+
+The release's notes are the version's section of the [Changelog](../overview/changelog), with its relative links made
+absolute. The publish job reads the section on every run, not only on `main`, so a version bump without its section
+fails before it is merged. What a release PR must change is in `AGENTS.md`, under "Releasing the compiler".
+
+The binaries aren't signed, so macOS quarantines a browser download until the user removes the flag.
+
+# Scoop
+
+The bucket is the [`nanyx-lang/scoop-nanyx`](https://github.com/nanyx-lang/scoop-nanyx) repository, with one
+manifest, `bucket/nanyx.json`, pointing at the `win-x64` zip.
+
+The bucket's `excavator.yml` workflow runs Scoop's `checkver` every day. When it finds a newer `compiler/<version>`
+release, it updates the manifest's `version`, `url` and `hash` and commits the change, so the bucket needs no editing by
+hand on a release. A new release reaches Scoop users within a day.
+
+# The VS Code extension
+
+The extension lists the `compiler/<version>` releases, downloads the archive for the user's platform into its own
+storage, and checks at most once a day for a newer one. See
+[VS Code extension](../standard-tools/vs-code-extension#finding-the-compiler).
