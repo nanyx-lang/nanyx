@@ -94,7 +94,8 @@ jobs:
       - name: Run the example packages as components under Wasmtime
         if: matrix.os == 'ubuntu-latest'
         run: |
-          nanyx() { dotnet run --project Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj --no-build --configuration Release -- "$@"; }
+          project="$PWD/Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj"
+          nanyx() { dotnet run --project "$project" --no-build --configuration Release -- "$@"; }
           for manifest in ../examples/*/*.nyxp; do
             package=$(dirname "$manifest")
             component="$RUNNER_TEMP/$(basename "$package").wasm"
