@@ -58,6 +58,7 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
     match supplied with
     | [] -> env, calleeTy, state
     | _ ->
+        let state = MemoryCells.settleBlock env state
         let ownScopes, state =
             supplied
             |> List.choose (fun (context, scope) -> match scope with TyVar v -> Some (context, v.Id) | _ -> None)
@@ -73,10 +74,13 @@ let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identif
             | None -> env
         // The scopes signatures write so far: a scope bound outside the call.
         let written = state.TypeVars |> Map.toList |> List.choose (function ScopeOf _, var -> Some (TyVar var) | _ -> None)
+        // The names bound outside the call whose types the arguments may yet fill in: a cell, or a reference of
+        // another block, that comes to hold what requires the call's scope outlives the call with it.
+        let open' = env.Unquantified.Keys |> Seq.choose (fun name -> env.Names.TryFind name |> Option.map (fun scheme -> name, scheme)) |> List.ofSeq
         env,
         calleeTy,
         { state with
-            SupplyingCalls = state.SupplyingCalls |> Map.add call.Id (supplied, written)
+            SupplyingCalls = state.SupplyingCalls |> Map.add call.Id (supplied, written, open')
             OpenScopes = List.map snd supplied @ state.OpenScopes }
 
 /// Whether the def `defName`, where it writes its type, has the scoped context `context` in its body: the type writes
@@ -107,7 +111,7 @@ let private declares (state: InferState) (defName: Identifier) (context: Identif
 /// context, as `memory { ... }` does `Memory`.
 let private unsuppliedAt (state: InferState) (subject: string) (instead: string) (context: Identifier) (span: SourceSpan) =
     let supplier = if context = MemoryCells.context then "a `memory { ... }` block" else "a call that supplies it"
-    if LambdaContexts.withinLambda state then None
+    if LambdaContexts.withinLambda state || state.EscapedContexts.Contains context then None
     else
         match state.ContextScope with
         | DefScope(_, true) -> None
@@ -151,6 +155,42 @@ let private mentions (scope: Ty) (ty: Ty) =
     match scope with
     | TyVar v -> (TypeEnv.freeTyVars ty).Contains v.Id
     | _ -> false
+
+/// Whether `ty`, as `resolve` resolves types, holds what requires the scope `scope` in a mutable object of another
+/// scope, or in a value of a scoped type of another scope: something that outlives a call of `scope` and holds what
+/// requires it.
+let rec private holds (resolve: Ty -> Ty) (scope: Ty) (ty: Ty) =
+    let ofOther (holderScope: Ty) (held: Ty list) =
+        resolve holderScope <> scope && held |> List.exists (mentions scope)
+    match ty with
+    | FunctionContexts.CellType(held, holderScope) when ofOther holderScope [ held ] -> true
+    | TyNominal(_, args, _, _) ->
+        let scopes, held = args |> List.partition (function FunctionContexts.ScopedContext _ -> true | _ -> false)
+        match scopes with
+        | [ FunctionContexts.ScopedContext(_, holderScope) ] when ofOther holderScope held -> true
+        | _ -> args |> List.exists (holds resolve scope)
+    | _ -> Ty.exists (holds resolve scope) ty
+
+/// The first of `bound`, names bound outside the call `call`, that comes to require its scope `scope`: a def's value
+/// was made before the call started, so its type can't mention the scope, unless it is the def the call is in, whose
+/// type is a variable until it is inferred. A lambda's parameter, or what a pattern binds, may: the function the call
+/// is in supplies the scope to it in turn. Neither may hold what requires the scope in a mutable object or a value of a
+/// scoped type of another scope (see `holds`), nor be a cell of another scope whose value requires it.
+let private outlivingHolder (state: InferState) (resolve: Ty -> Ty) (scope: Ty) (bound: (Identifier * TypeScheme) list) =
+    bound
+    |> List.tryFind (fun (_, scheme) ->
+        let ty = resolve scheme.Type
+        let kind = scheme.Symbol |> Option.bind state.Symbols.TryFind |> Option.map _.Kind
+        let isDefsValue =
+            match kind, scheme.Type with
+            | _, TyVar _ -> false
+            | Some (Parameter | PatternVariable), _ -> false
+            | _ -> true
+        let isCellOfOther =
+            scheme.Symbol
+            |> Option.bind state.Cells.TryFind
+            |> Option.exists (fun cellScope -> resolve cellScope <> scope)
+        (isDefsValue && mentions scope ty) || (isCellOfOther && mentions scope ty) || holds resolve scope ty)
 
 /// What inside the call `call` makes it require its scope `scope`, as `resolve` resolves types, if anything does, and
 /// how to name it: a use of a cell of that scope or, failing that, the first value and then the first call whose type
@@ -196,7 +236,7 @@ let private escape (call: Expression) (found: (Expression * string) option) (mes
 let leave (call: Expression) (state: InferState) : InferState =
     match state.SupplyingCalls |> Map.tryFind call.Id with
     | None -> state
-    | Some (supplied, written) ->
+    | Some (supplied, written, bound) ->
         let opened = List.map snd supplied
         let state = { state with OpenScopes = state.OpenScopes |> List.filter (fun scope -> not (List.contains scope opened)) }
         let resolve = Unifier.applySolved (fst (Solving.solve state.Constraints))
@@ -221,5 +261,17 @@ let leave (call: Expression) (state: InferState) : InferState =
                     let instead = if context = MemoryCells.context then ": return what the cells hold instead" else ""
                     Some (escape call found (fun through ->
                         $"The result of this '{callee}' call requires its '{context}'{through}, so it cannot leave the call{instead}"))
-                else None)
-        if errors.IsEmpty then state else { state with FailedExprs = (call.Id, errors) :: state.FailedExprs }
+                else
+                    match outlivingHolder state resolve scope bound with
+                    | Some (name, scheme) ->
+                        let found =
+                            introducer state resolve call scope (fun symbol -> scheme.Symbol = Some symbol)
+                            |> Option.map (fun (node, _) -> node, $"'{name}'")
+                        Some (escape call found (fun through ->
+                            $"'{context}' of this '{callee}' call would reach outside it{through}, which is bound outside the call and outlives it: only what is made inside the call can hold what requires it"))
+                    | None -> None)
+        if errors.IsEmpty then state
+        else
+            { state with
+                FailedExprs = (call.Id, errors) :: state.FailedExprs
+                EscapedContexts = supplied |> List.map fst |> Set.ofList |> Set.union state.EscapedContexts }
