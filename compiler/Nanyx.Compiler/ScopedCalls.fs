@@ -275,3 +275,36 @@ let leave (call: Expression) (state: InferState) : InferState =
             { state with
                 FailedExprs = (call.Id, errors) :: state.FailedExprs
                 EscapedContexts = supplied |> List.map fst |> Set.ofList |> Set.union state.EscapedContexts }
+
+/// The errors for the instance `value`, a context's, that a `use` loads, if one of its members holds or requires what
+/// belongs to a call that supplies a scoped context around the `use`, as a `memory` block's reference does. A context's
+/// member types are written without such a scope, so what the member is given would leave the call through them; a
+/// member that needs `Memory` declares it in its type, and takes what it works on as arguments.
+let instanceHolding (state: InferState) (value: Expression) : Diagnostic list =
+    match value.Kind with
+    | FunctionCall(name, _, args) when state.UseInstances.Contains value.Id ->
+        let resolve = Unifier.applySolved (fst (Solving.solve state.Constraints))
+        // Each scope open around the `use`, with the context it is of.
+        let openScopes =
+            state.SupplyingCalls
+            |> Map.values
+            |> Seq.collect (fun (supplied, _, _) -> supplied)
+            |> Seq.map (fun (context, scope) -> context, resolve scope)
+            |> Seq.filter (fun (_, scope) -> state.OpenScopes |> List.exists (resolve >> (=) scope))
+            |> List.ofSeq
+        let members =
+            args
+            |> List.collect (fun arg ->
+                match arg.Kind with
+                | RecordExpr fields -> fields |> List.map (function NamedField(_, field) | PositionalField field -> field)
+                | _ -> [ arg ])
+        members
+        |> List.choose (fun field ->
+            let ty = state.ExprTypes |> Map.tryFind field.Id |> Option.map resolve
+            match ty |> Option.bind (fun ty -> openScopes |> List.tryFind (fun (_, scope) -> mentions scope ty)) with
+            | Some (context, _) ->
+                Diagnostics.at DiagnosticCodes.ScopedContextEscapes field.Span
+                    $"This member of the '{name}' instance requires the '{context}' of a call around the `use`, which its type in '{name}' doesn't say, so it could leave the call through the context: give the member what it works on as an argument, and write [{context}] on the member's type"
+                |> Some
+            | _ -> None)
+    | _ -> []

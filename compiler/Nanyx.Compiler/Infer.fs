@@ -278,7 +278,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         | Ok (typedValue, nextState) ->
             let withFields = extendEnvWithRecordFields (FromUse value.Id) nextState env typedValue.Type
             let envWithUse, nextState = useInstance withFields nextState value typedValue.Type
-            match ownInstanceErrors withFields envWithUse nextState value with
+            match ownInstanceErrors withFields envWithUse nextState value @ ScopedCalls.instanceHolding nextState value with
             | _ :: _ as errors -> Error errors
             | [] ->
             match inferExpr envWithUse nextState body with
@@ -846,7 +846,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                     | Ok (typedExpr, next) ->
                         let withFields = extendEnvWithRecordFields (FromUse value.Id) next env' typedExpr.Type
                         let withUse, next = useInstance withFields next value typedExpr.Type
-                        match ownInstanceErrors withFields withUse next value with
+                        match ownInstanceErrors withFields withUse next value @ ScopedCalls.instanceHolding next value with
                         | _ :: _ as replaced -> errors <- replaced
                         | [] ->
                             current <- next
