@@ -127,6 +127,9 @@ module ComponentInterface =
         | NotYet of what: string
         /// An import names as many parameters as `named`, and its function takes `taken`.
         | Misnamed of named: int * taken: int
+        /// A function requires contexts its type doesn't write, which the host can't provide it: only an export whose
+        /// type writes them is run under the host's (see `Attributes.applyAttributes`).
+        | Unwritten
 
     /// A WIT type as WIT writes it where it is used: a record or a variant by its name.
     let rec witTypeText (ty: WitType) =
@@ -274,12 +277,27 @@ module ComponentInterface =
                 match Unifier.unalias output with
                 | TyPrimitive "unit" -> Ok None
                 | _ -> witTypeOf None output |> Result.map Some
-            let contextProblems = if contexts.IsEmpty && not requiresContexts then [] else [ NotYet "a function that requires contexts" ]
+            let contextProblems = if contexts.IsEmpty && not requiresContexts then [] else [ Unwritten ]
             let problems = (parameters @ [ result |> Result.map (fun _ -> "", WitType.Bool) ]) |> List.choose (function Error problem -> Some problem | Ok _ -> None)
             match misnamed @ contextProblems @ problems with
             | [] -> Ok { Export = export; Parameters = parameters |> List.choose Result.toOption; Result = result |> Result.toOption |> Option.flatten }
             | problems -> Error problems
         | _ -> Error [ Never("a value that isn't a function", "export a function: a WIT interface has only functions and types") ]
+
+    /// Whether the type `typeExpr` written for a def says it requires contexts, as `[Clock] int -> int` does.
+    let rec writesContexts (typeExpr: TypeExpr) =
+        match typeExpr.Kind with
+        | TypeWithContext(contexts, inner) -> not contexts.IsEmpty || writesContexts inner
+        | TypeConstraint(_, inner, _)
+        | TypeWhere(inner, _) -> writesContexts inner
+        | _ -> false
+
+    /// The function type `ty` with no contexts: the type a component gives an export that runs under its host's
+    /// (see `Hosts.providedExportName`), which requires the contexts `provide` does, and none the host doesn't provide.
+    let withoutContexts (ty: Ty) =
+        match Unifier.unalias ty with
+        | TyFunc(input, output, _) -> TyFunc(input, output, [])
+        | other -> other
 
     /// The definitions of `module'` by name.
     let private valuesOf (module': Module) =
@@ -292,11 +310,18 @@ module ComponentInterface =
     /// The errors in the defs `module'` marks `@component`, `exports`, and `@import`, `imports`, each by name with where
     /// it is written, of the types
     /// `typeOf` gives, and whether `requiresContexts` says they require contexts: each type that can't cross a component's
-    /// boundary, `NYX0277`, or that the compiler can't take across yet, `NYX0301`, and an import that names other than
+    /// boundary, `NYX0277`, or that the compiler can't take across yet, `NYX0301`, as an export that requires contexts its
+    /// type doesn't write is, and an import that names other than
     /// as many parameters as its function takes, `NYX0013`. A def whose type is unknown, after an error of its own, has
     /// none.
     let errors (typeOf: string -> Ty option) (requiresContexts: string -> bool) (module': Module) (exports: (string * SourceSpan) list) (imports: (string * SourceSpan) list) : Diagnostic list =
         let values = valuesOf module'
+        let written =
+            module'
+            |> List.choose (function
+                | Kind (Def (ValueDef(_, name, Some typeExpr, _))) when writesContexts typeExpr -> Some name
+                | _ -> None)
+            |> Set.ofList
         (exports |> List.map (fun (name, span) -> "export", name, span)) @ (imports |> List.map (fun (name, span) -> "import", name, span))
         |> List.collect (fun (verb, name, span) ->
             match typeOf name with
@@ -314,6 +339,12 @@ module ComponentInterface =
                             Diagnostics.at DiagnosticCodes.ComponentBoundaryType span $"A component can't {verb} '{name}': {what} can't cross a component's boundary. To fix it, {fix}"
                         | NotYet what ->
                             Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"A component can't {verb} '{name}' yet: {what} can't cross a component's boundary yet"
+                        | Unwritten when verb = "import" ->
+                            Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"A component can't import '{name}' yet: a function that requires contexts can't cross a component's boundary yet"
+                        | Unwritten when written.Contains name ->
+                            Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"A component can't export '{name}' here: it requires contexts, and its package names no host to provide them"
+                        | Unwritten ->
+                            Diagnostics.at DiagnosticCodes.UnsupportedByBackend span $"A component can't export '{name}': it requires contexts its type doesn't write. To fix it, write them in its type, as `[Clock] int -> int`, and the host's component root provides them"
                         | Misnamed(named, taken) ->
                             let parameters = if named = 1 then "parameter" else "parameters"
                             Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument span $"The import '{name}' names {named} {parameters}, and its function takes {taken}"
@@ -327,6 +358,7 @@ module ComponentInterface =
         |> List.choose (fun export ->
             typed.Types
             |> Map.tryFind export.Definition
+            |> Option.map (fun ty -> if export.Definition = Hosts.providedExportName export.Name then withoutContexts ty else ty)
             |> Option.bind (fun ty -> functionOf export ty (values |> Map.tryFind export.Definition) false |> Result.toOption))
 
     /// The name of the world a package's WIT (see `render`) gives a component built from it: `component`, unless an

@@ -8,7 +8,10 @@ module Attributes =
     /// with where it is written.
     type ComponentDefs =
         { Exports: (string * SourceSpan) list
-          Imports: (string * SourceSpan) list }
+          Imports: (string * SourceSpan) list
+          /// The exports that require contexts, each run under the host's by a def `applyAttributes` made up (see
+          /// `providedExport`): the call of the host's `provide` in it, as an entry point's call of `run` is.
+          Provided: EntryPoint list }
 
     /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
     let entryAttribute = "entry"
@@ -317,6 +320,36 @@ module Attributes =
             | ModuleBlock(_, blockItems) -> bodilessErrors blockItems
             | _ -> [])
 
+    /// The def a component exports in place of `name`, an export marked `@component` whose type, `typeExpr`, requires
+    /// contexts, written at `attributeSpan`, and the entry point (see `EntryPoint`) its call of the host's `provide`
+    /// is: `def __component_name = { width, height -> __host.provide({ -> name(width, height) }) }`, which runs `name`
+    /// under the contexts the host's component root provides, as `run` runs the program's entry point. Its parameters
+    /// are named as `value`'s lambda names them, which the WIT names them by (see `ComponentInterface`). It writes no
+    /// type, so that it requires `Async` and `HostRuntime`, which `provide` does, as the top level would.
+    let private providedExport (host: Host) (attribute: TopLevelItem) (name: string) (typeExpr: TypeExpr) (value: Expression) =
+        let count =
+            match parameterTypes typeExpr with
+            | Some [ Kind TypeUnit ] | None -> 0
+            | Some parameters -> parameters.Length
+        let names =
+            match value.Kind with
+            | Lambda(parameters, _, _) when parameters.Length = count && parameters |> List.forall (fun (parameter, _) -> parameter <> name) ->
+                parameters |> List.map fst
+            | _ -> List.init count (fun index -> $"p{index}")
+        let at = Expression.at attribute.Span
+        let call = at (FunctionCall(name, None, names |> List.map (IdentifierExpr >> at)))
+        // The function `provide` is passed is at the attribute, so that a context it doesn't provide is told apart.
+        let provide = at (FunctionCall($"{Hosts.importAlias}.{Hosts.provideFunction}", None, [ at (Lambda([], call, false)) ]))
+        let wrapper = at (Lambda(names |> List.map (fun parameter -> parameter, None), provide, false))
+        let def = TopLevelItem.at attribute.Span (Def (ValueDef(false, Hosts.providedExportName name, None, wrapper)))
+        let entry =
+            { Attribute = attribute.Id
+              Name = name
+              Host = host
+              Argument = attribute.Span
+              Call = SyntaxTree.expressionsWithin provide |> List.map _.Id }
+        def, entry
+
     /// Resolves `@attribute` lines. `@entry` on a definition appends a call of the host's `run` with that definition
     /// at the end of the module, so it runs as the program's start function, and imports the host and the modules of
     /// the contexts it provides (see `Host`). `@extern("module", "name")` on a definition written with a type and no
@@ -324,7 +357,8 @@ module Attributes =
     /// `ExternSyntax`). Any other attribute, an attribute that does not precede a value definition, or a definition with
     /// no value and no `@extern`, is an error. `@entry` takes no argument. `@component`, which takes none either, marks an
     /// exported def as one a component built from the program exports: it is left as it is, and given back by name, with
-    /// where it is written. `@import("interface", "name", ["parameter", ...])` on a def written with a type and no value makes
+    /// where it is written; one whose written type requires contexts also gets a def that calls it under the host's,
+    /// which the component exports in its place, and the host's import (see `providedExport`). `@import("interface", "name", ["parameter", ...])` on a def written with a type and no value makes
     /// it a function another component exports: its value becomes the interface, the function and the names of its
     /// parameters (see `ComponentImportSyntax`). The host is `host`: the package's, or the
     /// console host for a file in no package. A package with no host is a library, so an `@entry` in it is an error. With the module, each entry point (see `EntryPoint`) and each def marked `@component`. An attribute before
@@ -335,14 +369,18 @@ module Attributes =
         // The defs marked `@component` and `@import`, each with where it is written, as `loop` finds them.
         let components = ResizeArray<string * SourceSpan>()
         let imports = ResizeArray<string * SourceSpan>()
+        let provided = ResizeArray<TopLevelItem * EntryPoint>()
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entries, List.rev externs, List.rev errors
             | Kind (Attribute(name, Some argument)) :: rest when name = componentAttribute ->
                 let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
-            | Kind (Attribute(name, None)) :: (Kind (Def (ValueDef(true, defName, _, value))) as def) :: rest when name = componentAttribute ->
+            | Kind (Attribute(name, None)) as attribute :: (Kind (Def (ValueDef(true, defName, typeOpt, value))) as def) :: rest when name = componentAttribute ->
                 components.Add((defName, def.Span))
+                match host, typeOpt with
+                | Some host, Some typeExpr when ComponentInterface.writesContexts typeExpr -> provided.Add(providedExport host attribute defName typeExpr value)
+                | _ -> ()
                 loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ errors)
             | Kind (Attribute(name, None)) as attribute :: (Kind (Def (ValueDef(false, defName, _, _))) as def) :: rest when name = componentAttribute ->
                 let error =
@@ -402,6 +440,8 @@ module Attributes =
             match allowErrors @ statementAttributeErrors module' @ errors @ Externs.conflicts externs with
             | [] ->
                 // The host's prelude is imported into every module of the program, not here (see `Library`).
-                let entryImport = match host with Some host when not entries.IsEmpty -> [ hostImport host ] | _ -> []
-                Ok (entryImport @ items @ List.map snd entries, List.map fst entries, { Exports = List.ofSeq components; Imports = List.ofSeq imports })
+                let entryImport = match host with Some host when not entries.IsEmpty || provided.Count > 0 -> [ hostImport host ] | _ -> []
+                let wrappers = provided |> Seq.map fst |> List.ofSeq
+                let components = { Exports = List.ofSeq components; Imports = List.ofSeq imports; Provided = provided |> Seq.map snd |> List.ofSeq }
+                Ok (entryImport @ items @ wrappers @ List.map snd entries, List.map fst entries, components)
             | errors -> Error errors

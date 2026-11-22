@@ -453,6 +453,15 @@ module Compiler =
                 // the first import that brings it in.
                 Error (Typed, List.distinctBy Diagnostics.inItsModule merged.Errors)
             else
+                // An export that requires contexts runs under the host's `provide`: under a host whose root has none, it
+                // can't, and its def that calls `provide` is left out (see `Attributes.applyAttributes`).
+                let desugared, provided, unprovidedErrors =
+                    match components.Provided, host with
+                    | _ :: _, Some host when (TypeEnv.tryFind $"{Hosts.importAlias}.{Hosts.provideFunction}" env).IsNone ->
+                        let wrappers = components.Provided |> List.map (_.Name >> Hosts.providedExportName) |> Set.ofList
+                        let kept = desugared |> List.filter (function Kind (Def (ValueDef(_, name, _, _))) -> not (wrappers.Contains name) | _ -> true)
+                        kept, [], components.Provided |> List.map (Hosts.unprovidedExport host)
+                    | provided, _ -> desugared, provided, []
                 // A capitalised tag is a custom pattern's, and a match on one runs the pattern (see `CustomPatterns`).
                 let patternScope = CustomPatterns.scopeOf env ambiguousImports desugared
                 let desugared, rewriteErrors = CustomPatterns.rewrite patternScope desugared
@@ -486,14 +495,36 @@ module Compiler =
                         |> Option.bind (fun symbol -> contextTypes |> Map.tryFind symbol.Id)
                         |> Option.defaultValue []
                     Hosts.entryMismatch entry (types |> Map.tryFind entry.Name |> Option.map (Unifier.apply subst)) required expected
+                // A mismatch where an export is passed to its host's `provide` is a context it requires that the host
+                // doesn't provide.
+                let exportMismatch (export: EntryPoint) =
+                    let provides =
+                        TypeEnv.tryFind $"{Hosts.importAlias}.{Hosts.provideFunction}" env
+                        |> Option.bind (fun scheme -> match Unifier.unalias scheme.Type with TyFunc(parameter, _, _) -> Some parameter | _ -> None)
+                    let required =
+                        ownTopLevel
+                        |> List.tryFind (fun symbol -> symbol.Name = export.Name)
+                        |> Option.bind (fun symbol -> contextTypes |> Map.tryFind symbol.Id)
+                        |> Option.defaultValue []
+                    Hosts.exportMismatch export required provides
+                // As is a context missing where an export is called through `provide`, which is at the attribute.
+                let inferErrors =
+                    inferErrors
+                    |> List.map (fun diagnostic ->
+                        match provided |> List.tryFind (fun export -> diagnostic.Span = Some export.Argument) with
+                        | Some export when diagnostic.Code = DiagnosticCodes.MissingContextMembers.Code || diagnostic.Code = DiagnosticCodes.UndeclaredContext.Code ->
+                            exportMismatch export
+                        | _ -> diagnostic)
+                    |> List.distinct
                 let mismatchErrors =
                     mismatches
                     |> List.sortBy (fun (_, span, _) -> span.Start)
                     |> List.map (fun (text, span, kind) ->
                         let message = text (Unifier.tyToStringIn state.TypeDefs)
-                        match entries |> List.tryFind (fun entry -> entry.Argument = span) with
-                        | Some entry -> entryMismatch entry
-                        | None ->
+                        match entries |> List.tryFind (fun entry -> entry.Argument = span), provided |> List.tryFind (fun export -> export.Argument = span) with
+                        | Some entry, _ -> entryMismatch entry
+                        | None, Some export -> exportMismatch export
+                        | None, None ->
                             match kind with
                             // Outside a nominal type's home module, a value of its shape is no value of it: the error says
                             // why, and how to make one.
@@ -525,7 +556,7 @@ module Compiler =
                         | _ -> []
                     ofDef @ ofType
                 let runtimeErrors =
-                    Hosts.runtimeErrors isHost origin (entries @ (script |> Option.map fst |> Option.toList)) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
+                    Hosts.runtimeErrors isHost origin (entries @ provided @ (script |> Option.map fst |> Option.toList)) (provided |> List.map (_.Name >> Hosts.providedExportName) |> Set.ofList) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
                 // A script whose statements need `HostRuntime` is told so where they need it, and one whose statements use
                 // what escaped a scoped call is told of the escape (NYX0233): that its entry point, which has no span,
                 // then doesn't fit the host's `run` says nothing more.
@@ -569,7 +600,18 @@ module Compiler =
                         | _ -> []
                     | _ -> []
                 // A def marked `@component` has a type that can cross a component's boundary.
-                let componentErrors = ComponentInterface.errors (fun name -> types |> Map.tryFind name |> Option.map (Unifier.apply subst)) (fun name -> state.ContextRequirements |> Map.tryFind name |> Option.exists (List.isEmpty >> not)) desugared components.Exports components.Imports
+                // One that requires contexts is run under the host's (see `provided`), so they don't cross it.
+                let runUnderHost = components.Provided |> List.map _.Name |> Set.ofList
+                let componentErrors =
+                    ComponentInterface.errors
+                        (fun name ->
+                            types |> Map.tryFind name |> Option.map (Unifier.apply subst)
+                            |> Option.map (if runUnderHost.Contains name then ComponentInterface.withoutContexts else id))
+                        (fun name -> not (runUnderHost.Contains name) && state.ContextRequirements |> Map.tryFind name |> Option.exists (List.isEmpty >> not))
+                        desugared
+                        components.Exports
+                        components.Imports
+                    @ unprovidedErrors
                 let moduleErrors = componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
@@ -665,7 +707,13 @@ module Compiler =
                                 |> Option.orElse (Some (System.IO.Path.GetFileNameWithoutExtension(checkedModules.FileName origin)))
                                 |> Option.filter (fun name -> ComponentInterface.witName name <> "")
                                 |> Option.defaultValue "main"
-                            let own = components.Exports |> List.map (fun (name, _) -> { Module = moduleName; Name = name; Definition = name })
+                            let calledThroughProvide = provided |> List.map _.Name |> Set.ofList
+                            let own =
+                                components.Exports
+                                |> List.map (fun (name, _) ->
+                                    { Module = moduleName
+                                      Name = name
+                                      Definition = if calledThroughProvide.Contains name then Hosts.providedExportName name else name })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.

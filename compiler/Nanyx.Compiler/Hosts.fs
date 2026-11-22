@@ -68,6 +68,14 @@ module Hosts =
     /// The function each host exports that takes the entry point and runs it.
     let runFunction = "run"
 
+    /// The function each host's root may export that calls a function under the contexts it provides, and gives back
+    /// what it returns: a component's export that requires contexts is called through it (see `providedExportName`).
+    let provideFunction = "provide"
+
+    /// The def `Attributes.applyAttributes` makes up for the export marked `@component` named `name` whose type
+    /// requires contexts, which calls it through the host's `provide`, and which the component exports in its place.
+    let providedExportName (name: string) = $"__component_{name}"
+
     /// The alias the module that declares the entry point imports the host under, which no name written in Nanyx can
     /// clash with.
     let importAlias = "__host"
@@ -128,6 +136,36 @@ module Hosts =
             entry.Argument
             $"It doesn't fit the host '{entry.Host.Import}'\n  expected: {shown.[0]}\n  found:    {shown.[1]}{missingLines}"
         |> Diagnostics.about entry.Name
+
+    /// The names of the contexts `contexts`, as the module names them, with the type variables among them left out.
+    let private contextNames (contexts: Ty list) =
+        contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source
+
+    /// The error for an export marked `@component`, `export`, that requires contexts its host's root doesn't provide:
+    /// `required` is the contexts it requires, and `provides` the type of the parameter of the root's `provide`, if it
+    /// has one.
+    let exportMismatch (export: EntryPoint) (required: Ty list) (provides: Ty option) =
+        let provided =
+            match provides |> Option.map Unifier.unalias with
+            | Some(TyFunc(_, _, contexts)) -> contextNames contexts |> Set.ofList
+            | _ -> Set.empty
+        let missing = contextNames required |> List.distinct |> List.filter (provided.Contains >> not)
+        let names = missing |> List.map (fun name -> $"'{name}'") |> String.concat ", "
+        let said = if missing.IsEmpty then "contexts" else names
+        Diagnostics.at
+            DiagnosticCodes.EntryDoesNotFitHost
+            export.Argument
+            $"'{export.Name}' requires {said}, which the host '{export.Host.Import}' doesn't provide: a component's export runs under the contexts its host's root provides"
+        |> Diagnostics.about export.Name
+
+    /// The error for an export marked `@component`, `export`, that requires contexts, under `host`, whose root has no
+    /// `provide` to run it under them.
+    let unprovidedExport (host: Host) (export: EntryPoint) =
+        Diagnostics.at
+            DiagnosticCodes.EntryDoesNotFitHost
+            export.Argument
+            $"'{export.Name}' requires contexts, and the host '{host.Import}' provides none to a component's exports: its root has no '{provideFunction}'"
+        |> Diagnostics.about export.Name
 
     /// The errors for a host's component root whose `run`, of type `componentRun`, declared at `span`, doesn't provide
     /// the contexts its core root's `run`, of type `coreRun`, does: one more, or one fewer. A program that runs under the
@@ -202,13 +240,15 @@ module Hosts =
     /// The errors for each place a module that is not a host (see `mayRequireRuntime`, with `isHost`) requires `HostRuntime`: each of
     /// its top-level defs that requires it, as `contextTypes` (by symbol) has its contexts or a call in it does, other
     /// than its foreign functions, which any module may declare (see `ExternSyntax`), and each call at its top level that
-    /// requires it, other than the calls of the host's `run` that its entry points make (`entries`). A call requires it
+    /// requires it, other than the calls of the host's `run` that its entry points make, and of its `provide` that the
+    /// defs an export that requires contexts is called through make (`entries`), and those defs (`wrappers`). A call requires it
     /// when the runtime provides it there (`providers`, by the call's node), or when the def it calls requires it
     /// (`calleeContexts`, by the call's node): `HostRuntime` has no members, so nothing else records where it is needed.
     let runtimeErrors
         (isHost: string -> bool)
         (origin: ModuleOrigin)
         (entries: EntryPoint list)
+        (wrappers: Set<string>)
         (symbols: Map<SymbolId, Symbol>)
         (contextTypes: Map<SymbolId, Ty list>)
         (providers: Map<NodeId, ProvidedContext list>)
@@ -230,6 +270,7 @@ module Hosts =
                 |> List.collect (fun item ->
                     match item.Kind with
                     | Def (ValueDef(_, _, _, Kind (ExternSyntax.Import _))) -> []
+                    | Def (ValueDef(_, name, _, _)) when wrappers.Contains name -> []
                     | Def (ValueDef(_, name, _, value)) -> [ name, item, value ]
                     | ModuleBlock(_, blockItems) -> defs blockItems
                     | _ -> [])

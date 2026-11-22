@@ -67,15 +67,16 @@ let withoutUnreadClosures (func: Function) : Function =
         if unread.IsEmpty then func else { func with Body = withoutBindings unread func.Body }
 
 /// The functions of `functions` that `start` reaches, in their order, through the functions each calls or makes a
-/// closure over, and those `exported` names, which a component exports, and what they reach. Without a start, a module
-/// runs nothing of its own, and every function is kept.
+/// closure over, and those `exported` names, which a component exports, and what they reach. Without a start or an
+/// export, a module runs nothing of its own, and every function is kept; a library component, which has no start, keeps
+/// what its exports reach.
 let reachedFrom (start: Function option) (exported: string list) (functions: Function list) : Function list =
-    match start with
-    | None -> functions
-    | Some start ->
+    match start, exported with
+    | None, [] -> functions
+    | _ ->
         let byName = functions |> List.map (fun func -> func.Name, func) |> dict
         let reached = HashSet<string>()
-        let pending = Stack<string>(namedBy start @ exported)
+        let pending = Stack<string>((start |> Option.map namedBy |> Option.defaultValue []) @ exported)
         while pending.Count > 0 do
             let name = pending.Pop()
             if reached.Add name then
