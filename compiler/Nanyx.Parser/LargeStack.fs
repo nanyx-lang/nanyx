@@ -1,5 +1,5 @@
-/// Running work that recurses once per level of the code it reads: the checker once per operator of a chain, the
-/// formatter's comparison once per node. Generated code can nest
+/// Running work that recurses once per level of the code it reads: the checker and the WebAssembly backend once per
+/// operator of a chain, the formatter's comparison once per node. Generated code can nest
 /// thousands deep, more than the main thread's 1 MB stack holds, and a stack overflow cannot be caught.
 module Nanyx.LargeStack
 

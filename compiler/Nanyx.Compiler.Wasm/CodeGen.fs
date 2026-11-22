@@ -1475,7 +1475,10 @@ let transpileTypedModuleToWat (typed: TypedModule) : string =
 
 /// `typed` as WebAssembly text compiled with `options`, with what the backend cannot compile reported as a diagnostic
 /// at the place in the source it is written: the innermost expression it is in that has one, or else the definition.
+/// It runs on a large stack (see `Nanyx.LargeStack`), as lifting, lowering and emitting recurse once per operand of a
+/// chain of operators and once per branch of an `else if` chain.
 let tryTranspileTypedModuleWith (options: WasmOptions) (typed: TypedModule) : Result<string, Diagnostic> =
+    Nanyx.LargeStack.run <| fun () ->
     try
         Ok (transpileTypedModuleWithOptions options typed |> fst)
     with
