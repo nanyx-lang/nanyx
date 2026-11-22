@@ -89,65 +89,68 @@ let read (text: string) : SExpr list =
                     elif text.[i] = ';' && text.[i + 1] = ')' then depth <- depth - 1; i <- i + 2
                     else i <- i + 1
             else going <- false
-    // The nodes up to the `)` that closes the list being read, or the end of the text at the top level.
-    let rec nodes (topLevel: bool) : SExpr list =
-        let items = ResizeArray<SExpr>()
-        let mutable closed = false
-        while not closed do
-            skipSpace ()
-            if i >= text.Length then
-                if topLevel then closed <- true else raise (WatSyntaxError("a list that is never closed", i))
-            else
-                match text.[i] with
-                | ';' ->
-                    // A place marker: `file:line`, then a function's name and the `file:line` of its call for each call
-                    // the code was inlined through. Each file runs to the last `:`, and the line number follows it.
-                    let start = i
-                    let lineEnd = match text.IndexOf('\n', i) with -1 -> text.Length | found -> found
-                    let written = text.Substring(i + 3, lineEnd - i - 3).Trim()
-                    let parts = written.Split(" | ")
-                    let place (written: string) =
-                        let colon = written.LastIndexOf ':'
-                        match (if colon < 0 then None else Some(Int32.TryParse(written.Substring(colon + 1)))) with
-                        | Some(true, line) -> written.Substring(0, colon), line
-                        | _ -> raise (WatSyntaxError("a place marker that is not ;;@ file:line", start))
-                    // A function's name, after `entry`, may hold spaces, as one in backticks does.
-                    match written.Split(' ', 4) with
-                    | _ when written.StartsWith "def " ->
-                        let file, line = place (written.Substring "def ".Length)
-                        items.Add(Defined(file, line))
-                    | [| "probe"; id; kind |]
-                    | [| "probe"; id; kind; _ |] as probe ->
-                        match Int32.TryParse id with
-                        | true, id -> items.Add(Probed(id, kind, Array.tryItem 3 probe))
-                        | _ -> raise (WatSyntaxError("a probe's marker that is not ;;@probe number kind", start))
-                    | _ ->
-                        if parts.Length % 2 = 0 then raise (WatSyntaxError("a place marker with a function but not its call", start))
-                        let frames =
-                            [ for index in 0..2 .. parts.Length - 1 ->
-                                  let file, line = place parts.[index]
-                                  (if index + 1 < parts.Length then Some parts.[index + 1] else None), file, line ]
-                        items.Add(Placed frames)
-                    i <- lineEnd
-                | '(' ->
-                    i <- i + 1
-                    items.Add(List(nodes false))
-                | ')' ->
-                    if topLevel then raise (WatSyntaxError("a ) that closes nothing", i))
-                    i <- i + 1
-                    closed <- true
-                | '"' ->
-                    let start = i
-                    i <- i + 1
-                    while i < text.Length && text.[i] <> '"' do
-                        i <- i + (if text.[i] = '\\' then 2 else 1)
-                    if i >= text.Length then raise (WatSyntaxError("an unterminated string", start))
-                    items.Add(Text(stringBytes (text.Substring(start + 1, i - start - 1)) (start + 1)))
-                    i <- i + 1
+    // The nodes read so far of the list being read, or of the top level, and below it those of each list it is in. A
+    // stack rather than recursion, as code can nest thousands of lists deep (an else-if chain is an `if` in an `if`).
+    let mutable items = ResizeArray<SExpr>()
+    let outer = System.Collections.Generic.Stack<ResizeArray<SExpr>>()
+    let mutable finished = false
+    while not finished do
+        skipSpace ()
+        if i >= text.Length then
+            if outer.Count = 0 then finished <- true else raise (WatSyntaxError("a list that is never closed", i))
+        else
+            match text.[i] with
+            | ';' ->
+                // A place marker: `file:line`, then a function's name and the `file:line` of its call for each call
+                // the code was inlined through. Each file runs to the last `:`, and the line number follows it.
+                let start = i
+                let lineEnd = match text.IndexOf('\n', i) with -1 -> text.Length | found -> found
+                let written = text.Substring(i + 3, lineEnd - i - 3).Trim()
+                let parts = written.Split(" | ")
+                let place (written: string) =
+                    let colon = written.LastIndexOf ':'
+                    match (if colon < 0 then None else Some(Int32.TryParse(written.Substring(colon + 1)))) with
+                    | Some(true, line) -> written.Substring(0, colon), line
+                    | _ -> raise (WatSyntaxError("a place marker that is not ;;@ file:line", start))
+                // A function's name, after `entry`, may hold spaces, as one in backticks does.
+                match written.Split(' ', 4) with
+                | _ when written.StartsWith "def " ->
+                    let file, line = place (written.Substring "def ".Length)
+                    items.Add(Defined(file, line))
+                | [| "probe"; id; kind |]
+                | [| "probe"; id; kind; _ |] as probe ->
+                    match Int32.TryParse id with
+                    | true, id -> items.Add(Probed(id, kind, Array.tryItem 3 probe))
+                    | _ -> raise (WatSyntaxError("a probe's marker that is not ;;@probe number kind", start))
                 | _ ->
-                    let start = i
-                    while i < text.Length && not (endsAtom text.[i]) do
-                        i <- i + 1
-                    items.Add(Atom(text.Substring(start, i - start)))
-        List.ofSeq items
-    nodes true
+                    if parts.Length % 2 = 0 then raise (WatSyntaxError("a place marker with a function but not its call", start))
+                    let frames =
+                        [ for index in 0..2 .. parts.Length - 1 ->
+                              let file, line = place parts.[index]
+                              (if index + 1 < parts.Length then Some parts.[index + 1] else None), file, line ]
+                    items.Add(Placed frames)
+                i <- lineEnd
+            | '(' ->
+                i <- i + 1
+                outer.Push items
+                items <- ResizeArray<SExpr>()
+            | ')' ->
+                if outer.Count = 0 then raise (WatSyntaxError("a ) that closes nothing", i))
+                i <- i + 1
+                let list = List(List.ofSeq items)
+                items <- outer.Pop()
+                items.Add list
+            | '"' ->
+                let start = i
+                i <- i + 1
+                while i < text.Length && text.[i] <> '"' do
+                    i <- i + (if text.[i] = '\\' then 2 else 1)
+                if i >= text.Length then raise (WatSyntaxError("an unterminated string", start))
+                items.Add(Text(stringBytes (text.Substring(start + 1, i - start - 1)) (start + 1)))
+                i <- i + 1
+            | _ ->
+                let start = i
+                while i < text.Length && not (endsAtom text.[i]) do
+                    i <- i + 1
+                items.Add(Atom(text.Substring(start, i - start)))
+    List.ofSeq items

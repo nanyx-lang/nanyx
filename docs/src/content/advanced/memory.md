@@ -199,7 +199,19 @@ def total = memory { context outer ->
 
 Which block's `Memory` a type requires is never written. Where a type requires the `Memory` of two different blocks, as a function's type can, hovers and error messages number them in the order they first appear, `([Memory₁] () -> a), ([Memory₂] () -> b) -> b`; with one block's, it is plain `[Memory]`.
 
+## What the rule guarantees
+
 This is how Nanyx performs escape analysis. Instead of a separate escape-analysis pass, the compiler tracks which values require which `memory` call's `Memory`. A value that still needs it can only be used inside that call, so it cannot leak into pure code.
+
+The runtime relies on it. **Once a `memory` call has ended, nothing the program can still reach refers to a mutable object made under that call's `Memory`** (a reference, an `MArray`, the box of a captured cell, or anything a value of a type in `Memory`'s scope holds), **and no code that is left can load that call's instance.** So a block can free its mutable objects when it ends, whatever their counts say ([#2232](https://github.com/nanyx-lang/nanyx/issues/2232)). Every way out is closed by one of the rules above:
+
+- **Giving it back**, as the block's result, alone or in a tuple, record, list, tag, alias or nominal type, or through a function that gives back what its callback does (NYX0233).
+- **A lambda that holds it**: one that reads, changes or only captures one of the block's references or cells, directly or through another lambda, or that loads the block's named `Memory` (NYX0233 where it would leave).
+- **An outer block's cell or reference** that the inner block stores it in (NYX0233).
+- **A context**: a `use` instance's member that holds it (NYX0233 at the member), or a member that requires the block's `Memory`, which requires it on its name too. A member named as a value calls the instance where it is called, so a function given the instance can't carry it out.
+- **A sequence**: a lazy `seq` over a reference requires the block's `Memory` where it is pulled, so it is a value that can't leave either.
+
+Nothing else can carry a mutable object out. `Async` has no way to defer work past a call, and a foreign function (`@extern`) and [host memory](./hosts#host-memory) take and give only numbers and strings, never a reference.
 
 # No global mutable state
 

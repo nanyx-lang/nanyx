@@ -190,3 +190,21 @@ let ``The text's numbers, strings and comments are read as WebAssembly reads the
     Assert.Equal(-1L, instance.GetFunction<int64>("wide").Invoke())
     let memory = instance.GetMemory "memory"
     Assert.Equal<byte array>([| 97uy; 10uy; 0xC3uy; 0xA9uy; 34uy; 92uy |], memory.GetSpan(16L, 6).ToArray())
+
+// Writing a folded instruction recurses once per level it nests, so the assembler runs on a large stack: on a thread
+// with a 1 MB stack, as Windows' main thread has, an else-if chain of 2,000 branches ran out of it.
+[<Fact>]
+let ``Text nested 5,000 deep assembles on a thread with a 1 MB stack`` () =
+    let depth = 5_000
+    let chain = Text.StringBuilder()
+    for i in 1 .. depth do
+        chain.Append($"(if (result i32) (i32.eq (local.get $n) (i32.const {i})) (then (i32.const {i * 2})) (else ") |> ignore
+    chain.Append("(i32.const 0)").Append(String.replicate (depth * 2) ")") |> ignore
+    let wat = $"(module (func $f (export \"f\") (param $n i32) (result i32) {chain}))"
+    let wasm = Nanyx.LargeStack.runWithStack (1024 * 1024) (fun () -> WasmBinary.assemble wat)
+    use engine = new Wasmtime.Engine()
+    use store = new Wasmtime.Store(engine)
+    use module' = Wasmtime.Module.FromBytes(engine, "nested", wasm)
+    let f = Wasmtime.Instance(store, module', [||]).GetFunction<int, int>("f")
+    Assert.Equal(9_998, f.Invoke 4_999)
+    Assert.Equal(0, f.Invoke 6_000)

@@ -282,3 +282,19 @@ import nanyx/random as random
 def dealt = random.seeded(42, { random.below(10) })
 """
     Assert.Equal<string list>([], codes source)
+
+// The rest of #2233's routes, each rejected.
+
+[<Theory>]
+[<InlineData("def x = memory { (MRef.new(1), 2) }")>]
+[<InlineData("def x = memory { (r = MRef.new(1)) }")>]
+[<InlineData("def x = memory { #some(MRef.new(1)) }")>]
+[<InlineData("type Box = (r: MRef(int))\ndef x = memory { Box(r = MRef.new(1)) }")>]
+[<InlineData("type Box(a) = protected (v: a)\ndef x = memory { Box(v = MRef.new(1)) }")>]
+[<InlineData("def id: a -> a = { v -> v }\ndef x = memory { id(MRef.new(1)) }")>]
+[<InlineData("def x = memory {\n  def r = MRef.new(1)\n  def g = { MRef.get(r) }\n  { g() }\n}")>]
+[<InlineData("def x = memory {\n  mut c = 0\n  def g = { c }\n  def h = { g() }\n  [{ h() }]\n}")>]
+[<InlineData("def s = memory {\n  def r = MRef.new(1)\n  seq.unfold(0, { n -> #some((MRef.get(r), n)) })\n}")>]
+[<InlineData("def s = memory {\n  def r = MRef.new(1)\n  list.toSeq([1, 2]) \\ seq.map({ n -> n + MRef.get(r) })\n}")>]
+let ``A reference can't leave its block in a structure, a type, a generic value, a closure or a sequence`` (program: string) =
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes $"import nanyx/mref\n\n{program}\n")
