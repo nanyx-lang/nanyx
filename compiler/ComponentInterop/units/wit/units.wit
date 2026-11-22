@@ -1,0 +1,23 @@
+// The WIT `nanyx build` writes for the Nanyx component's imports of `acme:units/units` (../run.sh checks the
+// interface is the same), with the world this component exports it in.
+
+package acme:units@0.1.0;
+
+interface units {
+  variant unit {
+    metres,
+    feet,
+  }
+
+  record length {
+    value: f64,
+    unit: unit,
+  }
+
+  to-metres: func(p0: length) -> f64;
+  label: func(p0: unit) -> string;
+}
+
+world provider {
+  export units;
+}

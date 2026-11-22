@@ -227,8 +227,10 @@ module ComponentInterface =
         | TyPrimitive "unit" -> Error (NotYet "`()` as a value")
         | other -> Error (NotYet $"'{TypePrinting.tyToString other}'")
 
-    /// The WIT type of a value of the type named `typeName` applied to `args`, which stands for `underlying`.
+    /// The WIT type of a value of the type named `typeName` applied to `args`, which stands for `underlying`. A type
+    /// named through an import's alias, `units.Length`, is named by its own name, as in its own module.
     and private namedType (typeName: string) (args: Ty list) (underlying: Ty) =
+        let typeName = typeName.Substring(typeName.LastIndexOf '.' + 1)
         args
         |> List.map (witTypeOf None)
         |> all
@@ -435,7 +437,7 @@ module ComponentInterface =
             for directory in IO.Directory.GetDirectories hostDeps do
                 copy directory (IO.Path.Combine(deps, IO.Path.GetFileName directory))
         for imported, wit in importedPackages imports do
-            let directory = IO.Path.Combine(deps, "imported-" + witName (imported.Replace(':', '-').Replace('@', '-')))
+            let directory = IO.Path.Combine(deps, imported.Replace(':', '-').Replace('@', '-'))
             IO.Directory.CreateDirectory directory |> ignore
             IO.File.WriteAllText(IO.Path.Combine(directory, "package.wit"), wit)
         IO.File.WriteAllText(IO.Path.Combine(target, "component.wit"), render package hostWorld functions imports)

@@ -1,0 +1,15 @@
+# A Rust component that exports `acme:units/units`, which the Nanyx component in ../shapes imports (see ../run.sh).
+[package]
+name = "units"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.63"
+
+# A crate of its own, in no workspace.
+[workspace]
