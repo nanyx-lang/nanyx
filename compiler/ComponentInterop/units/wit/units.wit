@@ -14,8 +14,8 @@ interface units {
     unit: unit,
   }
 
-  to-metres: func(p0: length) -> f64;
-  label: func(p0: unit) -> string;
+  to-metres: func(length: length) -> f64;
+  label: func(unit: unit) -> string;
 }
 
 world provider {
