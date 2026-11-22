@@ -1,8 +1,8 @@
 module todo.server
 
 import (
-  todo.shared
   nanyx/time
+  todo.shared
 )
 
 -- A server for the todo protocol. The store is a context, so the same
@@ -30,29 +30,26 @@ def exists: (#some(Todo) | #notFound) -> #some(Todo) | #todoDoesNotExist = {
 export def createProtocol: [TodoStore, Clock] () -> TodoProtocol = {
   TodoProtocol(
     allTodos = { async { findAll() } }
-
     addTodo = { description -> async { insert(newTodo(description)) } }
-
     toggleCompleted = { id -> async {
-      proc {
-        def existing = try exists(find(id))
-        return try update(existing with completed = not existing.completed)
+        proc {
+          def existing = try exists(find(id))
+          return try update(existing with completed = not existing.completed)
+        } \match
+          | #some(todo) -> #updated(todo)
+          | e -> #updateError(e)
       }
-      \match
-        | #some(todo) -> #updated(todo)
-        | e -> #updateError(e)
-    }}
-
+    }
     deleteTodo = { id -> async {
-      proc {
-        try exists(find(id))
-        try delete(id)
-        return ()
+        proc {
+          try exists(find(id))
+          try delete(id)
+          return ()
+        } \match
+          | #some() -> #deleted
+          | e -> #deleteError(e)
       }
-      \match
-        | #some() -> #deleted
-        | e -> #deleteError(e)
-    }}
+    }
   )
 }
 
@@ -65,21 +62,17 @@ export def withInMemoryStore: [Clock] ([TodoStore] () -> a) -> a = { action ->
 
     use TodoStore(
       findAll = { todos \map.values }
-
       find = { id -> todos(id) }
-
       insert = { todo ->
         def saved = todo with id = nextId
         todos := todos \map.insert(saved.id, saved)
         nextId := nextId + 1
         #some(saved)
       }
-
       update = { todo ->
         todos := todos \map.insert(todo.id, todo)
         #some(todo)
       }
-
       delete = { id ->
         todos := todos \map.remove(id)
         #some()
