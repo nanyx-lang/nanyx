@@ -220,11 +220,16 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Error err -> Error err
             | Ok state ->
                 // A member of a plain context read as a value, as a builder's block reads its `zero`, is used where it
-                // is read, as a call of it is (see `LambdaContexts`).
-                let state =
-                    let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
-                    state |> LambdaContexts.recordUnsupplied env ofMember
+                // is read, as a call of it is (see `LambdaContexts`). One that is a function requires the context where
+                // it is called instead, so that what it holds of the instance can't outlive the instance's `use`.
+                let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
+                let isFunction = match Unifier.unalias scheme.Type with TyFunc _ -> true | _ -> false
+                let state = if isFunction then state else state |> LambdaContexts.recordUnsupplied env ofMember
                 let ty, next = instantiate (recordReference expr scheme state) scheme
+                let ty =
+                    match Unifier.unalias ty with
+                    | TyFunc(input, output, own) when not ofMember.IsEmpty -> TyFunc(input, output, own @ ofMember |> List.distinct)
+                    | _ -> ty
                 let ty, next =
                     match contextRequirementsOf env state name with
                     | Some written -> ContextVariables.ofNamedValue written scheme.Type ty next
