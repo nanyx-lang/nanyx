@@ -178,6 +178,7 @@ let private command (arguments: string list) : Shell -> int =
         | [] -> outputPath, release, timings, host, Array.ofList paths
     match arguments with
     | [ "--version" ] -> CliCommands.VersionIn
+    | [ "parse"; inputFile ] -> fun shell -> CliCommands.ParseIn(shell, inputFile)
     | "new" :: name :: directory ->fun shell -> CliCommands.NewIn(shell, name, Array.ofList directory)
     | "manifest" :: rest ->
         let json, rest = takeFlag "--json" rest
