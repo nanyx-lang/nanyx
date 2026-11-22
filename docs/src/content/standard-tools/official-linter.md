@@ -111,8 +111,11 @@ It is a rule of its own, apart from `unusedBindings`, so a project can keep one 
 ```nanyx
 context Log = (log: string -> ())
 
-def greet: [Log] string -> () = { name -> log("Hello, {name}") }
-def answer: [Log] () -> int = { () -> 42 } -- Linter warning: Unused context 'Log'
+def greet: [Log] string -> () = { name ->
+  log("Hello, {name}")
+}
+
+def answer: [Log] () -> int = { () -> 42 } -- Linter warning: 'Log' is required but not used by 'answer'
 ```
 
 The rule (`unusedContexts`) reports a context written in a def's signature that nothing in the def's body uses: the
