@@ -309,7 +309,7 @@ It fetches each dependency on GitHub, a package or a file, at the commit it is p
 `GITHUB_TOKEN` to a token of yours to have GitHub count its requests against your account.
 
 The cache is `.nanyx/packages` in your home directory, or the directory `NANYX_PACKAGES` names. Packages are
-downloaded from the [package index](https://nanyx-lang.github.io/packages/), or from the one `NANYX_INDEX` names: an
+downloaded from the [package index](https://packages.nanyx.dev/), or from the one `NANYX_INDEX` names: an
 address, or a directory on disk.
 
 ## `nanyx pack`

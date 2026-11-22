@@ -46,10 +46,9 @@ tracked under the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packa
 
 # Open questions
 
-- **A custom domain and mirroring.** The index is at `https://nanyx-lang.github.io/packages/` and points at
-  release assets on packages' own repositories. When should it move to `packages.nanyx.dev`, and who holds the domain?
-  Should artifacts be mirrored (to object storage or a project-owned repository) so a deleted release can't break
-  builds?
+- **Mirroring.** The index, at `https://packages.nanyx.dev/`, points at release assets on packages' own
+  repositories. Should artifacts be mirrored (to object storage or a project-owned repository) so a deleted release
+  can't break builds?
 - **Hosts and capabilities.** Should a package declare the contexts it requires in its manifest, so the index can
   show "this package needs `FileSystem`" before anyone installs it?
 - **Private packages.** Should the client support more than one index (a company's own) from the start? The
