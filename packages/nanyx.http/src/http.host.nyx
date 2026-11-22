@@ -18,17 +18,13 @@ import (
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/random as (Random)
-  nanyx.http.core/client as (Http, HttpError)
+  nanyx.http.core/client as (Http)
   nanyx.http.core/request as (Request)
   nanyx.http.core/response as (Response)
-  nanyx.http.core/wire as (readRequest, readResponse, writeRequest, writeResponse)
+  nanyx.http.core/wire as (readRequest, writeResponse)
+  nanyx.wasi/preview1 as (millisecondsOn, systemBits)
+  nanyx.wasi/runtime as (sendThroughRuntime)
 )
-
-@extern("nanyx:http", "send")
-def httpSend: [HostRuntime] I32, I32, I32 -> I32
-
-@extern("nanyx:http", "receive")
-def httpReceive: [HostRuntime] I32 -> ()
 
 @extern("nanyx:serve", "requestLength")
 def requestLength: [HostRuntime] () -> I32
@@ -38,56 +34,6 @@ def requestInto: [HostRuntime] I32 -> ()
 
 @extern("nanyx:serve", "respond")
 def respond: [HostRuntime] I32, I32 -> ()
-
-@extern("wasi_snapshot_preview1", "random_get")
-def randomGet: [HostRuntime] I32, I32 -> I32
-
-@extern("wasi_snapshot_preview1", "clock_time_get")
-def clockTimeGet: [HostRuntime] I32, I64, I32 -> I32
-
--- The host keeps three things in the block the module sets aside for it (see `hostState`): at 0,
--- what kind of answer a request the handler made had; at 8, the bits `random_get` last gave; and at
--- 16, the time `clock_time_get` last gave.
-
---| 64 bits from the operating system's random source, through WASI's `random_get`. The console
-  host does the same, for the reason `sendThroughRuntime` gives.
-def systemBits: [HostRuntime] () -> int = { _ ->
-  def at = I32.wrappingAdd(hostState(), 8)
-  ignore(randomGet(at, 8))
-  readI64(at)
-}
-
---| The time in milliseconds on WASI's clock `clock`: 0, the time of day, or 1, the monotonic clock,
-  which never goes backwards. The console host does the same, for the reason `sendThroughRuntime`
-  gives.
-def millisecondsOn: [HostRuntime] I32 -> int = { clock ->
-  def at = I32.wrappingAdd(hostState(), 16)
-  ignore(clockTimeGet(clock, 1_000_000, at))
-  readI64(at) / 1_000_000
-}
-
---| Sends `request` through `nanyx:http`, and gives its response, or why there is none. The console
-  host does the same: only a host's root module may call foreign functions, so the two can't share
-  it.
-def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | #error(HttpError) = { request ->
-  def wire = writeRequest(request)
-  def length = httpSend(addressOf(wire), byteLength(wire), hostState())
-  keepAlive(wire)
-  def buffer = allocate(length + 1)
-  httpReceive(buffer)
-  def answer = stringAt(buffer, length)
-  free(buffer)
-
-  match readI32(hostState())
-    | 0 ->
-      match readResponse(answer)
-        | #some(response) -> #some(response)
-        | #malformed -> #error(#other("the runtime's answer to the request was malformed"))
-    | 1 -> #error(#timeout)
-    | 2 -> #error(#connectionFailed(answer))
-    | 3 -> #error(#invalidUrl)
-    | _ -> #error(#other(answer))
-}
 
 --| The request this instance answers, from the runtime.
 def incoming: [HostRuntime] () -> #some(Request) | #malformed = { _ ->

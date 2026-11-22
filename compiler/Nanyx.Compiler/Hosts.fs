@@ -84,8 +84,9 @@ module Hosts =
     /// The context a host is written on: raw reads and writes, which only a host may require.
     let runtimeContext = "HostRuntime"
 
-    /// Whether the module `origin` may require `HostRuntime`: a module of the build host's own package, whose files
-    /// `isHost` tells apart, or a module a host is written on (see `runtimeModules`).
+    /// Whether the module `origin` may require `HostRuntime`: a module of the build host's own package, or of a host
+    /// library it depends on, whose files `isHost` tells apart, or a module of the standard library a host is written on
+    /// (see `runtimeModules`).
     let mayRequireRuntime (isHost: string -> bool) (origin: ModuleOrigin) =
         match origin with
         | StandardLibraryModule name -> List.contains name runtimeModules
@@ -167,7 +168,7 @@ module Hosts =
         Diagnostics.at
             DiagnosticCodes.HostRuntimeOutsideHost
             span
-            $"{what} requires the context '{runtimeContext}', which only a host's package may require: use the contexts the host provides, such as 'Console'"
+            $"{what} requires the context '{runtimeContext}', which only a host's package, and the host libraries it depends on, may require: use the contexts the host provides, such as 'Console'"
 
     /// The errors for each place a module that is not a host (see `mayRequireRuntime`, with `isHost`) requires `HostRuntime`: each of
     /// its top-level defs that requires it, as `contextTypes` (by symbol) has its contexts or a call in it does, other
@@ -228,3 +229,26 @@ module Hosts =
                     | Pipe(_, name, _, _) -> runtimeError expr.Span $"'{name}'"
                     | _ -> runtimeError expr.Span "This call")
             defErrors @ callErrors
+
+/// Host libraries: packages that hosts are written on, which may require `HostRuntime` (see `field`).
+module HostLibraries =
+    open Parser.Program.DataValues
+
+    /// The field of a package's `package` that declares it a host library: `hostLibrary = true`. A host library's
+    /// modules may require `HostRuntime`, as a host's own do, so that hosts share what they are written on: the build
+    /// host's package and the host libraries it depends on are the code that reaches the outside world (see the Hosts
+    /// page of the docs).
+    let field = "hostLibrary"
+
+    /// Whether the package whose manifest is `manifest` declares itself a host library.
+    let declares (manifest: DataValue) : bool =
+        match manifest.Data with
+        | DataRecord top ->
+            match DataValue.field "package" top with
+            | Some { DataField.Value = { DataValue.Data = DataRecord package } } ->
+                match DataValue.field field package with
+                | Some { DataField.Value = { DataValue.Data = DataBool declared } } -> declared
+                | _ -> false
+            | _ -> false
+        | _ -> false
+

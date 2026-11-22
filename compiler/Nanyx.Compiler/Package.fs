@@ -392,7 +392,8 @@ module Package =
         { PackageModules.ofFiles package.Manifest.Name package.Manifest.Root package.Host package.Sources with
             Dependencies = package.Dependencies |> List.map modules
             HostPackage = package.HostPackage |> Option.map modules
-            CheckedFile = package.CheckedFile }
+            CheckedFile = package.CheckedFile
+            HostLibrary = package.Manifest.HostLibrary }
         |> PackageModules.withReferenced package.ReferencedFiles
 
     /// The modules of the package the file at `filePath` is a source file of, if it is one, with those of the packages
