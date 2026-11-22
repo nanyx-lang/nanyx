@@ -174,7 +174,7 @@ const gettingStarted = nav.find((s) => s.dir === "getting-started")?.pages[0]?.p
         }
         // The visitor's operating system, as the install box names it, or null when it can't tell.
         function detectOs() {
-          var platform = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "") + " " + navigator.userAgent;
+          var platform = ((navigator.userAgentData && navigator.userAgentData.platform) || "") + " " + navigator.userAgent;
           if (/Win/i.test(platform)) return "windows";
           if (/Mac|iPhone|iPad|iPod/i.test(platform)) return "macos";
           if (/Linux|X11|Android|CrOS/i.test(platform)) return "linux";

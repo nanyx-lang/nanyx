@@ -6,4 +6,5 @@ def area: Shape -> float = {
   | #rect(w, h) -> w * h
 }
 
-println(area(#rect(3.0, 4.5))) -- 13.5
+println(area(#rect(3.0, 4.5)))
+-- 13.5
