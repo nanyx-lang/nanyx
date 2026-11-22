@@ -1,6 +1,6 @@
 /// A `for` loop walks anything `Iterable`: a type that attaches `toSeq`, an array, a slice, a stack, a mutable array,
-/// and a value of a type a signature requires `Iterable` of (#1802, see
-/// docs/src/content/work-in-progress/lazy-sequences.md).
+/// and a value of a type a signature requires `Iterable` of (see
+/// docs/src/content/deep-dives/lazy-sequences.md).
 module TranspilerWasmTests.Features.Loops.RunIterableLoop
 
 open Xunit

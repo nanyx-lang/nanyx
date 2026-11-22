@@ -20,10 +20,10 @@ A workflow's block desugars to calls of its context's members, each keyword's co
 3. With the `use` in the same function as the calls, each member is a known lambda, and `try` and `return` are
    inlined.
 4. Each continuation is a lambda called once, in a match arm, so it is inlined too.
-5. The members' generic values, boxed for a member generic in variables of its own, are now made and read in the same
+5. The members' generic values, boxed for a member generic in variables of its own, are made and read in the same
    branch once a `match` is copied into the branches of the `if` or `match` whose tag it tests, so the box is read
    through a known closure, inlined, and left unread.
-6. The `use`'s member lambdas, now unused, are not made.
+6. The `use`'s member lambdas, which nothing reads after these steps, are not made.
 
 # Where it runs
 
@@ -112,7 +112,7 @@ tests and the tags the arms before it tested and failed. From that:
   that the others, copied into every branch, fit the limit. The links that could change are those that read the
   variable, or a variable such a link binds that something can be known of (not a number, string or `bool`), those
   whose variable only they read, and those that give a variable another's value. Without this, a function with a long
-  run of tags made and matched took time that grew with the square of its length
+  run of tags made and matched would take time that grows with the square of its length
   ([#1847](https://github.com/nanyx-lang/nanyx/issues/1847)).
 - **A variable given another variable's value** of its type is that variable: what follows reads the other, and the
   binding goes. Not a parameter on the heap, which its function may only borrow: a match on the variable that takes it

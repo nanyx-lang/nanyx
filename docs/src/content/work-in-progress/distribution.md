@@ -1,51 +1,12 @@
 ---
 title: "Distribution"
-description: "How the compiler reaches users: GitHub releases, the Scoop bucket, and the package managers still to come"
+description: "The package managers the compiler doesn't reach yet (Homebrew, apt, an install script), and signing"
 order: 35
 ---
 
-> **Status: outline.** This page describes how the `nanyx` compiler is distributed today and what is planned. The
-> user-facing steps are on [Installation](../getting-started/installation).
-
-# Summary
-
-`nanyx` is published as a self-contained binary for each platform, attached to a GitHub release. Windows users can
-also install it with Scoop, and the VS Code extension downloads it on its own. Homebrew, apt and an install script
-are not there yet.
-
-# What exists
-
-## GitHub releases
-
-The `Compiler` workflow (`.github/workflows/compiler.yml`) publishes `nanyx` for five runtime identifiers:
-`win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`. Each build is self-contained, so no .NET runtime
-is needed, and is packed as `nanyx-<version>-<rid>.zip` on Windows and `nanyx-<version>-<rid>.tar.gz` elsewhere. An
-archive holds the executable, `nanyx.exe` or `nanyx` (with its executable bit set), and beside it `packages/`, the
-packages the compiler ships as source directories (the console host, `packages/nanyx.console`, and the others
-[Hosts](../advanced/hosts#packages-the-compiler-ships) lists), which it finds there. The workflow's smoke test runs a script and a package `nanyx new`
-made with the published binary, so an archive without them fails.
-
-Merging a change to the compiler's version on `main` is the release: the `Release` job tags the commit
-`compiler/<version>` and attaches the archives it has just built and tested to a GitHub release, unless that tag
-already exists. Nothing is rebuilt for a release. The release's notes are the version's section of the
-[Changelog](../overview/changelog), and the workflow fails when there is no section for the version. The binaries aren't signed, so macOS quarantines a browser
-download until the user removes the flag.
-
-## Scoop
-
-The bucket is the [`nanyx-lang/scoop-nanyx`](https://github.com/nanyx-lang/scoop-nanyx) repository, with one
-manifest, `bucket/nanyx.json`, pointing at the `win-x64` zip. Users add it with
-`scoop bucket add nanyx https://github.com/nanyx-lang/scoop-nanyx`.
-
-The bucket's `excavator.yml` workflow runs Scoop's `checkver` every day. When it finds a newer `compiler/<version>`
-release it updates the manifest's `version`, `url` and `hash` and commits the change, so the bucket needs no editing
-by hand on a release. A new release reaches Scoop users within a day.
-
-## The VS Code extension
-
-The extension lists the `compiler/<version>` releases, downloads the archive for the user's platform into its own
-storage, and checks at most once a day for a newer one. See
-[VS Code extension](../standard-tools/vs-code-extension#finding-the-compiler).
+The compiler is released on GitHub for each platform, and reaches users through Scoop and the VS Code extension. How
+to install it is on [Installation](../getting-started/installation), and how a release is made on
+[Releases](../deep-dives/releases) in Deep dives. This page keeps what is planned and the open questions.
 
 # What's planned
 

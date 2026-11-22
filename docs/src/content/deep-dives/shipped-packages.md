@@ -41,5 +41,17 @@ progress.
 - **Regular expressions are Nanyx code.** `nanyx.regex` is written over the standard library, with no intrinsic of its
   own: `regex.syntax.nyx` reads a pattern into a tree, applying its flags as it goes, and `regex.vm.nyx` compiles the
   tree into a Thompson NFA and runs it as a Pike VM, whose threads are kept in priority order and marked in an
-  `MArray` per code point, so matching is linear in the text for every pattern. The design is on
-  [Regular expressions](../work-in-progress/regex).
+  `MArray` per code point, so matching is linear in the text for every pattern. Checking literal patterns at compile
+  time is planned on [Regular expressions](../work-in-progress/regex).
+
+# Why regular expressions are built this way
+
+- **A shipped package, not the standard library,** which stays what every program needs.
+- **Written in Nanyx, not provided by a host.** Matching is pure computation, so it needs no capability. Taking the
+  host's engine (.NET's in the console host, JavaScript's in a browser), through a runtime import as `Http` does, would
+  be fast and complete, but each host would match differently, and pure code would need a capability. The engine is
+  also a real workload for `MArray`, functional but in place and sequences, written with the features users have.
+- **Linear time, as RE2, Go and Rust have,** so that no pattern can hang a server (ReDoS). A backtracking engine would
+  have backreferences and lookaround, but takes exponential time on some patterns.
+- **No typed captures.** A pattern's named groups could become a record type, `(year: string, month: string)`, but that
+  needs the compiler to evaluate the pattern while type checking, which Nanyx deliberately doesn't do.

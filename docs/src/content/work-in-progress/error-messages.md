@@ -9,14 +9,12 @@ How errors are shown, their suggestions and fixes, and every code are described 
 [Principles](../meta/principles#friendly-errors). This page keeps what is still open in the error messages
 workstream. Work is tracked under the `error messages` label.
 
-Every compiler error has a code and title from the table in `Diagnostics.fs` (`DiagnosticCodes`), the span of the node
-it is about, and a message in the house style. The CLI shows it with the line of source and an underline, and the
-common errors offer fixes. What is left:
+# Still open
 
-- **A syntax error's headline.** Every error's headline is its code's title plus at most one name
-  ([#2098](https://github.com/nanyx-lang/nanyx/issues/2098)), but a syntax error's has no name yet: the parser's errors
+- **A syntax error's headline.** Every error's headline is its code's title plus at most one name, but a syntax
+  error's has no name: the parser's errors
   carry only a message, so the token it found isn't known apart from it.
-- **Related locations.** Few errors use them yet. An error should point, where it helps, at the code that explains it
+- **Related locations.** Few errors use them. An error should point, where it helps, at the code that explains it
   as well: "expected because of this annotation", "first defined here". The CLI shows a related location as one line,
   with no excerpt.
 - **Where a type mismatch points.** A mismatch is reported where the constraint that failed was made, which is not
@@ -25,8 +23,8 @@ common errors offer fixes. What is left:
   nearest node that has a span.
 - **Syntax errors.** A syntax error the parser has no message of its own for says what it expected at the furthest
   point it read to and what it found there, `Expected `]`, found `xs``. Where several readings failed there, the list
-  of what they expected can be long; error recovery ([#846](https://github.com/nanyx-lang/nanyx/issues/846), stage 5)
-  is where these get better.
+  of what they expected can be long. Recovering inside an item ([The parser](./parser#recovering-inside-an-item)) is
+  where these can get better.
 - **Nominal types.** A mismatch with a nominal type outside its module is explained only when the shapes match
   ([#1804](https://github.com/nanyx-lang/nanyx/issues/1804)).
 

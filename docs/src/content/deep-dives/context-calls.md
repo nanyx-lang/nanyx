@@ -199,7 +199,7 @@ How it is built:
 
 - A call works out which of the members it finds are known (`CoreIrLowerMembers.knownMembers`, from what
   `LowerInput.ContextArguments` finds) before it lowers its arguments, and asks for the callee by a key that names them
-  (`SpecKey.Known`). It passes the others as before.
+  (`SpecKey.Known`). It passes the others as closures.
 - The specialisation binds each known member to a local, not a parameter. A call through that local is a direct call to
   the function the member wraps (`CallValue`), with its arguments arranged as the wrapper would arrange them
   (`directArguments`). A call that passes the local on to a function that requires the context finds it known, so the

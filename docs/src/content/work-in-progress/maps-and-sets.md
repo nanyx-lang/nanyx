@@ -4,13 +4,11 @@ description: "What maps and sets still need"
 order: 10
 ---
 
-> **Status: implemented, keyed by `Eq` and `Hash`, but not yet hash-based.** `map(k, v)`, map literals, lookups and
-> `list.groupBy` came with [#477](https://github.com/nanyx-lang/nanyx/issues/477); the `Hash` context, keys that
-> require it, and `set(a)` with [#533](https://github.com/nanyx-lang/nanyx/issues/533). What works is described on
-> [maps and sets](../stdlib/prelude-maps) and in [Collections](../tour/collections), and how they are built in
-> [Maps and sets](../deep-dives/maps-and-sets) in the Deep dives section. Both still hold a list, so a
-> lookup takes time in proportion to the size. The [open questions](#open-questions) need the maintainer's answer; the
-> defaults the code takes until then are marked.
+What maps and sets do is described on [maps and sets](../stdlib/prelude-maps) and in
+[Collections](../tour/collections), and how they are built in [Maps and sets](../deep-dives/maps-and-sets) in the Deep
+dives section. Their keys require `Eq` and `Hash`, but both hold a list, so a lookup takes time in proportion to the
+size. This page keeps their known gaps, the move to hash-based maps, and the [open questions](#open-questions), which
+need the maintainer's answer; the defaults the code takes until then are marked.
 
 # Known gaps
 
@@ -26,7 +24,7 @@ order: 10
 
 The list of entries is to become a persistent hash trie written in the prelude, behind the same intrinsics, so
 nothing outside the prelude changes. A trie is a recursive type, `#leaf(...) | #node(Trie(k, v), Trie(k, v))`, which a
-type alias can now be ([#246](https://github.com/nanyx-lang/nanyx/issues/246)). This waits on
+type alias can be. This waits on
 [open question 2](#open-questions), which decides the order a hash-based map gives its entries in.
 
 # Open questions
@@ -46,17 +44,9 @@ These are the choices the docs leave open. The code takes the marked default unt
      index, and equal maps still differ in order.
    - **Recommended:** the order of the keys' hashes once maps are hash tries, documented as unspecified, with
      `map.toList \list.sortBy(...)` for a chosen order.
-3. **Is a map a function?** Today a map can be *called*, but it is not a function value: it cannot be passed where a
+3. **Is a map a function?** A map can be *called*, but it is not a function value: it cannot be passed where a
    function is expected, or annotated with a function type.
    - *(Default)* Not a function: write `{ k -> m(k) }` where one is needed.
    - A map is assignable to its lookup's function type: the type checker accepts a `map(k, v)` where a
      `k -> #some(v) | #notFound` is wanted, and the backend wraps it in a closure there.
    - **Recommended:** make a map assignable to its lookup's type.
-
-Settled:
-
-- **Spelling.** The type is `map(k, v)`, and its functions are attached to it by that name, `map.get`, as `list.map`
-  is to `list(a)` (#653).
-- **Builders.** A literal builds any type with an attached `fromArray`
-  ([#1543](https://github.com/nanyx-lang/nanyx/issues/1543), [Collections](../tour/collections#syntax)), so `[]`
-  with an expected map type is an empty map, and `set[1, 2]` is a set.

@@ -4,24 +4,18 @@ description: "What is still open about the language server built into nanyx, and
 order: 30
 ---
 
-> What the language server does is described for users on
-> [VS Code extension](../standard-tools/vs-code-extension), and its options on
-> [The nanyx command](../standard-tools/command-line#editors). This page keeps what is [still open](#still-open).
-> Work is tracked under the `lsp` label.
-
-The language server is built into the `nanyx` binary (`nanyx lsp`), in `compiler/Nanyx.LanguageServer`, and calls the
-compiler as a library: each document is compiled after a pause in typing, and hover, completion, the type hints and
-the rest read that compile. The VS Code extension in `extension/` finds or downloads `nanyx` and starts it. Each
-feature is one handler class in `Nanyx.LanguageServer/Handlers/`, and the tests in `Nanyx.LanguageServer.Tests` talk
-to the server over the real wire protocol.
+What the language server does is described for users on [VS Code extension](../standard-tools/vs-code-extension),
+its options on [The nanyx command](../standard-tools/command-line#editors), and how it is built in
+[Language server](../deep-dives/language-server) in the Deep dives section. This page keeps what is
+[still open](#still-open). Work is tracked under the `lsp` label.
 
 # Still open
 
 - **Exact ranges.** The syntax tree keeps no span for a record field's name, so a diagnostic about one is reported at
   the nearest node that has a span, and semantic tokens read field names from the text.
-- **Parse errors.** The parser has no error recovery, so a parse error hides the rest of the file: hover, completion
-  and the type hints read the last text that parsed, less the top-level items edited since (see
-  [The parser](./parser)).
+- **Parse errors.** The parser recovers only at the next top-level item, so a parse error hides the rest of the item
+  it is in: while the user types in it, hover, completion and the type hints read the last text of the file that
+  parsed (see [The parser](./parser#recovering-inside-an-item)).
 - **Downloaded packages.** The server does not resolve packages from the lockfile and the cache, or offer to restore
   them ([#866](https://github.com/nanyx-lang/nanyx/issues/866)).
 - **Find references and rename** search the files of the document's package, but not other packages that depend on

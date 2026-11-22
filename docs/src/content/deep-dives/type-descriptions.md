@@ -1,12 +1,84 @@
 ---
 title: "Type descriptions"
-description: "How a match on a Type value is checked and what it compiles to"
+description: "Why types are passed and inspected as they are, how a match on a Type value is checked, and what it compiles to"
 order: 16
 ---
 
 A `match` on a `Type(a)` inspects the type it stands for, as [Inspecting a type](../tour/functions#inspecting-a-type)
-describes. This page says how the compiler checks one and what it compiles to. What is still planned is on
+describes. This page gives the design behind type arguments and descriptions, and says how the compiler checks a match
+on one and what it compiles to. What is still planned is on
 [Type members and reflection](../work-in-progress/type-members-and-reflection) in Work in progress.
+
+# Design
+
+Three problems led here. Code that follows a type's structure (serialisation, equality, hashing, printing) had to be
+written by hand or built into the compiler. A decoder, `def deserialise: [Decode(a)] string -> a`, mentions its type
+only in its output, so the call site had no good way to say which `a` it wants, as Haskell's `read` and Rust's `parse`
+have none, and where nothing fixed `a` the user got an ambiguity error that is hard to read. And a constraint over
+collections had to carry the element type everywhere, `[Iter(c, a)]`, though it follows from the container. Associated
+types ([Contexts](../advanced/contexts#associated-types)) answer the last; type arguments answer the other two. Both are
+the same thing: a record member whose value is a type.
+
+- **A type is passed as an argument,** `type a` or `into: type`, of type `Type(a)`, always written at the call. It is
+  the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`. The named form makes a type
+  parameter the same kind of member as an associated type, gives the argument a name at the call site, and matches the
+  constraint syntax; `type a` is its positional counterpart. A named type member is passed by name like any named
+  field: letting `deserialise(text, type Point)` skip that rule would make type arguments the one exception to a rule
+  that holds for every call and every record construction, and an author who wants positional calls declares
+  `type a`.
+- **Generic code is checked once, not per instantiation.** Inspection is type-checked when the generic function is
+  defined, as all generic code is. Nanyx does not adopt compile-time templates, at least for now: in Zig's `comptime`
+  and C++ templates, generic code is checked separately for each type it is used at, and errors appear inside library
+  code.
+- **Narrowing on a `Type` match only,** not full GADTs, and **a `build` the compiler provides** for decoding, not
+  rank-2 functions in the language.
+- **A nominal type is read-only to reflection outside its home module:** there its description is `#nominal`, with its
+  name and module but no structure and no `build`. Its encoding comes from its attached definitions or a context its
+  module provides.
+- **A description contains** field and case names and types, the type's name and module, its type parameters,
+  attributes on fields and doc comments.
+- **Customising an encoding:** a type that provides the library's context itself wins over walking its description, as
+  an explicit instance wins over synthesis, and attributes on fields cover renames without one.
+- **`Typed(a)` is synthesised for every type,** nominal ones too, so a function given a value of type `a` needn't also
+  take `type a`. It is the implicit counterpart of a type argument, as Haskell's `Typeable` is of `Proxy`, and as
+  Scala's `ClassTag` is usually an implicit parameter. The walker stays explicit: a record's fields have types the
+  checker never learns, so there is no `Typed` instance for them, only `f.type`, and a library takes `Typed(a)` in its
+  public function and passes the type explicitly in the code that walks it,
+  `def encode: [Typed(a)] a -> Json = { value -> encodeAt(value, typeOf) }`. Giving `Typed` of a nominal type
+  everywhere reveals nothing, since outside its home module its description is `#nominal`.
+
+Precedents: Jane Street's `typerep` for OCaml, GHC's `Type.Reflection`, and the "Scrap your boilerplate" approach
+(`Data`). Swift's `Mirror` and Go's `reflect` have a similar shape but are not typed.
+
+## Alternatives considered
+
+- **Runtime reflection.** C# and Java keep a description of every type at runtime and let any code inspect any value.
+  In a single WebAssembly module this costs binary size, defeats removal of unused code, and needs a description format
+  that the runtime and compiler agree on. It would also be an implicit capability, which in Nanyx would have to be a
+  context; `Typed(a)` is that context, resolved at compile time.
+- **Compile-time templates.** Zig's `comptime`, C++26 static reflection and D's templates allow arbitrary code over
+  types at compile time. They are very expressive, but generic code is only checked when it is instantiated, which
+  conflicts with checking generic code once. This could be revisited as a later extension if typed descriptions prove
+  too limited.
+- **Type-level induction over structure.** The compiler could expose a record as a type-level list of field names and
+  types, and libraries would handle the "no fields" and "one field, then the rest" cases with contexts whose instances
+  the compiler chains together. This is how PureScript's `RowToList` (used by `simple-json`), GHC Generics, Scala 3
+  Mirrors and shapeless work, and it suits Nanyx's row-like records. It needs instances for type constructors that
+  themselves require contexts, and field names as type-level strings. Users would program at the type level, and
+  errors would come from failed instance searches, which these libraries are known for.
+- **Deriving clauses and macros.** Haskell's `deriving`, Rust's `#[derive]` and procedural macros, and OCaml's ppx all
+  generate code from a type's definition. Nanyx has no compiler plugins that extend the language, which rules out
+  procedural macros and ppx. A built-in set of derivations would not let libraries add their own, such as JSON or SQL
+  mapping.
+- **Structural context synthesis.** Context synthesis works by name: the compiler builds `Add(Point)` from `Point`'s
+  attached definitions. Only the [well-known contexts](../advanced/contexts#common-contexts), `Eq`, `Ord`, `Hash` and
+  `ToString`, are also derived from structure, so that `Eq` of a record is built from the `Eq` of its fields. Opening
+  that to any context would need no new syntax, but it cannot express library-specific behaviour such as JSON field
+  names.
+- **Source generators.** C#'s source generators run user code at compile time that emits more source. The
+  [linter](../advanced/linters) infrastructure could host them, since linters will run Nanyx code at compile time.
+  Generated code would have to exist before type checking, while linters run after it, so generators would need their
+  own phase and a narrower view of the program. They remain an option for cases that type arguments cannot reach.
 
 # Checking
 

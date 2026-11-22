@@ -4,11 +4,11 @@ description: "Async, tasks, isolated processes, and keeping a crash from taking 
 order: 6
 ---
 
-Two questions that turn out to be one design. **Async:** an HTTP client, and soon a server, needs to wait on many
-things at once without a thread each. **Crash boundaries:** a crash ends the whole program today, and a server
-can't let one bad request do that. This page collects the ideas and recommends a direction. Async's direction is
-decided (direct style, B) and filed in stages ([Plan](#plan)), of which the first, the `Async` context, is built; the
-crash-boundary parts are still proposals.
+The `Async` context is built: a function that can wait requires it, and waits in direct style. How it is built, and
+why direct style, is on [Async](../deep-dives/async) in Deep dives. This page keeps what is still to come, which turns
+out to be one design for two questions. **Concurrency:** a program needs to wait on many things at once without a
+thread each. **Crash boundaries:** a crash ends the whole program, and a server can't let one bad request do that.
+Tasks are filed in stages ([Plan](#plan)); the crash-boundary parts are proposals.
 
 Two things are fixed already and constrain everything below:
 
@@ -17,7 +17,7 @@ Two things are fixed already and constrain everything below:
 - **Contexts are capabilities.** What a function may do is in its type, and a host decides what a program gets
   ([Hosts](./hosts)).
 
-# What a crash is today
+# What a crash does
 
 `crash`, `orCrash`, a failed `assert`, a [deferred error](./deferred-errors) and a non-exhaustive match all write a
 message to stderr and end in WebAssembly's `unreachable`, which **traps**. A trap unwinds the instance's whole stack
@@ -34,14 +34,14 @@ That rules out the obvious designs:
   crash happened is better done from outside, as below.
 
 So the unit a crash can be contained in is **an instance**: its own linear memory, which a trap leaves the others'
-untouched. The [test runner](./testing) already relies on this, a fresh instance per test, and the
-[HTTP host](./hosts#serving-http) runs each request in one.
+untouched. The [HTTP host](../advanced/hosts#the-http-host) runs each request in one, and the proposed
+[test runner](./testing) runs each test in one.
 
 # Recommendation in brief
 
 1. **Crash reports and a host crash hook.** Small, useful now, needed by everything else.
-2. **Async in direct style:** an `Async` context and structured concurrency, with no `async`/`await` keywords and no
-   coloured functions.
+2. **Async in direct style:** the `Async` context, which is built, and structured concurrency, with no
+   `async`/`await` keywords and no coloured functions.
 3. **Two levels of concurrency.** *Tasks* share an instance: cheap, and they crash together. *Processes* are
    instances: isolated, and a crash in one is a value to the others.
 4. **`isolate` first, processes and supervision after,** as a package on top.
@@ -67,97 +67,14 @@ This needs no language feature and makes every later step better, so it comes fi
 
 # 2. Async in direct style
 
-## The choice
+Direct style is decided and its first part is built: a function that can wait requires `Async`, there is no `await`
+keyword, and a host that can suspend provides `Async` ([Async](../deep-dives/async)). What follows is the rest: the
+rules that keep hidden suspension safe once there are tasks, starting and awaiting tasks, cancellation, and how tasks
+run.
 
-There are three ways to give Nanyx async.
-
-**A. A workflow,** as the [Workflows](../advanced/workflows) page sketched it before this was decided:
-
-```nanyx fragment
-def greeting = async {
-  def name = await! getName()
-  return "Hello, {name}"
-}
-```
-
-It needs no runtime support: the block is rewritten into continuations. But every function that waits must be
-written as a workflow and every caller must `await!` it, which is the "coloured function" problem of C#, JavaScript
-and Rust. A `list.map` over an async function needs an async `map`. And each `await!` allocates its continuation.
-
-**B. Direct style, with the waiting in the type as a context.** A function that can wait requires `Async`, and is
-otherwise an ordinary function:
-
-```nanyx fragment
-def greeting: [Async, Http] () -> string = {
-  def response = http.get("https://example.com/name") \orCrash("no name")
-  "Hello, {response.text}"
-}
-```
-
-There's no `await`: a call that waits suspends the calling task until it can carry on, as a blocking call reads.
-The colour is still in the type, as a context, but contexts are already polymorphic: `list.map` takes a
-`[c] a -> b`, so it maps an `[Async]` function with no second version. Inference adds `Async` to a function that
-calls one, as it adds `Console`. This is the model of OCaml 5's effects, Go, Java's virtual threads, and Flix and
-Unison's effect systems, and Nanyx's contexts are already most of the way there.
-
-**C. Every call can block, and nothing says so.** Go's model without the type. Simplest to write, but it loses what
-contexts are for: a function's type no longer says whether it can wait, and a host that can't suspend has no way to
-refuse a program that would.
-
-**Decided: B,** by the maintainer on 2026-11-17, with no visible `await` at a suspension point. It keeps
-capabilities in types, avoids colouring through context polymorphism, and the workflow form stays available for the
-cases a workflow is good at (generators, parsers), not for async.
-
-## What colouring costs in each
-
-A and B both put "this can wait" in the type; the difference is who pays for it.
-
-- **With A,** every generic function pays. `list.map(urls, fetch)` gives a `list(Task(Response))`, not the responses,
-  so the library needs a second set of functions for tasks (`async.traverse`, an async `fold`, an async `filter`),
-  the second standard library C# and Rust live with. Every function between the entry and the network call is written
-  in the workflow too.
-- **With B,** the prelude's higher-order functions are already generic in contexts (`[c] a -> b`), so
-  `urls \map { url -> http.get(url) }` works, and is `[Async]` because its lambda is.
-- **A function stored in data, in both.** A record field typed `string -> int` can hold neither A's
-  `string -> Task(int)` nor B's `[Async] string -> int`. What differs is the fix. In A the field is made generic in
-  its result, `type Handler(r) = (run: string -> r)`, and whoever calls `run` gets a `Task(int)` from one handler and
-  an `int` from another, so every consumer is written twice. In B the field is made generic in contexts,
-  `type Handler = [k] (run: [k] string -> int)`, as `seq`'s pull function is; whoever calls `run` gets an `int`
-  either way, and only needs `k` in scope. B's extra demand is that library authors know `[k]`-generic types, which
-  are less familiar than a type parameter.
-- **What B costs at run time** is suspending: nothing extra per call in a host that suspends instances or switches
-  stacks. With tasks compiled as state machines (#1890), an `Async` function that can wait keeps its live locals in a
-  frame on the heap, and one that can't pays nothing. A pays a closure
-  allocated per `await!`, which in-place reuse can't remove.
-
-So the recommendation isn't "B has no colour". It's that B's colour is a context, and contexts already have the
-polymorphism that makes colours cheap.
-
-## Where `Async` comes from
-
-Nothing starts it: like `Console`, the host provides it. A host that can suspend (the console host on Wasmtime, the
-HTTP host) runs the entry with `Async` in scope, and inference carries it down to every function that calls one that
-waits:
-
-```nanyx fragment
-::host nanyx.console
-
-def fetchName: [Async, Http] string -> string = { url ->
-  def response = http.get(url) \orCrash("no name")
-  response.text
-}
-
-println("Hello, {fetchName("https://example.com/name")}")    -- the top level already has Async and Http
-```
-
-- **No `async { }` block.** "May wait" is the `Async` context, which code has or doesn't. "Runs at the same time" is
-  [`start!`](#structured-concurrency). Those are the two things an `async` block mixes up in C# or JavaScript.
-- **Code without `Async` can't get it.** A library that doesn't ask for it provably never waits, as one that doesn't
-  ask for `Console` never prints.
-- **No `runBlocking`.** Inside a host that can suspend there's nothing to bridge, and in one that can't, a blocking
-  runner would need an event loop the host doesn't have. The missing-context error is the honest answer.
-- **The test host provides it too,** and can provide a deterministic one, with simulated time and a fixed task order,
-  so a test of `timeout` or `race` runs instantly and the same way every time.
+The test host, when there is one ([Testing](./testing)), provides `Async` too, and can provide a deterministic one,
+with simulated time and a fixed task order, so a test of `timeout` or `race` runs instantly and the same way every
+time.
 
 ## Rules that make hidden suspension safe
 
@@ -275,29 +192,25 @@ Decided by the maintainer on 2026-11-17 ([#1890](https://github.com/nanyx-lang/n
 
 ## How it runs
 
-The language doesn't change between these; the hosts and the backend do.
+The language doesn't change between these; the hosts and the backend do. Today a wait blocks its instance's thread
+and holds only that instance ([Async](../deep-dives/async#how-its-built)).
 
-- **First: a wait holds only its instance.** Built ([#1889](https://github.com/nanyx-lang/nanyx/issues/1889)): each
-  instance runs on a thread of its own, and a call that waits is a host call that blocks that thread, so `http.get`
-  holds only its instance, and the HTTP host answers other requests meanwhile, each in an instance of its own. Running
-  an instance on Wasmtime's own fiber stack, so that a wait suspends it and frees the thread, would scale further,
-  but the .NET embedding has no async API: it would mean calling Wasmtime's C API directly and running .NET host
-  functions on Wasmtime's stacks, which .NET doesn't support. A possible later optimisation
-  ([#1901](https://github.com/nanyx-lang/nanyx/issues/1901)). Tasks can be built on instances by running each as a
-  process (below), at the cost of copying.
-- **Then: tasks inside one instance, as compiler state machines** (decided 2026-11-20,
+- **Instances on fibers, maybe** ([#1901](https://github.com/nanyx-lang/nanyx/issues/1901)). Running an instance on
+  Wasmtime's own fiber stack, so that a wait suspends it and frees the thread, would scale further, but the .NET
+  embedding has no async API: it would mean calling Wasmtime's C API directly and running .NET host functions on
+  Wasmtime's stacks, which .NET doesn't support. A possible later optimisation. Tasks can also be built on instances
+  by running each as a process (below), at the cost of copying.
+- **Next: tasks inside one instance, as compiler state machines** (decided 2026-11-20,
   [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)). The backend compiles each `Async` function to a state
   machine, as C# and Rust compile async functions: it splits the function at each point where it can wait and keeps
   the locals that live across them in a frame on the heap, and a scheduler in the runtime runs an instance's tasks on
-  one stack. It needs nothing from the runtime, so the same module runs under Wasmtime on every OS and in a browser,
-  and a function that can't wait is compiled as before.
+  one stack. It needs nothing from the runtime, so the same module runs under Wasmtime on every OS and in a browser.
+  A function that can't wait is compiled as any other, and pays nothing.
 - **Stack switching, later** ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). WebAssembly's
   stack-switching proposal gives a module many stacks and lets it switch between them, so a task is a stack and
-  starting one costs about as much as a closure. It was the first plan, but the proposal is still experimental:
-  Wasmtime's implementation covers only some platforms and panics on Windows, and no browser ships it (Chrome's JSPI
-  is narrower). Once it is standard and widely supported, it comes back as a second way to compile tasks, behind the
-  same language.
-
+  starting one costs about as much as a closure. The proposal is still experimental: Wasmtime's implementation covers
+  only some platforms and panics on Windows, and no browser ships it (Chrome's JSPI is narrower). Once it is standard
+  and widely supported, it becomes a second way to compile tasks, behind the same language.
 A host that can't suspend at all (a plain WASI command with no async support) doesn't provide `Async`, and a program
 that needs it doesn't type-check there. That's the capability model doing its job.
 
@@ -305,7 +218,7 @@ that needs it doesn't type-check there. That's the capability model doing its jo
 
 A [lazy sequence](./lazy-sequences) carries the contexts its steps need, `[k] seq(a)`, so a sequence whose steps wait
 is just a `seq` with `Async` among them. That's what Kotlin calls a *flow*: a stream of values that are produced
-one at a time, possibly waiting between them, and only when someone reads them. `file.lines` is already this shape,
+one at a time, possibly waiting between them, and only when someone reads them. `file.lines` has this shape,
 with `FileSystem`.
 
 Kotlin's first flow example:
@@ -410,7 +323,7 @@ which is how every other failure looks. `Isolate` is a context the host provides
 
 Uses before there are any processes:
 
-- The **test runner**: a test's crash is `#crashed`, which is what the runner does by hand today.
+- The **test runner**: a test's crash is `#crashed`, and the runner records it and runs the next test.
 - The **HTTP host**: "each request in a fresh instance" is `isolate` per request, built from the same primitive.
 - A **playground or REPL**: a crashing snippet doesn't lose the session.
 - **Plugins**: running code the program doesn't trust, with only the contexts it's given.
@@ -453,13 +366,6 @@ def main = supervise(strategy = #oneForOne, [
 Processes can be scoped too: `supervise` returns only when its children have stopped, so a crash's reach is visible
 in the code.
 
-# What this changes on other pages
-
-- [Files, HTTP and JSON](./files-http-json) and [Hosts](./hosts): the calls that wait require `Async`, and the console
-  and HTTP hosts provide it. Done ([#1889](https://github.com/nanyx-lang/nanyx/issues/1889)).
-- [Workflows](../advanced/workflows#custom-keywords) no longer uses async as its example of a custom keyword. Done
-  ([#1889](https://github.com/nanyx-lang/nanyx/issues/1889)).
-
 # Open questions
 
 - **Fresh or reused instances.** `isolate` in a fresh instance gives clean memory; reusing a warm one is faster but
@@ -479,12 +385,10 @@ in the code.
 
 # Plan
 
-Async is filed in three stages, after the keyword kinds. The crash-boundary steps are still proposals, not filed.
+The rest of async is filed in stages. The crash-boundary steps are proposals, not filed.
 
 | Step | Issue | Stage |
 |---|---|---|
-| The `#delay` and `#bindF` keyword kinds ([Keyword kinds](../advanced/workflows#keyword-kinds)) | [#1879](https://github.com/nanyx-lang/nanyx/issues/1879) | Done |
-| Async 1: the `Async` context, provided by hosts; a wait holds only its instance | [#1889](https://github.com/nanyx-lang/nanyx/issues/1889) | Done |
 | Async 2: `start!`, `await` and `race`, each def a scope, tasks as compiler state machines | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
 | Tasks on stack switching, once it's standard and widely supported | [#2164](https://github.com/nanyx-lang/nanyx/issues/2164) | Planning |

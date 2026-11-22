@@ -31,8 +31,7 @@ the backlog:
 | Refactorings | [Refactorings](./refactorings) | [`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) |
 | Code quality | — | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
 
-[The parser](./parser) proposes moving the parser to a lexer and a hand-written parser, in stages.
-The compilation workstream has pages of its own for the larger pieces of its design:
+The compilation workstream has pages of its own for the larger pieces of its design: [the parser](./parser),
 [deferred errors](./deferred-errors),
 [tail calls](./tail-calls), [memory management](./memory-management), [inlining](./inlining)
 and [lazy sequences](./lazy-sequences). How the standard library is built is in

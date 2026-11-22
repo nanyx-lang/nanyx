@@ -4,26 +4,21 @@ description: "What is still open about the info view, doc comments, the library 
 order: 30
 ---
 
-> Doc comments, the info view, the library browser and search by type are built, and described for users on
-> [VS Code extension](../standard-tools/vs-code-extension#info-view),
-> [Basics](../getting-started/basics#doc-comments) and [The nanyx command](../standard-tools/command-line#the-standard-library).
-> This page keeps what is [still open](#still-open) and the [open questions](#open-questions). Work is tracked under
-> the `lsp` label.
-
-The info view (`NyxCompiler.InfoView`, `NyxCompiler.ContextFlow`, the server's `nanyx/infoView` request and
-`extension/src/infoView.ts`) is modelled on the infoview in Lean 4's VS Code extension. The library browser and search
-by type (`NyxCompiler.LibraryCatalog`, `NyxCompiler.LibrarySearch`, the `nanyx/libraryModules`, `nanyx/libraryModule`,
-`nanyx/librarySearch` and `nanyx/addImport` requests) read the exports of the checked standard library.
+Doc comments, the info view, the library browser and search by type are described for users on
+[VS Code extension](../standard-tools/vs-code-extension#info-view),
+[Basics](../getting-started/basics#doc-comments) and [The nanyx command](../standard-tools/command-line#the-standard-library),
+and how they are built in [Language server](../deep-dives/language-server#the-info-view-and-the-library-browser). This
+page keeps what is [still open](#still-open) and the [open questions](#open-questions). Work is tracked under the `lsp`
+label.
 
 # Still open
 
 - **Doc comments by symbol.** `Documentation.Reader` parses the file a symbol is declared in for its doc comments.
   Recording them by symbol in `TypedModule` would let the info view and the browser read them as they read types.
 - **A tag's and a record field's doc comment.** A tag has no symbol, so its doc comment is attached but not shown
-  anywhere yet; nor is a record field's on a member completion.
-- **A `memory` block** is part of the scope it is in. Now that a block can name its `Memory`,
-  `memory { context m -> … }` ([#1446](https://github.com/nanyx-lang/nanyx/issues/1446)), it may become a scope of
-  its own in the info view, since it is where a scoped context lives.
+  anywhere; nor is a record field's on a member completion.
+- **A `memory` block** is part of the scope it is in. A block can name its `Memory`, `memory { context m -> … }`, so it
+  may become a scope of its own in the info view, since it is where a scoped context lives.
 - **A module's types.** The info view lists no module's types, so it shows no kind; a library browser that lists them
   should show which are [nominal](../advanced/nominal-and-protected-types), `protected` or `private`.
 - **A pinned position** does not move with edits above it.

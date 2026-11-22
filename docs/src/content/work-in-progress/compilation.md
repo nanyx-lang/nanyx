@@ -38,15 +38,12 @@ Out of scope here, with their own workstreams:
 - **Features can reach the three phases unevenly.** A construct may parse before it type-checks, and type-check
   before the backend can generate code for it. Gaps are filed per phase under the `parser`, `type checker` and
   `wasm backend` labels.
-- **Type and name errors are deferred.** A debug build runs in spite of them, reporting each if the program reaches
-  it; `--release` refuses them. See [Deferred errors](./deferred-errors).
-- **A parse error stops everything.** There is no error recovery, so one syntax error hides every problem after
-  it. The language server needs recovery too. See [The parser](./parser).
-- **Some defs are still solved afresh.** The type checker holds one list of constraints for the
-  whole module and solves it again as it goes (`Solving.unifyDetailed`). A list is solved on top of the last one
-  solved, or of the checkpoint the type checker made once it generalised the def before (`Solving.checkpoint`), when
-  that can't change the result. Defs that share a variable (mutual recursion, a use before the def is checked) and a
-  module with a type error still solve afresh, newest first.
+- **A syntax error hides the rest of its item.** The parser reads on at the next top-level item, but not inside the
+  item the mistake is in, so later problems in that item are not reported. See [The parser](./parser).
+- **Some defs are solved afresh.** A list of constraints is solved on top of the last one solved, or of a checkpoint,
+  when that can't change the result ([Solving constraints](../deep-dives/compilation#solving-constraints)). Defs that
+  share a variable (mutual recursion, a use before the def is checked) and a module with a type error solve afresh,
+  newest first.
 
 # Goals
 

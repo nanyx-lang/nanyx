@@ -1,5 +1,5 @@
-/// A `for` loop over a `seq(a)` value pulls it one element at a time, the body running between pulls (#1698, see
-/// docs/src/content/work-in-progress/lazy-sequences.md).
+/// A `for` loop over a `seq(a)` value pulls it one element at a time, the body running between pulls (see
+/// docs/src/content/deep-dives/lazy-sequences.md).
 module TranspilerWasmTests.Features.Loops.RunSeqLoop
 
 open Xunit
