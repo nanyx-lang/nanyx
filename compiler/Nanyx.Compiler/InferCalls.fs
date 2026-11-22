@@ -75,13 +75,18 @@ let internal inferCall
                 // An open record's fields are the ones it lists: its other fields are kept, and can't be updated.
                 // The record's type may be known only from constraints not yet applied to it: a payload a match
                 // binds of a call's result.
+                let baseTy = Unifier.unalias (resolveSoFar afterBase typedBase.Type)
                 let updatable =
-                    match Unifier.unalias (resolveSoFar afterBase typedBase.Type) with
+                    match baseTy with
                     | TyOpenRecord(fields, _) -> Some fields
                     | ty -> recordFieldsOf ty
-                match updatable with
-                | None -> Error [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate baseExpr.Span "`with` needs a record whose fields are known here" ]
-                | Some fields ->
+                match updatable, baseTy with
+                | None, _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate baseExpr.Span "`with` needs a record whose fields are known here" ]
+                // An updated value of a nominal type is a new one, and only the type's home module makes those.
+                | Some _, TyNominal(nominal, _, _, isPrivate) when not (inNominalHome afterBase nominal expr.Span) ->
+                    let message = ProtectedShapes.updatedOutside afterBase (Map.toList env.Names) nominal isPrivate
+                    Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule expr.Span message ]
+                | Some fields, _ ->
                     let mutable current = afterBase
                     let mutable errors: Diagnostic list = []
                     // A field that isn't the record's is reported at its name, with the record's field closest to it.
