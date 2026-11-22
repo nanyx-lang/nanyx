@@ -85,6 +85,9 @@ backend writes, flat or folded: WebAssembly 2.0's numeric, variable, memory and 
 `return_call` and `return_call_indirect`, and no passive segments, SIMD or reference instructions. Functions keep their
 names in the `name` section, so a trap's backtrace, and the runner's out-of-memory check, see them as they do for the
 text. A form it doesn't read is a `WasmAssemblyError`, which the CLI reports as a compiler bug.
+`WatSyntax.read` keeps the lists it is in on a stack of its own, and `assemble` runs on a large stack
+(`Nanyx.LargeStack.run`), as writing a folded instruction recurses once per level it nests: an `else if` chain of
+thousands of branches nests its `if`s thousands deep.
 
 The tests run programs that print, trap, make a million tail calls, and use closures, records and tags from the binary
 and the text and compare what they do (`Features/Binary/WasmBinaryTests.fs`), assemble every end-to-end test's module

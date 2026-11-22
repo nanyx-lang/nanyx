@@ -186,7 +186,7 @@ soon as the compiler is ready (see [The page](#the-page)), while you read it or 
 
 **What differs in the browser.**
 
-- **Threads.** `LargeStack.run` runs the checker and the WebAssembly backend on a thread with a 1 GB stack. The browser
+- **Threads.** `LargeStack.run` runs the checker, the WebAssembly backend and its assembler on a thread with a 1 GB stack. The browser
   runs .NET on one thread and can't start another, so in the browser it runs the work on the calling thread instead.
   That thread's stack is the runtime's, much smaller, so code nested thousands deep, which the large stack is there for,
   may run out of stack in the browser. None of the examples came near it.
