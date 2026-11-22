@@ -196,7 +196,7 @@ println(s())
 """
     Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
 
-/// A block that installs a `Holder` whose `get` is `member`, of the type `memberType`, and gives back `result`.
+/// A block that installs a `Holder` whose `get`, of the type `memberType`, is `memberValue`, and gives back `result`.
 let private holding (memberType: string) (memberValue: string) (result: string) =
     $"import nanyx/mref\n\ncontext Holder = (get: {memberType})\n\ncontext Store(a) = (take: () -> a)\n\ndef taken: [Store(a)] () -> a = {{ take() }}\n\ndef x = memory {{\n  def r = MRef.new(1)\n  use Holder(get = {memberValue})\n  use Store(take = {{ 1 }})\n  {result}\n}}\n"
 
