@@ -50,7 +50,9 @@ const DEBOUNCE_MILLISECONDS = 150;
  * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
  * while you edit elsewhere. While it is visible and not pinned, it highlights in the editor what the server says to: on
  * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts. The code it shows is
- * highlighted as the editor highlights it, in the current theme's colours (see `Highlighter`).
+ * highlighted as the editor highlights it, in the current theme's colours (see `Highlighter`). The view tells the server
+ * how many characters fit across it, so that a signature too long for it is laid out as the formatter lays out a def's,
+ * and asks again when it is resized.
  */
 class InfoView {
     constructor(client, extensionPath) {
@@ -154,7 +156,13 @@ class InfoView {
         }
     }
     receive(message) {
-        if (message.type === "pin") {
+        if (message.type === "width" && message.columns !== undefined) {
+            if (message.columns !== this.columns) {
+                this.columns = message.columns;
+                this.schedule();
+            }
+        }
+        else if (message.type === "pin") {
             this.pinned = this.pinned ? undefined : this.cursor();
             this.schedule();
         }
@@ -199,7 +207,8 @@ class InfoView {
             try {
                 const result = await client.sendRequest(INFO_VIEW_REQUEST, {
                     textDocument: { uri: client.code2ProtocolConverter.asUri(target.uri) },
-                    position: client.code2ProtocolConverter.asPosition(target.position)
+                    position: client.code2ProtocolConverter.asPosition(target.position),
+                    width: this.columns
                 });
                 shown = result
                     ? { kind: "info", where, pinned, scopes: await withHighlightedCode(this.highlighter, await withRenderedDocumentation(result.scopes)) }
@@ -337,6 +346,7 @@ function page(webview) {
   code a.name:hover span { color: inherit !important; }
   .detail { color: var(--vscode-descriptionForeground); font-size: 0.9em; white-space: nowrap; }
   .empty, .message { color: var(--vscode-descriptionForeground); }
+  code.ruler { position: absolute; visibility: hidden; white-space: pre; }
   li.error code { color: var(--vscode-errorForeground); }
 </style>
 </head>
@@ -352,6 +362,27 @@ function page(webview) {
   const open = {};
   pin.textContent = "Pin";
   pin.addEventListener("click", () => vscode.postMessage({ type: "pin" }));
+
+  // How many characters of code fit across an item, in the editor's font: the server lays out a signature that is
+  // longer on several lines, as the formatter does. Measured again, and the view asked again, when the view is resized.
+  const ruler = element("code", "ruler", "0".repeat(100));
+  document.body.appendChild(ruler);
+  let columns;
+  let resized;
+  function measure() {
+    const character = ruler.getBoundingClientRect().width / 100;
+    // An item's code starts past the list's indent.
+    const fit = character > 0 ? Math.max(20, Math.floor((main.clientWidth - 16) / character)) : undefined;
+    if (fit !== undefined && fit !== columns) {
+      columns = fit;
+      vscode.postMessage({ type: "width", columns });
+    }
+  }
+  new ResizeObserver(() => {
+    clearTimeout(resized);
+    resized = setTimeout(measure, 100);
+  }).observe(main);
+  measure();
 
   function element(tag, className, text) {
     const node = document.createElement(tag);

@@ -18,6 +18,7 @@ how it decides where lines break, and how it guarantees it never changes what a 
 | Printing | `compiler/Nanyx.Formatter`: a syntax tree in, Nanyx source out |
 | CLI | `nanyx format` (`FormatCommand`) |
 | Editor | `FormattingHandler` and `RangeFormatting` in the language server |
+| Info view | `SignatureLayout.layOut`: a signature written for a reader (`name: type`), laid out as a def's at the view's width |
 
 The formatter only moves whitespace and comments, adds or removes brackets and blank lines, and sorts imports. Style
 diagnostics (naming, unused code, preferring one construct to another) belong to the

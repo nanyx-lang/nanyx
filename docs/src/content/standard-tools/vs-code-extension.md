@@ -203,6 +203,11 @@ inside `module Points`, which declares `Point`, it is `Point`, not `Points.Point
 after `import Points` and `q.Point` after `import Points as q`. Where a type can be named more than one way, the view
 uses the name with the fewest dots.
 
+A signature too long for the view is laid out as the formatter lays out a definition's, at the view's width: the name
+on its own line, then its type on the next, after `: `. It is laid out again when you resize the view. A type still
+too long for its line wraps; the formatter does not yet break a long union or parameter list
+([#2270](https://github.com/nanyx-lang/nanyx/issues/2270)).
+
 - **At the cursor**:
   - **Expression**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it
     shows the function's declared signature first (its annotation, or the generic type it was inferred to have), then
