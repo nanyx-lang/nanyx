@@ -283,3 +283,62 @@ let leave (call: Expression) (state: InferState) : InferState =
             { state with
                 FailedExprs = (call.Id, errors) :: state.FailedExprs
                 EscapedContexts = supplied |> List.map fst |> Set.ofList |> Set.union state.EscapedContexts }
+
+/// `ty` without what each function type in it requires where it is called.
+let rec private withoutContexts (ty: Ty) : Ty =
+    match ty with
+    | TyFunc(input, output, _) -> TyFunc(withoutContexts input, withoutContexts output, [])
+    | TyNominal(nominal, args, underlying, isPrivate) -> TyNominal(nominal, List.map withoutContexts args, underlying, isPrivate)
+    | _ -> Ty.map withoutContexts ty
+
+/// The instance `value`, a context's, that a `use` loads in `env`: the errors, if one of its members holds what belongs
+/// to a call around the `use` that supplies a scoped context, such as a `memory` block's reference, which would leave
+/// the call through the member's type in the context, written without that scope; and `env` with each member that
+/// requires such a context where it is called, as one that changes the block's cells does, requiring it on its name,
+/// so that naming it can't take it out of the call either.
+let instanceInScope (env: TypeEnv) (state: InferState) (value: Expression) : Diagnostic list * TypeEnv =
+    match value.Kind with
+    | FunctionCall(name, _, args) when state.UseInstances.Contains value.Id ->
+        let state = MemoryCells.settleBlock env state
+        let resolve = Unifier.applySolved (fst (Solving.solve state.Constraints))
+        // Each scope open around the `use`, with the context it is of.
+        let openScopes =
+            state.SupplyingCalls
+            |> Map.values
+            |> Seq.collect (fun (supplied, _, _) -> supplied)
+            |> Seq.map (fun (context, scope) -> context, resolve scope)
+            |> Seq.filter (fun (_, scope) -> state.OpenScopes |> List.exists (resolve >> (=) scope))
+            |> Seq.distinct
+            |> List.ofSeq
+        let members =
+            args
+            |> List.collect (fun arg ->
+                match arg.Kind with
+                | RecordExpr fields -> fields |> List.choose (function NamedField(memberName, field) -> Some (Some memberName, field) | PositionalField _ -> None)
+                | _ -> [ None, arg ])
+            |> List.choose (fun (memberName, field) -> state.ExprTypes |> Map.tryFind field.Id |> Option.map (fun ty -> memberName, field, resolve ty))
+        let errors =
+            members
+            |> List.choose (fun (_, field, ty) ->
+                openScopes
+                |> List.tryFind (fun (_, scope) -> mentions scope (withoutContexts ty))
+                |> Option.map (fun (context, _) ->
+                    Diagnostics.at DiagnosticCodes.ScopedContextEscapes field.Span
+                        $"This member of the '{name}' instance holds what belongs to the '{context}' of a call around the `use`, which its type in '{name}' doesn't say, so it could leave the call through the context: give the member what it works on as an argument instead"))
+        let env =
+            members
+            |> List.fold (fun current (memberName, _, ty) ->
+                match memberName, Unifier.unalias ty with
+                | Some memberName, TyFunc(_, _, contexts) ->
+                    let required =
+                        contexts
+                        |> List.filter (function
+                            | FunctionContexts.ScopedContext(_, scope) -> openScopes |> List.exists (snd >> (=) (resolve scope))
+                            | _ -> false)
+                    match required, TypeEnv.tryFind memberName current with
+                    | _ :: _, Some ({ Type = TyFunc(input, output, own) } as scheme) ->
+                        TypeEnv.extend memberName { scheme with Type = TyFunc(input, output, own @ required) } current
+                    | _ -> current
+                | _ -> current) env
+        errors, env
+    | _ -> [], env
