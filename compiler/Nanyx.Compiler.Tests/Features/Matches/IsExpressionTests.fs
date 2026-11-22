@@ -29,6 +29,16 @@ let ``a name a test binds is not in scope outside its chain`` () =
     Assert.Equal("v", unknownName "def f = { o: #some(int) | #none -> not (o is #some(v) and v > 1) and v > 2 }\n")
 
 [<Fact>]
+let ``brackets around a test only group it, so its names are in scope for the rest of its and chain`` () =
+    Assert.Empty((Compiler.compile "def f = { o: #some(int) | #none -> (o is #some(v)) and v > 3 }\n").Diagnostics)
+    Assert.Empty((Compiler.compile "def f = { a: #some(int) | #none, o: #some(int) | #none -> (a is #some(x) and o is #some(v)) and x + v > 3 }\n").Diagnostics)
+    Assert.Empty((Compiler.compile "def f = { o: #some(int) | #none -> if (o is #some(v)) then v else 0 }\n").Diagnostics)
+
+[<Fact>]
+let ``a name a bracketed test binds is not in scope past the or its brackets end at`` () =
+    Assert.Equal("v", unknownName "def f = { o: #some(int) | #none -> ((o is #some(v)) or false) and v > 3 }\n")
+
+[<Fact>]
 let ``an if's chain binds its names in the then branch and not in the else branch`` () =
     Assert.Empty((Compiler.compile "def f = { o: #some(int) | #none -> if o is #some(v) and v > 1 then v else 0 }\n").Diagnostics)
     Assert.Equal("v", unknownName "def f = { o: #some(int) | #none -> if o is #some(v) and v > 1 then 1 else v }\n")
