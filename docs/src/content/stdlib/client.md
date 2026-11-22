@@ -54,7 +54,7 @@ reason, described.
 
 ```nanyx fragment
 context Http = (
-  sendRequest: [Async] Request -> #some(Response) | #timeout | #connectionFailed(string) | #invalidUrl | #other(string)
+  sendRequest: [Async] Request -> #some(Response) | HttpError
 )
 ```
 

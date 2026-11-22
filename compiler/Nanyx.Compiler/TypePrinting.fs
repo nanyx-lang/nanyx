@@ -63,10 +63,19 @@ module TypePrinting =
         | TyRecursive(body, _) -> scopedContextsInPrintOrder body
         | _ -> []
 
+    /// A union alias in scope, by the name it is known by there, and the tags it stands for: a union that holds all of
+    /// them is written with its name (see `unionAliasesIn`).
+    type internal UnionAlias = { Name: string; Tags: Ty list }
+
     /// How `printTy` writes a type: an open record's or union's rest is spread with `Spread`, each scoped context of a
-    /// name `ty` requires at more than one scope is numbered by its scope's place in `Scopes`, and `Associated` gives
-    /// the names of the associated types of a context, its last arguments (see `AssociatedTypes`).
-    type internal Printing = { Spread: string; Scopes: Map<string, Ty list>; Associated: string -> string list }
+    /// name `ty` requires at more than one scope is numbered by its scope's place in `Scopes`, `Associated` gives
+    /// the names of the associated types of a context, its last arguments (see `AssociatedTypes`), and a union is
+    /// written with the names of the `Unions` whose tags it holds (see `withUnionAliases`).
+    type internal Printing =
+        { Spread: string
+          Scopes: Map<string, Ty list>
+          Associated: string -> string list
+          Unions: UnionAlias list }
 
     /// The names of the associated types of each context of `typeDefs`, by the name it is known by there: none for
     /// any other name.
@@ -75,15 +84,62 @@ module TypePrinting =
         | Some info when info.IsContext -> info.AssociatedTypes
         | _ -> []
 
+    /// The union aliases of `typeDefs` a union is written with, in the order `withUnionAliases` tries them: the one of
+    /// the most tags first, then, of as many, by the name each is written by, one with the fewest dots first (one of the
+    /// module's own top level, or one it imports by name, before one of a module block or one imported under a module's
+    /// alias), then the shortest, then the first by name. An alias a module imports under a module's alias is written
+    /// through it, `lib.Answer`, as hover writes a type of it (see `Signatures.writable`). An alias is one of a union of
+    /// two or more tags, with no parameters: an alias of one tag would rename that tag wherever it is written.
+    let internal unionAliasesIn (typeDefs: Map<string, TypeDefInfo>) : UnionAlias list =
+        let dots (name: string) = name |> Seq.filter ((=) '.') |> Seq.length
+        typeDefs
+        |> Map.toList
+        |> List.choose (fun (name, info) ->
+            match info.Underlying with
+            | TyUnion tags when
+                not info.IsNominal
+                && not info.IsContext
+                && info.Parameters.IsEmpty
+                && tags.Length >= 2
+                && tags |> List.forall (function TyTag _ -> true | _ -> false)
+                ->
+                Some (TypeDefInfo.nominalId info, { Name = name; Tags = tags })
+            | _ -> None)
+        |> List.groupBy fst
+        |> List.map (fun ((id: NominalId), named) ->
+            let names = named |> List.map snd
+            // The compiler knows an alias by its own name, which a module that imports it under an alias doesn't write.
+            match names |> List.filter (fun alias -> alias.Name <> id.Name) with
+            | [] -> names.Head
+            | imported -> imported |> List.minBy (fun alias -> dots alias.Name, alias.Name.Length, alias.Name))
+        |> List.sortBy (fun alias -> -alias.Tags.Length, dots alias.Name, alias.Name.Length, alias.Name)
+
+    /// The members of a union, with the tags of each of `aliases` that it holds all of, with the same payloads, written
+    /// as the alias, where the first of them is: `#some(string) | FsError`. A union with only some of an alias's tags
+    /// is written out. The aliases are tried in order, so of two that hold the same tag, the earlier is written.
+    let internal withUnionAliases (aliases: UnionAlias list) (members: Ty list) : Ty list =
+        aliases
+        |> List.fold (fun (members: Ty list) alias ->
+            let isAliasTag ty = List.contains ty alias.Tags
+            if alias.Tags |> List.forall (fun tag -> List.contains tag members) then
+                let first = List.findIndex isAliasTag members
+                members
+                |> List.indexed
+                |> List.choose (fun (index, item) ->
+                    if index = first then Some (TyAlias(alias.Name, [], TyUnion alias.Tags))
+                    elif isAliasTag item then None
+                    else Some item)
+            else members) members
+
     /// `Printing` for `ty`: the scopes of each scoped context it requires at more than one, in order of first appearance.
-    let internal printingFor (spread: string) (associated: string -> string list) (ty: Ty) : Printing =
+    let internal printingFor (spread: string) (associated: string -> string list) (unions: UnionAlias list) (ty: Ty) : Printing =
         let scopes =
             scopedContextsInPrintOrder ty
             |> List.groupBy fst
             |> List.map (fun (name, found) -> name, found |> List.map snd |> List.distinct)
             |> List.filter (fun (_, scopes) -> scopes.Length > 1)
             |> Map.ofList
-        { Spread = spread; Scopes = scopes; Associated = associated }
+        { Spread = spread; Scopes = scopes; Associated = associated; Unions = unions }
 
     /// `context` as `p` writes it among a function type's contexts: a scoped one numbered when `p` numbers its name, as
     /// `Memory₁`, and without its scope.
@@ -257,9 +313,10 @@ module TypePrinting =
         | TyApply(name, args) -> $"{name}({items args})"
         // A union of no tags has no values: the bottom type.
         | TyUnion [] -> "undefined"
-        // A rest named nothing (see `displayRenaming`) is written as a bare spread: `#some(int) | ...`.
+        // A rest named nothing (see `displayRenaming`) is written as a bare spread: `#some(int) | ...`. The tags of a
+        // union alias in scope are written as its name (see `withUnionAliases`).
         | TyUnion members ->
-            members
+            withUnionAliases p.Unions members
             |> List.map (function TyPrimitive "" -> p.Spread | item -> grouped item)
             |> String.concat " | "
         // Only inside what a recursive alias stands for, which is written by the alias's name.
@@ -274,7 +331,7 @@ module TypePrinting =
         | TyContexts contexts -> $"""[{writtenContexts contexts |> List.map (contextAsPrinted p >> printTy p false) |> String.concat ", "}]"""
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
-    let tyToString (ty: Ty) : string = printTy (printingFor "..." (fun _ -> []) ty) true ty
+    let tyToString (ty: Ty) : string = printTy (printingFor "..." (fun _ -> []) [] ty) true ty
 
     /// The type variables of `ty` in the order `tyToString` prints them, each as many times as it is printed. A
     /// nominal's or alias's underlying type is not printed, so its variables are not included (its arguments' are).

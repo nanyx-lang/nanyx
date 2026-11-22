@@ -182,6 +182,20 @@ def total = memory { context m ->
 """
     Assert.Equal<string list>([], codes source)
 
+[<Fact>]
+let ``A script that uses what escaped its block is told only of the escape`` () =
+    let source =
+        """
+import nanyx/mref
+def s = memory {
+  def r = MRef.new(10)
+  { MRef.get(r) }
+}
+
+println(s())
+"""
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)
+
 /// A block that installs a `Holder` whose `get` is `member`, of the type `memberType`, and gives back `result`.
 let private holding (memberType: string) (memberValue: string) (result: string) =
     $"import nanyx/mref\n\ncontext Holder = (get: {memberType})\n\ncontext Store(a) = (take: () -> a)\n\ndef taken: [Store(a)] () -> a = {{ take() }}\n\ndef x = memory {{\n  def r = MRef.new(1)\n  use Holder(get = {memberValue})\n  use Store(take = {{ 1 }})\n  {result}\n}}\n"
