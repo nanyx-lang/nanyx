@@ -121,7 +121,7 @@ the versions it finds are the lockfile `Package.scriptModules` reads, so a pin t
 package from the index with no version is `NYX0009`, whose fix writes the newest version the index has
 (`Resolution.newest`, kept for five minutes, since the editor checks a script as it is typed).
 
-- **Not built:** `--offline`.
+- **Not built:** `--offline` ([#2266](https://github.com/nanyx-lang/nanyx/issues/2266)).
 - A dependency on GitHub (`github =` in the manifest, `github:` in a script's `::dependency`) is read and checked, and
   resolved through `GitHubFetcher` (`GitHub.fs`). A build's store fetches with `GitHub.cached`, which reads only the
   cache and fails with `NotPulled` (`NYX0041`); `nanyx pull` wraps the shell's store in `PackageStore.downloading`,

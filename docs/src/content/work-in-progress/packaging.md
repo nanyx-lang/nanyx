@@ -55,7 +55,7 @@ cache, read by builds and filled by `nanyx pull`; `api.json` and `nanyx bump`
 `api-check` ([#865](https://github.com/nanyx-lang/nanyx/issues/865)). A program compiles to one WebAssembly module: imported modules
 are checked separately and their items inlined, so there is no compiled artifact per module or package.
 
-Not built: the index's check of a release's API (in nanyx-lang/packages, part of #865); projects (`.nyxproj`,
+Not built: projects (`.nyxproj`,
 [#1386](https://github.com/nanyx-lang/nanyx/issues/1386)); `nanyx manifest` beyond `--json`; and the editor's side. How
 the package commands are built is on [The nanyx command](../deep-dives/command-line#packages).
 # Goals
@@ -125,12 +125,11 @@ rules, and `api.json` and `nanyx bump`, which are built (`PackageApi.fs`), are d
 [Versions](../tour/packages#versions). `nanyx publish` refuses a version whose bump is too small, listing the changes
 that need a bigger one, and the index refuses a release that skipped the check.
 
-`nanyx api-check` runs the comparison on two `.nyxpkg` files, for the index's sync, which is to download the latest
-compiler release and run it on each new release against the newest version recorded below it, reporting a release that
-fails rather than recording it.
-
-`nanyx publish` runs the same check against the newest version published below the one it publishes
-(`PackageApi.publishCheck`). **Left for #865:** the index's sync running `nanyx api-check`.
+`nanyx publish` runs the check against the newest version published below the one it publishes
+(`PackageApi.publishCheck`). `nanyx api-check` runs it on two `.nyxpkg` files, for the index's sync, which downloads the
+latest compiler release and runs it on each new release against the newest version recorded below it that isn't yanked
+and is available, reporting a release that fails rather than recording it
+([nanyx-lang/packages#4](https://github.com/nanyx-lang/packages/pull/4)).
 ## What a package is
 
 A published package is a `.nyxpkg` file, built ([#863](https://github.com/nanyx-lang/nanyx/issues/863)): a zip of the
@@ -145,7 +144,9 @@ and check it against the index's SHA-256.
   level. The cache keeps each package's checked modules, for the compiler that checked them
   ([The cache and offline builds](#the-cache-and-offline-builds)).
 - **Not built:** the readme and licence in the archive, and the manifest's `package` gaining `nanyx = "0.14"` (the
-  minimum compiler version), `license` and `description`. Its `repository` is built: `nanyx publish` needs it.
+  minimum compiler version, which the index already reads and the resolver already honours,
+  [#2263](https://github.com/nanyx-lang/nanyx/issues/2263)), `license` and `description`
+  ([#2264](https://github.com/nanyx-lang/nanyx/issues/2264)). Its `repository` is built: `nanyx publish` needs it.
 - `api.json` is what the API comparison and the package website read, so neither has to compile the package.
 ## Where packages live
 
@@ -233,7 +234,8 @@ cache beside it, in the standard library's checked format, and later builds read
 ([#2167](https://github.com/nanyx-lang/nanyx/issues/2167); how, on
 [The nanyx command](../deep-dives/command-line#packages)). A package found by its path is always checked from source.
 
-**Not built:** `nanyx build --offline`, which stops a build that would update the lockfile from reaching the index; and
+**Not built:** `nanyx build --offline`, which stops a build that would update the lockfile from reaching the index
+([#2266](https://github.com/nanyx-lang/nanyx/issues/2266)); and
 `nanyx pull` checking what it downloads, so that the first build after it is fast too.
 
 ## The editor
@@ -253,20 +255,26 @@ import syntax ([#289](https://github.com/nanyx-lang/nanyx/issues/289)), path dep
 ([#1472](https://github.com/nanyx-lang/nanyx/issues/1472), [#1742](https://github.com/nanyx-lang/nanyx/issues/1742)),
 the lockfile and the cache ([#863](https://github.com/nanyx-lang/nanyx/issues/863)), the index
 ([#209](https://github.com/nanyx-lang/nanyx/issues/209)), `export module`
-([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)), and `api.json`, the API comparison and `nanyx bump`
-(#1470), and a script's dependencies on packages from the index, each pinned at the exact version its `::dependency`
+([#1457](https://github.com/nanyx-lang/nanyx/issues/1457)), `api.json`, the API comparison and `nanyx bump`
+(#1470), publishing, with `nanyx publish`, `yank` and the index's check of each release's API
+([#865](https://github.com/nanyx-lang/nanyx/issues/865), [nanyx-lang/packages#4](https://github.com/nanyx-lang/packages/pull/4)),
+and a script's dependencies on packages from the index, each pinned at the exact version its `::dependency`
 writes ([#867](https://github.com/nanyx-lang/nanyx/issues/867), see
 [Package ownership and locking](./package-ownership-and-locking#scripts)). Local packages came first, so that hosts and linters could become packages
 ([Built-ins as packages](./built-ins-as-packages)) without waiting for downloads.
 
 1. **The official linter as a shipped package**, once its contract exists
    ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
-2. **Publishing.** `nanyx publish` and `yank` are built; the index's check of a release's API, in its sync
-   ([#865](https://github.com/nanyx-lang/nanyx/issues/865)), is left.
-3. **The index:** recording owners' account IDs, and mirroring artifacts.
-4. **Projects** (`.nyxproj`, project references) when a workspace of several packages needs them
+2. **The index:** recording owners' account IDs, and mirroring artifacts.
+3. **Projects** (`.nyxproj`, project references) when a workspace of several packages needs them
    ([#1386](https://github.com/nanyx-lang/nanyx/issues/1386)).
-5. **Editor support.** Resolve packages in the language server; pull from the extension.
+4. **Editor support.** Resolve packages in the language server; pull from the extension
+   ([#866](https://github.com/nanyx-lang/nanyx/issues/866)).
+5. **The manifest's and the CLI's remaining parts:** the oldest compiler a package builds with
+   ([#2263](https://github.com/nanyx-lang/nanyx/issues/2263)), its licence and description
+   ([#2264](https://github.com/nanyx-lang/nanyx/issues/2264)), `nanyx update`
+   ([#2265](https://github.com/nanyx-lang/nanyx/issues/2265)) and `--offline`
+   ([#2266](https://github.com/nanyx-lang/nanyx/issues/2266)).
 6. **First packages.** Publish at least one official package end to end before launch, to prove the whole path.
    `nanyx.json` is the trial ([#867](https://github.com/nanyx-lang/nanyx/issues/867)): it is no longer shipped, and
    lives in [nanyx-lang/json](https://github.com/nanyx-lang/json), with its tests and a CI workflow that builds them
