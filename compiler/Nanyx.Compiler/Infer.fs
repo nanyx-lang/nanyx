@@ -556,6 +556,12 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
     | Error err -> Error err
     | Ok (typedBase, next) ->
         let symbol = match baseExpr.Kind with IdentifierExpr name -> TypeEnv.tryFind name env |> Option.bind _.Symbol | _ -> None
+        let resolvedBase = resolveSoFar next typedBase.Type
+        // A private type's fields are its representation, which only its home module reads.
+        match ProtectedShapes.hiddenRepresentation next expr.Span resolvedBase with
+        | Some nominal when recordFieldsOf resolvedBase |> Option.exists (Map.containsKey memberName) ->
+            Error [ ProtectedShapes.fieldReadOutside nominal memberName memberSpan ]
+        | _ ->
         match TypeDescriptions.memberType next symbol typedBase.Type memberName |> Option.orElseWith (fun () -> fieldTySoFar next typedBase.Type memberName) with
         | Some (fieldTy, next) -> Ok (mkTypedExpr expr fieldTy None None None, next)
         | None ->

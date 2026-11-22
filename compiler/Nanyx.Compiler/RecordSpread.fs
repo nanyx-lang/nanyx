@@ -15,6 +15,10 @@ let infer (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * Infe
             match infer env current record with
             | Error err -> fields, current, errors @ err
             | Ok (typedRecord, next) ->
+                // A private type's fields are its representation, which only its home module spreads out.
+                match ProtectedShapes.hiddenRepresentation next record.Span (resolveSoFar next typedRecord.Type) with
+                | Some nominal -> fields, next, errors @ [ ProtectedShapes.takenApartOutside nominal record.Span ]
+                | None ->
                 match recordFieldsSoFar next typedRecord.Type with
                 | Some spread -> Map.foldBack Map.add spread fields, next, errors
                 | None ->

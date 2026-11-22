@@ -171,6 +171,20 @@ a \math.sqrt       -- error: UserId is not assignable to float
 a * 2              -- error: UserId is not assignable to int
 ```
 
+A private record's fields are its representation too, so outside its module they are not read, destructured, matched
+or spread. Given `type Secret = private (key: string)`, each of these is error NYX0212 there, and allowed in the
+module:
+
+```nanyx
+s.key              -- error: the private type 'Secret' has no field 'key' outside the module that defines it
+def (key = k) = s  -- error: the private type 'Secret' can only be taken apart in the module that defines it
+(...s)             -- error: the same
+```
+
+The one thing that shows a private value's representation anywhere is `dbg`, which prints it as it is, because it is a
+debugging aid and is left out of a release build. `toString` and string interpolation stay closed: a private type is
+written only by the `toString` its module attaches.
+
 ## Accessors
 
 Because private types hide their representation, the home module is also the only place that can look inside one. If callers legitimately need the underlying value—to put it in a URL, say, or write it to a database—export an accessor that returns it:
