@@ -203,7 +203,15 @@ packages that WIT uses under `wit/deps`. It provides the contexts the root does:
 `run` (`NYX0275`). A host whose programs may be library components, packages with `@component` defs and no `@entry`,
 also names the world they are built in, which imports what its other world does and exports nothing:
 `library = "nanyx:console/library"`, beside `world`. Without one, building a library component under the host is an
-error. The host here provides one context, `Log`, which writes a line in capitals. The context is declared in a module of its own:
+error.
+
+A host's roots may also export `provide`, which takes a function of the shape `run` does, calls it under the contexts
+the host provides, and gives back what it returns: `export def provide: [HostRuntime] ([Log] () -> a) -> a`. A
+component's export that requires contexts, an [`@component`](../tour/attributes#component) def such as
+`[Clock] int -> int`, is called through it, so it runs under the host's contexts as the entry point does. A context
+`provide` doesn't provide is an error at the export (`NYX0237`), and under a host whose roots have no `provide`, as the
+HTTP host's haven't, so is every export that requires contexts. The console host's roots export one, and their `run`
+calls it. The host here provides one context, `Log`, which writes a line in capitals. The context is declared in a module of its own:
 
 ```nanyx fragment
 --| What a program under the shouting host can do.

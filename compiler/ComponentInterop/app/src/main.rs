@@ -1,9 +1,9 @@
 //! Calls the Nanyx component's `acme:shapes/shapes`, which calls the Rust component's `acme:units/units` in turn, and
-//! prints what it gives (../expected.txt).
+//! prints what it gives (../expected.txt). Its `announce` prints a line itself, under the Nanyx host's `Console`.
 
 wit_bindgen::generate!({ path: "wit", world: "app", generate_all });
 
-use acme::shapes::shapes::{shift, summarize, Length, Point, Shape, Summary, Unit};
+use acme::shapes::shapes::{announce, shift, summarize, Length, Point, Shape, Summary, Unit};
 
 fn show(summary: Summary) {
     println!("{} {:.3} {:?}", summary.name, summary.area, summary.corners);
@@ -17,4 +17,5 @@ fn main() {
     let shifted = shift(&[Point { x: 1.0, y: 1.0 }, Point { x: 2.0, y: 2.0 }], 0.5);
     println!("{:?}", shifted.iter().map(|p| (p.x, p.y)).collect::<Vec<_>>());
     println!("{:?}", shift(&[], 1.0).len());
+    announce("done");
 }

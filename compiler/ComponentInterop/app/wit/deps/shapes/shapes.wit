@@ -33,4 +33,5 @@ interface shapes {
 
   summarize: func(shape: shape) -> summary;
   shift: func(points: list<point>, by: f64) -> list<point>;
+  announce: func(what: string);
 }

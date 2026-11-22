@@ -1,6 +1,7 @@
 --| The console host: it runs a command-line program's entry point.
 
-  A program's `@entry` is passed to [`run`], which runs it in the contexts this host provides:
+  A program's `@entry` is passed to [`run`], which runs it through [`provide`] in the contexts this
+  host provides, as a component's exports that require contexts are:
   [`Console`], which reads and writes the standard streams, [`Env`], [`FileSystem`], which reads
   and writes files, [`Http`], which makes HTTP requests, [`Random`], which draws from the operating
   system's random source, [`Clock`], which reads its clocks, and `Async`, which the calls that wait
@@ -147,15 +148,15 @@ def exitProcess: [HostRuntime] int -> undefined = { code ->
   exitProcess(code)
 }
 
---| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
-  streams, an `Env` that reads what the program was started with, a `Clock` that reads the
-  operating system's clocks, a `FileSystem` that reads and
-  writes the directories the runtime opened for it, an `Http` that makes requests through the
-  runtime, a `Random` that draws from the operating system, and `Async`, so that it may wait. What
-  `entry` returns is ignored.
-export def run
-  : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> ()
-  = { entry ->
+--| Calls `f` with a `Console` that reads and writes the standard streams, an `Env` that reads what
+  the program was started with, a `Clock` that reads the operating system's clocks, a `FileSystem`
+  that reads and writes the directories the runtime opened for it, an `Http` that makes requests
+  through the runtime, a `Random` that draws from the operating system, and `Async`, so that it may
+  wait, and gives back what `f` returns. A component's export that requires contexts is called
+  through it.
+export def provide
+  : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> a
+  = { f ->
     use Console(
       write = { text -> writeTo(1, text) }
       writeError = { text -> writeTo(2, text) }
@@ -191,5 +192,13 @@ export def run
     use Random(bits = { _ -> systemBits() })
     use Clock(now = { _ -> millisecondsOn(0) }, ticks = { _ -> millisecondsOn(1) })
 
-    ignore(entry())
+    f()
+  }
+
+--| Runs `entry`, the program's entry point, in the contexts [`provide`] provides. What `entry`
+  returns is ignored.
+export def run
+  : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> ()
+  = { entry ->
+    ignore(provide(entry))
   }

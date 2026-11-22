@@ -3,7 +3,8 @@
   A component imports only what the program uses: `wasmtime run`, or any runtime that implements
   WASI 0.3, runs one that makes no requests, and `wasmtime run -S http` one that does.
 
-  Its [`run`] runs the program's entry point as `console.host`'s does, in the contexts it can write
+  Its [`run`] runs the program's entry point as `console.host`'s does, through [`provide`], which
+  a component's exports that require contexts are called through too, in the contexts it can write
   on WASI 0.3 alone: [`Console`] on `wasi:cli`'s stdin, stdout and stderr, [`Env`] on
   `wasi:cli/environment` and `exit`, [`FileSystem`] on `wasi:filesystem` (see
   `console.host.wasi.files.nyx`), [`Http`] on `wasi:http/client`, [`Clock`] on `wasi:clocks` and
@@ -115,14 +116,14 @@ def exitProcess: [HostRuntime] int -> undefined = { code ->
   exitProcess(code)
 }
 
---| Runs `entry`, the program's entry point, with a `Console` that reads and writes the standard
-  streams, an `Env` that reads what the program was started with, a `FileSystem` that reads and
-  writes the directories the host opened for it, an `Http` that makes requests through the host, a
-  `Clock` that reads the host's clocks, a `Random` that draws from its random source, and `Async`,
-  so that it may wait. What `entry` returns is ignored.
-export def run
-  : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> ()
-  = { entry ->
+--| Calls `f` with a `Console` that reads and writes the standard streams, an `Env` that reads what
+  the program was started with, a `FileSystem` that reads and writes the directories the host
+  opened for it, an `Http` that makes requests through the host, a `Clock` that reads the host's
+  clocks, a `Random` that draws from its random source, and `Async`, so that it may wait, and gives
+  back what `f` returns. A component's export that requires contexts is called through it.
+export def provide
+  : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> a
+  = { f ->
     use Console(
       write = { text -> writeOut(stdout, text) }
       writeError = { text -> writeOut(stderr, text) }
@@ -153,5 +154,13 @@ export def run
     use Random(bits = { _ -> wasiRandom.bits() })
     use Clock(now = { _ -> clocks.timeOfDay() }, ticks = { _ -> clocks.ticks() })
 
-    ignore(entry())
+    f()
+  }
+
+--| Runs `entry`, the program's entry point, in the contexts [`provide`] provides. What `entry`
+  returns is ignored.
+export def run
+  : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> ()
+  = { entry ->
+    ignore(provide(entry))
   }

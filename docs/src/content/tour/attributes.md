@@ -89,8 +89,9 @@ module shapes
 export def area: float, float -> float = { width, height -> width * height }
 ```
 
-A package with `@component` defs and no `@entry` is a library component: `nanyx build` writes a component that exports
-them and has no `run`. See [Components](../deep-dives/components#a-programs-own-exports).
+An export whose type writes the contexts it requires, as `[Clock] int -> int` does, runs under its host's, as the
+entry point does; a context the host doesn't provide is an error at the attribute. A package with `@component` defs and
+no `@entry` is a library component: `nanyx build` writes a component that exports them and has no `run`. See [Components](../deep-dives/components#a-programs-own-exports).
 
 ## `@import(...)`
 
