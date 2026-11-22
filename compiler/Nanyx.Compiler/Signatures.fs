@@ -77,21 +77,37 @@ let private moduleBlocksAt (syntax: Parser.Program.Module) (offset: int) : strin
         |> Option.defaultValue []
     around "" syntax
 
+/// The simplest name the code inside the module blocks `blocks` (innermost first) can write the type that `isIt`
+/// defines, known as `name`, by, from the module's `typeDefs` (see `relativeAt`).
+let private relativeName (typeDefs: Map<string, TypeDefInfo>) (blocks: string list) (isIt: TypeDefInfo -> bool) (name: string) =
+    let names = name :: (typeDefs |> Map.filter (fun _ info -> isIt info) |> Map.keys |> List.ofSeq)
+    let withinBlocks =
+        names
+        |> List.collect (fun candidate ->
+            blocks
+            |> List.choose (fun block -> if candidate.StartsWith(block + ".") then Some (candidate.Substring(block.Length + 1)) else None))
+    names @ withinBlocks
+    |> List.minBy (fun candidate -> candidate |> Seq.filter ((=) '.') |> Seq.length, candidate.Length, candidate)
+
 /// `ty` with each type and context it names written by the simplest name the code at `offset` in `syntax` can write it
 /// by, from the module's `typeDefs`: one an import brings in (`Point` after `import Points`, `s.Circle` through an
 /// alias), or, inside a module block, the name the block's own code writes (`Point` inside `module Points`, which
 /// declares it), rather than the name the compiler knows it by, `Points.Point`: the one with the fewest dots, then the
 /// shortest, then the first by name. What the info view writes.
 let relativeAt (typeDefs: Map<string, TypeDefInfo>) (syntax: Parser.Program.Module) (offset: int) (ty: Ty) : Ty =
+    renamed (relativeName typeDefs (moduleBlocksAt syntax offset)) ty
+
+/// Each type and context of `typeDefs` that has a definition, by the name the code at `offset` in `syntax` writes it by,
+/// as `relativeAt` names it, with the symbol of its definition: what the info view links a type's name to.
+let typeNamesAt (typeDefs: Map<string, TypeDefInfo>) (symbols: Map<SymbolId, Symbol>) (syntax: Parser.Program.Module) (offset: int) : (string * Symbol) list =
     let blocks = moduleBlocksAt syntax offset
-    let written (isIt: TypeDefInfo -> bool) (name: string) =
-        let names = name :: (typeDefs |> Map.filter (fun _ info -> isIt info) |> Map.keys |> List.ofSeq)
-        let withinBlocks =
-            names
-            |> List.collect (fun candidate ->
-                blocks
-                |> List.choose (fun block ->
-                    if candidate.StartsWith(block + ".") then Some (candidate.Substring(block.Length + 1)) else None))
-        names @ withinBlocks
-        |> List.minBy (fun candidate -> candidate |> Seq.filter ((=) '.') |> Seq.length, candidate.Length, candidate)
-    renamed written ty
+    typeDefs
+    |> Map.values
+    |> Seq.choose (fun info -> info.Symbol |> Option.bind (fun id -> symbols |> Map.tryFind id) |> Option.map (fun symbol -> info, symbol))
+    |> Seq.distinctBy (fun (_, symbol) -> symbol.Id)
+    |> Seq.map (fun (info, symbol) ->
+        let isIt (other: TypeDefInfo) =
+            other.IsNominal = info.IsNominal
+            && (if info.IsNominal then TypeDefInfo.nominalId other = TypeDefInfo.nominalId info else other.Name = info.Name)
+        relativeName typeDefs blocks isIt info.Name, symbol)
+    |> List.ofSeq
