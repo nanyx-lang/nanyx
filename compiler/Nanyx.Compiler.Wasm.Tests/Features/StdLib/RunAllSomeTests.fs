@@ -44,18 +44,18 @@ def main = {
     runSource source |> assertRan "#invalidInt\n#none\n#negative(-2)\n"
 
 [<Fact>]
-let ``Run - allSome on a list of results gives the first #error`` () =
+let ``Run - allSome gives the first failure with its payload`` () =
     let source =
         """@entry
 def main = {
-  def results: list(Result(int, string)) = [#some(1), #error("bad"), #some(3), #error("worse")]
-  def fine: list(Result(int, string)) = [#some(1), #some(2)]
+  def results: list(#some(int) | #failed(string)) = [#some(1), #failed("bad"), #some(3), #failed("worse")]
+  def fine: list(#some(int) | #failed(string)) = [#some(1), #some(2)]
   println(allSome(results))
   println(allSome(fine))
 }
 """
 
-    runSource source |> assertRan "#error(bad)\n#some([1, 2])\n"
+    runSource source |> assertRan "#failed(bad)\n#some([1, 2])\n"
 
 [<Fact>]
 let ``Run - allSome works on 100,000 elements`` () =

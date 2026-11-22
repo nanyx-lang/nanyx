@@ -154,7 +154,7 @@ def flat = xs \list.flatMap { x -> [x, x] }
 def indexed = xs \list.mapIndexed { i, x -> i + x }
 def parts = xs \list.partition { x -> x > 1 }
 def option = #some(1) \mapSome { x -> x + 1 }
-def result: Result(int, string) = Result.map(#some(1), { x -> x + 1 })
+def described = #some(1) \mapSomeOr("none", { x -> "{x}" })
 def counts = map.fromList([("a", 1)]) \map.map { v -> v + 1 }
 def odd = set.fromList(xs) \set.filter { x -> x % 2 == 1 }
 def cell = memory { 1 }

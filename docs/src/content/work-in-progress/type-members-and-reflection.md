@@ -16,7 +16,7 @@ a type's description to do them, but the standard ones don't yet. The [JSON cook
 field by field, so each field name appears twice:
 
 ```nanyx
-def decodeUser: string -> Result(User, DecodeError) = { data ->
+def decodeUser: string -> #some(User) | DecodeError = { data ->
   data
     \json.decode(
       json.record(name = json.field("name", json.string), age = json.field("age", json.int))
