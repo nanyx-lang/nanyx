@@ -10,7 +10,7 @@ type SqlError = #duplicateKey | #sqlError(string)
 type PreparedStatement = (
   setInt: (int, int) -> ()
   setString: (int, string) -> ()
-  executeUpdate: () -> #some(int) | #error(SqlError)
+  executeUpdate: () -> #some(int) | SqlError
 )
 
 context Connection = (prepare: string -> PreparedStatement)
@@ -28,7 +28,7 @@ def PreparedStatement.setArgument: PreparedStatement, int, SqlPrimitive -> () = 
 }
 
 export def executeUpdate
-  : [Connection] string, list(SqlPrimitive) -> #some(int) | #error(SqlError)
+  : [Connection] string, list(SqlPrimitive) -> #some(int) | SqlError
   = { query, args ->
     def statement = prepare(query)
     for args, 1.. | arg, position -> statement \setArgument(position, arg)
@@ -37,9 +37,9 @@ export def executeUpdate
 
 -- Callers that treat a duplicate key as "nothing to do" narrow the error with `except`
 export def insertIgnoringDuplicates
-  : [Connection] string, list(SqlPrimitive) -> #some(int) | #error(#sqlError(string))
+  : [Connection] string, list(SqlPrimitive) -> #some(int) | #sqlError(string)
   = { query, args ->
-    executeUpdate(query, args) except #error(#duplicateKey) -> #some(0)
+    executeUpdate(query, args) except #duplicateKey -> #some(0)
   }
 
 export def withConnection: [DataSource] ([Connection] () -> a) -> a = { action ->
@@ -48,7 +48,7 @@ export def withConnection: [DataSource] ([Connection] () -> a) -> a = { action -
 }
 
 export def addUser
-  : [DataSource] (id: int, name: string) -> #some(int) | #error(#sqlError(string))
+  : [DataSource] (id: int, name: string) -> #some(int) | #sqlError(string)
   = { id, name ->
     withConnection {
       insertIgnoringDuplicates(

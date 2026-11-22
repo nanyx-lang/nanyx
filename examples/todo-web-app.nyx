@@ -12,9 +12,9 @@ import (
 context TodoStore = (
   findAll: () -> list(Todo)
   find: TodoId -> #some(Todo) | #notFound
-  insert: Todo -> #some(Todo) | #error(#insertNotSuccessful)
-  update: Todo -> #some(Todo) | #error(#updateNotSuccessful)
-  delete: TodoId -> #some() | #error(#deleteNotSuccessful)
+  insert: Todo -> #some(Todo) | #insertNotSuccessful
+  update: Todo -> #some(Todo) | #updateNotSuccessful
+  delete: TodoId -> #some() | #deleteNotSuccessful
 )
 
 -- The store assigns the id
@@ -22,9 +22,9 @@ def newTodo: [Clock] string -> Todo = { description ->
   Todo(id = 0, description = description, completed = false, dateAdded = Clock.now)
 }
 
-def exists: (#some(Todo) | #notFound) -> #some(Todo) | #error(#todoDoesNotExist) = {
+def exists: (#some(Todo) | #notFound) -> #some(Todo) | #todoDoesNotExist = {
   | #some(todo) -> #some(todo)
-  | #notFound -> #error(#todoDoesNotExist)
+  | #notFound -> #todoDoesNotExist
 }
 
 export def createProtocol: [TodoStore, Clock] () -> TodoProtocol = {
@@ -40,7 +40,7 @@ export def createProtocol: [TodoStore, Clock] () -> TodoProtocol = {
       }
       \match
         | #some(todo) -> #updated(todo)
-        | #error(e) -> #updateError(e)
+        | e -> #updateError(e)
     }}
 
     deleteTodo = { id -> async {
@@ -51,7 +51,7 @@ export def createProtocol: [TodoStore, Clock] () -> TodoProtocol = {
       }
       \match
         | #some() -> #deleted
-        | #error(e) -> #deleteError(e)
+        | e -> #deleteError(e)
     }}
   )
 }

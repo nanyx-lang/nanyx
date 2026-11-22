@@ -274,7 +274,7 @@ def (a, b) = if n < 0 then return 0 else (n, n * 2)
 The values the branches end with are joined as any `if`'s or `match`'s are, so they need not be the same type. An `except` that returns from one case passes the others on, and what it gives the rest of the block is what is left:
 
 ```nanyx fragment
-def #some(result) = find(id) except #error(#notFound) -> return 0
+def #some(result) = find(id) except #notFound -> return 0
 ```
 
 ## Keywords in loops
@@ -282,11 +282,11 @@ def #some(result) = find(id) except #error(#notFound) -> return 0
 A `try` or `return` in the body of a `for` loop means the same as one outside it. A failed `try` ends the whole block with that failure, and a `return` ends it with its value: the items after it, and what follows the loop, don't run. Neither skips to the next item. To skip one, say so in the body with a `match`, or with a pattern on the loop, as in `for results | #some(x) -> ...`.
 
 ```nanyx
-def parse: string -> #some(int) | #error(string) = { s ->
-  if s == "" then #error("empty") else #some(s.length)
+def parse: string -> #some(int) | #empty = { s ->
+  if s == "" then #empty else #some(s.length)
 }
 
-def total: list(string) -> #some(int) | #error(string) = { items ->
+def total: list(string) -> #some(int) | #empty = { items ->
   proc {
     for items | item ->
       def n = try parse(item)

@@ -7,10 +7,10 @@ import nanyx/time
 
 export type TeamColor = #yellow | #black
 
-export def TeamColor.parse: string -> #some(TeamColor) | #error(#invalidColor) = {
+export def TeamColor.parse: string -> #some(TeamColor) | #invalidColor = {
   | "yellow" -> #some(#yellow)
   | "black" -> #some(#black)
-  | _ -> #error(#invalidColor)
+  | _ -> #invalidColor
 }
 
 export def TeamColor.show: TeamColor -> string = {
@@ -98,12 +98,12 @@ export def recordScore
   }
 
 export def openGame
-  : Rules, (TeamId, TeamId), Instant, GameId -> #some(OpenGame) | #error(#teamsMustBeUnique)
+  : Rules, (TeamId, TeamId), Instant, GameId -> #some(OpenGame) | #teamsMustBeUnique
   = { rules, teams, startedAt, id ->
     def (t1, t2) = teams
 
     if t1 == t2
-      then #error(#teamsMustBeUnique)
+      then #teamsMustBeUnique
       else #some(
         OpenGame(id = id, teams = teams, startedAt = startedAt, rules = rules, score = [[]])
       )

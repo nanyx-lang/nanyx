@@ -107,7 +107,7 @@ def lookup
        | #notFound
        | #expired(Entry, Timestamp)
        | #locked(user: string, until: Timestamp)
-       | #error(string)
+       | #failed(string)
   = { key, index ->
     find(index, key)
   }

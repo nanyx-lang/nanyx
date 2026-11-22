@@ -32,20 +32,18 @@ def AttestationCache.needsRefresh: [Clock] AttestationCache -> bool = { cache ->
 -- The service that produces attestations is a dependency, so it is a context
 context Attester = (
   getChallenge: () -> string
-  generateCertificateChain: string -> #some(list(string)) | #error(#attestationFailed)
+  generateCertificateChain: string -> #some(list(string)) | #attestationFailed
 )
 
 -- Retry an operation, waiting between attempts
 def retry
-  : [Clock]
-    (times: int, delay: int -> Duration, operation: () -> #some(a) | #error(e))
-    -> #some(a) | #error(e)
+  : [Clock] (times: int, delay: int -> Duration, operation: () -> #some(a) | r) -> #some(a) | r
   = { times, delay, operation ->
     rec attempt = { n ->
       match operation()
         | #some(value) -> #some(value)
-        | #error(e) ->
-          if n >= times then #error(e) else
+        | e ->
+          if n >= times then e else
             Clock.sleep(delay(n))
             attempt(n + 1)
     }
@@ -56,7 +54,7 @@ def retry
 -- Refresh the attestation if it is missing or expired. Returns the new cache;
 -- the old one is unchanged.
 export def AttestationCache.refresh
-  : [Clock, Attester] AttestationCache -> #some(AttestationCache) | #error(#attestationFailed)
+  : [Clock, Attester] AttestationCache -> #some(AttestationCache) | #attestationFailed
   = { cache ->
     if not cache.needsRefresh
       then #some(cache)

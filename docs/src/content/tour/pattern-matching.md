@@ -145,9 +145,9 @@ A payload that is a record with named fields is taken apart by name, as any reco
 A tag that carries the unit value is matched as it is written, with empty brackets, and `()` on its own matches the unit value:
 
 ```nanyx
-def describe: (#some() | #error(string)) -> string = {
+def describe: (#some() | #rejected(string)) -> string = {
   | #some() -> "saved"
-  | #error(reason) -> "not saved: {reason}"
+  | #rejected(reason) -> "not saved: {reason}"
 }
 ```
 
@@ -156,9 +156,9 @@ def describe: (#some() | #error(string)) -> string = {
 Where pattern matching really shines is in its ability to nest patterns inside each other, allowing you to make complex data structure comparisons and extract values in a single expression. Below is an artificial complex example that demonstrates this:
 
 ```nanyx
-type Result = #some(int) | #error(string)
+type Status = #some(int) | #failed(string)
 
-type Request = (id: int, status: Result, tags: list(string))
+type Request = (id: int, status: Status, tags: list(string))
 
 def processRequests: list(Request) -> string = { requests ->
   match requests
@@ -166,7 +166,7 @@ def processRequests: list(Request) -> string = { requests ->
       "No requests"
     | [(id = 1, status = #some(value), tags = ["urgent", ...rest]), ...more] ->
       "Urgent request 1 with value {value}"
-    | [(id = id, status = #error(msg), tags = []), (status = #some(val), ...), ...tail] ->
+    | [(id = id, status = #failed(msg), tags = []), (status = #some(val), ...), ...tail] ->
       "Error in request {id}: {msg}, followed by success"
     | [(status = #some(n), ...), ...rest] & requests & { .length > 5 } ->
       "Multiple requests with first one ok, total: {requests.length}"

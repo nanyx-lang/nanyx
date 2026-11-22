@@ -2024,9 +2024,9 @@ with the same fields is still not one. The message names the definitions attache
 module Points =
   export type Point = protected (x: int, y: int)
 
-  export def Point.new: int, int -> #some(Point) | #error(string) = { x, y ->
+  export def Point.new: int, int -> #some(Point) | #negative = { x, y ->
     if x < 0 or y < 0
-      then #error("Coordinates must be non-negative")
+      then #negative
       else #some(Point(x = x, y = y))
   }
 

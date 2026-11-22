@@ -282,7 +282,7 @@ A `match` on a type that leaves out a tag and has no `else` is a non-exhaustive 
 A description builds a value as well as taking one apart, which is what a decoder needs. A record's `r.build` is given a function that gives each field's value, as `#some(value)`, or fails; it calls it with each field in turn and gives `#some` of the record, or the first failure, with no record made. A case's `c.build` makes a value of its union from a payload of the case's type:
 
 ```nanyx
-def zeroOf: type a -> #some(a) | #error(string) = { t ->
+def zeroOf: type a -> #some(a) | #noCases | #noZero = { t ->
   match t
     | #int -> #some(0)
     | #string -> #some("none")
@@ -292,15 +292,15 @@ def zeroOf: type a -> #some(a) | #error(string) = { t ->
         | [c, ..._] ->
           match zeroOf(c.type)
             | #some(payload) -> #some(c.build(payload))
-            | #error(e) -> #error(e)
-        | [] -> #error("no cases")
-    | else -> #error("no zero")
+            | failure -> failure
+        | [] -> #noCases
+    | else -> #noZero
 }
 
 type Size = #small(int) | #large
 
 println(zeroOf(type (name: string, size: Size))) -- #some(name = none, size = #small(0))
-println(zeroOf(type (ratio: float))) -- #error(no zero)
+println(zeroOf(type (ratio: float))) -- #noZero
 ```
 
 The function given to `r.build` must give a value of whichever field it is given, so the checker gives it a field whose type is one of its own, which it never learns, and checks that it gives a value of that type: `f.type` is how to make one, as `zeroOf(f.type)` does. A function that gives a value of one particular type, as `{ f -> #some(1) }` would, is a type mismatch. A nominal type seen from outside its home module has no `build`, since its description shows no structure.
