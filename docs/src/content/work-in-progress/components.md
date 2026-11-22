@@ -337,8 +337,9 @@ Settled by the maintainer on 2026-11-22 ([#2241](https://github.com/nanyx-lang/n
 - **The WIT is generated from Nanyx declarations.** Nanyx is the source of truth; no WIT is written by hand or read.
 - **Exports are marked per def,** `@component export def area: Shape -> float`, the interface being the def's module.
   Names are written in kebab case: `areaOf` is `area-of`, the module `geo.shapes` the interface `geo-shapes`.
-- **Imports are bodiless defs, as `@extern` is:** `@import("acme:geometry/shapes@1.0.0", "area") def area: Shape -> float`,
-  naming the interface's full WIT name and the function, whose name defaults to the def's, kebab-cased. The WIT of the
+- **Imports are bodiless defs, as `@extern` is:** `@import("acme:geometry/shapes@1.0.0", "area", ["shape"]) def area: Shape -> float`,
+  naming the interface's full WIT name, the function, whose name defaults to the def's, kebab-cased, and its
+  parameters, which default to `p0`, `p1` and on. An export's parameters are named by its lambda's. The WIT of the
   imported interface is generated from these declarations too: component types are checked structurally, by field
   and case names, so no foreign WIT is read. Under `nanyx run` and `nanyx test`, which run core modules, an imported
   def reachable from the entry or a test is an error naming it.

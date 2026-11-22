@@ -19,30 +19,47 @@ module Attributes =
     let componentAttribute = "component"
 
     /// The attribute that declares a function another component exports, which a component built from the program
-    /// imports: `@import("acme:geometry/shapes@1.0.0", "area")` before a def written with a type and no value, naming
-    /// the WIT interface and the function, whose name is the def's in kebab case if the attribute doesn't give it.
+    /// imports: `@import("acme:geometry/shapes@1.0.0", "area", ["width", "height"])` before a def written with a type and
+    /// no value, naming the WIT interface, the function, whose name is the def's in kebab case if the attribute doesn't
+    /// give it, and the function's parameters, which are `p0`, `p1` and on if it doesn't name them.
     let componentImportAttribute = "import"
 
     /// The component import `@import` with `argument`, at `attributeSpan`, declares of the def `name` with `typeOpt`
-    /// and `value`, as its interface and function, or the errors in it.
+    /// and `value`, as its interface, its function and the names of the function's parameters, none if the attribute
+    /// gives none, or the errors in it.
     let private componentImport (attributeSpan: SourceSpan) (argument: Expression option) (name: string) (defSpan: SourceSpan) (typeOpt: TypeExpr option) (value: Expression) =
         let about (diagnostic: Diagnostic) = diagnostic |> Diagnostics.about $"@{componentImportAttribute}"
         let named =
             match argument with
-            | Some (Kind (LiteralExpr(StringLit witInterface))) -> Ok (witInterface, ComponentInterface.witName name)
-            | Some (Kind (TupleExpr [ Kind (LiteralExpr(StringLit witInterface)); Kind (LiteralExpr(StringLit functionName)) ])) -> Ok (witInterface, functionName)
+            | Some (Kind (LiteralExpr(StringLit witInterface))) -> Ok (witInterface, ComponentInterface.witName name, [])
+            | Some (Kind (TupleExpr [ Kind (LiteralExpr(StringLit witInterface)); Kind (LiteralExpr(StringLit functionName)) ])) -> Ok (witInterface, functionName, [])
+            | Some (Kind (TupleExpr [ Kind (LiteralExpr(StringLit witInterface)); Kind (LiteralExpr(StringLit functionName)); Kind (ListExpr parameters) ])) ->
+                let names = parameters |> List.choose (function Kind (LiteralExpr(StringLit parameter)) -> Some parameter | _ -> None)
+                if names.Length = parameters.Length then Ok (witInterface, functionName, names)
+                else
+                    Error [ Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument attributeSpan
+                                $"The function's parameters are named by a list of strings, as `[\"width\", \"height\"]`"
+                            |> about ]
             | _ ->
                 Error [ Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument attributeSpan
-                            $"It takes the WIT interface the function is exported from, and the function's name if it isn't the def's in kebab case, as `@{componentImportAttribute}(\"acme:geometry/shapes@1.0.0\", \"area\")`"
+                            $"It takes the WIT interface the function is exported from, the function's name if it isn't the def's in kebab case, and its parameters' names if they aren't `p0`, `p1` and on, as `@{componentImportAttribute}(\"acme:geometry/shapes@1.0.0\", \"area\", [\"width\", \"height\"])`"
                         |> about ]
         let named =
             named
-            |> Result.bind (fun (witInterface, functionName) ->
-                if ComponentInterface.isInterfaceName witInterface then Ok (witInterface, functionName)
-                else
+            |> Result.bind (fun (witInterface, functionName, parameters) ->
+                let unnamed = parameters |> List.filter (fun parameter -> ComponentInterface.witName parameter = "")
+                let repeated = parameters |> List.countBy ComponentInterface.witName |> List.filter (fun (_, count) -> count > 1) |> List.map fst
+                if not (ComponentInterface.isInterfaceName witInterface) then
                     Error [ Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument attributeSpan
                                 $"'{witInterface}' isn't a WIT interface's full name, which is its package's namespace and name, then its own, as `acme:geometry/shapes`, and its version, as `@1.0.0`, if it has one"
-                            |> about ])
+                            |> about ]
+                elif not unnamed.IsEmpty then
+                    Error [ Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument attributeSpan
+                                $"'{unnamed.Head}' isn't a parameter's name: a WIT name is words of letters and digits, as `width` or `area-of`"
+                            |> about ]
+                elif not repeated.IsEmpty then
+                    Error [ Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument attributeSpan $"Two of the function's parameters are named '{repeated.Head}'" |> about ]
+                else Ok (witInterface, functionName, parameters))
         let bodiless =
             match value.Kind, typeOpt with
             | ExternSyntax.Bodiless, Some _ -> Ok ()
@@ -307,8 +324,9 @@ module Attributes =
     /// `ExternSyntax`). Any other attribute, an attribute that does not precede a value definition, or a definition with
     /// no value and no `@extern`, is an error. `@entry` takes no argument. `@component`, which takes none either, marks an
     /// exported def as one a component built from the program exports: it is left as it is, and given back by name, with
-    /// where it is written. `@import("interface", "name")` on a def written with a type and no value makes it a function
-    /// another component exports: its value becomes the interface and the function (see `ComponentImportSyntax`). The host is `host`: the package's, or the
+    /// where it is written. `@import("interface", "name", ["parameter", ...])` on a def written with a type and no value makes
+    /// it a function another component exports: its value becomes the interface, the function and the names of its
+    /// parameters (see `ComponentImportSyntax`). The host is `host`: the package's, or the
     /// console host for a file in no package. A package with no host is a library, so an `@entry` in it is an error. With the module, each entry point (see `EntryPoint`) and each def marked `@component`. An attribute before
     /// a member of a context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`), as is
     /// one in a block (see `statementAttributeErrors`). `@allow` is for the linters: it is checked and left out (see
@@ -340,9 +358,9 @@ module Attributes =
                 | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
             | Kind (Attribute(name, argument)) as attribute :: (Kind (Def (ValueDef(isExport, defName, typeOpt, value))) as def) :: rest when name = componentImportAttribute ->
                 match componentImport attribute.Span argument defName def.Span typeOpt value with
-                | Ok (witInterface, functionName) ->
+                | Ok (witInterface, functionName, parameters) ->
                     imports.Add((defName, def.Span))
-                    let imported = { def with Kind = Def (ValueDef(isExport, defName, typeOpt, ComponentImportSyntax.import witInterface functionName value)) }
+                    let imported = { def with Kind = Def (ValueDef(isExport, defName, typeOpt, ComponentImportSyntax.import witInterface functionName parameters value)) }
                     loop rest (imported :: acc) entries externs errors
                 | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
             | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute && name <> componentAttribute && name <> componentImportAttribute ->

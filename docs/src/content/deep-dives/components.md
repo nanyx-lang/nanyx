@@ -300,15 +300,16 @@ A program calls a function another component exports by declaring it, marked `@i
 ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)):
 
 ```nanyx fragment
-@import("acme:geometry/shapes@1.0.0", "area")
+@import("acme:geometry/shapes@1.0.0", "area", [ "shape" ])
 def area: Shape -> float
 ```
 
-- **The attribute names the WIT interface in full,** its package, its name and its version, and the function, whose
-  name is the def's in kebab case if it is left out (`Attributes.applyAttributes`). The def's value becomes a call of
-  `__componentImport` with the two (`ComponentImportSyntax`), which the type checker takes to be of the def's written
-  type, as it does a foreign function's. Its type must cross a component's boundary, as an export's does
-  (`ComponentInterface.errors`).
+- **The attribute names the WIT interface in full,** its package, its name and its version, the function, whose
+  name is the def's in kebab case if it is left out, and the function's parameters, which are `p0`, `p1` and on if
+  they are left out (`Attributes.applyAttributes`). The def's value becomes a call of `__componentImport` with them
+  (`ComponentImportSyntax`), which the type checker takes to be of the def's written type, as it does a foreign
+  function's. Its type must cross a component's boundary, as an export's does, and it must name each of the
+  function's parameters if it names any, `NYX0013` (`ComponentInterface.errors`).
 - **A program imports what it calls.** An import is inlined into the modules that use it as any def is, so
   `ComponentInterface.imports` finds those the program reaches. The world `nanyx build` writes imports each interface
   they name, and the WIT of each interface's package is written from the program's declarations of it under
@@ -332,8 +333,8 @@ def area: Shape -> float
 A component's WIT is what another language's bindings are generated from, and the component model checks more than a
 value's shape: an interface's types, a record's fields, a variant's cases and a function's parameters are matched by
 name. So the other component's WIT must be the WIT `nanyx build` writes, as it is for the Rust components below. An
-import's parameters have no names in its Nanyx type, so they are written `p0`, `p1` and on, and the other component's
-WIT names them so too.
+export's parameters are named by its def's lambda. An import's have no names in its Nanyx type, so `@import` names
+them, as the other component's WIT does, and they are `p0`, `p1` and on if it doesn't.
 
 ## Testing with other languages
 

@@ -94,11 +94,12 @@ See [Components](../deep-dives/components#a-programs-own-exports).
 ## `@import(...)`
 
 Declares a function another component exports, which the component that `nanyx build` writes imports and calls. Its
-arguments are the WIT interface's full name, with its version, and the function's name, which is the def's in kebab case
-if it is left out. The def has a type and no value, and its type crosses a component's boundary as `@component`'s does.
+arguments are the WIT interface's full name, with its version, the function's name, which is the def's in kebab case
+if it is left out, and the names of the function's parameters, which are `p0`, `p1` and on if they are left out. The
+def has a type and no value, and its type crosses a component's boundary as `@component`'s does.
 
 ```nanyx fragment
-@import("acme:geometry/shapes@1.0.0", "area")
+@import("acme:geometry/shapes@1.0.0", "area", [ "width", "height" ])
 def area: float, float -> float
 ```
 
