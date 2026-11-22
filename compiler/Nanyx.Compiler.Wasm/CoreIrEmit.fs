@@ -15,6 +15,7 @@ open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
+open Transpiler.Wasm.WatPieces
 
 /// What the emitter needs from the module being compiled.
 type EmitContext =
@@ -326,6 +327,10 @@ type private FunctionEmitter(context: EmitContext) =
     // The place marker of the value whose code is being written, if it has one (see `Value`).
     let mutable currentMarker: string option = None
 
+    // The code of each value, sequence and remaining match written out of line (see `WatPieces`), which `Expand` puts
+    // back once the function's code is done.
+    let pieces = WatPieces()
+
     let helper (name: string) =
         helpers.Add name |> ignore
         name
@@ -362,6 +367,9 @@ type private FunctionEmitter(context: EmitContext) =
     member _.Helpers = Set.ofSeq helpers
 
     member _.UsesMemory = usesMemory
+
+    /// The function's code `code` with what each value, sequence and match in it wrote out of line put back.
+    member _.Expand (code: string) = pieces.Expand code
 
     /// The code that copies whether the runtime is probing into the function's local of it, if a probe in the function
     /// reads it, which the function starts with.
@@ -518,7 +526,7 @@ type private FunctionEmitter(context: EmitContext) =
                 parts.Add(this.Value tail deferred onStack expr)
         walk expr
         if deferred.Count > 0 || onStack.Count > 0 then internalError "a temporary in the core IR is used out of order"
-        join "\n    " parts
+        pieces.Add(join "\n    " parts)
 
     /// The code of the probe `probe` (see `CoreIrProbes`): when the runtime is probing (see `ProbingCopy`), a call with the probe's number,
     /// and, if the runtime asks, each of its locals `alive` has, written by its printer, passed with its name. Before it
@@ -578,8 +586,8 @@ type private FunctionEmitter(context: EmitContext) =
             currentMarker <- Some marker
             let code = this.UnmarkedValue tail deferred onStack expr
             currentMarker <- around
-            $"{marker}\n    {code}"
-        | _ -> this.UnmarkedValue tail deferred onStack expr
+            pieces.Add $"{marker}\n    {code}"
+        | _ -> pieces.Add(this.UnmarkedValue tail deferred onStack expr)
 
     member private this.UnmarkedValue (tail: bool) (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (expr: Expr) : string =
         // The code of each atom in order. A temporary already on the stack has none, so it has to come before anything
@@ -1303,7 +1311,7 @@ type private FunctionEmitter(context: EmitContext) =
                     |> String.concat "\n    "
                 let armCode = join "\n    " [ bindCode; this.SequenceAs tail resultTy arm.Body ]
                 let result = CoreIrLayout.valueType resultTy
-                $"{allConditions}\n    (if (result {result})\n      (then\n        {armCode}\n      )\n      (else\n        {emit rest}\n      )\n    )"
+                $"{allConditions}\n    (if (result {result})\n      (then\n        {armCode}\n      )\n      (else\n        {pieces.Add(emit rest)}\n      )\n    )"
         emit arms
 
 /// The locals a function declares beyond its parameters, in this order: its own locals, the scrutinees', what patterns
@@ -1390,7 +1398,7 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
         match func.Place, context.ShownFile with
         | Some place, Some shownFile -> [ definitionMarker shownFile place ]
         | _ -> []
-    let bodyCode = defined @ emitter.ProbingCopy @ [ bodyCode ] |> String.concat "\n    " |> withoutRepeatedMarkers
+    let bodyCode = defined @ emitter.ProbingCopy @ [ emitter.Expand bodyCode ] |> String.concat "\n    " |> withoutRepeatedMarkers
     let header =
         [ func.Params |> List.map (fun p -> $"(param ${localName p} {CoreIrLayout.valueType p.Type})") |> String.concat " "
           $"(result {CoreIrLayout.valueType func.Result})"
@@ -1409,7 +1417,7 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
 let emitStart (context: EmitContext) (func: Function) (before: string list) (after: string list) : Emitted =
     let emitter = FunctionEmitter(context)
     emitter.Declared <- declaredLocals func.Body |> List.map fst |> Set.ofList
-    let body = $"{emitter.Sequence false func.Body}\n    {dropValue func.Body.Type}"
+    let body = emitter.Expand $"{emitter.Sequence false func.Body}\n    {dropValue func.Body.Type}"
     let bodyCode = before @ emitter.ProbingCopy @ body :: after |> String.concat "\n    " |> withoutRepeatedMarkers
     let header =
         match localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) with

@@ -27,6 +27,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     let mutable subst = subst
     let mutable nextId = 0
     let usedNames = System.Collections.Generic.HashSet<string>()
+    // What `storesBeforeValue` found of each expression, by the node itself.
+    let storesFound = System.Collections.Generic.Dictionary<Expression, bool>(HashIdentity.Reference)
     // The locals that stand for the members the function is specialised on, by id (see `CoreIrLowerKnown`).
     let known = System.Collections.Generic.Dictionary<int, Var * KnownMember>()
     // The locals a `def` gives the value of a top-level function, by id: a `use` that binds one to a context member
@@ -1040,7 +1042,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let rec go (acc: Atom list) (remaining: Expression list) =
             match remaining with
             | [] -> k (List.rev acc)
-            | expr :: rest when storesBeforeValue expr -> bindTemp (this.Tail scope expr) (fun atom -> go (atom :: acc) rest)
+            | expr :: rest when storesBeforeValue storesFound expr -> bindTemp (this.Tail scope expr) (fun atom -> go (atom :: acc) rest)
             | expr :: rest ->
                 this.Complex scope expr (fun value ->
                     match value.Kind with
