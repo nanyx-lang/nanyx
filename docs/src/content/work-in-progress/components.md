@@ -6,8 +6,9 @@ order: 4
 
 This page is the design for [#2182](https://github.com/nanyx-lang/nanyx/issues/2182): emitting WebAssembly components
 that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or any runtime that implements WASI 0.3, and
-not only under `nanyx`'s own runtime. Stages 0 to 2 are built, and described on
-[Components](../deep-dives/components) in Deep dives: every console program builds as a component. The page sets out what was found, the
+not only under `nanyx`'s own runtime. Stages 0 to 3 are built, and described on
+[Components](../deep-dives/components) in Deep dives: every console program builds as a component, and every HTTP
+handler as a `wasi:http/service` component. The page sets out what was found, the
 [design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
 whose stages are filed as issues.
 
@@ -245,11 +246,14 @@ Each import of the console and HTTP hosts maps onto a WASI 0.3 interface, or ont
 - **The HTTP host's component root is in the world `wasi:http/service`,** with `Log` on stderr. It doesn't provide
   `Env`: the `service` world has no `wasi:cli/environment`, and importing it beyond the world would tie the component to
   hosts that happen to provide it. Configuration comes in through `init` (see [Serving HTTP](./hosts#serving-http)).
-- **One request per instance.** `wasmtime serve` lets a 0.3 component handle up to 128 requests at once, which would
-  have requests share one instance's memory, and so its crashes. The HTTP host's model is a fresh instance per request,
-  so its component raises backpressure (`backpressure.inc`) while it serves a request, and the host sends it no second
-  one. With a synchronous lift the instance is locked for the whole call anyway; the backpressure keeps it so under
-  the callback ABI too.
+- **One request at a time per instance, and instances reused in turn.** `wasmtime serve` lets a 0.3 component handle
+  up to 16 requests at once in one instance, which would have them share its memory, and so its crashes. So the
+  component raises backpressure (`backpressure.inc`) while it serves a request, and the host gives it no second one
+  until it is done. It doesn't stop the host reusing the instance for the next request, which `wasmtime serve` does up
+  to 128 times: the program runs afresh for each, its cached values set up and torn down by its start function, so
+  nothing it computes carries over, but a request that crashes ends the instance. That is the default; strict isolation
+  is `wasmtime serve --max-instance-reuse-count 1`, a fresh instance per request, as `nanyx run` gives (settled
+  2026-11-22).
 - **The runtime's own imports follow the target.** On a component, the compiler's crash, deferred-error and `dbg` writes
   use `wasi:cli/stderr`, and its exits use `wasi:cli/exit`, not `fd_write` and `proc_exit`.
 - **The console host's world is its own, `nanyx:console/command`:** `wasi:cli/command@0.3.0` with
@@ -300,7 +304,7 @@ user declares: a record as a record, a tag union as a variant, `list` as `list`,
 
 ## Async: a synchronous lift first, the callback ABI after #1890
 
-- **First**, `run` and `handle` are lifted synchronously.
+- **First**, `run` is lifted synchronously. `handle` was to be too, until stage 3 found it can't be (below).
   - A call that waits, or a stream read or write, is lowered async and waited on at once with `waitable-set.wait`,
     which runs with Wasmtime's default settings. A synchronous `stream.write` doesn't.
   - A wait blocks the instance, as it blocks its thread today.
@@ -315,14 +319,20 @@ user declares: a record as a record, a tag union as a variant, `list` as `list`,
   - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), and
     `TASK_CANCELLED` arriving at the callback is how the host cancels the entry.
 - **Stage 1 doesn't depend on #1890 or #2164.** A synchronously lifted component is the same program model as today.
+- **`wasi:http/service` amends this for its entry (settled 2026-11-22).** Its `handle` is lifted async with the
+  callback ABI from stage 3 on, not synchronously: the host reads the response's body from a stream only after
+  `handle` returns, so a synchronous `handle` can't write a body bigger than the stream's buffer. The compiler
+  generates a small wrapper for that entry alone, which runs the program as synchronously as a `run` does, returns
+  the response with `task.return`, and then writes the body ([The handler](../deep-dives/components#the-handler)).
+  #1890's scheduler replaces the wrapper in stage 4.
 - **#2164 isn't needed for components at all.** Stack switching would make the stackful ABI possible, but the callback
   ABI does the same job with the state machines. #2164 stays about running tasks on stacks.
 
 # Open questions
 
-- **Sharing an instance between requests.** A service handles one request per instance for now. Whether requests may
-  share an instance, and so its memory and crashes, once the callback ABI lets them interleave, belongs with tasks and
-  processes on [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#3-tasks-and-processes).
+- **Requests at once in one instance.** An instance serves one request at a time, and others in turn. Whether requests
+  may interleave in one instance, and so share its memory and crashes, once the callback ABI lets them, belongs with
+  tasks and processes on [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#3-tasks-and-processes).
 - **User components (stage 5).** How a program declares its own exports and imports (written WIT, or WIT generated
   from Nanyx declarations), and which Nanyx types map to which WIT types where the match isn't one to one.
 - **Running 0.3 in process (stage 6).** Whether Wasmtime's C API and wasmtime-dotnet will add WASI 0.3, or we build a
@@ -338,7 +348,7 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 | 1a. Console components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `nanyx.console`'s component root on `wasi:cli`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the example packages under `wasmtime run` | Build a command-line program that needs no `FileSystem` or `Http` once, and run it with `wasmtime run` or any WASI 0.3 runtime |
 | 1b. Files in components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `FileSystem` on `wasi:filesystem`, in the console host's component root | The same, for programs that read and write files |
 | 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)), done | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
-| 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)) | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
+| 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)), done | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request at a time per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
 | 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
 | 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)) | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types | Write plugins and libraries that other languages' components call, and call theirs |
 | 6. One root per host ([#2242](https://github.com/nanyx-lang/nanyx/issues/2242)) | Run 0.3 components in `nanyx run`, once an embedding supports it (upstream or our own), and delete the core roots | One implementation of each host |

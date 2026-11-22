@@ -81,6 +81,12 @@ module Hosts =
     /// script runs under in the compiler built for the browser (`Nanyx.Browser`), unless it names another.
     let playgroundPackage = "nanyx.playground"
 
+    /// The module of the foreign functions a component's core module defines itself for its host's component root,
+    /// reserved for it: `argument` and `result`, through which a `wasi:http/service` component's root takes the request
+    /// it answers and gives the response (see the Components page of the docs). Only a host's package, or a host library
+    /// it depends on, may declare one (see `reservedExternErrors`).
+    let componentModule = "nanyx:component"
+
     /// The context a host is written on: raw reads and writes, which only a host may require.
     let runtimeContext = "HostRuntime"
 
@@ -151,6 +157,26 @@ module Hosts =
                   DiagnosticCodes.ComponentRootContextsDiffer
                   span
                   $"The component root's '{runFunction}' {said}: a component root provides the contexts its core root does" ]
+
+    /// The errors for each foreign function of `componentModule` that the module `origin` declares, unless it may require
+    /// `HostRuntime` (see `mayRequireRuntime`, with `isHost`): the module is the compiler's own.
+    let reservedExternErrors (isHost: string -> bool) (origin: ModuleOrigin) (module': Module) : Diagnostic list =
+        if mayRequireRuntime isHost origin then
+            []
+        else
+            let rec externs (items: TopLevelItem list) =
+                items
+                |> List.collect (fun item ->
+                    match item.Kind with
+                    | Def (ValueDef(_, name, _, Kind (ExternSyntax.Import(importModule, _)))) when importModule = componentModule -> [ name, item.Span ]
+                    | ModuleBlock(_, blockItems) -> externs blockItems
+                    | _ -> [])
+            externs module'
+            |> List.map (fun (name, span) ->
+                Diagnostics.at
+                    DiagnosticCodes.ReservedExternModule
+                    span
+                    $"'{name}' imports from \"{componentModule}\", which is the compiler's own, for a host's component root: only a host's package, and the host libraries it depends on, may")
 
     /// Whether `ty` is the context `HostRuntime`, as the module names it (`HostRuntime`, or `r.HostRuntime` under an
     /// alias).

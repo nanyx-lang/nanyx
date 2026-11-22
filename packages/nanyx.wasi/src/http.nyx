@@ -11,8 +11,8 @@ import (
   nanyx.http.core/response as (Response)
 )
 
---| How many bytes of a response's body are read at a time.
-def chunkSize: I32 = 4096
+--| How many bytes of a body are read at a time.
+export def chunkSize: I32 = 4096
 
 -- `Http` is written on `wasi:http/client`'s `send`. A request is a `wasi:http/types` `request`: its
 -- headers a `fields`, its body a `stream<u8>`, its trailers a future, always `ok(none)`, and its
@@ -197,15 +197,17 @@ def withContentLength: [HostRuntime] Request -> list((string, string)) = { reque
 }
 
 --| A new `fields` with `headers`, each a name and a value, or the first that can't be set.
-def fieldsOf: [HostRuntime] list((string, string)) -> #some(I32) | #error(HttpError) = { headers ->
-  def fields = newFields()
+export def fieldsOf
+  : [HostRuntime] list((string, string)) -> #some(I32) | #error(HttpError)
+  = { headers ->
+    def fields = newFields()
 
-  match appendAll(fields, headers)
-    | #ok -> #some(fields)
-    | #error(e) ->
-      dropFields(fields)
-      #error(e)
-}
+    match appendAll(fields, headers)
+      | #ok -> #some(fields)
+      | #error(e) ->
+        dropFields(fields)
+        #error(e)
+  }
 
 --| Appends each of `headers` to `fields`.
 def appendAll: [HostRuntime] I32, list((string, string)) -> #ok | #error(HttpError) = {
@@ -278,32 +280,29 @@ def awaitReturn: [HostRuntime] I32 -> () = { subtask ->
   if waitFor(subtask) >= returned then subtaskDrop(subtask) else awaitReturn(subtask)
 }
 
---| The blocks of the body stream `reader`, each read into the `entriesAtOnce`-sized buffer at
-  `buffer`, after `blocks` (the latest first), until it ends.
-def bodyFrom: [HostRuntime] I32, I32, list(string) -> list(string) = { reader, buffer, blocks ->
-  def status = settled(reader, responseStreamRead(reader, buffer, chunkSize))
-  def read = status / 16
-  def kept = if read > 0 then [stringAt(buffer, read), ...blocks] else blocks
-  if status % 16 != 0 then kept else bodyFrom(reader, buffer, kept)
-}
-
---| The `count` headers at `entries`, from the `index`th on, after `headers`. Each is 16 bytes: its
-  name, a string, and its value, a `list<u8>` read as text; the host allocated them, and they are
-  freed.
-def headersIn
-  : [HostRuntime] I32, I32, I32, list((string, string)) -> list((string, string))
-  = { entries, index, count, headers ->
-    if index >= count then list.reverse(headers) else
-      def entry = I32.wrappingAdd(entries, index * 16)
-      def header = (takeString(entry), takeString(entry + 8))
-      headersIn(entries, index + 1, count, [header, ...headers])
+--| The blocks of the body stream `reader`, each read with `read` into the `chunkSize`-sized buffer
+  at `buffer`, after `blocks` (the latest first), until it ends.
+def blocksFrom
+  : [HostRuntime] ([HostRuntime] I32, I32, I32 -> I32), I32, I32, list(string) -> list(string)
+  = { read, reader, buffer, blocks ->
+    def status = settled(reader, read(reader, buffer, chunkSize))
+    def count = status / 16
+    def kept = if count > 0 then [stringAt(buffer, count), ...blocks] else blocks
+    if status % 16 != 0 then kept else blocksFrom(read, reader, buffer, kept)
   }
 
---| The `response` the host gave: its status, its headers and its body, which it reads to the end.
-def responseOf: [HostRuntime] I32 -> Response = { response ->
-  def status = I32.toInt(statusCode(response))
-  def fields = responseHeaders(response)
+--| The body the stream `reader` holds, read with `read`, its stream's `stream-read`, to the end.
+export def bodyFrom
+  : [HostRuntime] ([HostRuntime] I32, I32, I32 -> I32), I32 -> string
+  = { read, reader ->
+    def buffer = allocate(chunkSize)
+    def body = string.concat(list.reverse(blocksFrom(read, reader, buffer, [])))
+    free(buffer)
+    body
+  }
 
+--| The headers in `fields`, which it drops.
+export def headersOf: [HostRuntime] I32 -> list((string, string)) = { fields ->
   def headers = listFrom(
     { at -> copyAllFields(fields, at) }
     16
@@ -311,15 +310,20 @@ def responseOf: [HostRuntime] I32 -> Response = { response ->
   )
 
   dropFields(fields)
+  headers
+}
+
+--| The `response` the host gave: its status, its headers and its body, which it reads to the end.
+def responseOf: [HostRuntime] I32 -> Response = { response ->
+  def status = I32.toInt(statusCode(response))
+  def headers = headersOf(responseHeaders(response))
   def consumed = consumedFutureNew()
   def ends = allocate(8)
   consumeBody(response, readableEnd(consumed), ends)
   def reader = readI32(ends)
   def trailers = readI32(ends + 4)
   free(ends)
-  def buffer = allocate(chunkSize)
-  def body = string.concat(list.reverse(bodyFrom(reader, buffer, [])))
-  free(buffer)
+  def body = bodyFrom(responseStreamRead, reader)
   responseStreamDropReadable(reader)
   trailersFutureDropReadable(trailers)
   writeConsumed(writableEnd(consumed))
