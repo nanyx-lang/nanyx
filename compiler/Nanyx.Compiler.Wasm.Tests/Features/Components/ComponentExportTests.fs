@@ -108,7 +108,7 @@ let ``The componentizer wraps a core module with exports of its own as a compone
     let wat = transpileTypedModuleWithOptions options typed |> fst
     use target = new TempDirectory()
     let hostWit = System.IO.Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "wit")
-    let world = ComponentInterface.write hostWit "nanyx:console/command" package functions target.Path
+    let world = ComponentInterface.write hostWit "nanyx:console/command" package functions [] target.Path
     Assert.Equal("acme:test/component@0.1.0", world)
     match Nanyx.Runtime.Componentizer.componentize (WasmBinary.assemble wat) target.Path world with
     | Ok bytes -> Assert.Equal<byte array>([| 0x00uy; 0x61uy; 0x73uy; 0x6duy; 0x0duy; 0x00uy; 0x01uy; 0x00uy |], bytes.[.. 7])
@@ -278,7 +278,7 @@ let ``The componentizer accepts the WIT of records, tuples, lists and variants w
     let wat = transpileTypedModuleWithOptions { WasmOptions.Default with Component = Some CliRun; ComponentExports = exports } typed |> fst
     use target = new TempDirectory()
     let hostWit = System.IO.Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "wit")
-    let world = ComponentInterface.write hostWit "nanyx:console/command" package functions target.Path
+    let world = ComponentInterface.write hostWit "nanyx:console/command" package functions [] target.Path
     match Nanyx.Runtime.Componentizer.componentize (WasmBinary.assemble wat) target.Path world with
     | Ok _ -> ()
     | Error message -> Assert.Fail message

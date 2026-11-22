@@ -358,6 +358,10 @@ internal static partial class CliCommands
         var functions = component is null || entry.Value.Typed is null
             ? FSharpList<ComponentFunction>.Empty
             : ComponentInterface.functions(entry.Value.Typed.Value);
+        // And the functions it imports, from its definitions marked @import that it calls.
+        var imports = component is null || entry.Value.Typed is null
+            ? FSharpList<ComponentFunction>.Empty
+            : ComponentInterface.imports(entry.Value.Typed.Value);
         var exports = ListModule.OfSeq(functions.Select(function => Tuple.Create(ComponentInterface.exportName(witPackage, function.Export), function)));
         if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(ComponentEntryModule.ofWorld(component.World)), componentExports: exports), deferred, timings))
         {
@@ -369,13 +373,13 @@ internal static partial class CliCommands
             : outputPath!;
         var written = component is null || format == ProgramFormat.Text
             ? WriteProgram(shell, wat, format, outputFile)
-            : WriteComponent(shell, wat, package.Host.Value, component, witPackage, functions, outputFile);
+            : WriteComponent(shell, wat, package.Host.Value, component, witPackage, functions, imports, outputFile);
         if (written is null)
         {
             return 1;
         }
 
-        var world = component is null ? null : functions.IsEmpty ? component.World : ComponentInterface.qualified(witPackage, ComponentInterface.worldName(functions));
+        var world = component is null ? null : functions.IsEmpty && imports.IsEmpty ? component.World : ComponentInterface.qualified(witPackage, ComponentInterface.worldName(functions));
         var kind = world is null ? "" : $", a component of {world}";
         shell.Out.WriteLine($"Built {package.Manifest.Name} ({FileCount(package)}){WithDeferred(deferred, build.Diagnostics)}{kind}: {written}");
         return 0;
@@ -385,18 +389,18 @@ internal static partial class CliCommands
     /// Writes the program <paramref name="wat"/>, the core module of a component, to <paramref name="outputPath"/> as a
     /// component of the world of <paramref name="host"/>'s component root, and gives the path as the shell shows it;
     /// <c>null</c>, said on the shell's stderr, when it can't be built, with wit-component's reason. A program that exports
-    /// <paramref name="functions"/> of its own is a component of a world of <paramref name="witPackage"/>'s that includes
+    /// <paramref name="functions"/> of its own, or imports <paramref name="imports"/>, is a component of a world of <paramref name="witPackage"/>'s that includes
     /// the host's, whose WIT is written to a wit directory beside the component.
     /// </summary>
-    private static string? WriteComponent(Shell shell, string wat, Host host, HostComponent component, string witPackage, FSharpList<ComponentFunction> functions, string outputPath)
+    private static string? WriteComponent(Shell shell, string wat, Host host, HostComponent component, string witPackage, FSharpList<ComponentFunction> functions, FSharpList<ComponentFunction> imports, string outputPath)
     {
         var fullPath = shell.FullPath(outputPath);
         var witDirectory = host.WitDirectory;
         var world = component.World;
-        if (!functions.IsEmpty)
+        if (!functions.IsEmpty || !imports.IsEmpty)
         {
             witDirectory = Path.Combine(Path.GetDirectoryName(fullPath)!, "wit");
-            world = ComponentInterface.write(host.WitDirectory, component.World, witPackage, functions, witDirectory);
+            world = ComponentInterface.write(host.WitDirectory, component.World, witPackage, functions, imports, witDirectory);
         }
 
         var built = Componentizer.componentize(WasmBinary.assemble(wat), witDirectory, world);

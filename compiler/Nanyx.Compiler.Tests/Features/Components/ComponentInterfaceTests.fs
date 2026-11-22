@@ -29,9 +29,9 @@ export def notExported: int -> int = { n -> n }
     Assert.Equal<string list>([ "areaOf"; "greet" ], functions |> List.map _.Export.Name)
     Assert.Equal<string list>([ "shapes"; "shapes" ], functions |> List.map _.Export.Module)
     Assert.Equal<string list>([ "m.areaOf"; "m.greet" ], functions |> List.map _.Export.Definition)
-    let wit = ComponentInterface.render "acme:shapes@0.1.0" "nanyx:console/command" functions
+    let wit = ComponentInterface.render "acme:shapes@0.1.0" "nanyx:console/command" functions []
     let expected =
-        """/// Written by `nanyx build` from the program's definitions marked `@component`.
+        """/// Written by `nanyx build` from the program's definitions marked `@component` and `@import`.
 package acme:shapes@0.1.0;
 
 interface shapes {
@@ -58,7 +58,7 @@ export def all: I8, I16, I32, int, U8, U16, U32, U64, F32, float, bool -> int = 
 @component
 export def tick: () -> () = { -> () }
 """
-    let wit = ComponentInterface.render "acme:numbers@1.0.0" "nanyx:console/command" functions
+    let wit = ComponentInterface.render "acme:numbers@1.0.0" "nanyx:console/command" functions []
     Assert.Contains("  all: func(a: s8, b: s16, c: s32, d: s64, e: u8, f: u16, g: u32, h: u64, i: f32, j: f64, k: bool) -> s64;", wit)
     Assert.Contains("  tick: func();", wit)
 
@@ -132,7 +132,7 @@ export def area: Shape -> float = { s -> 0.0 }
 export def corners: list(Pair(Point)) -> (int, list(string)) = { xs -> (0, []) }
 """
     let expected =
-        """/// Written by `nanyx build` from the program's definitions marked `@component`.
+        """/// Written by `nanyx build` from the program's definitions marked `@component` and `@import`.
 package acme:shapes@0.1.0;
 
 interface shapes {
@@ -161,4 +161,58 @@ world component {
   export shapes;
 }
 """
-    Assert.Equal(expected, ComponentInterface.render "acme:shapes@0.1.0" "nanyx:console/command" functions)
+    Assert.Equal(expected, ComponentInterface.render "acme:shapes@0.1.0" "nanyx:console/command" functions [])
+
+/// A module whose defs are imported from another component, two of which the program calls.
+let private geometry =
+    """module geometry
+
+export type Point = (x: int, y: int)
+
+@import("acme:geometry/shapes@1.0.0", "area-of")
+export def area: Point -> float
+
+@import("acme:geometry/shapes@1.0.0")
+export def originOf: () -> Point
+
+@import("acme:geometry/shapes@1.0.0")
+export def unused: () -> int
+"""
+
+[<Fact>]
+let ``A def marked @import is imported from the interface it names, whose package's WIT is written from the declarations`` () =
+    let result = compileImporting (normalized geometry) "module main\n\nimport mod as m\n\ndef main = m.area(m.originOf())\n"
+    Assert.Empty(result.Diagnostics)
+    let imports = ComponentInterface.imports result.Typed.Value
+    Assert.Equal<string list>([ "area-of"; "origin-of" ], imports |> List.map _.Export.Name)
+    Assert.Contains("  import acme:geometry/shapes@1.0.0;", ComponentInterface.render "acme:app@0.1.0" "nanyx:console/command" [] imports)
+    let expected =
+        """/// Written by `nanyx build` from the program's definitions marked `@import`.
+package acme:geometry@1.0.0;
+
+interface shapes {
+  record point {
+    x: s64,
+    y: s64,
+  }
+
+  area-of: func(p0: point) -> f64;
+  origin-of: func() -> point;
+}
+"""
+    Assert.Equal<(string * string) list>([ "acme:geometry@1.0.0", expected ], ComponentInterface.importedPackages imports)
+
+[<Theory>]
+[<InlineData("@import(\"acme:geometry/shapes\")\ndef area = 1", "has a value")>]
+[<InlineData("@import(\"acme:geometry/shapes\")\ndef area", "needs its type written")>]
+[<InlineData("@import(\"shapes\")\ndef area: float -> float", "isn't a WIT interface's full name")>]
+[<InlineData("@import(1)\ndef area: float -> float", "It takes the WIT interface")>]
+let ``@import declares a def written with a type and no value, from a WIT interface named in full`` (source: string, message: string) =
+    let diagnostic = diagnosticOf (normalized source)
+    Assert.Contains(message, diagnostic.Message)
+
+[<Fact>]
+let ``An import's type must cross a component's boundary too`` () =
+    let diagnostic = diagnosticOf (normalized "@import(\"acme:geometry/shapes\")\ndef apply: (int -> int) -> int\n")
+    Assert.Equal(DiagnosticCodes.ComponentBoundaryType.Code, diagnostic.Code)
+    Assert.Contains("A component can't import 'apply': a function can't cross", diagnostic.Message)

@@ -111,9 +111,9 @@ let internal inferCall
             | Seqs.SeqType (TyPrimitive "int") -> inferAsCall (inferExpr env) state expr intCallee args
             | _ -> Ok (typed, next)
         | Error err -> Error err
-    elif name = ExternSyntax.builtIn then
-        // A foreign function's value (see `ExternSyntax`): the embedder provides it, so it is whatever the def's
-        // written type says.
+    elif name = ExternSyntax.builtIn || name = ComponentImportSyntax.builtIn then
+        // A foreign function's value (see `ExternSyntax`), or a component import's (see `ComponentImportSyntax`): the
+        // embedder provides it, so it is whatever the def's written type says.
         let ty, next = freshVar state
         Ok (mkTypedExpr expr ty None None None, next)
     elif name = RecSyntax.builtIn then

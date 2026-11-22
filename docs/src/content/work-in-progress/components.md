@@ -9,7 +9,7 @@ that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or 
 not only under `nanyx`'s own runtime. Stages 0 to 3 are built, and described on
 [Components](../deep-dives/components) in Deep dives: every console program builds as a component, and every HTTP
 handler as a `wasi:http/service` component. Stage 5 has begun: a program exports functions of numbers, strings,
-records, tuples, lists and variants, marked `@component`
+records, tuples, lists and variants, marked `@component`, and imports other components' functions, marked `@import`
 ([A program's own exports](../deep-dives/components#a-programs-own-exports)). The page sets out what was found, the
 [design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
 whose stages are filed as issues.
@@ -378,5 +378,5 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 | 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)), done | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
 | 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)), done | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request at a time per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
 | 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
-| 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)), begun | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types. Built: exports of numbers, bools, strings, records, tuples, lists and variants, with `out/wit`. Still to come: exports that require contexts; `@import`; library components; a test in CI with a component in another language | Write plugins and libraries that other languages' components call, and call theirs |
+| 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)), begun | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types. Built: exports and `@import`s of numbers, bools, strings, records, tuples, lists and variants, with `out/wit`. Still to come: exports that require contexts; library components; a test in CI with a component in another language | Write plugins and libraries that other languages' components call, and call theirs |
 | 6. One root per host ([#2242](https://github.com/nanyx-lang/nanyx/issues/2242)) | Run 0.3 components in `nanyx run`, once an embedding supports it (upstream or our own), and delete the core roots | One implementation of each host |
