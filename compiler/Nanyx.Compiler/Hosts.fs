@@ -112,18 +112,16 @@ module Hosts =
             if missing.IsEmpty then ""
             else
                 let names = missing |> List.map (fun name -> $"'{name}'") |> String.concat ", "
-                let built = if entry.Host.IsComponent then $" in a component: build with --core for a core module" else ""
-                $"\n  it doesn't provide {names}{built}"
+                $"\n  it doesn't provide {names}"
         Diagnostics.at
             DiagnosticCodes.EntryDoesNotFitHost
             entry.Argument
             $"It doesn't fit the host '{entry.Host.Import}'\n  expected: {shown.[0]}\n  found:    {shown.[1]}{missingLines}"
         |> Diagnostics.about entry.Name
 
-    /// The errors for a host's component root whose `run`, of type `componentRun`, declared at `span`, provides a
-    /// context that its core root's `run`, of type `coreRun`, doesn't: a program that runs under the one would not run
-    /// under the other. The component root may provide fewer, which a program that needs one it lacks is told when it is
-    /// built as a component (see `entryMismatch`).
+    /// The errors for a host's component root whose `run`, of type `componentRun`, declared at `span`, doesn't provide
+    /// the contexts its core root's `run`, of type `coreRun`, does: one more, or one fewer. A program that runs under the
+    /// one would not run under the other.
     let componentRootErrors (host: Host) (span: SourceSpan) (componentRun: Ty) (coreRun: Ty) =
         let provided (run: Ty) =
             match Unifier.unalias run with
@@ -133,16 +131,25 @@ module Hosts =
                     contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source
                 | _ -> []
             | _ -> []
-        let core = provided coreRun |> Set.ofList
-        match provided componentRun |> List.filter (core.Contains >> not) with
+        let core = provided coreRun
+        let built = provided componentRun
+        let listed (names: string list) = names |> List.map (fun name -> $"'{name}'") |> String.concat ", "
+        let root = host.Component |> Option.map _.CoreRoot |> Option.defaultValue host.Module
+        let differences =
+            [ match built |> List.filter (fun name -> not (List.contains name core)) with
+              | [] -> ()
+              | extra -> $"provides {listed extra}, which the core root '{host.Package}/{root}' doesn't"
+              match core |> List.filter (fun name -> not (List.contains name built)) with
+              | [] -> ()
+              | missing -> $"doesn't provide {listed missing}, which the core root '{host.Package}/{root}' does" ]
+        match differences with
         | [] -> []
-        | extra ->
-            let names = extra |> List.map (fun name -> $"'{name}'") |> String.concat ", "
-            let root = host.Component |> Option.map _.CoreRoot |> Option.defaultValue host.Module
+        | _ ->
+            let said = differences |> String.concat ", and "
             [ Diagnostics.at
-                  DiagnosticCodes.ComponentRootProvidesMore
+                  DiagnosticCodes.ComponentRootContextsDiffer
                   span
-                  $"The component root's '{runFunction}' provides {names}, which the core root '{host.Package}/{root}' doesn't: a component root provides no context its core root doesn't" ]
+                  $"The component root's '{runFunction}' {said}: a component root provides the contexts its core root does" ]
 
     /// Whether `ty` is the context `HostRuntime`, as the module names it (`HostRuntime`, or `r.HostRuntime` under an
     /// alias).

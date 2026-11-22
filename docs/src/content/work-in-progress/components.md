@@ -6,8 +6,8 @@ order: 4
 
 This page is the design for [#2182](https://github.com/nanyx-lang/nanyx/issues/2182): emitting WebAssembly components
 that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or any runtime that implements WASI 0.3, and
-not only under `nanyx`'s own runtime. Stages 0 and 1 are built, and described on
-[Components](../deep-dives/components) in Deep dives: a console program that needs no `Http` builds as a component. The page sets out what was found, the
+not only under `nanyx`'s own runtime. Stages 0 to 2 are built, and described on
+[Components](../deep-dives/components) in Deep dives: every console program builds as a component. The page sets out what was found, the
 [design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
 whose stages are filed as issues.
 
@@ -201,14 +201,12 @@ interleaving and a fresh instance per test or request. No embedding runs WASI 0.
 host = (
   root = "console.host"
   prelude = "console.prelude"
-  component = (root = "console.host.wasi", world = "wasi:cli/command@0.3.0")
+  component = (root = "console.host.wasi", world = "nanyx:console/command")
 )
 ```
 
-- **The component root is written against `wasi:*`.** It provides no context the core root doesn't, which the compiler
-  checks (`NYX0275`), and may provide fewer while it is built: the console host's lacks `Http` until stage 2. A program that needs one it lacks is an error naming it when it is built as a component.
-  Once a component root provides everything its core root does, the check becomes that they provide the same contexts.
-  Programs and libraries see only contexts, so they never know which root they ran on.
+- **The component root is written against `wasi:*`.** It provides the contexts the core root does, which the compiler
+  checks (`NYX0275`). Programs and libraries see only contexts, so they never know which root they ran on.
 - **`nanyx build` writes a component** when the host has a component root, and `--core` writes a core module.
   `nanyx run` always runs the core root.
 - **CI tests the component roots** by building the examples as components and running them under `wasmtime run` (46 or
@@ -254,6 +252,10 @@ Each import of the console and HTTP hosts maps onto a WASI 0.3 interface, or ont
   the callback ABI too.
 - **The runtime's own imports follow the target.** On a component, the compiler's crash, deferred-error and `dbg` writes
   use `wasi:cli/stderr`, and its exits use `wasi:cli/exit`, not `fd_write` and `proc_exit`.
+- **The console host's world is its own, `nanyx:console/command`:** `wasi:cli/command@0.3.0` with
+  `wasi:http/client@0.3.0`, which `wasi:cli/command` doesn't import. A component imports only what the program uses, so
+  one that makes no requests is a `wasi:cli/command` component; one that does needs a runtime with `wasi:http`, as
+  `wasmtime run -S http` is.
 - **The WIT is `@0.3.0`.** Every 0.3 host accepts it, since later 0.3.x versions are compatible, and nothing a host needs
   changed after it.
 - **The playground keeps its own host.** Browsers don't run components, so `nanyx.playground` is unaffected
@@ -335,7 +337,7 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 | 0. The componentizer ([#2236](https://github.com/nanyx-lang/nanyx/issues/2236)), done | A small Rust crate on wit-component, built to `wasm32-wasip1` by Cargo when the runtime builds, and embedded in `Nanyx.Compiler.Runtime`. A `cabi_realloc` export. The entry exported under a world's name. The runtime's own imports on `wasi:cli` | Nothing visible yet |
 | 1a. Console components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `nanyx.console`'s component root on `wasi:cli`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the example packages under `wasmtime run` | Build a command-line program that needs no `FileSystem` or `Http` once, and run it with `wasmtime run` or any WASI 0.3 runtime |
 | 1b. Files in components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `FileSystem` on `wasi:filesystem`, in the console host's component root | The same, for programs that read and write files |
-| 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)) | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
+| 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)), done | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
 | 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)) | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
 | 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
 | 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241)) | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types | Write plugins and libraries that other languages' components call, and call theirs |

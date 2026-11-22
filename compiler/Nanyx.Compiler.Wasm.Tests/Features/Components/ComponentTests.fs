@@ -1,6 +1,6 @@
 /// The core module of a WASI 0.3 component (`WasmOptions.Component`, see `ComponentAbi`), and the componentizer that
-/// wraps it (`Nanyx.Runtime.Componentizer`), with WASI 0.3.0's own WIT: the console host's `wit/`, which is
-/// `wasi:cli@0.3.0` as WASI's v0.3.0 tag has it, with the packages it uses under `wit/deps`.
+/// wraps it (`Nanyx.Runtime.Componentizer`), with the console host's `wit/`: its world `nanyx:console/command`, with WASI
+/// 0.3.0's own WIT, as WASI's v0.3.0 tag has it, under `wit/deps`.
 module TranspilerWasmTests.Features.Components.Component
 
 open System
@@ -12,7 +12,7 @@ open TranspilerWasmTestHelpers
 
 let private componentOptions = { WasmOptions.Default with Component = true }
 
-/// `wasi:cli`'s package, whose world `command` the tests wrap modules as.
+/// The console host's WIT package, whose world `command` the tests wrap modules as.
 let private wit = Path.Combine(NyxCompiler.ShippedPackages.directoryOf NyxCompiler.Hosts.consolePackage, "wit")
 
 /// The modules a module's text imports from.
@@ -46,7 +46,7 @@ let ``A program with no top-level code still has an entry`` () =
 [<InlineData("dbg(1)\nprintln(\"hi\")\n")>]
 // A crash writes why to stderr, with the runtime's own helper, and stops.
 [<InlineData("println(\"before\")\nlet xs = [1, 2]\nprintln(xs[5])\n")>]
-let ``The componentizer wraps a component's core module as a component of wasi:cli/command`` (source: string) =
+let ``The componentizer wraps a component's core module as a component of the console host's world`` (source: string) =
     let wat = transpileWatWith { componentOptions with Places = true } (normalized source)
     match Nanyx.Runtime.Componentizer.componentize (Transpiler.Wasm.WasmBinary.assemble wat) wit "command" with
     | Ok bytes -> Assert.Equal<byte array>(componentPreamble, preamble bytes)

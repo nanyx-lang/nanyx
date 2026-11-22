@@ -1,0 +1,9 @@
+package nanyx:console;
+
+/// What a program the console host builds as a component runs in: `wasi:cli/command`, and
+/// `wasi:http/client` for `Http`. A component imports only what the program uses, so one that makes
+/// no requests is a `wasi:cli/command` component that any WASI 0.3 runtime runs.
+world command {
+  include wasi:cli/command@0.3.0;
+  import wasi:http/client@0.3.0;
+}

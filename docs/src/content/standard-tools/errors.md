@@ -1670,9 +1670,7 @@ def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It d
 
 The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, and names each
 context the entry point requires that the host doesn't provide. To fix it, give the entry point the shape the host
-expects: for a command-line program, a function that takes nothing. A program built as a component runs under its
-host's [component root](../advanced/hosts#built-as-a-component), which may provide fewer contexts: build it with `--core`
-for a core module, which runs under the host's root.
+expects: for a command-line program, a function that takes nothing.
 
 # NYX0238: HostRuntime required outside a host
 
@@ -2260,11 +2258,12 @@ def values: a, type a -> int = { value, t ->
 
 To fix it, use the value where it is opened, with the field's `type`.
 
-# NYX0275: Component root provides a context its core root doesn't
+# NYX0275: Component root provides other contexts than its core root
 
 A host's [component root](../advanced/hosts#writing-a-host), which `nanyx build` builds a WebAssembly component from,
-provides a context in its `run` that the host's core root doesn't. A program that runs under the one would then not run
-under the other. It is reported at the component root's `run`, when a program is built as a component.
+provides a context in its `run` that the host's core root doesn't, or doesn't provide one the core root does. A program
+that runs under the one would then not run under the other. It is reported at the component root's `run`, when a program
+is built as a component.
 
 ```nanyx fragment
 export module shout.host.wasi
@@ -2281,8 +2280,7 @@ export def run: [HostRuntime] ([Extra, Log] () -> a) -> () = { entry ->
 }
 ```
 
-To fix it, provide the context in the core root too, or not in the component root. A component root may provide fewer
-contexts than its core root: a program that needs one it lacks is told so when it is built as a component (`NYX0237`).
+To fix it, provide the same contexts in both roots.
 
 # NYX0301: Not supported by the WebAssembly backend
 
