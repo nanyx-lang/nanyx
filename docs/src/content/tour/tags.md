@@ -127,7 +127,7 @@ That said, converting a tag to text gives the expected name:
 ```nanyx
 def t = #readwrite
 
-"{t}" -- "#readwrite"
+println("{t}") -- #readwrite
 ```
 
 This is useful for logging and debugging, but it does not change the underlying runtime type of the value.
