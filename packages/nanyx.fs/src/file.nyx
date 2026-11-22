@@ -93,7 +93,8 @@ def describe: FsError -> string = {
   chunk is the file's end. A read that failed stops the program, so that it is never taken for the
   end of a shorter file.
 def afterChunk
-  : [Async, FileSystem] Path, Reading, (#some(string) | #error(FsError)) -> #some(string, Reading) | #done
+  : [Async, FileSystem]
+    Path, Reading, (#some(string) | #error(FsError)) -> #some(string, Reading) | #done
   = { at, reading, chunk ->
     match chunk
       | #some(text) ->

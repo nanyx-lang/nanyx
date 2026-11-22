@@ -37,7 +37,9 @@ context Attester = (
 
 -- Retry an operation, waiting between attempts
 def retry
-  : [Clock] (times: int, delay: int -> Duration, operation: () -> #some(a) | #error(e)) -> #some(a) | #error(e)
+  : [Clock]
+    (times: int, delay: int -> Duration, operation: () -> #some(a) | #error(e))
+    -> #some(a) | #error(e)
   = { times, delay, operation ->
     rec attempt = { n ->
       match operation()

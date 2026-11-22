@@ -253,7 +253,8 @@ def mergePairs
   from `index`. An element of the left run goes first when the two are `#equal`, which keeps the
   sort stable.
 def merge
-  : [Memory, c] MSlice(a), MSlice(a), int, int, int, int, int, ([c] a, a -> #less | #equal | #greater) -> ()
+  : [Memory, c]
+    MSlice(a), MSlice(a), int, int, int, int, int, ([c] a, a -> #less | #equal | #greater) -> ()
   = { from, to, left, middle, right, end, index, order ->
     if left < middle and right < end then
       def x = element(from, left)

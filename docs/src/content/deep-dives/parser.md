@@ -86,7 +86,10 @@ items at one column; the pass keeps a stack of them, with the brackets and brace
    its column, with an `Indent` before it. After a `{` the block may be at any column, since the `}` closes it.
 3. **A match's arms are a block.** A line that starts with `|` opens a block of arms at its column when it is
    indented further than the innermost block, or at the column of a block that isn't arms, so that arms may line up
-   with their `match`. In `[` and `]` it doesn't: a table's rows start with `|`.
+   with their `match`. In `[` and `]` it doesn't: a table's rows start with `|`. A union type's cases written one per
+   line are such a block too, as in a def's long result (`-> | #some(Entry)` and its other cases under the first
+   `|`): the type parser reads its cases across the `Indent` and `Newline`s, and takes the `Dedent` that ends it
+   (`DescentTypes.typeUnion`).
 4. **A line indented less than a block closes it,** with a `Dedent`, and then the next block out, while the line is
    indented less than each. So does a line at a block of arms' column that doesn't start with `|`. So a match nested
    in an arm ends at the next arm indented back to the outer one

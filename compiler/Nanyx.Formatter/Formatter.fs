@@ -381,7 +381,7 @@ let format (options: Options) (parsed: SourceModule) : string =
     and declarationDoc (isExport: bool) (name: string) (typeOpt: TypeExpr option) : Doc =
         let name = cat [ (if isExport then text "export " else Doc.empty); text "def "; text (Names.written name) ]
         match typeOpt with
-        | Some t -> Doc.group (cat [ name; nest (cat [ Doc.softLine; text ": "; signature t ]) ])
+        | Some t -> Doc.group (cat [ name; nest (cat [ Doc.softLine; text ": "; brokenSignature t ]) ])
         | None -> name
 
     /// A def whose name (or destructuring pattern) is already laid out.
@@ -414,9 +414,9 @@ let format (options: Options) (parsed: SourceModule) : string =
             match typeOpt with
             | Some t ->
                 match commentsBeforeEquals t with
-                | [] -> NamedGroup(signatureGroup, cat [ name; nest (cat [ Doc.softLine; text ": "; signature t; Doc.line; text "=" ]) ])
+                | [] -> NamedGroup(signatureGroup, cat [ name; nest (cat [ Doc.softLine; text ": "; brokenSignature t; Doc.line; text "=" ]) ])
                 | comments ->
-                    let signatureLine = cat [ name; Doc.group (nest (cat [ Doc.softLine; text ": "; signature t ])) ]
+                    let signatureLine = cat [ name; Doc.group (nest (cat [ Doc.softLine; text ": "; brokenSignature t ])) ]
                     NamedGroup(signatureGroup, cat [ signatureLine; nest (cat [ cat comments; hard; text "=" ]) ])
             | None -> cat [ name; text " =" ]
         let underHead doc = IfGroupBroken(signatureGroup, nest doc, doc)
@@ -471,6 +471,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Some argument -> cat [ text ("@" + name); parenFields argument (span.Start + 1 + name.Length) span.End ]
 
     and signature (t: TypeExpr) : Doc = (types ()).Signature t
+    and brokenSignature (t: TypeExpr) : Doc = (types ()).BrokenSignature t
 
     and typeExpr (t: TypeExpr) : Doc = (types ()).TypeExpr t
 
