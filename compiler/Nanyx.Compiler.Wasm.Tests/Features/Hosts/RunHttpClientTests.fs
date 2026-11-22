@@ -52,21 +52,21 @@ let ``A GET and a POST read the status, the headers and the body`` () =
     println(response.status)
     println(Response.header(response, "X-Greeting"))
     println(response.body)
-  | #error(_) -> println("error")
+  | _ -> println("error")
 
 match http.post("{server.Url}/echo", "the body")
   | #some(response) -> println("{{response.status}} {{response.body}}")
-  | #error(_) -> println("error")
+  | _ -> println("error")
 
 def request = Request.of(#put, "{server.Url}/echo") with headers = [("X-Sent", "yes")]
 
 match http.send(request with body = "é")
   | #some(response) -> println(response.body)
-  | #error(_) -> println("error")
+  | _ -> println("error")
 
 match http.get("{server.Url}/missing")
   | #some(response) -> println("{{response.status}} {{response.body}}")
-  | #error(_) -> println("error")
+  | _ -> println("error")
 """
     |> assertPrinted
         """200
@@ -90,8 +90,8 @@ let ``A request with no answer in its timeout is #timeout`` () =
         try
             run $"""match http.send(Request.of(#get, "{server.Url}/slow") with timeout = 200)
   | #some(_) -> println("answered")
-  | #error(#timeout) -> println("timed out")
-  | #error(_) -> println("another error")
+  | #timeout -> println("timed out")
+  | _ -> println("another error")
 """
         finally
             release.Set()
@@ -100,15 +100,15 @@ let ``A request with no answer in its timeout is #timeout`` () =
 [<Fact>]
 let ``A server that isn't there, or a URL that isn't one, is an error saying so`` () =
     run $"""match http.get("http://localhost:{freePort ()}/")
-  | #error(#connectionFailed(_)) -> println("connection failed")
+  | #connectionFailed(_) -> println("connection failed")
   | _ -> println("?")
 
 match http.get("not a url")
-  | #error(#invalidUrl) -> println("invalid url")
+  | #invalidUrl -> println("invalid url")
   | _ -> println("?")
 
 match http.get("ftp://example.com/file")
-  | #error(#invalidUrl) -> println("invalid url")
+  | #invalidUrl -> println("invalid url")
   | _ -> println("?")
 """
     |> assertPrinted "connection failed\ninvalid url\ninvalid url\n"

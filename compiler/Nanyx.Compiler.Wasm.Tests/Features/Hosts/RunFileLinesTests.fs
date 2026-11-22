@@ -43,11 +43,11 @@ let ``A file is read line by line, without its line breaks`` () =
         """def show = { name ->
   match file.lines(path.of(name))
     | #some(lines) -> println(seq.toList(lines))
-    | #error(#notFound) -> println("not found")
-    | #error(#isDirectory) -> println("a directory")
-    | #error(#notDirectory) -> println("not a directory")
-    | #error(#permissionDenied) -> println("permission denied")
-    | #error(_) -> println("another error")
+    | #notFound -> println("not found")
+    | #isDirectory -> println("a directory")
+    | #notDirectory -> println("not a directory")
+    | #permissionDenied -> println("permission denied")
+    | _ -> println("another error")
 }
 
 show("crlf.txt")
@@ -83,7 +83,7 @@ let ``The lines of a file much larger than a chunk are counted, a chunk at a tim
   | #some(lines) ->
     println(seq.fold(lines, 0, { count, _ -> count + 1 }))
     println(seq.toList(seq.skip(lines, 199998)))
-  | #error(_) -> println("error")
+  | _ -> println("error")
 """
     runIn directory.Path (if option = "" then [] else [ option ]) source
     |> assertPrinted
@@ -111,7 +111,7 @@ let ``Pulling only the first line leaves the file closed, and a read that fails 
     println(seq.toList(seq.take(lines, 1)))
     println(file.delete(path.of("log.txt")))
     println(seq.fold(lines, 0, { count, _ -> count + 1 }))
-  | #error(_) -> println("error")
+  | _ -> println("error")
 """
     let outcome = runIn directory.Path [] source
     Assert.Equal("[line 0]\n#ok\n", outcome.StandardOutput)
@@ -129,7 +129,7 @@ let ``A file cut short while it is read crashes, rather than seeming to end`` ()
     println(seq.toList(seq.take(lines, 1)))
     println(file.write(path.of("log.txt"), "line 0\n"))
     println(seq.fold(lines, 0, { count, _ -> count + 1 }))
-  | #error(_) -> println("error")
+  | _ -> println("error")
 """
     let outcome = runIn directory.Path [] source
     Assert.Equal("[line 0]\n#ok\n", outcome.StandardOutput)
@@ -144,7 +144,7 @@ let ``A file outside the current directory has no lines to read`` () =
     let source =
         $"""match file.lines(path.of("{other.Path.Replace('\\', '/')}/secret.txt"))
   | #some(_) -> println("read")
-  | #error(#permissionDenied) -> println("permission denied")
-  | #error(_) -> println("another error")
+  | #permissionDenied -> println("permission denied")
+  | _ -> println("another error")
 """
     runIn directory.Path [] source |> assertPrinted "permission denied\n"

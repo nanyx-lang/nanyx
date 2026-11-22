@@ -60,7 +60,7 @@ to the program as it is, a second `--` included. The program also sees the proce
 
 Under the console host, the program reads and writes files through [`FileSystem`](../stdlib/filesystem), in the
 current directory and the directories in it, and nowhere else unless `--allow-dir` gives it another directory: a path
-outside them is `#error(#permissionDenied)`, whichever user runs it.
+outside them is `#permissionDenied`, whichever user runs it.
 
 `run` is a debug build: a program with type or name errors still runs, and reports each error if it reaches it (see
 [Deferred errors](../tour/error-handling#deferred-errors)). An error that can't be deferred, such as a syntax error,

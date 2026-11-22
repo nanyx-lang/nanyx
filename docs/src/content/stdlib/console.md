@@ -11,7 +11,7 @@ lists `nanyx.console.core` in its dependencies and imports `nanyx.console.core/c
 ```nanyx
 match readLine()
   | #some(line) -> println("You said: {line}")
-  | #error(#endOfInput) -> println("No input")
+  | #endOfInput -> println("No input")
 ```
 
 # dbg
@@ -81,8 +81,8 @@ Why reading from standard input gave no line: the input has ended.
 context Console = (
   write: string -> ()
   writeError: string -> ()
-  readLine: () -> #some(string) | #error(IoError)
-  readToEnd: () -> #some(string) | #error(IoError)
+  readLine: () -> #some(string) | #endOfInput
+  readToEnd: () -> #some(string) | #endOfInput
   flush: () -> ()
 )
 ```
@@ -93,7 +93,7 @@ The terminal: standard output, standard error and standard input. Code that need
 
 - `write`: Writes `text` to standard output, as it is.
 - `writeError`: Writes `text` to standard error, as it is.
-- `readLine`: The next line of standard input, without its line break, or `#error(#endOfInput)` when the
+- `readLine`: The next line of standard input, without its line break, or `#endOfInput` when the
   input has ended.
 - `readToEnd`: Everything left on standard input (the empty string when nothing is).
 - `flush`: Writes out anything the streams hold back. The console host holds nothing back, so there it
