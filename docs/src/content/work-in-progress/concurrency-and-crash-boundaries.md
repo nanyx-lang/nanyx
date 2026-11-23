@@ -205,7 +205,19 @@ and holds only that instance ([Async](../deep-dives/async#how-its-built)).
   machine, as C# and Rust compile async functions: it splits the function at each point where it can wait and keeps
   the locals that live across them in a frame on the heap, and a scheduler in the runtime runs an instance's tasks on
   one stack. It needs nothing from the runtime, so the same module runs under Wasmtime on every OS and in a browser.
-  A function that can't wait is compiled as any other, and pays nothing.
+  A function that can't wait is compiled as any other, and pays nothing. The lowering is built, with a scheduler that
+  runs one task ([How tasks are compiled](../deep-dives/async#how-tasks-are-compiled)); nothing stops yet.
+  Decided on 2026-11-23, with the plan of PRs on #1890:
+  - A function generic in contexts is compiled twice where it is used both ways, with `Async` and without, so that
+    only the first is a state machine.
+  - The host declares the wait the scheduler makes when every task is waiting, as a function with an attribute the
+    compiler finds, as it finds `run`; `Async` gets no members at run time.
+  - The scopes are module-level defs and a script's top level. Local defs and lambdas start tasks in the scope of the
+    def they're in. Each task tracks its innermost scope as it runs.
+  - A `Task` or a lambda that uses `start!` escaping its def is `NYX0233`, with a message about tasks; starting a task
+    that captures an `MRef`, an `MList` or a cell is an error with a code of its own.
+  - The playground host provides `Async` (`start!`, `await`, `sleep`), so a browser can run tasks.
+  - A top-level value whose building waits is built once: a task that reads it while it is built waits for it.
 - **Stack switching, later** ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). WebAssembly's
   stack-switching proposal gives a module many stacks and lets it switch between them, so a task is a stack and
   starting one costs about as much as a closure. The proposal is still experimental: Wasmtime's implementation covers
