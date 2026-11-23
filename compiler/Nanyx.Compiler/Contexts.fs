@@ -297,6 +297,15 @@ let internal instancesSuppliedToLambda (state: InferState) (lambda: Expression) 
     if state.ScriptEntry = Some lambda.Id then []
     else suppliedToLambda state paramTy |> List.filter (fun (_, _, args) -> not args.IsEmpty) |> List.map (fun (name, _, args) -> TyApply(name, args))
 
+/// `typedLambda`, the lambda `lambda` inferred, with `instances`, those it is given (see `instancesSuppliedToLambda`), in
+/// its type, so that what it is passed to passes their members to it.
+let internal withSuppliedInstances (instances: Ty list) (lambda: Expression) (typedLambda: TypedExpr, state: InferState) : TypedExpr * InferState =
+    match instances, Unifier.unalias typedLambda.Type with
+    | _ :: _, TyFunc(input, output, used) ->
+        let ty = TyFunc(input, output, used @ instances |> List.distinct)
+        { typedLambda with Type = ty }, { state with ExprTypes = state.ExprTypes |> Map.add lambda.Id ty }
+    | _ -> typedLambda, state
+
 /// `env` for the body of `lambda`, passed as a parameter of the type `paramTy`: with the members of each context that
 /// type requires, as far as `state` says, so the body can call them and what requires them. The function the lambda is
 /// passed to supplies them, as `withLog: [Console, c] ([Log, c] () -> ()) -> ()` supplies `Log` to its block, so the
