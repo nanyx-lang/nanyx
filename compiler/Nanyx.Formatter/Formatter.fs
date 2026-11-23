@@ -138,7 +138,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             let count = fields.Length
             let update index field =
                 match field with
-                | NamedField(n, value) -> cat [ text (Names.written n); text " = "; expr { full with Tail = (index = count - 1) } value ]
+                | NamedField(n, value) -> cat [ text (Names.written n); text " = "; expr (itemPosition (index = count - 1) value) value ]
                 | PositionalField value -> expr full value
             cat [ expr operandPosition record; text " with "; commaJoin (List.mapi update fields) ]
         | ForSyntax.Call(iterables, loop, parameters, _) when parameters = List.init iterables.Length (fun index -> (ForSyntax.element (index + 1), None)) ->
@@ -182,7 +182,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | TypeValue written -> cat [ text "type "; atomType written ]
         | ContextMemberCall(context, field, args) ->
             let count = args.Length
-            let argument index arg = expr { full with Tail = (index = count - 1) } arg
+            let argument index arg = expr (itemPosition (index = count - 1) arg) arg
             cat [ contextHead context; text "."; text (Names.written field); text "("; commaJoin (List.mapi argument args); text ")" ]
         | UseIn(value, body) ->
             let head = cat [ text "use "; useValue { full with Tail = false } value; text " in" ]
