@@ -63,6 +63,7 @@
     <Compile Include="CoreIrReuse.fs" />
     <Compile Include="CoreIrReach.fs" />
     <Compile Include="WatPieces.fs" />
+    <Compile Include="CoreIrEmitIntrinsics.fs" />
     <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CoreIrCachedValues.fs" />
     <Compile Include="ComponentValues.fs" />
