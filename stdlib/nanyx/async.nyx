@@ -35,7 +35,10 @@ export def scope: [c] ([TaskScope, c] () -> a) -> a = { block ->
 }
 
 --| Starts a task that runs `work`, and gives it back at once: the task runs at the same time as the code that
-  started it, from the next time that code waits. It belongs to the innermost scope, the def that started it.
+  started it, from the next time that code waits. It belongs to the innermost scope, the def that started it. It
+  is a `#delay` keyword: `start! e` is `start({ e })`, so `start! http.get(url) \orCrash("failed")` runs the
+  `orCrash` in the task.
+@customKeywordType(#delay)
 export def start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = { work ->
   -- The task keeps what `work` gives back as a function that gives it, so that the scheduler can drop it, whatever
   -- its type, and each `await` gets a reference of its own.

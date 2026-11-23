@@ -363,11 +363,13 @@ module Compiler =
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors
                         let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered
-                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, syntaxDiagnostics @ nameErrors)
+                        // The keywords it declares, read before `applyAttributes` takes a def's attribute away.
+                        let ownKeywordKinds = Attributes.keywordKinds items
+                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, syntaxDiagnostics @ nameErrors, ownKeywordKinds)
                     |> Result.mapError (fun diagnostics -> Desugared, syntaxDiagnostics @ diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, nameErrors) ->
+        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, nameErrors, ownKeywordKinds) ->
             let imports = importsOf moduleBlocks desugared
             let initial =
                 { Env =
@@ -769,7 +771,7 @@ module Compiler =
                      KeywordKinds =
                         merged.ReExports @ blockModuleReExports
                         |> List.fold (fun kinds reExported -> Attributes.withKeywordKinds reExported.Module.KeywordKinds kinds) Map.empty
-                        |> Attributes.withKeywordKinds (Attributes.keywordKinds desugared) }
+                        |> Attributes.withKeywordKinds ownKeywordKinds }
 
     /// The module `item` imports into the module `origin` (whose `originKey` is `key`), checked, with where it is from;
     /// or why it cannot be imported. `hostModules` are the build's host package's modules, and `inHostPackage` says

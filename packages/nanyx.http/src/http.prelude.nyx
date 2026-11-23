@@ -3,7 +3,7 @@
   wait require; `Random`, the source of random numbers; and `Clock`, the time.
 export module http.prelude
 
-export nanyx/async (Async)
+export nanyx/async (Async, await, start)
 export nanyx/random (Random)
 export nanyx/clock (Clock)
 export nanyx.http.core/client (Http, HttpError)

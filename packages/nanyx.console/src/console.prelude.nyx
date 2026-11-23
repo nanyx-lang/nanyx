@@ -9,7 +9,7 @@ export nanyx.console.core/console (Console, IoError, print, println, eprint, epr
 export nanyx.console.core/env (Env)
 export nanyx.fs/filesystem (FileSystem, FsError)
 export nanyx.fs/path (Path)
-export nanyx/async (Async)
+export nanyx/async (Async, await, start)
 export nanyx/random (Random)
 export nanyx/clock (Clock)
 export nanyx.http.core/client (Http, HttpError)
