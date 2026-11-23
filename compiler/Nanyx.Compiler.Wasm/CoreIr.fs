@@ -633,6 +633,22 @@ module Expr =
     /// The expression of `kind`, of type `ty`, at the place the lowering is at (see `Places`).
     let make (kind: ExprKind) (ty: IrType) : Expr = { Kind = kind; Type = ty; Place = Places.Current }
 
+    /// The integer operators that cannot trap, as `/` and `%` can: a value made with one of them that nothing reads need
+    /// not be made. Their operands are atoms, evaluated before: `and` and `or` are one only where their right operand
+    /// can be evaluated whether it is needed or not (see `isSafeInstruction`), and an `if` otherwise.
+    let safeOperators = set [ "=="; "!="; "<"; "<="; ">"; ">="; "and"; "or" ]
+
+    /// Whether `e` is an atom, or one instruction on atoms that writes nothing, calls nothing and cannot trap: evaluating
+    /// it where its value is not needed costs only the instruction.
+    let isSafeInstruction (e: Expr) =
+        match e.Kind with
+        | Atom _
+        | Field _
+        | Prim(Not, _)
+        | Prim(FloatBinary _, _) -> true
+        | Prim(Binary op, _) -> safeOperators.Contains op
+        | _ -> false
+
     /// `var` bound to `value` for `body`, of `body`'s type.
     let letIn (var: Var) (value: Expr) (body: Expr) : Expr = make (Let(var, value, body)) body.Type
 

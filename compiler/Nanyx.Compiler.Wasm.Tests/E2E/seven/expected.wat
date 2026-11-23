@@ -108,11 +108,17 @@
     i64.const 1
     i64.eq
     i32.and
-    i32.const 264
+    (if (result i32)
+      (then
+        i32.const 264
     call $__nanyx_write_stderr
     call $__nanyx_crashed
     unreachable
-    i32.and
+      )
+      (else
+        i32.const 0
+      )
+    )
     local.get $c2_i64
     i64.const 0
     i64.eq
