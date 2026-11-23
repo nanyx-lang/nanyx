@@ -20,6 +20,7 @@ run every program this way, so a leak anywhere fails a test. `run --memory` does
 `RunIn` and `RunScript` take. `build` and `wasm` write the program as a `ProgramFormat`, the binary format unless `--wat`
 asks for text; `WriteProgram` assembles it (see [the binary format](./compilation#the-binary-format)). `run --no-inline` and `build --no-inline` clear
 `WasmOptions.Inline` (see [Inlining](./inlining)); the docs' examples are run both ways, and must print the same.
+`run --yield-at-every-wait` sets `WasmOptions.YieldAtEveryWait` (see [Async](./async#how-tasks-are-compiled)).
 
 # Runtime errors
 

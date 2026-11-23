@@ -55,7 +55,11 @@ type EmitContext =
       /// has (see `WasmOptions.Probes`), and a page asks for (`WasmOptions.DbgToEmbedder`): the host decides where it
       /// goes. Without it, or where the runtime leaves it to the program, the program writes it to its stderr through
       /// `$dbg_str`.
-      DbgToRuntime: bool }
+      DbgToRuntime: bool
+      /// The functions that are state machines, which can stop at a call and carry on later (see `CoreIrSplitPoints`).
+      StateMachines: Set<string>
+      /// Whether each call of a function value that can wait stops once first (see `WasmOptions.YieldAtEveryWait`).
+      YieldAtEveryWait: bool }
 
 /// The marker that says the code after it, up to the next one, was made from source at `place`: a line comment,
 /// `;;@ main.nyx:12`, that `WasmBinary` writes into the module's table of places (see `WatSyntax.Placed`). Code inlined
@@ -286,12 +290,58 @@ type private FunctionEmitter(context: EmitContext) =
     // The local a probe holds a local's text in while the runtime reads it (see `Probe`).
     let probeText = lazy (freshLocal "__probe_text" "i32")
 
+    // The split points of the function, when it is a state machine (see `CoreIrSplitPoints`), its name and its result,
+    // and the locals it keeps its state in and the temporaries it keeps in locals (see `TaskLowering`).
+    let mutable plan: CoreIrSplitPoints.SplitPlan option = None
+    let mutable machine = ("", IrUnit)
+    let storedTemps = Dictionary<int, string>()
+    let resumeLocal = lazy (freshLocal "__resume" "i32")
+    let childLocal = lazy (freshLocal "__child" "i32")
+    let frameLocal = lazy (freshLocal "__frame" "i32")
+
     let localOf (var: Var) =
         match droppedTemps.TryGetValue var.Id with
         | true, local -> local
-        | _ -> localName var
+        | _ ->
+            match storedTemps.TryGetValue var.Id with
+            | true, local -> local
+            | _ -> localName var
+
+    // Whether the state machine's code `expr` holds a split point.
+    let holds (expr: Expr) = plan |> Option.exists (fun plan -> CoreIrSplitPoints.holds plan expr)
+
+    // The states inside `expr`, if it holds any.
+    let rangeOf (expr: Expr) =
+        match plan with
+        | Some plan -> match plan.Ranges.TryGetValue expr with | true, range -> Some range | _ -> None
+        | None -> None
+
+    // `code`, which leaves the stack as it found it, run only when the function is not resuming, or resumes in `range`.
+    let unlessResuming (range: (int * int) option) (code: string) = TaskLowering.onlyWhen (TaskLowering.runsAt resumeLocal.Value range) code
+
+    // The code that leaves 1 when the function is not resuming, or else whether it resumes in `range`, and otherwise
+    // what `normally` leaves (see `TaskLowering`).
+    let choosing (normally: string) (range: (int * int) option) =
+        let resuming = match range with Some range -> TaskLowering.resumesIn resumeLocal.Value range | None -> "i32.const 0"
+        $"local.get ${resumeLocal.Value}\n    i32.eqz\n    (if (result i32)\n      (then\n        {normally})\n      (else\n        {resuming}))"
 
     member _.Helpers = Set.ofSeq helpers
+
+    /// Makes the function a state machine with the split points `found`, named `name` and giving a value of type
+    /// `result`.
+    member _.Machine(found: CoreIrSplitPoints.SplitPlan, name: string, result: IrType) =
+        plan <- Some found
+        machine <- (name, result)
+
+    /// The code a state machine starts with, which restores what it kept when it is resumed (see `TaskLowering.prologue`).
+    member _.Prologue =
+        match plan with
+        | Some plan ->
+            helper Helpers.free |> ignore
+            let saved =
+                plan.Saved |> Map.map (fun _ vars -> vars |> List.map (fun var -> localOf var, CoreIrLayout.valueType var.Type) |> List.distinctBy fst)
+            [ TaskLowering.prologue resumeLocal.Value childLocal.Value frameLocal.Value saved ]
+        | None -> []
 
     member _.UsesMemory = usesMemory
 
@@ -413,9 +463,23 @@ type private FunctionEmitter(context: EmitContext) =
         let flush () =
             if waiting.Count > 0 then internalError "a store in the core IR while a temporary waits to be used"
 
+        // In a state machine resuming at a split point in this chain, each link before the last one that holds a split
+        // point runs only if the state is in it, or the function is not resuming (see `TaskLowering`).
+        let guarded =
+            let links, last = Chain.split expr
+            let linkHolds (link: Expr) = match link.Kind with Let(_, value, _) | Do(value, _) -> holds value | _ -> false
+            let lastHolding = if holds last then links.Length else links |> List.tryFindIndexBack linkHolds |> Option.defaultValue 0
+            HashSet<Expr>(List.take lastHolding links, HashIdentity.Reference)
+        let guard (link: Expr) (code: string) =
+            if not (guarded.Contains link) then code
+            else
+                match link.Kind with
+                | Let(_, value, _) | Do(value, _) -> unlessResuming (rangeOf value) code
+                | _ -> unlessResuming None code
+
         let rec walk (expr: Expr) =
             match expr.Kind with
-            | Let(var, value, body) when var.Kind = Temp ->
+            | Let(var, value, body) when var.Kind = Temp && not (plan |> Option.exists (fun plan -> plan.StoredTemps.Contains var.Id)) ->
                 claim value
                 deferred.[var.Id] <- value
                 waiting.Add var
@@ -423,29 +487,31 @@ type private FunctionEmitter(context: EmitContext) =
             | Let(var, value, body) ->
                 claim value
                 flush ()
-                parts.Add(join "\n    " [ this.Value false deferred onStack value; $"local.set ${localName var}" ])
+                // A temporary a state machine keeps in a local is stored as a local is (see `SplitPlan.StoredTemps`).
+                if var.Kind = Temp then storedTemps.[var.Id] <- freshLocal "__kept" (CoreIrLayout.valueType var.Type)
+                parts.Add(guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
                 walk body
             // A probe stores nothing a temporary waits on, so it can stand among them.
             | Do({ Kind = Probe(kind, locals) } as probe, rest) ->
-                parts.Add(this.Probe probe kind locals (aliveAt rest))
+                parts.Add(guard expr (this.Probe probe kind locals (aliveAt rest)))
                 walk rest
             | Do(value, rest) ->
                 claim value
                 flush ()
-                parts.Add(join "\n    " [ this.Value false deferred onStack value; dropValue value.Type ])
+                parts.Add(guard expr (join "\n    " [ this.Value false deferred onStack value; dropValue value.Type ]))
                 walk rest
             // Counting leaves the stack as it is, so it can happen while temporaries wait to be used.
             | Dup(vars, body) ->
-                parts.Add(this.DupVars vars)
+                parts.Add(guard expr (this.DupVars vars))
                 walk body
             | Drop(vars, body) ->
-                parts.Add(dropVars localOf vars)
+                parts.Add(guard expr (dropVars localOf vars))
                 walk body
             | Release(released, body) ->
-                parts.Add(this.Release released)
+                parts.Add(guard expr (this.Release released))
                 walk body
             | FreeToken(token, body) ->
-                parts.Add(this.FreeToken token)
+                parts.Add(guard expr (this.FreeToken token))
                 walk body
             | _ ->
                 claim expr
@@ -511,10 +577,58 @@ type private FunctionEmitter(context: EmitContext) =
             let marker = placeMarker shownFile place
             let around = currentMarker
             currentMarker <- Some marker
-            let code = this.UnmarkedValue tail deferred onStack expr
+            let code = this.SplitValue tail deferred onStack expr
             currentMarker <- around
             pieces.Add $"{marker}\n    {code}"
-        | _ -> pieces.Add(this.UnmarkedValue tail deferred onStack expr)
+        | _ -> pieces.Add(this.SplitValue tail deferred onStack expr)
+
+    /// The code of a value that may be a split point (see `CoreIrSplitPoints`): in a state machine, a call it can stop
+    /// in and resume; in a function that is not one, a call it runs to the end (see `TaskLowering`).
+    member private this.SplitValue (tail: bool) (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (expr: Expr) : string =
+        // The type of what the callee gives, which its resume entry gives too, and the code that converts it to the
+        // call's, as `Call` converts it.
+        let calleeResult =
+            match expr.Kind with
+            | Call(name, _) -> context.Signature name |> Option.map snd |> Option.defaultValue expr.Type
+            | _ -> expr.Type
+        let resumeType () =
+            let result = CoreIrLayout.valueType calleeResult
+            context.IndirectCall(TaskLowering.resumeTypeOf result)
+            TaskLowering.resumeTypeName result
+        match plan with
+        | Some found when found.States.ContainsKey expr ->
+            let state = found.States.[expr]
+            let name, result = machine
+            let resumeSlot = context.FunctionSlot (TaskLowering.Names.resumeEntry name) 1
+            helper Helpers.alloc |> ignore
+            let stop (at: int) =
+                let kept = found.Saved.[at] |> List.map (fun var -> localOf var, CoreIrLayout.valueType var.Type) |> List.distinctBy fst
+                TaskLowering.stopAfter frameLocal.Value resumeSlot at kept (CoreIrLayout.valueType result)
+            let resumable (at: int) (resultType: string) (resumeType: string) (call: string) =
+                TaskLowering.resumable resumeLocal.Value childLocal.Value at resumeType resultType call
+            // A call of a function value first stops once, when every wait does (see `WasmOptions.YieldAtEveryWait`).
+            let yielded, state =
+                if CoreIrSplitPoints.statesOf context.YieldAtEveryWait expr = 2 then
+                    let unitResume = (context.IndirectCall(TaskLowering.resumeTypeOf "i32"); TaskLowering.resumeTypeName "i32")
+                    // Skipped when resuming at the call, after it.
+                    let yieldCode = join "\n    " [ resumable state "i32" unitResume $"call ${TaskLowering.Names.yieldOnce}"; "drop"; stop state ]
+                    [ unlessResuming (Some (state, state)) yieldCode ], state + 1
+                else [], state
+            // Nothing follows a tail call: the callee's frame takes the function's place, so it keeps nothing.
+            if tail then join "\n    " [ yield! yielded; this.UnmarkedValue true deferred onStack expr ]
+            else
+                let resumed = conversion calleeResult expr.Type
+                let call = this.UnmarkedValue false deferred onStack expr
+                let call = resumable state (CoreIrLayout.valueType expr.Type) (resumeType ()) call
+                let call = if resumed = "" then call else internalError "a call that can stop whose value needs converting"
+                join "\n    " [ yield! yielded; call; stop state ]
+        | None when not context.StateMachines.IsEmpty && CoreIrSplitPoints.isSplit context.StateMachines expr ->
+            if conversion calleeResult expr.Type <> "" then internalError "a call that can stop whose value needs converting"
+            let call = this.UnmarkedValue false deferred onStack expr
+            let value = freshLocal "__blocked" (CoreIrLayout.valueType expr.Type)
+            let frame = freshLocal "__blocked_frame" "i32"
+            join "\n    " [ call; TaskLowering.blockOn value frame (resumeType ()) ]
+        | _ -> this.UnmarkedValue tail deferred onStack expr
 
     member private this.UnmarkedValue (tail: bool) (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (expr: Expr) : string =
         // The code of each atom in order. A temporary already on the stack has none, so it has to come before anything
@@ -874,14 +988,16 @@ type private FunctionEmitter(context: EmitContext) =
                       "i32.const 0" ]
             else join "\n    " [ prefix; atomsAfter true [ text ]; "call $dbg_str"; "i32.const 0" ]
         | If(cond, ifTrue, ifFalse) ->
-            let condCode = atoms [ cond ]
+            // A state machine resuming in a branch takes that branch.
+            let condCode = if holds expr then choosing (atoms [ cond ]) (rangeOf ifTrue) else atoms [ cond ]
             let result = CoreIrLayout.valueType expr.Type
             $"{condCode}\n    (if (result {result})\n      (then\n        {this.SequenceAs tail expr.Type ifTrue}\n      )\n      (else\n        {this.SequenceAs tail expr.Type ifFalse}\n      )\n    )"
         | Match(scrutinees, arms) -> this.Arms tail expr.Type scrutinees arms
-        | Dup(vars, body) -> join "\n    " [ this.DupVars vars; this.Value tail deferred onStack body ]
-        | Drop(vars, body) -> join "\n    " [ dropVars localOf vars; this.Value tail deferred onStack body ]
-        | Release(released, body) -> join "\n    " [ this.Release released; this.Value tail deferred onStack body ]
-        | FreeToken(token, body) -> join "\n    " [ this.FreeToken token; this.Value tail deferred onStack body ]
+        // What counting does before a body a state machine resumes in has been done already.
+        | Dup(vars, body) -> join "\n    " [ this.Resumed body (this.DupVars vars); this.Value tail deferred onStack body ]
+        | Drop(vars, body) -> join "\n    " [ this.Resumed body (dropVars localOf vars); this.Value tail deferred onStack body ]
+        | Release(released, body) -> join "\n    " [ this.Resumed body (this.Release released); this.Value tail deferred onStack body ]
+        | FreeToken(token, body) -> join "\n    " [ this.Resumed body (this.FreeToken token); this.Value tail deferred onStack body ]
         // An allocation into the block a reuse token holds, if it holds one (see `CoreIrReuse`).
         | Reuse(token, { Kind = CallRuntime(name, ([ head; _ ] as args), _) }) when Helpers.reusingVariant name = Some Helpers.listConsAt ->
             join "\n    " [ $"local.get ${localName token}"; atomsAfter true args; $"call ${storing Helpers.listConsAt (atomType head)}" ]
@@ -900,11 +1016,17 @@ type private FunctionEmitter(context: EmitContext) =
         | DropAfter(body, vars) ->
             // A temporary among `vars` is kept in a local as its value is pushed, to be dropped once `body` is done.
             // Nothing can follow a tail call, so `body` is not one.
+            // A temporary a state machine keeps in a local is there already.
             for var in vars do
-                if var.Kind = Temp then droppedTemps.[var.Id] <- freshLocal "__owned" (CoreIrLayout.valueType var.Type)
+                if var.Kind = Temp && not (storedTemps.ContainsKey var.Id) then
+                    droppedTemps.[var.Id] <- freshLocal "__owned" (CoreIrLayout.valueType var.Type)
             join "\n    " [ this.Value false deferred onStack body; dropVars localOf vars ]
         | Let _
         | Do _ -> this.Sequence tail expr
+
+    /// `code`, the code that comes before `body`, which leaves the stack as it found it: skipped when a state machine
+    /// resumes in `body`.
+    member _.Resumed (body: Expr) (code: string) = if holds body then unlessResuming None code else code
 
     /// The code of the array intrinsic `name` (one of `arrayIntrinsics`) on `args`, whose code `atoms` gives, for a value
     /// of type `ty` (see `CoreIrArrays`).
@@ -1071,6 +1193,7 @@ type private FunctionEmitter(context: EmitContext) =
 
     member this.Atom (deferred: Dictionary<int, Expr>) (onStack: HashSet<int>) (atom: Atom) : string =
         match atom with
+        | AVar v when v.Kind = Temp && storedTemps.ContainsKey v.Id -> $"local.get ${storedTemps.[v.Id]}"
         | AVar v when v.Kind = Temp ->
             match deferred.TryGetValue v.Id with
             | true, value ->
@@ -1122,10 +1245,12 @@ type private FunctionEmitter(context: EmitContext) =
                 [ $"local.get ${cursor}"; touching $"i32.load offset={CoreIrLayout.tailOffset stream.Element.Type}"; $"local.set ${cursor}" ]
         let bodyCode = this.Sequence false loop.Body
         let bodyDrop = dropValue loop.Body.Type
-        // The starting atoms are read in the order `tempsUsedBy` gives them.
-        let startCode = loop.Streams |> List.collect start |> String.concat "\n    "
+        // The starting atoms are read in the order `tempsUsedBy` gives them. A state machine resuming in the body has
+        // started the loop and taken the element already.
+        let startCode = loop.Streams |> List.collect start |> String.concat "\n    " |> this.Resumed loop.Body
+        let nextCode = loop.Streams |> List.collect next |> String.concat "\n        " |> this.Resumed loop.Body
         let inLoop =
-            List.collect next loop.Streams @ [ bodyCode; bodyDrop ] @ List.collect advance loop.Streams @ [ $"br $__for_next_{depth}" ]
+            [ nextCode; bodyCode; bodyDrop ] @ List.collect advance loop.Streams @ [ $"br $__for_next_{depth}" ]
             |> String.concat "\n        "
         $"{startCode}\n    block $__for_done_{depth}\n      loop $__for_next_{depth}\n        {inLoop}\n      end\n    end\n    i32.const 0"
 
@@ -1133,8 +1258,11 @@ type private FunctionEmitter(context: EmitContext) =
     /// The loop is unit.
     member this.WhileLoop (loop: WhileLoop) : string =
         let depth = loop.Depth
+        // A state machine resuming in the body carries on round the loop it was in.
+        let condition = this.Sequence false loop.Condition
+        let condition = if holds loop.Body then choosing condition (rangeOf loop.Body) else condition
         let inLoop =
-            [ this.Sequence false loop.Condition
+            [ condition
               "i32.eqz"
               $"br_if $__while_done_{depth}"
               this.Sequence false loop.Body
@@ -1260,11 +1388,15 @@ type private FunctionEmitter(context: EmitContext) =
             | arm :: rest ->
                 let conditions =
                     List.map2 (fun pattern (scrutinee: Var) -> condition pattern $"local.get ${localName scrutinee}" scrutinee.Type) arm.Patterns scrutinees
-                let allConditions = conjunction conditions
+                // A state machine resuming in an arm takes it, and what it binds is restored already.
+                let allConditions =
+                    if arms |> List.exists (fun arm -> holds arm.Body) then choosing (conjunction conditions) (rangeOf arm.Body)
+                    else conjunction conditions
                 let bindCode =
                     List.map2 (fun pattern (scrutinee: Var) -> binds pattern $"local.get ${localName scrutinee}" scrutinee.Type) arm.Patterns scrutinees
                     |> List.concat
                     |> String.concat "\n    "
+                    |> this.Resumed arm.Body
                 let armCode = join "\n    " [ bindCode; this.SequenceAs tail resultTy arm.Body ]
                 let result = CoreIrLayout.valueType resultTy
                 $"{allConditions}\n    (if (result {result})\n      (then\n        {armCode}\n      )\n      (else\n        {pieces.Add(emit rest)}\n      )\n    )"
@@ -1349,12 +1481,16 @@ let private withoutRepeatedMarkers (code: string) =
 let emitFunction (context: EmitContext) (func: Function) (exportName: string option) : Emitted =
     let emitter = FunctionEmitter(context)
     emitter.Declared <- (func.Params |> List.map localName) @ (declaredLocals func.Body |> List.map fst) |> Set.ofList
+    // A state machine can stop at its split points, and has a resume entry that carries on (see `TaskLowering`).
+    let found =
+        if context.StateMachines.Contains func.Name then CoreIrSplitPoints.plan context.StateMachines context.YieldAtEveryWait func else None
+    found |> Option.iter (fun found -> emitter.Machine(found, func.Name, func.Result))
     let bodyCode = emitter.SequenceAs true func.Result func.Body
     let defined =
         match func.Place, context.ShownFile with
         | Some place, Some shownFile -> [ definitionMarker shownFile place ]
         | _ -> []
-    let bodyCode = defined @ emitter.ProbingCopy @ [ emitter.Expand bodyCode ] |> String.concat "\n    " |> withoutRepeatedMarkers
+    let bodyCode = defined @ emitter.ProbingCopy @ emitter.Prologue @ [ emitter.Expand bodyCode ] |> String.concat "\n    " |> withoutRepeatedMarkers
     let header =
         [ func.Params |> List.map (fun p -> $"(param ${localName p} {CoreIrLayout.valueType p.Type})") |> String.concat " "
           $"(result {CoreIrLayout.valueType func.Result})"
@@ -1365,7 +1501,11 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
         match exportName with
         | Some exported -> definition + "\n" + $"""  (export "{exported}" (func ${func.Name}))"""
         | None -> definition
-    { Text = text; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
+    let resume =
+        match found with
+        | Some _ -> [ TaskLowering.resumeEntry func.Name (func.Params |> List.map (_.Type >> CoreIrLayout.valueType)) (CoreIrLayout.valueType func.Result) ]
+        | None -> []
+    { Text = String.concat "\n" (text :: resume); Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
 
 /// The start function, `func` (see `CoreIrLower.StartFunction`): the code `before`, then the top-level expressions, with
 /// what was inlined into them, each value dropped, then the code `after`. It takes nothing and returns nothing, and

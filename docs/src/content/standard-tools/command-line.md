@@ -454,6 +454,9 @@ These are for people working on the compiler and the standard library, and are n
 - `nanyx parse file.nyx` prints the syntax tree of a file, without checking it.
 - `--no-inline`, on `run` and `build`, compiles every call as a call. Inlining changes no behaviour, so a program
   that behaves differently with it points at a bug in the compiler.
+- `--yield-at-every-wait`, on `run`, makes every call that can wait stop once and be resumed, which runs each way a
+  function that waits has of stopping and carrying on (see [Async](../deep-dives/async#how-tasks-are-compiled)). A
+  program that behaves differently with it points at a bug in the compiler.
 - `nanyx stdlib-docs <directory>` writes the reference on each page of the docs site's
   [Standard Library](../stdlib/standard-library) section from the library's doc comments, or, on a page that pins a
   published package in its front matter (`package: nanyx.json 0.1.0`), from that version's, and with `--check` lists

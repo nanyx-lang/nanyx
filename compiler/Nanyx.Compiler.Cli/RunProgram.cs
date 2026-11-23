@@ -18,13 +18,13 @@ internal static partial class CliCommands
     /// where it is, as <c>dbg</c> does. With <paramref name="profile"/>, Wasmtime's guest profiler samples the run and the
     /// profile is written to that file, in the Firefox profiler's format.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null, bool yieldAtEveryWait = false)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
         var errors = shell.Error;
         // A profiled run is of the code without probes, as a release build runs it.
-        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, profile is null, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty);
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, profile is null, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;

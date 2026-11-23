@@ -95,7 +95,10 @@ type WasmOptions =
       Component: ComponentEntry option
       /// The functions a component's core module exports for the program's definitions marked `@component`, each with
       /// the name it exports it under (see `ComponentExports`). Only with `Component`.
-      ComponentExports: (string * ComponentFunction) list }
+      ComponentExports: (string * ComponentFunction) list
+      /// Make each call of a function value that can wait stop once and be resumed before it is made (see
+      /// `TaskLowering`), so that a test runs every state machine's way of stopping and carrying on.
+      YieldAtEveryWait: bool }
 
     static member Default =
         { CheckMemory = false
@@ -107,7 +110,8 @@ type WasmOptions =
           DbgToEmbedder = false
           ExportStart = false
           Component = None
-          ComponentExports = [] }
+          ComponentExports = []
+          YieldAtEveryWait = false }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -597,7 +601,9 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
           ShownFile = None
           TakesOver = (fun _ _ -> false)
           ProbeId = (fun () -> 0)
-          DbgToRuntime = false }
+          DbgToRuntime = false
+          StateMachines = Set.empty
+          YieldAtEveryWait = false }
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -899,6 +905,13 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // How many probes the module has numbered (see `EmitContext.ProbeId`).
     let probes = ref 0
 
+    // The functions that can stop and carry on later (see `TaskLowering`). The getter of a cached value runs the
+    // function that builds it to the end, so it is the function that builds it that can be a state machine.
+    let machines =
+        definitionFunctions @ Option.toList startFunction
+        |> List.map (fun func -> if cachedNames.Contains func.Name then { func with Name = CoreIrCachedValues.buildName func.Name } else func)
+        |> CoreIrSplitPoints.stateMachines CoreIrLowerInput.startFunctionName
+
     let context: CoreIrEmit.EmitContext =
         { TagId =
             fun name ->
@@ -925,7 +938,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           ShownFile = if options.Places then Some(CoreIr.shownFile options.SourceRoot) else None
           TakesOver = fun name index -> CoreIrCounting.parameterUse ownership name index = Owned
           ProbeId = fun () -> (probes.Value <- probes.Value + 1; probes.Value)
-          DbgToRuntime = options.Probes || options.DbgToEmbedder }
+          DbgToRuntime = options.Probes || options.DbgToEmbedder
+          StateMachines = machines
+          YieldAtEveryWait = options.YieldAtEveryWait }
 
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
 
@@ -933,6 +948,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let mutable functionsTouchMemory = false
 
     let cachedValues = definitionFunctions |> List.filter (fun func -> cachedNames.Contains func.Name)
+
+    /// The indirect type of the resume entry of a state machine that gives a value of type `result` (see `TaskLowering`).
+    let resumeType (result: CoreIr.IrType) =
+        let valueType = CoreIrLayout.valueType result
+        context.IndirectCall(TaskLowering.resumeTypeOf valueType)
+        TaskLowering.resumeTypeName valueType
 
     /// The text of a function from the core IR, noting the helpers it calls and whether it touches memory. A cached
     /// value's is the function that builds it, then its getter under its own name.
@@ -944,7 +965,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             emitted.Text
         if cachedNames.Contains func.Name then
             let build = note (CoreIrEmit.emitFunction context { func with Name = CoreIrCachedValues.buildName func.Name } None)
-            build + "\n\n" + CoreIrCachedValues.getter context.ShownFile func (exportNameOf functionContextRequirements specialisations func)
+            let resumes = if machines.Contains (CoreIrCachedValues.buildName func.Name) then Some (resumeType func.Result) else None
+            build + "\n\n" + CoreIrCachedValues.getter context.ShownFile func (exportNameOf functionContextRequirements specialisations func) resumes
         // An owning entry is a copy of a function, never exported as well.
         elif owningEntries.Contains func.Name then note (CoreIrEmit.emitFunction context func None)
         else note (emitFromCoreIr functionContextRequirements context specialisations func)
@@ -971,6 +993,18 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 | None -> $"  (start ${CoreIrLowerInput.startFunctionName})"
             emitted.Text, directive
         | None -> "", (options.Component |> Option.map (fun entry -> ComponentAbi.entryFunction entry None) |> Option.defaultValue "")
+
+    // The runtime's part of the state machines (see `TaskLowering`).
+    let renderedTasks =
+        if machines.IsEmpty then ""
+        else
+            let yielding =
+                if options.YieldAtEveryWait then
+                    usedHelpers.Add Helpers.alloc |> ignore
+                    usedHelpers.Add Helpers.free |> ignore
+                    TaskLowering.yieldHelpers (context.FunctionSlot TaskLowering.Names.yieldResume 1)
+                else []
+            TaskLowering.globals @ yielding |> String.concat "\n"
 
     let support = supportFunctions (definitionFunctions @ Option.toList startFunction) tagIdMap functionTable usedHelpers
 
@@ -1001,7 +1035,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             { Function = name
               Parameters = func.Params |> List.map _.Type
               Result = func.Result
-              TakesOver = fun index -> CoreIrCounting.parameterUse ownership name index = Owned }
+              TakesOver = fun index -> CoreIrCounting.parameterUse ownership name index = Owned
+              Resumes = if machines.Contains name then Some (resumeType func.Result) else None }
         let exportContext: ComponentExports.ExportContext =
             { TagCode = context.TagId >> Wat.tagCode
               RecordLayout = context.RecordLayoutId
@@ -1174,6 +1209,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             [ if not (String.IsNullOrWhiteSpace allImports) then allImports
               if not (String.IsNullOrWhiteSpace dataSegments) then dataSegments
               if not (String.IsNullOrWhiteSpace renderedCachedGlobals) then renderedCachedGlobals
+              if not (String.IsNullOrWhiteSpace renderedTasks) then renderedTasks
               if not (String.IsNullOrWhiteSpace renderedFunctions) then renderedFunctions
               if not (String.IsNullOrWhiteSpace support.Drops) then support.Drops
               if not (String.IsNullOrWhiteSpace support.Equalities) then support.Equalities

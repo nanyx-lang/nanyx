@@ -33,7 +33,9 @@ let globals (func: Function) : string list =
 /// The getter of a cached value, exported under `exportName` if given: it builds the value on its first read, and gives
 /// each read a reference of its own, as the function it stands for did by computing a new value. Its body starts with
 /// the marker of the definition's place, where `shownFile` names files for markers, as the function that builds it does.
-let getter (shownFile: (string -> string) option) (func: Function) (exportName: string option) : string =
+/// A value whose building can stop is built to the end, through its resume entry of the indirect type `resumes` (see
+/// `TaskLowering.blockOn`).
+let getter (shownFile: (string -> string) option) (func: Function) (exportName: string option) (resumes: string option) : string =
     let defined =
         match func.Place, shownFile with
         | Some place, Some shownFile -> [ "    " + CoreIrEmit.definitionMarker shownFile place ]
@@ -44,12 +46,18 @@ let getter (shownFile: (string -> string) option) (func: Function) (exportName: 
         match exportName with
         | Some exported -> [ $"""  (export "{exported}" (func ${func.Name}))""" ]
         | None -> []
-    [ $"  (func ${func.Name} (result {CoreIrLayout.valueType func.Result})"
+    let valueType = CoreIrLayout.valueType func.Result
+    let locals, blocking =
+        match resumes with
+        | Some resumeType -> $" (local $__blocked {valueType}) (local $__blocked_frame i32)", [ "      " + TaskLowering.blockOn "__blocked" "__blocked_frame" resumeType ]
+        | None -> "", []
+    [ $"  (func ${func.Name} (result {valueType}){locals}"
       yield! defined
       $"    global.get ${builtGlobal func.Name}"
       "    i32.eqz"
       "    if"
       $"      call ${buildName func.Name}"
+      yield! blocking
       $"      global.set ${valueGlobal func.Name}"
       "      i32.const 1"
       $"      global.set ${builtGlobal func.Name}"
