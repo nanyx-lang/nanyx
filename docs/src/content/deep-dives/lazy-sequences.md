@@ -148,8 +148,11 @@ next element is pulled. An ordinary workflow couldn't do it: under the one desug
 prelude's `Yield` context declares `yield` as a keyword of kind `#yield`, and any lambda with one in it, a block after
 `seq` included, is rewritten into the sequence itself (`WorkflowDesugaring`): `yield x` with the rest `k` is
 `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop whose body yields
-`seq.append(seq.flatMap(items, body), seq.delay({ k }))`. `seq` is an ordinary prelude function, `seq.delay` by
-another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the whole
+`seq.append(seq.flatMap(__toSeq(items), body), seq.delay({ k }))`. The loop's items are anything `Iterable`, as a
+plain `for` loop's are: the checker reads `__toSeq(items)` as `__seqItself(items)`, the sequence as it is with whatever
+its steps need, when the items are a sequence or a type nothing has settled (`Loops.walksAsSequence`), and through
+their `Iterable` otherwise, so a list, an array, a set or a map is walked by its `toSeq`. `seq` is an ordinary prelude
+function, `seq.delay` by another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the whole
 carries what any branch's sequence does. There is no `yield` in a `while` loop: a `while` needs a cell, and a sequence
 that reads one can't leave its `memory` block anyway.
 

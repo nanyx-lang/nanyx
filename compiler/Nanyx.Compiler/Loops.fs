@@ -7,6 +7,14 @@ open Parser.Program
 open NyxCompiler.InferState
 open NyxCompiler.TypeResolution
 
+/// Whether `var` is a type a signature around the loop requires `Iterable` of.
+let private iterableInScope (env: TypeEnv) (current: InferState) (var: TyVar) =
+    env.Instances
+    |> List.exists (fun instance ->
+        match resolveSoFar current instance.Context with
+        | TyApply(ctxName, TyVar forVar :: _) -> ctxName = Seqs.iterable && forVar.Id = var.Id
+        | _ -> false)
+
 /// `for xs, ys | arms`, at `expr`: the parser passes the iterables and a lambda of one element of each. Each iterable
 /// is anything `Iterable`, and the loop is unit. A `list(a)`, a `seq(a)`, a `map(k, v)` and a `set(a)` are walked as
 /// they are; anything else is read as the prelude's `__toSeq(xs)`, its sequence. A type nothing has settled is a list,
@@ -17,13 +25,7 @@ let inferFor
     (inferLambdaWithExpected: TypeEnv -> InferState -> Expression -> (Identifier * TypeExpr option) list -> Expression -> Ty option -> Ty option -> Result<TypedExpr * InferState, Diagnostic list>)
     (env: TypeEnv) (state: InferState) (expr: Expression)
     (iterables: Expression list) (lambdaExpr: Expression) (lambdaArgs: (Identifier * TypeExpr option) list) (lambdaBody: Expression) =
-    // Whether `var` is a type a signature around the loop requires `Iterable` of.
-    let iterableInScope (current: InferState) (var: TyVar) =
-        env.Instances
-        |> List.exists (fun instance ->
-            match resolveSoFar current instance.Context with
-            | TyApply(ctxName, TyVar forVar :: _) -> ctxName = Seqs.iterable && forVar.Id = var.Id
-            | _ -> false)
+    let iterableInScope = iterableInScope env
     let elementOf (current: InferState) (iterable: Expression) =
         inferExpr env current iterable
         |> Result.bind (fun (typedIterable, afterIterable) ->
@@ -82,3 +84,18 @@ let inferWhile
         let constrained = addConstraintAt condition.Span typedCondition.Type (TyPrimitive "bool") afterCondition
         inferExpr env constrained body
         |> Result.map (fun (_, next) -> mkTypedExpr expr (TyPrimitive "unit") None None None, next))
+
+/// Whether `iterable`, which a `for` loop in a sequence's block walks as `__toSeq(iterable)` (see
+/// `WorkflowDesugaring`), is walked as the sequence it is: a sequence, its steps' contexts and all, or a type nothing
+/// has settled, unless a signature around the loop requires `Iterable` of it. Anything else is read through its
+/// `Iterable`. The inference is set aside: the iterable is inferred again as the argument of the call it is read as.
+let walksAsSequence
+    (inferExpr: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
+    (env: TypeEnv) (state: InferState) (iterable: Expression) =
+    match inferExpr env state iterable with
+    | Ok (typedIterable, afterIterable) ->
+        match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
+        | Seqs.SeqType _ -> true
+        | TyVar var -> not (iterableInScope env afterIterable var)
+        | _ -> false
+    | Error _ -> true
