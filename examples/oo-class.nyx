@@ -38,9 +38,13 @@ context Attester = (
 
 -- Retry an operation until it succeeds or has been tried `times` times
 def retry: [c] int, ([c] () -> #some(a) | r) -> #some(a) | r = { times, operation ->
-  match operation()
-    | #some(value) -> #some(value)
-    | e -> if times <= 1 then e else retry(times - 1, operation)
+  rec attempt: [c] int -> #some(a) | r = { n ->
+    match operation()
+      | #some(value) -> #some(value)
+      | e -> if n >= times then e else attempt(n + 1)
+  }
+
+  attempt(1)
 }
 
 -- Refresh the attestation if it is missing or expired. Returns the new cache;
