@@ -830,6 +830,30 @@ type private FunctionEmitter(context: EmitContext) =
         | CallRuntime(name, [ object ], _) when name = WasmRegions.Names.regionTrack ->
             let slot = context.FunctionSlot (CoreIrRegions.dropContentsName (atomType object)) 1
             join "\n    " [ atoms [ object ]; $"i32.const {slot}"; $"call ${helper name}"; "i32.const 0" ]
+        // A value stored where it may outlive its `memory` block is promoted first (see `CoreIrPromotion`): onto the region
+        // of the object it is stored into, onto the outermost region, or, for a block's result, onto the region of the
+        // block around it, if there is one, before the block's own region ends.
+        | CallRuntime(name, [ container; value ], _) when name = WasmRegions.Names.regionStore ->
+            let promote = if CoreIrRegions.canHoldMutable (atomType value) then [ atoms [ value ]; atomsAfter true [ container ]; touching $"i32.load offset={WasmRegions.ownerOffset}"; $"call ${CoreIrRegions.promoteName (atomType value)}" ] else []
+            join "\n    " [ yield! promote; "i32.const 0" ]
+        | CallRuntime(name, [ value ], _) when name = WasmRegions.Names.regionStoreOutermost ->
+            let promote = if CoreIrRegions.canHoldMutable (atomType value) then [ atoms [ value ]; $"global.get {WasmRegions.outermostGlobal}"; $"call ${CoreIrRegions.promoteName (atomType value)}" ] else []
+            helper WasmRegions.Names.regionGlobals |> ignore
+            join "\n    " [ yield! promote; "i32.const 0" ]
+        | CallRuntime(name, [ result ], _) when name = WasmRegions.Names.regionExit ->
+            let outer = freshLocal "__outer_region" "i32"
+            let promote =
+                if CoreIrRegions.canHoldMutable (atomType result) then
+                    [ $"global.get {WasmRegions.innermostGlobal}"
+                      touching $"i32.load offset={WasmRegions.ownerOffset}"
+                      $"local.tee ${outer}"
+                      "if"
+                      atoms [ result ]
+                      $"local.get ${outer}"
+                      $"call ${CoreIrRegions.promoteName (atomType result)}"
+                      "end" ]
+                else []
+            join "\n    " [ yield! promote; $"call ${helper name}"; "i32.const 0" ]
         // Whether the reference the intrinsic takes over is the only one, read from the count before it is given up. An
         // immortal object's count is 0, so it is never held exclusively.
         | CallRuntime(name, [ value ], _) when name = Intrinsics.isExclusive ->
