@@ -271,3 +271,33 @@ def main = {
 """
     let outcome, _ = nanyxOnPackage [ "walker.nyx", walker; "main.nyx", main ] [ "run"; "{package}" ]
     assertRan "6\n" outcome
+
+[<Fact>]
+let ``Run - a Type match tells apart types that share a layout, as a list and a set do`` () =
+    let source =
+        """def kind: type a -> string = { t ->
+  match t
+    | #list(e) -> "list"
+    | #set(e) -> "set"
+    | else -> "other"
+}
+
+type Box(a) = (get: () -> string)
+
+def boxFor: type a -> Box(a) = { t -> Box(get = { -> kind(t) }) }
+
+def run: Box(a) -> string = { b ->
+  def get = b.get
+  get()
+}
+
+def viaTyped: [Typed(a)] a -> string = { x -> kind(typeOf) }
+
+println(run(boxFor(type list(int))))
+println(run(boxFor(type set(int))))
+println(kind(type list(int)))
+println(kind(type set(int)))
+println(viaTyped([1]))
+println(viaTyped(set.fromList([1])))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "list\nset\nlist\nset\nlist\nset\n"
