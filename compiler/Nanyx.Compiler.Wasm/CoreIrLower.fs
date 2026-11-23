@@ -1271,8 +1271,21 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// The definition `name` as a function called `functionName` that reports `messages`, errors deferred to run time,
     /// as soon as it is called: what a definition that cannot be lowered because of them is instead. It takes the
-    /// parameters the definition does, context members included, as values of no known type.
-    member this.Trap (name: string) (functionName: string) (typeArguments: IrType list) (messages: string list) : Function =
+    /// parameters it would take lowered as `lowering` says, and results in what it would, so that a call through a
+    /// function value calls it at the signature the value's type gives. Where even those cannot be lowered, it takes
+    /// the parameters the definition does, context members included, as values of no known type.
+    member this.Trap (lowering: Lowering) (name: string) (functionName: string) (typeArguments: IrType list) (messages: string list) : Function =
+        let crash = Expr.make (Crash messages) IrError
+        let asWritten =
+            match lowering with
+            | AsDefined
+            | LiftedCapturing _ ->
+                try Some (this.Lowered (Some crash) lowering name functionName typeArguments)
+                with CannotLower _ -> None
+            | _ -> None
+        match asWritten with
+        | Some func -> func
+        | None ->
         let parameterNames, _ = parametersAndBody definitions.[name]
         let contextParameters = input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue []
         let parameters =
@@ -1287,7 +1300,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeArguments = typeArguments
           Params = parameters
           Result = IrError
-          Body = Expr.make (Crash messages) IrError
+          Body = crash
           Place = definitionPlace name }
 
     /// The types of the parameters of the lifted lambda `name` (its environment aside), whose type where it was written
@@ -1309,6 +1322,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     /// Lowers the definition `name` to a function called `functionName`, as `lowering` says.
     member this.Function (lowering: Lowering) (name: string) (functionName: string) (typeArguments: IrType list) : Function =
+        this.Lowered None lowering name functionName typeArguments
+
+    /// Lowers the definition `name` as `Function` does, but with `crash` in place of its body when it is given (see
+    /// `Trap`).
+    member private this.Lowered (crash: Expr option) (lowering: Lowering) (name: string) (functionName: string) (typeArguments: IrType list) : Function =
         selfName <- functionName
         match lowering with
         | AsStart -> this.StartFunction ()
@@ -1408,9 +1426,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | IrRecord _ when value.Type <> result -> bindTemp value (fun atom -> CoreIrLowerMembers.coerce this.MemberTools scope atom result (fun atom -> Expr.make (Atom atom) result))
                 | _ -> value
             let parameters = parameters @ (members |> List.map snd |> List.filter (fun var -> var.Kind = Param))
-            probed parameters result (this.WithKnownValues (this.Complex scope body adapted))
+            match crash with
+            | Some crash -> probed parameters result crash
+            | None -> probed parameters result (this.WithKnownValues (this.Complex scope body adapted))
         | LiftedCapturing(capturedTys, capturedLocals) ->
-            CoreIrLowerLifted.liftedCapturing this.LiftedTools name parameterNames body scopeOf probed capturedTys capturedLocals
+            let lowerBody (scope: Scope) (body: Expression) = crash |> Option.defaultWith (fun () -> this.Tail scope body)
+            CoreIrLowerLifted.liftedCapturing this.LiftedTools name parameterNames body lowerBody scopeOf probed capturedTys capturedLocals
         | WrapperCalling(wrapped, instanceTy, captured) ->
             CoreIrLowerLifted.wrapperCalling this.LiftedTools wrapped instanceTy captured parameterNames make
         | Adapting _ -> internalError "an adapter lowered as a definition"
