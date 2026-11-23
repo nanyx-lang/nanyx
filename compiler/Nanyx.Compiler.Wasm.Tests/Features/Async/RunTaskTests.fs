@@ -180,3 +180,16 @@ println(later())
 """
     Assert.DoesNotContain("$__nanyx_scope_enter", transpileWat source)
     runSource source |> assertRan "3\n6\n"
+
+[<Fact>]
+let ``An await in the right operand of and and or runs only when the left doesn't decide`` () =
+    let source =
+        """def check: [Async] int -> bool = { n ->
+  def t = start! n > 2
+  n > 0 and await(t) or not(n > 0) and await(start! true)
+}
+
+println(check(1))
+println(check(5))
+println(check(-1))"""
+    assertPrints "false\ntrue\ntrue\n" "false\ntrue\ntrue\n" source
