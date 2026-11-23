@@ -71,7 +71,7 @@ export def array.toSeq: array(a) -> seq(a) = { xs ->
 
 -- The elements of `xs` from `index` on.
 def elementsFrom: array(a), int -> seq(a) = { xs, index ->
-  Seq(
+  Sequence(
     next = {
       if index >= __nanyx_array_length(xs)
         then #done

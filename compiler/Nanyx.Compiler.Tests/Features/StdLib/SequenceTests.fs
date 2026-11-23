@@ -15,8 +15,8 @@ let ``A range is a seq of ints, written as the prelude's type is`` () =
         clean """
 def bounded = 1..10
 def endless = 0..
-def written: Seq(int) = 1..3
-def aliased: seq(int) -> Seq(int) = { s -> s }
+def written: Sequence(int) = 1..3
+def aliased: seq(int) -> Sequence(int) = { s -> s }
 """
     Assert.Equal("seq(int)", asciiTypeIn typed "bounded")
     Assert.Equal("seq(int)", asciiTypeIn typed "endless")
@@ -29,7 +29,7 @@ let ``The seq functions are attached to seq, and a pipe finds them`` () =
         clean """
 def doubled = (1..10) \seq.map { * 2 } \seq.toList
 def piped: [Console] () -> list(int) = { (1..3) \map { x -> x + 1 } \toList }
-def firstEvens = (0..) \seq.filter { x -> x % 2 == 0 } \seq.take(3) \Seq.toList
+def firstEvens = (0..) \seq.filter { x -> x % 2 == 0 } \seq.take(3) \Sequence.toList
 """
     Assert.Equal("list(int)", asciiTypeIn typed "doubled")
     Assert.Equal("list(int)", asciiTypeIn typed "firstEvens")
@@ -56,7 +56,7 @@ def pulled: ([Console] seq(int)) -> list(int) = { s -> s \seq.toList }
 """.ReplaceLineEndings "\n"
         )
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
-    Assert.Contains("'Seq.toList' requires the context 'Console'", diagnostic.Message)
+    Assert.Contains("'Sequence.toList' requires the context 'Console'", diagnostic.Message)
 
 [<Fact>]
 let ``A sequence mapped with a function that needs a context is made where the context is not`` () =
