@@ -32,7 +32,7 @@ let rec needsConversion (given: IrType) (expected: IrType) : bool =
         List.exists2 (fun (_, givenTy) (_, expectedTy) -> needsConversion givenTy expectedTy) givenFields expectedFields
     | IrList givenElement, IrList expectedElement
     | IrArray givenElement, IrArray expectedElement -> needsConversion givenElement expectedElement
-    | IrFunction(givenInput, givenOutput, _), IrFunction(expectedInput, expectedOutput, _) ->
+    | IrFunction(givenInput, givenOutput, _, _), IrFunction(expectedInput, expectedOutput, _, _) ->
         needsConversion expectedInput givenInput || needsConversion givenOutput expectedOutput
     | _ -> false
 
@@ -44,7 +44,7 @@ let rec holdsBox (ty: IrType) : bool =
     | IrRecord fields -> fields |> List.exists (snd >> holdsBox)
     | IrList element
     | IrArray element -> holdsBox element
-    | IrFunction(input, output, _) -> holdsBox input || holdsBox output
+    | IrFunction(input, output, _, _) -> holdsBox input || holdsBox output
     | _ -> false
 
 /// What converting needs from the function being lowered.

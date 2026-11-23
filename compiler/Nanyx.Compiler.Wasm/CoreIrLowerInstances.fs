@@ -86,7 +86,7 @@ let neverCalled (fnTy: Ty) : bool =
 /// `standInFunction`).
 let standInArity (ty: IrType) =
     match ty with
-    | IrFunction(input, _, members) -> 1 + (valuesOf input).Length + members.Length
+    | IrFunction(input, _, members, _) -> 1 + (valuesOf input).Length + members.Length
     | _ -> 1
 
 /// The function `functionName` a stand-in for a context member of the type `ty` is a closure over (see `neverCalled`):
@@ -94,7 +94,7 @@ let standInArity (ty: IrType) =
 let standInFunction (newVar: string -> VarKind -> IrType -> Var) (functionName: string) (ty: IrType) : Function =
     let input, result, members =
         match ty with
-        | IrFunction(input, result, members) -> input, result, members
+        | IrFunction(input, result, members, _) -> input, result, members
         | _ -> internalError $"a stand-in for a context member of type '{IrType.show ty}'"
     let environment = newVar ClosureSyntax.envParameter Param (IrRecord [ "0", IrWord ])
     let values = valuesOf input |> List.mapi (fun index ty -> newVar $"__arg{index + 1}" Param ty)

@@ -20,7 +20,9 @@ type ContextLayouts =
     { /// Of each context without parameters: each member's key and declared type.
       Plain: Map<string, (ContextMemberKey * NyxCompiler.Ty) list>
       /// Of each parameterised context: its parameters, and each member's name and declared type in them.
-      Parameterised: Map<string, NyxCompiler.TyVar list * (string * NyxCompiler.Ty) list> }
+      Parameterised: Map<string, NyxCompiler.TyVar list * (string * NyxCompiler.Ty) list>
+      /// The names `nanyx/async`'s `Async` is known by: a function that requires it can wait.
+      Waiting: Set<string> }
 
 module ContextMemberKey =
     /// A name in a key's text, with each `_` written `-5F-`, so that `_` only ever separates the parts.

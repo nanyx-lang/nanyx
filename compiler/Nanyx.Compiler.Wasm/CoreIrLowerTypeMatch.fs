@@ -274,7 +274,7 @@ let private descriptionOf (tools: TypeMatchTools) (ty: Ty, view: string) : Expr 
                 | _ -> []
             | _ -> []
         let fieldTy = tools.ToIrType (TyApply(TypeValues.field, [ boxedTy ]))
-        let getTy = IrFunction(IrBox, IrBox, [])
+        let getTy = IrFunction(IrBox, IrBox, [], false)
         let fieldItems =
             fields
             |> List.map (fun (fieldName, fieldType) k ->
@@ -287,7 +287,7 @@ let private descriptionOf (tools: TypeMatchTools) (ty: Ty, view: string) : Expr 
                     makeRecord tools fieldTy (Map.ofList values) k))
         let maker = tools.Request $"__make_{tools.TypeIds.Of(ty, view)}" (MakingRecord ty)
         naming (Some ("fields", fieldItems, fieldTy)) (fun values ->
-            let values = values |> Map.add makeMember (closure maker (IrFunction(IrList IrBox, IrBox, [])))
+            let values = values |> Map.add makeMember (closure maker (IrFunction(IrList IrBox, IrBox, [], false)))
             makeRecord tools (tools.ToIrType (TyApply(TypeValues.recordInfo, [ boxedTy ]))) values (tagged TypeValues.recordTag))
     | tag, shape when tag = TypeValues.unionTag ->
         let rec cases (ty: Ty) =
@@ -307,7 +307,7 @@ let private descriptionOf (tools: TypeMatchTools) (ty: Ty, view: string) : Expr 
                 let builder = tools.Request $"__build_case_{tools.TypeIds.Of(ty, view)}_{caseName}" (CaseBuilding(ty, caseName))
                 let values =
                     [ "name", text caseName; "type", typeId payloadTy; "get", closure getter getTy
-                      "build", closure builder (IrFunction(IrBox, IrBox, [])) ]
+                      "build", closure builder (IrFunction(IrBox, IrBox, [], false)) ]
                 makeRecord tools caseTy (Map.ofList values) k)
         naming (Some ("cases", caseItems, caseTy)) (fun values ->
             makeRecord tools (tools.ToIrType (TyApply(TypeValues.unionInfo, [ boxedTy ]))) values (tagged TypeValues.unionTag))
