@@ -10,6 +10,8 @@
     "Sequence",
     "Stack",
     "StringTrie",
+    "Task",
+    "TaskScope",
     "Trie"
   ],
   "private": [

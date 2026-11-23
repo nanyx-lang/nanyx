@@ -1,8 +1,9 @@
 /// Where a function that can wait can stop and carry on later: its split points, which a state machine resumes at (see
 /// "How tasks are compiled" in `docs/src/content/deep-dives/async.md`). A function is a state machine when it can stop:
-/// when it calls a function value that requires `Async` (`IrFunction`'s `waits`), or a function that is a state machine
-/// itself. Each such call is a split point. This module finds them in the core IR once it is counted, and what each
-/// keeps across it; `TaskLowering` turns them into code.
+/// when it calls a function value that requires `Async` (`IrFunction`'s `waits`), waits for a task or for a scope's tasks
+/// (see `WasmScheduler`), or calls a function that is a state machine itself. Each such call is a split point. This
+/// module finds them in the core IR once it is counted, and what each keeps across it; `TaskLowering` turns them into
+/// code.
 module internal Transpiler.Wasm.CoreIrSplitPoints
 
 open System.Collections.Generic
@@ -30,10 +31,14 @@ type SplitPlan =
       /// How many states there are.
       Count: int }
 
+/// The intrinsics that can stop the task running (see `WasmScheduler`): a wait for a task, and the end of a scope.
+let private waitingIntrinsics = set [ NyxCompiler.Intrinsics.taskWait; NyxCompiler.Intrinsics.scopeExit ]
+
 /// Whether `expr` is a split point, given the functions that are state machines.
 let isSplit (machines: Set<string>) (expr: Expr) : bool =
     match expr.Kind with
     | Call(name, _) -> machines.Contains name
+    | CallRuntime(name, _, _) -> waitingIntrinsics.Contains name
     | CallClosure(closure, _, _) ->
         match closure.Type with
         | IrFunction(_, _, _, waits) -> waits
@@ -90,7 +95,8 @@ let stateMachines (start: string) (functions: Function list) : Set<string> =
             for expr in CoreIrRewrite.allExprs func.Body do
                 match expr.Kind with
                 | Call(name, _) -> callees.Add name |> ignore
-                | CallClosure _ when isSplit Set.empty expr -> waits <- true
+                | CallClosure _
+                | CallRuntime _ when isSplit Set.empty expr -> waits <- true
                 | _ -> ()
             func.Name, (waits, callees))
         |> List.filter (fun (name, _) -> name <> start)

@@ -5,8 +5,9 @@ order: 20
 ---
 
 A function that can wait requires the [`Async`](../stdlib/async) context, which the console and HTTP hosts provide
-([Hosts](../advanced/hosts#the-console-host)). This page says how it is built and why it has this shape. Tasks,
-cancellation, async streams and crash boundaries are not built yet; they are on
+([Hosts](../advanced/hosts#the-console-host)), and tasks do several things at once
+([Async](../advanced/async)). This page says how they are built and why they have this shape. Cancellation, `race`,
+async streams and crash boundaries are not built yet; they are on
 [Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries) in Work in progress.
 
 # How it's built
@@ -39,7 +40,7 @@ such as WebAssembly's stack switching once it is widely supported
 without ever stopping.
 
 - **Split points.** A function is a state machine when it can stop: when it calls a function value whose type waits,
-  or a function that is a state machine itself (`CoreIrSplitPoints.stateMachines`, over the module once it is counted).
+  waits for a task or for a scope's tasks (below), or calls a function that is a state machine itself (`CoreIrSplitPoints.stateMachines`, over the module once it is counted).
   Each such call is a split point, numbered from 1 in the order the code is written, so the states inside any
   expression are a range. The start function and the getter of a cached value run state machines without being one
   (below). A function that can't stop is compiled as before.
@@ -62,9 +63,9 @@ without ever stopping.
   when the function stops: a temporary whose value holds a split point, and those waiting to be used while it is
   computed, are kept in locals instead (`SplitPlan.StoredTemps`).
 - **Running one to the end.** Code that calls a state machine without being one, the start function, the getter of a
-  cached value and a component's export, resumes it while it stops (`TaskLowering.blockOn`). With no tasks yet, that
-  is the whole scheduler.
-- **Testing it.** Since nothing stops yet, `WasmOptions.YieldAtEveryWait` (`nanyx run --yield-at-every-wait`, for
+  cached value and a component's export, runs it to the end (`TaskLowering.blockOn`): while it stops, the scheduler
+  runs the other tasks until its turn comes again (below), and then resumes it.
+- **Testing it.** Since a wait on the host doesn't stop yet, `WasmOptions.YieldAtEveryWait` (`nanyx run --yield-at-every-wait`, for
   working on the compiler) makes every call of a function value that can wait stop once before it is made, through
   `__nanyx_yield`, which has a frame of its own. The tests run programs that wait both ways, with memory checks, and
   compare what they print: `RunStateMachineTests.fs`, and every test of the HTTP client.
@@ -145,3 +146,55 @@ Nothing starts it: like `Console`, the host provides it.
   ask for `Console` never prints.
 - **No `runBlocking`.** Inside a host that can suspend there's nothing to bridge, and in one that can't, a blocking
   runner would need an event loop the host doesn't have. The missing-context error is the honest answer.
+
+# Tasks and scopes
+
+`start!` starts a task, `await` waits for one, and each module-level def is the scope of the tasks it starts
+([Async](../advanced/async)).
+
+- **The library.** `nanyx/async` declares them on six intrinsics (`Intrinsics.taskStart` and the others, in
+  `Builtins.fs`). `TaskScope` is a scoped context, as `Memory` is, and `Task(a)` is a type in its scope,
+  `[TaskScope] protected (handle: I32)`. `scope` supplies `TaskScope` to its block, as `memory` supplies `Memory`: it
+  opens a scope, runs the block, and waits for the scope's tasks before it gives back the block's result. `start`
+  requires `TaskScope` and starts a task whose function runs `work` and keeps what it gives back as a function of
+  nothing, `{ value }`, so that the scheduler can drop it whatever its type, and each `await` gets a reference of its own
+  by calling it. `await` requires `TaskScope` too, so a function that awaits a task it is given borrows its caller's
+  scope rather than supplying one, which a function that takes a `Task` and doesn't require it would.
+- **`start!`.** `start` is a function, not a member of `Async`, which has no members: a `#delay` keyword rewrites
+  nothing but itself, so `Attributes.applyAttributes` allows `@customKeywordType(#delay)` on a top-level def, and
+  `Attributes.keywordKinds` reads it there (any other kind needs a builder, `NYX0019`). The hosts' preludes export
+  `start` and `await` beside `Async`.
+- **Each def a scope.** `TaskScopes.wrap`, before inference, makes the body of each module-level def that names
+  `start` where nothing in it binds the name (a parameter or a local def named `start` is not the one that starts a
+  task), and a script's entry point if it does, the block of a call of `scope`; a module that defines a `start` of its
+  own has no scopes (`TaskScopeSyntax.scopeCall`, with
+  `nanyx/async` imported under an alias no code can write). So the rules that keep what requires a scoped context in
+  its call (`ScopedCalls`) keep a def's tasks in it: a `Task` given back is `NYX0233`, with a message about tasks
+  rather than the call. A lambda requires its contexts where it is called, so nothing ties a lambda that starts a task
+  to the def it is written in; `TaskCaptures.escapeErrors` reports a def that is a scope whose result holds one. Local
+  defs and lambdas are not scopes: their tasks belong to the def they are written in.
+- **Tasks share only values.** `TaskCaptures.captureErrors` reports a call of `start` whose function requires a
+  `memory` block's `Memory`, as one that uses a cell or a reference does (`NYX0279`).
+- **The scheduler** (`WasmScheduler`) runs an instance's tasks on its one stack, as state machines. A task is a block
+  of the function it runs, the frame it stopped in, its scope and its own innermost scope, the function that gives its
+  result, and the regions of the `memory` blocks it is in, which the scheduler swaps in when it runs it. The queue is
+  first in, first out, so the order tasks run in is fixed: a task starts from the next time the code that started it
+  waits. `taskWait` and `scopeExit` are split points that stop the running task while what they wait for hasn't
+  finished, with a frame of their own whose resume entry looks again. Each task has a scope for the tasks it starts
+  directly, and finishes once they have. The main task, the program's own code, is made when something first needs
+  it, and freed with its outermost scope. Today a wait on the host blocks the thread rather than stopping, so tasks
+  take turns only where they wait for each other.
+- **A crash in a task** traps, as any crash does, which ends the instance and its other tasks.
+
+## Why tasks are built this way
+
+- **A task nobody awaits is waited for,** as in Kotlin, not cancelled, as in Swift: a `start!` whose result is never
+  used is probably started for what it does, and its effect was wanted.
+- **`await` is a function, not a keyword.** A keyword exists to capture the rest of a block; waiting on a task is an
+  ordinary call that suspends, like `http.get`, so it's written like one.
+- **A task never stands in for its value.** `a` is a `Task(Response)` until it's awaited. Having it awaited when it's
+  first read would be an implicit conversion, which Nanyx doesn't have.
+- **`Task`, not `Process`.** A task shares the instance and lives in a scope; a process, when there are processes, is
+  isolated and runs on its own. The names keep the two levels apart.
+- **The scope is the def, not the nearest lambda,** so that `urls \map { url -> start! http.get(url) }` starts every
+  request at once: the def, not `map`'s lambda, waits for them.
