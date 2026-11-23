@@ -8,6 +8,22 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.37.0
+
+*23 November 2026*
+
+A small release with one fix to local recursive functions and contexts. An annotated local `rec` is now checked like an
+annotated local `def`, which can report errors in code that compiled before.
+
+**Fixes**
+
+- A local `rec` that writes its type runs only in the contexts its type declares, and is checked against the parameter
+  and result types it writes, as a local `def` is. **This breaks code** whose `rec` calls something that needs a context
+  its type doesn't declare: it is now NYX0211, fixed by adding the context, such as `[c]`, to the type
+  ([Contexts](../advanced/contexts)).
+- A local function that writes a context variable of the function around it, such as `def go: [c] int -> int` inside a
+  `[c]` function, compiles and runs, instead of failing with NYX0301.
+
 # 0.36.0
 
 *23 November 2026*
