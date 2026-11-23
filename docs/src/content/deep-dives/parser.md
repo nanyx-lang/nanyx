@@ -104,5 +104,8 @@ items at one column; the pass keeps a stack of them, with the brackets and brace
    item, and indentation closes no block outside them. A block opened inside them, after an opener or by arms, closes
    when they do, and a `}` closes the blocks opened inside its `{`, each with a `Dedent`. A line that starts with a
    closing bracket or brace is part of what it closes, so a list's `]` on its own line is no item
-   ([#248](https://github.com/nanyx-lang/nanyx/issues/248)).
+   ([#248](https://github.com/nanyx-lang/nanyx/issues/248)). An item in them ends at its `,`, or, written one per line,
+   at its line's end, and so does a workflow keyword applied to a value that is the item, `try x`, `try! x`, `yield x`
+   or `return x`, though it takes in an operator after it on its line: `g(a = try f(x) + 1, b = try h(y))` binds
+   `f(x) + 1` and `h(y)` ([#2411](https://github.com/nanyx-lang/nanyx/issues/2411)).
 7. **The end of the text** closes every block but the top level's.

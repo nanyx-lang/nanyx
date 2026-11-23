@@ -51,7 +51,11 @@ construct are written once, as documents, and the printer decides where to break
 - Parentheses are not kept by the parser (`tupleOrParenExpr` returns the inner expression), so they are printed where
   precedence needs them, and nowhere else. A record of plain named fields that is a type application's only argument
   or a tag's payload shares its brackets: `list(price: int)`, not `list((price: int))`
-  ([#1628](https://github.com/nanyx-lang/nanyx/issues/1628)).
+  ([#1628](https://github.com/nanyx-lang/nanyx/issues/1628)). A construct that takes everything after it, such as an
+  `if`, a `match` or a `with` (`Formatter.isOpenEnded`), is bracketed unless nothing follows it (`Position.Tail`). A
+  workflow keyword applied to a value, `try x`, `yield x` or `return x`, that is an item in brackets (an argument, a
+  field, an element or an entry) is not, since the parser ends it at the item's `,` or line break
+  (`Position.endsWithItsItem`, [#2411](https://github.com/nanyx-lang/nanyx/issues/2411)).
 - Literals are stored by value (`IntLit of int`, a decoded `StringLit`), so they are printed from their source text,
   through their spans, and `0xFF`, `1_000` and escapes survive. The text between the holes of an interpolated string
   has no span of its own: `SourceText.WrittenStringText` finds it in the source after the opening quote or the hole before it,

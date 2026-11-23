@@ -24,6 +24,18 @@ let statementPosition = { Inline = true; Tail = true; Prec = 0 }
 /// An operand of `.` or `not`: a primary expression.
 let operandPosition = { Inline = false; Tail = false; Prec = prefixPrecedence }
 
+/// Whether `e`, an item in brackets (an argument, a field, an element or an entry), ends where the item does though
+/// it takes everything after it elsewhere: a workflow keyword applied to a value, `try x`, `yield x` or `return x`,
+/// which the parser ends at the item's `,` or line break. Another item may follow one without brackets.
+let endsWithItsItem (e: Expression) =
+    match e.Kind with
+    | WorkflowBindExpr _
+    | WorkflowReturnExpr _ -> true
+    | _ -> false
+
+/// An item in brackets, the last of them if `isLast` (see `endsWithItsItem`).
+let itemPosition (isLast: bool) (e: Expression) = { full with Tail = isLast || endsWithItsItem e }
+
 /// How tightly the operator the parser reads as `op` binds, as the parser has it (see `binaryOperators`).
 let precedence op =
     match binaryOperatorNamed op with
