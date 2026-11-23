@@ -123,6 +123,31 @@ def main = {
     runSource (source.ReplaceLineEndings "\n") |> assertRan "ab 2\n"
 
 [<Fact>]
+let ``Run - a context member's boxed value may be a tuple, passed whole or made of the call's arguments (#2413)`` () =
+    let source = "" + genericProc + """
+def whole: [Proc] int -> #some((int, string)) | #missing = { n -> ret((n, "a")) }
+def made: [Proc] int -> #some((int, string)) | #missing = { n -> ret(n, "b") }
+
+@entry
+def main = {
+  use Proc(
+    bind = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    ret = { value -> #some(value) }
+  )
+  match whole(1)
+    | #some((n, s)) -> println("{n} {s}")
+    | #missing -> println("missing")
+  match made(2)
+    | #some((n, s)) -> println("{n} {s}")
+    | #missing -> println("missing")
+}
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "1 a\n2 b\n"
+
+[<Fact>]
 let ``Run - a context member's boxed values may be lists, converted element by element`` () =
     let source = """context Lists = (
   reversed: list(a) -> list(a)

@@ -291,6 +291,22 @@ show(run(7))
     runSource source |> assertRan "found\nnot found\nnil\n"
 
 [<Fact>]
+let ``Run - a proc block returns a tuple of binds (#2413)`` () =
+    let source =
+        normalized """def num = { x: int -> if x > 0 then #some(x) else #none }
+
+def m3 = { x: int, y: int ->
+  proc {
+    return (try num(x), try num(y))
+  }
+}
+
+println(m3(1, 2))
+println(m3(1, -2))
+"""
+    runSource source |> assertRan "#some(1, 2)\n#none\n"
+
+[<Fact>]
 let ``Run - the prelude's proc and option helpers need no import`` () =
     let source =
         normalized """def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
