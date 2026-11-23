@@ -430,19 +430,32 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
             this.Complex scope value k
-        // A `box` (see `Boxes`) is the box a captured cell is: made, read and changed as one is.
+        // A `box` (see `Boxes`) is made on the region of the outermost `memory` block running (see `CoreIrRegions`), and
+        // read and changed as a captured cell is.
         | FunctionCall(name, _, [ value ]) when name = Intrinsics.boxNew && not (scope.Vars.ContainsKey name) ->
-            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", atomType atoms.Head ])))
+            this.Atoms scope [ value ] (fun atoms ->
+                let link = ASized(SizedInteger.I32, 0L)
+                let fields =
+                    [ CoreIrRegions.dropField, link
+                      CoreIrRegions.nextField, link
+                      CoreIrRegions.prevField, link
+                      CoreIrRegions.boxValueField, atoms.Head ]
+                let boxTy = CoreIrRegions.boxType (atomType atoms.Head)
+                let box = newVar (uniqueName "__box") Local boxTy
+                let tracked = newVar (uniqueName "__tracked") Local IrUnit
+                let body = k (Expr.make (Atom(AVar box)) boxTy)
+                let track = Expr.make (CallRuntime(WasmRegions.Names.regionTrack, [ AVar box ], false)) IrUnit
+                Expr.make (Let(box, Expr.make (MakeRecord fields) boxTy, Expr.make (Let(tracked, track, body)) body.Type)) body.Type)
         | FunctionCall(name, _, [ box ]) when name = Intrinsics.boxGet && not (scope.Vars.ContainsKey name) ->
             this.Atoms scope [ box ] (fun atoms ->
                 let held = tyOf expr
                 let copy = newVar (uniqueName "__box_value") Local held
                 let body = k (Expr.make (Atom(AVar copy)) held)
-                Expr.make (Let(copy, Expr.make (Field(atoms.Head, 0)) held, body)) body.Type)
+                Expr.make (Let(copy, Expr.make (Field(atoms.Head, CoreIrRegions.boxValueSlot)) held, body)) body.Type)
         | FunctionCall(name, _, args) when name = Intrinsics.boxSet && not (scope.Vars.ContainsKey name) ->
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 match atoms with
-                | [ AVar box; value ] -> k (Expr.make (SetField(box, 0, value)) IrUnit)
+                | [ AVar box; value ] -> k (Expr.make (SetField(box, CoreIrRegions.boxValueSlot, value)) IrUnit)
                 | _ -> internalError "a box set with something other than a box and a value")
         // The array of a collection literal's items, built in one block (see `CoreIrLowerArrayLiterals`).
         | FunctionCall(name, _, [ items ]) when name = CollectionSyntax.arrayOf && not (scope.Vars.ContainsKey name) ->

@@ -120,7 +120,8 @@ and, when it was the last, drops the fields that are on the heap and frees the o
 - an array's drops each of its elements, from the first to the last. An array is a block made by `__nanyx_new_cell`,
   so its count is at `p - 4`, then its length, an `i32`, at `p`, then its elements one after another, each stored as
   a list cell's head is (`CoreIrLayout.arrayElementOffset`). A mutable array (`MArray`) is laid out the same way, so
-  its drop is an array's; an `MRef` is a one-field record, so its drop is a record's;
+  its drop is an array's; an `MRef` is a record of its region's links and its value (see [Regions](#regions)),
+  so its drop is a record's, which takes it off its region's list first;
 - a tag union's returns at once for a code (an odd value); for a cell, it reads the code to tell the payload's type,
   unless every tag with a payload has a payload of the same type;
 - a function value's calls the function whose table slot is in the closure's info word, which drops what the
@@ -466,6 +467,40 @@ are its size word's, so without the word itself. `reused_in_place` counts the ob
 count of one: `__nanyx_list_cons_at`, `__nanyx_tag_box_at` and `__nanyx_reuse_object` count it when the token holds a
 block, and `UpdateRecord` when it updates the record in place. The runner reads the counters however the program
 stopped (`WasmRunner.runCounting`), so the report follows a trap, a failed check or a leak too.
+
+## Regions
+
+Counting can't free a cycle, and a reference (`MRef`) can hold a value that holds the reference. The type checker makes
+sure that nothing the program can still reach refers to a mutable object once the `memory` block it was made under has
+ended ([Memory](../advanced/memory#values-cannot-escape-memory-scope)), so the block frees what is left of them when it
+ends, whatever their counts say ([#2232](https://github.com/nanyx-lang/nanyx/issues/2232)).
+
+The outermost `memory` block running has a region (`WasmRegions.fs`), which `memory` starts and ends with the
+intrinsics `__nanyx_region_enter` and `__nanyx_region_exit`. They count the blocks running in a global: the first block
+to start makes the region, a block of three words held in another global, and the last to end ends it. Every block
+whose `Memory` an object can be made under runs inside the outermost one, so the region outlives everything that can
+refer to its objects. The cost is that a cycle made in an inner block lives until the outermost block ends; a region
+for each block, which needs the backend to know which block's `Memory` each call is given, is
+[#2376](https://github.com/nanyx-lang/nanyx/issues/2376).
+
+An `MRef` is a box laid out as a record of four fields (`CoreIrRegions.boxType`): the table slot of the function that
+drops what it holds (`__nanyx_region_drop_…`, one for each type of box, called through the table as an environment's
+drop function is), the next and the previous object on the region's list, then the value. The link fields' names start
+with `-`, which no field of the program's can, so they are stored first and no record of the program's is taken for a
+box. The region's block is laid out as the links are, with no drop function, and the list is circular, with the region
+as its sentinel, so an object is linked and unlinked without asking whether it is first or last.
+
+- `__nanyx_region_track` puts a new box on the region's list, with its drop function's table slot.
+- When counting gives up a box's last reference, its drop function takes it off the list (`__nanyx_region_unlink`)
+  before it drops its value and frees it, as any record's does. So a box that is not in a cycle is freed as early as
+  before, and costs only its three link words.
+- `__nanyx_region_end` takes a reference to every box still on the list, so that none is freed or taken off it while it
+  runs, then calls each box's drop function, which gives up the references the boxes hold to each other, then frees
+  each box, whatever its count says, and the region.
+
+A block can't be left without ending it: a crash ends the program, and a workflow's `try` or `return` in a block ends
+the block's lambda, after which `memory` ends the region as usual. The boxes of captured cells and `MArray`s are not on
+the region yet.
 
 ## Things that need care
 
