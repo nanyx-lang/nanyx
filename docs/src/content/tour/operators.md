@@ -142,7 +142,9 @@ Boolean operations are the keywords `and`, `or` and `not`. `&&` and `||` are not
 `and` and `or` short-circuit: `a and b` evaluates `b` only when `a` is `true`, and `a or b` evaluates `b` only when `a` is `false`. So a test on the left guards what is on the right: here `10 / x` is never evaluated with `x` zero.
 
 ```nanyx
-def safe: int -> bool = { x -> x != 0 and 10 / x > 1 }
+def safe: int -> bool = { x ->
+  x != 0 and 10 / x > 1
+}
 
 @entry
 def main = {
