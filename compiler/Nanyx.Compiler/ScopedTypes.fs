@@ -15,8 +15,9 @@ let made (env: TypeEnv) (state: InferState) (name: Identifier) (info: TypeDefInf
         let ty, underlying, scoped, next = freshNominalType state info
         ty, underlying, LambdaContexts.recordUnsupplied env (Option.toList scoped) next
     else
+        // A recursive alias's value is made from what it stands for one level deep, not its closed definition.
         let ty, next = namedType state name info
-        ty, info.Underlying, next
+        ty, RecursiveAliases.underlying ty, next
 
 /// Checks that the context whose scope the values of `info` belong to, if any, is available where its constructor
 /// `name` is called, at `call` written at `span`.
