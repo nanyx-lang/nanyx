@@ -151,7 +151,10 @@ requests has no `wasi:http` import. It is Nanyx, on
   address and a count, each string an address and a length. The host allocates them with `cabi_realloc`, which is the
   program's allocator, and the root frees each once it has copied it out.
 - **The clocks and random numbers** are `wasi:clocks/system-clock`'s `now`, an `instant` of seconds and nanoseconds
-  written to memory, `monotonic-clock`'s `now`, nanoseconds as a `u64`, and `wasi:random`'s `get-random-u64`.
+  written to memory, `monotonic-clock`'s `now`, nanoseconds as a `u64`, and `wasi:random`'s `get-random-u64`. A sleep
+  is `monotonic-clock`'s async `wait-for`, lowered with `[async-lower]` and waited on as a request is
+  (`nanyx.wasi/abi`'s `awaitCall`), so it holds the instance until it is over: the component roots' waits don't yet let
+  the program's other tasks run.
 - **Exiting** is `wasi:cli/exit`'s `exit-with-code`, which takes 0 to 255; any other code exits with 1.
 - **Files** are `wasi:filesystem`'s, in `console.host.wasi.files.nyx`, a `@partial` fragment of the root. The preopens
   come from `get-directories` once, and are kept in the host's block; a path is found in one as the core root finds it

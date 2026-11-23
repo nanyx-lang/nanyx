@@ -487,6 +487,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 elif name = Intrinsics.listSetHead then CoreIrRegions.withBarrier stored WasmRegions.Names.regionStoreOutermost atoms call
                 // The scheduler calls a task's function with nothing but itself, so it holds the members it requires.
                 elif name = Intrinsics.taskStart then CoreIrLowerMembers.coerce this.MemberTools scope atoms.Head (IrFunction(IrUnit, IrUnit, [], true)) (fun task -> call [ task ])
+                // The scheduler calls the host's wait with its timeout and nothing else, as it calls a task's function.
+                elif name = Intrinsics.hostWait then
+                    CoreIrLowerMembers.coerce this.MemberTools scope atoms.Head (IrFunction(IrSized SizedInteger.I32, IrUnit, [], false)) (fun wait -> call (wait :: atoms.Tail))
                 else call atoms)
         | FunctionCall(name, _, args) when input.Externs.ContainsKey name && not (scope.Vars.ContainsKey name) ->
             // A foreign function: a direct call to the module's import of it. It takes no context members: it requires

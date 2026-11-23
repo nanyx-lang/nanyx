@@ -19,10 +19,13 @@ async streams and crash boundaries are not built yet; they are on
   [Hosts](./hosts#how-its-built).
 - **A host that can't suspend doesn't provide it.** The playground host doesn't, so a program that needs `Async` is an
   error naming the host (`NYX0205`), as for any context a host doesn't provide.
-- **A wait holds only its instance.** Each instance runs on a thread of its own, and a call that waits is a host call
-  that blocks that thread. The console host has one instance; the HTTP host runs each request's instance on a thread
-  of its own (`WasmServer.serve`), so a handler that waits on an outbound request holds only its own, and the host
-  answers other requests meanwhile.
+- **A wait holds only its task.** On the console and HTTP hosts' core roots, a request or a sleep stops the task that
+  waits while it is in flight, and the instance's other tasks run (below). A wait that is a blocking host call holds
+  the instance's thread until it is done: a file's, since WASI preview 1 has no file functions that don't block, and
+  every wait of the hosts' component roots, until they wait on one waitable set
+  ([Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#how-it-runs)). Each instance
+  runs on a thread of its own: the console host has one; the HTTP host runs each request's instance on a thread of its
+  own (`WasmServer.serve`), so a handler holds only its own, and the host answers other requests meanwhile.
 - **The backend knows which functions can wait.** `Async` has no members, so nothing a function is passed says it
   requires it. A function's IR type says so instead (`IrFunction`'s `waits`, in `CoreIr.fs`), from the contexts its
   type requires (`CoreIrLowerTypes.toIrTypeIn`). A function generic in contexts is specialised on what its context
@@ -35,9 +38,8 @@ Tasks ([#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) need a function
 carry on later, while other code runs on the same stack. The backend compiles such a function to a state machine, as
 C# and Rust compile async functions. `TaskLowering` decides how; it is the one place to change for another lowering,
 such as WebAssembly's stack switching once it is widely supported
-([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). Nothing stops yet: a wait still blocks its instance's thread
-(above), so today every call that could stop finishes, and the state machines are the path every `Async` program takes
-without ever stopping.
+([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). A function that can wait stops only where something it waits
+for hasn't finished: a task, a scope's tasks, or the host (below); a call that could stop and doesn't costs a check.
 
 - **Split points.** A function is a state machine when it can stop: when it calls a function value whose type waits,
   waits for a task or for a scope's tasks (below), or calls a function that is a state machine itself (`CoreIrSplitPoints.stateMachines`, over the module once it is counted).
@@ -65,9 +67,9 @@ without ever stopping.
 - **Running one to the end.** Code that calls a state machine without being one, the start function, the getter of a
   cached value and a component's export, runs it to the end (`TaskLowering.blockOn`): while it stops, the scheduler
   runs the other tasks until its turn comes again (below), and then resumes it.
-- **Testing it.** Since a wait on the host doesn't stop yet, `WasmOptions.YieldAtEveryWait` (`nanyx run --yield-at-every-wait`, for
-  working on the compiler) makes every call of a function value that can wait stop once before it is made, through
-  `__nanyx_yield`, which has a frame of its own. The tests run programs that wait both ways, with memory checks, and
+- **Testing it.** A wait stops only when what it waits for isn't done, so `WasmOptions.YieldAtEveryWait` (`nanyx run
+  --yield-at-every-wait`, for working on the compiler) makes every call of a function value that can wait stop once
+  before it is made, through `__nanyx_yield`, which has a frame of its own. The tests run programs that wait both ways, with memory checks, and
   compare what they print: `RunStateMachineTests.fs`, and every test of the HTTP client.
 
 # Why it's built this way
@@ -153,7 +155,7 @@ Nothing starts it: like `Console`, the host provides it.
 ([Async](../advanced/async)).
 
 - **The library.** `nanyx/async` declares them on six intrinsics (`Intrinsics.taskStart` and the others, in
-  `Builtins.fs`). `TaskScope` is a scoped context, as `Memory` is, and `Task(a)` is a type in its scope,
+  `Builtins.fs`), and `nanyx/host.async` a host's waits on a seventh, `Intrinsics.hostWait` (below). `TaskScope` is a scoped context, as `Memory` is, and `Task(a)` is a type in its scope,
   `[TaskScope] protected (handle: I32)`. `scope` supplies `TaskScope` to its block, as `memory` supplies `Memory`: it
   opens a scope, runs the block, and waits for the scope's tasks before it gives back the block's result. `start`
   requires `TaskScope` and starts a task whose function runs `work` and keeps what it gives back as a function of
@@ -182,8 +184,19 @@ Nothing starts it: like `Console`, the host provides it.
   waits. `taskWait` and `scopeExit` are split points that stop the running task while what they wait for hasn't
   finished, with a frame of their own whose resume entry looks again. Each task has a scope for the tasks it starts
   directly, and finishes once they have. The main task, the program's own code, is made when something first needs
-  it, and freed with its outermost scope. Today a wait on the host blocks the thread rather than stopping, so tasks
-  take turns only where they wait for each other.
+  it, and freed once it holds no scope.
+- **Waits on the host.** A host's code that waits starts what it waits for and polls it, calling `waitOnHost` between
+  polls ([Hosts](../advanced/hosts#waiting-on-the-host)). Its intrinsic, `hostWait`, is a split point that keeps the
+  host's wait it is given, a function value of a timeout, and the shortest timeout given, and stops until the
+  scheduler has made that wait once more (`__nanyx_host_round`). A task resumed while what it waits for hasn't
+  happened has stalled (`__nanyx_task_stalled`); the scheduler counts the tasks that stall in a row, and when every
+  task in the queue has (`__nanyx_task_idle`), nothing can happen until the host does something, so it calls the
+  host's wait, if a task gave one. The tasks that waited on the host then poll again. On the hosts' core roots, the
+  wait is the runtime's `nanyx:async` `wait`, and a request is `nanyx:http`'s `start` and `poll`
+  ([Foreign functions](./foreign-functions)). A sleep, `Clock`'s `sleep`, waits on the host for what is left of it
+  until the monotonic clock has passed its deadline. Passing the wait, rather than marking it for the compiler to
+  find, keeps it a function like any other: nothing that only the scheduler calls has to survive linking, and a host
+  can write its wait in Nanyx.
 - **A crash in a task** traps, as any crash does, which ends the instance and its other tasks.
 
 ## Why tasks are built this way

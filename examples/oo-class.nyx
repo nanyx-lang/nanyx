@@ -90,15 +90,20 @@ def main = {
     generateCertificateChain = { challenge -> #some(["leaf for {challenge}", "root"]) }
   )
 
-  def first = use Clock(now = { 1_000 }, ticks = { 0 }) in empty \refresh
+  def first = use Clock(now = { 1_000 }, ticks = { 0 }, sleep = { _ -> () }) in empty \refresh
   println(show(first))
 
   match first
     -- Still fresh a little later, so nothing is generated
     | #some(cache) ->
-      println(show(use Clock(now = { 30_000 }, ticks = { 0 }) in cache \refresh))
+      println(
+        show(use Clock(now = { 30_000 }, ticks = { 0 }, sleep = { _ -> () }) in cache \refresh)
+      )
+
       -- Expired after a minute, so a new one is generated
-      println(show(use Clock(now = { 90_000 }, ticks = { 0 }) in cache \refresh))
+      println(
+        show(use Clock(now = { 90_000 }, ticks = { 0 }, sleep = { _ -> () }) in cache \refresh)
+      )
     | #attestationFailed -> ()
 
   use Attester(
@@ -106,5 +111,5 @@ def main = {
     generateCertificateChain = { _ -> #attestationFailed }
   )
 
-  println(show(use Clock(now = { 1_000 }, ticks = { 0 }) in empty \refresh))
+  println(show(use Clock(now = { 1_000 }, ticks = { 0 }, sleep = { _ -> () }) in empty \refresh))
 }

@@ -23,7 +23,7 @@ import (
   nanyx.http.core/response as (Response)
   nanyx.http.core/wire as (readRequest, writeResponse)
   nanyx.wasi/preview1 as (millisecondsOn, systemBits)
-  nanyx.wasi/runtime as (sendThroughRuntime)
+  nanyx.wasi/runtime as (sendThroughRuntime, sleepOnRuntime)
 )
 
 @extern("nanyx:serve", "requestLength")
@@ -61,7 +61,12 @@ export def run
   = { handle ->
     use Http(sendRequest = { request -> sendThroughRuntime(request) })
     use Random(bits = { _ -> systemBits() })
-    use Clock(now = { _ -> millisecondsOn(0) }, ticks = { _ -> millisecondsOn(1) })
+
+    use Clock(
+      now = { _ -> millisecondsOn(0) }
+      ticks = { _ -> millisecondsOn(1) }
+      sleep = { ms -> sleepOnRuntime(ms) }
+    )
 
     match incoming()
       | #some(request) -> answer(handle(request))
