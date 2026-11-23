@@ -22,6 +22,11 @@ type LambdaPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
     let pattern = parts.Pattern
     let typeExpr = parts.TypeExpr
 
+    /// The comments in the lambda `e` after `lastEnd`, the end of its body, before its `}`, which its body did not
+    /// place (see `CommentPlacement.PlaceAfter`). The lambda is broken over lines to keep them inside it.
+    let closingComments (e: Expression) (lastEnd: int) =
+        if sourceText.Valid e.Span && lastEnd >= 0 then placement.PlaceAfter lastEnd e.Span.End else []
+
     /// A lambda's parameters as written, each with the pattern it was written as, if any, and its body as written. A
     /// pattern parameter (`{ (a, b) -> a + b }`) is taken apart by a one-arm match the parser puts at the top of the
     /// body, over the parameter that stands in its place (`patternArgument`).
@@ -89,16 +94,24 @@ type LambdaPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
             // its braces go among them.
             | Block statements, _ when isWrittenBlock body ->
                 cat [ head; nest (cat [ hard; parts.StatementsInSequence true e.Span.Start e.Span.End statements ]); hard; text "}" ]
-            | _, _ when bodyOnOwnLine && not (bracketedAsStatement body) -> cat [ head; nest (cat [ hard; expr statementPosition body ]); hard; text "}" ]
+            | _, _ when bodyOnOwnLine && not (bracketedAsStatement body) ->
+                let bodyDoc = expr statementPosition body
+                cat [ head; nest (cat (hard :: bodyDoc :: closingComments e body.Span.End)); hard; text "}" ]
             | _, _ ->
                 let bodyDoc = expr full body
                 // A body that starts like a shorthand lambda (`{ - 1 }`, `{ .name }`) needs the arrow.
                 let head =
                     let first = (Doc.render Int32.MaxValue bodyDoc).TrimStart()
                     if List.isEmpty parameters && contextNames.IsEmpty && not takesUnit && first.Length > 0 && "*/+-<>=!.|".Contains first[0] then text "{ ->" else head
-                // A body that spans lines is indented once, and the `}` goes back to the lambda's line's indent, so
-                // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
-                Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])
+                match closingComments e body.Span.End with
+                // A comment before the `}` puts the body on a line of its own, the comment after it and the `}` on the
+                // next, unless the body can't be a statement.
+                | [] ->
+                    // A body that spans lines is indented once, and the `}` goes back to the lambda's line's indent, so
+                    // the braces of `{ x -> proc {` ... `}` do not end up one above the other.
+                    Doc.group (cat [ head; text " "; nest bodyDoc; Doc.line; text "}" ])
+                | comments when bracketedAsStatement body -> cat [ head; text " "; nest (cat (bodyDoc :: comments)); hard; text "}" ]
+                | comments -> cat [ head; nest (cat (hard :: bodyDoc :: comments)); hard; text "}" ]
 
     /// A lambda's parameter, with the pattern it was written as, if any (see `writtenLambda`). An annotated parameter is
     /// bracketed, so an arrow after its annotation is not read as part of it.
@@ -116,13 +129,18 @@ type LambdaPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
     /// `{ m -> | pattern -> ... }`.
     and shorthand (e: Expression) parameters (body: Expression) : Doc option =
         let made (x: Expression) = sourceText.Valid e.Span && x.Span = e.Span
+        // A comment before the `}` of one of them stays before it, with the `}` on the next line.
+        let closed (opening: Doc) (closing: Doc list) (single: unit -> Doc) =
+            if closing.IsEmpty then single () else cat [ opening; nest (cat closing); hard; text "}" ]
         match parameters, body.Kind with
-        | [], UnitExpr when made body -> Some(text "{ }")
-        | [ (first, None); (second, None) ], BinaryOp(op, _, l, r) when
+        | [], UnitExpr when made body -> Some(closed (text "{") (closingComments e (e.Span.Start + 1)) (fun () -> text "{ }"))
+        | [ (first, None); (second, None) ], BinaryOp(op, opSpan, l, r) when
             first = implicitArgument && second = implicitSecondArgument && l.Kind = IdentifierExpr first && r.Kind = IdentifierExpr second ->
-            Some(text $"{{ {op} }}")
+            let opEnd = opSpan |> Option.map _.End |> Option.defaultValue -1
+            Some(closed (text $"{{ {op}") (closingComments e opEnd) (fun () -> text $"{{ {op} }}"))
         | [ (only, None) ], _ when only = implicitArgument ->
-            Some(Doc.group (cat [ text "{ "; nest (expr full body); Doc.line; text "}" ]))
+            let bodyDoc = expr full body
+            Some(closed (cat [ text "{ "; bodyDoc ]) (closingComments e body.Span.End) (fun () -> Doc.group (cat [ text "{ "; nest bodyDoc; Doc.line; text "}" ])))
         // `{ | ... }` makes up its parameters and their scrutinees at the lambda; `{ m, f -> | ... }` makes up the
         // scrutinees of the parameters it names at its arms.
         | _, Match(scrutinees, arms) when

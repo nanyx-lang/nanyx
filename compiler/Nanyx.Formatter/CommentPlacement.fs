@@ -54,7 +54,12 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
                 | None -> entries.Add StackBlank
 
         let mutable previous = start
-        for childStart, childEnd, isImport, build in children do
+        // Where the next child starts: a comment after that is not this child's.
+        let followers =
+            match children with
+            | [] -> []
+            | _ :: rest -> (rest |> List.map (fun (childStart, _, _, _) -> childStart)) @ [ Int32.MaxValue ]
+        for (childStart, childEnd, isImport, build), follower in List.zip children followers do
             let childStart = max childStart previous
             let childEnd = max childEnd childStart
             between previous childStart
@@ -68,7 +73,7 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
             for i in before do
                 placeComment true i
             let trailing =
-                match unplacedIn childEnd (sourceText.LineEnd (max childStart (childEnd - 1)) + 1) with
+                match unplacedIn childEnd (min (sourceText.LineEnd (max childStart (childEnd - 1)) + 1) (max childEnd follower)) with
                 | i :: _ when childEnd > childStart -> Some i
                 | _ -> None
             match trailing with
@@ -93,6 +98,15 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
     /// Whether a comment not yet placed starts between the offsets `start` and `finish`.
     member _.HasCommentsIn(start, finish) = not (List.isEmpty (unplacedIn start finish))
 
+    /// The comments not yet placed that start between `lastEnd`, where the last token of what they follow ends, and
+    /// `finish`, placed: one on that token's line goes at the end of the line, and any other on a line of its own.
+    member _.PlaceAfter (lastEnd: int) (finish: int) : Doc list =
+        [ for i in unplacedIn lastEnd finish ->
+              placed[i] <- true
+              let comment, span = comments[i]
+              if sourceText.LineOf span.Start = sourceText.LineOf (max 0 (lastEnd - 1)) then Doc.trailingComment comment
+              else cat [ Doc.hardLine; Doc.comment comment ] ]
+
     /// Marks the comment at `index` placed, and gives its text and span.
     member _.Place(index: int) =
         placed[index] <- true
@@ -100,9 +114,9 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
 
     /// Children laid out one per line between the offsets `start` and `finish`, each given as its start and end offsets
     /// and a function building its document. The comments among them are put back: a comment after a child on its
-    /// last line stays at the end of that line, and any other on a line of its own. A comment inside a child that the
-    /// child does not place itself goes on a line of its own before it, or after it when the child placed comments
-    /// that come before it, so that comments stay in order.
+    /// last line, before the next child, stays at the end of that line, and any other on a line of its own. A comment
+    /// inside a child that the child does not place itself goes on a line of its own before it, or after it when the
+    /// child placed comments that come before it, so that comments stay in order.
     ///
     /// With `blankLines`, for where the parser allows blank lines between children (the top level, a module block and
     /// a block of statements, but not a list of imports): a child that spans more than one line gets a blank line
