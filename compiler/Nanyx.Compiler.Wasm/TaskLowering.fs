@@ -15,7 +15,7 @@
 ///   task resumes each function it stopped in, outermost first, as Rust polls a future, and a crash's stack still
 ///   shows them.
 /// - Code that runs a state machine without being one, such as the start function, runs it to the end: while it
-///   stops, it resumes it (`blockOn`). With no tasks yet, that is the whole scheduler.
+///   stops, the scheduler runs the other tasks (`blockOn`, `WasmScheduler`).
 module internal Transpiler.Wasm.TaskLowering
 
 open Transpiler.Wasm.Wat
@@ -35,6 +35,13 @@ module Names =
     let yieldResume = "__nanyx_yield_resume"
     /// The resume entry of the state machine `name`.
     let resumeEntry (name: string) = $"{name}__resume"
+    /// The scheduler's helpers that `blockOn` calls (see `WasmScheduler`): the task running, made the main task if there
+    /// is none, and the one that runs the other tasks until the running one's turn comes again.
+    let currentTask = "__nanyx_task_current"
+    let runOthers = "__nanyx_task_run_others"
+
+/// Where a task keeps the frame it stopped in (see `WasmScheduler`).
+let taskFrameOffset = 8
 
 /// A frame's header: the resume entry's table slot, the state, the frame of the call it stopped in, and padding, so
 /// that what follows is 8-byte aligned.
@@ -163,9 +170,10 @@ let resumable (resume: string) (child: string) (state: int) (resumeType: string)
           call
           "))" ]
 
-/// The code after a call of a state machine, from code that is not one, that runs it to the end: while it stops, it is
-/// resumed, through its frame's resume entry, of the indirect type `resumeType`. Its value, of type `result`, is kept in
-/// the local `value` meanwhile, and the frame in `frame`.
+/// The code after a call of a state machine, from code that is not one, that runs it to the end: while it stops, the
+/// other tasks run until the running one's turn comes again (see `WasmScheduler`), and then it is resumed, through its
+/// frame's resume entry, of the indirect type `resumeType`. Its value, of type `result`, is kept in the local `value`
+/// meanwhile, and the frame in `frame`.
 let blockOn (value: string) (frame: string) (resumeType: string) : string =
     lines
         [ $"local.set ${value}"
@@ -176,7 +184,12 @@ let blockOn (value: string) (frame: string) (resumeType: string) : string =
           $"br_if $__blocked_{value}"
           "i32.const 0"
           $"global.set ${Names.suspending}"
+          $"call ${Names.currentTask}"
           $"global.get ${Names.suspended}"
+          $"i32.store offset={taskFrameOffset}"
+          $"call ${Names.runOthers}"
+          $"call ${Names.currentTask}"
+          $"i32.load offset={taskFrameOffset}"
           $"local.tee ${frame}"
           $"local.get ${frame}"
           "i32.load"

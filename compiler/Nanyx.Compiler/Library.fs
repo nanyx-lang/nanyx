@@ -354,6 +354,12 @@ module Compiler =
                             match origin, entries with
                             | (SourceFile _ | InMemory), _ when host.IsSome -> Scripts.asEntry host.Value (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
                             | _ -> desugared, None
+                        // Each module-level def that starts a task is a scope for its tasks (see `TaskScopes`).
+                        let desugared =
+                            match origin with
+                            | StandardLibraryModule _ -> desugared
+                            | SourceFile _
+                            | InMemory -> TaskScopes.wrap (fun call -> script |> Option.exists (fun (entry, _) -> entry.Call |> List.contains call.Id)) desugared
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors
                         let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered
@@ -555,6 +561,15 @@ module Compiler =
                         | Some (TyFunc(_, _, contexts)) -> contexts
                         | _ -> []
                     ofDef @ ofType
+                // A task holds nothing of a `memory` block (see `TaskCaptures`).
+                let taskErrors =
+                    TaskCaptures.captureErrors state.Symbols state.References (fun node -> state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst)) desugared
+                    @ TaskCaptures.escapeErrors
+                        (fun name ->
+                            match types |> Map.tryFind name |> Option.map (Unifier.apply subst >> Unifier.unalias) with
+                            | Some (TyFunc(_, result, _)) -> Some result
+                            | _ -> None)
+                        desugared
                 let runtimeErrors =
                     Hosts.runtimeErrors isHost origin (entries @ provided @ (script |> Option.map fst |> Option.toList)) (provided |> List.map (_.Name >> Hosts.providedExportName) |> Set.ofList) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
                 // A script whose statements need `HostRuntime` is told so where they need it, and one whose statements use
@@ -612,7 +627,7 @@ module Compiler =
                         components.Exports
                         components.Imports
                     @ unprovidedErrors
-                let moduleErrors = componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                let moduleErrors = componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ taskErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []

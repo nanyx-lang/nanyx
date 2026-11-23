@@ -166,8 +166,8 @@ module Helpers =
     /// How the helper `name` uses its operand at `index`. A helper borrows its operands and gives back a value of its
     /// own, except `listCons`, which takes both over, `listConcat`, which copies the first list's cells and makes the
     /// second their tail, the intrinsics that write an array's element, change a mutable array's element and a list
-    /// cell's tail or head, which take the value over, and the one that says whether a value is held exclusively, which takes
-    /// over the reference it counts.
+    /// cell's tail or head, which take the value over, the one that says whether a value is held exclusively, which takes
+    /// over the reference it counts, and those that give a task its function and its result, which it keeps.
     let operandUse (name: string) (index: int) =
         if name = listCons
            || (name = listConcat && index = 1)
@@ -175,7 +175,9 @@ module Helpers =
            || (name = NyxCompiler.Intrinsics.arrayWrite && index = 2)
            || (name = NyxCompiler.Intrinsics.listSetTail && index = 1)
            || (name = NyxCompiler.Intrinsics.listSetHead && index = 1)
-           || name = NyxCompiler.Intrinsics.isExclusive then
+           || name = NyxCompiler.Intrinsics.isExclusive
+           || name = NyxCompiler.Intrinsics.taskStart
+           || name = NyxCompiler.Intrinsics.taskFinish then
             Owned
         else
             Borrowed

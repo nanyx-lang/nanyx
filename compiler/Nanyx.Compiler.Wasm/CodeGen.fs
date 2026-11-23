@@ -1003,8 +1003,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         | None -> "", (options.Component |> Option.map (fun entry -> ComponentAbi.entryFunction entry None) |> Option.defaultValue "")
 
     // The runtime's part of the state machines (see `TaskLowering`).
+    // and the scheduler (see `WasmScheduler`), which a module that starts tasks, or runs a state machine to the end, has.
     let renderedTasks =
-        if machines.IsEmpty then ""
+        if machines.IsEmpty && not (usedHelpers |> Seq.exists WasmScheduler.intrinsics.Contains) then ""
         else
             let yielding =
                 if options.YieldAtEveryWait then
@@ -1012,7 +1013,15 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                     usedHelpers.Add Helpers.free |> ignore
                     TaskLowering.yieldHelpers (context.FunctionSlot TaskLowering.Names.yieldResume 1)
                 else []
-            TaskLowering.globals @ yielding |> String.concat "\n"
+            for helper in WasmScheduler.dependencies do
+                usedHelpers.Add helper |> ignore
+            context.IndirectCall(TaskLowering.resumeTypeOf "i32")
+            let scheduler =
+                WasmScheduler.helpers
+                    (context.FunctionSlot WasmScheduler.Names.waitResume 1)
+                    (context.FunctionSlot WasmScheduler.Names.scopeExitResume 1)
+                    (TaskLowering.resumeTypeName "i32")
+            TaskLowering.globals @ yielding @ scheduler |> String.concat "\n"
 
     let support = supportFunctions (definitionFunctions @ Option.toList startFunction) tagIdMap functionTable usedHelpers
 

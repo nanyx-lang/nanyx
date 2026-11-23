@@ -191,6 +191,25 @@ module Intrinsics =
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
     let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries; setOfElements; setElements ]
 
+    /// The intrinsics of tasks, which `nanyx/async` is written on (see `TaskLowering` in the backend and
+    /// `docs/src/content/deep-dives/async.md`). A task is known by its handle, an `I32`.
+    /// Starts a task that runs a function, in the innermost scope of the task running, and gives its handle. The task
+    /// takes the function over.
+    let taskStart = prefix + "task_start"
+    /// Keeps the value the running task gives back, as a function of nothing that gives it, which it takes over.
+    let taskFinish = prefix + "task_finish"
+    /// Waits until the task of a handle has finished: a call that can stop.
+    let taskWait = prefix + "task_wait"
+    /// The value the finished task of a handle gave back, a reference of the caller's own: its function's value.
+    let taskResult = prefix + "task_result"
+    /// Opens a scope for the tasks the running task starts.
+    let scopeEnter = prefix + "scope_enter"
+    /// Waits until every task of the innermost scope has finished, then closes it: a call that can stop.
+    let scopeExit = prefix + "scope_exit"
+
+    /// The contexts a task's function requires, whatever they are.
+    let private contextsVar = TyVar.ordinary (-4) (Some "k")
+
     let private keyVar = TyVar.ordinary (-2) (Some "k")
     let private valueVar = TyVar.ordinary (-3) (Some "v")
     let private entries = listOf (tuple [ TyVar keyVar; TyVar valueVar ])
@@ -262,6 +281,12 @@ module Intrinsics =
           arrayNew, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, Arrays.ofType element, []); Symbol = None; ProvidedBy = None }
           arrayWrite, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Arrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           regionEnter, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
+          taskStart, { Quantified = set [ contextsVar.Id ]; Type = TyFunc(TyFunc(unitTy, unitTy, [ TyVar contextsVar ]), i32Ty, []); Symbol = None; ProvidedBy = None }
+          taskFinish, { Quantified = set [ elementVar.Id ]; Type = TyFunc(TyFunc(unitTy, element, []), unitTy, []); Symbol = None; ProvidedBy = None }
+          taskWait, TypeEnv.mono (TyFunc(i32Ty, unitTy, []))
+          taskResult, { Quantified = set [ elementVar.Id ]; Type = TyFunc(i32Ty, element, []); Symbol = None; ProvidedBy = None }
+          scopeEnter, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
+          scopeExit, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
           regionExit, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, unitTy, []); Symbol = None; ProvidedBy = None }
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }
           listSetTail, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; listOf element ], unitTy, []); Symbol = None; ProvidedBy = None }
