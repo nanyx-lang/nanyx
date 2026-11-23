@@ -7,7 +7,7 @@
 /// The callee's body is placed where the call was, with its parameters bound to the call's arguments and every variable
 /// it binds made new, so that none shares a local with the caller's, and its loops numbered inside the caller's. A call
 /// is inlined where a sequence can hold the body: as what a chain ends in, or as the value of a `let` or a `do`, a
-/// temporary's among them. Every temporary of the chain still waiting to be used becomes a local first, since the body
+/// temporary's among them, in the branches of an `if` or a `match` too. Every temporary of the chain still waiting to be used becomes a local first, since the body
 /// stores before it reads what it is given.
 module internal Transpiler.Wasm.CoreIrInline
 
@@ -315,6 +315,9 @@ type private Inliner
                         rebuilt.Add(fun next -> bindValue v body next)
                     | None when v.Kind = Temp ->
                         claim value
+                        // A temporary is evaluated where it is used, and a branch's own sequences with it, so calls
+                        // inside an `if` or a `match` it is bound to are inlined there, as on the right of `and` (#2486).
+                        let value = nested loopDepth value
                         waiting.Add((v, rebuilt.Count, value))
                         rebuilt.Add(fun next -> Expr.make (Let(v, value, next)) next.Type)
                     | None ->
