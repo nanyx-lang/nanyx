@@ -6,7 +6,8 @@ open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
 // A `use` loads a context's constructor, `use Log(...)` or `use C(T)(...)`, or a name a lambda binds with `context`.
-// Anything else, a record, a def's name, a call or a field, is NYX0249, reported at the use's value (#1448).
+// Anything else, a record, a def's name, a call or a field, is NYX0249, reported at the use's value (#1448). A call of a
+// name not in scope at all is an unknown context, NYX0108, reported at the name (#2197).
 
 let private log = """context Log = (log: string -> ())
 
@@ -73,6 +74,47 @@ let ``A use ... in of something other than an instance is reported at its value`
 
 def main = use addInt in ()
 """)
+
+[<Fact>]
+let ``A use of a call of a def's name is reported at the call`` () =
+    Assert.Equal(
+        useOfNonInstance "f(1)",
+        reported """def f = { n: int -> (log = { m: string -> () }) }
+
+def main = {
+  use f(1)
+  ()
+}
+""")
+
+/// The code and text of each diagnostic `source`, its line endings made `\n`, compiles to, and their messages.
+let private unknownContexts (source: string) =
+    let source = source.ReplaceLineEndings "\n"
+    let diagnostics = (Compiler.compile source).Diagnostics
+    diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt source (spanOf diagnostic)), diagnostics |> List.map _.Message
+
+[<Fact>]
+let ``A use of a misspelt context is an unknown context at its name, with the closest context suggested`` () =
+    let reported, messages =
+        unknownContexts (
+            log
+            + """context Counter = (next: int -> int)
+
+def main = {
+  def total = use Countr(next = { n -> n - 1 }) in 3
+  println("{total}")
+}
+"""
+        )
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownContext.Code, "Countr" ], reported)
+    Assert.Contains("'Countr' is not a context in scope", messages.Head)
+    Assert.Contains("Counter", messages.Head)
+
+[<Fact>]
+let ``A use of a context not imported is an unknown context that names the import`` () =
+    let reported, messages = unknownContexts "def main = use HostRuntime() in ()\n"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownContext.Code, "HostRuntime" ], reported)
+    Assert.Contains("add `import nanyx/host.runtime`", messages.Head)
 
 [<Fact>]
 let ``A use of a name a lambda's parameter binds is reported, as only a context name can be loaded`` () =
