@@ -41,16 +41,30 @@ module KnownMember =
         | _ -> false
 
 /// What a function is lowered for: a definition, at type arguments (none when it is not generic), and specialised on the
-/// members known for some of the contexts it requires, by their keys. The others it takes as parameters.
+/// members known for some of the contexts it requires, by their keys. The others it takes as parameters. Types that
+/// share an IR type, `list(int)` and `set(int)`, have different descriptions, so the type arguments a `Type` value can
+/// stand for are in `Described` too, as types (see `SpecKey.describedVariables`), and so are those of the function a
+/// lambda is lifted from.
 type SpecKey =
     { Definition: string
       TypeArguments: IrType list
-      Known: (ContextMemberKey * KnownMember) list }
+      Known: (ContextMemberKey * KnownMember) list
+      Described: Ty list }
 
 module SpecKey =
     /// The function lowered for `definition` at `typeArguments`, with no known members.
     let plain (definition: string) (typeArguments: IrType list) =
-        { Definition = definition; TypeArguments = typeArguments; Known = [] }
+        { Definition = definition; TypeArguments = typeArguments; Known = []; Described = [] }
+
+    /// The type variables of a definition's type `scheme` that a `Type` value it is given or makes can stand for: those in
+    /// a `Type(…)` it names, and in a `Typed(…)` context it requires, whose member is one.
+    let describedVariables (scheme: Ty) : Set<int> =
+        let rec walk (found: Set<int>) (ty: Ty) =
+            match ty with
+            | TyApply(name, args) when TypeValues.isTypeName name || name = TypeValues.typedContext ->
+                args |> List.collect freeVars |> List.fold (fun found v -> Set.add v found) found
+            | _ -> Ty.fold walk found ty
+        walk Set.empty scheme
 
 /// `ty` without the rests of its unions that nothing closes, which add no tags (see `toIrType`): `ToString(#red | r)`
 /// is passed at `#red`.
