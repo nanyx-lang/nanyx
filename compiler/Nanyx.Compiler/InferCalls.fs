@@ -258,12 +258,7 @@ let internal inferCall
                         match expectedInput with
                         | Some expectedInput -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
                         | None -> inferExpr lambdaEnv state lambda)
-                    |> Result.map (fun (typedLambda, next) ->
-                        match instances, Unifier.unalias typedLambda.Type with
-                        | _ :: _, TyFunc(input, output, used) ->
-                            let ty = TyFunc(input, output, used @ instances |> List.distinct)
-                            { typedLambda with Type = ty }, { next with ExprTypes = next.ExprTypes |> Map.add lambda.Id ty }
-                        | _ -> typedLambda, next)
+                    |> Result.map (Contexts.withSuppliedInstances instances lambda)
                 // A square-bracket literal builds the type its parameter takes, if it is one with a `fromArray`, and any
                 // literal is checked against that type (see `ExpectedLiterals`).
                 let inferItem state item paramTy =
@@ -384,12 +379,16 @@ let internal inferCall
                             match LambdaArguments.namedFields arg underlying with
                             | Some (names, values, memberTys) ->
                                 // A constructor does not run the lambdas it is given, so in a value they are inferred
-                                // outside it, as a record's are (see `Contexts.asConstructorField`).
+                                // outside it, as a record's are (see `Contexts.asConstructorField`). One given for a
+                                // field whose type requires contexts can use them, as a lambda argument can.
                                 let inferLambda state lambda lambdaArgs lambdaBody expectedInput fieldTy =
+                                    let lambdaEnv, state = Contexts.extendEnvForLambdaArgument env state lambda (Some fieldTy)
+                                    let instances = Contexts.instancesSuppliedToLambda state lambda (Some fieldTy)
                                     match expectedInput with
                                     | Some expectedInput ->
-                                        state |> Contexts.asConstructorField fieldTy (fun state -> inferLambdaWithExpected env state lambda lambdaArgs lambdaBody (Some expectedInput) None)
-                                    | None -> inferExpr env state lambda
+                                        state |> Contexts.asConstructorField fieldTy (fun state -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None)
+                                    | None -> inferExpr lambdaEnv state lambda
+                                    |> Result.map (Contexts.withSuppliedInstances instances lambda)
                                 LambdaArguments.inferTupleItems (fun state item _ -> inferExpr env state item) inferLambda current values memberTys
                                 |> Result.map (fun (typedValues, next) ->
                                     let fieldTys = List.zip names (typedValues |> List.map _.Type) |> Map.ofList
