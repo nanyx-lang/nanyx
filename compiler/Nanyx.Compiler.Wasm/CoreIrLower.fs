@@ -967,11 +967,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             CoreIrLowerMembers.coerceAll this.MemberTools scope atoms fieldTys (fun atoms ->
                 k (Expr.make (MakeRecord(List.zip (List.map fst fields) atoms)) ty)))
 
-    /// A call through the function value `closure`, whose result is of type `ty`. A function whose input is a tuple
-    /// takes the tuple's elements (see `IrType.tupleElements`): a tuple passed whole has them read from it. A function
-    /// whose input is unit takes nothing, so `f()` and `f(())` are the same call (see `ValueParameters`). The members
-    /// of the contexts the value requires follow, as the call at `node` finds them (see `CoreIrLowerMembers.memberAtoms`). A known function a
-    /// specialisation stands in for with `closure` is called directly (see `CoreIrLowerKnown`).
+    /// A call through the function value `closure`, whose result is of type `ty`. A function whose input is a tuple takes
+    /// its elements, read from a tuple passed whole; one that takes one value takes a tuple whole (see
+    /// `CoreIrLowerArguments.takesOneValue`); one whose input is unit takes nothing, so `f()` and `f(())` are the same call
+    /// (see `ValueParameters`). The members of the contexts the value requires follow, as the call at `node` finds them
+    /// (see `CoreIrLowerMembers.memberAtoms`). A known function a specialisation stands in for is called directly.
     member this.CallValue (scope: Scope) (node: NodeId) (closure: Var) (args: Expression list) (ty: IrType) (k: Expr -> Expr) : Expr =
         // The arguments of a context member whose type has values boxed are held in locals, since converting them stores
         // (see `CoreIrLowerBoxes`).
@@ -1009,7 +1009,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             match closure.Type with
             | IrFunction(input, _, _) -> IrType.tupleElements input
             | _ -> None
-        match elements, SyntaxTree.flattenCallArgs args with
+        let takesOneValue = match closure.Type with IrFunction(input, _, _) -> CoreIrLowerArguments.takesOneValue input | _ -> false
+        match elements, (if takesOneValue then args else SyntaxTree.flattenCallArgs args) with
+        | _, (_ :: _ :: _ as several) when takesOneValue ->
+            atomsOf scope several (fun atoms -> CoreIrLowerArguments.asTuple bindElement atoms (fun tuple -> call [ tuple ]))
         | _, flatArgs when (match closure.Type with IrFunction(IrUnit, _, _) -> true | _ -> false) ->
             // What the argument does is done first; its value, the unit, isn't passed.
             let rec run (remaining: Expression list) =
