@@ -123,6 +123,7 @@ module Helpers =
     let stringSlice = NyxCompiler.Intrinsics.stringSlice
     let stringFromByte = NyxCompiler.Intrinsics.stringFromByte
     let stringFromMemory = NyxCompiler.Intrinsics.stringFromMemory
+    let stringFromBytes = NyxCompiler.Intrinsics.stringFromBytes
     let stringJoin = NyxCompiler.Intrinsics.stringJoin
     let stringShiftBytes = NyxCompiler.Intrinsics.stringShiftBytes
     let listCons = NyxCompiler.Intrinsics.listCons
@@ -589,6 +590,25 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             $"  call ${Helpers.stringAlloc}"
             "  local.tee $out"
             "  local.get $address"
+            "  local.get $len"
+            $"  call ${Helpers.copyBytes}"
+            "  local.get $out"
+            ")" ]
+      // A new string holding the bytes of an array of `U8`s, which are one each after its length (see
+      // `CoreIrLayout.arrayElementOffset`), copied at once.
+      Helpers.stringFromBytes,
+      lines
+          [ $"(func ${Helpers.stringFromBytes} (param $bytes i32) (result i32)"
+            "  (local $out i32)"
+            "  (local $len i32)"
+            "  local.get $bytes"
+            "  i32.load"
+            "  local.tee $len"
+            $"  call ${Helpers.stringAlloc}"
+            "  local.tee $out"
+            "  local.get $bytes"
+            "  i32.const 4"
+            "  i32.add"
             "  local.get $len"
             $"  call ${Helpers.copyBytes}"
             "  local.get $out"
@@ -1178,7 +1198,8 @@ let helperDependencies =
       Helpers.stringJoin, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringShiftBytes, [ Helpers.stringLength; Helpers.stringAlloc ]
       Helpers.intTextLength, []
-      Helpers.intTextWrite, [ Helpers.intTextLength ] ]
+      Helpers.intTextWrite, [ Helpers.intTextLength ]
+      Helpers.stringFromBytes, [ Helpers.stringAlloc; Helpers.copyBytes ] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
     @ WasmRegions.dependencies
 
