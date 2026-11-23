@@ -15,6 +15,7 @@ def make: () -> Client = {
   Client(ingest = { s -> post(s) + 1 })
 }
 
+@entry
 def main = {
   def c = make()
   use T(post = { s -> s.length }) in println(c.ingest("abc"))
@@ -31,6 +32,7 @@ def ingestWith: int -> ([T] string -> int) = { n -> { s -> post(s) + n } }
 
 def shower: () -> ([Show(int)] int -> string) = { { n -> show(n) ++ "!" } }
 
+@entry
 def main = {
   use T(post = { s -> s.length }) in println(ingestWith(2)("abc"))
   use Show(int)(show = { n -> "n{n}" }) in println(shower()(5))

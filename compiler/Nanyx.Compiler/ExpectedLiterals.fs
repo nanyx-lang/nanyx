@@ -46,8 +46,10 @@ let intoRecordFields (state: InferState) (expr: Expression) (fields: RecordField
         (positional |> List.mapi (fun index value -> TypeResolution.tupleFieldName index, value)) @ named
         |> List.fold (fun state (name, value) ->
             match expectedFields |> Map.tryFind name with
-            | Some ty -> expect ty state value
-            | None -> state) state
+            // What the value is written in may expect a type of it already, as a map literal does of the value of each
+            // of its entries, which are pairs: that one is the more exact.
+            | Some ty when not (state.ExpectedTypes.ContainsKey value.Id) -> expect ty state value
+            | _ -> state) state
     | _ -> state
 
 /// The function type the lambda `expr` is checked against, if what it is written in expects one: a record field's, or the
