@@ -10,11 +10,20 @@
   `to`, each bound moved into `0` to the length, and an empty slice when `to` is before `from`.
   Reading one element, [`Slice.at`], gives `#notFound` past the end, never a trap.
 
+  A function that makes new elements, such as [`Slice.map`], [`Slice.filter`] or [`Slice.sort`],
+  gives them in an `Array` of their own. [`Slice.take`] and [`Slice.skip`] give a slice of the same
+  array, as [`Slice.slice`] does, and copy nothing.
+
   Each function is attached to `Slice`, so with `import nanyx/slice` it is called as
-  `Slice.length(s)`, or as `s \length`; `xs \slice(1, 4)` makes a slice of the array `xs`.
+  `Slice.length(s)`, or as `s \length`; `xs \slice(1, 4)` makes a slice of the array `xs`, and the
+  literal `Slice[1, 2, 3]` a slice of all of a new array.
 module slice
 
-import nanyx/array
+import (
+  nanyx/array
+  nanyx/marray
+  nanyx/mslice
+)
 
 export type Slice(a) = private (items: Array(a), start: int, length: int)
 
@@ -37,9 +46,14 @@ export def array.slice: array(a), int, int -> Slice(a) = { xs, from, to ->
   within(xs, 0, array.length(xs), from, to)
 }
 
---| All of `xs`, as a slice that shares its storage.
-export def Slice.ofArray: Array(a) -> Slice(a) = { xs ->
+--| All of `xs`, as a slice that shares its storage. The literal `Slice[1, 2, 3]` is made with it.
+export def Slice.fromArray: Array(a) -> Slice(a) = { xs ->
   Slice(items = xs, start = 0, length = array.length(xs))
+}
+
+--| The elements of `xs`, in order, as a slice of all of a new array.
+export def Slice.fromList: list(a) -> Slice(a) = { xs ->
+  Slice.fromArray(array.fromList(xs))
 }
 
 --| How many elements `s` views.
@@ -122,3 +136,170 @@ def mapFrom: [c] Slice(a), array(b), int, ([c] a -> b) -> array(b) = { s, made, 
     mapFrom(s, made, index + 1, f)
   else made
 }
+
+-- `step` applied to `acc` and each element of `s` from `index` down to the first, last first: a
+-- list built by putting each element in front of `acc` comes out in order.
+def foldBackFrom: [c] Slice(a), int, b, ([c] b, a -> b) -> b = { s, index, acc, step ->
+  match Slice.at(s, index)
+    | #some(element) -> foldBackFrom(s, index - 1, step(acc, element), step)
+    | #notFound -> acc
+}
+
+--| An array of the elements of `s` that `keep` holds for, in order.
+export def Slice.filter: [c] Slice(a), ([c] a -> bool) -> Array(a) = { s, keep ->
+  array.fromList(
+    foldBackFrom(s, s.length - 1, [], { acc, x -> if keep(x) then [x, ...acc] else acc })
+  )
+}
+
+--| An array of the values `f` gives as `#some`, in order, leaving out the elements it gives `#skip`
+  for: a `map` and a `filter` in one walk.
+export def Slice.filterMap: [c] Slice(a), ([c] a -> #some(b) | #skip) -> Array(b) = { s, f ->
+  array.fromList(
+    foldBackFrom(
+      s
+      s.length - 1
+      []
+      { acc, x ->
+        match f(x)
+          | #some(y) -> [y, ...acc]
+          | #skip -> acc
+      }
+    )
+  )
+}
+
+--| An array of the values `f` yields for each element in turn, in the order it yields them, as
+  [`list.select`] gives them.
+export def Slice.select: [c, d] Slice(a), ([c] a -> [d] seq(b)) -> Array(b) = { s, f ->
+  array.fromList(list.select(Slice.toList(s), f))
+}
+
+--| The first value `f` yields, running it on the elements in turn as [`Slice.select`] does, or
+  `#notFound` when it yields none. It stops at the first yield: `f` runs on no element after the one
+  it yields for.
+export def Slice.selectOne
+  : [c, d] Slice(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
+  = { s, f ->
+    def selected = s \Slice.toSeq \seq.flatMap(f)
+
+    match selected.next()
+      | #next(y, _) -> #some(y)
+      | #done -> #notFound
+  }
+
+-- The position of the first element of `s` from `index` on that `matches` holds for.
+def findIndexFrom
+  : [c] Slice(a), int, ([c] a -> bool) -> #some(int) | #notFound
+  = { s, index, matches ->
+    match Slice.at(s, index)
+      | #some(element) -> (if matches(element)
+        then #some(index)
+        else findIndexFrom(s, index + 1, matches))
+      | #notFound -> #notFound
+  }
+
+--| The first element `matches` holds for, or `#notFound`.
+export def Slice.find: [c] Slice(a), ([c] a -> bool) -> #some(a) | #notFound = { s, matches ->
+  match findIndexFrom(s, 0, matches)
+    | #some(index) -> Slice.at(s, index)
+    | #notFound -> #notFound
+}
+
+--| The position of the first element `matches` holds for, counting from 0 at the start of `s`, as
+  [`Slice.at`] does, or `#notFound`.
+export def Slice.findIndex
+  : [c] Slice(a), ([c] a -> bool) -> #some(int) | #notFound
+  = { s, matches ->
+    findIndexFrom(s, 0, matches)
+  }
+
+--| Whether `test` holds for any element (so `false` for an empty slice).
+export def Slice.any: [c] Slice(a), ([c] a -> bool) -> bool = { s, test ->
+  findIndexFrom(s, 0, test) is #some(_)
+}
+
+--| Whether `test` holds for every element (so `true` for an empty slice).
+export def Slice.all: [c] Slice(a), ([c] a -> bool) -> bool = { s, test ->
+  findIndexFrom(s, 0, { x -> not test(x) }) is #notFound
+}
+
+--| Whether an element of `s` is equal to `x`. Elements are compared with `==`, by their structure.
+export def Slice.contains: [Eq(a)] Slice(a), a -> bool = { s, x ->
+  Slice.any(s, { y -> y == x })
+}
+
+--| An array of the elements of `s`, last first.
+export def Slice.reverse: Slice(a) -> Array(a) = { s ->
+  array.init(s.length, { index -> __nanyx_array_get(s.items, s.start + s.length - 1 - index) })
+}
+
+--| An array of the elements of `s` in the order `order` gives: `order(a, b)` says whether `a` comes
+  before `b` (`#less`), after it (`#greater`), or either way (`#equal`), as `compare` does. The sort
+  is stable: elements `order` finds equal keep their order. It is [`MArray.sortWith`]'s merge sort,
+  on a copy of the elements.
+export def Slice.sortWith
+  : [c] Slice(a), ([c] a, a -> #less | #equal | #greater) -> Array(a)
+  = { s, order ->
+    memory {
+      def sorted = MArray.fromArray(Slice.toArray(s))
+      MArray.sortWith(sorted, order)
+      MArray.toArray(sorted)
+    }
+  }
+
+--| An array of the elements of `s` in ascending order of `key`. The sort is stable: elements with the
+  same key keep their order.
+export def Slice.sortBy: [Ord(b), c] Slice(a), ([c] a -> b) -> Array(a) = { s, key ->
+  Slice.sortWith(s, { x, y -> compare(key(x), key(y)) })
+}
+
+--| An array of the elements of `s` in ascending order of their `Ord`. The sort is stable.
+export def Slice.sort: [Ord(a)] Slice(a) -> Array(a) = { s ->
+  Slice.sortWith(s, compare)
+}
+
+--| The first `count` elements of `s` (all of them when there are fewer), as a slice of the same
+  array: it copies nothing.
+export def Slice.take: Slice(a), int -> Slice(a) = { s, count ->
+  Slice.slice(s, 0, count)
+}
+
+--| The elements of `s` after the first `count`, as a slice of the same array: it copies nothing.
+export def Slice.skip: Slice(a), int -> Slice(a) = { s, count ->
+  Slice.slice(s, count, s.length)
+}
+
+--| An array of pairs of the elements of `xs` and `ys` at the same position, as long as the shorter.
+export def Slice.zip: Slice(a), Slice(b) -> Array((a, b)) = { xs, ys ->
+  array.init(
+    (if xs.length < ys.length then xs.length else ys.length)
+    { index ->
+      (__nanyx_array_get(xs.items, xs.start + index), __nanyx_array_get(ys.items, ys.start + index))
+    }
+  )
+}
+
+--| An array of the running totals of a fold: `initial`, then each value [`Slice.fold`] passes along,
+  so the last is what the fold gives back, and it holds one more element than `s`.
+export def Slice.scan: [c] Slice(a), b, ([c] b, a -> b) -> Array(b) = { s, initial, step ->
+  scanFrom(s, __nanyx_array_new(s.length + 1), 0, initial, step)
+}
+
+-- `made`, a new array one longer than `s`, once `state` is written at `index` and each value `step`
+-- makes of it and the elements of `s` from `index` on after it.
+def scanFrom
+  : [c] Slice(a), array(b), int, b, ([c] b, a -> b) -> array(b)
+  = { s, made, index, state, step ->
+    __nanyx_array_write(made, index, state)
+
+    if index < s.length
+      then scanFrom(
+        s
+        made
+        index + 1
+        step(state, __nanyx_array_get(s.items, s.start + index))
+        step
+      )
+      else made
+  }
