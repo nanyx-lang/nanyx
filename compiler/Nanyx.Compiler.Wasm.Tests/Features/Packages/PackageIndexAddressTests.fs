@@ -32,7 +32,7 @@ let ``A package an index at an address doesn't list has no versions`` () =
 let ``The versions an index at an address lists are read, and one it can't serve is an error`` () =
     let listing =
         "/index/acme/acme.core.json",
-        """{ "name": "acme.core", "versions": [{ "version": "1.0.0", "url": "../../artifacts/acme.core-1.0.0.nyxpkg", "sha256": "00", "dependencies": {}, "yanked": false, "available": true }] }"""
+        """{ "name": "acme.core", "versions": [{ "version": "1.0.0", "url": "../../artifacts/acme.core-1.0.0.nyxpkg", "sha256": "00", "dependencies": {}, "unlisted": false, "available": true }] }"""
     use server = indexServer [ config; listing ] (Some "/index/acme/acme.web.json")
     match PackageIndex.versions server.Url "acme.core" with
     | Ok(_, versions) -> Assert.Equal<string list>([ "1.0.0" ], versions |> List.map (fun version -> string version.Version))

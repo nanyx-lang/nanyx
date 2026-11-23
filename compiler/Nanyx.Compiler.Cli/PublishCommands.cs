@@ -4,7 +4,7 @@ using NyxCompiler;
 
 /// <summary>
 /// The commands that publish a package: <c>nanyx publish</c>, which releases a version on the package's own GitHub
-/// repository and registers a new package with the index, and <c>nanyx yank</c>. What they change on GitHub is
+/// repository and registers a new package with the index, and <c>nanyx unlist</c>. What they change on GitHub is
 /// <see cref="GitHubApi"/>'s, and the files of the index's repository they write are <see cref="Publishing"/>'s.
 /// These run the steps in order, say what each is doing, and stop at the first that fails.
 /// </summary>
@@ -165,15 +165,15 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Yank a published version of a package, so that no new resolution chooses it; a lockfile that locks it still builds. Opens the pull request on the package index that marks it yanked. Signs in to GitHub as nanyx publish does.
+    /// Unlist a published version of a package, so that no new resolution chooses it; a lockfile that locks it still builds, with a warning. Opens the pull request on the package index that marks it unlisted. Signs in to GitHub as nanyx publish does.
     /// </summary>
     /// <param name="package">The package, as in acme.util.</param>
-    /// <param name="version">The version to yank, as in 1.2.0.</param>
-    [Consolo("yank")]
-    public static int Yank(string package, string version) => YankIn(Shell.Process, package, version);
+    /// <param name="version">The version to unlist, as in 1.2.0.</param>
+    [Consolo("unlist")]
+    public static int Unlist(string package, string version) => UnlistIn(Shell.Process, package, version);
 
-    /// <summary>What <c>nanyx yank</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int YankIn(Shell shell, string package, string version)
+    /// <summary>What <c>nanyx unlist</c> does, run in <paramref name="shell"/>.</summary>
+    internal static int UnlistIn(Shell shell, string package, string version)
     {
         if (SemanticVersionModule.tryParse(version)?.Value is not { } parsed)
         {
@@ -194,10 +194,10 @@ internal static partial class CliCommands
             return 1;
         }
 
-        var yanked = Publishing.yank(package, parsed, index.ResultValue.Value.Item1);
-        if (yanked.IsError)
+        var unlisted = Publishing.unlist(package, parsed, index.ResultValue.Value.Item1);
+        if (unlisted.IsError)
         {
-            shell.Error.WriteLine($"error: {yanked.ErrorValue}");
+            shell.Error.WriteLine($"error: {unlisted.ErrorValue}");
             return 1;
         }
 
@@ -206,16 +206,16 @@ internal static partial class CliCommands
             return 1;
         }
 
-        shell.Out.WriteLine($"Opening the pull request that yanks {package} {parsed}");
+        shell.Out.WriteLine($"Opening the pull request that unlists {package} {parsed}");
         var pull = GitHubApi.openIndexPullRequest(
             github,
             route,
             indexPath,
-            yanked.ResultValue,
+            unlisted.ResultValue,
             FSharpOption<string>.Some(index.ResultValue.Value.Item2),
-            $"yank-{package}-{parsed}",
-            $"Yank {package} {parsed}",
-            $"Yanks {package} {parsed}, so that no new resolution chooses it. Opened by `nanyx yank`.");
+            $"unlist-{package}-{parsed}",
+            $"Unlist {package} {parsed}",
+            $"Unlists {package} {parsed}, so that no new resolution chooses it. Opened by `nanyx unlist`.");
         if (pull.IsError)
         {
             shell.Error.WriteLine($"error: {pull.ErrorValue}");

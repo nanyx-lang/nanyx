@@ -97,7 +97,7 @@ and the live view is drawn inside the box.
 
 `nanyx migrate` is `Migration.fs`, `nanyx pull` is `PackageDependencies.pull`, `nanyx install` is
 `PackageDependencies.install`, `nanyx pack` is `PackageApi.pack` (`PackageArchive.packWith`, with the package's `api.json`), `nanyx bump` is `PackageApi.bump`, and `nanyx api-check` is `PackageApi.checkVersions` on the `api.json` of each
-`.nyxpkg` (`PackageApi.ofArchive`). `nanyx publish` and `nanyx yank` are `PublishCommands.cs`: the GitHub requests they send are
+`.nyxpkg` (`PackageApi.ofArchive`). `nanyx publish` and `nanyx unlist` are `PublishCommands.cs`: the GitHub requests they send are
 `GitHubApi.fs`, through a `GitHubClient` the `Shell`'s `GitHub` gives (a fake one in the Wasm tests, otherwise GitHub
 signed in with `GITHUB_TOKEN` or `gh auth token`), and the files of the index's repository they write are
 `Publishing.fs`. `publish` checks everything it can before it creates the release: that the account can push to the
@@ -119,7 +119,7 @@ checks the manifest's new text and resolves it before writing either file, so a 
 A script has no lockfile: each `::dependency` on a package from the index pins an exact version. `nanyx run` on a
 script (`TryPullScript`) and `nanyx pull script.nyx` download them first (`Script.pull`, `ScriptDependencies.pull`):
 `Resolution.resolvePinned` resolves as `resolve` does, but offers the solver only the pinned version of each pinned
-package, which may be yanked, and `PackageIndex.download` checks each download against the index's SHA-256. A build
+package, which may be unlisted, and `PackageIndex.download` checks each download against the index's SHA-256. A build
 of the script reads the cache alone (`ScriptDependencies.cached`, the same solve over the versions in the cache), and
 the versions it finds are the lockfile `Package.scriptModules` reads, so a pin that isn't downloaded is `NYX0041`. A
 package from the index with no version is `NYX0009`, whose fix writes the newest version the index has
@@ -139,11 +139,18 @@ Choosing versions is `Resolution.resolve`. It gathers the dependencies named by
 their version of the package and of each package it reaches by path or on GitHub (`Resolution.requirements`), reads
 each package's versions from the index as it is reached (`PackageIndex.versions`, with their dependencies and minimum
 compiler), and hands them to `VersionSolver.solve`: [PubGrub](https://github.com/dart-lang/pub/blob/master/doc/solver.md)
-as pub builds it, with a term's versions a finite set of those the index lists. A version that is yanked (unless the
+as pub builds it, with a term's versions a finite set of those the index lists. A version that is unlisted (unless the
 lockfile locks it), missing from GitHub or too new for the compiler is ruled out by an incompatibility of its own, so
 that an explanation can name it, and a dependency that no listed version satisfies is one too. The version a lockfile
 locks is chosen whenever it is allowed. A conflict is `NYX0047`, whose message is the solver's explanation, written as
 pub writes it: a sentence for each step, and a number for a step used twice.
+
+An unlisted version a build keeps is a warning, `NYX0051`, wherever a command reads the index for it: a resolution
+gives the unlisted versions it chose (`Resolved.Unlisted`), which only a lockfile's lock or a script's pin can be, and
+`PackageIndex.fetch` gives the index's entry of each version it downloads. `PackageDependencies` and
+`ScriptDependencies` turn them into warnings (`Resolution.lockedUnlisted`, `Resolution.pinnedUnlisted`), which come back
+with what was pulled (`Pulled`), and the command line prints them once each (`PrintWarnings`). A version already in the
+cache is read from there, not the index, so it doesn't warn.
 
 A package in the cache, from the index or GitHub, never changes, so a build doesn't check it again: its checked modules
 are kept in a file of their own in the cache, `.checked/<name>-<version>-<build>.bin` (`CheckedPackages`,

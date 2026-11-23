@@ -307,6 +307,6 @@ packs the package and creates the release `v1.2.0`, with the `.nyxpkg` as its as
 The [package index](https://packages.nanyx.dev/) records each new release within the hour. For a package's
 first version, `publish` also opens the pull request that registers it with the index, which a maintainer merges.
 
-A published version never changes. `nanyx yank acme.web 1.2.0` opens the pull request that yanks it: once that is
-merged, no new resolution chooses it, but a lockfile that locks it keeps building. Both commands sign in to GitHub
+A published version never changes. `nanyx unlist acme.web 1.2.0` opens the pull request that unlists it: once that is
+merged, no new resolution chooses it, but a lockfile that locks it keeps building, with a warning that it is unlisted. Both commands sign in to GitHub
 with `GITHUB_TOKEN`, or else the GitHub CLI's login. See [`nanyx publish`](../standard-tools/command-line#nanyx-publish).

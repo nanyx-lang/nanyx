@@ -58,6 +58,7 @@ let private withoutExamples =
       DiagnosticCodes.NothingToRun
       DiagnosticCodes.VersionConflict
       DiagnosticCodes.PackageFileNotUtf8
+      DiagnosticCodes.UnlistedVersion
       DiagnosticCodes.BackendInternalError ]
     |> List.map _.Code
 

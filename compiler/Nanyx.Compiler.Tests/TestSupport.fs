@@ -158,6 +158,7 @@ let storeOf (package: TempPackage) : PackageStore =
 /// explanation as its error.
 let pullFrom (store: PackageStore) (manifestPath: string) : Result<string list, string list> =
     PackageDependencies.pull store manifestPath
+    |> Result.map _.Lines
     |> Result.mapError (function
         | NoVersions diagnostic -> [ diagnostic.Message ]
         | LockErrors errors -> errors)
@@ -189,7 +190,7 @@ let publishToIndex (package: TempPackage) (found: Package) (bytes: byte array) =
             ""
     File.WriteAllText(
         listing,
-        $$"""{ "name": "{{name}}", "versions": [{{earlier}} { "version": "{{version}}", "url": "../../artifacts/{{Path.GetFileName artifact}}", "sha256": "{{hash}}", "dependencies": { {{dependencies}} }, "yanked": false, "available": true }] }"""
+        $$"""{ "name": "{{name}}", "versions": [{{earlier}} { "version": "{{version}}", "url": "../../artifacts/{{Path.GetFileName artifact}}", "sha256": "{{hash}}", "dependencies": { {{dependencies}} }, "unlisted": false, "available": true }] }"""
     )
     hash
 

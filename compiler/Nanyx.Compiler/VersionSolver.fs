@@ -4,8 +4,8 @@ open System.Collections.Generic
 
 /// Why a version the index lists can't be chosen for a new resolution.
 type UnusableVersion =
-    /// Its author yanked it. A lockfile that already names it keeps it.
-    | Yanked
+    /// Its author unlisted it. A lockfile that already names it keeps it.
+    | Unlisted
     /// Its release or asset is missing from GitHub, so it can't be downloaded.
     | Unavailable
     /// It needs a newer compiler: the oldest it builds with, and this one.
@@ -443,11 +443,11 @@ module VersionSolver =
 
     let private describeTerm (state: State) (term: Term) = describeVersions state term.Package term.Versions
 
-    /// What makes the versions `term` allows unusable, after them: "is yanked".
+    /// What makes the versions `term` allows unusable, after them: "is unlisted".
     let private unusableText (state: State) (term: Term) (reason: UnusableVersion) =
         let one = term.Versions.Count = 1 || term.Versions.Count = (state.Universe term.Package).Length
         match reason with
-        | Yanked -> if one then "is yanked" else "are yanked"
+        | Unlisted -> if one then "is unlisted" else "are unlisted"
         | Unavailable -> if one then "is missing from GitHub" else "are missing from GitHub"
         | NeedsCompiler(oldest, running) -> $"""{(if one then "needs" else "need")} nanyx {oldest} or later (this is {running})"""
         | UnreadableDependencies -> if one then "has dependencies the index writes in a way this nanyx can't read" else "have dependencies the index writes in a way this nanyx can't read"

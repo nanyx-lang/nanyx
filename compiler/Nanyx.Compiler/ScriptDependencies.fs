@@ -10,17 +10,23 @@ open System.IO
 module ScriptDependencies =
     /// Each of `pins`, a package and the exact version the script `script` (its path, for messages) names, and the
     /// packages they depend on, chosen from the index of `store` and downloaded into its cache, each checked against the
-    /// SHA-256 the index records: a line for each, `nanyx.json 0.1.0`, or what went wrong.
-    let pull (store: PackageStore) (script: string) (pins: (string * SemanticVersion) list) : Result<string list, string list> =
+    /// SHA-256 the index records: a line for each, `nanyx.json 0.1.0`, and a warning for each pin the index has
+    /// unlisted, which it still downloads; or what went wrong.
+    let pull (store: PackageStore) (script: string) (pins: (string * SemanticVersion) list) : Result<Pulled, string list> =
         match pins with
-        | [] -> Result.Ok []
+        | [] -> Result.Ok { Lines = []; Warnings = [] }
         | _ ->
-            match Resolution.resolvePinned store (Path.GetFileName script) pins with
+            let name = Path.GetFileName script
+            match Resolution.resolvePinned store name pins with
             | Result.Error(Conflict diagnostic) -> Result.Error [ diagnostic.Message ]
             | Result.Error(IndexUnreadable message) -> Result.Error [ message ]
-            | Result.Ok lockfile ->
-                match lockfile.Packages |> List.map (PackageIndex.download store) |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
-                | [] -> Result.Ok(lockfile.Packages |> List.map (fun locked -> $"{locked.Name} {locked.Version}"))
+            | Result.Ok resolved ->
+                let packages = resolved.Lockfile.Packages
+                match packages |> List.map (PackageIndex.download store) |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
+                | [] ->
+                    Result.Ok
+                        { Lines = packages |> List.map (fun locked -> $"{locked.Name} {locked.Version}")
+                          Warnings = resolved.Unlisted |> List.map (fun (package, version) -> Resolution.pinnedUnlisted name package version) }
                 | errors -> Result.Error errors
 
     /// The versions of `name` in the cache of `store`, as the solver reads them: each with the dependencies its manifest
