@@ -126,9 +126,13 @@ any function that uses it does:
 ```nanyx
 context Greeter = protected ()
 
-def Greeter.hello: [Greeter] string -> string = { name -> "hello, {name}" }
+def Greeter.hello: [Greeter] string -> string = { name ->
+  "hello, {name}"
+}
 
-def greetAll: [Greeter] list(string) -> list(string) = { names -> names \list.map(hello) }
+def greetAll: [Greeter] list(string) -> list(string) = { names ->
+  names \list.map(hello)
+}
 
 def greeted = { _ ->
   use Greeter()
