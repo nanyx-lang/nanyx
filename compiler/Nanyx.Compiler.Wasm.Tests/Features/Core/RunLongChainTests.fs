@@ -22,27 +22,39 @@ let ``An and chain of 200 is tests compiles and runs`` () =
     let source = $"def f = {{ m: #some(int) | #none -> {tests} and v200 == 7 }}\nprintln(f(#some(7)))\nprintln(f(#none))\n"
     runSource source |> assertRan "true\nfalse\n"
 
+/// Asserts that the program `source n` writes `output n`, and that it compiles and runs in time that grows with `n`, not
+/// with its square: at `n` it takes less than ten times what it takes at a quarter of `n`. A linear compile takes about 5
+/// times as long, and a quadratic one 16 or more (an else-if that checked in quadratic time took 20 times as long). When
+/// the first runs miss, both sizes run again and each one's quicker run counts, so that load on the machine, which slows
+/// one run and not the other, can't make the test fail (#2388).
+let private runsInLinearTime (n: int) (source: int -> string) (output: int -> string) =
+    let time size =
+        let clock = System.Diagnostics.Stopwatch.StartNew()
+        let outcome = runSource (source size)
+        clock.Stop()
+        outcome |> assertRan (output size)
+        clock.Elapsed.TotalMilliseconds
+    let quarter = n / 4
+    let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
+    let atQuarter, atN = time quarter, time n
+    if not (isLinear atQuarter atN) then
+        let atQuarter = min atQuarter (time quarter)
+        let atN = min atN (time n)
+        Assert.True(isLinear atQuarter atN, $"{n:N0} took {atN:F0} ms, {atN / atQuarter:F1} times the {atQuarter:F0} ms of {quarter:N0}")
+
 // The backend writes each level of a chain without copying the code of the levels inside it, and its passes look at
 // each level once, so a chain compiles in time that grows with its length (#2351). 10,000 additions took 30 s to
 // compile in a Release build when each level copied the code inside it.
 [<Fact>]
 let ``A chain of 10,000 additions compiles and runs in time that grows with its length`` () =
-    let source = "def x = 1" + String.replicate 9_999 " + 1" + "\nprintln(x)\n"
-    let clock = System.Diagnostics.Stopwatch.StartNew()
-    let outcome = runSource source
-    clock.Stop()
-    outcome |> assertRan "10000\n"
-    Assert.True(clock.ElapsedMilliseconds < 20_000L, $"10,000 additions took {clock.ElapsedMilliseconds} ms")
+    runsInLinearTime 10_000 (fun n -> "def x = 1" + String.replicate (n - 1) " + 1" + "\nprintln(x)\n") (fun n -> $"{n}\n")
 
 // Each branch of an else-if is joined to the next, which makes a chain of 10,000 type variables, each solved to the one
 // before it. The type checker follows such a chain once, not once for each variable on it, so a long else-if checks in
 // time that grows with its length (#2362). 10,000 branches took 2 minutes in a Release build when it followed it each time.
 [<Fact>]
 let ``An else-if chain of 10,000 branches compiles and runs in time that grows with its length`` () =
-    let branches = [ for i in 1 .. 10_000 -> $"if n == {i} then {i * 2}" ] |> String.concat " else "
-    let source = $"def f = {{ n: int -> {branches} else 0 }}\nprintln(f(9999))\nprintln(f(20000))\n"
-    let clock = System.Diagnostics.Stopwatch.StartNew()
-    let outcome = runSource source
-    clock.Stop()
-    outcome |> assertRan "19998\n0\n"
-    Assert.True(clock.ElapsedMilliseconds < 30_000L, $"10,000 branches took {clock.ElapsedMilliseconds} ms")
+    let source n =
+        let branches = [ for i in 1..n -> $"if n == {i} then {i * 2}" ] |> String.concat " else "
+        $"def f = {{ n: int -> {branches} else 0 }}\nprintln(f({n - 1}))\nprintln(f(20000))\n"
+    runsInLinearTime 10_000 source (fun n -> $"{(n - 1) * 2}\n0\n")
