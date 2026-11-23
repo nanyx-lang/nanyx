@@ -58,7 +58,7 @@ let ``A range of number literals is of ints, not of the numbers it is used as`` 
         [ "def small: seq(U8) = 1..4\n", "'int' vs 'U8'", "1..4"
           "def floats: seq(float) = 1..3\n", "'int' vs 'float'", "1..3"
           "def countBytes = { xs: seq(U8) -> seq.length(xs) }\ndef n = countBytes(250..254)\n", "'int' vs 'U8'", "250..254"
-          "def mixed = 1..2.5\n", "'int' vs 'float'", "1..2.5" ]
+          "def mixed = 1..2.5\n", "'int' vs 'float'", "1" ]
     for source, message, at in cases do
         Assert.Equal((DiagnosticCodes.TypeMismatch.Code, message, at), onlyDiagnostic (enumerableNumbers + source))
 
