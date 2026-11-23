@@ -291,7 +291,7 @@ Jo
 2: Jo
 """ ]
 
-/// The examples no test runs, each with why. They are out of date with the library (#2459).
+/// The examples no test runs, each with why.
 let private notRun: Map<string, string> =
     Map.ofList
         [ "teamColours.nyx", "a string in its list of points is freed while the list still holds it (#2464)" ]
