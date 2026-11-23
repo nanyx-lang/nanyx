@@ -360,6 +360,7 @@ module SyntaxTree =
                     (patterns |> List.collect Pattern.expressions |> List.collect (free bound)) @ free bound body)
             match expr.Kind with
             | IdentifierExpr name -> named name
+            | IsSyntax.BindingWhile loop -> free bound { expr with Kind = loop }
             | FunctionCall(name, _, args)
             | ContextMemberCall(_, name, args) -> named name @ (args |> List.collect (free bound))
             | Pipe(value, name, _, args) -> named name @ ((value :: args) |> List.collect (free bound))

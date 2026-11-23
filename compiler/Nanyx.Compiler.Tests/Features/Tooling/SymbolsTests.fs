@@ -53,6 +53,21 @@ def unwrap = if #some(1) is #some(v) then v else 0
     Assert.Equal(Some (PatternVariable, offsetOf source "v)" 0 0), resolvesTo source (offsetOf source "then v" 0 5))
 
 [<Fact>]
+let ``Names in a while loop's body refer to the variables its condition's tests bind`` () =
+    let source =
+        normalized """def f = {
+  memory {
+    mut state: #a(int) | #b = #a(1)
+    while state is #a(v) and v > 0 ->
+      println(v)
+      state := #b
+  }
+}
+"""
+    Assert.Equal(Some (PatternVariable, offsetOf source "v)" 0 0), resolvesTo source (offsetOf source "v > 0" 0 0))
+    Assert.Equal(Some (PatternVariable, offsetOf source "v)" 0 0), resolvesTo source (offsetOf source "println(v)" 0 8))
+
+[<Fact>]
 let ``Names in a guard pattern's predicate refer to its parameter and to what is in scope at the match`` () =
     let source =
         normalized """def size = { n, limit -> match n
