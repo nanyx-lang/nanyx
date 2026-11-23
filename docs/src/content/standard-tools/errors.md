@@ -1013,7 +1013,27 @@ module louder
 export def string.shout: string -> string = { s -> s ++ "!!" }
 ```
 
-To fix it, import all but one of the modules with `as`.
+A bare name that two contexts in scope attach a definition by is ambiguous too
+([Attached to a context](../advanced/attached-definitions#attached-to-a-context)):
+
+```nanyx
+context Greeter = protected ()
+
+def Greeter.hello: [Greeter] string -> string = { s -> "hello {s}" }
+
+context Waver = protected ()
+
+def Waver.hello: [Waver] string -> string = { s -> "wave {s}" }
+
+def both = { _ ->
+  use Greeter()
+  use Waver()
+  hello("x")  -- error NYX0106: 'hello' could be 'Greeter.hello' and 'Waver.hello', ...
+}
+```
+
+To fix it, import all but one of the modules with `as`, or, for a context's definition, write its whole name, as
+`Greeter.hello`.
 
 # NYX0107: Unknown attached type
 

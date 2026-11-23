@@ -27,3 +27,21 @@ def run = { _ ->
 run()
 """
     runSource source |> assertRan "later: x\nhello from a def\n[hello a, hello b]\n"
+
+[<Fact>]
+let ``A top-level def of the same name wins over a def attached to a context`` () =
+    let source =
+        """context Greeter = protected ()
+
+def Greeter.hello: [Greeter] string -> string = { s -> "hello {s}" }
+
+def hello = { s: string -> "my own hello {s}" }
+
+def run = { _ ->
+  use Greeter()
+  println(hello("x"))
+}
+
+run()
+"""
+    runSource source |> assertRan "my own hello x\n"

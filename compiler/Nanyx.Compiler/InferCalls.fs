@@ -32,6 +32,39 @@ let private inferLookup
     |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id lookup })
 
 /// A call of the function `name`, its name at `spanOpt`, with `args`.
+/// `a..b` is the prelude's `seq.range(a, b)`, and `a..`, which has no end, its `seq.from(a)`: each a sequence of the
+/// bounds' type, which needs its `Enumerable` (see `Seqs`). A range of `int`s is read instead as the call of the prelude's
+/// counting function, which is passed no instances. The bounds are inferred once, and each call is checked with them
+/// by name (see `RangeSyntax.bound`): inferred again inside the call to the counting function, a range in a range's
+/// bound was inferred twice at each level it was nested (#2307).
+let private inferRange
+    (inferExpr: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
+    (env: TypeEnv) (state: InferState) (expr: Expression) (bounds: Expression list) : Result<TypedExpr * InferState, Diagnostic list> =
+    let callee, intCallee = if bounds.Length = 1 then Seqs.fromFunction, Seqs.intFromFunction else Seqs.rangeFunction, Seqs.intRangeFunction
+    let inferBounds =
+        bounds
+        |> List.fold (fun result bound ->
+            result |> Result.bind (fun (typedBounds, current) ->
+                inferExpr env current bound |> Result.map (fun (typed, next) -> typedBounds @ [ typed ], next))) (Ok ([], state))
+    match inferBounds with
+    | Error err -> Error err
+    | Ok (typedBounds, afterBounds) ->
+        let names = typedBounds |> List.mapi (fun index typed -> RangeSyntax.bound index, typed.Type)
+        let boundEnv = names |> List.fold (fun current (name, ty) -> TypeEnv.extend name (TypeEnv.mono ty) current) env
+        let named = List.map2 (fun (bound: Expression) (name, _) -> Expression.from bound (IdentifierExpr name)) bounds names
+        // The call is written as it is read, with the bounds themselves (see `ExpressionRewrites.writeAsRead`).
+        let call callee =
+            let read = { expr with Kind = FunctionCall(callee, None, bounds) }
+            inferAsCall (inferExpr boundEnv) afterBounds expr callee named
+            |> Result.map (fun (typed, next) ->
+                { typed with Expr = read; Arguments = Some typedBounds }, { next with ReadAs = next.ReadAs |> Map.add expr.Id read })
+        match call callee with
+        | Ok (typed, next) ->
+            match Unifier.unalias (resolveSoFar next typed.Type) with
+            | Seqs.SeqType (TyPrimitive "int") -> call intCallee
+            | _ -> Ok (typed, next)
+        | Error err -> Error err
+
 let rec internal inferCall
     (inferExpr: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
     (inferLambdaWithExpected: TypeEnv -> InferState -> Expression -> (Identifier * TypeExpr option) list -> Expression -> Ty option -> Ty option -> Result<TypedExpr * InferState, Diagnostic list>)
@@ -106,16 +139,7 @@ let rec internal inferCall
                     else Error errors
         | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`with` takes a record and the fields to update" ]
     elif name = RangeSyntax.builtIn then
-        // `a..b` is the prelude's `seq.range(a, b)`, and `a..`, which has no end, its `seq.from(a)`: each a sequence of
-        // the bounds' type, which needs its `Enumerable` (see `Seqs`). A range of `int`s is inferred again as the call
-        // of the prelude's counting function, which is passed no instances.
-        let callee, intCallee = if args.Length = 1 then Seqs.fromFunction, Seqs.intFromFunction else Seqs.rangeFunction, Seqs.intRangeFunction
-        match inferAsCall (inferExpr env) state expr callee args with
-        | Ok (typed, next) ->
-            match Unifier.unalias (resolveSoFar next typed.Type) with
-            | Seqs.SeqType (TyPrimitive "int") -> inferAsCall (inferExpr env) state expr intCallee args
-            | _ -> Ok (typed, next)
-        | Error err -> Error err
+        inferRange inferExpr env state expr args
     elif name = ExternSyntax.builtIn || name = ComponentImportSyntax.builtIn then
         // A foreign function's value (see `ExternSyntax`), or a component import's (see `ComponentImportSyntax`): the
         // embedder provides it, so it is whatever the def's written type says.
@@ -450,7 +474,8 @@ let rec internal inferCall
                     Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message |> Diagnostics.about name ]
                 | None ->
                     // A def attached to a context available here, by its bare name.
-                    match AttachedContextDefs.qualifiedFor env state name with
-                    | Some qualified ->
+                    match AttachedContextDefs.qualifiedFor env state name calleeSpan with
+                    | Some (Ok qualified) ->
                         inferCall inferExpr inferLambdaWithExpected env (AttachedContextDefs.record expr.Id qualified state) expr qualified spanOpt args
+                    | Some (Error errors) -> Error errors
                     | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"'{name}' is not in scope" env.Names.Keys name ]

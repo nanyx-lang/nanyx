@@ -119,9 +119,9 @@ A type's own definitions, those attached in the module that defines it, or in th
 # Attached to a context
 
 A [context](./contexts) can have definitions attached to it too. A context has no values to pipe, so a definition
-attached to it is reached by its bare name instead, wherever the context is: in a function that requires it, or whose
-requirements are inferred, and under a `use` of it, as the context's members are. It requires the context itself, as
-any function that uses it does:
+attached to it is reached by its bare name instead, wherever the context is: in a function that requires it, under a
+`use` of it, and anywhere for a context the host provides, as the context's members are. It requires the context
+itself, as any function that uses it does:
 
 ```nanyx
 context Greeter = protected ()
@@ -143,9 +143,10 @@ println(greeted())
 -- [hello, Ada, hello, Alan]
 ```
 
-Where the context isn't, as at the top level here, `hello` is not in scope (`NYX0102`); `Greeter.hello` is, and requires
-`Greeter` as a call of it would. A name of your own wins: a local definition, a parameter or an import named `hello` is
-the one `hello` means. Such a definition is how a context gets a [workflow keyword](./workflows#keyword-kinds) that
+Where the context isn't, as at the top level here, `hello` is not in scope (`NYX0102`). In a function that doesn't write
+its type, `hello` means `Greeter.hello`, and requires `Greeter` as a call of that would. A name of your own wins: a
+definition, a parameter or an import named `hello` is the one `hello` means. Where two contexts attach a definition of
+the same name, the bare name is ambiguous (`NYX0106`), unless only one of the two is available; write the whole name. Such a definition is how a context gets a [workflow keyword](./workflows#keyword-kinds) that
 needs no builder, as `Async` gets `start!` from `Async.start`.
 
 # When to use attached definitions
