@@ -34,6 +34,9 @@ by position, or writing the character a look-alike stands for.
 Most errors, such as type errors and unknown names, don't stop a debug build: see
 [Deferred errors](../tour/error-handling#deferred-errors).
 
+One code is a warning, not an error: [`NYX0051`](#nyx0051), a version that has been unlisted, which the build goes on
+with. The command line shows it as `warning NYX0051`.
+
 The codes are grouped by what the compiler is doing when it finds the error:
 
 - `NYX00xx`: reading a file, its directives and its imports.
@@ -810,7 +813,7 @@ takes a value, `#bind`.
 
 Resolution chooses a version of each package a build needs from the package index, the newest that every dependency
 accepts, and there is none: two packages need versions of a third that no version satisfies both
-of, a dependency accepts only versions the index doesn't have, or every version it accepts is yanked or needs a newer
+of, a dependency accepts only versions the index doesn't have, or every version it accepts is unlisted or needs a newer
 compiler. A build has [one version of each package](../tour/packages#versions), so the conflict can't be settled by
 using two. The message explains it a step at a time, from the dependencies that cause it:
 
@@ -868,6 +871,22 @@ scoped export context Tx = protected ()  -- error NYX0050: Write `export` before
 ```
 
 To fix it, write `export scoped`, which the error's fix does; `nanyx format` writes it too.
+
+# NYX0051: Unlisted version
+
+A warning, not an error: the build goes on. Its author has unlisted the version a lockfile locks, or a script's
+`::dependency` pins, with [`nanyx unlist`](./command-line#nanyx-unlist), so no new resolution chooses it, but what
+already names it keeps it. A command that reads the package index for the version, `nanyx pull`, `install`, `build` or
+`run`, warns; one that reads it only from the package cache doesn't:
+
+```text
+warning NYX0051: Unlisted version 'acme.json 0.1.1'
+  = acme.json 0.1.1, which 'nanyx.lock' locks, is unlisted, so no new resolution chooses it: to move to a listed version, delete its entry from 'nanyx.lock' and run `nanyx pull`, first changing the version the manifest asks for if it accepts no listed one, or keep it if you need it
+```
+
+To move to a listed version in a package, delete the version's entry from `nanyx.lock`: `nanyx pull`, or the next
+build, locks the newest listed version the manifest accepts. If it accepts none, change the version it asks for first.
+In a script, change the version its `::dependency` names. Or keep the version, if you need it.
 
 # NYX0101: Unknown identifier
 

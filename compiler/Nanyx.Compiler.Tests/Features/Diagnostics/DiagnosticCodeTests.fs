@@ -15,6 +15,7 @@ let ``Every compiler code is distinct and has the NYX form`` () =
         Assert.Matches("^NYX\\d{4}$", code)
 
 [<Fact>]
-let ``The compiler reports only critical and error severities`` () =
-    for code in DiagnosticCodes.all do
+let ``The compiler reports only critical and error severities, but for the warning that a version is unlisted`` () =
+    for code in DiagnosticCodes.all |> List.filter ((<>) DiagnosticCodes.UnlistedVersion) do
         Assert.True(code.Severity = Severity.Critical || code.Severity = Severity.Error, $"{code.Code} is {code.Severity}")
+    Assert.Equal(Severity.Warning, DiagnosticCodes.UnlistedVersion.Severity)

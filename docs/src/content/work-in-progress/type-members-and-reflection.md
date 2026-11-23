@@ -27,8 +27,7 @@ can't do yet:
 - **A type that provides a library's context itself.** The design says such a type wins over walking its description,
   but a walker has no way to ask whether a field's type, which it never learns, has an instance, so for now a type is
   written another way by a decoder or encoder built by hand.
-- **Compiler bugs the walker works around or stops at:** a case's `get` on a recursive type
-  ([#2378](https://github.com/nanyx-lang/nanyx/issues/2378)), `map.map` at a boxed type
+- **Compiler bugs the walker works around or stops at:** `map.map` at a boxed type
   ([#2379](https://github.com/nanyx-lang/nanyx/issues/2379)) and `Typed` for an imported function whose result names a
   type alias ([#2380](https://github.com/nanyx-lang/nanyx/issues/2380)).
 

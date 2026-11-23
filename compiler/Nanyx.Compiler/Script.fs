@@ -364,9 +364,9 @@ module Script =
 
     /// What `nanyx pull` does for the script at `filePath`, whose text is `source`: downloads into the cache of `store`
     /// each package from the index its `::dependency` lines pin, and the packages they depend on (see
-    /// `ScriptDependencies.pull`), giving a line for each, or what went wrong. A directive written wrong is left for
-    /// the build to report.
-    let pull (store: PackageStore) (filePath: string) (source: string) : Result<string list, string list> =
+    /// `ScriptDependencies.pull`), giving a line for each and a warning for each pin the index has unlisted, or what
+    /// went wrong. A directive written wrong is left for the build to report.
+    let pull (store: PackageStore) (filePath: string) (source: string) : Result<Pulled, string list> =
         let pins =
             settings (Directives.read filePath source)
             |> List.choose (function

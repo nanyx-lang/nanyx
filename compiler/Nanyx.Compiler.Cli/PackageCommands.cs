@@ -1,4 +1,5 @@
 using Consolo;
+using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
 using NyxCompiler;
 
@@ -96,11 +97,12 @@ internal static partial class CliCommands
             return 1;
         }
 
-        foreach (var line in pulled.ResultValue)
+        foreach (var line in pulled.ResultValue.Lines)
         {
             shell.Out.WriteLine(line);
         }
 
+        PrintWarnings(shell, pulled.ResultValue.Warnings);
         return 0;
     }
 
@@ -296,8 +298,8 @@ internal static partial class CliCommands
             return 0;
         }
 
-        File.WriteAllText(LockfileModule.pathIn(Path.GetDirectoryName(manifestPath)!), LockfileModule.write(locked.Item1));
-        foreach (var line in locked.Item2)
+        File.WriteAllText(LockfileModule.pathIn(Path.GetDirectoryName(manifestPath)!), LockfileModule.write(locked.Lockfile));
+        foreach (var line in locked.Lines)
         {
             shell.Out.WriteLine(line);
         }
@@ -305,10 +307,12 @@ internal static partial class CliCommands
         var pulled = PackageDependencies.pull(store, manifestPath);
         if (pulled.IsError)
         {
+            PrintWarnings(shell, locked.Warnings);
             PrintLockFailure(shell, pulled.ErrorValue);
             return 1;
         }
 
+        PrintWarnings(shell, ListModule.Append(locked.Warnings, pulled.ResultValue.Warnings));
         return 0;
     }
 }

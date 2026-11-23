@@ -10,6 +10,18 @@ type ResolutionError =
     /// The index can't be read.
     | IndexUnreadable of string
 
+/// What a resolution chose: the lockfile that records it, and the versions in it the index has unlisted, which only a
+/// lockfile or a script's pin keeps.
+type Resolved =
+    { Lockfile: Lockfile
+      Unlisted: (string * SemanticVersion) list }
+
+/// What pulling the dependencies of a package or a script did: a line for each package, and a warning (`NYX0051`) for
+/// each version it uses that the index has unlisted, which it read the index for.
+type Pulled =
+    { Lines: string list
+      Warnings: Diagnostic list }
+
 /// Choosing the version of each package a build needs from the package index (#864), with `VersionSolver`: the newest
 /// that satisfies every dependency, keeping each version a lockfile already locks while it still does. What it gives is
 /// the lockfile that records them.
@@ -47,7 +59,7 @@ module Resolution =
     /// This compiler's version, if it is a semantic version.
     let private running = SemanticVersion.tryParse Toolchain.version
 
-    /// `indexed` as the solver reads it: why it can't be chosen, if it can't. A yanked version can be, when `locked` is
+    /// `indexed` as the solver reads it: why it can't be chosen, if it can't. An unlisted version can be, when `locked` is
     /// what the lockfile locks of its package, since a build that already locks it keeps it.
     let private candidate (locked: SemanticVersion option) (indexed: IndexedVersion) : SolverVersion =
         let dependencies =
@@ -62,7 +74,7 @@ module Resolution =
             if not indexed.Available then Some Unavailable
             elif needsNewer.IsSome then needsNewer
             elif dependencies |> List.exists (snd >> Option.isNone) then Some UnreadableDependencies
-            elif indexed.Yanked && locked <> Some indexed.Version then Some Yanked
+            elif indexed.Unlisted && locked <> Some indexed.Version then Some Unlisted
             else None
         { Version = indexed.Version
           Dependencies = dependencies |> List.choose (fun (name, requirement) -> requirement |> Option.map (fun requirement -> name, requirement))
@@ -89,7 +101,7 @@ module Resolution =
         (requirements: RootRequirement list)
         (locked: Map<string, SemanticVersion>)
         (pinned: Map<string, SemanticVersion>)
-        : Result<Lockfile, ResolutionError> =
+        : Result<Resolved, ResolutionError> =
         let listings = Dictionary<string, IndexedVersion list>()
         let versions (name: string) =
             if ShippedPackages.isShipped name then
@@ -113,7 +125,11 @@ module Resolution =
                   Version = version
                   Sha256 = indexed.Sha256
                   Dependencies = indexed.Dependencies |> List.map fst |> List.filter names.Contains |> List.sort }
-            Result.Ok { Packages = chosen |> List.map entry }
+            let unlisted =
+                chosen |> List.filter (fun (name, version) -> listings.[name] |> List.exists (fun listed -> listed.Version = version && listed.Unlisted))
+            Result.Ok
+                { Lockfile = { Packages = chosen |> List.map entry }
+                  Unlisted = unlisted }
         | NoSolution lines ->
             let message = String.concat "\n" lines
             Result.Error(Conflict(Diagnostics.general DiagnosticCodes.VersionConflict message |> Diagnostics.about root))
@@ -121,16 +137,36 @@ module Resolution =
 
     /// Resolves the dependencies of the package `manifest` describes against the index of `store`, keeping each version
     /// `lockfile` locks while it is still allowed: the lockfile that records the versions chosen, or why there are none.
-    let resolve (store: PackageStore) (manifest: Manifest) (lockfile: Lockfile) : Result<Lockfile, ResolutionError> =
+    let resolve (store: PackageStore) (manifest: Manifest) (lockfile: Lockfile) : Result<Resolved, ResolutionError> =
         let locked = lockfile.Packages |> List.map (fun package -> package.Name, package.Version) |> Map.ofList
         resolveWith store manifest.Name (requirements store manifest) locked Map.empty
 
     /// Resolves the dependencies of the script `script` (its name, for messages) against the index of `store`: each of
-    /// `pins` at exactly the version it gives, which may be yanked, since the script names it, and the packages they
+    /// `pins` at exactly the version it gives, which may be unlisted, since the script names it, and the packages they
     /// depend on as a package's are. A script has no lockfile: the versions its directives write are its pins.
-    let resolvePinned (store: PackageStore) (script: string) (pins: (string * SemanticVersion) list) : Result<Lockfile, ResolutionError> =
+    let resolvePinned (store: PackageStore) (script: string) (pins: (string * SemanticVersion) list) : Result<Resolved, ResolutionError> =
         let pinned = Map.ofList pins
         resolveWith store script (pinRequirements script pins) pinned pinned
+
+    /// The warning (`NYX0051`) that `name` `version`, which `namedBy` names, is unlisted, with how to move off it, `move`.
+    /// The build goes on with it.
+    let private unlistedWarning (name: string) (version: SemanticVersion) (namedBy: string) (move: string) : Diagnostic =
+        Diagnostics.general
+            DiagnosticCodes.UnlistedVersion
+            $"{name} {version}, which {namedBy}, is unlisted, so no new resolution chooses it: {move}, or keep it if you need it"
+        |> Diagnostics.about $"{name} {version}"
+
+    /// The warning (`NYX0051`) that `name` `version`, which a package's lockfile locks, is unlisted.
+    let lockedUnlisted (name: string) (version: SemanticVersion) : Diagnostic =
+        unlistedWarning
+            name
+            version
+            $"'{Lockfile.fileName}' locks"
+            $"to move to a listed version, delete its entry from '{Lockfile.fileName}' and run `nanyx pull`, first changing the version the manifest asks for if it accepts no listed one"
+
+    /// The warning (`NYX0051`) that `name` `version`, which the script `script` (its name) pins, is unlisted.
+    let pinnedUnlisted (script: string) (name: string) (version: SemanticVersion) : Diagnostic =
+        unlistedWarning name version $"'{script}' pins with `::dependency`" "to move to a listed version, change the version its `::dependency` names"
 
     /// What `requirements` ask for that `lockfile` doesn't satisfy, each a line naming it: a package it doesn't lock, one
     /// it locks at a version the requirement doesn't accept, or one a locked package depends on that it doesn't lock.

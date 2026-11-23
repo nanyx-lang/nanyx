@@ -68,6 +68,50 @@ println(describe(shapes, type list(Shape)))
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "#circle 1.5\n[#square 4, #empty ()]\n"
 
+/// Counts the ints in a value, through its cases' and fields' `get`s.
+let private count =
+    """def count: a, type a -> int = { value, t ->
+  match t
+    | #int -> 1
+    | #list(elem) -> list.sum(list.map(value, { x -> count(x, elem) }))
+    | #record(r) -> list.sum(list.map(r.fields, { f -> count(f.get(value), f.type) }))
+    | #union(u) ->
+        list.sum(
+          list.map(u.cases, { c ->
+            match c.get(value)
+              | #some(p) -> count(p, c.type)
+              | #none -> 0
+          })
+        )
+    | else -> 0
+}
+
+"""
+
+[<Fact>]
+let ``Run - a recursive union's case gives its payload`` () =
+    let source =
+        count
+        + """type R = #rarr(list(R)) | #n(int)
+
+def r: R = #rarr([#n(1), #n(2)])
+
+println(count(r, type R))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "2\n"
+
+[<Fact>]
+let ``Run - a tree is walked through its cases and the fields of their payloads`` () =
+    let source =
+        count
+        + """type Tree = #node(Tree, int, Tree) | #leaf
+
+def tree: Tree = #node(#node(#leaf, 1, #leaf), 2, #node(#leaf, 3, #leaf))
+
+println(count(tree, type Tree))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n"
+
 [<Fact>]
 let ``Run - an arm at a type only known when the program runs gives a value of the narrowed type back`` () =
     let source =

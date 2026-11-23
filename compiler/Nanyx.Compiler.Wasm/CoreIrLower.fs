@@ -52,6 +52,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         usedNames.Add candidate |> ignore
         candidate
 
+    /// A new local of type `ty`, its name `name` made unique: each call makes another.
+    let newLocal (name: string) (ty: IrType) = newVar (uniqueName name) Local ty
+
     let newTemp (ty: IrType) =
         let var = newVar "" Temp ty
         { var with Name = $"__t{var.Id}" }
@@ -357,24 +360,24 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 if form = CellSyntax.read then Expr.make (Atom(AVar cell)) cell.Type
                 else
                     match cell.Type with
-                    | IrRecord [ _, held ] -> Expr.make (Field(AVar cell, 0)) held
+                    | CoreIrRegions.RegionBox held -> Expr.make (Field(AVar cell, CoreIrRegions.boxValueSlot)) held
                     | other -> internalError $"a box of type '{IrType.show other}'"
             let copy = newVar (uniqueName name) Local value.Type
             let body = k (Expr.make (Atom(AVar copy)) value.Type)
             Expr.make (Let(copy, value, body)) body.Type
         | AssignSyntax.Call(Kind (IdentifierExpr name), value) when scope.Vars.ContainsKey name ->
-            // A cell isn't on a region yet, so what it is given goes onto the outermost one.
-            this.Atoms scope [ value ] (fun atoms ->
-                CoreIrRegions.withBarrier (newVar (uniqueName "__stored") Local) WasmRegions.Names.regionStoreOutermost atoms (fun atoms ->
-                    k (Expr.make (Assign(scope.Vars.[name], atoms.Head)) IrUnit)))
+            // A cell no lambda captures lives no longer than the block it is in, so what it is given needs no promoting.
+            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (Assign(scope.Vars.[name], atoms.Head)) IrUnit))
         // The box's node is the `mut`'s, so its type is the cell's.
         | FunctionCall(form, _, [ value ]) when form = CellSyntax.box ->
+            // A captured cell is a box on the innermost region, as an `MRef` is (see `CoreIrRegions`).
             this.Atoms scope [ value ] (fun atoms ->
-                k (Expr.make (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", asCellType (tyOf expr) (atomType atoms.Head) ])))
+                let held = asCellType (tyOf expr) (atomType atoms.Head)
+                CoreIrRegions.tracked (newLocal "__cell") held atoms.Head (fun box -> k (Expr.make (Atom box) (atomType box))))
         | FunctionCall(form, _, [ Kind (IdentifierExpr name); value ]) when form = CellSyntax.setBox && scope.Vars.ContainsKey name ->
             this.Atoms scope [ value ] (fun atoms ->
-                CoreIrRegions.withBarrier (newVar (uniqueName "__stored") Local) WasmRegions.Names.regionStoreOutermost atoms (fun atoms ->
-                    k (Expr.make (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit)))
+                CoreIrRegions.withBarrier (newLocal "__stored") WasmRegions.Names.regionStore (AVar scope.Vars.[name] :: atoms) (fun atoms ->
+                    k (Expr.make (SetField(scope.Vars.[name], CoreIrRegions.boxValueSlot, List.last atoms)) IrUnit)))
         | CrashSyntax.Call message ->
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
@@ -442,13 +445,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         // read and changed as a captured cell is, a store into it promoting what it is given.
         | FunctionCall(name, _, [ value ]) when name = Intrinsics.boxNew && not (scope.Vars.ContainsKey name) ->
             this.Atoms scope [ value ] (fun atoms ->
-                let fields = CoreIrRegions.boxFields atoms.Head
-                let boxTy = CoreIrRegions.boxType (atomType atoms.Head)
-                let box = newVar (uniqueName "__box") Local boxTy
-                let tracked = newVar (uniqueName "__tracked") Local IrUnit
-                let body = k (Expr.make (Atom(AVar box)) boxTy)
-                let track = Expr.make (CallRuntime(WasmRegions.Names.regionTrack, [ AVar box ], false)) IrUnit
-                Expr.make (Let(box, Expr.make (MakeRecord fields) boxTy, Expr.make (Let(tracked, track, body)) body.Type)) body.Type)
+                CoreIrRegions.tracked (newLocal "__box") (atomType atoms.Head) atoms.Head (fun box -> k (Expr.make (Atom box) (atomType box))))
         | FunctionCall(name, _, [ box ]) when name = Intrinsics.boxGet && not (scope.Vars.ContainsKey name) ->
             this.Atoms scope [ box ] (fun atoms ->
                 let held = tyOf expr
@@ -459,7 +456,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 match atoms with
                 | [ AVar _; _ ] ->
-                    CoreIrRegions.withBarrier (newVar (uniqueName "__stored") Local) WasmRegions.Names.regionStore atoms (fun atoms ->
+                    CoreIrRegions.withBarrier (newLocal "__stored") WasmRegions.Names.regionStore atoms (fun atoms ->
                         match atoms with
                         | [ AVar box; value ] -> k (Expr.make (SetField(box, CoreIrRegions.boxValueSlot, value)) IrUnit)
                         | _ -> internalError "a box set with something other than a box and a value")
@@ -476,14 +473,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 k
         | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
-            // `s.length` is one): the runtime helper of the same name. A mutable array is read as an array is.
-            // A mutable array, and a list's cells an `MList` changes, aren't on a region yet, so what they are given goes
-            // onto the outermost one.
+            // `s.length` is one): the runtime helper of the same name. A mutable array is a box on a region, and is
+            // lowered by `CoreIrRegions.mutableArray`. The cells of a list an `MList` changes aren't on a region, so what
+            // they are given goes onto the outermost one.
             let ty = tyOf expr
-            let barrier = if name = Intrinsics.marraySet || name = Intrinsics.listSetHead then WasmRegions.Names.regionStoreOutermost else ""
+            let stored = newLocal "__stored"
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
-                let call atoms = k (Expr.make (CallRuntime(Intrinsics.asArrayIntrinsic name, atoms, not (Intrinsics.returnsUnit name))) ty)
-                if barrier = "" then call atoms else CoreIrRegions.withBarrier (newVar (uniqueName "__stored") Local) barrier atoms call)
+                let call atoms = k (Expr.make (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty)
+                if CoreIrRegions.isMutableArrayIntrinsic name then CoreIrRegions.mutableArray stored name atoms ty k
+                elif name = Intrinsics.listSetHead then CoreIrRegions.withBarrier stored WasmRegions.Names.regionStoreOutermost atoms call
+                else call atoms)
         | FunctionCall(name, _, args) when input.Externs.ContainsKey name && not (scope.Vars.ContainsKey name) ->
             // A foreign function: a direct call to the module's import of it. It takes no context members: it requires
             // only `HostRuntime`, which marks who may call it.
