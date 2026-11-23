@@ -59,9 +59,10 @@ The HTTP host, `nanyx.http`, serves a program whose entry point is a `Request ->
 
 `nanyx.json`, for reading and writing JSON, is not shipped: it is published to the package index from
 [nanyx-lang/json](https://github.com/nanyx-lang/json), and a program names it in its dependencies,
-`(package = "nanyx.json", version = "0.1")`:
+`(package = "nanyx.json", version = "0.2")`:
 
 - [json](./json) — the `Json` value, parsing and printing (`nanyx.json/json`)
+- [json, reflection](./json-reflection) — encoding and decoding any type by walking it (`nanyx.json/json`)
 - [json, decoders](./json-typed) — reading JSON into types of your own (`nanyx.json/json`)
 - [encode](./encode) — writing types of your own as JSON (`nanyx.json/encode`)
 

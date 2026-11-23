@@ -9,22 +9,29 @@ decoding with `build` and the synthesised `Typed(a)` are described on [Functions
 and how they compile, with the design behind them and the alternatives considered, in
 [Type descriptions](../deep-dives/type-descriptions). This page keeps what is still to be built on them.
 
+# What is built on it
+
+`nanyx.json` 0.2.0 encodes and decodes any record or tag union by walking its type: `json.encode(user)` through
+`Typed(a)`, and `json.decode(text, into = type User)`, as the [JSON cookbook](../cookbook/json-parsing) shows
+([#1789](https://github.com/nanyx-lang/nanyx/issues/1789)).
+
 # The problem left
 
-Serialization, equality, hashing, printing and mapping to storage all follow a type's structure. A library can walk
-a type's description to do them, but the standard ones don't yet. The [JSON cookbook](../cookbook/json-parsing) decodes
-field by field, so each field name appears twice:
+`dbg`, string interpolation and `==` work on any record because they are compiler intrinsics. What the JSON walker
+can't do yet:
 
-```nanyx
-def decodeUser: string -> #some(User) | DecodeError = { data ->
-  data
-    \json.decode(
-      json.record(name = json.field("name", json.string), age = json.field("age", json.int))
-    )
-}
-```
-
-`dbg`, string interpolation and `==` work on any record because they are compiler intrinsics.
+- **A nominal type of your own through `Typed`.** The `typeOf` of a `Typed` instance is written in the prelude, so it
+  sees every nominal type, even one of the caller's own module, as `#nominal`: `json.encode(money)` can't write a
+  `protected` type of the module that calls it, though `json.decode(text, into = type Money)` reads it
+  ([#2382](https://github.com/nanyx-lang/nanyx/issues/2382)).
+- **A type that provides a library's context itself.** The design says such a type wins over walking its description,
+  but a walker has no way to ask whether a field's type, which it never learns, has an instance, so for now a type is
+  written another way by a decoder or encoder built by hand.
+- **Compiler bugs the walker works around or stops at:** a case's `get` on a recursive type
+  ([#2378](https://github.com/nanyx-lang/nanyx/issues/2378)), `map.map` at a boxed type
+  ([#2379](https://github.com/nanyx-lang/nanyx/issues/2379)), `Typed` for an imported function whose result names a
+  type alias ([#2380](https://github.com/nanyx-lang/nanyx/issues/2380)), and a `set` type matched at run time
+  ([#2381](https://github.com/nanyx-lang/nanyx/issues/2381)).
 
 # Decisions
 
@@ -42,6 +49,6 @@ Decided by the maintainer on 2026-11-17:
 
 | Step | Issue |
 |---|---|
-| JSON for any record, on reflection | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) |
+| JSON for any record, on reflection (done, `nanyx.json` 0.2.0) | [#1789](https://github.com/nanyx-lang/nanyx/issues/1789) |
 | `dbg`, interpolation and `==` as library code (Planning) | [#2000](https://github.com/nanyx-lang/nanyx/issues/2000) |
 | Deserialisation-only constructors (Planning) | [#2001](https://github.com/nanyx-lang/nanyx/issues/2001) |

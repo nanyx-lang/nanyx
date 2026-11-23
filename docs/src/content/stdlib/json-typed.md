@@ -2,57 +2,58 @@
 title: json, decoders
 description: Reading JSON into types of your own, and writing them back
 order: 15.6
-package: nanyx.json 0.1.0
+package: nanyx.json 0.2.0
 ---
 
-A `Decoder(a)` reads an `a` out of a `Json` value, and says where a document doesn't fit. The decoders are in
-`nanyx.json/json` with the rest of [json](json), and the encoders, which go the other way, in [encode](encode).
+`json.decode(text, into = type T)` reads most types with nothing written for them, by walking the type: see
+[reflection](json-reflection). A decoder is for a document whose shape isn't the type's: under other keys, nested
+differently, or with a tag in a member of its own. A `Decoder(a)` reads an `a` out of a `Json` value, and says where a
+document doesn't fit. The decoders are in `nanyx.json/json` with the rest of [json](json), and the encoders, which go the
+other way, in [encode](encode).
 
 Some decoders read one kind of value each: `string`, `int` (a whole number), `float` and `bool`, and `value` reads any
-value as it is. The rest build larger decoders from smaller: `list`, `dict`, `optional`, `field`, `oneOf`, `convert`,
-`andThen`, and `record`, a builder that reads a record a member at a time, each with `try`, and gives back what it
-read with `return`. `json.decode` parses text and runs a decoder on it, and `json.decodeValue` runs one on a value
-already parsed.
+value as it is. `json.decoderFor(type T)` reads a `T` by walking its type, as `json.decode` does. The rest build larger
+decoders from smaller: `list`, `dict`, `optional`, `field`, `oneOf`, `convert`, `andThen`, and `record`, a builder
+that reads a record a member at a time, each with `try`, and gives back what it read with `return`. `json.decodeWith`
+parses text and runs a decoder on it, and `json.decodeValueWith` runs one on a value already parsed.
 
-When a value doesn't fit, the `DecodeError` says where, by the path from the document's root to it, which
-`json.pathText` writes as `users[2].age`, and what was wrong there; `json.describe` writes both. A decoder takes time
-in proportion to the size of what it reads, and reads a long list in constant stack.
+When a value doesn't fit, the decoder gives `#doesNotFit`, a `DecodeError`, which says where, by the path from the
+document's root to it, which `json.pathText` writes as `users[2].age`, and what was wrong there; `json.describe` writes
+both. Text that isn't JSON is an `#invalidJson`, as `json.parse` gives. A decoder takes time in proportion to the size
+of what it reads, and reads a long list in constant stack.
 
 ```nanyx
-::dependency nanyx.json 0.1.0
+::dependency nanyx.json 0.2.0
 
-import (
-  nanyx.json/encode as encode
-  nanyx.json/json as json
-)
+import nanyx.json/json as json
 
 type User = (name: string, age: int)
 
+-- the name is nested in a member of its own, {"profile": {"name": ...}}
 def user: json.Decoder(User) = json.record {
-  def name = try json.field("name", json.string)
+  def name = try json.field("profile", json.field("name", json.string))
   def age = try json.field("age", json.int)
   return User(name = name, age = age)
 }
 
-def userEncoder: json.Encoder(User) = encode.object(
-  [
-    encode.field("name", { u -> u.name }, encode.string)
-    encode.field("age", { u -> u.age }, encode.int)
-  ]
-)
+def show = { text ->
+  match json.decodeWith(text, json.list(user))
+    | #some(users) -> println(json.encode(users) \orCrash("users are written"))
+    | failure -> println(json.describe(failure))
+}
 
-match json.decode('[{"name": "Ada", "age": 36}, {"name": "Bob", "age": 2.5}]', json.list(user))
-  | #some(users) -> println(json.encode(users, encode.list(userEncoder)))
-  | #error(e) -> println(json.describe(e))
+show('[{"profile": {"name": "Ada"}, "age": 36}]')
+show('[{"profile": {"name": "Ada"}, "age": 36}, {"profile": {"name": "Bob"}, "age": 2.5}]')
 
+-- [{"name":"Ada","age":36}]
 -- [1].age: Expected a whole number, found 2.5
 ```
 
-A tagged union is read by the decoder a field of it chooses: a `try` reads by any decoder, including one picked by what
-an earlier `try` read.
+A tagged union whose tag is a member of its own is read by the decoder that member chooses: a `try` reads by any
+decoder, including one picked by what an earlier `try` read.
 
 ```nanyx
-::dependency nanyx.json 0.1.0
+::dependency nanyx.json 0.2.0
 
 import nanyx.json/json as json
 
@@ -71,17 +72,17 @@ def shape: json.Decoder(Shape) = json.record {
   return s
 }
 
-match json.decode('{"kind": "square", "side": 2}', shape)
+match json.decodeWith('{"kind": "square", "side": 2}', shape)
   | #some(#square(side)) -> println("A square of side {side}")
   | #some(_) -> println("Another shape")
-  | #error(e) -> println(json.describe(e))
+  | failure -> println(json.describe(failure))
 
 -- A square of side 2.0
 ```
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.1.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.2.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 ## `PathStep`
 
@@ -95,11 +96,20 @@ name, or the element of an array at this index, counting from 0.
 ## `DecodeError`
 
 ```nanyx fragment
-type DecodeError = (path: list(PathStep), message: string)
+type DecodeError = #doesNotFit(path: list(PathStep), message: string)
 ```
 
-Why a decoder read no value: the path from the root of the document to the value that didn't
-fit, each step in turn (empty for the root itself), and what was wrong with it.
+Why a decoder read no value: `#doesNotFit`, with the path from the root of the document to the
+value that didn't fit, each step in turn (empty for the root itself), and what was wrong with it.
+
+## `EncodeError`
+
+```nanyx fragment
+type EncodeError = #cannotEncode(path: list(PathStep), message: string)
+```
+
+Why [`encode`](json-reflection#encode) wrote no text: `#cannotEncode`, with the path from the value's root to a part of
+it that can't be written as JSON, a function or a nominal type, and why.
 
 ## `Decoder`
 
@@ -107,8 +117,9 @@ fit, each step in turn (empty for the root itself), and what was wrong with it.
 type Decoder(a) = private (run: (Json -> #some(a) | #failed(list(PathStep), string)), absent: #some(a) | #none)
 ```
 
-What reads an `a` from a `Json` value, or says why it can't. The decoders here make one, and
-[`decode`](#decode) and [`decodeValue`](#decodevalue) run one. A missing member is the decoder's to read too: only
+What reads an `a` from a `Json` value, or says why it can't. The decoders here make one,
+[`decoderFor`](json-reflection#decoderfor) makes one for any type by walking it, and [`decodeWith`](#decodewith) and [`decodeValueWith`](#decodevaluewith)
+run one. A missing member is the decoder's to read too: only
 [`optional`](#optional) reads one, as `#none`.
 
 ## `string`
@@ -267,22 +278,23 @@ def user: json.Decoder(User) = json.record {
 The first `try` that fails ends the block with its error. A `try` can read by any decoder,
 one chosen by what an earlier `try` read among them, as for a tagged union.
 
-## `decodeValue`
+## `decodeValueWith`
 
 ```nanyx fragment
-def decodeValue: Json, Decoder(a) -> #some(a) | #error(DecodeError)
+def decodeValueWith: Json, Decoder(a) -> #some(a) | #doesNotFit(path: list(PathStep), message: string)
 ```
 
-What `decoder` reads from `value`, or why it reads nothing, with the path to what didn't fit.
+What `decoder` reads from `value`, or a [`DecodeError`](#decodeerror) with the path to what didn't fit, and
+why.
 
-## `decode`
+## `decodeWith`
 
 ```nanyx fragment
-def decode: string, Decoder(a) -> #some(a) | #error(DecodeError)
+def decodeWith: string, Decoder(a) -> #some(a) | #doesNotFit(path: list(PathStep), message: string) | #invalidJson(position: int, line: int, column: int, message: string)
 ```
 
-What `decoder` reads from the JSON `text`, or why it reads nothing: text that isn't JSON is an
-error at the root, whose message says where in the text, by line and column.
+What `decoder` reads from the JSON `text`, or why it reads nothing: an `#invalidJson` for text
+that isn't JSON, which says where in the text, or a [`DecodeError`](#decodeerror) for a value that doesn't fit.
 
 ## `pathText`
 
@@ -296,11 +308,13 @@ element by its index in brackets, as `users[2].age`. The root, with no steps, is
 ## `describe`
 
 ```nanyx fragment
-def describe: DecodeError -> string
+def describe: #doesNotFit(path: list(PathStep), message: string) | #cannotEncode(path: list(PathStep), message: string) | #invalidJson(position: int, line: int, column: int, message: string) -> string
 ```
 
-`e` as a message writes it: its path, then what was wrong there, as
-`users[2].age: Expected a whole number, found 2.5`, or only what was wrong for the root.
+`e` as a message writes it. A [`DecodeError`](#decodeerror) or an [`EncodeError`](#encodeerror) is its path, then what was
+wrong there, as `users[2].age: Expected a whole number, found 2.5`, or only what was wrong for
+the root. A `JsonError` is what was wrong, then where, as `Expected a value, found the end of
+the text, at line 1, column 5`.
 
 ## `Encoder`
 
@@ -311,10 +325,10 @@ type Encoder(a) = a -> Json
 What writes an `a` as a `Json` value: any function that does. The encoders that build one are
 in the module `nanyx.json/encode`.
 
-## `encode`
+## `encodeWith`
 
 ```nanyx fragment
-def encode: a, Encoder(a) -> string
+def encodeWith: a, Encoder(a) -> string
 ```
 
 `value` as JSON text, written by `encoder` and printed compactly as [`print`](json#print) prints.

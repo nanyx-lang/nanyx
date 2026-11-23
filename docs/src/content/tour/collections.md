@@ -49,7 +49,7 @@ def middle = xs \slice(1, 4)
 println(Slice.toArray(middle))
 ```
 
-This prints `#some(20)`, `#notFound`, `5` and `[20, 30, 40]`. To work on part of an array, or of a string, without copying it, take a slice: `xs \slice(1, 4)` is a [`Slice`](../stdlib/slice) that views the elements from index 1 up to but not including 4, and shares the array's storage. Bounds clamp, so a slice past the end is shorter, never an error. `Slice.toArray` copies the run into an array of its own. An [`MSlice`](../stdlib/mslice) does the same for a mutable array, so `ys \slice(0, 3) \sort` sorts part of it in place, and a [`StringSlice`](../stdlib/text#stringslice) views part of a string.
+This prints `#some(20)`, `#notFound`, `5` and `[20, 30, 40]`. To work on part of an array, or of a string, without copying it, take a slice: `xs \slice(1, 4)` is a [`Slice`](../stdlib/slice) that views the elements from index 1 up to but not including 4, and shares the array's storage. Bounds clamp, so a slice past the end is shorter, never an error. `Slice.toArray` copies the run into an array of its own. A slice has the functions a list has: those that make new elements, such as `Slice.map`, `Slice.filter` and `Slice.sort`, give an `Array`, and `Slice.take` and `Slice.skip` give a slice of the same array. An [`MSlice`](../stdlib/mslice) does the same for a mutable array, so `ys \slice(0, 3) \sort` sorts part of it in place, and a [`StringSlice`](../stdlib/text#stringslice) views part of a string.
 
 The functions on arrays are on the [array](../stdlib/array) page. For an array whose elements change, see [Memory](../advanced/memory#mutable-collections).
 
@@ -159,7 +159,7 @@ def other = Bag[3, 4]
 println(list.length(bag.items))
 ```
 
-The standard library's `list`, `set`, `map`, `Array`, `seq` (`Seq[1, 2, 3]` is a sequence), `Stack`, `Queue`, `Trie` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A literal of a type with no `fromArray` is an error (NYX0257).
+The standard library's `list`, `set`, `map`, `Array`, `Slice`, `seq` (`Seq[1, 2, 3]` is a sequence), `Stack`, `Queue`, `Trie` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A literal of a type with no `fromArray` is an error (NYX0257).
 
 Anything that can be iterated can be spread into a literal: a list, an array, a set, a map, a slice, a sequence, or a type of your own that attaches `toSeq`. A sequence is pulled when the literal is built, and spreading one whose steps need a context makes the literal need it:
 
