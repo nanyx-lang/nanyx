@@ -3,7 +3,8 @@ module TranspilerWasmTests.Features.StdLib.RunStringSearch
 open Xunit
 open TranspilerWasmTestHelpers
 
-// Searching a string compares its bytes in place: it makes no string for each position it tries.
+// Searching a string compares its bytes in place: it makes no string for each position it tries. The search itself is
+// a runtime helper, `__nanyx_string_index_between` (#2313).
 
 [<Fact>]
 let ``Run - contains, count, startsWith and endsWith allocate nothing`` () =
@@ -31,3 +32,23 @@ def pieces: int -> int = { n -> list.length(string.split("a,bb,ccc,dddd", on = "
     let allocations, result = allocationsOf program "pieces" 0
     Assert.Equal(4, result)
     Assert.Equal(8, allocations)
+
+[<Fact>]
+let ``Run - searching finds a needle at either end, of several bytes, longer than the string, or empty`` () =
+    let source =
+        normalized """import nanyx/text
+
+@entry
+def main = {
+  def s = "aé€😀aé"
+  println("{string.indexOf(s, "a")} {string.lastIndexOf(s, "a")} {string.indexOf(s, "😀")} {string.indexOf(s, "aé")}")
+  println("{string.indexOf(s, "é€😀aé")} {string.indexOf(s, "é€😀aéx")} {string.indexOf("", "a")} {string.indexOf("", "")}")
+  println("{string.indexOf(s, "")} {string.count(s, "aé")} {string.count("aaaa", "aa")} {string.contains(s, "€😀")}")
+  println("{string.indexOf("aab", "ab")} {string.indexOf("ababc", "abc")} {string.split("x😀y😀", on = "😀")}")
+}
+"""
+    runSource source
+    |> assertRan (
+        "#some(0) #some(10) #some(6) #some(0)\n#some(1) #notFound #notFound #some(0)\n"
+        + "#some(0) 2 2 true\n#some(1) #some(2) [x, y, ]\n"
+    )
