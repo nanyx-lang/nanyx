@@ -38,6 +38,8 @@ type LiftedTools =
       CoerceAll: Scope -> Atom list -> IrType list -> (Atom list -> Expr) -> Expr
       /// The parameters a lifted function takes for its parameters (see `FunctionLowering.ValueParameters`).
       ValueParameters: string list -> IrType list -> Var list * (Expr -> Expr) * Var list
+      /// The parameters a definition names.
+      ParameterNames: string -> string list
       /// The types of a lifted lambda's parameters and result (see `FunctionLowering.LiftedParameterTypes`).
       LiftedParameterTypes: string -> Ty -> Ty list * Ty
       /// The name to call a definition by at an instance type.
@@ -51,6 +53,26 @@ type LiftedTools =
       SetSelfMembers: (ContextMemberKey * IrType) list -> unit
       /// Lowers an expression in tail position.
       Tail: Scope -> Expression -> Expr }
+
+/// The parameters a lifted function takes for its parameters `names`, of types `tys`, as a function value of type
+/// `fnTy` (see `FunctionLowering.ValueParameters`). Where it takes its input whole (see `IrType.recordTakenWhole`), that
+/// is one parameter, and each name is bound to the record's field of its name, or else, when the record has a field
+/// for each name, the field in its place, at the type the name has.
+let private valueParameters (tools: LiftedTools) (names: string list) (tys: IrType list) (fnTy: IrType) : Var list * (Expr -> Expr) * Var list =
+    match IrType.recordTakenWhole ("" :: names) fnTy with
+    | Some (IrRecord fields as recordTy) ->
+        let record = tools.NewVar (tools.UniqueName "__input") Param recordTy
+        let slotOf index name =
+            match fields |> List.tryFindIndex (fst >> (=) name) with
+            | Some slot -> slot
+            | None when fields.Length = names.Length -> index
+            | None -> cannot $"a function whose parameter {name} is not among its input's fields"
+        let named = List.map2 (fun name ty -> tools.NewVar (tools.UniqueName name) Local ty) names tys
+        let bind (body: Expr) =
+            List.foldBack2 (fun (var: Var) slot (body: Expr) -> Expr.make (Let(var, Expr.make (Field(AVar record, slot)) var.Type, body)) body.Type)
+                named (List.mapi slotOf names) body
+        [ record ], bind, named
+    | _ -> tools.ValueParameters names tys
 
 /// The lifted lambda `name`, whose parameters are `parameterNames` (its environment first) and whose body is `body`,
 /// as a function made by `make`, its closure capturing values of `capturedTys` and the local functions in
@@ -71,7 +93,7 @@ let liftedCapturing (tools: LiftedTools) (name: string) (parameterNames: string 
     let environment = IrRecord(("0", IrWord) :: (capturedTys |> List.mapi (fun index ty -> string (index + 1), ty)))
     let parameterTys, resultTy = tools.LiftedParameterTypes name lambdaTy
     let environmentParameter = parameterOf parameterNames.Head environment
-    let valueParameters, bind, named = tools.ValueParameters parameterNames.Tail (List.map tools.ToIrType parameterTys)
+    let valueParameters, bind, named = valueParameters tools parameterNames.Tail (List.map tools.ToIrType parameterTys) (tools.ToIrType lambdaTy)
     // The owner's context members are bound from the environment with what else it captures.
     let capturedMembers =
         let contextParameters, aliases = input.ContextParameters |> Map.tryFind owner |> Option.defaultValue ([], Map.empty)
@@ -109,10 +131,17 @@ let wrapperCalling (tools: LiftedTools) (wrapped: string) (instanceTy: Ty) (capt
     // Takes an environment, which holds after its table slot the members of the contexts the function requires
     // that the closure captured, and after its other parameters those its value's type requires; and calls the
     // function with the rest and them all, in the order it takes them.
-    let parameterTys, resultTy = parameterTypes parameterNames.Tail instanceTy true
+    // A wrapper that takes its input whole (see `IrType.recordTakenWhole`) passes the function each field under the
+    // name of the parameter that takes it.
+    let names =
+        let wrappedNames = tools.ParameterNames wrapped
+        match IrType.recordTakenWhole parameterNames (tools.ToIrType instanceTy) with
+        | Some _ when wrappedNames.Length = parameterNames.Tail.Length -> wrappedNames
+        | _ -> parameterNames.Tail
+    let parameterTys, resultTy = parameterTypes names instanceTy true
     let environment = IrRecord(("0", IrWord) :: (captured |> List.mapi (fun index (_, ty) -> string (index + 1), ty)))
     let environmentParameter = parameterOf parameterNames.Head environment
-    let valueParameters, bind, named = tools.ValueParameters parameterNames.Tail (List.map tools.ToIrType parameterTys)
+    let valueParameters, bind, named = valueParameters tools names (List.map tools.ToIrType parameterTys) (tools.ToIrType instanceTy)
     let passed =
         match tools.ToIrType instanceTy with
         | IrFunction(_, _, members, _) -> members |> List.map (fun (key, ty) -> key, tools.NewVar (contextMemberParameter key) Param ty)

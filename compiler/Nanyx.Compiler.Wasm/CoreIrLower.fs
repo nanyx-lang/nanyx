@@ -152,8 +152,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | _ -> false
 
     let parameterNames (name: string) =
-        match definitions.[name].Kind with
-        | Lambda(parameters, _, _) -> parameters |> List.map fst
+        match definitions |> Map.tryFind name |> Option.map _.Kind with
+        | Some (Lambda(parameters, _, _)) -> parameters |> List.map fst
         | _ -> []
 
     /// What the type variables and context variables of the definition `name` are where its type is `instanceTy`.
@@ -850,10 +850,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | Some lambdaTy ->
                 let parameterTys, resultTy = this.LiftedParameterTypes target (substitute subst lambdaTy)
                 let inputTy =
-                    match parameterTys with
-                    | [] -> TyPrimitive "unit"
-                    | [ single ] -> single
-                    | several -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
+                    match parameterTys, Unifier.unalias (substitute subst lambdaTy) with
+                    | [], _ -> TyPrimitive "unit"
+                    | [ single ], _ -> single
+                    // Several parameters of a record that is not a tuple take it whole (see `IrType.recordTakenWhole`).
+                    | _, (TyFunc(input, _, _) as fnTy) when (IrType.recordTakenWhole (parameterNames target) (toIrType fnTy)).IsSome -> input
+                    | several, _ -> TyRecord(several |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
                 toIrType (substitute subst (TyFunc(inputTy, resultTy, requiredContexts lambdaTy)))
             | None -> tyOf expr
         let arity = IrType.closureArity (parameterNames target) ty
@@ -1412,6 +1414,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           Coerce = CoreIrLowerMembers.coerce this.MemberTools
           CoerceAll = CoreIrLowerMembers.coerceAll this.MemberTools
           ValueParameters = this.ValueParameters
+          ParameterNames = parameterNames
           LiftedParameterTypes = this.LiftedParameterTypes
           Callee = callee
           BindingsAt = bindingsAt
