@@ -51,6 +51,8 @@ module Seqs =
     let appendFunction = $"{typeName}.append"
     let flatMapFunction = $"{typeName}.flatMap"
     let delayFunction = $"{typeName}.delay"
+    /// What a `yield x` the sequence ends after is: the prelude's sequence of `x` alone, which makes no rest.
+    let lastFunction = "__seqLast"
 
     /// `name`, a definition's, as it is shown: one attached to the type by its alias, `seq.map`.
     let shownName (name: string) =

@@ -354,6 +354,12 @@ module WorkflowDesugaring =
         // The end of a sequence: `seq.empty()`. It carries no contexts, and joins a branch that carries some (see
         // `BranchJoin.joinCarried`).
         let sequenceEnd () = Expression.synthetic (FunctionCall(Seqs.emptyFunction, None, []))
+        // Whether `chain` is a sequence's end and nothing else: a `yield` or a `for` loop it follows is the last thing
+        // the sequence gives, and needs no rest made for it.
+        let isSequenceEnd (chain: Expression) =
+            match chain.Kind with
+            | FunctionCall(name, None, []) -> name = Seqs.emptyFunction
+            | _ -> false
 
         // A workflow bind or return becomes a call to the workflow's members, whose type is not that of the bind as
         // written (a bind's call is the whole rest of the workflow), so that call is a node of its own, with a new id.
@@ -644,17 +650,24 @@ module WorkflowDesugaring =
             let restFunction = madeFor expr (Lambda([], desugarChain rest next, false))
             memberCall expr (Option.get builder) WorkflowSyntax.forMember [ desugarExpr iterable; bodyFunction; restFunction ]
         // A `yield` of `value` in a sequence, `expr`, followed by `rest`: the sequence of `value` and then what the rest
-        // of the block up to `next` gives, which runs only when the sequence is pulled that far.
+        // of the block up to `next` gives, which runs only when the sequence is pulled that far. A `yield` the
+        // sequence ends after has no rest to make.
         //
         //   seq.cons(value, { <rest of the block> })
+        //   __seqLast(value)
         and yieldCall (expr: Expression) (value: Expression) (rest: Statement list) next =
-            let tail = madeFor expr (Lambda([], desugarChain rest next, false))
-            madeFor expr (FunctionCall(Seqs.consFunction, None, [ desugarExpr value; tail ]))
+            match desugarChain rest next with
+            | restOfBlock when isSequenceEnd restOfBlock -> madeFor expr (FunctionCall(Seqs.lastFunction, None, [ desugarExpr value ]))
+            | restOfBlock ->
+                let tail = madeFor expr (Lambda([], restOfBlock, false))
+                madeFor expr (FunctionCall(Seqs.consFunction, None, [ desugarExpr value; tail ]))
         // A `for` loop statement over `iterable` whose body yields, `expr`, in a sequence, followed by `rest`: the
         // sequences the body gives for each element, one after another, then what the rest of the block up to `next`
         // gives. Each is worked out when the sequence is pulled that far.
         //
         //   seq.append(seq.flatMap(__toSeq(items), { item -> <body, then seq.empty()> }), seq.delay({ <rest of the block> }))
+        //
+        // A loop the sequence ends after is the `seq.flatMap` alone.
         //
         // The items are anything `Iterable`, as a plain `for` loop's are: a sequence is walked as it is, and anything
         // else is read through its `Iterable` (see `Loops.walksAsSequence`).
@@ -665,8 +678,11 @@ module WorkflowDesugaring =
                 | _ -> [ Statement.from body (ExprStatement body) ]
             let bodyChain = desugarChain (statements |> List.collect liftStatementBinds) (endWith sequenceEnd)
             let each = madeFor expr (FunctionCall(Seqs.flatMapFunction, None, [ madeFor iterable (FunctionCall(ForSyntax.toSeq, None, [ desugarExpr iterable ])); { loop with Kind = Lambda(parameters, bodyChain, false) } ]))
-            let restOfBlock = madeFor expr (FunctionCall(Seqs.delayFunction, None, [ madeFor expr (Lambda([], desugarChain rest next, false)) ]))
-            madeFor expr (FunctionCall(Seqs.appendFunction, None, [ each; restOfBlock ]))
+            match desugarChain rest next with
+            | restOfBlock when isSequenceEnd restOfBlock -> each
+            | restOfBlock ->
+                let delayed = madeFor expr (FunctionCall(Seqs.delayFunction, None, [ madeFor expr (Lambda([], restOfBlock, false)) ]))
+                madeFor expr (FunctionCall(Seqs.appendFunction, None, [ each; delayed ]))
         // A statement followed by the rest of the chain, as a block made up for them that spans from the statement
         // to the end of the rest. The rest is a made-up `()` with no span when the statement is the last one.
         and chainBlock (statement: Statement) (nextExpr: Expression) (desugared: Statement) =
