@@ -19,7 +19,7 @@ run every program this way, so a leak anywhere fails a test. `run --memory` does
 `MemoryReport.cs` from the checked allocator's counters; the two are `MemoryCheck.Check` and `MemoryCheck.Report`, which
 `RunIn` and `RunScript` take. `build` and `wasm` write the program as a `ProgramFormat`, the binary format unless `--wat`
 asks for text; `WriteProgram` assembles it (see [the binary format](./compilation#the-binary-format)). `run --no-inline` and `build --no-inline` clear
-`WasmOptions.Inline` (see [Inlining](./inlining)); the tour examples are run both ways, and must print the same.
+`WasmOptions.Inline` (see [Inlining](./inlining)); the docs' examples are run both ways, and must print the same.
 
 # Runtime errors
 

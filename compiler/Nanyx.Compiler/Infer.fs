@@ -155,6 +155,10 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
             | FunctionCall(name, spanOpt, _) ->
                 match resolveCallInstances env next expr name (SyntaxTree.nameSpan spanOpt expr) with
                 | Error _ when snd (Solving.solve next.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok next
+                // A call read as a call to another function (see `PipeTargets`), such as `__toSeq(xs)` read as
+                // `__seqItself(xs)` (see `Loops.walksAsSequence`), was checked as that call: the contexts of the
+                // function written, which is not called, are not required of it.
+                | Error _ when next.PipeTargets.ContainsKey expr.Id -> Ok next
                 | resolved -> resolved
                 |> Result.bind (fun next -> resolveReferenceInstances env next expr)
                 |> Result.bind (fun next -> localFunctionArguments env next expr)

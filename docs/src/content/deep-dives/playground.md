@@ -19,7 +19,7 @@ built. What is still planned is on [Playground](../work-in-progress/playground) 
 - `terminal.ts` is the output pane;
 - `share.ts` reads and writes share links.
 
-The tour's examples run with the same modules, from `tour.ts` (see [The tour's examples](#the-tours-examples)).
+The docs' examples run with the same modules, from `tour.ts` (see [The docs' examples](#the-docs-examples)).
 
 The page has the site's header (`Header.astro`, without the docs' sidebar), and under it a toolbar and the editor and
 the output, side by side on a wide window, the editor with 60% of the width, and stacked, the editor above, below 900
@@ -71,11 +71,12 @@ browser's storage, and takes the fragment out of the address, so that a reload k
 opened while the page is open asks before it replaces changed code. A link that doesn't decode opens the default
 example, and says so.
 
-**Examples.** The Examples menu is every runnable example in the [language tour](../tour/variables), grouped by its
-page in the tour's order, and named by the heading it is under. `docs/site/playground-examples.mjs` reads them: a block
-is runnable when it is fenced ` ```nanyx ` with nothing after `nanyx` and has no `-- error` comment, which are the
-blocks [the tests run](./compilation#tour-examples). As those tests do, it adds `import nanyx/text` to each that doesn't
-import it or turn a linter on, after its module declaration or else after its directives. Choosing an example asks
+**Examples.** The Examples menu is every example in the [language tour](../tour/variables) that opens in the
+playground ([below](#the-docs-examples)), grouped by its page in the tour's order, and named by the heading it is
+under. `docs/site/playground-examples.mjs` reads them: a block is runnable when it is fenced ` ```nanyx ` with nothing after `nanyx` and has no `-- error` comment, which are the
+blocks [the tests run](./compilation#docs-examples). As those tests do, it adds `import nanyx/text` to each that doesn't
+import it or turn a linter on, after its module declaration or else after its directives; the links under the examples
+on every page open their code so. Choosing an example asks
 before it replaces code that was changed since it was opened. What a runnable block is (`isRunnable`) and the code it
 runs as (`playgroundCode`) are in `docs/site/playground-code.mjs`, which the tour's pages read in the browser too.
 
@@ -83,17 +84,35 @@ runs as (`playgroundCode`) are in `docs/site/playground-code.mjs`, which the tou
 in headless Chromium with Playwright: it waits for the compiler, runs hello world, types two lines of input and
 Ctrl+D, checks that runs keep the output before them, that a compile error links its code, that Share's link opens the
 code without running it, that a bad link opens hello world, that a reload keeps the code, that a tour link opens its
-example in an isolated page, and runs every example in the menu, checking that none fails; and the tour's examples
-(below). The Compiler workflow's
+example in an isolated page, and runs every example in the menu, checking that none fails; and the docs' examples
+(below), running every example on the pages outside the tour, as its "Open in the playground" link opens it, ending its
+input if it reads any, and checking that none fails. The Compiler workflow's
 `Browser test` job builds the site with the compiler it published and runs it.
 
-# The tour's examples
+# The docs' examples
 
-Each runnable example in the [language tour](../tour/variables) is a small playground where it is
-([#2248](https://github.com/nanyx-lang/nanyx/issues/2248)). `remarkPlaygroundLinks`, in
-`docs/site/playground-examples.mjs`, puts a bar under each block, `<div data-tour-run>`, with an "Open in the playground"
-link, a share link the build writes (`shareFragment`). `src/lib/playground/tour.ts`, which every docs page loads
-(`DocsLayout.astro`), wires each bar on `astro:page-load`, since the tour's pages are swapped in by the client router:
+Each runnable example on a page of the docs, in the [language tour](../tour/variables) and every other section, is a
+small playground where it is ([#2248](https://github.com/nanyx-lang/nanyx/issues/2248),
+[#2434](https://github.com/nanyx-lang/nanyx/issues/2434)). `remarkPlaygroundLinks`, in
+`docs/site/playground-examples.mjs`, puts a bar under each block that opens in the playground (`opensInPlayground`),
+`<div data-tour-run>`, with an "Open in the playground" link, a share link the build writes (`shareFragment`).
+`src/lib/playground/tour.ts`, which every docs page loads (`DocsLayout.astro`), wires each bar on `astro:page-load`,
+since the docs' pages are swapped in by the client router.
+
+A block opens in the playground when it is runnable (`isRunnable`: fenced ` ```nanyx ` with nothing after it and no
+`-- error` comment), is one file, and needs no host but the playground's. `needsAnotherHost` decides that from the
+block's source when the site is built: a block needs another host when it names one with `::host`; when it depends on a
+package from the index, `::dependency nanyx.json 0.2.0`, which the playground can't download; when it imports, or
+depends on, a module only the console host can run, such as `nanyx.fs`'s or `nanyx.console.core/env`; or when it uses,
+outside a comment, a name only the console host's prelude brings in and doesn't declare it itself, such as `args`,
+`exit`, `FileSystem` or `Http` and the members of those contexts. Which names and modules those are is read from the two
+hosts' preludes, `packages/nanyx.console/src/console.prelude.nyx` and `packages/nanyx.playground/src/playground.prelude.nyx`,
+so a host that brings in more changes it. The [error reference](../standard-tools/errors)'s examples get no bar, as
+each shows its section's error, and nor do those in a standard library page's generated reference, which are its doc
+comments' and are checked where they are written. The page test runs every example that has a link under the playground host, so a block that
+`needsAnotherHost` misses fails it.
+
+What the bar does:
 
 - It adds **Run**, which loads the compiler and the runner through `loadPlayground` on the first Run on the page, not
   with the page, saying "Loading the compiler…" until they are ready, and then runs the example with `compileAndRun`
@@ -107,7 +126,7 @@ link, a share link the build writes (`shareFragment`). `src/lib/playground/tour.
   shows once the code has changed, and puts the example back.
 - **"Open in the playground"** opens the code as it is: edited, it builds the share link of the edited code.
 - **An example that only declares things** gets only the link, with `data-no-output`: running it would print nothing,
-  and most of the tour's examples are like this. `runsCode`, in `playground-code.mjs`, decides it from the block's
+  and most of the docs' examples are like this. `runsCode`, in `playground-code.mjs`, decides it from the block's
   source when the site is built: a block runs something when it has an `@entry` or a top-level item that isn't a
   declaration, an item being a line that isn't indented and doesn't start with a closing bracket, a `|` or another
   operator, which go on with the item before. Its declarations are `def`, `type`, `context`, `module`, `import`,
@@ -115,11 +134,11 @@ link, a share link the build writes (`shareFragment`). `src/lib/playground/tour.
   the module starts (see [Compilation](./compilation)), so a block of definitions prints nothing, whatever their
   bodies do. A top-level expression that prints nothing still gets Run.
 - **An example that reads input** (`readsInput`: one that calls `readLine` or `readToEnd`) gets only the link, with
-  `data-reads-input`: a tour page isn't cross-origin isolated, since those headers would put every resource the site
+  `data-reads-input`: a docs page isn't cross-origin isolated, since those headers would put every resource the site
   loads under `require-corp`, so a program on it can't read input.
 
 The output's styles, and the editor's colours, are shared with the playground (`playground-shared.css`); the bar's are
-in `tour-run.css`. The page test checks that a tour page fetches nothing of the compiler until Run, that an example
+in `tour-run.css`. The page test checks that a docs page fetches nothing of the compiler until Run, that an example
 runs where it is, that an edited example runs as edited and Reset gives its code back, that "Open in the playground"
 opens the edited code, and that an example that only declares things, or reads input, gets no Run.
 
@@ -232,7 +251,7 @@ downloads it from the release named by `playgroundRelease` in `docs/site/playgro
 named, and unpacks it into `public/playground/compiler`, so the site serves the compiler at `/playground/compiler/`;
 `compiler.js` fetches its files from beside itself, so it works from there. Moving the playground on to a newer
 release is changing that line, after the release is published: a build that names a release without the asset fails.
-It names the latest release, 0.34.0. A release is due whenever the tour uses something the named release can't compile: the page test's run of every example fails until one is out and named here. When it is `null`, the build unpacks nothing and the page says its
+It names the latest release, 0.35.0. A release is due whenever the tour uses something the named release can't compile: the page test's run of every example fails until one is out and named here. When it is `null`, the build unpacks nothing and the page says its
 compiler isn't on the site. To build the site with a compiler you built
 yourself, set `NANYX_BROWSER_ZIP` to its zip.
 

@@ -101,16 +101,16 @@ and the text and compare what they do (`Features/Binary/WasmBinaryTests.fs`), as
 and validate it, and run the memory-checked examples from both. Every module a test compiles with `transpileWatWith` is
 assembled too.
 
-# Tour examples
+# Docs examples
 
-Every ` ```nanyx ` block in the [language tour](../tour/variables), the [Getting started](../getting-started/basics)
-pages, the [Standard Library](../stdlib/standard-library) pages, the [Custom patterns](../advanced/custom-patterns)
-page and the [JSON cookbook](../cookbook/json-parsing) page is a test case: `RunTourExampleTests.fs` in
-`Nanyx.Compiler.Wasm.Tests` reads their pages, and compiles and runs each block in the test process, as `nanyx run`
-would run it as a script. Packages from the index that a block names, such as `::dependency nanyx.json 0.1.0`, are read
+Every ` ```nanyx ` block on every page of the docs, the [language tour](../tour/variables)'s and every other section's,
+is a test case: `RunDocExampleTests.fs` in `Nanyx.Compiler.Wasm.Tests` reads the pages under `docs/src/content`, and
+compiles and runs each block in the test process, as `nanyx run` would run it as a script. Packages from the index that a block names, such as `::dependency nanyx.json 0.1.0`, are read
 from an index on disk that the tests make (`testStore` in `TestHelpers.fs`), from the `.nyxpkg` files of their releases
 in `Nanyx.Compiler.Wasm.Tests/Packages`, so no example needs the network. A standard-library page's generated reference is left out (see
-[Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)). The words after
+[Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)), and so is the
+[error reference](../standard-tools/errors), whose examples each report their section's error and are checked by
+`ErrorReferenceTests.fs`. The words after
 `nanyx` on a block's opening fence say what kind of example it is:
 
 | Fence | What the test does |
@@ -118,10 +118,11 @@ in `Nanyx.Compiler.Wasm.Tests/Packages`, so no example needs the network. A stan
 | ` ```nanyx ` | The block is a whole program. It must compile with no errors, and run with exit code 0 and nothing on standard error. |
 | ` ```nanyx fragment ` | The block is part of a program: it uses names defined elsewhere, stands for code with `...`, or is one file of several. It is not compiled. |
 | ` ```nanyx skip=#123 ` | The block is a program the compiler gets wrong, until issue #123 is fixed. It is not compiled. When the issue is fixed, remove the tag. |
+| ` ```nanyx unformatted ` | The block is code shown as it was before formatting, on the [Formatter](../standard-tools/formatter) page. It is not compiled. |
 
 A block fenced ` ```nanyx ` must also be formatted, here and on every other docs page: a formatter test checks each one
-that parses and has no `-- error` comment ([Formatter](./formatter#the-repositorys-nanyx)). Outside the tour, ` ```nanyx unformatted `
-marks code shown as it was before formatting, which that test leaves alone.
+that parses and has no `-- error` comment ([Formatter](./formatter#the-repositorys-nanyx)), which leaves
+` ```nanyx unformatted ` blocks alone.
 
 A whole program is checked further by what its comments say:
 
@@ -131,7 +132,7 @@ A whole program is checked further by what its comments say:
 - **Output.** A block that prints something and ends with comment lines prints those lines, without their `--`.
   Comments that give a value, such as `def result = add5(10)  -- 15`, are not checked.
 
-The tour's examples print with the console host's prelude, which every program sees, and use strings without
+The examples print with the console host's prelude, which every program sees, and use strings without
 importing `nanyx/text`, so the test adds that import to every block that doesn't have it, after its module's doc comment
 and declaration if it has them, but for a block that turns a linter on with `::linter`, which would report the import
 unused. Anything else a block uses, such as `nanyx/math`, it imports itself.

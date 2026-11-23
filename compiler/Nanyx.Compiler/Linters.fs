@@ -1097,14 +1097,14 @@ module Linters =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
               UnannotatedExports.rule; UnusedResults.rule; UselessExpressions.rule; ShadowedPreludeNames.rule; Semicolons.rule
-              UnconstructibleTypes.rule; UnusedContexts.rule; Allows.rule ]
+              UnconstructibleTypes.rule; UnusedContexts.rule; RepeatedPulls.rule; Allows.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ UnannotatedExports.lint model
                 @ UnusedResults.lint model @ UselessExpressions.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model
-                @ UnconstructibleTypes.lint model @ UnusedContexts.lint model }
+                @ UnconstructibleTypes.lint model @ UnusedContexts.lint model @ RepeatedPulls.lint model }
 
     /// The linters the compiler has, which a manifest's `linters` or a script's `::linter` directives can turn on.
     let all = [ official ]

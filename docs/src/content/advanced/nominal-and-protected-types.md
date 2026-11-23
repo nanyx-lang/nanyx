@@ -30,14 +30,14 @@ export type Email = protected string
 
 Declaring `Email` also declares a constructor of the same name. Applying `Email` to a value of the underlying shape wraps it, and matching on `Email(e)` unwraps it again:
 
-```nanyx
+```nanyx fragment
 def wrapped = Email("ada@example.com") -- Email
 def Email(raw) = wrapped -- raw: string
 ```
 
 For record shapes the constructor takes the record's fields by name:
 
-```nanyx
+```nanyx fragment
 export type User = protected (name: string, email: Email)
 
 def user = User(name = "Ada", email = wrapped)
@@ -80,7 +80,7 @@ Nominal types are not assignable to each other, even if their structures are ide
 
 So, given the definition of `Email` above, `Email` is assignable to `string` but `string` is not assignable to `Email`. In practice this means an `Email` can be used anywhere a `string` is expected, including with every attached definition on `string`:
 
-```nanyx
+```nanyx fragment
 def email: Email = ...
 
 email.length                        -- 15
@@ -93,7 +93,7 @@ Note that these all produce plain `string`s (or `int`s, `bool`s and so on), not 
 
 The same applies to record shapes. A protected record is still a record, so its fields can be read with ordinary dot access from any module, even though only the home module can construct one:
 
-```nanyx
+```nanyx fragment
 def user: User = ...
 
 user.name          -- "Ada"
@@ -161,7 +161,7 @@ export def UserId.new: int -> #some(UserId) | #invalidUserId = { value ->
 
 Outside the `ids` module, callers can pass `UserId` values around and store them in records, but they cannot construct one directly, pattern-match on `UserId(n)` to get at the integer, or treat the value as an `int`:
 
-```nanyx
+```nanyx fragment
 def a: UserId = ...
 def b: UserId = ...
 
@@ -175,7 +175,7 @@ A private record's fields are its representation too, so outside its module they
 or spread. Given `type Secret = private (key: string)`, each of these is error NYX0212 there, and allowed in the
 module:
 
-```nanyx
+```nanyx fragment
 s.key              -- error: the private type 'Secret' has no field 'key' outside the module that defines it
 def (key = k) = s  -- error: the private type 'Secret' can only be taken apart in the module that defines it
 (...s)             -- error: the same
@@ -192,6 +192,8 @@ Because private types hide their representation, the home module is also the onl
 ```nanyx
 module ids
 
+export type UserId = private int
+
 -- expose a read-only view of the underlying int
 export def UserId.value: UserId -> int = { UserId(n) -> n }
 ```
@@ -202,7 +204,7 @@ The accessor is a deliberate choice about which operations make sense for the ty
 
 No `==`, order or hash is derived from a private type's representation, in its home module or out of it, so `a == b`, sorting a list of them and making a set of them are errors, and so is comparing a record or a list that holds one. A private type has `==`, `compare` and `hash` only when its module attaches them. It is then compared, ordered and hashed through them everywhere, and a structure that holds it is compared and hashed through them too (see [Contexts](./contexts#when-synthesis-applies)):
 
-```nanyx
+```nanyx fragment
 export def UserId.`==`: UserId, UserId -> bool = { a, b ->
   a.value == b.value
 }

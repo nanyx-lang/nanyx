@@ -94,12 +94,12 @@ def items = seq({
   println("Yielding 1")
   seq.cons(1, {
     println("Yielding 2")
-    seq.cons(2, { seq.empty() })
+    __seqLast(2)
   })
 })
 ```
 
-`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.flatMap` over the loop's sequence, which must be a `seq`, a range included (walk a list with `\list.toSeq`).
+`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `yield` the block ends with has no rest, and is `__seqLast(x)`, the sequence of `x` alone. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.flatMap` over the loop's collection. As with a plain `for` loop, that can be anything `Iterable`: a sequence or a range, which is walked as it is, or a list, an array, a set, a map or a type of your own that attaches `toSeq`, which is read through its sequence. A loop in `list.build { ... }` walks a list as it is written, `for xs | x -> yield x`.
 
 ```nanyx
 def evens = seq {
@@ -220,7 +220,7 @@ A block that uses no keyword is still the call of its builder: `proc { #some(1) 
 
 A workflow can provide a `try` keyword to short-circuit on errors. This is useful for chaining [option-like](option-like-types) steps.
 
-```nanyx
+```nanyx fragment
 def getCustomer: int -> #some(Customer) | #customerNotFound = ...
 def getLastOrder: Customer -> #some(Order) | #orderNotFound = ...
 
@@ -237,7 +237,7 @@ def lastOrderTotal: () -> #some(Money) | #customerNotFound | #orderNotFound = pr
 
 A workflow can also provide a `return` keyword that exits the block early, and a `defer` keyword, of kind `#bindF`, that runs the expression after it at the end of the block.
 
-```nanyx
+```nanyx fragment
 def main = {
   jobs {
     defer! println("This runs at the end of the block")
@@ -254,7 +254,7 @@ def main = {
 
 A keyword means the same wherever it is in the block. A `try` or `return` in a branch of an `if`, or in an arm of a `match`, has the rest of the block as its continuation, just as one outside the branch does. A failed `try` and a `return` end the whole block, not just the branch:
 
-```nanyx
+```nanyx fragment
 def check: int -> #some(int) | #negative | #odd = { n ->
   proc {
     if n < 0 then try #negative
@@ -324,7 +324,7 @@ A keyword whose continuation cannot be the rest of the block is an error:
 
 Workflows are a natural fit for DSLs. A query builder can turn a block into a pipeline of filtering, joining, and projection steps.
 
-```nanyx
+```nanyx fragment
 def result = query {
   def customer = from customers
   def order = from orders

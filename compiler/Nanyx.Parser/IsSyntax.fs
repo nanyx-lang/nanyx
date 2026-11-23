@@ -108,3 +108,26 @@ module IsSyntax =
         match kind with
         | IfExpr(condition, thenBranch, elseBranch) -> asMatch condition thenBranch elseBranch
         | _ -> None
+
+    /// `while condition -> body` when the tests along `condition`'s `and` chain bind names, which are in scope in `body`
+    /// each time round: the loop whose condition is the `if` of `condition` that runs the body (see `asMatch`), and
+    /// whose own body is `()`:
+    ///
+    ///   while (if condition then { body; true } else false) -> ()
+    ///
+    /// The block, and the `if`'s match, are made at the condition's node, both a `bool` as it is: the parser declares
+    /// the names there, and the checker's type for it is the backend's for the match. `None` when the chain binds no
+    /// names. The `else` is made at the body, so the `if`'s match is not itself a test (see `Test`).
+    let whileAsIf (condition: Expression) (body: Expression) : (Expression * Expression) option =
+        let ran =
+            { Expression.from body (Block [ Statement.from body (ExprStatement body); Statement.from body (ExprStatement(Expression.from body (LiteralExpr(BoolLit true)))) ]) with
+                Id = condition.Id }
+        asMatch condition ran (Expression.from body (LiteralExpr(BoolLit false)))
+        |> Option.map (fun running -> { condition with Kind = running }, Expression.from body UnitExpr)
+
+    /// A `while` loop whose condition binds names, as the loop `whileAsIf` makes of it.
+    let (|BindingWhile|_|) (kind: ExpressionKind) =
+        match kind with
+        | WhileSyntax.Call(condition, body) ->
+            whileAsIf condition body |> Option.map (fun (condition, body) -> FunctionCall(WhileSyntax.builtIn, None, [ condition; body ]))
+        | _ -> None

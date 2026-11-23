@@ -83,7 +83,7 @@
     <Compile Include="Features\Embedding\EmbedderOptionsTests.fs" />
     <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
-    <Compile Include="Features\Docs\RunTourExampleTests.fs" />
+    <Compile Include="Features\Docs\RunDocExampleTests.fs" />
     <Compile Include="Features\Docs\StandardLibraryReferenceTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />
     <Compile Include="Features\Errors\RunErrorTests.fs" />
@@ -119,12 +119,14 @@
     <Compile Include="Features\Regex\RunRegexTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Lists\RunListKeyTests.fs" />
+    <Compile Include="Features\Lists\ListFromSeqAllocationTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />
     <Compile Include="Features\Maps\RunMapEqualityTests.fs" />
     <Compile Include="Features\Maps\RunMapMatchTests.fs" />
     <Compile Include="Features\Loops\RunLoopTests.fs" />
     <Compile Include="Features\Loops\RunSeqLoopTests.fs" />
     <Compile Include="Features\Loops\RunIterableLoopTests.fs" />
+    <Compile Include="Features\Loops\RunWhileBindingTests.fs" />
     <Compile Include="Features\Matching\RunMatchingTests.fs" />
     <Compile Include="Features\Matching\RunAndPatternTests.fs" />
     <Compile Include="Features\Matching\RunCustomPatternTests.fs" />
@@ -154,6 +156,7 @@
     <Compile Include="Features\Memory\ClosureEntryTests.fs" />
     <Compile Include="Features\Memory\MatchBorrowingTests.fs" />
     <Compile Include="Features\Memory\HeapReuseTests.fs" />
+    <Compile Include="Features\Memory\SequenceStepTests.fs" />
     <Compile Include="Features\Memory\OutOfMemoryTests.fs" />
     <Compile Include="Features\Binary\WasmBinaryTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
@@ -247,6 +250,7 @@
     <Compile Include="Features\Workflows\RunWorkflowLoopTests.fs" />
     <Compile Include="Features\Workflows\RunKeywordKindTests.fs" />
     <Compile Include="Features\Workflows\RunSequenceTests.fs" />
+    <Compile Include="Features\Workflows\RunSequenceForTests.fs" />
     <Compile Include="E2E\E2ETests.fs" />
   </ItemGroup>
 

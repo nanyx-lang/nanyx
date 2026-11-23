@@ -27,12 +27,12 @@ Where definitions would normally be ambigous and result in a compiler error (suc
 This allows for disambiguation when needed while keeping the function name consistent with the domain concept. For example, instead of overloading a global `map` function, you can define `MyType.map` as an attached function on your type. As a convenience, the type name does not need to be specified when piping an instance of that type to the function in question:
 
 ```nanyx
-type MyType = ...
+type MyType = (label: string)
 
 -- Create a function that is attached to the type MyType
-def MyType.name = { ... }
+def MyType.name = { t -> t.label }
 
-def o: MyType = ...
+def o = MyType(label = "o")
 
 -- Use the attached function in a qualified way
 def result1 = MyType.name(o)

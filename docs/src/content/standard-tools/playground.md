@@ -41,13 +41,19 @@ empties the pane.
 # Examples
 
 The **Examples** menu holds every example in the [language tour](../tour/variables) that is a whole program, grouped by
-its page. Choosing one replaces the editor's code, after asking if you have changed it. Each of those examples in the
-tour that prints something can also be run where it is, with **Run** under it: click its code to edit it, and **Reset**
-puts it back. The tour loads the compiler on the first Run on a page. **Open in the playground** under it opens it here,
-as edited. An example that only defines things, with no code at its top level that runs, has only that link, as running
-it would print nothing; so has an example that reads input, since a tour page can't give a program input.
+its page. Choosing one replaces the editor's code, after asking if you have changed it.
 
-The tour's examples use strings without importing `nanyx/text`, so the playground adds `import nanyx/text` to them, as
+Every example on the docs' pages that is a whole program, the tour's and the others', has **Open in the playground**
+under it, which opens it here, as edited; one that prints something can also be run where it is, with **Run**: click
+its code to edit it, and **Reset** puts it back. A page loads the compiler on the first Run on it. An example that only
+defines things, with no code at its top level that runs, has only the link, as running it would print nothing; so has an
+example that reads input, since a docs page can't give a program input. An example that needs another host than the
+playground's has neither: one that names a host with `::host`, or uses what only the
+[console host](../advanced/hosts) gives a program, such as its arguments (`args`), files or HTTP. Nor has one that
+depends on a package from the index, such as `nanyx.json`, which the playground can't download. The
+[error reference](./errors)'s examples have neither either: each shows an error.
+
+The docs' examples use strings without importing `nanyx/text`, so the playground adds `import nanyx/text` to them, as
 the tests that run them do.
 
 # Sharing

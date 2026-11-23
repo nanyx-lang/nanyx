@@ -35,8 +35,9 @@ A cell is not a value of its own. `def y = x` copies what `x` holds into `y`, wh
 A cell can be declared only inside a `memory { ... }` block, where `Memory` is:
 
 ```nanyx
-def main = {
+def broken = {
   mut x = 0 -- Error NYX0221: `mut` needs the context 'Memory'
+  x
 }
 
 def main = {

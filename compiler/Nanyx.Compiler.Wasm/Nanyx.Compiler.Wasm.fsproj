@@ -41,6 +41,7 @@
     <Compile Include="CoreIrLowerInstances.fs" />
     <Compile Include="CoreIrLowerBoxes.fs" />
     <Compile Include="CoreIrLowerMembers.fs" />
+    <Compile Include="CoreIrLowerInterpolation.fs" />
     <Compile Include="CoreIrLowerMatch.fs" />
     <Compile Include="CoreIrLowerLocals.fs" />
     <Compile Include="CoreIrLowerLifted.fs" />
@@ -63,12 +64,14 @@
     <Compile Include="CoreIrReuse.fs" />
     <Compile Include="CoreIrReach.fs" />
     <Compile Include="WatPieces.fs" />
+    <Compile Include="CoreIrEmitIntrinsics.fs" />
     <Compile Include="CoreIrEmitLocals.fs" />
     <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CoreIrCachedValues.fs" />
     <Compile Include="ComponentValues.fs" />
     <Compile Include="ComponentExports.fs" />
     <Compile Include="ComponentImports.fs" />
+    <Compile Include="CodeGenContexts.fs" />
     <Compile Include="CodeGen.fs" />
     <Compile Include="WatSyntax.fs" />
     <Compile Include="WasmBinary.fs" />
