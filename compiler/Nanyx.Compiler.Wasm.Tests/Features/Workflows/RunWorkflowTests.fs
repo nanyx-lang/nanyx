@@ -380,3 +380,34 @@ println(unbox(r))
     let mainPath = Path.Combine(directory.Path, "main.nyx")
     File.WriteAllText(mainPath, main.ReplaceLineEndings "\n")
     runFile mainPath |> assertRan "a1\n"
+
+[<Fact>]
+let ``Run - a try in each argument of a call binds it, on one line or one per line`` () =
+    // `try` in an argument ends at its `,` or line break. A block written on one line, `proc { return ... }`, has the
+    // rest of the block after its keywords as one on several lines does (#2411).
+    let source =
+        normalized """type P = (a: int, b: int)
+
+def num = { x: int -> if x > 0 then #some(x) else #none }
+
+def oneLine = { x: int, y: int -> proc { return P(a = try num(x), b = try num(y)) } }
+
+def onePerLine = { x: int, y: int ->
+  proc {
+    return P(
+      a = try num(x)
+      b = try num(y)
+    )
+  }
+}
+
+def positional = { x: int -> proc { return list.length([try num(x), try num(x + 1)]) } }
+
+@entry
+def main = {
+  println("{oneLine(1, 2)} {oneLine(1, -2)} {oneLine(-1, 2)}")
+  println("{onePerLine(1, 2)} {onePerLine(-1, 2)}")
+  println("{positional(1)} {positional(-1)}")
+}
+"""
+    runSource source |> assertRan "#some((a = 1, b = 2)) #none #none\n#some((a = 1, b = 2)) #none\n#some(2) #none\n"

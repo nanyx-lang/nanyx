@@ -429,7 +429,7 @@ allocation `reusing` a token.
   reference up, and says whether the count was 1 (an immortal object's is 0, so never). Taking the reference over is
   what makes the answer mean something: a caller that uses the value afterwards keeps a reference of its own, which
   counting adds before the check, inlined or not, and a function that checks a parameter owns it. `MList.toList`
-  checks its box this way, and hands over the cells the `MList` built when it holds the only reference, or copies them.
+  checks its record of references this way, and hands over the cells the `MList` built when it holds the only reference, or copies them.
   `__nanyx_list_set_tail` changes a cell's tail in place, giving up the old one and taking the new one over: what
   builds a list front to back, in cells nothing else sees yet (`MList.add`). `__nanyx_list_set_head` changes a
   cell's element the same way, which is how `MList.set` changes an element of its own cells without copying them.
@@ -507,7 +507,9 @@ left as it is, which also ends a walk around a cycle. Each type that can hold a 
 list of them, promotes nothing. What a function value or a boxed value holds can't be followed, so promoting one merges
 every region inside the target onto it (`__nanyx_region_merge`). A cell no lambda captures is a WebAssembly local, which
 lives no longer than the block it is in, so `:=` on one promotes nothing. The cells of a list an `MList` changes aren't
-on a region, so a value stored into one is promoted onto the outermost region. Since a box made in a
+on a region. A new cell that `MList.add` makes the last one's tail is stored into the `MList`'s reference to its last
+cell too, which promotes it onto the `MList`'s region, so `__nanyx_list_set_tail` has no barrier of its own; a value
+`MList.set` stores into a cell is promoted onto the outermost region. Since a box made in a
 block can only stay reachable after the block ends through its result or a store into an outer block's box, both of
 which move it out, nothing the program can still reach refers to what is left on a block's region when it ends. This
 holds whatever the type checker allows, so a hole in the escape check

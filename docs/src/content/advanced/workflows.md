@@ -66,7 +66,7 @@ Three things about the types are worth knowing when writing a builder:
 - **A continuation takes a context variable.** The rest of the block calls the context's members, so the continuation requires the context. A member that takes a continuation writes its type as `[c] ... -> ...` with a context variable, as `log`'s `[c] () -> ()` does, and so does the block's type, so that the block may also call what requires other contexts, such as `println`.
 - **Members are generic at each call.** A member's own type variables are instantiated afresh at each call, so one block can bind values of different types: `try` in `proc` binds an `int` in one statement and a `string` in the next.
 
-Applying a keyword to a value without parentheses, as in `log! "hi"` or `try f()`, is sugar reserved for workflow keywords; ordinary functions are always called with parentheses. The language's own keywords, `try`, `yield` and `return`, are written without the `!`.
+Applying a keyword to a value without parentheses, as in `log! "hi"` or `try f()`, is sugar reserved for workflow keywords; ordinary functions are always called with parentheses. The language's own keywords, `try`, `yield` and `return`, are written without the `!`. A keyword applied to a value takes everything after it in its statement, so `try a + b` is `try (a + b)`, but one that is an argument, a field or an element ends at its `,`, or at the end of its line when they are written one per line: `P(a = try num(x), b = try num(y))` binds both.
 
 A builder can take parameters before its block, and can require contexts of its own. `retrying(3) { ... }` is `retrying(3, { ... })`, and a builder whose type is `[Clock, c] ([Retry, c] () -> a) -> a` needs a `Clock` where it is called.
 

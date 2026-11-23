@@ -1,7 +1,7 @@
 --| Mutable lists: lists that grow at the end, changed in place.
 
   An `MList(a)` is a list that [`MList.add`] grows at the end, in constant time, and whose
-  elements [`MList.set`] changes in place. It holds its elements in an [`MRef`](mref), so it
+  elements [`MList.set`] changes in place. It holds its cells in [`MRef`](mref)s, so it
   belongs to the `memory` block it was made in: every operation requires that block's `Memory`,
   and the list can't leave the block, so give back [`MList.toList`] of it, which takes no time
   when the `MList` isn't used afterwards. [`MList.at`] and [`MList.set`] walk to the element, as
@@ -14,14 +14,19 @@ module mlist
 
 import nanyx/mref
 
--- The elements in order, the last of their cells, and how many there are. `add` changes the last
--- cell's tail to a new cell, and `set` changes a cell's element: the cells are the list's own until `toList` hands them over, so
--- nothing else sees them change.
-export type MList(a) = [Memory] private MRef(first: list(a), last: list(a), count: int)
+-- The first of the list's cells, the last of them, and how many there are, each in a reference of its
+-- own, so that `add` changes them in place and makes nothing but the new cell. `add` changes the last
+-- cell's tail to a new cell, and `set` changes a cell's element: the cells are the list's own until
+-- `toList` hands them over, so nothing else sees them change.
+export type MList(a) = [Memory] private (
+  first: MRef(list(a))
+  last: MRef(list(a))
+  count: MRef(int)
+)
 
 --| A new list with nothing in it.
 export def MList.empty: [Memory] () -> MList(a) = {
-  MList(MRef.new(first = [], last = [], count = 0))
+  MList(first = MRef.new([]), last = MRef.new([]), count = MRef.new(0))
 }
 
 --| A new list holding `xs`, in order.
@@ -52,24 +57,26 @@ export def MList.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MList(a) = { bl
 
 --| Adds `value` at the end of `items`.
 export def MList.add: [Memory] MList(a), a -> () = { MList(state), value ->
-  def held = MRef.get(state)
   def cell = [value]
 
-  match held.last
-    | [] -> MRef.set(state, (first = cell, last = cell, count = 1))
-    | last ->
-      __nanyx_list_set_tail(last, cell)
-      MRef.set(state, (first = held.first, last = cell, count = held.count + 1))
+  match MRef.get(state.last)
+    | [] -> MRef.set(state.first, cell)
+    | last -> __nanyx_list_set_tail(last, cell)
+
+  MRef.set(state.last, cell)
+  MRef.set(state.count, MRef.get(state.count) + 1)
 }
 
 --| Adds `value` at the end of `items`, as [`MList.add`] does: `items += 5`.
-export def MList.`+=`: [Memory] MList(a), a -> () = MList.add
+export def MList.`+=`: [Memory] MList(a), a -> () = { items, value ->
+  MList.add(items, value)
+}
 
 --| The element of `items` at `index`, counting from 0, or `#notFound` when `index` is negative or
   past the end. It walks to the element, in time proportional to `index`: use an `MArray` to index
   often.
 export def MList.at: [Memory] MList(a), int -> #some(a) | #notFound = { MList(state), index ->
-  list.at(MRef.get(state).first, index)
+  list.at(MRef.get(state.first), index)
 }
 
 --| Changes the element of `items` at `index`, counting from 0, to `value`: `#ok`, or `#outOfRange`
@@ -77,10 +84,8 @@ export def MList.at: [Memory] MList(a), int -> #some(a) | #notFound = { MList(st
 export def MList.set
   : [Memory] MList(a), int, a -> #ok | #outOfRange
   = { MList(state), index, value ->
-    def held = MRef.get(state)
-
-    if index >= 0 and index < held.count then
-      setHeadAt(held.first, index, value)
+    if index >= 0 and index < MRef.get(state.count) then
+      setHeadAt(MRef.get(state.first), index, value)
       #ok
     else #outOfRange
   }
@@ -97,7 +102,7 @@ def setHeadAt: list(a), int, a -> () = { cells, index, value ->
 
 --| How many elements `items` holds.
 export def MList.length: [Memory] MList(a) -> int = { MList(state) ->
-  MRef.get(state).count
+  MRef.get(state.count)
 }
 
 --| The elements of `items` now, in order, as a sequence: adding to `items` later doesn't change
@@ -110,7 +115,7 @@ export def MList.toSeq: [Memory] MList(a) -> seq(a) = { items ->
   time: the list is the cells `items` built. Otherwise it copies them, so that adding to `items`
   later leaves the list as it is.
 export def MList.toList: [Memory] MList(a) -> list(a) = { MList(state) ->
-  def first = MRef.get(state).first
+  def first = MRef.get(state.first)
   if __nanyx_is_exclusive(state) then first else list.map(first, { x -> x })
 }
 

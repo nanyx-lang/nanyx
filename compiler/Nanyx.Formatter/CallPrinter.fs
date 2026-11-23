@@ -14,6 +14,8 @@ type CallPrinter(indentSize: int, sourceText: SourceText, placement: CommentPlac
     let nest doc = Doc.nest indentSize doc
     let commaJoin docs = Doc.join (text ", ") docs
     let hasCommentsIn start finish = placement.HasCommentsIn(start, finish)
+    // An item between commas or on a line of its own, the last in its brackets if `isLast`.
+    let item isLast (e: Expression) = expression (isLast || Position.endsWithItsItem e) e
     let rec listDoc (span: SourceSpan) (segments: Choice<Expression list, Expression> list) : Doc =
         let items =
             segments
@@ -21,8 +23,8 @@ type CallPrinter(indentSize: int, sourceText: SourceText, placement: CommentPlac
                 | Choice1Of2 elements -> elements |> List.map (fun element -> false, element)
                 | Choice2Of2 spread -> [ true, spread ])
         let count = items.Length
-        let itemDoc index (spread, item: Expression) =
-            cat [ (if spread then text "..." else Doc.empty); expression (index = count - 1) item ]
+        let itemDoc index (spread, element: Expression) =
+            cat [ (if spread then text "..." else Doc.empty); item (index = count - 1) element ]
         if sourceText.Valid span && hasCommentsIn span.Start span.End then
             let children =
                 items
@@ -35,7 +37,7 @@ type CallPrinter(indentSize: int, sourceText: SourceText, placement: CommentPlac
     and mapDoc (span: SourceSpan) (entries: (Expression * Expression) list) : Doc =
         let count = entries.Length
         let entryDoc index (key: Expression, value: Expression) =
-            cat [ expression false key; text " => "; expression (index = count - 1) value ]
+            cat [ item false key; text " => "; item (index = count - 1) value ]
         if sourceText.Valid span && hasCommentsIn span.Start span.End then
             let children =
                 entries
@@ -99,9 +101,9 @@ type CallPrinter(indentSize: int, sourceText: SourceText, placement: CommentPlac
         let fieldDoc index field =
             let isLast = index = count - 1
             match field with
-            | NamedField(n, value) -> cat [ text (Names.written n); text " = "; expression isLast value ]
-            | PositionalField value when spread -> cat [ text "..."; expression isLast value ]
-            | PositionalField value -> expression isLast value
+            | NamedField(n, value) -> cat [ text (Names.written n); text " = "; item isLast value ]
+            | PositionalField value when spread -> cat [ text "..."; item isLast value ]
+            | PositionalField value -> item isLast value
         let valueOf field =
             match field with
             | NamedField(_, value)

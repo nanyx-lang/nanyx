@@ -32,9 +32,9 @@ export def parse: string -> #some(SemanticVersion) | #invalidVersionNumber = { v
   match numbers \split(on = ".")
     | [major, minor, patch] -> proc {
       return SemanticVersion(
-        major = (try parseNumber(major))
-        minor = (try parseNumber(minor))
-        patch = (try parseNumber(patch))
+        major = try parseNumber(major)
+        minor = try parseNumber(minor)
+        patch = try parseNumber(patch)
         tag = tag
         buildMetadata = buildMetadata
       )
