@@ -24,7 +24,7 @@ def squares = memory {
 Mutable lists: lists that grow at the end, changed in place.
 
 An `MList(a)` is a list that [`MList.add`](#mlistadd) grows at the end, in constant time, and whose
-elements [`MList.set`](#mlistset) changes in place. It holds its elements in an [`MRef`](mref), so it
+elements [`MList.set`](#mlistset) changes in place. It holds its cells in [`MRef`](mref)s, so it
 belongs to the `memory` block it was made in: every operation requires that block's `Memory`,
 and the list can't leave the block, so give back [`MList.toList`](#mlisttolist) of it, which takes no time
 when the `MList` isn't used afterwards. [`MList.at`](#mlistat) and [`MList.set`](#mlistset) walk to the element, as
@@ -37,7 +37,7 @@ Each function is attached to `MList`, so with `import nanyx/mlist` it is called 
 ## `MList`
 
 ```nanyx fragment
-type MList(a) = [Memory] private MRef(first: list(a), last: list(a), count: int)
+type MList(a) = [Memory] private (first: MRef(list(a)), last: MRef(list(a)), count: MRef(int))
 ```
 
 ## `MList.empty`

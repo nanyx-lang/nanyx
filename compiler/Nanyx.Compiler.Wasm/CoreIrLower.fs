@@ -474,8 +474,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
             // `s.length` is one): the runtime helper of the same name. A mutable array is a box on a region, and is
-            // lowered by `CoreIrRegions.mutableArray`. The cells of a list an `MList` changes aren't on a region, so what
-            // they are given goes onto the outermost one.
+            // lowered by `CoreIrRegions.mutableArray`. The cells of a list an `MList` changes aren't on a region, so the
+            // element `__nanyx_list_set_head` gives one goes onto the outermost one. `__nanyx_list_set_tail` needs no
+            // barrier: `MList.add` stores the new cell into its reference to the last cell too, which promotes it.
             let ty = tyOf expr
             let stored = newLocal "__stored"
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
