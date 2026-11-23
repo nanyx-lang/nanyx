@@ -76,28 +76,28 @@ def words: int -> int = { n ->
 """
 
 [<Fact>]
-let ``MArray - init and create make one block`` () =
+let ``MArray - init and create make one block for the array`` () =
     use program = instantiateWasm program []
     let liveBefore = program.LiveBlocks
-    // The mutable array, and the region of the `memory` block it is made in.
+    // The array, the box that puts it on a region, and the region of the `memory` block it is made in.
     let initAllocations, length = allocationsOf program "made" 1000
     Assert.Equal(1000, length)
-    Assert.Equal(2, initAllocations)
+    Assert.Equal(3, initAllocations)
     let createAllocations, length = allocationsOf program "created" 1000
     Assert.Equal(1000, length)
-    Assert.Equal(2, createAllocations)
+    Assert.Equal(3, createAllocations)
     Assert.Equal(liveBefore, program.LiveBlocks)
 
 [<Fact>]
-let ``MArray - fromArray and toArray each make one block`` () =
+let ``MArray - fromArray and toArray each make one block for the array`` () =
     use program = instantiateWasm program []
     let liveBefore = program.LiveBlocks
     let sourceAllocations, _ = allocationsOf program "sourced" 1000
     let copiedAllocations, result = allocationsOf program "copied" 1000
     Assert.Equal(7 + 0 + 1000, result)
-    // The source array, then a block for the mutable array, one for the array copied back, and the region of the
-    // `memory` block.
-    Assert.Equal(3, copiedAllocations - sourceAllocations)
+    // The source array, then a block for the mutable array's array and one for its box, one for the array copied back,
+    // and the region of the `memory` block.
+    Assert.Equal(4, copiedAllocations - sourceAllocations)
     Assert.Equal(liveBefore, program.LiveBlocks)
 
 [<Fact>]
