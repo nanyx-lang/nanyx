@@ -137,6 +137,10 @@ let internal inferCall
         | ForSyntax.Call(iterables, lambdaExpr, lambdaArgs, lambdaBody) ->
             Loops.inferFor inferExpr inferLambdaWithExpected env state expr iterables lambdaExpr lambdaArgs lambdaBody
         | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall expr.Span "`for` takes an iterable and a loop body" ]
+    elif name = ForSyntax.toSeq && (match args with [ iterable ] -> Loops.walksAsSequence inferExpr env state iterable | _ -> false) then
+        // A sequence a `for` loop in a sequence's block walks is passed on as it is (see `Loops.walksAsSequence`).
+        inferExpr env state { expr with Kind = FunctionCall(ForSyntax.sequenceItself, spanOpt, args) }
+        |> Result.map (fun (typed, next) -> typed, { next with PipeTargets = next.PipeTargets |> Map.add expr.Id ForSyntax.sequenceItself })
     elif name = WhileSyntax.builtIn then
         match expr.Kind with
         | WhileSyntax.Call(condition, body) -> Loops.inferWhile inferExpr env state expr condition body

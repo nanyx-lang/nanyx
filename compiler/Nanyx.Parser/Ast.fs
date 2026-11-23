@@ -450,8 +450,12 @@ module ForSyntax =
     let builtIn = "__for"
 
     /// What an iterable that is not a list, a sequence, a map or a set is read as: the prelude's function that gives its
-    /// sequence through its `Iterable`.
+    /// sequence through its `Iterable`. A `for` loop in a sequence's block walks its iterable written as a call to it.
     let toSeq = "__toSeq"
+
+    /// What a sequence a `for` loop in a sequence's block walks, which is written `__toSeq(xs)`, is read as instead: the
+    /// prelude's function that gives the sequence as it is, its steps' contexts and all.
+    let sequenceItself = "__seqItself"
 
     /// The loop lambda's parameter for an element of the `position`th iterable (counted from 1). Like a shorthand
     /// lambda's parameter, no code can write it.
