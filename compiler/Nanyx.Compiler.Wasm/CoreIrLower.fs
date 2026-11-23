@@ -675,6 +675,29 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Atoms scope [ left; right ] (fun atoms ->
                 let order = Expr.make (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
                 bindTemp order (fun result -> k (Expr.make (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
+        | ("and" | "or"), _, _ ->
+            // `a and b` evaluates `b` only when `a` is true, and `a or b` only when `a` is false: an `if`. A `b` of a
+            // name or a literal, or an operator on those, that is one instruction that cannot trap or call anything, is
+            // evaluated anyway, with `i32.and` or `i32.or`, which costs less than a branch. Lowering it to see is done
+            // only for those, which lower to nothing but what they give.
+            let ty = tyOf expr
+            let isPlain (operand: Expression) =
+                match operand.Kind with
+                | LiteralExpr _
+                | IdentifierExpr _ -> true
+                | _ -> false
+            let isSmall =
+                match right.Kind with
+                | BinaryOp(_, _, rightLeft, rightRight) -> isPlain rightLeft && isPlain rightRight
+                | _ -> isPlain right
+            if isSmall && Expr.isSafeInstruction (this.Branch scope right ty) then
+                this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(Binary op, atoms)) ty))
+            else
+                this.Atoms scope [ left ] (fun atoms ->
+                    let decided = Expr.make (Atom(ABool(op = "or"))) ty
+                    let right = this.Branch scope right ty
+                    let ifTrue, ifFalse = if op = "and" then right, decided else decided, right
+                    k (Expr.make (If(atoms.Head, ifTrue, ifFalse)) ty))
         | _ when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
             // An instruction on the floats' values.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).

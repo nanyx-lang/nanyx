@@ -139,6 +139,19 @@ An operator that groups to the left reads `a - b - c` as `(a - b) - c`, and one 
 
 Boolean operations are the keywords `and`, `or` and `not`. `&&` and `||` are not operators, and neither is a prefix `!`: the compiler tells you to write the keyword instead. `<<` and `>>` are composition only; bitwise operations on integers are named functions. Likewise, testing a value against a pattern uses the keyword `is`, as in `x is #some(v)`. That is a `bool` expression usable anywhere, which binds like an operator between `==` and `and` in the table above, and the names its pattern binds are in scope for the rest of an `and` chain after it (see [Tests anywhere](../tour/pattern-matching#tests-anywhere)).
 
+`and` and `or` short-circuit: `a and b` evaluates `b` only when `a` is `true`, and `a or b` evaluates `b` only when `a` is `false`. So a test on the left guards what is on the right: here `10 / x` is never evaluated with `x` zero.
+
+```nanyx
+def safe: int -> bool = { x ->
+  x != 0 and 10 / x > 1
+}
+
+@entry
+def main = {
+  println(safe(0))
+}
+```
+
 The characters `|`, `&`, `?`, `#`, `@`, `$`, `:` and `\` are not operator characters; they are syntax (see below). `??` is built in, like `and` and `or`: its right operand runs only when it is needed, so it is not a function, and it cannot be defined or attached to a type. Neither can `is`, whose right side is a pattern, not a value.
 
 ## Reserved spellings
