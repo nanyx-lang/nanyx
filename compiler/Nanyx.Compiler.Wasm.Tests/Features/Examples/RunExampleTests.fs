@@ -225,6 +225,7 @@ public object this[string name]
 }
 """
           "sql-utils.nyx", ""
+          "teamColours.nyx", "#teamsMustBeUnique\nGame 1 finished at 10000: 3-1, 0-3, 3-0\n"
           "stringTransformation.nyx",
           """oneTwoThree -> oneTwoThree
 oneTwoThree -> OneTwoThree
@@ -294,7 +295,7 @@ Jo
 /// The examples no test runs, each with why.
 let private notRun: Map<string, string> =
     Map.ofList
-        [ "teamColours.nyx", "a string in its list of points is freed while the list still holds it (#2464)" ]
+        []
 
 let examplesRun () : obj array seq = prints |> Map.keys |> Seq.map (fun name -> [| box name |])
 

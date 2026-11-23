@@ -34,3 +34,27 @@ let intoMapEntries (state: InferState) (expr: Expression) : InferState =
     match expr.Kind, expectedOf state expr with
     | MapSyntax.Call entries, Some (Maps.MapType(_, value)) -> entries |> List.map snd |> List.fold (expect value) state
     | _ -> state
+
+/// `state` with the value of each field of the record or tuple literal `expr`, `fields`, checked against the type of the field of
+/// that name in the record expected of it, if one is: a lambda given for a field of type `[C] a -> b` can call `C`'s
+/// members, as one given for a parameter of that type can (see `Contexts.extendEnvForLambdaArgument`).
+let intoRecordFields (state: InferState) (expr: Expression) (fields: RecordField list) : InferState =
+    match expectedOf state expr with
+    | Some (TyRecord(expectedFields, _)) ->
+        let positional = fields |> List.choose (function PositionalField value -> Some value | NamedField _ -> None)
+        let named = fields |> List.choose (function NamedField(name, value) -> Some (name, value) | PositionalField _ -> None)
+        (positional |> List.mapi (fun index value -> TypeResolution.tupleFieldName index, value)) @ named
+        |> List.fold (fun state (name, value) ->
+            match expectedFields |> Map.tryFind name with
+            // What the value is written in may expect a type of it already, as a map literal does of the value of each
+            // of its entries, which are pairs: that one is the more exact.
+            | Some ty when not (state.ExpectedTypes.ContainsKey value.Id) -> expect ty state value
+            | _ -> state) state
+    | _ -> state
+
+/// The function type the lambda `expr` is checked against, if what it is written in expects one: a record field's, or the
+/// result of a lambda around it (see `InferState.ExpectedLambdaTypes`).
+let functionOf (state: InferState) (expr: Expression) : Ty option =
+    match state.ExpectedLambdaTypes |> Map.tryFind expr.Id |> Option.map (resolveSoFar state >> Unifier.unalias) |> Option.orElse (expectedOf state expr) with
+    | Some (TyFunc _ as ty) -> Some ty
+    | _ -> None

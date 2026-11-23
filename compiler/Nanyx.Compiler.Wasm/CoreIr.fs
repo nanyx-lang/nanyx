@@ -428,10 +428,19 @@ module IrType =
             |> Some
         | _ -> None
 
+    /// The input of a function value of type `ty` that the lifted function `parameterNames` (its environment first)
+    /// takes whole, though it names several parameters: a record that is not a tuple, as a call through the value
+    /// passes it (`(channel: string, n: int) -> int` called as `f(channel = "abc", n = 1)`). Each parameter is bound to
+    /// its field.
+    let recordTakenWhole (parameterNames: string list) (ty: IrType) =
+        match parameterNames, ty with
+        | _ :: _ :: _ :: _, IrFunction(IrRecord _ as input, _, _, _) when (tupleElements input).IsNone -> Some input
+        | _ -> None
+
     /// How many parameters the lifted function `parameterNames` (its environment first) takes as a function value of
     /// type `ty`: a lone parameter whose type is a tuple takes the tuple's elements (see `tupleElements`), one whose type
-    /// is unit takes nothing, as a function written without parameters does, and the members of the contexts the
-    /// function requires follow.
+    /// is unit takes nothing, as a function written without parameters does, several whose input is a record that is not
+    /// a tuple take it whole (see `recordTakenWhole`), and the members of the contexts the function requires follow.
     let closureArity (parameterNames: string list) (ty: IrType) =
         let members =
             match ty with
@@ -439,6 +448,7 @@ module IrType =
             | _ -> 0
         let values =
             match parameterNames, ty with
+            | _ when (recordTakenWhole parameterNames ty).IsSome -> 2
             | [ _; _ ], IrFunction(IrUnit, _, _, _) -> 1
             | [ _; _ ], IrFunction(input, _, _, _) ->
                 match tupleElements input with
