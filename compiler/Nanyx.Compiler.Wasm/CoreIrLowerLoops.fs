@@ -55,7 +55,7 @@ let forEach
 /// None when `ty` isn't a sequence: a record of one function of no parameters that gives `#next(x, rest)` or `#done`.
 let private pulledBy (ty: IrType) =
     match IrType.unfold ty with
-    | IrRecord [ _, (IrFunction(IrUnit, IrTags tags, _) as next) ] when tags |> List.exists (fun (name, payload) -> name = NyxCompiler.Seqs.doneTag && payload.IsNone) ->
+    | IrRecord [ _, (IrFunction(IrUnit, IrTags tags, _, _) as next) ] when tags |> List.exists (fun (name, payload) -> name = NyxCompiler.Seqs.doneTag && payload.IsNone) ->
         match tags |> List.tryFind (fst >> (=) NyxCompiler.Seqs.nextTag) |> Option.bind snd with
         | Some (IrRecord [ _, element; _, rest ]) -> Some (next, element, rest)
         | _ -> None
@@ -119,7 +119,7 @@ let forEachPulling
                         let taken = { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = Expr.doThen (next head) (Expr.make (Assign(rest, AVar tail)) IrUnit) }
                         Expr.make (Match([ rest ], [ taken; { Patterns = [ PWildcard ]; Body = stop } ])) IrUnit
                     [ rest, Expr.make (Atom atoms.Head) ty ], step
-                | _, Some (IrFunction(_, result, wanted) as nextTy, elementTy, restTy) ->
+                | _, Some (IrFunction(_, result, wanted, _) as nextTy, elementTy, restTy) ->
                     let step (next: Var -> Expr) =
                         let pull = local "__for_pull" nextTy
                         let pulled = local "__for_pulled" result

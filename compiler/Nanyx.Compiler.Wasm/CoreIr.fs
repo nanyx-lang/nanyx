@@ -36,8 +36,9 @@ type IrType =
     /// record of the parameters when there are several, as a function's type has it. The members are those of the
     /// contexts the function requires where it is called, by key, each with its type: a call passes them after its
     /// arguments, in this order (contexts without parameters by name, then instances of parameterised ones by key, and
-    /// each context's members in its layout's order).
-    | IrFunction of IrType * IrType * members: (ContextMemberKey * IrType) list
+    /// each context's members in its layout's order). `waits` says whether the function requires `Async`, so that a call
+    /// of it can wait (see `docs/src/content/deep-dives/async.md`): `Async` has no members, so nothing else says so.
+    | IrFunction of IrType * IrType * members: (ContextMemberKey * IrType) list * waits: bool
     /// A value of one of a context member's own type variables, which the member's value is made once for, whatever type
     /// each call has it at: held in a box, a closure block whose function returns the value, so it is passed, kept and
     /// dropped the same way whatever the value is (see `CoreIrLowerBoxes`).
@@ -390,8 +391,8 @@ module IrType =
             | IrRecord fields -> IrRecord(fields |> List.map (fun (name, fieldTy) -> name, replace fieldTy))
             | IrList element -> IrList(replace element)
             | IrArray element -> IrArray(replace element)
-            | IrFunction(input, output, members) ->
-                IrFunction(replace input, replace output, members |> List.map (fun (key, memberTy) -> key, replace memberTy))
+            | IrFunction(input, output, members, waits) ->
+                IrFunction(replace input, replace output, members |> List.map (fun (key, memberTy) -> key, replace memberTy), waits)
             | IrInt
             | IrSized _
             | IrBool
@@ -434,12 +435,12 @@ module IrType =
     let closureArity (parameterNames: string list) (ty: IrType) =
         let members =
             match ty with
-            | IrFunction(_, _, members) -> members.Length
+            | IrFunction(_, _, members, _) -> members.Length
             | _ -> 0
         let values =
             match parameterNames, ty with
-            | [ _; _ ], IrFunction(IrUnit, _, _) -> 1
-            | [ _; _ ], IrFunction(input, _, _) ->
+            | [ _; _ ], IrFunction(IrUnit, _, _, _) -> 1
+            | [ _; _ ], IrFunction(input, _, _, _) ->
                 match tupleElements input with
                 | Some elements -> 1 + elements.Length
                 | None -> 2
@@ -492,9 +493,9 @@ module IrType =
             $"({shown})"
         | IrList element -> $"list({show element})"
         | IrArray element -> $"array({show element})"
-        | IrFunction(input, output, []) -> $"({show input} -> {show output})"
-        | IrFunction(input, output, members) ->
-            let keys = members |> List.map (fst >> ContextMemberKey.text) |> String.concat ", "
+        | IrFunction(input, output, [], false) -> $"({show input} -> {show output})"
+        | IrFunction(input, output, members, waits) ->
+            let keys = (if waits then [ "Async" ] else []) @ (members |> List.map (fst >> ContextMemberKey.text)) |> String.concat ", "
             $"([{keys}] {show input} -> {show output})"
         | IrRecursive body -> $"rec self. {show body}"
         | IrSelf -> "self"
@@ -517,10 +518,11 @@ module IrType =
             |> sprintf "rec_%s"
         | IrList element -> $"list_{mangle element}"
         | IrArray element -> $"array_{mangle element}"
-        | IrFunction(input, output, []) -> $"fn_{mangle input}_to_{mangle output}"
-        | IrFunction(input, output, members) ->
+        | IrFunction(input, output, members, waits) ->
             let keys = members |> List.map (fst >> ContextMemberKey.text) |> String.concat "_"
-            $"fn_{mangle input}_to_{mangle output}_ctx_{keys}"
+            let contexts = if members.IsEmpty then "" else $"_ctx_{keys}"
+            let waiting = if waits then "_waits" else ""
+            $"fn_{mangle input}_to_{mangle output}{contexts}{waiting}"
         | IrRecursive body -> $"mu_{mangle body}"
         | _ -> show ty
 

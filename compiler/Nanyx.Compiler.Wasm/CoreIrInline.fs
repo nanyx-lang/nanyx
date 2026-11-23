@@ -217,7 +217,7 @@ type private Inliner
         let rec heldAlike (paramTy: IrType) (argTy: IrType) =
             match paramTy, argTy with
             | IrTags _, IrTags _ -> true
-            | IrFunction(input, output, members), IrFunction(input', output', members') ->
+            | IrFunction(input, output, members, _), IrFunction(input', output', members', _) ->
                 heldAlike input input'
                 && heldAlike output output'
                 && members.Length = members'.Length

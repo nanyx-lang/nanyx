@@ -435,7 +435,12 @@ let private contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: 
         declared false
         |> List.map (fun (name, _, members) -> name, members |> List.map (fun (memberName, ty) -> contextMemberKey None memberName, CoreIrLowerTypes.boxOwnVariables ty))
         |> Map.ofList
-      Parameterised = declared true |> List.map (fun (name, info, members) -> name, (info.Parameters, members)) |> Map.ofList }
+      Parameterised = declared true |> List.map (fun (name, info, members) -> name, (info.Parameters, members)) |> Map.ofList
+      Waiting =
+        typeDefs
+        |> Map.filter (fun _ info -> info.IsContext && info.Name = "Async" && info.Home = StandardLibraryModule ModuleOrigin.asyncName)
+        |> Map.keys
+        |> Set.ofSeq }
 
 /// `exprTypes` with the type of each function `module'` names as a value (a closure over its wrapper: `wrapped` gives
 /// the function each wrapper calls) requiring the contexts without parameters that the function requires

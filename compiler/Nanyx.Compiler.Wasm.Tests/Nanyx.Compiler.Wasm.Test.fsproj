@@ -72,6 +72,7 @@
     <Compile Include="Features\Contexts\RunLocalInstanceContextTests.fs" />
     <Compile Include="Features\Contexts\RunDefaultContextTests.fs" />
     <Compile Include="Features\Contexts\RunBlockContextTests.fs" />
+    <Compile Include="Features\Async\WaitingSpecialisationTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />
