@@ -303,8 +303,9 @@ module ([Modules](../tour/modules)).
 
 # NYX0019: Unknown keyword kind
 
-A workflow keyword's `@customKeywordType` names a kind the compiler does not know, or names none, or names a kind other
-than `#delay` before a top-level def. The kinds are listed in [Workflows](../advanced/workflows#keyword-kinds).
+A workflow keyword's `@customKeywordType` names a kind the compiler does not know, or names none, or marks a def that is
+attached to no context, or names a kind other than `#delay` before a def attached to one. The kinds are listed in
+[Workflows](../advanced/workflows#keyword-kinds).
 
 ```nanyx
 context Lazy = (
@@ -313,16 +314,18 @@ context Lazy = (
 )
 ```
 
-A `#delay` keyword rewrites nothing but itself, so a top-level def can be one, as `nanyx/async`'s `start` is. Any
-other kind needs a workflow's builder, so only a member of the builder's context can be one:
+A keyword belongs to a context, where it is in scope wherever the context is. A `#delay` keyword rewrites nothing but
+itself, so a def attached to a context can be one, as `nanyx/async`'s `Async.start` is; a def attached to none can't:
 
 ```nanyx
-@customKeywordType(#bind)  -- error NYX0019: A definition can only be a `#delay` keyword, which rewrites nothing but itself: ...
+@customKeywordType(#delay)  -- error NYX0019: A keyword belongs to a context: ...
 def step: (() -> int) -> int = { work -> work() }
 ```
 
-To fix it, write a kind from the list, as `@customKeywordType(#bind)`, and on a def, `#delay`, or make the keyword a
-member of its builder's context.
+Any other kind needs a workflow's builder, so only a member of the builder's context can be one.
+
+To fix it, write a kind from the list, as `@customKeywordType(#bind)`; attach a `#delay` def to the context it belongs
+to, as `def Async.start`; or make the keyword a member of its builder's context.
 
 # NYX0020: Code in a manifest
 

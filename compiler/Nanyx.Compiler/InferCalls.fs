@@ -32,7 +32,7 @@ let private inferLookup
     |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id lookup })
 
 /// A call of the function `name`, its name at `spanOpt`, with `args`.
-let internal inferCall
+let rec internal inferCall
     (inferExpr: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
     (inferLambdaWithExpected: TypeEnv -> InferState -> Expression -> (Identifier * TypeExpr option) list -> Expression -> Ty option -> Ty option -> Result<TypedExpr * InferState, Diagnostic list>)
     (env: TypeEnv) (state: InferState) (expr: Expression) (name: string) (spanOpt: SourceSpan option) (args: Expression list) : Result<TypedExpr * InferState, Diagnostic list> =
@@ -448,4 +448,9 @@ let internal inferCall
                             $"'{receiver}' is a value, so '{name}' is not a function's name, but '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
                         | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToString receiverTy}' has no '{memberName}' attached"
                     Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message |> Diagnostics.about name ]
-                | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"'{name}' is not in scope" env.Names.Keys name ]
+                | None ->
+                    // A def attached to a context available here, by its bare name.
+                    match AttachedContextDefs.qualifiedFor env state name with
+                    | Some qualified ->
+                        inferCall inferExpr inferLambdaWithExpected env (AttachedContextDefs.record expr.Id qualified state) expr qualified spanOpt args
+                    | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownFunction calleeSpan $"'{name}' is not in scope" env.Names.Keys name ]
