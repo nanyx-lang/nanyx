@@ -226,6 +226,10 @@ type InferState =
             /// The type each local def in `LocalContextRequirements` declares without its contexts, by its symbol, as
             /// `ContextSignatures` holds it by name until its block ends.
             LocalContextSignatures: Map<SymbolId, TypeExpr>;
+            /// The variable of the def around it that each context variable a local def in `LocalContextRequirements`
+            /// writes stands for, by the local def's symbol and the variable's name: `c` in `def go: [c] int -> int`
+            /// inside a `[c]` def is that def's `c`, which its own type does not name.
+            LocalContextVariables: Map<SymbolId, Map<Identifier, TyVar>>;
             /// The module being checked: the home of each nominal type it defines (see `NominalId`).
             Home: ModuleOrigin;
             LocalNominals: Set<string>;
@@ -448,6 +452,7 @@ let emptyState =
             InferredContextTypes = Map.empty;
             LocalContextRequirements = Map.empty;
             LocalContextSignatures = Map.empty;
+            LocalContextVariables = Map.empty;
             Home = InMemory;
             LocalNominals = Set.empty;
             LocalPrivateNominals = Set.empty;
@@ -594,7 +599,16 @@ let internal registerLocalContextRequirement state (symbol: SymbolId option) nam
             LocalContextSignatures =
                 match signature with
                 | Some signature -> registered.LocalContextSignatures |> Map.add symbol signature
-                | None -> registered.LocalContextSignatures }
+                | None -> registered.LocalContextSignatures
+            LocalContextVariables =
+                let outer =
+                    contexts
+                    |> List.choose (fun (context: TypeExpr) ->
+                        match context.Kind with
+                        | TypeVar name -> state.TypeVars |> Map.tryFind (WrittenVar name) |> Option.map (fun var -> name, var)
+                        | _ -> None)
+                    |> Map.ofList
+                registered.LocalContextVariables |> Map.add symbol outer }
     | None -> registered
 
 /// `state` with what `ContextRequirements` and `ContextSignatures` hold for each of `names`, the local defs of a block
