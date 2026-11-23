@@ -33,3 +33,16 @@ let ``A chain of 10,000 additions compiles and runs in time that grows with its 
     clock.Stop()
     outcome |> assertRan "10000\n"
     Assert.True(clock.ElapsedMilliseconds < 20_000L, $"10,000 additions took {clock.ElapsedMilliseconds} ms")
+
+// Each branch of an else-if is joined to the next, which makes a chain of 10,000 type variables, each solved to the one
+// before it. The type checker follows such a chain once, not once for each variable on it, so a long else-if checks in
+// time that grows with its length (#2362). 10,000 branches took 2 minutes in a Release build when it followed it each time.
+[<Fact>]
+let ``An else-if chain of 10,000 branches compiles and runs in time that grows with its length`` () =
+    let branches = [ for i in 1 .. 10_000 -> $"if n == {i} then {i * 2}" ] |> String.concat " else "
+    let source = $"def f = {{ n: int -> {branches} else 0 }}\nprintln(f(9999))\nprintln(f(20000))\n"
+    let clock = System.Diagnostics.Stopwatch.StartNew()
+    let outcome = runSource source
+    clock.Stop()
+    outcome |> assertRan "19998\n0\n"
+    Assert.True(clock.ElapsedMilliseconds < 30_000L, $"10,000 branches took {clock.ElapsedMilliseconds} ms")

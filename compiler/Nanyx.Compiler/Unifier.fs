@@ -589,6 +589,37 @@ module Unifier =
             let underlying = RecursiveAliases.underlying ty
             aliasNames[underlying] <- tyToString ty
             underlying
+        // Where a chain of variables each solved to the next ends, in `start`, by the first variable of the chain: a
+        // variable that is not solved there to another. Each constraint of an else-if joins a branch to the next, so
+        // the solve its constraints were given to makes each branch's variable stand for the one before it, and
+        // looking up the last walks every branch (#2362). A chain is walked once and each variable on it remembered.
+        // The solving below only solves variables that are not solved yet, and goes back no further than `start`
+        // when a trial fails, so the substitution it is at always holds `start`, and a chain in `start` ends where it
+        // did.
+        let chainEnds = Dictionary<int, TyVar>()
+        let chainEnd (first: TyVar) =
+            let walked = ResizeArray<int>()
+            let rec walk (var: TyVar) =
+                match chainEnds.TryGetValue var.Id with
+                | true, known -> known
+                | false, _ ->
+                    match start.TryFind var.Id with
+                    | Some (TyVar next) when next.Id <> var.Id ->
+                        walked.Add var.Id
+                        walk next
+                    | _ -> var
+            let last = walk first
+            for id in walked do
+                chainEnds[id] <- last
+            last
+        // What `var` stands for under `subst`, as `apply` gives it, with a chain of `start` followed to its end at once.
+        let rec resolveIn (subst: Subst) (var: TyVar) =
+            let var = chainEnd var
+            match subst.TryFind var.Id with
+            | Some replacement when replacement = TyVar var -> replacement
+            | Some replacement -> applyResolving (resolveIn subst) replacement
+            | None -> TyVar var
+        let applyIn (subst: Subst) (ty: Ty) = applyResolving (resolveIn subst) ty
         let rec loop (subst: Subst) (remaining: ConstraintSet) =
             // A closed record has exactly its fields, so two closed records agree only when they have the same ones:
             // a record with a field more or a field fewer is a different type.
@@ -834,8 +865,8 @@ module Unifier =
             match remaining with
             | [] -> Ok subst
             | (left, right, kind, origin) :: rest ->
-                let l = apply subst left
-                let r = apply subst right
+                let l = applyIn subst left
+                let r = applyIn subst right
                 if l = r then
                     loop subst rest
                 // A variable takes the error type, as it would any other; anything else agrees with it. What a call to

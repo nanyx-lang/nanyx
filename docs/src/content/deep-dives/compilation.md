@@ -39,7 +39,8 @@ text to the binary format for `nanyx build` and `nanyx wasm` (below).
 Every compiler error has a code and a title from one table, `DiagnosticCodes` in `Diagnostics.fs`, and the span of
 the node it is about; [Compiler errors](../standard-tools/errors) lists them. A construct the backend cannot lower yet
 is reported as an `UnsupportedByBackend` error (`NYX0301`) where it is
-written (see [Memory management](./memory-management#core-ir)). A broken invariant of the backend, such as a context
+written (see [Memory management](./memory-management#core-ir)); one in a function the backend makes with no place of
+its own, such as the printer a `dbg` calls, is reported where it was first asked for. A broken invariant of the backend, such as a context
 member the type checker found but the backend cannot, is a bug in the compiler, not a missing feature. It is reported
 as a `BackendInternalError` (`NYX0302`) that asks for a bug report. The backend raises one with
 `CoreIr.internalError`, never a bare `failwith`.
@@ -53,6 +54,12 @@ checker marks the list it holds as a checkpoint (`Solving.checkpoint`); a later 
 of the checkpoint's variables is solved on top of it, since the two share nothing and the order they are solved in
 can't show. Otherwise the whole list is solved afresh, newest first, so that the failure reported, and the order in
 which a union's tags are added, are what solving it afresh gives.
+
+Solved on top of an earlier solution, a variable can stand for another that stands for another in turn: an else-if
+joins each branch to the next, so each branch's variable stands for the one before it. `Unifier.unifyFrom` follows such
+a chain of the earlier solution once and remembers where it ends for each variable on it, so a long else-if checks in
+time that grows with its length. A type read against a solution once it is found, such as the type of each node of the
+module, is resolved with `Unifier.applySolved`, which keeps what each variable resolves to with the solution.
 
 # Deferred errors
 

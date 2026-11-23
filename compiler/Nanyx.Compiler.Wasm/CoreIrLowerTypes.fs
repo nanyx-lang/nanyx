@@ -344,9 +344,13 @@ let adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType list =
     | _ -> []
 
 /// `ty` with each type variable it still has made unit: nothing constrains one where a value of `ty` is made, as in the
-/// instance passed for the elements of `[]`, so no value of it is ever met (see `toIrType`).
+/// instance passed for the elements of `[]`, so no value of it is ever met (see `toIrType`). The rest of a union stays a
+/// variable, which adds no tags, as `#some(list(int)) | r` from a call to `list.map` has it until something closes it:
+/// unit is no tag.
 let unconstrainedAsUnit (ty: Ty) =
-    substitute (freeVars ty |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList) ty
+    let unionRests = Set.difference (Unifier.restVarIds true ty) (Unifier.restVarIds false ty)
+    let unconstrained = freeVars ty |> List.filter (unionRests.Contains >> not)
+    substitute (unconstrained |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList) ty
 
 /// The type each context without parameters in `contextLayouts` declares for its member of each key, where only one
 /// declares a member of that key.
