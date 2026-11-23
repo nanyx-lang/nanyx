@@ -172,14 +172,14 @@ import (
   nanyx.fs/path as path
 )
 
-def copyUpper = { from, into ->
+def copyMore = { from, into ->
   match file.read(path.of(from))
-    | #some(text) -> file.write(path.of(into), string.toUpper(text)) \ignore
+    | #some(text) -> file.write(path.of(into), "{text}\nfour") \ignore
     | _ -> println("unread")
 }
 
 file.write(path.of("a.txt"), "one\ntwo\nthree") \ignore
-copyUpper("a.txt", "b.txt")
+copyMore("a.txt", "b.txt")
 
 match file.lines(path.of("b.txt"))
   | #some(lines) -> println(lines \seq.map { line -> "> {line}" } \seq.toList)
@@ -189,5 +189,5 @@ match file.lines(path.of("b.txt"))
     for options in [ []; [ "--yield-at-every-wait" ] ] do
         let outcome = nanyxIn directory.Path ([ "run"; "--check-memory" ] @ options @ [ "main.nyx" ])
         Assert.Equal("", outcome.StandardError.ReplaceLineEndings "\n")
-        Assert.Equal("[> ONE, > TWO, > THREE]\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+        Assert.Equal("[> one, > two, > three, > four]\n", outcome.StandardOutput.ReplaceLineEndings "\n")
         Assert.Equal(0, outcome.ExitCode)
