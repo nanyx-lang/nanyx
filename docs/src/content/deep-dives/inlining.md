@@ -77,7 +77,9 @@ temporaries (`CoreIrSimplify.withTemporaries`).
   gives or takes tags to one whose type has other tags there, since tags are held alike). A body whose type has fewer
   tags than the function declares, as one that declares an error it never makes, is inlined too, and given the
   declared type ([#1882](https://github.com/nanyx-lang/nanyx/issues/1882)). A call is inlined as what a
-  chain ends in or as a `let`'s or `do`'s value, a temporary's among them (`acc + double(n)`). Every temporary of the
+  chain ends in or as a `let`'s or `do`'s value, a temporary's among them (`acc + double(n)`), and so in the branches
+  of an `if` or a `match` that is a temporary's value, as the right operand of an `and` or an `or` is
+  ([#2486](https://github.com/nanyx-lang/nanyx/issues/2486)). Every temporary of the
   chain still waiting to be used becomes a local first, since the inlined body stores before it reads what it is
   given, and nothing may be stored while a temporary waits; temporaries are bound in the order they are evaluated, so
   the order holds. The body's loops are numbered inside the caller's, and a chain that is a `let`'s value is flattened
