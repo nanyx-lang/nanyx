@@ -166,12 +166,18 @@ def double = { (x: int): int -> x * 2 }
 
 Without brackets, a parameter's annotation ends at the `->`, so `{ q: Point -> q }` takes a `Point` and returns it. A parameter of a function type has brackets around the type, `{ g: (int -> int) -> g(1) }`, or around the whole parameter, `{ (g: int -> int) -> g(1) }`.
 
-Named fields can be destructured to a different local name with `field = localName`:
+A lambda for a function whose parameters are named takes them by name: `{ x, y -> ... }` for `(x: float, y: float) -> float`, in either order, and a parameter that is not one of the names is an error ([NYX0280](../standard-tools/errors#nyx0280)). To give a field another name in the body, take the input with a record pattern, in brackets, `(field = localName)`:
 
-```nanyx skip=#443
-def magnitude: (x: int, y: int) -> float = { x = innerX, y = innerY ->
-  Math.sqrt(innerX * innerX + innerY * innerY)
+```nanyx
+import nanyx/math as math
+
+def magnitude: (x: float, y: float) -> float = { (x = innerX, y = innerY) ->
+  math.sqrt(innerX * innerX + innerY * innerY)
 }
+
+println(magnitude(x = 3.0, y = 4.0))
+
+-- 5.0
 ```
 
 ## Type arguments

@@ -668,7 +668,15 @@ and inferLambdaWithExpected (env: TypeEnv) (state: InferState) (lambda: Expressi
             args
             |> List.choose snd
             |> List.fold (fun result typeExpr -> result |> Result.bind (fun current -> inferTypeOfValues env current typeExpr)) (Ok state)
-    annotated |> Result.bind (fun state -> inferLambdaAfterTypeOfs env state lambda args body expectedInputOpt expectedReturnOpt)
+    // A parameter that takes no field of a named record it is given is an error at the parameter (see
+    // `LambdaParameterFields`).
+    let fields =
+        match expectedInputOpt |> Option.map (LambdaParameterFields.check state lambda args) with
+        | Some (_ :: _ as errors) -> Error errors
+        | _ -> Ok ()
+    annotated
+    |> Result.bind (fun state -> fields |> Result.map (fun () -> state))
+    |> Result.bind (fun state -> inferLambdaAfterTypeOfs env state lambda args body expectedInputOpt expectedReturnOpt)
 
 and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: Expression) (args: (Identifier * TypeExpr option) list) (body: Expression) (expectedInputOpt: Ty option) (expectedReturnOpt: Ty option) : Result<TypedExpr * InferState, Diagnostic list> =
     let mutable current = state
