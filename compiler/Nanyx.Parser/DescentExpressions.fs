@@ -429,7 +429,7 @@ and private primary (c: Cursor) : Expression =
 
 /// A primary expression and the `.field`s after it, with the span of its text.
 and private accessed (c: Cursor) : Operand =
-    // In a shorthand lambda's body, the first operand is the argument it leaves out, made up at the operator or `.`
+    // In a shorthand lambda's body, the first operand is the argument it leaves out, made up at the operator, `.` or `\`
     // written in its place, which takes up no text.
     let madeUp = c.ImplicitArgumentNext
     let mutable expr, text =

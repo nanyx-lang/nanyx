@@ -526,6 +526,8 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
             | None ->
                 if c.Is Dot && (match c.At 1 with Code next -> (next.Kind = Name || next.Kind = Keyword) && next.Start = c.Start + 1 | _ -> false) then
                     c.SpanOf c.Token.Value
+                // `{ \f }`: the argument is piped into what follows.
+                elif c.Is Backslash then c.SpanOf c.Token.Value
                 else raise NoMatch
         c.ImplicitArgumentNext <- Some leftOut
         let body = expression Crossing c

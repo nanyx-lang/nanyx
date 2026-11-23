@@ -105,6 +105,22 @@ println("{ps \list.filter { .age * 2 >= 60 } \list.length}")
     runSource source |> assertRan "1\nb\nc\n2\n"
 
 [<Fact>]
+let ``Run - a lambda that starts with a pipe pipes its argument`` () =
+    // `{ \math.abs }` is `{ x -> x \math.abs }`, and a chain of pipes may follow, on the line or on lines after it.
+    let source =
+        normalized """import nanyx/math as math
+
+def firstOfEach: list(int) -> list(int) = { \take(1)
+  \reverse
+}
+
+println([-1, 2] \map { \math.abs })
+println([[1, 2], [3, 4]] \map { \take(1) \reverse })
+println([[5, 6]] \map(firstOfEach))
+"""
+    runSource source |> assertRan "[1, 2]\n[[1], [3]]\n[[5]]\n"
+
+[<Fact>]
 let ``Run - a function takes positional and named arguments together, called or piped into`` () =
     let source =
         normalized """def stepped: (int, step: int) -> int = { a, step -> a * 10 + step }
