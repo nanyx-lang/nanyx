@@ -422,6 +422,18 @@ let ``arms after parameters may follow on the arrow's line, after one parameter 
     | other -> failwith $"Unexpected lambda: %A{other}"
 
 [<Fact>]
+let ``a comment may follow a lambda's last arm, before its closing brace`` () =
+    // #2437: a comment after the last arm, on its line or a line of its own, was a syntax error at the `}`.
+    for source in
+        [ "def f = {\n  | 0 -> 0\n  | n -> n -- a comment\n}"
+          "def f = {\n  | 0 -> 0\n  | n -> n\n  -- a comment\n}"
+          "def f = { x, y ->\n  | 0, _ -> y\n  | _, _ -> x -- a comment\n}" ] do
+        readsWhole source
+        match (onlyValue source).Kind with
+        | Lambda (_, Kind (Match (_, [ _; _ ])), false) -> ()
+        | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
 let ``a result annotation after the parameters types the body`` () =
     match (onlyValue "def f = { (x: int): int -> x * 2 }").Kind with
     | Lambda ([ ("x", Some _) ], Kind (LambdaResultSyntax.Annotated (Kind (TypeName "int"), Kind (BinaryOp ("*", _, _, _)))), false) -> ()
