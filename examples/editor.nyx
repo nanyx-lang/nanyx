@@ -1,6 +1,8 @@
+::dependency nanyx.regex
+
 module editor.lines
 
-import nanyx/text.regex
+import nanyx.regex/regex
 
 -- Navigating the lines of a text document: finding the nearest line with
 -- content, and the next line where the indentation changes.
@@ -17,11 +19,20 @@ export type RelativeIndentation =
   | #moreIndentation
   | #sameIndentation
 
-def TextLine.isBlank = { line -> line.text \trim == "" }
+def TextLine.isBlank: TextLine -> bool = { line ->
+  line.text \string.trim == ""
+}
+
+def letterOrDigit = Regex.parse('[a-zA-Z0-9]') \orCrash("bad pattern")
 
 -- A "stop line" is one that is blank or contains only punctuation
-export def TextLine.isStopLine = { line -> not (line.text \Regex.matches('[a-zA-Z0-9]')) }
-export def TextLine.isSignificant = { line -> not line.isStopLine }
+export def TextLine.isStopLine: TextLine -> bool = { line ->
+  not (line.text \Regex.isMatch(letterOrDigit))
+}
+
+export def TextLine.isSignificant: TextLine -> bool = { line ->
+  not (line \isStopLine)
+}
 
 def changeToDiff: Change -> (int, int) -> bool = {
   | #greaterThan -> { > }
@@ -75,10 +86,12 @@ export def iterLinesOutwards: TextDocument, int -> seq(Neighbours) = { document,
 export def nearestSignificantLine: TextDocument, int -> TextLine = { document, lineNumber ->
   def current = document.lineAt(lineNumber)
 
-  if current.isSignificant then current else
+  if current \isSignificant then current else
     def #some(line) =
-      iterLinesOutwards(document, lineNumber) \flatMap { back, forward -> [back, forward] \somes
-      } \find { .isSignificant } except #notFound -> #some(current)
+      iterLinesOutwards(document, lineNumber) \flatMap { (back, forward) -> [back, forward]
+          \somes
+          \toSeq
+      } \find { l -> l \isSignificant } except #notFound -> #some(current)
 
     line
 }
@@ -89,15 +102,71 @@ export def nextLineOfChangeOfIndentation
     def diff = changeToDiff(change)
     def start = directionToDelta(direction)(currentLine.number)
 
-    iterLines(document, start = start, direction = direction) \filter { .isSignificant
+    iterLines(document, start = start, direction = direction) \filter { l -> l \isSignificant
     } \find { line -> diff(line.firstNonWhitespace, currentLine.firstNonWhitespace)
     } except #notFound -> #none
   }
 
 export def relativeIndentation: TextLine, TextLine -> RelativeIndentation = { from, to ->
   if
-    | to.isBlank -> #noIndentation
+    | to \isBlank -> #noIndentation
     | from.firstNonWhitespace > to.firstNonWhitespace -> #lessIndentation
     | from.firstNonWhitespace < to.firstNonWhitespace -> #moreIndentation
     | else -> #sameIndentation
+}
+
+def documentOf: list(string) -> TextDocument = { source ->
+  def lines =
+    source \mapIndexed { i, text ->
+      def indent = text.length - (text \string.trimStart).length
+      TextLine(number = i, text = text, firstNonWhitespace = indent)
+    }
+
+  TextDocument(
+    lineCount = lines.length
+    lineAt = { n ->
+      def #some(line) = lines \at(n) except #notFound -> #some(
+        TextLine(number = n, text = "", firstNonWhitespace = 0)
+      )
+
+      line
+    }
+  )
+}
+
+def describe: (#some(TextLine) | #none) -> string = {
+  | #some(line) -> "line {line.number}: {line.text \string.trim}"
+  | #none -> "none"
+}
+
+@entry
+def main = {
+  def document = documentOf(
+    ["def main =", "  def x = 1", "", "  --", "  if x > 0 then", "    println(x)", "main()"]
+  )
+
+  def line = { n -> document.lineAt(n) }
+
+  println("Nearest significant line to 3: {describe(#some(nearestSignificantLine(document, 3)))}")
+
+  println(
+    "Indented more, after line 1: {describe(
+      nextLineOfChangeOfIndentation(document, line(1), #greaterThan, #forwards)
+    )}"
+  )
+
+  println(
+    "Indented less, after line 5: {describe(
+      nextLineOfChangeOfIndentation(document, line(5), #lessThan, #forwards)
+    )}"
+  )
+
+  println(
+    "Indented less, before line 1: {describe(
+      nextLineOfChangeOfIndentation(document, line(1), #lessThan, #backwards)
+    )}"
+  )
+
+  println("Line 1 to line 5: {relativeIndentation(line(1), line(5))}")
+  println("Line 5 to line 2: {relativeIndentation(line(5), line(2))}")
 }

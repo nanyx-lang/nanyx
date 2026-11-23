@@ -1,7 +1,8 @@
 module volleyball
 
 -- Scoring a volleyball game. Custom patterns decide what the latest point
--- means for the game, so the scoring function reads as a plain match.
+-- means for the game, so the scoring function reads as a plain match. Times
+-- are milliseconds since 1970, as `Clock.now` gives them.
 
 export type TeamColor = #yellow | #black
 
@@ -18,16 +19,15 @@ export def TeamColor.show: TeamColor -> string = {
 
 type GameId = int
 type TeamId = string
-type Instant = int -- seconds since the venue opened
 type Rules = (maxSetPoints: int, maxSets: int)
-type Score = (by: (team: TeamId, color: TeamColor), at: Instant)
+type Score = (by: (team: TeamId, color: TeamColor), at: int)
 type SetScores = list(Score) -- the points of one set
 type GameScores = list(SetScores) -- finished sets first, the set in play last
 
 type OpenGame = (
   id: GameId
   teams: (TeamId, TeamId)
-  startedAt: Instant
+  startedAt: int
   rules: Rules
   score: GameScores
 )
@@ -35,8 +35,8 @@ type OpenGame = (
 type FinishedGame = (
   id: GameId
   teams: (TeamId, TeamId)
-  startedAt: Instant
-  finishedAt: Instant
+  startedAt: int
+  finishedAt: int
   rules: Rules
   score: GameScores
 )
@@ -74,7 +74,7 @@ pattern OpenGame -> #SetInPlay | #SetWon | #GameWon = { game ->
 }
 
 export def recordScore
-  : (OpenGame, by: (team: TeamId, color: TeamColor), at: Instant) -> Game
+  : (OpenGame, by: (team: TeamId, color: TeamColor), at: int) -> Game
   = { game, by, at ->
     def point = Score(by = by, at = at)
     def finishedSets = game.score \dropLast
@@ -97,7 +97,7 @@ export def recordScore
   }
 
 export def openGame
-  : Rules, (TeamId, TeamId), Instant, GameId -> #some(OpenGame) | #teamsMustBeUnique
+  : Rules, (TeamId, TeamId), int, GameId -> #some(OpenGame) | #teamsMustBeUnique
   = { rules, teams, startedAt, id ->
     def (t1, t2) = teams
 
@@ -108,32 +108,34 @@ export def openGame
       )
   }
 
--- Plays the points in order, one every 30 seconds from `at`, until they run out or the game is won.
-def play: OpenGame, list((TeamId, TeamColor)), Instant -> Game = { game, points, at ->
-  match points
-    | [] -> #open(game)
-    | [(team, color), ...rest] ->
-      match recordScore(game, by = (team = team, color = color), at = at)
-        | #open(next) -> play(next, rest, at + 30)
-        | #finished(done) -> #finished(done)
-}
-
 @entry
 def main = {
-  def herons = ("Herons", #yellow)
-  def crows = ("Crows", #black)
-  -- A short game: a set is won with 3 points and a lead of 2, and the game with 2 sets of 3.
   def rules = Rules(maxSetPoints = 3, maxSets = 3)
+  def yellow = (team = "Herons", color = #yellow)
+  def black = (team = "Crows", color = #black)
 
-  match openGame(rules, ("Herons", "Crows"), 100, 1)
-    | #teamsMustBeUnique -> println("A team can't play itself")
+  -- The rally winners, in order: the Herons take the first set, the Crows the second, the
+  -- Herons the third and the game
+  def rallies = [yellow, yellow, black, yellow, black, black, black, yellow, yellow, yellow, yellow]
+
+  println(openGame(rules, ("Herons", "Herons"), 0, 1))
+
+  match openGame(rules, ("Herons", "Crows"), 0, 1)
+    | #teamsMustBeUnique -> println("teams must be unique")
     | #some(game) ->
-      def points = [herons, herons, crows, herons, crows, crows, crows, herons, herons, herons]
+      def start: Game = #open(game)
 
-      match play(game, points, 130)
-        | #open(g) -> println("Game {g.id} is still being played: {g.score.length} sets so far")
-        | #finished(g) ->
-          def sets = g.score \map { set -> set \map { s -> s.by.team } }
-          println("Game {g.id} started at {g.startedAt} and finished at {g.finishedAt}")
-          println(sets)
+      def final = rallies \fold((start, 1_000)) { (state, time), by ->
+        match state
+          | #open(open) -> (recordScore(open, by = by, at = time), time + 1_000)
+          | #finished(_) -> (state, time)
+      }
+
+      match final
+        | (#open(open), _) -> println("still playing set {open.score.length}")
+        | (#finished(done), _) ->
+          def sets = done.score \map { set -> "{setPoints(set, "Herons")}-{setPoints(set, "Crows")}"
+          }
+
+          println("Game {done.id} finished at {done.finishedAt}: {sets \string.join(", ")}")
 }

@@ -116,3 +116,23 @@ def exprs: list(Expr) = [ #num(1), sum, nested ]
 for exprs | e -> println("{eval(e)}")
 """
     runSource source |> assertRan "1\n5\n15\n"
+
+// A record alias that names itself was built from its closed definition, so `S(...)` didn't match `S` (#2213).
+[<Fact>]
+let ``Run - a recursive record alias is built by its name`` () =
+    let source = """
+type S = (next: () -> #next(int, S) | #done)
+
+def range: int, int -> S = { first, last ->
+  S(next = { if first > last then #done else #next(first, range(first + 1, last)) })
+}
+
+def total: S -> int = { s ->
+  match s.next()
+    | #done -> 0
+    | #next(n, rest) -> n + total(rest)
+}
+
+println("{total(range(1, 10))}")
+"""
+    runSource source |> assertRan "55\n"
