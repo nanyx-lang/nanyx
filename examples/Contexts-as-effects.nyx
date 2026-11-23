@@ -1,16 +1,13 @@
 module contextsAsEffects
 
-import (
-  nanyx/math
-  nanyx/text
-)
+import nanyx/random as random
 
 ---
 Part one: a Caesar cipher and a frequency-analysis cracker, written with
 ordinary pure functions and pipes.
 ---
 
-def letters = 'a'..'z'
+def letters = "abcdefghijklmnopqrstuvwxyz" \chars
 
 -- The code point of a one-character string
 def codePoint: string -> int = { c ->
@@ -77,14 +74,15 @@ def freqs: string -> list(float) = { s ->
 
 -- How well two frequency tables match, according to the chi-square statistic
 def chisqr: list(float), list(float) -> float = { xs, ys ->
-  xs \zipWith(ys) { x, y -> (x - y) ** 2.0 / y } \sum
+  xs \zipWith(ys) { x, y -> (x - y) ** 2 / y } \sum
 }
 
 -- Crack a Caesar-encoded string
 def crack: string -> string = { s ->
   def table = freqs(s)
   def chitab = (0..25) \map { n -> chisqr(rotateList(table, n), english) }
-  def #some(shift) = chitab \indexOf(chitab \min) except #notFound -> #some(0)
+  def #some(best) = chitab \min except #emptyList -> #some(0.0)
+  def #some(shift) = chitab \indexOf(best) except #notFound -> #some(0)
   rotate(s, 26 - shift)
 }
 
@@ -105,11 +103,11 @@ def askConst: () -> int = {
 }
 
 def askRandom: [Random] () -> int = {
-  use Ask(int)(ask = { randomInt() }) in addTwice()
+  use Ask(int)(ask = { random.below(100) }) in addTwice()
 }
 
 -- State is just another context; the mutation lives in a `memory` scope that
--- never escapes `runState`.
+-- never escapes `sumFrom`.
 context State(a) = (get: () -> a, put: a -> ())
 
 def sumdown: [State(int)] int -> int = { sum ->
@@ -120,16 +118,16 @@ def sumdown: [State(int)] int -> int = { sum ->
     sumdown(sum + i)
 }
 
-def runState: [c] a, ([State(a), c] () -> b) -> b = { init, action ->
+def sumFrom: int -> int = { start ->
   memory {
-    mut cell = init
-    use State(a)(get = { cell }, put = { v -> cell := v }) in action()
+    mut cell = start
+    use State(int)(get = { cell }, put = { v -> cell := v }) in sumdown(0)
   }
 }
 
 @entry
 def main = {
-  println(crack(rotate("nanyx is a fun language", 3)))
+  println(crack(rotate("contexts are the parameters that nobody has to pass by hand", 3)))
   println("{askConst()}")
-  println("{runState(10, { sumdown(0) })}") -- 55
+  println("{sumFrom(10)}") -- 55
 }

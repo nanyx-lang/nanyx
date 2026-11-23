@@ -1,6 +1,9 @@
 module whisper.decode
 
-import nanyx/math as math
+import (
+  nanyx/math as math
+  nanyx/random as random
+)
 
 ---
 The decoding loop of a speech-recognition model, reduced to its shape: an
@@ -69,7 +72,8 @@ context Model = (
 )
 
 def argmax: list(float) -> int = { xs ->
-  def #some(index) = xs \indexOf(xs \max) except #notFound -> #some(0)
+  def #some(top) = xs \max except #emptyList -> #some(0.0)
+  def #some(index) = xs \indexOf(top) except #notFound -> #some(0)
   index
 }
 
@@ -81,7 +85,7 @@ def softmax: list(float) -> list(float) = { xs ->
 
 -- Pick an index with probability proportional to its weight
 def sample: [Random] list(float) -> int = { probabilities ->
-  def r = Random.float()
+  def r = random.fraction()
 
   rec pick = {
     | [], i, _ -> i - 1
@@ -92,7 +96,7 @@ def sample: [Random] list(float) -> int = { probabilities ->
 }
 
 -- A decoder chooses the next token for a sequence from its logits
-type Decoder = (next: (Tokens, Logits) -> int)
+type Decoder = (next: [Random] (Tokens, Logits) -> int)
 
 -- Greedy decoding takes the most likely token, or samples when there is a temperature
 def greedyDecoder: [Random] float -> Decoder = { temperature ->
@@ -111,24 +115,25 @@ type LogitFilter = (Tokens, Logits) -> Logits
 -- Forbid a blank output right at the start of the transcript
 def suppressBlank: [Tokenizer] int -> LogitFilter = { sampleBegin ->
   def blank = encode(" ")
+  def end = eot
 
   { tokens, logits ->
     if tokens.length == sampleBegin then
-      logits \mapIndexed { i, l -> if blank \contains(i) or i == eot then -math.infinity else l }
+      logits \mapIndexed { i, l -> if blank \contains(i) or i == end then -math.infinity else l }
     else logits
   }
 }
 
 -- Extend every sequence by one token until all have ended or the limit is reached
 def mainLoop
-  : [Model, Tokenizer]
+  : [Model, Tokenizer, Random]
     (list(Tokens), AudioFeatures, Decoder, list(LogitFilter), sampleLen: int) -> list(Tokens)
   = { initial, audio, decoder, filters, sampleLen ->
     rec step = { sequences, i ->
-      def completed = sequences \all { s -> s \last == #some(eot) }
+      def completed = sequences \list.all { s -> s \list.last == #some(eot) }
 
       if completed or i >= sampleLen then sequences else
-        def extended = sequences \zip(logits(sequences, audio)) \map { tokens, raw ->
+        def extended = sequences \list.zip(logits(sequences, audio)) \map { (tokens, raw) ->
           def filtered = filters \fold(raw) { l, filter -> filter(tokens, l) }
           [...tokens, decoder.next(tokens, filtered)]
         }
@@ -161,3 +166,68 @@ export def transcribe
       return text \trim
     }
   }
+
+---
+A toy tokenizer and model to run the decoder with. The model has learned one
+sentence: it scores the next word of it highest, but a blank higher still at
+the start, which `suppressBlank` rules out.
+---
+
+def vocabulary = ["<|endoftext|>", "<|startoftranscript|>", " ", " hello", " from", " nanyx", "!"]
+def sentence = [3, 4, 5, 6, 0]
+
+def tokenText: int -> string = { token ->
+  def #some(text) = vocabulary \at(token) except #notFound -> #some("")
+  text
+}
+
+def nextScores: Tokens -> Logits = { tokens ->
+  def position = tokens.length - 1
+  def #some(next) = sentence \at(position) except #notFound -> #some(0)
+
+  vocabulary \mapIndexed { i, _ ->
+    if
+      | i == 2 and position == 0 -> 20.0
+      | i == next -> 10.0
+      | else -> 0.0
+  }
+}
+
+def describe: (#some(string) | OptionsError) -> string = {
+  | #some(text) -> "transcribed: {text}"
+  | #beamSizeAndBestOf -> "error: beam size and best-of together"
+  | #bestOfWithGreedySampling -> "error: best-of with greedy sampling"
+  | #patienceWithoutBeamSize -> "error: patience without a beam size"
+  | #lengthPenaltyOutOfRange -> "error: length penalty out of range"
+}
+
+@entry
+def main = {
+  use Tokenizer(
+    eot = 0
+    sotSequence = [1]
+    encode = { text -> vocabulary \indexOf(text) \mapSomeOr([]) { i -> [i] } }
+    decode = { tokens -> tokens \map(tokenText) \string.join("") }
+  )
+
+  use Model(logits = { sequences, _ -> sequences \map(nextScores) })
+
+  random.seeded(
+    7
+    {
+      def audio = [[0.0]]
+
+      println(describe(transcribe(audio, defaultOptions)))
+      println(describe(transcribe(audio, (...defaultOptions, sampleLen = #some(2)))))
+      println(describe(transcribe(audio, (...defaultOptions, temperature = 0.5))))
+
+      println(
+        describe(
+          transcribe(audio, (...defaultOptions, suppressBlank = false, sampleLen = #some(3)))
+        )
+      )
+
+      println(describe(transcribe(audio, (...defaultOptions, bestOf = #some(5)))))
+    }
+  )
+}
