@@ -235,38 +235,48 @@ module Solving =
             | Ok withUnknown -> withUnknown, failures
             | Error _ -> subst, failures
 
-    /// The lists of constraints `agreeing` was given lately, by reference, each with the constraints of it that agree.
-    let private agreeingLists =
-        new System.Threading.ThreadLocal<Dictionary<ConstraintSet, ConstraintSet>>(fun () ->
-            Dictionary<ConstraintSet, ConstraintSet>(HashIdentity.Reference))
+    /// A list of constraints solved past its failures (see `solvedSoFar`): what the rest agree on, the constraints of it
+    /// that agree, and its failures in the order they were found.
+    type private SoFar = { Subst: Subst; Kept: ConstraintSet; Failures: Mismatch list }
+
+    /// The lists of constraints `solvedSoFar` solved lately, by reference.
+    let private soFarLists =
+        new System.Threading.ThreadLocal<Dictionary<ConstraintSet, SoFar>>(fun () ->
+            Dictionary<ConstraintSet, SoFar>(HashIdentity.Reference))
+
+    /// `constraints` solved as `solveDetailed` does, for the type checker, which asks again and again as it goes. The
+    /// constraints in front of a list solved lately are solved with the constraints of it that agree, after its failures,
+    /// rather than the whole list from the start each time: an error in the module would otherwise have every later
+    /// question solve all of the module again, twice (#2449). Where that list kept all its constraints, they are
+    /// `constraints` itself, which is given as it is, so that the checkpoints in it are still found (see `checkpoint`).
+    let private solvedSoFar (constraints: ConstraintSet) : SoFar =
+        let given = soFarLists.Value
+        match given.TryGetValue constraints with
+        | true, known -> known
+        | false, _ ->
+            let rec walk (newer: ConstraintSet) (remaining: ConstraintSet) =
+                match given.TryGetValue remaining with
+                | true, known when obj.ReferenceEquals(known.Kept, remaining) -> constraints, known.Failures
+                | true, known -> List.rev newer @ known.Kept, known.Failures
+                | false, _ ->
+                    match remaining with
+                    | [] -> constraints, []
+                    | constraint :: rest -> walk (constraint :: newer) rest
+            let toSolve, earlier = walk [] constraints
+            let subst, kept, _, failures = solveSettingAside toSolve [] []
+            let known = { Subst = subst; Kept = kept; Failures = earlier @ failures }
+            if given.Count >= solvedListsKept then given.Clear()
+            given[constraints] <- known
+            known
 
     /// The constraints of `constraints` that agree, as `solveDetailed` keeps them: those it sets aside are not among
     /// them. The type checker asks whether a constraint fits with those it has so far by solving it with these, so that
     /// an error earlier in the module, reported where it is, does not make every later constraint seem not to fit.
-    ///
-    /// The constraints in front of a list it gave lately are put in front of what that list gave, so that solving them
-    /// is on top of what that solved to (see `unifyDetailed`), rather than the whole list from the start each time. Where
-    /// that list kept all its constraints, they are `constraints` itself, which is given as it is, so that the checkpoints
-    /// in it are still found (see `checkpoint`).
-    let agreeing (constraints: ConstraintSet) : ConstraintSet =
-        let given = agreeingLists.Value
-        match given.TryGetValue constraints with
-        | true, kept -> kept
-        | false, _ ->
-            let rec walk (newer: ConstraintSet) (remaining: ConstraintSet) =
-                match given.TryGetValue remaining with
-                | true, kept when obj.ReferenceEquals(kept, remaining) -> constraints
-                | true, kept -> List.rev newer @ kept
-                | false, _ ->
-                    match remaining with
-                    | [] -> constraints
-                    | constraint :: rest -> walk (constraint :: newer) rest
-            let _, kept, _, _ = solveSettingAside (walk [] constraints) [] []
-            if given.Count >= solvedListsKept then given.Clear()
-            given[constraints] <- kept
-            kept
+    let agreeing (constraints: ConstraintSet) : ConstraintSet = (solvedSoFar constraints).Kept
 
-    /// Solves `constraints` as `solveDetailed` does, giving each failure's message and where it is.
+    /// Solves `constraints` as `solveDetailed` does, giving each failure's message and where it is, for the type checker
+    /// as it goes (see `solvedSoFar`). A failure found in a list this one extends is given first, before those found in
+    /// the constraints in front of it.
     let solve (constraints: ConstraintSet) : Subst * (string * SourceSpan) list =
-        let subst, failures = solveDetailed constraints
-        subst, failures |> List.map (fun (message, span, _) -> message tyToString, span)
+        let known = solvedSoFar constraints
+        known.Subst, known.Failures |> List.map (fun (message, span, _) -> message tyToString, span)
