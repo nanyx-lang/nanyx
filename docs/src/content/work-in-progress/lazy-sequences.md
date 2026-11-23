@@ -1,6 +1,6 @@
 ---
 title: "Lazy sequences"
-description: "What is still open about seq(a) and Iterable: contexts through Iterable, inferring it, and a shorter signature"
+description: "What is still open about seq(a) and Iterable: inferring Iterable, and a shorter signature"
 order: 25
 ---
 
@@ -12,19 +12,16 @@ section. This page keeps what is still open.
 
 # Plan
 
-1. **The `seq` functions taking any `Iterable`** ([#2005](https://github.com/nanyx-lang/nanyx/issues/2005)). They
-   take a `([c] seq(a))`, since `Iterable` takes only values whose sequence needs no contexts: carrying a sequence's
-   contexts through `toSeq` would let them take any `Iterable` (see [open questions](#open-questions)).
-2. **Inferring `Iterable` for a def that writes no type**
+1. **Inferring `Iterable` for a def that writes no type**
    ([#2003](https://github.com/nanyx-lang/nanyx/issues/2003)). `def walk = { items -> for items | item -> ... }` should
    be inferred as `[Iterable(s)] s -> ()`. It isn't, since generalising the def would have to quantify `elem`, which its
    type doesn't name; a type nothing settles is walked as a list, unless a signature around the loop requires
    `Iterable` of it. A written signature pays for it, and how to make that shorter is an
    [open question](#open-questions).
-3. **A range of characters** waits on a character type ([#2196](https://github.com/nanyx-lang/nanyx/issues/2196)).
-4. **`Seq.cache`,** not written yet, would give the sequences that want it stored tails, so that walking one twice
+2. **A range of characters** waits on a character type ([#2196](https://github.com/nanyx-lang/nanyx/issues/2196)).
+3. **`Seq.cache`,** not written yet, would give the sequences that want it stored tails, so that walking one twice
    does its work once.
-5. **Later:** fusing chains of `map` and `filter` in the compiler, so that a chain doesn't allocate a closure and a
+4. **Later:** fusing chains of `map` and `filter` in the compiler, so that a chain doesn't allocate a closure and a
    `#next` per element at each step.
 
 # Open questions
@@ -42,9 +39,6 @@ section. This page keeps what is still open.
 
   Making a plain `seq(a)` parameter quietly mean "anything iterable" is ruled out: the annotation would no longer mean
   what it says.
-- **Iterable values that need contexts.** `Iterable` takes only values whose sequence needs no contexts, so the `seq`
-  functions take a sequence. Whether and how to carry a sequence's contexts through `toSeq` is
-  [#2005](https://github.com/nanyx-lang/nanyx/issues/2005).
 - **Walking an unbounded range.** The compiler rejects a `for` whose only inputs are ranges with no end (NYX0217). But
   an infinite `for` that ends with a `return` is as legitimate as a `while` loop that ends the same way, so this could
   be a default-linter rule instead, as for `while true`.
