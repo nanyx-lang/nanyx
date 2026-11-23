@@ -79,6 +79,12 @@ module ModuleOrigin =
     /// (`nanyx/async`).
     let asyncName = "async"
 
+/// The call the compiler makes the body of each def that starts a task into (see `TaskScopes`): `nanyx/async`'s
+/// `scope`, imported under an alias no code can write.
+module TaskScopeSyntax =
+    let alias = "__async"
+    let scopeCall = alias + ".scope"
+
 /// What makes a nominal type the type it is: the module that defines it, and the name it is defined under there
 /// (`Person`, or `money.Money` in a `module money =` block). Two modules that each define a `Person` define two
 /// types.

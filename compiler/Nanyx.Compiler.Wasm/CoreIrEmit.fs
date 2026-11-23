@@ -791,6 +791,11 @@ type private FunctionEmitter(context: EmitContext) =
                 | other -> internalError $"'{name}' at '{IrType.show other}', which is not an integer"
             join "\n    " [ atoms args; yield! code ]
         | CallRuntime(name, args, _) when bitwiseOperations.ContainsKey name -> join "\n    " [ atoms args; yield! bitwiseOperations.[name] ]
+        // What a finished task gave back, through the function it keeps it as (see `WasmScheduler`).
+        | CallRuntime(name, [ handle ], _) when name = Intrinsics.taskResult ->
+            let result = CoreIrLayout.valueType expr.Type
+            context.IndirectCall(TaskLowering.resumeTypeOf result)
+            join "\n    " [ atoms [ handle ]; yield! WasmScheduler.readResult (freshLocal "__result" "i32") (TaskLowering.resumeTypeName result) |> List.map touching ]
         | CallRuntime(name, [ arg ], _) when name = Intrinsics.intCast ->
             // An integer as one of another integer type, which the prelude has checked it fits.
             join "\n    " [ atoms [ arg ]; yield! SizedIntegerCode.cast (integerType (atomType arg)) (integerType expr.Type) ]
