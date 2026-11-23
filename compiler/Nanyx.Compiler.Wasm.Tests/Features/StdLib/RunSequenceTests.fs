@@ -18,6 +18,22 @@ let ``Run - a range nested 20 deep in its own bound counts through each level`` 
     runSource $"println({nested})\nprintln((2..{nested}) \\seq.toList)\n" |> assertRan "3\n[2, 3]\n"
 
 [<Fact>]
+let ``Run - a range of a number other than int counts with its succ`` () =
+    runSource """
+def U8.succ: U8 -> U8 = { n -> n + 1 }
+def float.succ: float -> float = { x -> x + 1.0 }
+def bytes = { first: U8, last: U8 -> first..last }
+def sumBytes: seq(U8) -> U8 = { xs -> seq.fold(xs, 0, { a, b -> a + b }) }
+def countInts = { xs: seq(I64) -> seq.length(xs) }
+
+println((0.5..2.5) \seq.toList)
+println(bytes(250, 254) \seq.toList)
+println(sumBytes(bytes(1, 10)))
+println(countInts(1..5))
+"""
+    |> assertRan "[0.5, 1.5, 2.5]\n[250, 251, 252, 253, 254]\n55\n5\n"
+
+[<Fact>]
 let ``Run - a range without an end is cut short by take`` () =
     runSource """
 def naturals = 0..
