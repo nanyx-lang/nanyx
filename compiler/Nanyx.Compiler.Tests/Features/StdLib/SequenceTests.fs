@@ -23,6 +23,45 @@ def aliased: seq(int) -> Sequence(int) = { s -> s }
     Assert.Equal("seq(int)", asciiTypeIn typed "written")
     Assert.Equal("seq(int) -> seq(int)", asciiTypeIn typed "aliased")
 
+// A range's bounds are inferred once, so a range in a range's bound checks in time that grows with how deep it is
+// nested. Each level was inferred twice, and 18 levels took 113 s to check (#2307).
+[<Fact>]
+let ``A range nested 20 deep in its own bound is a seq of ints`` () =
+    let nested = List.fold (fun inner _ -> $"seq.length(1..{inner})") "3" [ 1..20 ]
+    let typed = clean $"def counted = {nested}\ndef ranged = 1..{nested}\n"
+    Assert.Equal("int", asciiTypeIn typed "counted")
+    Assert.Equal("seq(int)", asciiTypeIn typed "ranged")
+
+/// `U8` and `float` made `Enumerable`, so that ranges of them can be written.
+let private enumerableNumbers = "def U8.succ: U8 -> U8 = { n -> n + 1 }\ndef float.succ: float -> float = { x -> x + 1.0 }\n"
+
+[<Fact>]
+let ``A range's bounds are of their own type, whatever the range is used as`` () =
+    let typed =
+        clean (
+            enumerableNumbers
+            + """def decimals: seq(float) = 0.5..2.5
+def ints: seq(I64) = 1..3
+def bytes = { first: U8, last: U8 -> first..last }
+def countInts = { xs: seq(I64) -> seq.length(xs) }
+def counted = countInts(1..5)
+"""
+        )
+    Assert.Equal("seq(float)", asciiTypeIn typed "decimals")
+    Assert.Equal("seq(int)", asciiTypeIn typed "ints")
+    Assert.Equal("U8, U8 -> seq(U8)", asciiTypeIn typed "bytes")
+    Assert.Equal("int", asciiTypeIn typed "counted")
+
+[<Fact>]
+let ``A range of number literals is of ints, not of the numbers it is used as`` () =
+    let cases =
+        [ "def small: seq(U8) = 1..4\n", "'int' vs 'U8'", "1..4"
+          "def floats: seq(float) = 1..3\n", "'int' vs 'float'", "1..3"
+          "def countBytes = { xs: seq(U8) -> seq.length(xs) }\ndef n = countBytes(250..254)\n", "'int' vs 'U8'", "250..254"
+          "def mixed = 1..2.5\n", "'int' vs 'float'", "1" ]
+    for source, message, at in cases do
+        Assert.Equal((DiagnosticCodes.TypeMismatch.Code, message, at), onlyDiagnostic (enumerableNumbers + source))
+
 [<Fact>]
 let ``The seq functions are attached to seq, and a pipe finds them`` () =
     let typed =
