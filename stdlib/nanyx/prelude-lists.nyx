@@ -206,7 +206,8 @@ export def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound = {
   then yield v }` gives the payload of each `#other`.
 export def list.select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b) = { xs, f ->
   -- Built front to back: each value yielded goes in a new cell that becomes the tail of the last
-  -- one. Nothing else sees the cells until the list is given back.
+  -- one. Nothing else sees the cells until the list is given back. This is what an `MList` does,
+  -- written out by hand because the prelude can't import `nanyx/mlist`, which imports the prelude.
   memory {
     mut first = []
     mut last = []
