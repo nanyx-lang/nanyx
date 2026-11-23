@@ -23,6 +23,15 @@ def aliased: seq(int) -> Sequence(int) = { s -> s }
     Assert.Equal("seq(int)", asciiTypeIn typed "written")
     Assert.Equal("seq(int) -> seq(int)", asciiTypeIn typed "aliased")
 
+// A range's bounds are inferred once, so a range in a range's bound checks in time that grows with how deep it is
+// nested. Each level was inferred twice, and 18 levels took 113 s to check (#2307).
+[<Fact>]
+let ``A range nested 20 deep in its own bound is a seq of ints`` () =
+    let nested = List.fold (fun inner _ -> $"seq.length(1..{inner})") "3" [ 1..20 ]
+    let typed = clean $"def counted = {nested}\ndef ranged = 1..{nested}\n"
+    Assert.Equal("int", asciiTypeIn typed "counted")
+    Assert.Equal("seq(int)", asciiTypeIn typed "ranged")
+
 [<Fact>]
 let ``The seq functions are attached to seq, and a pipe finds them`` () =
     let typed =

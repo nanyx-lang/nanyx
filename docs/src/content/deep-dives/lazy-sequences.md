@@ -129,7 +129,10 @@ computation lazy without saying so; and it is subtyping by another name, which c
 
 `a..b` is read as the prelude's `seq.range(a, b)`, and `a..` as `seq.from(a)`, of any type with an `Enumerable` (its
 `succ`) and an `Ord` (`InferCalls`, `Seqs`). A range of `int`s is read as the prelude's `__intRange` or `__intFrom`
-instead, which count and are passed no instances. Both are `seq` values that can be passed around and stored.
+instead, which count and are passed no instances. Both are `seq` values that can be passed around and stored. The
+bounds are inferred once, before either call, which is checked with each bound by a name of its own
+(`RangeSyntax.bound`), so a range in a range's bound is not inferred again for each call
+([#2307](https://github.com/nanyx-lang/nanyx/issues/2307)).
 
 # `for` loops
 

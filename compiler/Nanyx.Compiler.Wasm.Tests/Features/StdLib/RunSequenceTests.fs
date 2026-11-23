@@ -13,6 +13,11 @@ println((1..10) \seq.map { * 2 } \seq.toList)
     |> assertRan "[2, 4, 6, 8, 10, 12, 14, 16, 18, 20]\n"
 
 [<Fact>]
+let ``Run - a range nested 20 deep in its own bound counts through each level`` () =
+    let nested = List.fold (fun inner _ -> $"seq.length(1..{inner})") "3" [ 1..20 ]
+    runSource $"println({nested})\nprintln((2..{nested}) \\seq.toList)\n" |> assertRan "3\n[2, 3]\n"
+
+[<Fact>]
 let ``Run - a range without an end is cut short by take`` () =
     runSource """
 def naturals = 0..
