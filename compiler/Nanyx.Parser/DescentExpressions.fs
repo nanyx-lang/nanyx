@@ -216,6 +216,13 @@ and private contextMember (c: Cursor) : Expression =
     let start = c.Start
     let contextName, _ = identifierWithSpan c
     if not (Char.IsUpper contextName[0]) || not (c.Adjacent && c.Is LeftParen) then raise NoMatch
+    // A call of a capitalised name, `Wrap(x)`, has no `.` after its `)`: its arguments are read once, as a call's (#2218).
+    match closingParen c 0 with
+    | Some close ->
+        match c.At(close + 1), c.At close with
+        | Code dot, Code paren when dot.Kind = Dot && dot.Start = paren.End -> ()
+        | _ -> raise NoMatch
+    | None -> ()
     c.Take() |> ignore
     let types = sepBy1 c (fun () -> DescentTypes.typeExpr c) (fun () -> c.Expect Comma |> ignore)
     c.Expect RightParen |> ignore
