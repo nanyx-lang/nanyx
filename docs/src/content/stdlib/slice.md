@@ -32,8 +32,13 @@ Bounds clamp: `array.slice(xs, from, to)` is the elements from `from` up to but 
 `to`, each bound moved into `0` to the length, and an empty slice when `to` is before `from`.
 Reading one element, [`Slice.at`](#sliceat), gives `#notFound` past the end, never a trap.
 
+A function that makes new elements, such as [`Slice.map`](#slicemap), [`Slice.filter`](#slicefilter) or [`Slice.sort`](#slicesort),
+gives them in an `Array` of their own. [`Slice.take`](#slicetake) and [`Slice.skip`](#sliceskip) give a slice of the same
+array, as [`Slice.slice`](#sliceslice) does, and copy nothing.
+
 Each function is attached to `Slice`, so with `import nanyx/slice` it is called as
-`Slice.length(s)`, or as `s \length`; `xs \slice(1, 4)` makes a slice of the array `xs`.
+`Slice.length(s)`, or as `s \length`; `xs \slice(1, 4)` makes a slice of the array `xs`, and the
+literal `Slice[1, 2, 3]` a slice of all of a new array.
 
 ## `Slice`
 
@@ -50,13 +55,21 @@ def array.slice: array(a), int, int -> Slice(a)
 The elements of `xs` from `from` up to but not including `to`, sharing `xs`'s storage: each bound
 is moved into `0` to the length of `xs`, so `xs \slice(1, 100)` is everything after the first.
 
-## `Slice.ofArray`
+## `Slice.fromArray`
 
 ```nanyx fragment
-def Slice.ofArray: array(a) -> Slice(a)
+def Slice.fromArray: array(a) -> Slice(a)
 ```
 
-All of `xs`, as a slice that shares its storage.
+All of `xs`, as a slice that shares its storage. The literal `Slice[1, 2, 3]` is made with it.
+
+## `Slice.fromList`
+
+```nanyx fragment
+def Slice.fromList: list(a) -> Slice(a)
+```
+
+The elements of `xs`, in order, as a slice of all of a new array.
 
 ## `Slice.length`
 
@@ -144,5 +157,152 @@ def Slice.map: [c] Slice(a), ([c] a -> b) -> array(b)
 ```
 
 An array of `f` applied to each element of `s`, in order.
+
+## `Slice.filter`
+
+```nanyx fragment
+def Slice.filter: [c] Slice(a), ([c] a -> bool) -> array(a)
+```
+
+An array of the elements of `s` that `keep` holds for, in order.
+
+## `Slice.filterMap`
+
+```nanyx fragment
+def Slice.filterMap: [c] Slice(a), ([c] a -> #some(b) | #skip) -> array(b)
+```
+
+An array of the values `f` gives as `#some`, in order, leaving out the elements it gives `#skip`
+for: a `map` and a `filter` in one walk.
+
+## `Slice.select`
+
+```nanyx fragment
+def Slice.select: [c, d] Slice(a), ([c] a -> [d] seq(b)) -> array(b)
+```
+
+An array of the values `f` yields for each element in turn, in the order it yields them, as
+[`list.select`](prelude-lists#listselect) gives them.
+
+## `Slice.selectOne`
+
+```nanyx fragment
+def Slice.selectOne: [c, d] Slice(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
+```
+
+The first value `f` yields, running it on the elements in turn as [`Slice.select`](#sliceselect) does, or
+`#notFound` when it yields none. It stops at the first yield: `f` runs on no element after the one
+it yields for.
+
+## `Slice.find`
+
+```nanyx fragment
+def Slice.find: [c] Slice(a), ([c] a -> bool) -> #some(a) | #notFound
+```
+
+The first element `matches` holds for, or `#notFound`.
+
+## `Slice.findIndex`
+
+```nanyx fragment
+def Slice.findIndex: [c] Slice(a), ([c] a -> bool) -> #some(int) | #notFound
+```
+
+The position of the first element `matches` holds for, counting from 0 at the start of `s`, as
+[`Slice.at`](#sliceat) does, or `#notFound`.
+
+## `Slice.any`
+
+```nanyx fragment
+def Slice.any: [c] Slice(a), ([c] a -> bool) -> bool
+```
+
+Whether `test` holds for any element (so `false` for an empty slice).
+
+## `Slice.all`
+
+```nanyx fragment
+def Slice.all: [c] Slice(a), ([c] a -> bool) -> bool
+```
+
+Whether `test` holds for every element (so `true` for an empty slice).
+
+## `Slice.contains`
+
+```nanyx fragment
+def Slice.contains: [Eq(a)] Slice(a), a -> bool
+```
+
+Whether an element of `s` is equal to `x`. Elements are compared with `==`, by their structure.
+
+## `Slice.reverse`
+
+```nanyx fragment
+def Slice.reverse: Slice(a) -> array(a)
+```
+
+An array of the elements of `s`, last first.
+
+## `Slice.sortWith`
+
+```nanyx fragment
+def Slice.sortWith: [c] Slice(a), ([c] (a, a) -> #less | #equal | #greater) -> array(a)
+```
+
+An array of the elements of `s` in the order `order` gives: `order(a, b)` says whether `a` comes
+before `b` (`#less`), after it (`#greater`), or either way (`#equal`), as `compare` does. The sort
+is stable: elements `order` finds equal keep their order. It is [`MArray.sortWith`](mslice#marraysortwith)'s merge sort,
+on a copy of the elements.
+
+## `Slice.sortBy`
+
+```nanyx fragment
+def Slice.sortBy: [Ord(b), c] Slice(a), ([c] a -> b) -> array(a)
+```
+
+An array of the elements of `s` in ascending order of `key`. The sort is stable: elements with the
+same key keep their order.
+
+## `Slice.sort`
+
+```nanyx fragment
+def Slice.sort: [Ord(a)] Slice(a) -> array(a)
+```
+
+An array of the elements of `s` in ascending order of their `Ord`. The sort is stable.
+
+## `Slice.take`
+
+```nanyx fragment
+def Slice.take: Slice(a), int -> Slice(a)
+```
+
+The first `count` elements of `s` (all of them when there are fewer), as a slice of the same
+array: it copies nothing.
+
+## `Slice.skip`
+
+```nanyx fragment
+def Slice.skip: Slice(a), int -> Slice(a)
+```
+
+The elements of `s` after the first `count`, as a slice of the same array: it copies nothing.
+
+## `Slice.zip`
+
+```nanyx fragment
+def Slice.zip: Slice(a), Slice(b) -> array((a, b))
+```
+
+An array of pairs of the elements of `xs` and `ys` at the same position, as long as the shorter.
+
+## `Slice.scan`
+
+```nanyx fragment
+def Slice.scan: [c] Slice(a), b, ([c] (b, a) -> b) -> array(b)
+```
+
+An array of the running totals of a fold: `initial`, then each value [`Slice.fold`](#slicefold) passes along,
+so the last is what the fold gives back, and it holds one more element than `s`.
 
 <!-- End of the generated reference. -->
