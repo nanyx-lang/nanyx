@@ -11,7 +11,8 @@
   their fill at a byte count, so a multi-byte `fill` can be cut mid-character. `chars`, `reverse` and
   `codePoints` work by character, where a character is one Unicode code point: they read each UTF-8
   sequence's lead byte, so they never cut a character in half. `fromCodePoint` turns a code point
-  back into a character.
+  back into a character. `toUtf8` gives a string's bytes as an array, and `fromUtf8` turns bytes
+  back into a string, checking that they are well-formed UTF-8.
 
   Every function here is stack-safe: each one that walks a string calls itself only in tail
   position, so it works on a string of any length.
@@ -21,8 +22,10 @@ module text
 -- `__nanyx_string_byte_at`, `__nanyx_string_slice`, `__nanyx_string_from_byte` and
 -- `__nanyx_string_join`, which copies each piece of its result once; `split` and `words` also build
 -- their results with `__nanyx_list_cons`, last first, and reverse them with the prelude's
--- `list.reverse`. `++` (concatenation) and `==` on strings are language operators. A string built
--- from many pieces is built as a list of them and joined once, since `++` copies both its operands.
+-- `list.reverse`. `toUtf8` and `fromUtf8` also use the array intrinsics `__nanyx_array_new`,
+-- `__nanyx_array_write`, `__nanyx_array_get` and `__nanyx_array_length`, so that this module needs
+-- no import. `++` (concatenation) and `==` on strings are language operators. A string built from
+-- many pieces is built as a list of them and joined once, since `++` copies both its operands.
 
 --| The number of bytes in `s`.
 export def string.length: string -> int = { s ->
@@ -454,6 +457,103 @@ export def string.fromCodePoint: int -> #some(string) | #invalidCodePoint = { co
   if codePoint < 0 or codePoint > 1114111 or codePoint >= 55296 and codePoint <= 57343
     then #invalidCodePoint
     else #some(encodeCodePoint(codePoint))
+}
+
+-- UTF-8 bytes ----------------------------------------------------------------------------------
+
+--| The bytes of `s`, its UTF-8 encoding, in order: `"aé" \toUtf8` is `[97, 195, 169]`. Stack-safe:
+  it works on a string of any length.
+export def string.toUtf8: string -> Array(U8) = { s ->
+  bytesFrom(s, __nanyx_array_new(string.length(s)), 0)
+}
+
+--| `bytes`, a new array as long as `s`, once each byte of `s` from `i` on is written into it.
+def bytesFrom: string, Array(U8), int -> Array(U8) = { s, bytes, i ->
+  if i < string.length(s) then
+    __nanyx_array_write(bytes, i, U8.fromInt(__nanyx_string_byte_at(s, i)))
+    bytesFrom(s, bytes, i + 1)
+  else bytes
+}
+
+--| Byte `i` of `bytes`, as an int.
+def byteOf: Array(U8), int -> int = { bytes, i ->
+  U8.toInt(__nanyx_array_get(bytes, i))
+}
+
+--| Whether `bytes`, which holds `count` bytes, has a byte at `i` and it is from `low` to `high`.
+def byteBetween: Array(U8), int, int, int, int -> bool = { bytes, count, i, low, high ->
+  i < count and byteOf(bytes, i) >= low and byteOf(bytes, i) <= high
+}
+
+--| Whether `bytes`, which holds `count` bytes, has `n` continuation bytes from `i` on.
+def continuationsFrom: Array(U8), int, int, int -> bool = { bytes, count, i, n ->
+  if n <= 0
+    then true
+    else if byteBetween(bytes, count, i, 128, 191)
+      then continuationsFrom(bytes, count, i + 1, n - 1)
+      else false
+}
+
+--| The length of the well-formed UTF-8 sequence at byte `i` of `bytes`, which holds `count` bytes,
+  or 0 when there isn't one there. The range each lead byte allows its second byte rules out
+  overlong encodings, surrogates and code points past 0x10FFFF.
+def sequenceLength: Array(U8), int, int -> int = { bytes, count, i ->
+  def lead = byteOf(bytes, i)
+
+  def sequence = { low, high, length ->
+    def secondFits = byteBetween(bytes, count, i + 1, low, high)
+    if secondFits and continuationsFrom(bytes, count, i + 2, length - 2) then length else 0
+  }
+
+  if lead < 128
+    then 1
+    else if lead < 194
+      then 0
+      else if lead < 224
+        then sequence(128, 191, 2)
+        else if lead == 224
+          then sequence(160, 191, 3)
+          else if lead == 237
+            then sequence(128, 159, 3)
+            else if lead < 240
+              then sequence(128, 191, 3)
+              else if lead == 240
+                then sequence(144, 191, 4)
+                else if lead < 244
+                  then sequence(128, 191, 4)
+                  else if lead == 244 then sequence(128, 143, 4) else 0
+}
+
+--| Whether the bytes of `bytes` from `i` on, up to `count`, are well-formed UTF-8.
+def wellFormedFrom: Array(U8), int, int -> bool = { bytes, count, i ->
+  def length = if i < count then sequenceLength(bytes, count, i) else 0
+
+  if i >= count
+    then true
+    else if length > 0 then wellFormedFrom(bytes, count, i + length) else false
+}
+
+--| Each of the bytes of `bytes` before `stop` as a string of one byte, in order, in front of `acc`.
+def byteStringsBefore: Array(U8), int, list(string) -> list(string) = { bytes, stop, acc ->
+  if stop <= 0
+    then acc
+    else byteStringsBefore(
+      bytes
+      stop - 1
+      __nanyx_list_cons(__nanyx_string_from_byte(byteOf(bytes, stop - 1)), acc)
+    )
+}
+
+--| The string whose UTF-8 encoding is `bytes`: `string.fromUtf8([97, 195, 169])` is `#some("aé")`.
+  Bytes that aren't well-formed UTF-8 give `#invalidUtf8`: a continuation byte with no lead byte, a
+  sequence cut short, an overlong encoding, a surrogate (`0xD800` to `0xDFFF`) or a code point past
+  `0x10FFFF`. Stack-safe: it works on any number of bytes.
+export def string.fromUtf8: Array(U8) -> #some(string) | #invalidUtf8 = { bytes ->
+  def count = __nanyx_array_length(bytes)
+
+  if wellFormedFrom(bytes, count, 0)
+    then #some(__nanyx_string_join(byteStringsBefore(bytes, count, []), ""))
+    else #invalidUtf8
 }
 
 -- String slices --------------------------------------------------------------------------------

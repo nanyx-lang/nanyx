@@ -20,10 +20,10 @@ Mutable objects can. A reference ([`MRef`](../advanced/memory#references)) can h
 reference, and counting never frees that cycle. Every mutable object belongs to the `memory` block it was made in,
 and nothing that needs the block's `Memory` can leave it, so a block frees its references when it ends, whatever their
 counts say ([#2232](https://github.com/nanyx-lang/nanyx/issues/2232); see
-[Regions](./memory-management#regions)). Counting still frees them earlier when there is no cycle. The outermost block
-running does the freeing, so a cycle made in an inner block lives until the outermost one ends
-([#2376](https://github.com/nanyx-lang/nanyx/issues/2376)). The boxes of captured cells and `MArray`s are not on a
-region yet, so a cycle through one of them still leaks.
+[Regions](./memory-management#regions)). Counting still frees them earlier when there is no cycle. A value stored
+into an outer block's reference, or given back by a block, moves the references it holds onto the outer block first
+([#2376](https://github.com/nanyx-lang/nanyx/issues/2376)), so each block frees its own cycles. The boxes of captured
+cells and `MArray`s are not on a region yet, so a cycle through one of them still leaks.
 
 That keeps [performance predictable](../meta/principles#performance-you-can-reason-about). Memory comes back
 at a point the program determines, not when a collector decides to run, and there are no collector pauses.

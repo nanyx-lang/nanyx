@@ -22,8 +22,9 @@ page keeps what is still open.
 
 # HTTP
 
-- **Binary bodies.** A body is a `string`, because nothing in the library turns an `Array(U8)` into a `string`.
-  Binary bodies come with a conversion between bytes and text.
+- **Binary bodies.** A body is a `string`. The library now converts between bytes and text, with
+  [`string.toUtf8` and `string.fromUtf8`](../stdlib/text), so a body could be an `Array(U8)` and a program could read
+  it as text when it is UTF-8; `Request` and `Response` don't take one yet.
 - **A `.json` helper.** `Response.json` would make `nanyx.http.core` depend on `nanyx.json`, and the HTTP host would
   want a constructor of that name as much as a client wants a reader. Whether to add it is open.
 - **What the HTTP host still needs**, route patterns, `Log` and `Env`, streamed bodies, serving beyond `localhost`

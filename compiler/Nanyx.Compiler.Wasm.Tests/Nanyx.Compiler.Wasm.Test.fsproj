@@ -217,6 +217,7 @@
     <Compile Include="Features\StdLib\RunListSortOrderTests.fs" />
     <Compile Include="Features\StdLib\RunListZipWithChunksTests.fs" />
     <Compile Include="Features\StdLib\RunStringCodePointTests.fs" />
+    <Compile Include="Features\StdLib\RunStringUtf8Tests.fs" />
     <Compile Include="Features\StdLib\RunBitwiseTests.fs" />
     <Compile Include="Features\StdLib\RunStackTests.fs" />
     <Compile Include="Features\StdLib\RunQueueTests.fs" />
