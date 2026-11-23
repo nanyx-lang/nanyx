@@ -31,10 +31,9 @@ page keeps what is still open.
   and serving as a `wasi:http` component, is on [Serving HTTP](./hosts#serving-http).
 # JSON
 
-- **Encoding and decoding any record automatically** ([#1789](https://github.com/nanyx-lang/nanyx/issues/1789)) is
-  decided to wait for type reflection ([Type members and reflection](./type-members-and-reflection)), which lets any
-  library walk a type's structure, not just JSON's. Deriving a JSON context in the compiler, as `Eq` and `ToString` are
-  derived, was rejected: it would be a compiler special case that a SQL or YAML library couldn't use.
+- **Encoding and decoding any record automatically** is built on type reflection, in `nanyx.json` 0.2.0
+  ([#1789](https://github.com/nanyx-lang/nanyx/issues/1789)); what is left is on
+  [Type members and reflection](./type-members-and-reflection).
 - **Where the encoders live.** They are in a module of their own, `nanyx.json/encode`, because their names are the
   decoders' (`encode.string`, `json.string`). Attaching them to `Encoder` (`json.Encoder.string`) would keep one
   module, since a type's attached definitions are reached through an import's alias
