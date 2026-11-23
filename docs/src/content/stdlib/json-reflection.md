@@ -79,7 +79,7 @@ match json.encode(Button(label = "OK", onClick = { () }))
 -- onClick: A function can't be written as JSON
 ```
 
-To write or read a type another way, as under other keys or with a tag in a field of its own, build a
+To write or read a type another way, as nested differently or with a tag in a member of its own, build a
 [decoder](json-typed) or an [encoder](encode) for it. `json.decoderFor(type T)` and `json.encoderFor(type T)` are the walk
 as a decoder and an encoder, for the parts of it that are written as `encode` writes them.
 
