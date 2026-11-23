@@ -67,6 +67,7 @@
     <Compile Include="WatPieces.fs" />
     <Compile Include="CoreIrSplitPoints.fs" />
     <Compile Include="TaskLowering.fs" />
+    <Compile Include="WasmScheduler.fs" />
     <Compile Include="CoreIrEmitIntrinsics.fs" />
     <Compile Include="CoreIrEmitLocals.fs" />
     <Compile Include="CoreIrEmit.fs" />

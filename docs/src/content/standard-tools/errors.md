@@ -303,8 +303,8 @@ module ([Modules](../tour/modules)).
 
 # NYX0019: Unknown keyword kind
 
-A workflow keyword's `@customKeywordType` names a kind the compiler does not know, or names none. The kinds are listed
-in [Workflows](../advanced/workflows#keyword-kinds).
+A workflow keyword's `@customKeywordType` names a kind the compiler does not know, or names none, or names a kind other
+than `#delay` before a top-level def. The kinds are listed in [Workflows](../advanced/workflows#keyword-kinds).
 
 ```nanyx
 context Lazy = (
@@ -313,7 +313,16 @@ context Lazy = (
 )
 ```
 
-To fix it, write a kind from the list, as `@customKeywordType(#bind)`.
+A `#delay` keyword rewrites nothing but itself, so a top-level def can be one, as `nanyx/async`'s `start` is. Any
+other kind needs a workflow's builder, so only a member of the builder's context can be one:
+
+```nanyx
+@customKeywordType(#bind)  -- error NYX0019: A definition can only be a `#delay` keyword, which rewrites nothing but itself: ...
+def step: (() -> int) -> int = { work -> work() }
+```
+
+To fix it, write a kind from the list, as `@customKeywordType(#bind)`, and on a def, `#delay`, or make the keyword a
+member of its builder's context.
 
 # NYX0020: Code in a manifest
 
@@ -1632,6 +1641,15 @@ def leak = memory {
 
 To fix it, give back what the cells hold, rather than the cells or a function over them.
 
+A def is the scope of the tasks it starts ([Async](../advanced/async#each-def-is-a-scope)), so a task, or a lambda
+that starts one, can't leave the def either:
+
+```nanyx
+def leaks = { _ -> start! 1 }  -- error NYX0233: A task can't leave the def that started it: ...
+```
+
+To fix that, await the task in the def, and give back what it gave back.
+
 # NYX0234: mut argument is not a cell
 
 An argument is passed with `mut`, as a cell, but it is not one.
@@ -2356,6 +2374,26 @@ println(area(2.0))
 
 To fix it, build the program with `nanyx build` and run the component, or test what calls the import by passing the
 function in.
+
+# NYX0279: Task that holds what belongs to a memory block
+
+A task is started with a function that uses a `memory` block's cells or references (`MRef`, `MList`). Tasks share only
+immutable values, so that another task can never change what one holds while it waits
+([Async](../advanced/async#tasks-share-only-values)).
+
+```nanyx
+def counts = { _ ->
+  memory {
+    mut total = 0
+    def t = start! total := total + 1  -- error NYX0279: A task can't hold what belongs to a 'memory' block: ...
+    await(t)
+    total
+  }
+}
+```
+
+To fix it, give the task what the cell holds, and change the cell with what the task gives back:
+`def t = start! now + 1`, after `def now = total`, then `total := await(t)`.
 
 # NYX0301: Not supported by the WebAssembly backend
 

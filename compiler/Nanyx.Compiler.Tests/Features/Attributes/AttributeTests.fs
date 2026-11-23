@@ -112,6 +112,37 @@ let ``A #delay or #bindF member whose type doesn't take a function of no paramet
     Assert.Equal(16, diagnostic.Span.Value.Start)
 
 [<Fact>]
+let ``A top-level def can be a #delay keyword`` () =
+    let source =
+        """def twice: (() -> int) -> int = { work -> work() + work() }
+
+@customKeywordType(#delay)
+def run: (() -> int) -> int = { work -> twice(work) }
+
+def result = run! 21
+"""
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Theory>]
+[<InlineData("bind")>]
+[<InlineData("bindF")>]
+[<InlineData("yield")>]
+let ``A top-level def can't be a keyword of any other kind`` (kind: string) =
+    let source = $"@customKeywordType(#{kind})\ndef run: (() -> int) -> int = {{ work -> work() }}\n"
+    let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
+    Assert.StartsWith("A definition can only be a `#delay` keyword", diagnostic.Message)
+
+[<Fact>]
+let ``A #delay def whose type doesn't take a function of no parameters is an error at the attribute`` () =
+    let source = "@customKeywordType(#delay)\ndef run: int -> int = { n -> n }\n"
+    let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.KeywordMemberType.Code, diagnostic.Code)
+    Assert.StartsWith("'run' is a `#delay` keyword", diagnostic.Message)
+    Assert.Equal(0, diagnostic.Span.Value.Start)
+
+[<Fact>]
 let ``A keyword type without a kind is an error`` () =
     let diagnostic = (Compiler.compile "context C = (\n  @customKeywordType\n  step: int\n)").Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
