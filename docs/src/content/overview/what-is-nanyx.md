@@ -22,7 +22,7 @@ Nanyx is a modern, type-safe programming language designed for building reliable
 
 ## Pipeline operator
 The `\` operator lets you chain transformations in a readable, left-to-right manner:
-```nanyx
+```nanyx fragment
 data \parse \validate \transform \save
 ```
 
@@ -38,7 +38,7 @@ def greet: [Console] string -> () = { name ->
 
 ## Powerful pattern matching
 Exhaustive pattern matching on records, tag unions, literals, and more:
-```nanyx
+```nanyx fragment
 match result
   | #some(value) -> process(value)
   | #invalid(reason) -> logError(reason)

@@ -1,6 +1,6 @@
 // The playground's examples: every runnable example in the language tour, grouped by its page, and the links that
 // open one in the playground. A tour example is runnable when its block is fenced ```nanyx with nothing after it (not
-// a fragment, nor skipped) and it doesn't show an error: these are the blocks `RunTourExampleTests.fs` compiles and runs.
+// a fragment, nor skipped) and it doesn't show an error: these are the blocks `RunDocExampleTests.fs` compiles and runs.
 // Plain JS so that both astro.config.mjs and the playground page can import it. What a runnable example is, and the
 // code it runs as, are in `playground-code.mjs`, which the tour's pages read in the browser too.
 

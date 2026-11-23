@@ -57,10 +57,11 @@ those files workable. Problems with the code's structure are tracked as GitHub i
 - **Keep the VS Code extension page up to date.** A change to the extension in `extension/` (a setting, a
   command, a feature, how it finds `nanyx`) updates
   [VS Code extension](docs/src/content/standard-tools/vs-code-extension.md) in the same PR.
-- **The tour's examples are tests.** Every ` ```nanyx ` block in `docs/src/content/tour` is compiled and run by
-  `RunTourExampleTests.fs`. Mark a block that isn't a whole program ` ```nanyx fragment `, and one the compiler
-  gets wrong ` ```nanyx skip=#<issue> `; the rules are in
-  [Compilation](docs/src/content/deep-dives/compilation.md#tour-examples).
+- **The docs' examples are tests.** Every ` ```nanyx ` block on every page under `docs/src/content` is compiled and
+  run by `RunDocExampleTests.fs`, but for the error reference's, which `ErrorReferenceTests.fs` checks. Mark a block
+  that isn't a whole program ` ```nanyx fragment `, and one the compiler gets wrong ` ```nanyx skip=#<issue> `; the
+  rules are in
+  [Compilation](docs/src/content/deep-dives/compilation.md#docs-examples).
 - **Use types, not strings.** Prefer a union case to a string for types, kinds and keys. Never take
   structured data apart with `Split`.
 

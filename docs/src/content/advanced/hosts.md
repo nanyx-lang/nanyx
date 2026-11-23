@@ -60,10 +60,10 @@ The host has a _prelude_: a module whose exports every module of the program see
 ```nanyx
 match args()
   | [name, ..._] -> println("Hello, {name}!")
-  | [] -> exit(2)
+  | [] -> println("Hello, whoever you are!")
 ```
 
-`nanyx run greet.nyx Ada` prints `Hello, Ada!`; with no arguments, the program ends with the exit code 2. Arguments for the program go after the file or package.
+`nanyx run greet.nyx Ada` prints `Hello, Ada!`; with no arguments, it prints `Hello, whoever you are!`. Arguments for the program go after the file or package.
 
 `Console` and `Env` are declared in a separate package, `nanyx.console.core`, which the compiler ships too. A library has no host, so it sees no host's prelude: it lists `nanyx.console.core` in its dependencies, at the compiler's version, and imports what it uses:
 

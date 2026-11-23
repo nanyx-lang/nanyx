@@ -11,16 +11,20 @@ Attached definitions let you add functions and values directly onto a type. This
 Use dot syntax to attach a definition to a type.
 
 ```nanyx
+import nanyx/math as math
+
 type Point = (x: int, y: int)
 
 def Point.length = { p ->
-  Math.sqrt(p.x ** 2 + p.y ** 2)
+  math.sqrt(int.toFloat(p.x ** 2 + p.y ** 2))
 }
 ```
 
 Attached functions are inferred from their bodies like any other function. Only where the body leaves a single parameter open (it could be anything, or any record with the fields it reads) does the parameter take the type the definition is attached to. In the example above, `p` is a `Point`: the body reads `p.x` and `p.y`, which a `Point` has. A parameter the body uses as something else keeps that type, so a constructor function takes what it builds from:
 
 ```nanyx
+type Point = (x: int, y: int)
+
 def Point.diagonal = { n -> Point(x = n, y = n) }
 
 def d = Point.diagonal(3)
@@ -30,7 +34,7 @@ Here `n` is an `int`, and `Point.diagonal` is an `int -> Point`.
 
 Call it in a qualified way like any other function:
 
-```nanyx
+```nanyx fragment
 def p = Point(x = 3, y = 4)
 
 def len = Point.length(p)
@@ -38,7 +42,7 @@ def len = Point.length(p)
 
 Or use it in a pipeline without needing to specify the type name:
 
-```nanyx
+```nanyx fragment
 def len = p \length
 ```
 
@@ -46,7 +50,7 @@ def len = p \length
 
 Dot syntax on a value reads what the value itself has: the fields of a record, and the properties a built-in type has, such as the `length` of a string or a list. It never reaches an attached definition. An attached definition is reached by its qualified name, or by piping the value into it, which resolves the name by the value's type:
 
-```nanyx
+```nanyx fragment
 def len1 = Point.length(p)
 def len2 = p \length
 ```
@@ -58,6 +62,8 @@ def len2 = p \length
 Operators are just attached definitions with symbolic names:
 
 ```nanyx
+type Point = (x: int, y: int)
+
 export def Point.`+` = { a, b ->
   Point(x = a.x + b.x, y = a.y + b.y)
 }
@@ -70,6 +76,8 @@ The built-in arithmetic and comparison operators on `int`, `float` and the other
 Attached definitions can satisfy contexts or typeclass-style constraints. For example, defining `+` and `0` on a type can allow a `Sum` context to be synthesized.
 
 ```nanyx
+type Point = (x: int, y: int)
+
 def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
 
 def Point.`0` = Point(x = 0, y = 0)

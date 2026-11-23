@@ -16,7 +16,7 @@ When an operation can fail, Nanyx conventions favor a result-like union with a s
 There is no `Option(a)` or `Result(a, e)` alias in the standard library: it follows a convention where any union type containing `#some(a)` can be treated as an [option-like type](../advanced/option-like-types), whatever its other tags are.
 
 ```nanyx
-def list.head = {
+def list.first = {
   | [] -> #emptyList
   | [x, ...] -> #some(x)
 }
@@ -32,7 +32,7 @@ A field that may be absent has its absence in its type, as a tag union: `petsNam
 
 For data that is neither a simple failure nor a missing field, explicit tags are more informative than a generic `Option`:
 
-```nanyx
+```nanyx fragment
 artist: #loading | #some(Artist)
 
 artist: #unspecified | #some(Artist)
@@ -44,7 +44,7 @@ Both mean “you might not have an artist,” but the tags explain why not and w
 
 Explicit unions make it easy to evolve the model over time. If you later need an error state, you can add it without invalidating the existing tags:
 
-```nanyx
+```nanyx fragment
 artist: #loading | #loaded(Artist) | #errored(LoadError)
 ```
 

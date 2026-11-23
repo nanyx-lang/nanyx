@@ -29,7 +29,7 @@ A browser app is a different host, because the browser owns the main loop. The e
 it returns, and the browser calls back into the module for each event. So the entry shape is a description of the app
 rather than a procedure, as in Elm:
 
-```nanyx
+```nanyx fragment
 module main
 
 @entry
@@ -137,7 +137,7 @@ Real services often need more than one long-running activity, for example an HTT
 a scheduled job. Because a host is a function that takes an entry, a composite host is a function that takes a record
 of entries:
 
-```nanyx
+```nanyx fragment
 @entry
 def main = (http = handler, worker = processQueue, nightly = Schedule.daily(at = "02:00", cleanup))
 ```

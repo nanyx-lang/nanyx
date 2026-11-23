@@ -25,7 +25,7 @@ def p = Point(x = 10, y = 20)
 
 Records are structural and immutable by default. To "update an object," create a new value using `with`:
 
-```nanyx
+```nanyx fragment
 def moved = p with (x = p.x + 5, y = p.y + 3)
 ```
 
@@ -38,7 +38,9 @@ Behavior is defined separately from data:
 ```nanyx
 type Point = (x: int, y: int)
 
-def Point.translate = { point, dx, dy ->
+def p = Point(x = 10, y = 20)
+
+def Point.translate = { (point: Point), dx, dy ->
   point with (x = point.x + dx, y = point.y + dy)
 }
 

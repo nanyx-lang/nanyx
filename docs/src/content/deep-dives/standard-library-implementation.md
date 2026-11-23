@@ -162,7 +162,7 @@ browser compiler is released, the build could ask it which names are nominal ins
 `StandardLibraryReferenceTests.fs`, fails, showing the difference, when a page's reference, or the list of nominal
 types, is not what the library gives, when a file that exports names has no page, and when a page with a reference has no file. The `nanyx` blocks
 on these pages outside the reference are compiled and run, as the tour's are
-([Tour examples](./compilation#tour-examples)).
+([Docs examples](./compilation#docs-examples)).
 
 So explain a function in its doc comment, where hover shows it too, and keep a page's prose to what is about the
 module as a whole. The open questions about the generated references are on
