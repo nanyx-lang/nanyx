@@ -68,6 +68,15 @@ a chain of the earlier solution once and remembers where it ends for each variab
 time that grows with its length. A type read against a solution once it is found, such as the type of each node of the
 module, is resolved with `Unifier.applySolved`, which keeps what each variable resolves to with the solution.
 
+Each local def is generalised against what is in scope, and in a function that writes no type, each of its parameters'
+variables and each of its locals' is in scope. `TypeEnv.UnquantifiedVars` counts how many names have each such
+variable, so the def looks at each variable once, not once for each local that has it. The number literals nothing has
+settled yet, such as the `1` of `x + 1` on a parameter `x` of a type still open, are settled as a local def is
+generalised when they are of a variable it is generic in. `NumericLiterals.settle` remembers which variables the literals
+it left were of, and while the constraints since agree, looks at those variables and the literals added since, not at
+every literal again. A function of thousands of such lines checks in time that grows with its length
+([#2407](https://github.com/nanyx-lang/nanyx/issues/2407)).
+
 # Deferred errors
 
 What deferred errors are for users is in [Deferred errors](../tour/error-handling#deferred-errors). The approach is the
