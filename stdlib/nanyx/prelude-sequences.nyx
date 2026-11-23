@@ -18,8 +18,11 @@ export type Sequence(a) = [k] protected (next: [k] () -> #next(a, Sequence(a)) |
 
 --| The sequence of no elements.
 export def seq.empty: () -> seq(a) = {
-  Sequence(next = { #done })
+  noElements
 }
+
+-- The sequence of no elements, made once: each `seq.empty()` shares it.
+def noElements: seq(a) = Sequence(next = { #done })
 
 --| The sequence `f` gives, worked out when it is pulled, not now: `f` runs each time the sequence is
   pulled.
@@ -30,6 +33,11 @@ export def seq.delay: ([c] () -> [d] seq(a)) -> [c, d] seq(a) = { f ->
       s.next()
     }
   )
+}
+
+--| `x` alone: what a `yield x` that ends a sequence's block is.
+export def __seqLast: a -> seq(a) = { x ->
+  Sequence(next = { #next(x, seq.empty()) })
 }
 
 --| `x`, then the elements of the sequence `rest` gives, which runs only when the sequence is pulled
@@ -174,16 +182,35 @@ export def seq.append: ([c] seq(a)), ([d] seq(a)) -> [c, d] seq(a) = { s, t ->
   pulled: `(1..3) \seq.flatMap { n -> seq.range(1, n) }` gives `1`, `1`, `2`, `1`, `2` and `3`. Lazy:
   `f` runs on an element only when the sequence is pulled that far.
 export def seq.flatMap: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b) = { s, f ->
-  Sequence(
-    next = {
-      match s.next()
-        | #next(x, rest) ->
-          def more = seq.append(f(x), seq.flatMap(rest, f))
-          more.next()
-        | #done -> #done
-    }
-  )
+  Sequence(next = { flatMapNext(s, f) })
 }
+
+-- The next element of `seq.flatMap(s, f)`: the first of the sequence `f` gives for the first element
+-- of `s` that gives one. Each inner sequence is walked here, not appended to the rest, so its elements
+-- cost one step each (see "What a step costs" in docs/src/content/deep-dives/lazy-sequences.md).
+def flatMapNext
+  : [c, d] ([c] seq(a)), ([d] a -> [d] seq(b)) -> #next(b, ([c, d] seq(b))) | #done
+  = { s, f ->
+    match s.next()
+      | #next(x, rest) -> flatMapInner(f(x), rest, f)
+      | #done -> #done
+  }
+
+-- The next element of `inner`, then of the sequences `f` gives for the elements of `rest`.
+def flatMapInner
+  : [c, d] ([d] seq(b)), ([c] seq(a)), ([d] a -> [d] seq(b)) -> #next(b, ([c, d] seq(b))) | #done
+  = { inner, rest, f ->
+    match inner.next()
+      | #next(y, more) -> #next(y, flatMapFrom(more, rest, f))
+      | #done -> flatMapNext(rest, f)
+  }
+
+-- The elements of `inner`, then those of the sequences `f` gives for the elements of `rest`.
+def flatMapFrom
+  : ([d] seq(b)), ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b)
+  = { inner, rest, f ->
+    Sequence(next = { flatMapInner(inner, rest, f) })
+  }
 
 --| The elements of each sequence of `s`, one after another: `[[1, 2], [3]] \list.map(list.toSeq)
   \list.toSeq \seq.flatten` gives `1`, `2` and `3`. Lazy: it pulls `s` one sequence at a time.
