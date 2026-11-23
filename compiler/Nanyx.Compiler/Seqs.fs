@@ -1,22 +1,22 @@
 namespace NyxCompiler
 
-/// The prelude's lazy sequence, `type Seq(a) = [k] protected (next: [k] () -> #next(a, Seq(a)) | #done)`, a type as
+/// The prelude's lazy sequence, `type Sequence(a) = [k] protected (next: [k] () -> #next(a, Sequence(a)) | #done)`, a type as
 /// any user's is (see the lazy sequences page of the docs). Its alias `seq` is written as it, as `list` is the built-in
 /// `List` (see `BuiltinTypeNames`), and it is shown by its alias, `seq(int)`. A range, `1..10` or `0..`, is one, made
 /// by the prelude's `seq.range` or `seq.from` from its bounds' `Enumerable`, but for a range of `int`s a `for` loop
 /// walks, which counts with its bounds (see `Loops`).
 module Seqs =
-    /// The type's name, as the prelude declares it and definitions are attached to it: `Seq.map`.
-    let typeName = "Seq"
+    /// The type's name, as the prelude declares it and definitions are attached to it: `Sequence.map`.
+    let typeName = "Sequence"
 
     /// The type's alias: a type or an attached definition may be written with it, `seq(int)` or `seq.map`, and the type
     /// is shown by it.
     let alias = "seq"
 
-    /// The type's identity: the prelude's `Seq`, not a type of that name another module defines.
+    /// The type's identity: the prelude's `Sequence`, not a type of that name another module defines.
     let nominal: NominalId = { Home = StandardLibraryModule ModuleOrigin.preludeName; Name = typeName }
 
-    /// The tag a sequence's `next` gives with its first element and the rest, `#next(a, Seq(a))`.
+    /// The tag a sequence's `next` gives with its first element and the rest, `#next(a, Sequence(a))`.
     let nextTag = "next"
 
     /// The tag a sequence's `next` gives when it has no more elements, `#done`.

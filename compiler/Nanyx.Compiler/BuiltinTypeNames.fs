@@ -23,8 +23,8 @@ module internal BuiltinTypeNames =
               "F64", "float"
               "Boolean", "bool" ]
 
-    /// Each library type's alias and the type it is written as: `seq(int)` is the prelude's `Seq(int)`, and `seq.map`
-    /// is `Seq.map` (see `Seqs`). The type is declared as a user's is, so here the alias is the other way round.
+    /// Each library type's alias and the type it is written as: `seq(int)` is the prelude's `Sequence(int)`, and `seq.map`
+    /// is `Sequence.map` (see `Seqs`). The type is declared as a user's is, so here the alias is the other way round.
     let private libraryAliases = Map.ofList [ Seqs.alias, Seqs.typeName ]
 
     /// Each spelling that is not a type and the alias to write instead.

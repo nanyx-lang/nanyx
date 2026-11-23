@@ -222,7 +222,7 @@ let ``Type names refer to imported types in their own file`` () =
         let moduleSource = "module shapes\nexport type Shape = #circle(int) | #square(int)\n"
         File.WriteAllText(modulePath, moduleSource)
         let mainPath = Path.Combine(dir, "main.nyx")
-        let mainSource = "module main\nimport shapes\ndef unit: Shape = #circle(1)\ndef ok: Seq(int) = seq.fromList([1])\n"
+        let mainSource = "module main\nimport shapes\ndef unit: Shape = #circle(1)\ndef ok: Sequence(int) = seq.fromList([1])\n"
         File.WriteAllText(mainPath, mainSource)
         let result = Compiler.compileFile mainPath
         Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
@@ -230,7 +230,7 @@ let ``Type names refer to imported types in their own file`` () =
         Assert.Equal(Some (TypeDefinition, modulePath, offsetOf moduleSource "Shape" 0 0), at "Shape =")
         // The prelude's types are declared in the prelude, in the file of their topic.
         let preludeSource = (StandardLibrary.tryLoadFile "nanyx/prelude-sequences.nyx").Value.Replace("\r\n", "\n")
-        Assert.Equal(Some (TypeDefinition, "nanyx/prelude-sequences.nyx", offsetOf preludeSource "Seq(a) =" 0 0), at "Seq("))
+        Assert.Equal(Some (TypeDefinition, "nanyx/prelude-sequences.nyx", offsetOf preludeSource "Sequence(a) =" 0 0), at "Sequence("))
 
 [<Fact>]
 let ``Context members are declared in the context and referred to where it is required`` () =
@@ -346,7 +346,7 @@ def local = {
 
 [<Fact>]
 let ``Hovering an imported type's name shows its definition`` () =
-    let source = "def ok: Seq(int) = seq.fromList([1])\n"
+    let source = "def ok: Sequence(int) = seq.fromList([1])\n"
     Assert.Equal(
-        Some ("type Seq(a) = [k] protected (next: ([k] () -> #next(a, seq(a)) | #done))", "Seq"),
-        typeDefinitionHover "" (Compiler.compile source) source (offsetOf source "Seq" 0 1))
+        Some ("type Sequence(a) = [k] protected (next: ([k] () -> #next(a, seq(a)) | #done))", "Sequence"),
+        typeDefinitionHover "" (Compiler.compile source) source (offsetOf source "Sequence" 0 1))
