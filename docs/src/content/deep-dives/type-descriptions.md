@@ -136,8 +136,8 @@ from the type's definition (`TypeDefInfo.Doc`, filled from the module's doc comm
 - **Canonical boxes.** For that to work whatever the value is, a boxed value of a collection holds its elements boxed:
   a list, a set or an array of boxes, and a map whose entries are tuples of boxes. A record or a union is boxed as it
   is, since only its description's `get`s read it. A field's `get` (`fieldGettingFunction`) and a case's `get`
-  (`caseGettingFunction`) are closures over functions of their own that unbox the value, read the part, and box it in
-  this form, through a function per collection type (`canonicalisingFunction`).
+  (`caseGettingFunction`) are closures over functions of their own that unbox the value, read the part (of the layout
+  a recursive type unfolds to, `IrType.unfold`), and box it in this form, through a function per collection type (`canonicalisingFunction`).
 
 # Building
 
