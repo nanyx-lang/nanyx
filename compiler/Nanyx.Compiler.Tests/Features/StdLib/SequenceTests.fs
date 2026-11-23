@@ -15,8 +15,8 @@ let ``A range is a seq of ints, written as the prelude's type is`` () =
         clean """
 def bounded = 1..10
 def endless = 0..
-def written: Seq(int) = 1..3
-def aliased: seq(int) -> Seq(int) = { s -> s }
+def written: Sequence(int) = 1..3
+def aliased: seq(int) -> Sequence(int) = { s -> s }
 """
     Assert.Equal("seq(int)", asciiTypeIn typed "bounded")
     Assert.Equal("seq(int)", asciiTypeIn typed "endless")
@@ -56,7 +56,7 @@ def pulled: ([Console] seq(int)) -> list(int) = { s -> s \seq.toList }
 """.ReplaceLineEndings "\n"
         )
     Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, diagnostic.Code)
-    Assert.Contains("'Seq.toList' requires the context 'Console'", diagnostic.Message)
+    Assert.Contains("'Sequence.toList' requires the context 'Console'", diagnostic.Message)
 
 [<Fact>]
 let ``A sequence mapped with a function that needs a context is made where the context is not`` () =

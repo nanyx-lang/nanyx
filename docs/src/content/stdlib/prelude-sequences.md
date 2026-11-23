@@ -23,10 +23,10 @@ println((1..4) \seq.fold(0) { + })
 
 <!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
 
-## `Seq`
+## `Sequence`
 
 ```nanyx fragment
-type Seq(a) = [k] protected (next: ([k] () -> #next(a, seq(a)) | #done))
+type Sequence(a) = [k] protected (next: ([k] () -> #next(a, seq(a)) | #done))
 ```
 
 A lazy sequence of `a`s: a function that, when called, gives back the first element and the rest
@@ -164,7 +164,7 @@ def seq.fromArray: array(a) -> seq(a)
 ```
 
 The elements of `xs`, in order, each read when the sequence is pulled. What a literal builds a
-sequence with, `Seq[1, 2, 3]`. The same as [`array.toSeq`](prelude-arrays#arraytoseq).
+sequence with, `seq[1, 2, 3]` or `Sequence[1, 2, 3]`. The same as [`array.toSeq`](prelude-arrays#arraytoseq).
 
 ## `seq.map`
 
@@ -219,7 +219,7 @@ def seq.select: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b)
 ```
 
 The values `f` yields for each element in turn, in the order it yields them, as
-[`list.select`](prelude-lists#listselect) gives them for a list: [`seq.flatMap`](#seqflatmap) for a lambda with `yield` in it. Lazy: the
+[`list.select`](prelude-lists#listselect) gives them for a list: [`seq.flatMap`](#sequenceflatmap) for a lambda with `yield` in it. Lazy: the
 code after a `yield` runs only when the sequence is pulled that far.
 
 ## `seq.filterMap`
@@ -256,7 +256,7 @@ def seq.skipWhile: ([c] seq(a)), ([d] a -> bool) -> [c, d] seq(a)
 def seq.scan: ([c] seq(a)), b, ([d] (b, a) -> b) -> [c, d] seq(b)
 ```
 
-The running totals of a fold: `initial`, then each value [`seq.fold`](#seqfold) passes along:
+The running totals of a fold: `initial`, then each value [`seq.fold`](#sequencefold) passes along:
 `(1..3) \seq.scan(0) { + }` gives `0`, `1`, `3` and `6`. Lazy: each total is worked out when it is
 pulled, so it works on an endless sequence.
 
@@ -266,7 +266,7 @@ pulled, so it works on an endless sequence.
 def seq.zipWith: ([c] seq(a)), ([d] seq(b)), ([e] (a, b) -> f) -> [c, d, e] seq(f)
 ```
 
-`f` applied to the elements of `s` and `t` in pairs, ending when either ends, as [`seq.zip`](#seqzip) does:
+`f` applied to the elements of `s` and `t` in pairs, ending when either ends, as [`seq.zip`](#sequencezip) does:
 `seq.zipWith(1.., 10..12, { + })` gives `11`, `13` and `15`. Lazy.
 
 ## `seq.intersperse`
@@ -343,7 +343,7 @@ def seq.unzip: [c] ([c] seq((a, b))) -> ([c] seq(a), ([c] seq(b)))
 ```
 
 The first parts of the pairs of `pairs` and their second parts, each a sequence: the inverse of
-[`seq.zip`](#seqzip). Each side pulls `pairs` on its own, so a sequence whose steps have effects runs them
+[`seq.zip`](#sequencezip). Each side pulls `pairs` on its own, so a sequence whose steps have effects runs them
 once for each side pulled.
 
 ## `seq.filter`
@@ -397,7 +397,7 @@ def seq.reduce: [c, d] ([c] seq(a)), ([d] (a, a) -> a) -> #some(a) | #none
 
 The elements of `s`, pulled now, combined with `f`, in order, starting from the first: `(1..5)
 \seq.reduce { * }` is `#some(120)`, and an empty sequence, having no first element, gives `#none`.
-To start from another value, use [`seq.fold`](#seqfold).
+To start from another value, use [`seq.fold`](#sequencefold).
 
 ## `seq.toList`
 
@@ -415,7 +415,7 @@ def list.fromSeq: [c] ([c] seq(a)) -> list(a)
 ```
 
 The elements of `s`, pulled now, as a list: `(1..3) \list.fromSeq` is `[1, 2, 3]`. It requires
-the contexts the sequence's steps do. An endless sequence never ends: cut it with [`seq.take`](#seqtake).
+the contexts the sequence's steps do. An endless sequence never ends: cut it with [`seq.take`](#sequencetake).
 
 ## `list.build`
 
@@ -511,7 +511,7 @@ Whether `s` has no elements. It pulls one element.
 def seq.selectOne: [c, d] ([c] seq(a)), ([d] a -> [d] seq(b)) -> #some(b) | #notFound
 ```
 
-The first value `f` yields, running it on the elements in turn as [`seq.select`](#seqselect) does, or
+The first value `f` yields, running it on the elements in turn as [`seq.select`](#sequenceselect) does, or
 `#notFound` when it yields none. It stops at the first yield.
 
 ## `seq.count`

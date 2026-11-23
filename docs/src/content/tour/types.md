@@ -58,7 +58,7 @@ Each built-in type has a capitalised name, which is the type, and a lowercase al
 | `string` | `String` |
 | `list` | `List` |
 | `unit` | `Unit` |
-| `seq` | `Seq` |
+| `seq` | `Sequence` |
 | `map` | `Map` |
 | `set` | `Set` |
 | `int` | `I64` |
