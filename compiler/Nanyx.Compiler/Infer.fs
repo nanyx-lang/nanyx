@@ -282,7 +282,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         let scheme, instance = (ContextNames.loaded env state value).Value
         inferExpr (ContextNames.load env instance) (ContextNames.recordLoad value scheme instance state) body
         |> Result.map (fun (typedBody, next) -> mkTypedExpr expr typedBody.Type (Some typedBody) None None, next)
-    | UseIn(value, _) when not (UseDischarge.notLoadable state value).IsEmpty -> Error (UseDischarge.notLoadable state value)
+    | UseIn(value, _) when not (UseDischarge.notLoadable env state value).IsEmpty -> Error (UseDischarge.notLoadable env state value)
     | UseIn(value, body) ->
         match inferExpr env (state |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with
         | Error err -> Error err
@@ -855,8 +855,8 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                 current <- ContextNames.recordLoad value scheme instance current
                 env' <- ContextNames.load env' instance
                 typedStatements <- typedStatements @ [ TypedUseStatement (mkTypedExpr value scheme.Type None None None) ]
-            | UseStatement value when errors.IsEmpty && not (UseDischarge.notLoadable current value).IsEmpty ->
-                errors <- UseDischarge.notLoadable current value
+            | UseStatement value when errors.IsEmpty && not (UseDischarge.notLoadable env' current value).IsEmpty ->
+                errors <- UseDischarge.notLoadable env' current value
             | UseStatement value ->
                 if errors.IsEmpty then
                     match inferExpr env' (current |> UseDischarge.mark value |> LambdaContexts.enterUse value) value with
