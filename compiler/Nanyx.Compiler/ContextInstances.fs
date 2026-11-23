@@ -172,8 +172,9 @@ let private canSynthesize (ctxName: Identifier) (argTys: Ty list) =
 /// back for the next.
 let private contextArgTysAtCall (state: InferState) (shared: Map<TypeVarKey, TyVar>) (signature: TypeExpr option) (generalTy: Ty) (calleeTy: Ty) (args: TypeExpr list) : Ty list * Ty list * Map<TypeVarKey, TyVar> * InferState =
     // Read with only the call's own variables in scope, so each other variable is a fresh one, shared by the
-    // signature and the arguments.
-    let mutable current = { state with TypeVars = shared }
+    // signature and the arguments. A type the signature names that only an aliased import brings in is written there
+    // by its own name (`a -> K` for `m.K`), so it is read as such (#2380).
+    let mutable current = { state with TypeVars = shared; HiddenTypeNames = Set.empty }
     let read (typeExpr: TypeExpr) =
         let ty, next = typeExprToTy current typeExpr
         current <- next
@@ -196,7 +197,7 @@ let private contextArgTysAtCall (state: InferState) (shared: Map<TypeVarKey, TyV
             let names = namedVarsIn generalTy calleeTy
             args |> List.map (read >> replaceNamedVars names)
     let read = current.TypeVars
-    let current = { current with TypeVars = state.TypeVars }
+    let current = { current with TypeVars = state.TypeVars; HiddenTypeNames = state.HiddenTypeNames }
     argTys |> List.map (resolveSoFar current), argTys, read, current
 
 /// `env` with the instance a `use` of the value of type `valueTy` loads in scope, when it is one of a parameterised
