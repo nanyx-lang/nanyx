@@ -48,3 +48,27 @@ let ``Defs that share a variable, as mutually recursive ones do, are solved toge
     Assert.Empty(result.Diagnostics)
     Assert.Equal("int -> bool", typeIn result.Typed.Value "isEven")
     Assert.Equal("int -> bool", typeIn result.Typed.Value "isOdd")
+
+/// `count` defs, from `g{from}` on, that each pipe a list through calls with lambdas, the last with an argument before
+/// its lambda, which the type checker looks the types so far up for many times.
+let private pipeDefs (from: int) (count: int) =
+    [ for i in from .. from + count - 1 ->
+          $"def g{i}: list(int) -> int = {{ xs ->\n  xs\n    \\list.map {{ x -> x + {i} }}\n    \\list.filter {{ x -> x > 1 }}\n    \\list.fold(0, {{ a, b -> a + b }})\n}}" ]
+
+/// How long compiling `source` takes, in milliseconds.
+let private compileTime (source: string) =
+    let watch = System.Diagnostics.Stopwatch.StartNew()
+    Compiler.compile source |> ignore
+    watch.ElapsedMilliseconds
+
+[<Fact>]
+let ``A failure early in a module leaves the defs after it solved on top of what agrees, not afresh`` () =
+    // Each type looked up after a failure solved the whole module again, twice, so checking took time in proportion to
+    // the square of the module's size, and minutes for a package's (#2449).
+    let clean = moduleOf ([ "def first: int = 1" ] @ pipeDefs 1 40)
+    let failing = moduleOf ([ "def first: int = \"one\"" ] @ pipeDefs 1 40)
+    Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' vs 'int'", "\"one\""), onlyDiagnostic failing)
+    compileTime clean |> ignore
+    let cleanTime = compileTime clean
+    let failingTime = compileTime failing
+    Assert.True(failingTime < 3L * cleanTime + 1000L, $"With the failure: {failingTime} ms; without it: {cleanTime} ms")
