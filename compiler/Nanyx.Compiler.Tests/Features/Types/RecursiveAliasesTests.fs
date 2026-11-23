@@ -164,3 +164,19 @@ def probe = runBox(area, #group([#circle(1.0)]))
 type Shape = #circle(float) | #group(list(Shape))
 """
     |> ignore
+
+// A record alias that names itself was built from its closed definition, so `S(...)` was a type mismatch with `S`
+// (#2213).
+[<Fact>]
+let ``A recursive record alias is built by its name`` () =
+    let typed =
+        clean """
+type S = (next: () -> #next(int, S) | #done)
+
+def range: int, int -> S = { first, last ->
+  S(next = { if first > last then #done else #next(first, range(first + 1, last)) })
+}
+
+def s = range(1, 10)
+"""
+    Assert.Equal("S", asciiTypeIn typed "s")
