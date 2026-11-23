@@ -55,6 +55,30 @@ public sealed class HoverTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Hover_at_a_call_leaves_out_a_context_variable_that_resolved_to_no_contexts()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-call-contexts.nyx"));
+
+        // `list.select` is `[c, d] list(a), ([c] a -> [d] seq(b)) -> list(b)`, and this lambda requires nothing.
+        Open(uri, """
+            type Item = #foo(string) | #bar
+
+            def items: list(Item) = [#foo("a"), #bar]
+
+            def r: list(string) = items \select { x ->
+              if x is #foo(s) then yield s
+            }
+
+            """);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var callee = await HoverAt(uri, 4, 31);
+        Assert.StartsWith(
+            "```nanyx\ndef list.select: list(Item), (Item -> seq(string)) -> list(string)\n```",
+            callee?.Contents.MarkupContent?.Value);
+    }
+
+    [Fact]
     public async Task Hover_on_a_declarations_name_shows_its_name_and_type()
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("hover-declaration.nyx"));
