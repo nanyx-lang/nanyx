@@ -70,29 +70,81 @@ module internal NumericLiterals =
             | _ -> None)
         |> Map.ofList
 
+    /// A list of literals `settleOf` left unsettled, as it found them: the variables they were of, each once, and the
+    /// constraints that solved them so. A list holds the literals of a function's earlier lines, so each of its local defs
+    /// would otherwise look at all of them again (#2407).
+    type private Unsettled = { Vars: TyVar list; Constraints: ConstraintSet }
+
+    /// What `settleOf` found of each list it left unsettled, for the literals (`false`) and for the operands (`true`).
+    let private unsettledLists =
+        [ false; true ] |> List.map (fun operands -> operands, System.Runtime.CompilerServices.ConditionalWeakTable<NumericLiteral list, Unsettled>()) |> Map.ofList
+
+    /// How many constraints, at most, `settlesNone` looks through for those it found a list's literals unsettled under.
+    let private constraintsLookedThrough = 4096
+
+    /// Whether `literals`, the literals (or operands) `isFor` says `settleOf` is settling, are certainly all still of a
+    /// variable `openVar` gives, one of their own the def being generalised is not generic in, so that none settles: it
+    /// then gives each variable they are of, once. Where they extend a list whose literals were all found so, under
+    /// constraints the current ones extend, each of those is of what its variable then is now, so only the variables are
+    /// looked at, and the literals in front of them. Otherwise, or where one may settle, it gives nothing, and `settleOf`
+    /// looks at each literal.
+    let private settlesNone (operands: bool) (isFor: NumericLiteral -> bool) (openVar: Ty -> TyVar option) (constraints: ConstraintSet) (literals: NumericLiteral list) =
+        let found = unsettledLists[operands]
+        let rec earlier (newer: NumericLiteral list) (remaining: NumericLiteral list) =
+            match found.TryGetValue remaining with
+            | true, known -> Some (newer, known)
+            | false, _ ->
+                match remaining with
+                | [] -> None
+                | literal :: rest -> earlier (literal :: newer) rest
+        let rec extends (looked: int) (current: ConstraintSet) (known: ConstraintSet) =
+            obj.ReferenceEquals(current, known)
+            || (looked < constraintsLookedThrough
+                && match current with
+                   | _ :: rest -> extends (looked + 1) rest known
+                   | [] -> false)
+        match earlier [] literals with
+        | Some (newer, known) when extends 0 constraints known.Constraints ->
+            let vars =
+                (newer |> List.filter isFor |> List.map _.Type) @ (known.Vars |> List.map TyVar) |> List.map openVar
+            if vars |> List.forall Option.isSome then Some (vars |> List.choose id |> List.distinctBy _.Id) else None
+        | _ -> None
+
+    /// Keeps what `settleOf` found of `literals`, under `constraints`: the variables those it is settling are of.
+    let private keepUnsettled (operands: bool) (vars: TyVar list) (literals: NumericLiteral list) (constraints: ConstraintSet) =
+        if not literals.IsEmpty then unsettledLists[operands].AddOrUpdate(literals, { Vars = vars; Constraints = constraints })
+
     /// `settle` for the literals, or else for the operators' operands (`operands`). Operands that turned out to be of a
     /// variable the def's annotation names, which a `for` over an `[Iterable(i)] i` makes its associated `elem` only once
     /// the loop's instance is found, fail to check, as they would have had they been of it when the operator was read.
     let private settleOf (operands: bool) (isOwn: Ty -> bool) (state: InferState) : InferState =
-        let subst = fst (Solving.solve state.Constraints)
-        let written = if operands then writtenVariables subst state else Map.empty
-        let isSettling (literal: NumericLiteral) =
-            literal.Operator.IsSome = operands
-            && (match Unifier.applySolved subst literal.Type with
-                | TyVar { Name = None } as open' -> isOwn open'
-                | _ -> true)
-        let settling, unsettled = state.UnsettledLiterals |> List.partition isSettling
-        settling
-        |> List.fold (fun current literal ->
-            match Unifier.applySolved subst literal.Type, literal.Operator with
-            | TyVar v, Some (op, node) when literal.Requires.IsSome && written.ContainsKey v.Id ->
-                let error = undeclared current literal.At op literal.Requires.Value { v with Name = Some written.[v.Id] }
-                { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
-            | TyVar _, _ -> addConstraint literal.Type (defaultType literal.Value) current
-            | ty, Some (op, node) when isKnownNonNumber ty ->
-                let error = Diagnostics.at DiagnosticCodes.TypeMismatch literal.At (notANumber op ty)
-                { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
-            | _ -> current) { state with UnsettledLiterals = unsettled }
+        let subst, failures = Solving.solve state.Constraints
+        let isFor (literal: NumericLiteral) = literal.Operator.IsSome = operands
+        let openVar (ty: Ty) =
+            match Unifier.applySolved subst ty with
+            | TyVar ({ Name = None } as v) when not (isOwn (TyVar v)) -> Some v
+            | _ -> None
+        let settleEach () =
+            let written = if operands then writtenVariables subst state else Map.empty
+            let settling, unsettled = state.UnsettledLiterals |> List.partition (fun literal -> isFor literal && (openVar literal.Type).IsNone)
+            keepUnsettled operands (unsettled |> List.filter isFor |> List.choose (_.Type >> openVar) |> List.distinctBy _.Id) unsettled state.Constraints
+            settling
+            |> List.fold (fun current literal ->
+                match Unifier.applySolved subst literal.Type, literal.Operator with
+                | TyVar v, Some (op, node) when literal.Requires.IsSome && written.ContainsKey v.Id ->
+                    let error = undeclared current literal.At op literal.Requires.Value { v with Name = Some written.[v.Id] }
+                    { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
+                | TyVar _, _ -> addConstraint literal.Type (defaultType literal.Value) current
+                | ty, Some (op, node) when isKnownNonNumber ty ->
+                    let error = Diagnostics.at DiagnosticCodes.TypeMismatch literal.At (notANumber op ty)
+                    { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
+                | _ -> current) { state with UnsettledLiterals = unsettled }
+        // Under constraints that fail, a later solution need not agree with an earlier one, so each literal is looked at.
+        match (if failures.IsEmpty then settlesNone operands isFor openVar state.Constraints state.UnsettledLiterals else None) with
+        | Some vars ->
+            keepUnsettled operands vars state.UnsettledLiterals state.Constraints
+            state
+        | None -> settleEach ()
 
     /// `state` with each literal not yet settled whose type is still a variable of its own, and one `isOwn` says the
     /// def being generalised has, made its default type. So is one of a variable a type annotation names, which a

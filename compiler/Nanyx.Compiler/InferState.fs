@@ -817,16 +817,17 @@ let internal withAssociatedNames (state: InferState) (ty: Ty) : Ty =
     rename (resolveSoFar state ty)
 
 /// The type variables of the types of what is in scope in `env`, each resolved by `subst`: those a def's type shares
-/// with its surroundings, which generalising it must leave alone. Only the names whose schemes have free variables are
-/// looked at (see `TypeEnv.Unquantified`), and a variable `subst` does not bind stands for itself, so the many names in
-/// scope that are generalised, and the defs of the module not yet checked, cost little (#1266).
+/// with its surroundings, which generalising it must leave alone. Only the variables of names whose schemes have free
+/// variables are looked at, each once (see `TypeEnv.UnquantifiedVars`), and a variable `subst` does not bind stands for
+/// itself, so the many names in scope that are generalised, and the defs of the module not yet checked, cost little
+/// (#1266).
 let internal envVarsUnder (subst: Subst) (env: TypeEnv) : System.Collections.Generic.HashSet<int> =
     let found = System.Collections.Generic.HashSet<int>()
     let add (id: int) =
         if subst.ContainsKey id then found.UnionWith(TypeEnv.freeTyVars (Unifier.apply subst (TyVar (TyVar.ordinary id None))))
         else found.Add id |> ignore
-    for free in env.Unquantified.Values do
-        Set.iter add free
+    for id in env.UnquantifiedVars.Keys do
+        add id
     for instance in env.Instances do
         Set.iter add (TypeEnv.freeTyVars instance.Context)
     env.BlockScope |> Option.iter (TypeEnv.freeTyVars >> Set.iter add)
