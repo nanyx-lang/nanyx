@@ -574,7 +574,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | None -> cannot $"the context member '{ContextMemberKey.text key}', which is not in scope"
         // `x \f(a, b)` is the call `f(x, a, b)`, typed at the pipe's node.
         | Pipe(value, name, range, args) -> this.Complex scope { expr with Kind = FunctionCall(name, range, pipeCallArguments value args) } k
-        | InterpolatedString parts -> this.Interpolation scope expr parts k
+        | InterpolatedString parts -> CoreIrLowerInterpolation.lowerInterpolation this.InterpolationTools scope expr parts k
         | Lambda _ -> cannot "a lambda"
         | _ -> cannot "this kind of expression"
 
@@ -787,67 +787,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | flatArgs when flatArgs.Length = parameters.Length -> atomsOf flatArgs call
         | _ -> cannot $"a call to '{name}' with its arguments in another shape"
 
-    /// The interpolated string of `parts`, at `expr`.
-    member private this.Interpolation (scope: Scope) (expr: Expression) (parts: StringPart list) (k: Expr -> Expr) : Expr =
-        // A hole the compiler writes itself holds its value, not a call to convert it.
-        if parts |> List.exists (function StringExpr hole -> input.BuiltInHoles.Contains hole.Id | StringText _ -> false) then
-            let written =
-                parts
-                |> List.map (function
-                    | StringExpr (Kind (FunctionCall(_, _, [ value ])) as hole) when input.BuiltInHoles.Contains hole.Id -> StringExpr value
-                    | part -> part)
-            this.Complex scope { expr with Kind = InterpolatedString written } k
-        elif parts |> List.exists (function StringExpr hole -> tyOf hole = IrError | StringText _ -> false) then
-            // A hole of no known type cannot be printed. The holes are evaluated in order up to it, for what they do (the
-            // hole itself most likely stops the program, through the deferred error that left its type unknown), and if
-            // the program is still running then, it stops there.
-            let insideHole = { scope with InterpolationDepth = scope.InterpolationDepth + 1 }
-            let holes = parts |> List.choose (function StringExpr hole -> Some hole | StringText _ -> None)
-            let before = holes |> List.takeWhile (fun hole -> tyOf hole <> IrError)
-            let unknown = holes |> List.find (fun hole -> tyOf hole = IrError)
-            let stop = Expr.make (Crash [ Interpolation.unknownHoleMessage unknown.Span ]) IrString
-            (before @ [ unknown ])
-            |> List.rev
-            |> List.fold (fun (rest: Expr) hole -> this.Complex insideHole hole (fun value -> Expr.make (Do(value, rest)) rest.Type)) stop
-            |> k
-        else
-            // Each hole is evaluated into its local, in order, and then the string is built from the text and them.
-            // A string inside a hole is a level deeper, so that it keeps to its own hole locals.
-            let depth = scope.InterpolationDepth
-            let insideHole = { scope with InterpolationDepth = depth + 1 }
-            let holes = parts |> List.choose (function StringExpr hole -> Some hole | StringText _ -> None)
-            let rec evaluateHoles (index: int) (remaining: Expression list) (evaluated: (Var * HoleType) option list) =
-                match remaining with
-                | [] ->
-                    let mutable next = List.rev evaluated
-                    let irParts =
-                        parts
-                        |> List.map (function
-                            | StringText text -> Text text
-                            | StringExpr _ ->
-                                let held = next.Head
-                                next <- next.Tail
-                                match held with
-                                | Some (var, holeType) -> Hole(var, holeType)
-                                | None -> Text "()")
-                    k (Expr.make (Interpolate irParts) IrString)
-                // The unit value is written `()`, as a derived `toString` writes it. It is still evaluated, for what it does:
-                // the instance passed for the elements of `[]` writes one (see `unconstrainedAsUnit`).
-                | hole :: rest when tyOf hole = IrUnit ->
-                    let body = evaluateHoles (index + 1) rest (None :: evaluated)
-                    this.Complex insideHole hole (fun value -> Expr.make (Do(value, body)) body.Type)
-                | hole :: rest ->
-                    let holeType = this.HoleType scope hole
-                    // A float or an `F32` is formatted to a string as its hole is evaluated, since that allocates.
-                    let local = newVar (Interpolation.holeLocalName depth index) (InterpolationHole(depth, index)) (if holeType = HoleFloat then IrString else tyOf hole)
-                    let store (value: Expr) =
-                        let body = evaluateHoles (index + 1) rest (Some (local, holeType) :: evaluated)
-                        Expr.make (Let(local, value, body)) body.Type
-                    if holeType = HoleFloat then
-                        let format = if tyOf hole = IrF32 then Helpers.f32ToString else Helpers.floatToString
-                        this.Atoms insideHole [ hole ] (fun atoms -> store (Expr.make (CallRuntime(format, atoms, true)) IrString))
-                    else this.Complex insideHole hole store
-            evaluateHoles 0 holes []
+    /// What lowering an interpolated string needs from this function's lowering (see `CoreIrLowerInterpolation`).
+    member private this.InterpolationTools : CoreIrLowerInterpolation.InterpolationTools =
+        { Input = input
+          Subst = fun () -> subst
+          ToIrType = toIrType
+          TypeOf = tyOf
+          TypeIn = this.TypeIn
+          NewVar = newVar
+          Complex = this.Complex
+          Atoms = this.Atoms }
 
     /// What finding and adapting context members needs from this function's lowering (see `CoreIrLowerMembers`).
     member private this.MemberTools : CoreIrLowerMembers.MemberTools =
@@ -923,37 +872,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           ToIrType = toIrType
           Closure = this.Closure
           LowerBlock = this.Block }
-
-    /// How the hole `hole` of an interpolated string is printed, from its type. A tag's cases are in the order its type
-    /// names them, which is the order they are tested in.
-    member this.HoleType (scope: Scope) (hole: Expression) : HoleType =
-        match this.TypeIn scope hole with
-        | IrString -> HoleString
-        | IrInt -> HoleInt
-        | IrSized integer -> HoleSized integer
-        | IrBool -> HoleBool
-        | IrFloat | IrF32 -> HoleFloat
-        | IrTags tags ->
-            // In the order the hole's type names them, where the type checker gave the hole one.
-            let rec cases (ty: Ty) =
-                match Unifier.unalias ty with
-                | TyTag(name, payload) -> [ name, payload |> Option.map toIrType ]
-                | TyUnion items -> items |> List.collect cases
-                | TyVar _ -> []
-                | _ -> cannot "interpolating a union with tags not known here"
-            let ordered =
-                match input.ExprTypes |> Map.tryFind hole.Id |> Option.map (substitute subst) with
-                | Some ty when (match Unifier.unalias ty with TyTag _ | TyUnion _ -> true | _ -> false) -> cases ty
-                | _ -> tags
-            ordered
-            |> List.distinctBy fst
-            |> List.map (fun (name, payloadTy) ->
-                match payloadTy with
-                | None
-                | Some (IrString | IrInt | IrBool) -> name, payloadTy
-                | Some other -> cannot $"interpolating `#{name}` with a payload of type '{IrType.show other}'")
-            |> HoleTag
-        | other -> cannot $"interpolating a value of type '{IrType.show other}'"
 
     /// Allocates a record of `fields` (name and value, in the order they are stored), of type `ty`. Each value is
     /// adapted to its field's type (see `CoreIrLowerMembers.coerce`): a pure lambda given for a field of a value of a
