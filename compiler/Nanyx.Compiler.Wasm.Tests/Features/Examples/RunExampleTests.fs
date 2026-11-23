@@ -12,6 +12,11 @@ let private examplesDirectory = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY
 let private prints: Map<string, string> =
     Map.ofList
         [ "constraints.nyx", ""
+          "Contexts-as-effects.nyx",
+          """contexts are the parameters that nobody has to pass by hand
+42
+55
+"""
           "csv.nyx",
           """GOOG,"Google Inc.",505.24,0.47,0.09
 YHOO,"Yahoo! Inc.",27.38,0.33,1.22
@@ -24,6 +29,29 @@ CNET Networks is down -1.4901%
           """Hello, Ada!
 Hello, Grace!
 Hello, Barbara!
+"""
+          "editor.nyx",
+          """Nearest significant line to 3: line 4: if x > 0 then
+Indented more, after line 1: line 5: println(x)
+Indented less, after line 5: line 6: main()
+Indented less, before line 1: line 0: def main =
+Line 1 to line 5: #moreIndentation
+Line 5 to line 2: #noIndentation
+"""
+          "eightQueens.nyx",
+          """Q . . . . . . .
+. . . . Q . . .
+. . . . . . . Q
+. . . . . Q . .
+. . Q . . . . .
+. . . . . . Q .
+. Q . . . . . .
+. . . Q . . . .
+"""
+          "EventSubscription.nyx",
+          """POST https://highstorm.app/api/v1/events/deploys {"event":"deploy.finished","content":"v1.2.0"}
+Ingested event evt_1
+HTTP error 401
 """
           "fizzbuzzbaz.nyx",
           """1
@@ -75,6 +103,24 @@ alice
 [#cheated(#bob), #won(#alice)]
 alice -> 10
 bob -> 0
+"""
+          "oo-class.nyx",
+          """chain [leaf for challenge, root], generated at 1000
+chain [leaf for challenge, root], generated at 1000
+chain [leaf for challenge, root], generated at 90000
+attestation failed
+"""
+          "pairing.nyx",
+          """companion pk-1, identity #none, key index list from #some(1700000000)
+trust circle app 42, device ZmFt
+extraction failed
+pair_success: device, device_identity
+"""
+          "pixel-sorting.nyx",
+          """red grey green blue
+green black red blue
+red grey green blue
+8 pixels sorted
 """
           "regex-matching.nyx",
           """Hi, we have saved your phone number 123-456-7890.
@@ -179,6 +225,42 @@ public object this[string name]
 }
 """
           "sql-utils.nyx", ""
+          "stringTransformation.nyx",
+          """oneTwoThree -> oneTwoThree
+oneTwoThree -> OneTwoThree
+oneTwoThree -> one-two-three
+oneTwoThree -> one_two_three
+oneTwoThree -> One Two Three
+oneTwoThree -> One two three
+one_two_three -> oneTwoThree
+one_two_three -> OneTwoThree
+one_two_three -> one-two-three
+one_two_three -> one_two_three
+one_two_three -> One Two Three
+one_two_three -> One two three
+one-two-three -> oneTwoThree
+one-two-three -> OneTwoThree
+one-two-three -> one-two-three
+one-two-three -> one_two_three
+one-two-three -> One Two Three
+one-two-three -> One two three
+one two three -> oneTwoThree
+one two three -> OneTwoThree
+one two three -> one-two-three
+one two three -> one_two_three
+one two three -> One Two Three
+one two three -> One two three
+"""
+          "todo-web-app.nyx",
+          """/api/TodoProtocol/toggleCompleted
+Toggled [x] 2: Write a web app
+#deleted
+#deleteError(#todoDoesNotExist)
+Added [ ] 4: Celebrate
+[ ] 1: Learn Nanyx
+[x] 2: Write a web app
+[ ] 4: Celebrate
+"""
           "traitsAndTypeclasses.nyx",
           """24
 10
@@ -186,6 +268,20 @@ public object this[string name]
 (w = 3)
 """
           "vendingMachine.nyx", "Dispensed; 3 coins left\n"
+          "wallet.nyx",
+          """primary: #p2wpkh on mainnet
+funding: #p2sh on mainnet
+cold: #p2trTestnet on testnet
+1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2: #p2pkh on mainnet
+xyz: #unknown on mainnet
+"""
+          "whisper_decoding.nyx",
+          """transcribed: hello from nanyx!
+transcribed: hello from
+transcribed: hello from nanyx!
+transcribed: from nanyx
+error: best-of with greedy sampling
+"""
           "zipping.nyx",
           """Alex
 Sam
@@ -195,23 +291,10 @@ Jo
 2: Jo
 """ ]
 
-/// The examples no test runs, each with why. They are out of date with the library (#2459).
+/// The examples no test runs, each with why.
 let private notRun: Map<string, string> =
     Map.ofList
-        [ "Contexts-as-effects.nyx", "`'a'..'z'` needs an `Enumerable(string)`, which isn't loaded (#2459)"
-          "EventSubscription.nyx", "it imports `nanyx.web/http`, which is not a package (#2459)"
-          "editor.nyx", "it imports `nanyx/text.regex`, which is now the package `nanyx.regex` (#2459)"
-          "eightQueens.nyx", "it passes a `seq(string)` to `string.join`, which takes a list (#2459)"
-          "malicious-shas.nyx", "it imports `nanyx/encoding`, which doesn't exist (#2459)"
-          "oo-class.nyx", "it imports `nanyx/time`, which doesn't exist (#2459)"
-          "pairing.nyx", "it imports `nanyx/encoding`, which doesn't exist (#2459)"
-          "pixel-sorting.nyx", "it calls `Math.sqrt` and `Math.floor`, which `nanyx/math` doesn't have (#2459)"
-          "stringTransformation.nyx", "it imports `nanyx/text.regex`, which is now the package `nanyx.regex` (#2459)"
-          "teamColours.nyx", "it imports `nanyx/time`, which doesn't exist (#2459)"
-          "todo-web-app.nyx", "it imports `nanyx/time`, which doesn't exist (#2459)"
-          "wallet.nyx", "it imports `nanyx/encoding`, which doesn't exist (#2459)"
-          "web-server-shared.nyx", "it imports `nanyx/time`, which doesn't exist (#2459)"
-          "whisper_decoding.nyx", "it calls `Random.float`, which isn't in scope (#2459)" ]
+        [ "teamColours.nyx", "a string in its list of points is freed while the list still holds it (#2464)" ]
 
 let examplesRun () : obj array seq = prints |> Map.keys |> Seq.map (fun name -> [| box name |])
 
