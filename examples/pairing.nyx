@@ -89,12 +89,12 @@ export def extractPairDevicePayload: Element, Context -> #some(Payload) | #extra
   | el, #trustCircleOnboarding -> proc {
     return #trustCircle(
       TrustCircleOnboarding(
-        appId = (try required(el \subtagText("app_id") \bindSome(int.fromString)))
-        authKey = (try required(el \subtagText("auth_key")))
-        deviceIdentity = (try required(el \subtagText("device_identity")))
-        famDeviceId = (try required(el \subtagBinary("fam_device_id")))
-        keyIndexList = (try required(el \subtagBinary("key_index_list")))
-        keyIndexListTs = (try required(keyIndexListTs(el)))
+        appId = try required(el \subtagText("app_id") \bindSome(int.fromString))
+        authKey = try required(el \subtagText("auth_key"))
+        deviceIdentity = try required(el \subtagText("device_identity"))
+        famDeviceId = try required(el \subtagBinary("fam_device_id"))
+        keyIndexList = try required(el \subtagBinary("key_index_list"))
+        keyIndexListTs = try required(keyIndexListTs(el))
         ref = try required(el \subtagBinary("ref"))
       )
     )
