@@ -54,34 +54,39 @@ module internal ArithmeticInference =
         if state.PendingArithmetic.IsEmpty then generalizeDef state
         else
             let tentative, generalized = generalizeDef state
-            let subst = fst (Solving.solve state.Constraints)
-            let isOwn (ty: Ty) =
-                match ty with
-                | TyVar v -> tentative.Quantified.Contains v.Id
-                | _ -> false
-            // An operator of a def that failed to check is no def's to settle.
-            let own =
-                match generalising with
-                | LocalDef -> state.PendingArithmetic
-                | TopLevelDef name -> state.PendingArithmetic |> List.filter (fun pending -> pending.InDef = name)
-            let resolved = own |> List.map (fun pending -> pending, Unifier.apply subst pending.OperandTy)
-            let stays =
-                match generalising with
-                | LocalDef -> fun (_: PendingArithmetic) (ty: Ty) -> not (isOwn ty)
-                | TopLevelDef name ->
-                    let onVariables =
-                        resolved |> List.filter (fun (pending, ty) -> isOwn ty && (OperatorContexts.smallest state pending.MemberName).IsSome)
-                    // A def whose type an annotation cannot write requires nothing (see `ContextInference.annotation`).
-                    let writable () = (ContextInference.typeExprOf (ContextInference.varNames tentative.Type) tentative.Type).IsSome
-                    let requires = not onVariables.IsEmpty && writable ()
-                    fun pending ty -> requires && onVariables |> List.exists (fun (other, _) -> other.Operator = pending.Operator)
-            let staying, numbers = resolved |> List.partition (fun (pending, ty) -> stays pending ty)
-            let pending = staying |> List.map fst
-            if numbers.IsEmpty then tentative, { generalized with PendingArithmetic = pending }
-            else
-                numbers
-                |> List.fold (fun current (pending, ty) -> asNumbers pending ty current) { state with PendingArithmetic = pending }
-                |> generalizeDef
+            match generalising with
+            // A local def generic in nothing settles none of them: each is on a variable it is not generic in.
+            | LocalDef when tentative.Quantified.IsEmpty -> tentative, generalized
+            | _ ->
+                let subst = fst (Solving.solve state.Constraints)
+                let isOwn (ty: Ty) =
+                    match ty with
+                    | TyVar v -> tentative.Quantified.Contains v.Id
+                    | _ -> false
+                // An operator of a def that failed to check is no def's to settle.
+                let own =
+                    match generalising with
+                    | LocalDef -> state.PendingArithmetic
+                    | TopLevelDef name -> state.PendingArithmetic |> List.filter (fun pending -> pending.InDef = name)
+                let resolved = own |> List.map (fun pending -> pending, Unifier.apply subst pending.OperandTy)
+                let stays =
+                    match generalising with
+                    | LocalDef -> fun (_: PendingArithmetic) (ty: Ty) -> not (isOwn ty)
+                    | TopLevelDef name ->
+                        let onVariables =
+                            resolved |> List.filter (fun (pending, ty) -> isOwn ty && (OperatorContexts.smallest state pending.MemberName).IsSome)
+                        // A def whose type an annotation cannot write requires nothing (see `ContextInference.annotation`).
+                        let writable () = (ContextInference.typeExprOf (ContextInference.varNames tentative.Type) tentative.Type).IsSome
+                        let requires = not onVariables.IsEmpty && writable ()
+                        let operators = onVariables |> List.map (fun (pending, _) -> pending.Operator) |> Set.ofList
+                        fun pending _ -> requires && operators.Contains pending.Operator
+                let staying, numbers = resolved |> List.partition (fun (pending, ty) -> stays pending ty)
+                let pending = staying |> List.map fst
+                if numbers.IsEmpty then tentative, { generalized with PendingArithmetic = pending }
+                else
+                    numbers
+                    |> List.fold (fun current (pending, ty) -> asNumbers pending ty current) { state with PendingArithmetic = pending }
+                    |> generalizeDef
 
     /// The arithmetic operators of the top-level def `name`, generalised as `scheme`, that are on its own type
     /// variables, and `state` with each a call that requires its context of the variable, as a call to a function
@@ -95,13 +100,19 @@ module internal ArithmeticInference =
                 match resolveSoFar state pending.OperandTy with
                 | TyVar v when scheme.Quantified.Contains v.Id -> Some (pending, v)
                 | _ -> None)
-        let contextsOf (v: TyVar) =
+        // The contexts of each variable, for the members its operators read, worked out once for the variable.
+        let contexts =
             onVariables
-            |> List.filter (fun (_, other) -> other.Id = v.Id)
-            |> List.map (fun (pending, _) -> pending.MemberName)
-            |> List.distinct
-            |> OperatorContexts.covering state
-            |> Option.defaultValue []
+            |> List.groupBy (fun (_, v) -> v.Id)
+            |> List.map (fun (id, operators) ->
+                id,
+                operators
+                |> List.map (fun (pending, _) -> pending.MemberName)
+                |> List.distinct
+                |> OperatorContexts.covering state
+                |> Option.defaultValue [])
+            |> Map.ofList
+        let contextsOf (v: TyVar) = contexts[v.Id]
         let calls =
             onVariables
             |> List.choose (fun (pending, v) ->

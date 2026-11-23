@@ -493,6 +493,26 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.Equal(expectedOutput, outcome.StandardOutput)
     Assert.Equal("", outcome.StandardError)
 
+/// Asserts that the program `source n` writes `output n`, and that it compiles and runs in time that grows with `n`, not
+/// with its square: at `n` it takes less than ten times what it takes at a quarter of `n`. A linear compile takes about 5
+/// times as long, and a quadratic one 16 or more (an else-if that checked in quadratic time took 20 times as long). When
+/// the first runs miss, both sizes run again and each one's quicker run counts, so that load on the machine, which slows
+/// one run and not the other, can't make the test fail (#2388).
+let runsInLinearTime (n: int) (source: int -> string) (output: int -> string) =
+    let time size =
+        let clock = System.Diagnostics.Stopwatch.StartNew()
+        let outcome = runSource (source size)
+        clock.Stop()
+        outcome |> assertRan (output size)
+        clock.Elapsed.TotalMilliseconds
+    let quarter = n / 4
+    let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
+    let atQuarter, atN = time quarter, time n
+    if not (isLinear atQuarter atN) then
+        let atQuarter = min atQuarter (time quarter)
+        let atN = min atN (time n)
+        Assert.True(isLinear atQuarter atN, $"{n:N0} took {atN:F0} ms, {atN / atQuarter:F1} times the {atQuarter:F0} ms of {quarter:N0}")
+
 /// Asserts that `outcome` ran to its end, writing `expectedOutput` to stdout and `expectedDbg`, what its `dbg`s printed,
 /// to stderr.
 let assertRanWithDbg (expectedOutput: string) (expectedDbg: string) (outcome: RunOutcome) =
