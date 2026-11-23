@@ -1071,10 +1071,20 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// local on the way to its value (see `storesBeforeValue`) is lowered whole, its stores with it, into one
     /// temporary: it is computed where it is used, so nothing computed before it waits on the stack across its stores.
     member this.Atoms (scope: Scope) (exprs: Expression list) (k: Atom list -> Expr) : Expr =
+        // A call through a function value in scope whose type holds boxes holds its arguments in locals (see `CallValue`).
+        let callStores (call: Expression) =
+            match call.Kind with
+            | FunctionCall(name, _, args) when not (SyntaxTree.flattenCallArgs args).IsEmpty ->
+                let value =
+                    match scope.Vars |> Map.tryFind name with
+                    | Some var -> Some var
+                    | None -> scope.Members |> Map.tryFind (NamedMember name)
+                value |> Option.exists (fun var -> CoreIrLowerBoxes.holdsBox var.Type)
+            | _ -> false
         let rec go (acc: Atom list) (remaining: Expression list) =
             match remaining with
             | [] -> k (List.rev acc)
-            | expr :: rest when storesBeforeValue storesFound expr -> bindTemp (this.Tail scope expr) (fun atom -> go (atom :: acc) rest)
+            | expr :: rest when storesBeforeValue callStores storesFound expr -> bindTemp (this.Tail scope expr) (fun atom -> go (atom :: acc) rest)
             | expr :: rest ->
                 this.Complex scope expr (fun value ->
                     match value.Kind with

@@ -8,17 +8,18 @@ open Parser.Program
 /// expression, a `match` (which holds its scrutinees in locals), an interpolated string (which holds its holes), and
 /// so on. Such an operand is lowered whole into one temporary (see `Atoms`). What it finds of each expression it looks
 /// at is kept in `found`, so that asking it of each operand of a long chain in turn looks at each part of the chain
-/// once (#2351).
-let rec storesBeforeValue (found: System.Collections.Generic.Dictionary<Expression, bool>) (expr: Expression) =
+/// once (#2351). `callStores` says it of a call the syntax alone can't tell of: one through a function value whose
+/// type holds boxes, which holds its arguments in locals (see `CallValue`).
+let rec storesBeforeValue (callStores: Expression -> bool) (found: System.Collections.Generic.Dictionary<Expression, bool>) (expr: Expression) =
     match found.TryGetValue expr with
     | true, stores -> stores
     | _ ->
-        let stores = storesBeforeValueOf found expr
+        let stores = storesBeforeValueOf callStores found expr
         found.[expr] <- stores
         stores
 
-and private storesBeforeValueOf found (expr: Expression) =
-    let storesBeforeValue = storesBeforeValue found
+and private storesBeforeValueOf callStores found (expr: Expression) =
+    let storesBeforeValue = storesBeforeValue callStores found
     match expr.Kind with
     | Block [ Kind (ExprStatement last) ] -> storesBeforeValue last
     | Block _
@@ -33,7 +34,7 @@ and private storesBeforeValueOf found (expr: Expression) =
     | WhileSyntax.Call _ -> true
     // A read of a cell copies what it holds into a local of its own (see `CellSyntax`).
     | FunctionCall(name, _, [ _ ]) when name = CellSyntax.read || name = CellSyntax.unbox -> true
-    | FunctionCall(_, _, args) -> args |> List.exists storesBeforeValue
+    | FunctionCall(_, _, args) -> callStores expr || args |> List.exists storesBeforeValue
     | TupleExpr items
     | ListExpr items -> items |> List.exists storesBeforeValue
     | RecordExpr fields ->
