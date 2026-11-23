@@ -8,11 +8,15 @@ open Wasmtime
 
 /// The runtime's own import for outbound HTTP, `nanyx:http`, on which the console host implements `Http` (see the
 /// Foreign functions page of the docs). WASI preview 1 has no networking, so until the backend emits components and
-/// can use `wasi:http`, a program makes requests through these two functions, backed by .NET's `HttpClient`:
+/// can use `wasi:http`, a program makes requests through these functions, backed by .NET's `HttpClient`:
 ///
-/// - `send(request, length, kind) -> i32` makes the request written in the `length` bytes at `request`, blocking until
-///   it is answered, keeps the answer, writes what kind of answer it is at `kind` (see `Answer`), and gives its length
-///   in bytes;
+/// - `start(request, length) -> i32` starts the request written in the `length` bytes at `request`, and gives a handle
+///   to it at once. When it is answered, it signals the store's `AsyncImport.Waits`, so that a task waiting on it runs
+///   while it is in flight;
+/// - `poll(handle, kind) -> i32` gives -1 while the request is in flight; once it is answered, it keeps the answer,
+///   writes what kind of answer it is at `kind` (see `Answer`), gives its length in bytes, and is done with the handle;
+/// - `send(request, length, kind) -> i32` makes the request, blocking until it is answered, and keeps the answer as
+///   `poll` does, for a module built before `start`;
 /// - `receive(destination)` copies the kept answer to `destination`, where the program has made room for it.
 ///
 /// A request is written as lines, each ended by `\n`: the method, the URL, the timeout in milliseconds, the number of
@@ -108,36 +112,62 @@ module HttpImport =
         appendHeaders text headers
         Array.append (Encoding.UTF8.GetBytes(text.ToString())) body
 
-    /// Makes the request written in `bytes`, and gives what kind of answer it had, with the answer.
-    let private answer (bytes: byte array) : Answer * byte array =
-        match requestOf bytes with
-        | Error(kind, message) -> kind, Encoding.UTF8.GetBytes message
-        | Ok(request, timeout) ->
-            use request = request
-            use cancel = new CancellationTokenSource(timeout)
-            try
-                use response = client.SendAsync(request, cancel.Token).GetAwaiter().GetResult()
-                let body = response.Content.ReadAsByteArrayAsync(cancel.Token).GetAwaiter().GetResult()
-                Answer.Response, written response body
-            with
-            // A timeout that ends the request while it connects can fail it as a connection that failed.
-            | _ when cancel.IsCancellationRequested -> Answer.Timeout, [||]
-            | :? OperationCanceledException -> Answer.Timeout, [||]
-            | :? HttpRequestException as ex -> Answer.ConnectionFailed, Encoding.UTF8.GetBytes ex.Message
-            | ex -> Answer.Other, Encoding.UTF8.GetBytes ex.Message
+    /// Makes the request written in `bytes`, and gives what kind of answer it had, with the answer, once it has one.
+    let private answer (bytes: byte array) : Tasks.Task<Answer * byte array> =
+        task {
+            match requestOf bytes with
+            | Error(kind, message) -> return kind, Encoding.UTF8.GetBytes message
+            | Ok(request, timeout) ->
+                use request = request
+                use cancel = new CancellationTokenSource(timeout)
+                try
+                    use! response = client.SendAsync(request, cancel.Token)
+                    let! body = response.Content.ReadAsByteArrayAsync(cancel.Token)
+                    return Answer.Response, written response body
+                with
+                // A timeout that ends the request while it connects can fail it as a connection that failed.
+                | _ when cancel.IsCancellationRequested -> return Answer.Timeout, [||]
+                | :? OperationCanceledException -> return Answer.Timeout, [||]
+                | :? HttpRequestException as ex -> return Answer.ConnectionFailed, Encoding.UTF8.GetBytes ex.Message
+                | ex -> return Answer.Other, Encoding.UTF8.GetBytes ex.Message
+        }
 
-    /// Defines `send` and `receive` on `linker`, for one store: the answer `send` keeps is this store's.
-    let define (linker: Linker) =
+    /// Defines `start`, `poll`, `send` and `receive` on `linker`, for one store: the requests in flight and the answer
+    /// kept are this store's, and a request that is answered signals `waits`.
+    let define (linker: Linker) (waits: AsyncImport.Waits) =
         let kept = ref [||]
+        let inFlight = Collections.Generic.Dictionary<int, Tasks.Task<Answer * byte array>>()
+        let mutable lastHandle = 0
+        // Keeps `answer` for `receive`, and writes its kind at `kind`: what `poll` and `send` give back.
+        let keep (memory: Memory) (kind: int) (answerKind: Answer, answer: byte array) =
+            kept.Value <- answer
+            memory.WriteInt32(int64 kind, int answerKind)
+            answer.Length
+        linker.DefineFunction(
+            moduleName,
+            "start",
+            CallerFunc<int, int, int>(fun caller request length ->
+                let bytes = (caller.GetMemory "memory").GetSpan(int64 request, length).ToArray()
+                let answered = answer bytes
+                answered.ContinueWith(fun (_: Tasks.Task<Answer * byte array>) -> waits.Signal()) |> ignore
+                lastHandle <- lastHandle + 1
+                inFlight.[lastHandle] <- answered
+                lastHandle))
+        linker.DefineFunction(
+            moduleName,
+            "poll",
+            CallerFunc<int, int, int>(fun caller handle kind ->
+                match inFlight.TryGetValue handle with
+                | true, answered when answered.IsCompleted ->
+                    inFlight.Remove handle |> ignore
+                    keep (caller.GetMemory "memory") kind answered.Result
+                | _ -> -1))
         linker.DefineFunction(
             moduleName,
             "send",
             CallerFunc<int, int, int, int>(fun caller request length kind ->
                 let memory = caller.GetMemory "memory"
-                let answerKind, answer = answer (memory.GetSpan(int64 request, length).ToArray())
-                kept.Value <- answer
-                memory.WriteInt32(int64 kind, int answerKind)
-                answer.Length))
+                keep memory kind ((answer (memory.GetSpan(int64 request, length).ToArray())).GetAwaiter().GetResult())))
         linker.DefineFunction(
             moduleName,
             "receive",

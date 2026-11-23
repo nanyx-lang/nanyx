@@ -3,6 +3,8 @@
 export module runtime
 
 import (
+  nanyx/async as (Async)
+  nanyx/host.async as (waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx.http.core/client as (HttpError)
@@ -11,22 +13,41 @@ import (
   nanyx.http.core/wire as (readResponse, writeRequest)
 )
 
-@extern("nanyx:http", "send")
-def httpSend: [HostRuntime] I32, I32, I32 -> I32
+@extern("nanyx:http", "start")
+def httpStart: [HostRuntime] I32, I32 -> I32
+
+@extern("nanyx:http", "poll")
+def httpPoll: [HostRuntime] I32, I32 -> I32
 
 @extern("nanyx:http", "receive")
 def httpReceive: [HostRuntime] I32 -> ()
 
--- A request is passed to `nanyx:http` written as `nanyx.http.core/wire` writes it, and its response comes
--- back written the same way. What kind of answer `send` had, a response or why there is none, it writes
--- at the address it is given.
+@extern("nanyx:async", "wait")
+def runtimeWait: [HostRuntime] I32 -> ()
 
---| Sends `request` through `nanyx:http`, and gives its response, or why there is none.
-export def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | HttpError = { request ->
+-- A request is passed to `nanyx:http` written as `nanyx.http.core/wire` writes it, and its response comes
+-- back written the same way. `start` starts it and gives a handle to it, and `poll` gives -1 while it is
+-- in flight, and once it is answered, the answer's length, writing what kind of answer it had, a response
+-- or why there is none, at the address it is given.
+
+--| Waits until the runtime has answered the request of `handle`, while the program's other tasks run,
+  and gives the answer's length, with its kind at `kind`.
+def answerOf: [Async, HostRuntime] I32, I32 -> I32 = { handle, kind ->
+  def length = httpPoll(handle, kind)
+
+  if length >= 0 then length else
+    waitOnHost(runtimeWait, -1)
+    answerOf(handle, kind)
+}
+
+--| Sends `request` through `nanyx:http`, and gives its response, or why there is none. The program's other
+  tasks run while it is in flight.
+export def sendThroughRuntime: [Async, HostRuntime] Request -> #some(Response) | HttpError = { request ->
   def wire = writeRequest(request)
-  def kind = allocate(4)
-  def length = httpSend(addressOf(wire), byteLength(wire), kind)
+  def handle = httpStart(addressOf(wire), byteLength(wire))
   keepAlive(wire)
+  def kind = allocate(4)
+  def length = answerOf(handle, kind)
   def buffer = allocate(length + 1)
   httpReceive(buffer)
   def answer = stringAt(buffer, length)

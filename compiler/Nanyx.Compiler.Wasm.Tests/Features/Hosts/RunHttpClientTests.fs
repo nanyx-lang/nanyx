@@ -138,6 +138,34 @@ println(greetings(["{server.Url}/a", "{server.Url}/b"]))
     |> assertPrinted "Hello, Ada\n[Hello, Ada, Hello, Ada]\n"
 
 [<Fact>]
+let ``Requests started as tasks are in flight at once`` () =
+    // The server answers the first request only once the second has come, so the program ends only if both are in
+    // flight together: one at a time, the first would wait for the second until it gave up.
+    use second = new ManualResetEventSlim()
+    use server =
+        new TestServer(fun _ path _ _ ->
+            match path with
+            | "/first" ->
+                // The program runs twice (see `run`), so the second's coming is forgotten once it is seen.
+                let together = second.Wait(TimeSpan.FromSeconds 10.0)
+                second.Reset()
+                200, [], (if together then "together" else "alone")
+            | _ ->
+                second.Set()
+                200, [], "second")
+    run $"""def body: [Async, Http] string -> string = {{ url -> (http.get(url) \orCrash("failed")).body }}
+
+def both = {{ _ ->
+  def first = start! body("{server.Url}/first")
+  def second = start! body("{server.Url}/second")
+  "{{await(first)}} {{await(second)}}"
+}}
+
+println(both())
+"""
+    |> assertPrinted "together second\n"
+
+[<Fact>]
 let ``A program that does not use Http imports nothing for it`` () =
     let wat = transpileWat (withFinalNewline """@entry
 def main = { println("hi") }""")
