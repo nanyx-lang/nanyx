@@ -30,12 +30,13 @@ The parser records every comment and every run of blank lines it skips, with its
 the syntax tree. The tree itself does not change, so the type checker and code generator are untouched. The formatter
 attaches each comment to a node:
 
-- A comment on the same line after code is a *trailing* comment of the last node that ends on that line, and stays
-  on that line.
+- A comment on the same line after code is a *trailing* comment of the last node that ends on that line before it,
+  and stays on that line.
 - A comment on a line of its own is a *leading* comment of the next node that starts after it, and is printed on its
   own line, at that node's indent, before it.
 - A comment with no following node in its block (the end of a file, a match or a lambda body) is printed at the end
-  of that block.
+  of that block. One before the `}` of a lambda whose body is on the `{`'s line breaks the lambda over lines, so that it
+  has a line inside the lambda to go on (`LambdaPrinter.closingComments`).
 - A `---` block comment is always on lines of its own. Its opening line of dashes goes at the indent of the code
   around it; the rest of its lines, the closing one included, are printed exactly as written.
 - A `--|` doc comment is a leading comment too. Its text and line breaks are kept, without rewrapping, and each

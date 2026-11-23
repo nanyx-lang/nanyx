@@ -139,3 +139,22 @@ let ``A comment after a lambda's last arm stays where it is`` () =
     // #2437: the parser reads a comment there, and the formatter keeps it on the arm's line, or on its own.
     unchanged (lines [ "def f = {"; "  | 0 -> 0"; "  | n -> n -- a comment"; "}" ])
     unchanged (lines [ "def f = {"; "  | 0 -> 0"; "  | n -> n"; "  -- a comment"; "}" ])
+
+[<Fact>]
+let ``A comment before the closing brace of a lambda whose body starts on the brace's line stays inside it`` () =
+    // #2450: a same-line `match` body keeps it after its last arm, on lines of their own.
+    unchanged (lines [ "def h = { x -> match x"; "    | 0 -> 1"; "    | n -> n -- a comment"; "}" ])
+    // Any other body goes on a line of its own, with the comment after it, and the `}` on the next line.
+    Assert.Equal(lines [ "def a = { x ->"; "  x + 1 -- c"; "}" ], format "def a = { x -> x + 1 -- c\n}")
+    Assert.Equal(lines [ "def a = { x ->"; "  x + 1"; "  -- c"; "}" ], format "def a = { x -> x + 1\n  -- c\n}")
+    Assert.Equal(lines [ "def a = { xs ->"; "  list.sum([1, 2]) -- c"; "}" ], format "def a = { xs -> list.sum([\n  1,\n  2\n]) -- c\n}")
+    Assert.Equal(lines [ "def a = { x -> match x"; "    | 0 -> 1"; "    | n -> n -- c"; "}" ], format "def a = { x -> match x | 0 -> 1 | n -> n -- c\n}")
+    // The shorthands keep their one line, with the `}` on the next.
+    unchanged (lines [ "def a = { -- c"; "}" ])
+    unchanged (lines [ "def a = {"; "  -- c"; "}" ])
+    unchanged (lines [ "def a = { .length -- c"; "}" ])
+    unchanged (lines [ "def a = { + -- c"; "}" ])
+    // As an argument too, where the comment is not taken for the end of the argument before the lambda on its line.
+    Assert.Equal(
+        lines [ "def a = list.map("; "  [1, 2]"; "  { x ->"; "    x * 2 -- double"; "  }"; ")" ],
+        format "def a = list.map([1, 2], { x -> x * 2 -- double\n})")
