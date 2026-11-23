@@ -133,7 +133,10 @@ passes the instance the type checker found for it there, as a call to a top-leve
   boxed (`IrBox`: a closure whose function returns the value), and so does the lambda a `use` binds to it. A call
   boxes what it passes and unboxes what it is given back, rebuilding a tag's cell, a record or a list around the parts
   it converts, and a function passed to the member or returned by it is adapted the same way (`CoreIrLowerBoxes`,
-  [#1160](https://github.com/nanyx-lang/nanyx/issues/1160)).
+  [#1160](https://github.com/nanyx-lang/nanyx/issues/1160)). Such a member takes one value even when a call has its
+  variable at a tuple, so `ret((x, y))` passes the tuple whole and `ret(x, y)` passes one made of its arguments, where
+  a function whose input is a tuple takes the tuple's elements (`CoreIrLowerArguments.takesOneValue`,
+  [#2413](https://github.com/nanyx-lang/nanyx/issues/2413)).
 
 So a lambda that uses a context may leave the scope that supplies it, and a function may be named as a value where
 its contexts aren't available. A lambda that leaves still requires the context where it is called, as its type says.
