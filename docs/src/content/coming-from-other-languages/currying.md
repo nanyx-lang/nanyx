@@ -28,17 +28,17 @@ Those costs outweigh the conciseness upside for Nanyx. The sections below explai
 In Nanyx, these evaluate to the same result:
 
 ```nanyx
-string.concat("Hello, ", "World!")
+string.removePrefix("Hello, World!", "Hello, ")
 
-"Hello, "
-  \string.concat("World!")
+"Hello, World!"
+  \string.removePrefix("Hello, ")
 ```
 
 That is what most people expect after learning `\`. In curried languages, the second line usually produces a different result, because the piped value is used as the last argument rather than the first. This makes the operator feel less predictable, even for experienced users.
 
 The difference shows up in arithmetic too:
 
-```nanyx
+```nanyx fragment
 someNumber \Num.div(2)
 
 someNumber \Num.sub(1)
@@ -48,7 +48,7 @@ In Nanyx, those mean divide by 2 and subtract 1. In curried languages, they typi
 
 Nanyx also benefits from `\` with higher-order functions. Consider:
 
-```nanyx
+```nanyx fragment
 def answer = numbers \list.map { num ->
   someFunction("some argument", num, anotherArg)
 }
@@ -70,7 +70,7 @@ None of that is impossible to learn, but it is extra conceptual weight that does
 
 Currying makes pointfree composition effortless, but pointfree code is often harder to read. Compare:
 
-```nanyx
+```nanyx fragment
 def sortedUnique = compose(list.sort, list.distinct)
 ```
 

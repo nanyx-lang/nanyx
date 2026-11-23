@@ -78,7 +78,7 @@ The rule is `RepeatedPulls`, in `LinterRepeatedPulls.fs`.
 Because a lazy function runs its callback when the result is pulled, not when it is called, it moves the callback's
 contexts into the type of its result, where an eager function requires them at the call:
 
-```nanyx
+```nanyx fragment
 list.map: [c] list(a), ([c] a -> b) -> list(b)          -- runs f now: needs c now
 seq.map:  ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)   -- runs f when pulled: the result needs c and d
 seq.fold: [c, d] ([c] seq(a)), b, ([d] b, a -> b) -> b  -- runs now again

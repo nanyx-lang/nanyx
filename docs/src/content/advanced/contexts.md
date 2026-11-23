@@ -161,7 +161,7 @@ def double: [] int -> int = { x ->
 
 Use the `use` keyword to load an instance of a context into scope. Once loaded, any functions that require it can be called:
 
-```nanyx
+```nanyx fragment
 def main = {
   use Console(write = { text -> hostPrint(text) })
 
@@ -194,13 +194,13 @@ An instance is always written at its `use`, so that is where what its members ne
 
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
-```nanyx
+```nanyx fragment
 def result = use Console(write = hostPrint) in println("Hello from a scoped context")
 ```
 
 After `in` there can also be a block of statements, on the lines after it and indented more than the line `use` is on. The block's value is the value of `use ... in`, and the context is loaded for the block only:
 
-```nanyx
+```nanyx fragment
 def main = {
   def total = use Counter(next = { n -> n - 1 }) in
     def a = counted(3)
@@ -315,7 +315,7 @@ def fooEscapes: [Foo] string -> ([Foo] () -> string) = { s ->
 def main: [Console] () -> () = {
   def escaped = use Foo(bar = { s -> s }) in fooEscapes("hi")
   use Foo(bar = { s -> s ++ "!" }) in println(escaped())   -- hi!
-  println(escaped())                                       -- error: requires 'Foo'
+  println(escaped())                                       -- error NYX0205: requires 'Foo'
 }
 ```
 
@@ -323,7 +323,7 @@ A result type that leaves the context out, `[Foo] string -> () -> string`, is an
 
 The same goes for a parameterised context. A function that does not write its type, and calls a function that requires `Show(a)` with a value of one of its own type variables, requires `Show` at that variable itself:
 
-```nanyx
+```nanyx fragment
 def describe: [Show(a)] a -> string = { v ->
   Show(a).show(v)
 }
@@ -351,7 +351,7 @@ Holding or passing `handlers` requires nothing, and building it doesn't run its 
 
 You can require several contexts by listing them, separated by `,`:
 
-```nanyx
+```nanyx fragment
 def readAndPrintFile: [Console, FileSystem] string -> () = { path ->
   def contents = openFile(path).contents
   println(contents)
@@ -517,8 +517,10 @@ Floats follow IEEE 754: `0.0 == -0.0` is `true`, and `NaN == NaN` is `false`.
 A nominal type can attach its own `==`, which `a == b` on it, and a function that requires `Eq`, then use for it:
 
 ```nanyx
+type Email = protected string
+
 def Email.`==`: Email, Email -> bool = { a, b ->
-  lower(a) == lower(b)
+  string.lowercase(a) == string.lowercase(b)
 }
 ```
 
@@ -526,7 +528,7 @@ Only a nominal type, protected or private, can: a structural type, such as `type
 
 An `==` passes through the structures around it. A tag with a payload, a tuple, a record and a list are compared part by part, each part with its own `==`:
 
-```nanyx
+```nanyx fragment
 #some(Email("A@x.io")) == #some(Email("a@x.io")) -- true
 [Email("A@x.io")] == [Email("a@x.io")] -- true
 
@@ -573,11 +575,11 @@ The compiler has a `Hash` for every type it has an `Eq` for, which hashes by str
 type Email = protected string
 
 def Email.`==`: Email, Email -> bool = { a, b ->
-  lower(a) == lower(b)
+  string.lowercase(a) == string.lowercase(b)
 }
 
 def Email.hash: Email -> int = { e ->
-  string.hash(lower(e))
+  string.hash(string.lowercase(e))
 }
 ```
 
@@ -758,7 +760,7 @@ The holes in the instance itself are checked before it is loaded, so they write 
 
 A tag with a payload, a tuple, a record, a list, a map and a set have a `ToString` when their parts do. The compiler derives it, writing each part with the `ToString` of its type:
 
-```nanyx
+```nanyx fragment
 "{#some(Point(x = 1, y = 2))}" -- "#some((1, 2))"
 "{[1, 2, 3]}" -- "[1, 2, 3]"
 "{(name = "Ada", age = 36)}" -- "(age = 36, name = Ada)"
@@ -810,7 +812,7 @@ def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
 
 You can call `list.sum` on a `list(Point)` without explicitly loading an `Add(Point)` context -- the compiler sees that `Point.zero` and ``Point.`+` `` satisfy the context and synthesizes it. The attached `+` is also what `p + q` on two points calls:
 
-```nanyx
+```nanyx fragment
 def points = [Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)]
 
 def total = points \list.sum

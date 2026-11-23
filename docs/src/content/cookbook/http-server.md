@@ -26,7 +26,7 @@ Then name the HTTP host in the manifest, `my_server.nyxp`, in place of the conso
 
 In `src/main.nyx`:
 
-```nanyx
+```nanyx fragment
 module main
 
 @entry

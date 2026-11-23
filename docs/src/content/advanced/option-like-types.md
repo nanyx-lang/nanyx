@@ -24,9 +24,9 @@ The type variable `r` represents all other tags in the union, allowing us to use
 # Works with options
 
 ```nanyx
-def name: #some(string) | #none = ...
+def name: #some(string) | #none = #some("Ada")
 
-def upper = name \mapSome { .toUpperCase }
+def upper = name \mapSome(string.uppercase) -- #some("ADA")
 ```
 
 # Works with failures
@@ -34,7 +34,7 @@ def upper = name \mapSome { .toUpperCase }
 A function that can fail gives `#some` with its value, and a tag of its own for each way it fails:
 
 ```nanyx
-def value: #some(int) | #notFound | #dbDown = ...
+def value: #some(int) | #notFound | #dbDown = #notFound
 
 def doubled = value \mapSome { * 2 }
 ```
