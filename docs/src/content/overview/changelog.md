@@ -8,6 +8,81 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.35.0
+
+*23 November 2026*
+
+A release about memory and reflection. A `memory` block now frees the mutable objects made in it when it ends,
+cycles included, and the escape checks behind that are stated as a guarantee. Code that walks a type's description
+handles recursive types, and `Result` is gone in favour of failures as tags of their own. Programs can now call
+other WebAssembly components and be called by them.
+
+**Language**
+
+- `Result` and its functions are removed, and the standard library no longer wraps failures in `#error(...)`: a
+  failure is a tag of its own, named for what went wrong, such as `#invalidPattern(RegexError)`, and a union alias can
+  name a group of them, as `IoError` and `HttpError` do. **This breaks code** that uses `Result`, or that matches
+  `#error(e)` from the standard library or the shipped packages ([Error handling](../tour/error-handling)).
+- The sequence type is `Sequence(a)`, not `Seq(a)`. The lowercase `seq(a)`, `seq.` and `seq[1, 2, 3]` are unchanged,
+  and `Sequence[1, 2, 3]` is a sequence too. **This breaks code** that names `Seq`
+  ([Collections](../tour/collections)).
+- A tag's payload may be positional types followed by named fields, as a record type writes them:
+  `#rect(string, width: float, height: float)` ([Tags](../tour/tags)).
+- A `try`, `yield` or `return` that is an argument's value ends at the argument's `,`, so
+  `P(a = try num(x), b = try num(y))` works on one line, and a one-line builder body such as
+  `proc { return try num(x) }` works ([Workflows](../advanced/workflows)).
+- A private type can't be taken apart, read or updated outside its module: its fields, destructuring, spreads and
+  `with` are NYX0212 there. A private type gets no `==`, `<` or hashing derived from its hidden representation, and
+  nor does a structure holding one ([Nominal and protected types](../advanced/nominal-and-protected-types)).
+- A scoped context may have members, and a `use` of an instance of it supplies it
+  ([Contexts](../advanced/contexts)).
+- A `memory` block frees the mutable objects made in it when it ends: its references (`MRef`), the boxes of cells a
+  lambda captures, and `MArray`s, cycles through them included. Each block has a region of its own; a mutable object
+  stored into an outer block's object, or given back from the block, moves to the outer region
+  ([Memory](../advanced/memory)).
+- NYX0233, a value of a `memory` block escaping it, is now a guarantee the runtime relies on, with the routes the red
+  team found closed: a callback's result, an outer block's cell or `MRef`, a named `Memory`, a captured reference, a
+  `use`'s instance, and a context member named as a value ([Memory](../advanced/memory)).
+
+**Standard library**
+
+- `string.toUtf8` and `string.fromUtf8`, between a string and its UTF-8 bytes ([text](../stdlib/text)).
+- `Slice` gets the core collection functions, with `list`'s names: `filter`, `select`, `find`, `any`, `all`, `sort`,
+  `take`, `skip`, `zip` and more. `Slice.ofArray` is renamed `Slice.fromArray`, so `Slice[1, 2, 3]` builds a slice.
+  **This breaks code** that calls `Slice.ofArray` ([Slice](../stdlib/slice)).
+- `MList.add` makes one allocation per element, not two.
+- `use Log(log = println)`: a generic function given as a context member finds its instances
+  ([Contexts](../advanced/contexts)).
+
+**Tools**
+
+- Components: a program can import functions another component exports with `@import`, naming their parameters, and
+  build a library component with no `@entry`. An exported function that needs contexts runs under the ones its host
+  provides. A Nanyx component and Rust components call each other in CI ([Attributes](../tour/attributes)).
+- `nanyx yank` is now `nanyx unlist`, and the index records `unlisted`. A command that reads the index for a locked or
+  pinned version that is unlisted warns, NYX0051 ([Packages](../tour/packages)).
+- The package index is at `https://packages.nanyx.dev/`, where each package has a page with its versions, README and
+  install line ([Packages](../tour/packages)).
+- The formatter breaks a long signature's contexts, parameters and result union over lines
+  ([Formatter](../standard-tools/formatter)).
+- A type is displayed with a union alias's name when it holds every tag of the alias: `#some(string) | FsError`.
+- Unused and unreachable code is drawn faint in the editor ([Official linter](../standard-tools/official-linter)).
+- Building the compiler from source no longer needs Rust: the componentizer is committed.
+
+**Performance**
+
+- A long `else if` chain is checked and compiled in time that grows with its length: 10,000 branches take about
+  10 seconds to run, from about 2 minutes. Long chains no longer overflow the stack in the backend, the WAT
+  assembler or `nanyx parse`.
+
+**Fixes**
+
+- Walking a recursive type's description reads the right payload; a match on a `Type` value tells `set(int)` from
+  `list(int)`; `map.map` compiles at a type known only at run time; and a `[Typed(a)]` function whose result names a
+  type of an import under an alias finds `Typed` ([Functions](../tour/functions#type-arguments)).
+- `dbg` of an open union prints it, and an error in a `dbg` printer is reported at the `dbg`.
+- A private non-record type can be unwrapped by pattern inside a `module` block.
+
 # 0.34.0
 
 *22 November 2026*
