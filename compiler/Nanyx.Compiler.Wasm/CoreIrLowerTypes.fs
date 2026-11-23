@@ -311,7 +311,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
                 declared
                 |> List.map (fun (memberName, memberTy) ->
                     InstanceMember(key, memberName), toIrTypeExpanding layouts (expanding.Add name) recursing (boxOwnVariables (substitute bound memberTy))))
-        IrFunction(toIrType input, toIrType output, members @ instances)
+        let waits = concreteContexts contexts |> List.exists (function TyApply(name, []) | TyAlias(name, [], _) -> layouts.Waiting.Contains name | _ -> false)
+        IrFunction(toIrType input, toIrType output, members @ instances, waits)
     | TyOpenRecord _ -> cannot "a record whose other fields are not known here"
     | TyApply(name, _) -> cannot $"a value of type {name}"
     | TyAlias _ -> cannot "an alias"
@@ -324,7 +325,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
 /// requires them takes them (see `IrFunction`).
 let contextMembersOf (layouts: ContextLayouts) (contexts: Ty list) : (ContextMemberKey * IrType) list =
     match toIrTypeIn layouts (TyFunc(TyPrimitive "unit", TyPrimitive "unit", contexts)) with
-    | IrFunction(_, _, members) -> members
+    | IrFunction(_, _, members, _) -> members
     | _ -> []
 
 /// The arguments an adapter from a function value of type `givenTy` to one of `expectedTy` takes and passes on (see
@@ -339,8 +340,8 @@ let valuesOf (input: IrType) =
 
 let adaptedValueTypes (givenTy: IrType) (expectedTy: IrType) : IrType list =
     match givenTy, expectedTy with
-    | IrFunction(given, _, _), IrFunction(IrUnit, _, _) when given <> IrBox -> valuesOf given
-    | _, IrFunction(expected, _, _) -> valuesOf expected
+    | IrFunction(given, _, _, _), IrFunction(IrUnit, _, _, _) when given <> IrBox -> valuesOf given
+    | _, IrFunction(expected, _, _, _) -> valuesOf expected
     | _ -> []
 
 /// `ty` with each type variable it still has made unit: nothing constrains one where a value of `ty` is made, as in the

@@ -163,7 +163,7 @@ let private asFailure (tools: TypeMatchTools) (value: Var) (expected: IrType) (k
 /// value, boxed, or a failure; and what it gives, the record or the failure.
 let private buildParts (buildTy: IrType) =
     match buildTy with
-    | IrFunction(IrFunction(fieldTy, givenTy, []) as functionTy, resultTy, []) -> fieldTy, functionTy, givenTy, resultTy
+    | IrFunction(IrFunction(fieldTy, givenTy, [], _) as functionTy, resultTy, [], _) -> fieldTy, functionTy, givenTy, resultTy
     | other -> internalError $"a build of type '{IrType.show other}'"
 
 /// The union a record description's `build`, of type `buildTy`, gathers its fields' values in, boxed: `#some` of them,
@@ -225,7 +225,7 @@ let buildingFunction (tools: TypeMatchTools) (functionName: string) (buildTy: Ir
                 bindLocal tools "__gathered" (Expr.make (Call(gatherer, [ AVar fields; AVar given ])) gathered) (fun result ->
                     let values = tools.NewVar (tools.UniqueName "__values") PatternBound (IrList IrBox)
                     let make =
-                        bindLocal tools "__make" (Expr.make (Field(AVar info, slotOf makeMember)) (IrFunction(IrList IrBox, IrBox, []))) (fun maker ->
+                        bindLocal tools "__make" (Expr.make (Field(AVar info, slotOf makeMember)) (IrFunction(IrList IrBox, IrBox, [], false))) (fun maker ->
                             bindLocal tools "__made" (Expr.make (CallClosure(maker, [ AVar values ], Borrowing)) IrBox) (fun boxed ->
                                 tools.Convert (AVar boxed) made (fun record -> Expr.make (MakeTag("some", record)) resultTy)))
                     let arms = { Patterns = [ PTag("some", Some (PBind values)) ]; Body = make } :: asFailure tools result resultTy (fun atom -> Expr.make (Atom atom) resultTy)

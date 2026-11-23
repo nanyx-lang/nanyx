@@ -115,7 +115,7 @@ def build: int -> (int -> int) = { n ->
   wrap(n, { x -> x + step })
 }
 """
-    let ty = IrFunction(IrInt, IrInt, [])
+    let ty = IrFunction(IrInt, IrInt, [], false)
     use program = instantiateWasm (source.ReplaceLineEndings "\n") [ ty ]
     let live = program.LiveBlocks
     program.Drop(ty, program.Call("build", 100000))
@@ -142,7 +142,7 @@ let ``Drop - a closure frees what it captures`` () =
   { s -> prefix ++ s }
 }
 """
-    let ty = IrFunction(IrString, IrString, [])
+    let ty = IrFunction(IrString, IrString, [], false)
     use program = instantiateWasm source [ ty ]
     assertDropFreesEverything program "prefixer" ty
 

@@ -504,14 +504,14 @@
     local.get $p
   )
 
-  (func $__nanyx_start (local $__inlined31 i32) (local $fd__in1__in4 i32) (local $offset__in1__in1__in4 i32) (local $__inlined12__in1__in4 i32) (local $offset__in4__in1__in4 i32) (local $__inlined16__in1__in4 i32) (local $offset__in7__in1__in4 i32) (local $__inlined20__in1__in4 i32) (local $offset__in8__in1__in4 i32) (local $__inlined24__in1__in4 i32) (local $__inlined24__in1 i32) (local $__owned_0 i32)
+  (func $__nanyx_start (local $__inlined41 i32) (local $fd__in1__in4 i32) (local $offset__in1__in1__in4 i32) (local $__inlined12__in1__in4 i32) (local $offset__in4__in1__in4 i32) (local $__inlined16__in1__in4 i32) (local $offset__in7__in1__in4 i32) (local $__inlined20__in1__in4 i32) (local $offset__in8__in1__in4 i32) (local $__inlined24__in1__in4 i32) (local $__inlined24__in1 i32) (local $__owned_0 i32)
     i32.const 264
     local.tee $__owned_0
     i32.const 288
     call $__nanyx_string_concat
     local.get $__owned_0
     call $__nanyx_drop_string
-    local.set $__inlined31
+    local.set $__inlined41
     i32.const 1
     local.set $fd__in1__in4
     i32.const 12
@@ -521,7 +521,7 @@
     i32.add
     local.set $__inlined12__in1__in4
     local.get $__inlined12__in1__in4
-    local.get $__inlined31
+    local.get $__inlined41
     i32.store
     i32.const 0
     drop
@@ -532,7 +532,7 @@
     i32.add
     local.set $__inlined16__in1__in4
     local.get $__inlined16__in1__in4
-    local.get $__inlined31
+    local.get $__inlined41
     call $__nanyx_string_length
     i32.store
     i32.const 0
@@ -553,10 +553,10 @@
     i32.add
     call $fd_write
     local.set $__inlined24__in1__in4
-    local.get $__inlined31
+    local.get $__inlined41
     drop
     i32.const 0
-    local.get $__inlined31
+    local.get $__inlined41
     call $__nanyx_drop_string
     local.set $__inlined24__in1
     i32.const 0

@@ -22,6 +22,13 @@ cancellation, async streams and crash boundaries are not built yet; they are on
   that blocks that thread. The console host has one instance; the HTTP host runs each request's instance on a thread
   of its own (`WasmServer.serve`), so a handler that waits on an outbound request holds only its own, and the host
   answers other requests meanwhile.
+- **The backend knows which functions can wait.** `Async` has no members, so nothing a function is passed says it
+  requires it. A function's IR type says so instead (`IrFunction`'s `waits`, in `CoreIr.fs`), from the contexts its
+  type requires (`CoreIrLowerTypes.toIrTypeIn`). A function generic in contexts is specialised on what its context
+  variables stand for, so it is compiled apart for a function that can wait and for one that can't: `list.map` over
+  `http.get` and `list.map` over a pure lambda are two functions. This is the start of compiling tasks
+  ([#1890](https://github.com/nanyx-lang/nanyx/issues/1890)), where only the functions that can wait will be compiled
+  to state machines.
 
 # Why it's built this way
 

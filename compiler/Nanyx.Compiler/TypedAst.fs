@@ -75,6 +75,10 @@ module ModuleOrigin =
     /// (`nanyx/host.runtime`).
     let hostRuntimeName = "host.runtime"
 
+    /// The name of the standard library module whose context, `Async`, a function that can wait requires
+    /// (`nanyx/async`).
+    let asyncName = "async"
+
 /// What makes a nominal type the type it is: the module that defines it, and the name it is defined under there
 /// (`Person`, or `money.Money` in a `module money =` block). Two modules that each define a `Person` define two
 /// types.
