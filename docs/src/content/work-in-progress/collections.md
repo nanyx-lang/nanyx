@@ -88,8 +88,7 @@ updated as [the work](#the-work) lands:
 
 The `Trie` column stands for `StringTrie` too, which has the same functions. `Slice` has `fromArray` under another
 name, `Slice.ofArray`, which [#2189](https://github.com/nanyx-lang/nanyx/issues/2189) renames. The table leaves out what isn't in the core set, such as `list`'s
-`groupBy`, `windows` and `sum`, `set`'s `union`, or `MArray`'s `swap`; `reduce` is changing on every type at once in
-[#2080](https://github.com/nanyx-lang/nanyx/issues/2080).
+`groupBy`, `windows` and `sum`, `set`'s `union`, `MArray`'s `swap`, or `reduce`.
 
 # The work
 
