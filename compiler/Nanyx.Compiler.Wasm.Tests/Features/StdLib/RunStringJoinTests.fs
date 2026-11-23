@@ -3,9 +3,8 @@ module TranspilerWasmTests.Features.StdLib.RunStringJoin
 open Xunit
 open TranspilerWasmTestHelpers
 
-// `string.join` copies each piece into its result once (`__nanyx_string_join`), and `concat`, `replace` and `reverse`
-// are built on it (#1291); `uppercase` and `lowercase` make their result in one allocation
-// (`__nanyx_string_shift_bytes`, #1467). `runSource` checks the memory, so these also show that the helpers free
+// `string.join` copies each piece into its result once (`__nanyx_string_join`), and `concat` is built on it (#1291);
+// `uppercase` and `lowercase` make their result in one allocation (`__nanyx_string_shift_bytes`, #1467). `runSource` checks the memory, so these also show that the helpers free
 // nothing they borrow.
 
 [<Fact>]

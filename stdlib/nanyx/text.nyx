@@ -18,14 +18,17 @@
   position, so it works on a string of any length.
 module text
 
--- Everything here is written over five compiler intrinsics: `__nanyx_string_length`,
--- `__nanyx_string_byte_at`, `__nanyx_string_slice`, `__nanyx_string_from_byte` and
--- `__nanyx_string_join`, which copies each piece of its result once; `split` and `words` also build
--- their results with `__nanyx_list_cons`, last first, and reverse them with the prelude's
--- `list.reverse`. `toUtf8` and `fromUtf8` also use the array intrinsics `__nanyx_array_new`,
--- `__nanyx_array_write`, `__nanyx_array_get` and `__nanyx_array_length`, so that this module needs
--- no import. `++` (concatenation) and `==` on strings are language operators. A string built from
--- many pieces is built as a list of them and joined once, since `++` copies both its operands.
+-- Everything here is written over seven compiler intrinsics: `__nanyx_string_length`,
+-- `__nanyx_string_byte_at`, `__nanyx_string_slice`, `__nanyx_string_from_byte`,
+-- `__nanyx_string_join`, which copies each piece of its result once, and `__nanyx_string_new` and
+-- `__nanyx_string_write`, which make a string whose length is known first and copy each stretch of
+-- it in once, as `repeat`, `padStart`, `padEnd`, `replace` and `reverse` do. `split` and `words`
+-- also build their results with `__nanyx_list_cons`, last first, and reverse them with the
+-- prelude's `list.reverse`. `toUtf8` and `fromUtf8` also use the array intrinsics
+-- `__nanyx_array_new`, `__nanyx_array_write`, `__nanyx_array_get` and `__nanyx_array_length`, so
+-- that this module needs no import. `++` (concatenation) and `==` on strings are language
+-- operators. A string built from many pieces whose length isn't known first is built as a list of
+-- them and joined once, since `++` copies both its operands.
 
 --| The number of bytes in `s`.
 export def string.length: string -> int = { s ->
@@ -217,39 +220,55 @@ export def string.isBlank: string -> bool = { s ->
   skipWhitespace(s, 0) == string.length(s)
 }
 
---| `acc` followed by `s` repeated `times` times. `s` doubles at each step, so this takes as many steps
-  as `times` has bits; since every copy is the same, the order they are added to `acc` in doesn't matter.
-def repeatOnto: string, int, string -> string = { s, times, acc ->
-  if times <= 0
-    then acc
-    else if times % 2 == 1
-      then repeatOnto(s ++ s, times / 2, acc ++ s)
-      else repeatOnto(s ++ s, times / 2, acc)
+--| `made`, a new string, once the `filled` bytes written into it from `start` are copied after
+  themselves until `total` bytes from `start` are written: each copy doubles what is written, so
+  this takes as many steps as the result has bits.
+def doubleFrom: string, int, int, int -> string = { made, start, filled, total ->
+  if filled < total then
+    def count = if filled < total - filled then filled else total - filled
+    __nanyx_string_write(made, start + filled, made, start, count)
+    doubleFrom(made, start, filled + count, total)
+  else made
+}
+
+--| `made`, a new string, once `count` bytes of repeats of `fill`, which isn't empty, are written
+  into it from `at`.
+def fillFrom: string, int, string, int -> string = { made, at, fill, count ->
+  def first = if string.length(fill) < count then string.length(fill) else count
+  __nanyx_string_write(made, at, fill, 0, first)
+  doubleFrom(made, at, first, count)
 }
 
 --| `s` repeated `times` times (the empty string when `times` is zero or negative). Stack-safe: it works
   for any `times`.
 export def string.repeat: string, int -> string = { s, times ->
-  repeatOnto(s, times, "")
-}
+  def length = string.length(s)
 
---| The bytes needed in front of or behind `s` to make it `width` bytes long, cut from repeats of `fill`.
-def padding: string, int, string -> string = { s, width, fill ->
-  def missing = width - string.length(s)
-
-  if missing <= 0 or string.length(fill) == 0
+  if times <= 0 or length == 0
     then ""
-    else string.substring(string.repeat(fill, missing), start = 0, length = missing)
+    else if times == 1
+      then s
+      else fillFrom(__nanyx_string_new(length * times), 0, s, length * times)
 }
 
 --| `s` with `fill` repeated in front of it until it is `width` bytes long. Longer strings are unchanged.
 export def string.padStart: (string, width: int, fill: string) -> string = { s, width, fill ->
-  padding(s, width, fill) ++ s
+  def missing = width - string.length(s)
+
+  if missing <= 0 or string.length(fill) == 0 then s else
+    def made = fillFrom(__nanyx_string_new(width), 0, fill, missing)
+    __nanyx_string_write(made, missing, s, 0, string.length(s))
+    made
 }
 
 --| `s` with `fill` repeated after it until it is `width` bytes long. Longer strings are unchanged.
 export def string.padEnd: (string, width: int, fill: string) -> string = { s, width, fill ->
-  s ++ padding(s, width, fill)
+  def missing = width - string.length(s)
+
+  if missing <= 0 or string.length(fill) == 0 then s else
+    def made = __nanyx_string_new(width)
+    __nanyx_string_write(made, 0, s, 0, string.length(s))
+    fillFrom(made, string.length(s), fill, missing)
 }
 
 --| The pieces of `s` from byte `from` on between occurrences of `separator`, last first, in front of
@@ -298,13 +317,39 @@ export def string.concat: list(string) -> string = { pieces ->
   string.join(pieces, "")
 }
 
+--| `made`, a new string, once the bytes of `s` from `from` on are written into it from `at`, with
+  `replacement` written in place of each occurrence of `pattern`.
+def replaceFrom
+  : string, string, string, string, int, int -> string
+  = { s, pattern, replacement, made, from, at ->
+    def index = indexFrom(s, pattern, from)
+    def before = index - from
+
+    if index < 0 then
+      __nanyx_string_write(made, at, s, from, string.length(s) - from)
+      made
+    else
+      __nanyx_string_write(made, at, s, from, before)
+      __nanyx_string_write(made, at + before, replacement, 0, string.length(replacement))
+
+      replaceFrom(
+        s
+        pattern
+        replacement
+        made
+        index + string.length(pattern)
+        at + before + string.length(replacement)
+      )
+  }
+
 --| `s` with every occurrence of `pattern` replaced by `replacement`. An empty `pattern` leaves `s` unchanged.
 export def string.replace
   : (string, pattern: string, replacement: string) -> string
   = { s, pattern, replacement ->
-    if string.length(pattern) == 0
-      then s
-      else string.join(string.split(s, on = pattern), replacement)
+    def found = if string.length(pattern) == 0 then 0 else countFrom(s, pattern, 0, 0)
+    def length = string.length(s) + found * (string.length(replacement) - string.length(pattern))
+
+    if found == 0 then s else replaceFrom(s, pattern, replacement, __nanyx_string_new(length), 0, 0)
   }
 
 def withoutCarriageReturn: string -> string = { line ->
@@ -379,23 +424,21 @@ export def string.chars: string -> list(string) = { s ->
   charsBefore(s, string.length(s), [])
 }
 
---| The characters of `s` from byte `start` on, last first, in front of `acc`.
-def charsReversedFrom: string, int, list(string) -> list(string) = { s, start, acc ->
+--| `made`, a new string as long as `s`, once each character of `s` from byte `start` on is written
+  into it where it ends as far from the end of `made` as it starts from the start of `s`.
+def reverseFrom: string, string, int -> string = { s, made, start ->
   def stop = nextCharStart(s, start + 1)
 
-  if start >= string.length(s)
-    then acc
-    else charsReversedFrom(
-      s
-      stop
-      __nanyx_list_cons(string.substring(s, start = start, length = stop - start), acc)
-    )
+  if start < string.length(s) then
+    __nanyx_string_write(made, string.length(s) - stop, s, start, stop - start)
+    reverseFrom(s, made, stop)
+  else made
 }
 
 --| `s` with its characters (code points, not bytes) in reverse order, so it never cuts a character in
   half. Stack-safe: it works on a string of any length.
 export def string.reverse: string -> string = { s ->
-  __nanyx_string_join(charsReversedFrom(s, 0, []), "")
+  if string.length(s) <= 1 then s else reverseFrom(s, __nanyx_string_new(string.length(s)), 0)
 }
 
 --| The bits a character's lead byte `b` holds, for a character `length` bytes long.

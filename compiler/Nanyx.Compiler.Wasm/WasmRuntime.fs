@@ -125,6 +125,8 @@ module Helpers =
     let stringFromMemory = NyxCompiler.Intrinsics.stringFromMemory
     let stringJoin = NyxCompiler.Intrinsics.stringJoin
     let stringShiftBytes = NyxCompiler.Intrinsics.stringShiftBytes
+    let stringNew = NyxCompiler.Intrinsics.stringNew
+    let stringWrite = NyxCompiler.Intrinsics.stringWrite
     let listCons = NyxCompiler.Intrinsics.listCons
     let floatSqrt = NyxCompiler.Intrinsics.floatSqrt
     let floatFloor = NyxCompiler.Intrinsics.floatFloor
@@ -592,6 +594,32 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  local.get $len"
             $"  call ${Helpers.copyBytes}"
             "  local.get $out"
+            ")" ]
+      // A new string of `$len` bytes, none for a length below 0, which the standard library writes before anything
+      // reads it.
+      Helpers.stringNew,
+      lines
+          [ $"(func ${Helpers.stringNew} (param $len i32) (result i32)"
+            "  local.get $len"
+            "  i32.const 0"
+            "  local.get $len"
+            "  i32.const 0"
+            "  i32.gt_s"
+            "  select"
+            $"  call ${Helpers.stringAlloc}"
+            ")" ]
+      // `$count` bytes of `$source` from `$start` copied into the new string `$target` at `$at`.
+      Helpers.stringWrite,
+      lines
+          [ $"(func ${Helpers.stringWrite} (param $target i32) (param $at i32) (param $source i32) (param $start i32) (param $count i32)"
+            "  local.get $target"
+            "  local.get $at"
+            "  i32.add"
+            "  local.get $source"
+            "  local.get $start"
+            "  i32.add"
+            "  local.get $count"
+            $"  call ${Helpers.copyBytes}"
             ")" ]
       Helpers.stringJoin,
       lines (
@@ -1178,7 +1206,9 @@ let helperDependencies =
       Helpers.stringJoin, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringShiftBytes, [ Helpers.stringLength; Helpers.stringAlloc ]
       Helpers.intTextLength, []
-      Helpers.intTextWrite, [ Helpers.intTextLength ] ]
+      Helpers.intTextWrite, [ Helpers.intTextLength ]
+      Helpers.stringNew, [ Helpers.stringAlloc ]
+      Helpers.stringWrite, [ Helpers.copyBytes ] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
     @ WasmRegions.dependencies
 
@@ -1187,6 +1217,8 @@ let helperDependencies =
 /// `closeHelpers`) declares a memory.
 let private helpersWithoutMemory =
     set [ yield Helpers.stringSlice
+          yield Helpers.stringNew
+          yield Helpers.stringWrite
           yield Helpers.stringConcat
           yield Helpers.exit
           yield Helpers.crashed
