@@ -243,6 +243,28 @@ let compileClean (source: string) =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     result.Typed.Value
 
+/// How long compiling `source` takes, in milliseconds.
+let compileTime (source: string) =
+    let watch = System.Diagnostics.Stopwatch.StartNew()
+    Compiler.compile source |> ignore
+    watch.ElapsedMilliseconds
+
+/// Asserts that `source n` compiles in time that grows with `n`, not with its square, and with no diagnostics at a
+/// quarter of `n`: at `n` it takes less than ten times what it takes at a quarter of `n`. A linear check takes about 4
+/// times as long, and a quadratic one 16. When the first runs miss, both sizes compile again and each one's quicker run
+/// counts, so that load on the machine, which slows one run and not the other, can't make the test fail (as
+/// `runsInLinearTime` does for the Wasm tests, #2388).
+let checksInLinearTime (n: int) (source: int -> string) =
+    let quarter = n / 4
+    compileClean (source quarter) |> ignore
+    let time size = float (compileTime (source size))
+    let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
+    let atQuarter, atN = time quarter, time n
+    if not (isLinear atQuarter atN) then
+        let atQuarter = min atQuarter (time quarter)
+        let atN = min atN (time n)
+        Assert.True(isLinear atQuarter atN, $"{n:N0} took {atN:F0} ms, {atN / atQuarter:F1} times the {atQuarter:F0} ms of {quarter:N0}")
+
 /// The types of the top-level defs of `source`, its line endings made `\n`, which must compile with no diagnostics.
 let definedTypes (source: string) = (compileClean (normalized source)).Types
 

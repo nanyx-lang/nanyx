@@ -55,12 +55,6 @@ let private pipeDefs (from: int) (count: int) =
     [ for i in from .. from + count - 1 ->
           $"def g{i}: list(int) -> int = {{ xs ->\n  xs\n    \\list.map {{ x -> x + {i} }}\n    \\list.filter {{ x -> x > 1 }}\n    \\list.fold(0, {{ a, b -> a + b }})\n}}" ]
 
-/// How long compiling `source` takes, in milliseconds.
-let private compileTime (source: string) =
-    let watch = System.Diagnostics.Stopwatch.StartNew()
-    Compiler.compile source |> ignore
-    watch.ElapsedMilliseconds
-
 [<Fact>]
 let ``A failure early in a module leaves the defs after it solved on top of what agrees, not afresh`` () =
     // Each type looked up after a failure solved the whole module again, twice, so checking took time in proportion to
