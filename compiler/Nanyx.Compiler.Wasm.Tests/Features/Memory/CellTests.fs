@@ -270,3 +270,36 @@ def main = {
 }
 """
     runSource source |> assertRan "1\n"
+
+[<Fact>]
+let ``Run - a cell that shadows a parameter reads the parameter in its own value, in a memory block and a lambda`` () =
+    let source = """
+def h: [Console] int -> () = { state ->
+  memory {
+    mut state: #continue(int) | #done = #continue(state)
+    match state
+      | #continue(n) -> println(n)
+      | #done -> ()
+    state := #done
+    println("ok")
+  }
+}
+
+def g: [Console] int -> () = { state ->
+  memory {
+    def show = { ->
+      mut state = state + 1
+      state := state * 10
+      println(state)
+    }
+    show()
+  }
+}
+
+@entry
+def main = {
+  h(1)
+  g(2)
+}
+"""
+    runSource source |> assertRan "1\nok\n30\n"

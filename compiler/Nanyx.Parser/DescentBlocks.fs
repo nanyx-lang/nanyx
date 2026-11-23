@@ -31,14 +31,6 @@ let internal nextCodeStart (c: Cursor) =
     c.Index <- index
     start
 
-/// That no comment comes between the last token taken and the next code token, where only spaces and line breaks may
-/// be: before the `}` of a lambda whose body starts on the `{`'s line. A comment there is a mistake. One after a body
-/// of statements, or of arms, on lines of their own is not.
-let internal noCommentBefore (c: Cursor) =
-    let next = nextCodeStart c
-    if c.Source.Substring(c.LastEnd, max 0 (next - c.LastEnd)).Contains "--" then
-        c.GiveUp "a comment before a lambda's `}`, which is a mistake"
-
 /// Whether the cursor is at a closing bracket or brace, which ends whatever block is open inside it.
 let private atClose (c: Cursor) = c.Is RightParen || c.Is RightBracket || c.Is RightBrace
 
@@ -440,7 +432,6 @@ and private lambdaBody (c: Cursor) : Expression =
     if c.Is RightBrace then raise NoMatch
     if c.OnSameLine then
         let body = sameLineBody c (expression Crossing)
-        noCommentBefore c
         body
     else
         skipLayout c
@@ -513,7 +504,6 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
         | _ -> raise NoMatch
     let empty () =
         if not (nextCodeIs c RightBrace) then raise NoMatch
-        noCommentBefore c
         skipLayout c
         fun span -> Lambda([], Expression.at span UnitExpr, false)
     let binaryAlone () =
@@ -539,7 +529,6 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
                 else raise NoMatch
         c.ImplicitArgumentNext <- Some leftOut
         let body = expression Crossing c
-        noCommentBefore c
         skipLayout c
         fun _ -> Lambda([ (implicitArgument, None) ], body, false)
     // `context l` or `context l: Log`, the names of the instances of the contexts the lambda is given, before its
@@ -622,6 +611,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
         fun _ -> Lambda([], body, false)
     // `{ | pattern -> ... }`: arms, matched against as many arguments as the most patterns an arm has.
     let matchArms () =
+        let armsStart = nextCodeStart c
         let written = arms c
         skipLayout c
         fun span ->

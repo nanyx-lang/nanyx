@@ -47,3 +47,30 @@ export def atLeast: (int, low: int) -> int = { n, low -> if n < low then low els
           "module main\n\nimport limits as limits\n\n@entry\ndef main = {\n  println(\"{limits.atLeast(1, low = 5)} {limits.low(1, 5)}\")\n}\n" ]
     let outcome, _ = nanyxOnPackage files [ "run"; "{package}" ]
     assertRan "5 1\n" outcome
+
+[<Fact>]
+let ``Run - a def in a lambda that shadows a name the lambda captures reads the captured name in its own value`` () =
+    let source = """
+def h: [Console] int -> () = { x ->
+  def f = { ->
+    def x = x + 1
+    println(x)
+  }
+  f()
+  rec count = { n ->
+    def x = x + n
+    if n == 0 then x else count(n - 1)
+  }
+  def g = { y ->
+    def x = x * y
+    println(x + count(1))
+  }
+  g(10)
+}
+
+@entry
+def main = {
+  h(1)
+}
+"""
+    runSource source |> assertRan "2\n11\n"
