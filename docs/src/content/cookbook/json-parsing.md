@@ -16,24 +16,24 @@ cd json_parsing
 nanyx install nanyx.json
 ```
 
-`nanyx install` adds `(package = "nanyx.json", version = "0.1")` to the manifest's `dependencies`, locks the newest
-0.1 version in `nanyx.lock` and downloads it. A script names the exact version it uses in a `::dependency` line
+`nanyx install` adds `(package = "nanyx.json", version = "0.2")` to the manifest's `dependencies`, locks the newest
+0.2 version in `nanyx.lock` and downloads it. A script names the exact version it uses in a `::dependency` line
 instead, which `nanyx run` downloads:
 
 ```nanyx fragment
-::dependency nanyx.json 0.1.0
+::dependency nanyx.json 0.2.0
 ```
 
 Import its module under a name, `json`, so that its `print` doesn't clash with the console's.
 
 # Reading JSON
 
-`json.parse` gives back `#some(Json)`, or `#error(JsonError)` when the text isn't JSON. An object is a
+`json.parse` gives back `#some(Json)`, or `#invalidJson` with where and why when the text isn't JSON. An object is a
 `map(string, Json)`, so `map.get` looks a key up, and one pattern can take the result apart through as many tags as
 it needs:
 
 ```nanyx
-::dependency nanyx.json 0.1.0
+::dependency nanyx.json 0.2.0
 
 import nanyx.json/json as json
 
@@ -45,7 +45,7 @@ match json.parse(data)
     | (#some(#string(name)), #some(#number(age))) -> println("Hello, {name}, aged {age}!")
     | _ -> println("Who are you?"))
   | #some(_) -> println("Expected an object")
-  | #error(e) -> println("Invalid JSON at line {e.line}, column {e.column}: {e.message}")
+  | #invalidJson(e) -> println("Invalid JSON at line {e.line}, column {e.column}: {e.message}")
 
 -- Hello, Alice, aged 30.0!
 ```
@@ -81,41 +81,83 @@ println(json.print(#array(names)))
 -- ["Alice","Bob"]
 ```
 
-# Decoding into records
+# Reading and writing records
 
-A decoder reads a `Json` value into a type of your own, and says where a document didn't fit. `json.record` reads a
-record a member at a time, each with `try`, and an encoder from `nanyx.json/encode` writes it back:
+`json.encode` writes a value of any type, and `json.decode` reads text into the type it is given, by walking the type,
+with no decoder or encoder written for it. A record is an object, a tag with a payload `{"tag": payload}` and one
+without its name, and an option is its value or `null`, left out when it is `#none`. A field's key is its name, or the
+one a `@json(name = "...")` attribute before it gives. `json.encode` gives `#some` of the text, or `#cannotEncode` for
+a part that can't be written, a function or a nominal type whose structure it can't see, and `json.decode` gives
+`#some` of the value, or `#doesNotFit` when a document doesn't fit; `json.describe` says where:
 
 ```nanyx
-::dependency nanyx.json 0.1.0
+::dependency nanyx.json 0.2.0
+
+import nanyx.json/json as json
+
+type Role = #admin | #member(team: string)
+
+type User = (
+  name: string
+  age: int
+  @json(name = "e_mail")
+  email: #some(string) | #none
+  role: Role
+)
+
+def ada = User(name = "Ada", age = 36, email = #none, role = #member(team = "core"))
+
+match json.encode(ada)
+  | #some(text) -> println(text)
+  | failure -> println(json.describe(failure))
+
+def data = '{"users": [{"name": "Alice", "age": 30, "role": "admin"}, {"name": "Bob", "age": "25", "role": "admin"}]}'
+
+match json.decode(data, into = type (users: list(User)))
+  | #some(read) -> println(json.encode(read.users) \orCrash("users are written"))
+  | failure -> println(json.describe(failure))
+
+-- {"name":"Ada","age":36,"role":{"member":{"team":"core"}}}
+-- users[1].age: Expected a whole number, found a string
+```
+
+# Writing a decoder of your own
+
+To read or write a type another way, build a decoder from smaller ones. `json.record` reads a record a member at a
+time, each with `try`, `json.decoderFor(type T)` reads a part by walking its type, and `json.decodeWith` runs the
+decoder; encoders from `nanyx.json/encode` go the other way, run by `json.encodeWith`:
+
+```nanyx
+::dependency nanyx.json 0.2.0
 
 import (
   nanyx.json/encode as encode
   nanyx.json/json as json
 )
 
-type User = (name: string, age: int)
+type Point = (x: int, y: int)
 
-def user: json.Decoder(User) = json.record {
-  def name = try json.field("name", json.string)
-  def age = try json.field("age", json.int)
-  return User(name = name, age = age)
+type Place = (name: string, at: Point)
+
+-- a place is written as {"title": ..., "at": ...}, not under its field's name
+def place: json.Decoder(Place) = json.record {
+  def name = try json.field("title", json.string)
+  def at = try json.field("at", json.decoderFor(type Point))
+  return Place(name = name, at = at)
 }
 
-def userEncoder: json.Encoder(User) = encode.object(
+def placeEncoder: json.Encoder(Place) = encode.object(
   [
-    encode.field("name", { u -> u.name }, encode.string)
-    encode.field("age", { u -> u.age }, encode.int)
+    encode.field("title", { p -> p.name }, encode.string)
+    encode.field("at", { p -> p.at }, json.encoderFor(type Point))
   ]
 )
 
-def data = '{"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": "25"}]}'
+match json.decodeWith('[{"title": "home", "at": {"x": 1, "y": 2}}]', json.list(place))
+  | #some(places) -> println(json.encodeWith(places, encode.list(placeEncoder)))
+  | failure -> println(json.describe(failure))
 
-match json.decode(data, json.field("users", json.list(user)))
-  | #some(users) -> println(json.encode(users, encode.list(userEncoder)))
-  | #error(e) -> println(json.describe(e))
-
--- users[1].age: Expected a whole number, found a string
+-- [{"title":"home","at":{"x":1,"y":2}}]
 ```
 
 The [decoders](../stdlib/json-typed) page lists the rest: lists, maps, optional members, tagged unions and more.
