@@ -115,3 +115,17 @@ let ``Tag arms join with an arm of a named union whichever comes first`` () =
             + String.concat "\n" (order |> List.map (fun i -> arms.[i]))
             + "\n}\n"
         Assert.Equal("list(T) -> T", typeIn (compileClean source) "f")
+
+[<Fact>]
+let ``A tag arm joins the tags a catch-all arm passes on, so their payloads are one type`` () =
+    // The catch-all arm is what is left of `o` once `#none` is handled, `#some(list(int))`. Joined as an open rest, the
+    // union held `#some` twice, and the `[]`'s element was left free: a `def` of the match was generalised over it,
+    // and the backend counted its elements as `unit`s (#2464).
+    let source = """
+def o: #some(list(int)) | #none = #none
+
+def r = match o
+  | #none -> #some([])
+  | other -> other
+"""
+    Assert.Equal("#some(list(int))", typeOf source "r")

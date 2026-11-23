@@ -179,6 +179,10 @@ public object this[string name]
 }
 """
           "sql-utils.nyx", ""
+          "teamColours.nyx",
+          """Game 1 started at 100 and finished at 400
+[[Herons, Herons, Crows, Herons], [Crows, Crows, Crows], [Herons, Herons, Herons]]
+"""
           "traitsAndTypeclasses.nyx",
           """24
 10
@@ -207,7 +211,6 @@ let private notRun: Map<string, string> =
           "pairing.nyx", "it imports `nanyx/encoding`, which doesn't exist (#2459)"
           "pixel-sorting.nyx", "it calls `Math.sqrt` and `Math.floor`, which `nanyx/math` doesn't have (#2459)"
           "stringTransformation.nyx", "it imports `nanyx/text.regex`, which is now the package `nanyx.regex` (#2459)"
-          "teamColours.nyx", "it imports `nanyx/time`, which doesn't exist (#2459)"
           "todo-web-app.nyx", "it imports `nanyx/time`, which doesn't exist (#2459)"
           "wallet.nyx", "it imports `nanyx/encoding`, which doesn't exist (#2459)"
           "web-server-shared.nyx", "it imports `nanyx/time`, which doesn't exist (#2459)"

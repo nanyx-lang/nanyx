@@ -1,7 +1,5 @@
 module volleyball
 
-import nanyx/time
-
 -- Scoring a volleyball game. Custom patterns decide what the latest point
 -- means for the game, so the scoring function reads as a plain match.
 
@@ -20,6 +18,7 @@ export def TeamColor.show: TeamColor -> string = {
 
 type GameId = int
 type TeamId = string
+type Instant = int -- seconds since the venue opened
 type Rules = (maxSetPoints: int, maxSets: int)
 type Score = (by: (team: TeamId, color: TeamColor), at: Instant)
 type SetScores = list(Score) -- the points of one set
@@ -108,3 +107,33 @@ export def openGame
         OpenGame(id = id, teams = teams, startedAt = startedAt, rules = rules, score = [[]])
       )
   }
+
+-- Plays the points in order, one every 30 seconds from `at`, until they run out or the game is won.
+def play: OpenGame, list((TeamId, TeamColor)), Instant -> Game = { game, points, at ->
+  match points
+    | [] -> #open(game)
+    | [(team, color), ...rest] ->
+      match recordScore(game, by = (team = team, color = color), at = at)
+        | #open(next) -> play(next, rest, at + 30)
+        | #finished(done) -> #finished(done)
+}
+
+@entry
+def main = {
+  def herons = ("Herons", #yellow)
+  def crows = ("Crows", #black)
+  -- A short game: a set is won with 3 points and a lead of 2, and the game with 2 sets of 3.
+  def rules = Rules(maxSetPoints = 3, maxSets = 3)
+
+  match openGame(rules, ("Herons", "Crows"), 100, 1)
+    | #teamsMustBeUnique -> println("A team can't play itself")
+    | #some(game) ->
+      def points = [herons, herons, crows, herons, crows, crows, crows, herons, herons, herons]
+
+      match play(game, points, 130)
+        | #open(g) -> println("Game {g.id} is still being played: {g.score.length} sets so far")
+        | #finished(g) ->
+          def sets = g.score \map { set -> set \map { s -> s.by.team } }
+          println("Game {g.id} started at {g.startedAt} and finished at {g.finishedAt}")
+          println(sets)
+}
