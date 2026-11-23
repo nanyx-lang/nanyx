@@ -77,7 +77,7 @@ def Name.compare: Name, Name -> #less | #equal | #greater = { a, b -> string.com
 def names = Name(s = "a")..Name(s = "b")
 """
     (checkScript (source.ReplaceLineEndings "\n")).StandardOutput
-    |> assertDiagnostic "NYX0205" "Missing context 'Enumerable'" "main.nyx:6:13" "'Seq.range' requires the context 'Enumerable(Name)'"
+    |> assertDiagnostic "NYX0205" "Missing context 'Enumerable'" "main.nyx:6:13" "'Sequence.range' requires the context 'Enumerable(Name)'"
 
 [<Fact>]
 let ``A range of ints counts without passing an Enumerable`` () =

@@ -11,8 +11,8 @@ builds them. What is still open is on [Lazy sequences](../work-in-progress/lazy-
 
 # One type
 
-There is one lazy sequence type, `seq(a)`, attached to as `seq` or `Seq`, as lists are `list` or `List`; the prelude
-writes `seq.map`. The prelude declares it as `Seq`, a type as a user's is, and `seq` is its alias (`Seqs`,
+There is one lazy sequence type, `seq(a)`, attached to as `seq` or `Sequence`, as lists are `list` or `List`; the prelude
+writes `seq.map`. The prelude declares it as `Sequence`, a type as a user's is, and `seq` is its alias (`Seqs`,
 `BuiltinTypeNames`); it is shown as `seq(int)`.
 
 There is no separate `gen(a)` for sequences that may be infinite. The type checker can't prove a sequence ends:
@@ -26,14 +26,14 @@ nothing to check it. A split would also mix finiteness with purity, and purity i
 A sequence is a function that, when called, gives back the first element and the rest of the sequence, or `#done`:
 
 ```nanyx fragment
-export type Seq(a) = [k] protected (next: [k] () -> #next(a, Seq(a)) | #done)
+export type Sequence(a) = [k] protected (next: [k] () -> #next(a, Sequence(a)) | #done)
 ```
 
-`Seq` is a nominal type, not a structural alias: attached definitions such as `seq.map` need a type of their own to
+`Sequence` is a nominal type, not a structural alias: attached definitions such as `seq.map` need a type of their own to
 attach to, the recursion goes through a name, and since the library keeps the representation to itself it can change
 it later (chunking, fusion) without breaking anyone. It is protected, so a sequence is made with the library's
 functions, and read with `s.next()`. It is generic in contexts ([Types generic in
-contexts](../advanced/contexts#types-generic-in-contexts)), and its tail, `Seq(a)` in its own body, is a `[k] seq(a)`
+contexts](../advanced/contexts#types-generic-in-contexts)), and its tail, `Sequence(a)` in its own body, is a `[k] seq(a)`
 too, since a protected type can name itself.
 
 It is a singly linked list whose tails are functions rather than cells. The closest prior art is OCaml's `Seq`
@@ -75,8 +75,8 @@ contexts into the type of its result, where an eager function requires them at t
 
 ```nanyx
 list.map: [c] list(a), ([c] a -> b) -> list(b)          -- runs f now: needs c now
-Seq.map:  ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)   -- runs f when pulled: the result needs c and d
-Seq.fold: [c, d] ([c] seq(a)), b, ([d] b, a -> b) -> b  -- runs now again
+seq.map:  ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)   -- runs f when pulled: the result needs c and d
+seq.fold: [c, d] ([c] seq(a)), b, ([d] b, a -> b) -> b  -- runs now again
 ```
 
 So a lambda given for `d`, a context variable that only the result carries, is checked as a constructor's field is:

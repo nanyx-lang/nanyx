@@ -7,7 +7,7 @@
     "Path",
     "Queue",
     "Regex",
-    "Seq",
+    "Sequence",
     "Stack",
     "StringTrie",
     "Trie"

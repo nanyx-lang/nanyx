@@ -67,7 +67,7 @@ Most of the time, Nanyx programs don't care very much about the specific impleme
 | `Queue(a)` | - | First in, first out (`import nanyx/queue`) |
 | `Trie(k, v)`, `StringTrie(v)` | - | Lookup by a sequence of keys, and every key that starts with a prefix (`import nanyx/trie`) |
 | `Collection(a)` | - | Any in-memory collection |
-| `Seq(a)` | `seq(a)` | Lazy sequences, which may never end, such as the range `0..` ([sequences](../stdlib/prelude-sequences)) |
+| `Sequence(a)` | `seq(a)` | Lazy sequences, which may never end, such as the range `0..` ([sequences](../stdlib/prelude-sequences)) |
 
 ```nanyx
 def lookup = ["a" => 1, "b" => 2]
@@ -159,7 +159,7 @@ def other = Bag[3, 4]
 println(list.length(bag.items))
 ```
 
-The standard library's `list`, `set`, `map`, `Array`, `Slice`, `seq` (`Seq[1, 2, 3]` is a sequence), `Stack`, `Queue`, `Trie` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A literal of a type with no `fromArray` is an error (NYX0257).
+The standard library's `list`, `set`, `map`, `Array`, `Slice`, `seq` (`seq[1, 2, 3]` is a sequence), `Stack`, `Queue`, `Trie` and mutable collections get their literals the same way, with nothing special about them. A `fromArray` that requires a context makes the literal require it: `MStack[1, 2]` needs `Memory`, so it is written inside a `memory` block. A literal of a type with no `fromArray` is an error (NYX0257).
 
 Anything that can be iterated can be spread into a literal: a list, an array, a set, a map, a slice, a sequence, or a type of your own that attaches `toSeq`. A sequence is pulled when the literal is built, and spreading one whose steps need a context makes the literal need it:
 
