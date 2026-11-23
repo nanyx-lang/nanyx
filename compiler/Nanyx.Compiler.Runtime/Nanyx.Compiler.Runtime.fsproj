@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="AsyncImport.fs" />
     <Compile Include="HttpImport.fs" />
     <Compile Include="SpanTable.fs" />
     <Compile Include="Probing.fs" />

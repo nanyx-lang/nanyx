@@ -1,12 +1,15 @@
---| Time: a function that reads the time requires [`Clock`], and calls its members.
+--| Time: a function that reads the time, or waits for some to pass, requires [`Clock`], and calls its
+  members.
 
   A host provides `Clock` to the program's entry point, as it provides `Console`: the console and
-  HTTP hosts read the operating system's clocks. A `use` of `Clock(now = ..., ticks = ...)` makes
-  any other, such as one that gives a test the time it needs.
+  HTTP hosts read the operating system's clocks. A `use` of `Clock(now = ..., ticks = ..., sleep = ...)`
+  makes any other, such as one that gives a test the time it needs, and sleeps by moving it on.
 
-  The hosts' preludes make `now` and `ticks` names every module of a program sees; a library that
-  names `Clock` imports it with `import nanyx/clock as (Clock)`.
+  The hosts' preludes make `now`, `ticks` and `sleep` names every module of a program sees; a library
+  that names `Clock` imports it with `import nanyx/clock as (Clock)`.
 module clock
+
+import nanyx/async as (Async)
 
 --| The time. A host supplies one; a `use` of `Clock(...)` makes any other.
 export context Clock = (
@@ -17,4 +20,7 @@ export context Clock = (
   --| Milliseconds since a start the host chooses, which never go backwards: the time between two
     calls is how long passed between them. Only differences between its values mean anything.
   ticks: () -> int
+  --| Waits until at least `ms` milliseconds have passed on [`ticks`], while the program's other
+    tasks run. A wait of 0 or less returns at once.
+  sleep: [Async] int -> ()
 )

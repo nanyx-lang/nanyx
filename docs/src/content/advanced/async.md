@@ -81,8 +81,18 @@ The tasks of a program run on one thread, one at a time. A task runs from the fi
 waits, and each runs until it waits itself, when the next takes its turn, first started first. A task that never waits
 runs to the end before any other runs.
 
-Today a call that waits still holds the thread until it is done, so tasks take turns only where they wait for each
-other or for their def's scope; waiting on the network or a timer while other tasks run is what comes next, with
-`sleep`, cancellation and `race` ([Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#plan)).
+A request, or a [`sleep`](../stdlib/clock), lets the other tasks run while it waits, so requests started as tasks
+are in flight at once, and take about as long together as the slowest of them:
+
+```nanyx fragment
+def pages: [Async, Http] list(string) -> list(string) = { urls ->
+  urls \list.map { url -> start! http.get(url) } \list.map { task -> (await(task) \orCrash("failed")).body }
+}
+```
+
+A file's functions still hold the thread until they are done: the console host reads and writes files with WASI
+preview 1, which has no way to start a read and come back for it. So does every wait of a program built as a
+[component](./hosts#built-as-a-component), for now. Cancellation and `race` are what comes next
+([Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#plan)).
 
 A crash in a task ends the program, the other tasks too, as any crash does.

@@ -30,7 +30,7 @@ import (
   nanyx.fs/path as path
   nanyx.http.core/client as (Http)
   nanyx.wasi/preview1 as (millisecondsOn, systemBits)
-  nanyx.wasi/runtime as (sendThroughRuntime)
+  nanyx.wasi/runtime as (sendThroughRuntime, sleepOnRuntime)
 )
 
 @extern("wasi_snapshot_preview1", "fd_write")
@@ -190,7 +190,12 @@ export def provide
 
     use Http(sendRequest = { request -> sendThroughRuntime(request) })
     use Random(bits = { _ -> systemBits() })
-    use Clock(now = { _ -> millisecondsOn(0) }, ticks = { _ -> millisecondsOn(1) })
+
+    use Clock(
+      now = { _ -> millisecondsOn(0) }
+      ticks = { _ -> millisecondsOn(1) }
+      sleep = { ms -> sleepOnRuntime(ms) }
+    )
 
     f()
   }

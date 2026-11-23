@@ -68,6 +68,12 @@ def readToEndAfter: [HostRuntime] list(string) -> string = { lines ->
     | _ -> string.concat(list.map(list.reverse(lines), { line -> line ++ "\n" }))
 }
 
+--| Reads the page's clock until it reads `deadline`. It is `Clock`'s `sleep` here, which no code can
+  call yet: this host provides no `Async`, which `sleep` requires.
+def spinUntil: [HostRuntime] int -> () = { deadline ->
+  if pageTicks() >= deadline then () else spinUntil(deadline)
+}
+
 --| Runs `entry`, the program's entry point, with a `Console` that writes to the page, a `Random`
   that draws from the page's generator, which the page seeds, and a `Clock` that reads the
   browser's time. Reading waits for a line typed in the page, and gives `#endOfInput` once
@@ -83,7 +89,12 @@ export def run: [HostRuntime] ([Clock, Console, Random] () -> a) -> () = { entry
   )
 
   use Random(bits = { _ -> randomBits() })
-  use Clock(now = { _ -> pageNow() }, ticks = { _ -> pageTicks() })
+
+  use Clock(
+    now = { _ -> pageNow() }
+    ticks = { _ -> pageTicks() }
+    sleep = { ms -> spinUntil(pageTicks() + ms) }
+  )
 
   ignore(entry())
 }

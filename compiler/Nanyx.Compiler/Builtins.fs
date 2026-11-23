@@ -215,6 +215,10 @@ module Intrinsics =
     let scopeEnter = prefix + "scope_enter"
     /// Waits until every task of the innermost scope has finished, then closes it: a call that can stop.
     let scopeExit = prefix + "scope_exit"
+    /// Waits on the host: stops until the scheduler has made the host's wait, the function given, which takes a timeout
+    /// in milliseconds (-1 for none), with the shortest timeout the tasks waiting on it gave (see `nanyx/host.async`).
+    /// A call that can stop.
+    let hostWait = prefix + "host_wait"
 
     /// The contexts a task's function requires, whatever they are.
     let private contextsVar = TyVar.ordinary (-4) (Some "k")
@@ -299,6 +303,7 @@ module Intrinsics =
           taskResult, { Quantified = set [ elementVar.Id ]; Type = TyFunc(i32Ty, element, []); Symbol = None; ProvidedBy = None }
           scopeEnter, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
           scopeExit, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
+          hostWait, { Quantified = set [ contextsVar.Id ]; Type = TyFunc(tuple [ TyFunc(i32Ty, unitTy, [ TyVar contextsVar ]); i32Ty ], unitTy, []); Symbol = None; ProvidedBy = None }
           regionExit, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, unitTy, []); Symbol = None; ProvidedBy = None }
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }
           listSetTail, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; listOf element ], unitTy, []); Symbol = None; ProvidedBy = None }

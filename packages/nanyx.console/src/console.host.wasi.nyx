@@ -152,7 +152,12 @@ export def provide
 
     use Http(sendRequest = { request -> sendThroughWasi(request) })
     use Random(bits = { _ -> wasiRandom.bits() })
-    use Clock(now = { _ -> clocks.timeOfDay() }, ticks = { _ -> clocks.ticks() })
+
+    use Clock(
+      now = { _ -> clocks.timeOfDay() }
+      ticks = { _ -> clocks.ticks() }
+      sleep = { ms -> clocks.sleepFor(ms) }
+    )
 
     f()
   }

@@ -245,7 +245,9 @@ module WasmRunner =
             let profiler = profiled |> Option.map (fun _ -> GuestProfiler(engine, module', profileInterval))
             profiler |> Option.iter (fun profiler -> profiler.Watch store)
             linker.DefineWasi()
-            HttpImport.define linker
+            let waits = AsyncImport.Waits()
+            AsyncImport.define linker waits
+            HttpImport.define linker waits
             Probing.define linker (spanTable program) listener
             Probing.defineDbg linker (fun _ -> false)
             configure store
