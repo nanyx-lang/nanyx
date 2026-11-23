@@ -26,11 +26,20 @@ module internal UseDischarge =
 
     /// The error for a `use` of `value`, unless it is a context's constructor, `use Log(...)` or `use C(T)(...)`: a `use`
     /// loads only a declared context, so loose members are never in scope. A name a lambda binds with `context l`, the
-    /// one other thing a `use` loads, is loaded before this is asked (see `ContextNames.loaded`).
-    let notLoadable (state: InferState) (value: Expression) : Diagnostic list =
+    /// one other thing a `use` loads, is loaded before this is asked (see `ContextNames.loaded`). A call of a name that
+    /// is not in scope at all, a context misspelt or not imported, is an unknown context, reported at the name with the
+    /// contexts in scope closest to it, or the import that brings it in.
+    let notLoadable (env: TypeEnv) (state: InferState) (value: Expression) : Diagnostic list =
         match value.Kind with
         | UseInstanceSyntax.Instance _ -> []
         | FunctionCall(name, _, _) when state.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext -> []
+        | FunctionCall(name, nameSpan, _) when (TypeResolution.tryFindTypeDef name state).IsNone && not (state.ContextDefs.ContainsKey name) && (TypeEnv.tryFind name env).IsNone ->
+            let contexts =
+                state.TypeDefs
+                |> Map.filter (fun contextName info -> info.IsContext && not (state.HiddenTypeNames.Contains contextName))
+                |> Map.keys
+            [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownContext
+                  (nameSpan |> Option.defaultValue value.Span) $"'{name}' is not a context in scope" contexts name ]
         | _ ->
             [ Diagnostics.at DiagnosticCodes.UseOfNonInstance value.Span
                   "`use` loads a context's constructor, as in `use Log(...)`, or a name bound with `context`" ]
