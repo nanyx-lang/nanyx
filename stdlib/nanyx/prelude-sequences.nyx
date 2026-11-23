@@ -104,6 +104,10 @@ export def __toSeq: [Iterable(c)] c -> seq(elem) = { xs ->
   toSeq(xs)
 }
 
+--| `s` as it is, its steps' contexts and all: what a `for` loop in a sequence's block walks when it
+  is over a sequence, where it is over anything else [`Iterable`] through `__toSeq`.
+export def __seqItself: ([c] seq(a)) -> [c] seq(a) = { s -> s }
+
 --| The elements of `xs`, in order.
 export def list.toSeq: list(a) -> seq(a) = { xs ->
   Sequence(
