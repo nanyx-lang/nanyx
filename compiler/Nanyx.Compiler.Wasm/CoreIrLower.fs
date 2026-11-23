@@ -233,8 +233,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let typeArguments =
                 if contextArguments |> List.forall List.isEmpty then typeArguments
                 else typeArguments @ (contextArguments |> List.map (fun members -> IrFunction(IrUnit, IrUnit, members)))
+            let described =
+                let variables = SpecKey.describedVariables scheme
+                typeVars |> List.filter variables.Contains |> List.map (fun id -> bindings |> Map.tryFind id |> Option.defaultValue (TyPrimitive "unit"))
             if typeArguments.IsEmpty && knownMembers.IsEmpty then own ()
-            else request { Definition = name; TypeArguments = typeArguments; Known = knownMembers } bindings AsDefined
+            else request { Definition = name; TypeArguments = typeArguments; Known = knownMembers; Described = described } bindings AsDefined
 
     let callee (name: string) (instanceTy: Ty) = calleeKnowing None name instanceTy []
 
@@ -906,7 +909,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         this.Atoms scope captured (fun atoms ->
             CoreIrLowerLocals.capturedInstances this.LocalTools scope target bindings captured atoms (fun atoms capturedLocals ->
                 let capturedTys = atoms |> List.map atomType
-                let name = request (SpecKey.plain target (self.TypeArguments @ typeArguments)) subst (LiftedCapturing(capturedTys, capturedLocals))
+                let name = request { SpecKey.plain target (self.TypeArguments @ typeArguments) with Described = self.Described } subst (LiftedCapturing(capturedTys, capturedLocals))
                 k (closureOver name arity atoms ty)))
 
     /// What lowering a local function generic in variables of its own needs from this function's lowering (see
