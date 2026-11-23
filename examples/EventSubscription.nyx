@@ -53,7 +53,7 @@ def encode: Event -> string = { event ->
   "\{{fields \string.join(",")}\}"
 }
 
-export def Client.new: [Transport] Options -> Client = { options ->
+export def Client.new: Options -> Client = { options ->
   def #some(baseUrl) = options.baseUrl except #none -> #some("https://highstorm.app")
 
   Client(
