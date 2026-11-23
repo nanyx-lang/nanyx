@@ -119,3 +119,19 @@ memory {
 ```
 
 Because the condition has to change for the loop to end, `while` is almost always used together with [the `Memory` context](../advanced/memory). It is the one low-level loop in the language, and exists so that locally mutable algorithms can be written inside an otherwise immutable interface.
+
+A `while` condition binds names as an `if` condition does: the names an [`is` test](./pattern-matching#tests-anywhere) binds, through an `and` chain, are in scope in the body. They are bound afresh each time round, from what the condition reads on that pass, and are not in scope after the loop:
+
+```nanyx
+def countdown: [Console] int -> () = { n ->
+  memory {
+    mut state: #continue(int) | #done = #continue(n)
+
+    while state is #continue(k) ->
+      println(k)
+      state := if k > 1 then #continue(k - 1) else #done
+  }
+}
+
+countdown(3)
+```

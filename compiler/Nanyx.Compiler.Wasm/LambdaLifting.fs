@@ -449,6 +449,7 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
             |> rebuild
         | Except(value, arms) -> recur { expr with Kind = Match([ value ], arms) }
         | IsSyntax.BindingIf asMatch -> recur { expr with Kind = asMatch }
+        | IsSyntax.BindingWhile loop -> recur { expr with Kind = loop }
         | Match(values, arms) ->
             // A guard's predicate is inlined by the backend where its arm is tested, as a `for` loop's lambda is,
             // never lifted; lift inside it.

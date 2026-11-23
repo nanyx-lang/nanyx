@@ -127,13 +127,16 @@ let private forExpression (c: Cursor) =
             Expression.at (c.SpanFrom arrowStart) (Lambda(elements, body, false))
     Expression.at (c.SpanFrom start) (FunctionCall(ForSyntax.builtIn, None, iterables @ [ body ]))
 
-/// `while condition -> body`: a call to the built-in "__while" (see `WhileSyntax`).
+/// `while condition -> body`: a call to the built-in "__while" (see `WhileSyntax`). The names the tests along the
+/// condition's `and` chain bind are declared at the condition, where the loop that binds them is made (see
+/// `IsSyntax.whileAsIf`).
 let private whileExpression (c: Cursor) =
     let start = c.Start
     c.Expect(Keyword, "while") |> ignore
     let condition = expression Crossing c
     c.Expect Arrow |> ignore
     let body = armBody c
+    c.Declare ArmBody condition.Id (IsSyntax.chainNames condition)
     Expression.at (c.SpanFrom start) (FunctionCall(WhileSyntax.builtIn, None, [ condition; body ]))
 
 /// `do` and an indented block of statements, which is that block.

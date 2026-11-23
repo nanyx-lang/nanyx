@@ -45,3 +45,38 @@ def f: int -> #some(int) | #odd = { n -> proc {
     Assert.Equal(
         "`try` is in a `while` loop, so the rest of the `proc` block cannot follow it: handle the value with a `match` in the loop",
         diagnostic.Message)
+
+/// A function whose memory block has the cell `state`, then a `while` loop with this condition whose body reads `v`,
+/// then `after`.
+let private bindingLoop (condition: string) (after: string) =
+    let source = $"""
+def f = {{
+  memory {{
+    mut state: #a(int) | #b = #a(1)
+    mut go = true
+    while {condition} ->
+      println(v)
+      state := #b
+      go := false
+    {after}
+  }}
+}}
+"""
+    source.ReplaceLineEndings "\n"
+
+[<Fact>]
+let ``the names a while condition's is test binds are in scope in its body`` () =
+    let typed = compileClean (bindingLoop "state is #a(v) and v > 0" "()")
+    Assert.Equal("() -> ()", Unifier.tyToString typed.Types.["f"])
+
+[<Fact>]
+let ``the names a while condition binds are not in scope after the loop`` () =
+    let code, text = singleError (bindingLoop "state is #a(v)" "println(v)")
+    Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, code)
+    Assert.Equal("v", text)
+
+[<Fact>]
+let ``a while condition's is test under or binds nothing in the body`` () =
+    let code, text = singleError (bindingLoop "state is #a(v) or go" "()")
+    Assert.Equal(DiagnosticCodes.UnknownIdentifier.Code, code)
+    Assert.Equal("v", text)
