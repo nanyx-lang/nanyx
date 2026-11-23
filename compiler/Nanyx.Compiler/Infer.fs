@@ -766,6 +766,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         let typeOpt, contextOpt, declaredTypeExprOpt, expectedDeclaredOpt, envWithCtx =
                             annotation.TypeOpt, annotation.Contexts, annotation.DeclaredTypeExpr, annotation.Declared, annotation.Env
                         let symbol, declaredState = declareSymbol DefValue expr.Id name LocalValue false (Some block.Span.End) nextState
+                        let value = LocalRecursion.written expr
                         // Only a `rec` def's value can name the def (see `LocalRecursion`).
                         let selfVisible ty = if LocalRecursion.isRec expr then TypeEnv.declare name symbol (TypeEnv.mono ty) envWithCtx else envWithCtx
                         let preboundTy, preboundState, envWithRec, preboundFresh =
@@ -783,12 +784,12 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                         // not runs in those of the def around it.
                         let outerScope = nextStateWithReq.ContextScope
                         let bodyState =
-                            match typeOpt, expr.Kind with
-                            | Some _, Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, false) } |> LambdaContexts.markBody expr
+                            match typeOpt, value.Kind with
+                            | Some _, Lambda _ -> { nextStateWithReq with ContextScope = DefScope(name, false) } |> LambdaContexts.markBody value
                             | _ -> nextStateWithReq
                         let bodyState = if preboundFresh then LambdaContexts.enterSelf preboundTy bodyState else bodyState
                         let inferResult =
-                            inferDefValue envWithRec bodyState expr annotation
+                            inferDefValue envWithRec bodyState value annotation
                             |> Result.map (fun (typedExpr, next) -> typedExpr, { LambdaContexts.leaveSelf preboundTy typedExpr.Type next with ContextScope = outerScope })
                         match inferResult with
                         | Ok (typedExpr, next) ->
@@ -809,7 +810,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                             let typeOpt =
                                 match DefAnnotations.settleContextHoles finalState name typeOpt with
                                 | Ok settled when settled <> typeOpt ->
-                                    let contexts = (fst (extractDefContexts settled expr)).Value
+                                    let contexts = (fst (extractDefContexts settled value)).Value
                                     current <- registerLocalContextRequirement (recordWrittenType name settled current) symbol name contexts declaredTypeExprOpt
                                     settled
                                 | Ok _ -> typeOpt

@@ -48,6 +48,7 @@ let internal read
     : Result<ReadAnnotation * InferState, Diagnostic list> =
     let memberRequirements = checkMemberRequirements state typeOpt
     let span = declarationSpan state DefValue expr
+    let expr = LocalRecursion.written expr
     let contextsExist =
         match fst (extractContextFromTypeExpr typeOpt) with
         | Some contexts -> ensureContextsExist state name span contexts

@@ -103,7 +103,10 @@ passes the instance the type checker found for it there, as a call to a top-leve
   that names a top-level function that requires contexts does (`requiresContexts` in `CodeGen.fs`,
   [#1397](https://github.com/nanyx-lang/nanyx/issues/1397)). The type checker keeps such a context out of the function's type (it records it beside
   it, `TypedModule.ContextTypes`), so the backend puts it into the type of the function's lambda, in the lambda's own
-  type variables (`localContexts` in `CodeGen.fs`). A function generic in variables of its own has a closure for each
+  type variables (`localContexts` in `CodeGen.fs`). So does one that writes a context variable of the def around it,
+  as `def go: [c] int -> int` inside a `[c]` def: the type checker records the variable as the def around it's
+  (`InferState.LocalContextVariables`), so the members it stands for at each call of that def are passed to the local
+  function ([#2465](https://github.com/nanyx-lang/nanyx/issues/2465)). A function generic in variables of its own has a closure for each
   type it is used at (`GenericLocal`), each taking the members of the instances at that type. A call to the function
   finds each context where the type checker found it at the call, by its place among those the type writes
   (`CoreIrLowerInstances.foundAt`): an instance built from attached definitions (one whose single member requires
