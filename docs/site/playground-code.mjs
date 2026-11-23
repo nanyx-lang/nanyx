@@ -1,5 +1,5 @@
-// What a runnable example in the tour is, and the code it runs as. The docs build reads these (`playground-examples.mjs`)
-// and so do the tour's pages in the browser (`src/lib/playground/tour.ts`), which run an example as it is edited.
+// What a runnable example on a docs page is, and the code it runs as. The docs build reads these (`playground-examples.mjs`)
+// and so do the docs' pages in the browser (`src/lib/playground/tour.ts`), which run an example as it is edited.
 
 /**
  * Whether a ```nanyx block, with `meta` the words after `nanyx` on its fence, is a whole program that runs: not a
@@ -13,8 +13,8 @@ export function isRunnable(meta, code) {
 }
 
 /**
- * The code the playground opens for a tour example: the example with `import nanyx/text` added, as the tests add it,
- * since the tour uses strings without importing it. It goes after the example's module declaration when it has one
+ * The code the playground opens for a docs example: the example with `import nanyx/text` added, as the tests add it,
+ * since the docs use strings without importing it. It goes after the example's module declaration when it has one
  * (and the comments and directives before it), else after its directives, and isn't added to an example that already
  * imports it or turns a linter on, which would report it unused.
  *

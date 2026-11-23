@@ -12,7 +12,7 @@ import { installSteps, type InstallOs } from "@/lib/install";
 
 const themes = { light: paperWhite as any, dark: inkNight as any };
 
-// The examples, the .nyx files in src/home, in this order. `RunTourExampleTests.fs` runs each, and checks it prints
+// The examples, the .nyx files in src/home, in this order. `RunDocExampleTests.fs` runs each, and checks it prints
 // what its last comments say; the playground link opens it as it is.
 const order = ["contexts", "patterns", "pipes"];
 const sources = import.meta.glob<string>("../home/*.nyx", { query: "?raw", import: "default", eager: true });

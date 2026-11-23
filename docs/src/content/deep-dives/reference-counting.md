@@ -72,7 +72,7 @@ list. The same goes for `list.map` from the standard library.
 Reuse never changes what a program means. When something else still refers to the value, the arm finds that out
 when it runs, leaves the value as it was, and the new value gets memory of its own:
 
-```nanyx
+```nanyx fragment
 def both: list(int) -> int = { xs ->
   def ys = double(xs)
   total(xs) + total(ys)
@@ -96,6 +96,13 @@ arm that took the old one apart. Strings are not reused.
 A `with` on a record nothing else refers to updates it in place too, with no pattern needed:
 
 ```nanyx
+type Particle = (
+  x: float
+  y: float
+  vx: float
+  vy: float
+)
+
 def step: Particle -> Particle = { p ->
   p with (x = p.x + p.vx, y = p.y + p.vy)
 }

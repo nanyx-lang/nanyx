@@ -145,7 +145,7 @@ arithmetic.
 Each sized type has an attached `fromString`, the mirror of its `toString`, with its own tag for text it cannot read,
 as `int.fromString` has ([Reading from text](../stdlib/prelude-contexts#reading-from-text)):
 
-```nanyx
+```nanyx fragment
 I8.fromString: string -> #some(I8) | #invalidI8
 I16.fromString: string -> #some(I16) | #invalidI16
 I32.fromString: string -> #some(I32) | #invalidI32

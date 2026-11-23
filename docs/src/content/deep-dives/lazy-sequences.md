@@ -70,10 +70,15 @@ A sequence whose steps use a context says so in its type: reading lines gives a 
 be pulled only where `FileSystem` is available, and a sequence whose steps wait would be an `[Async] seq(a)`, which is
 what Kotlin calls a flow. No second sequence type is needed for impure sequences.
 
+Pulling such a sequence again runs its steps, and their effects, again. Since its type says so, the official linter's
+`repeatedPulls` rule warns when a def pulls one more than once on some path, and its fix pulls it once into a list
+([Sequence with effects pulled more than once](../standard-tools/official-linter#sequence-with-effects-pulled-more-than-once)).
+The rule is `RepeatedPulls`, in `LinterRepeatedPulls.fs`.
+
 Because a lazy function runs its callback when the result is pulled, not when it is called, it moves the callback's
 contexts into the type of its result, where an eager function requires them at the call:
 
-```nanyx
+```nanyx fragment
 list.map: [c] list(a), ([c] a -> b) -> list(b)          -- runs f now: needs c now
 seq.map:  ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b)   -- runs f when pulled: the result needs c and d
 seq.fold: [c, d] ([c] seq(a)), b, ([d] b, a -> b) -> b  -- runs now again
@@ -148,11 +153,44 @@ next element is pulled. An ordinary workflow couldn't do it: under the one desug
 prelude's `Yield` context declares `yield` as a keyword of kind `#yield`, and any lambda with one in it, a block after
 `seq` included, is rewritten into the sequence itself (`WorkflowDesugaring`): `yield x` with the rest `k` is
 `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop whose body yields
-`seq.append(seq.flatMap(items, body), seq.delay({ k }))`. `seq` is an ordinary prelude function, `seq.delay` by
-another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the whole
+`seq.append(seq.flatMap(__toSeq(items), body), seq.delay({ k }))`. A `yield` or a loop the sequence ends after makes no
+rest: the last `yield x` is `__seqLast(x)`, the sequence of `x` alone, and the loop is the `seq.flatMap` alone. The loop's items are anything `Iterable`, as a
+plain `for` loop's are: the checker reads `__toSeq(items)` as `__seqItself(items)`, the sequence as it is with whatever
+its steps need, when the items are a sequence or a type nothing has settled (`Loops.walksAsSequence`), and through
+their `Iterable` otherwise, so a list, an array, a set or a map is walked by its `toSeq`. `seq` is an ordinary prelude
+function, `seq.delay` by another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the whole
 carries what any branch's sequence does. There is no `yield` in a `while` loop: a `while` needs a cell, and a sequence
 that reads one can't leave its `memory` block anyway.
 
 `list.select` takes a lambda that yields, a sequence it flattens: `xs \list.select { x -> if x > 0 then yield x }`.
 Each collection type is made from a sequence with `fromSeq`, and from a `yield` block with `build`,
 `Array.build { yield 1 }`.
+
+# What a step costs
+
+A sequence is persistent: pulling a step gives the element and a new sequence for the rest, and the step that was pulled
+can be pulled again. So each step is made on the heap, and the allocator counts it (`nanyx run --memory`). Pulling one
+element of `1..n` makes four blocks: the `Sequence` record, the closure its `next` holds (capturing where the range is
+and where it ends), and the `#next(x, rest)` it gives, a tag box and its payload tuple. Each stage of `seq.map` or
+`seq.filter` makes two more per element, its own `Sequence` record and closure for the rest. The `#next` it gives costs
+nothing: the stage's `match` arm takes the `#next` it pulled apart and builds its own of the same size, so it writes
+into the same blocks ([Reuse in place](reference-counting#reuse-in-place)). So `seq.range(1, n) \seq.toList` makes five
+blocks per element, the list's cell included, and a `seq.filter` and a `seq.map` folded with `seq.fold` seven.
+
+A `yield` block costs what its calls do. `seq { for 1..n | i -> yield i }` makes ten blocks per element: four for the
+range, two for the step of `seq.flatMap` that gives the element, and four for `__seqLast(i)`, though the `#next` it gives
+is reused by `seq.flatMap`'s. `seq.flatMap` walks each inner sequence itself rather than through `seq.append`, and
+`seq.empty()` is one sequence that every call shares.
+
+What isn't reused, and why:
+
+- **A step's `Sequence` record and closure.** Reuse in place works inside one `match` arm: the arm takes a block apart
+  and makes one of the same size, a list cell, a tag or a record (`CoreIrReuse`). A step's new record and closure are
+  made by another function, `seq.map(rest, f)`, while the old ones belong to the consumer, which calls the closure,
+  lending it its environment, and frees both once it has the next step. A closure is never made in a reused block
+  either. Reusing them would take closures that own their environment when they are called at a last use, and the
+  next step's record and closure made where that environment is let go.
+- **The `#next` a consumer takes apart.** `seq.fold`, `seq.toList` and a `for` loop take each `#next` apart and make
+  nothing of its size: their next `#next` is made by the producer's closure, a function of its own.
+- **The `#next` the first stage gets.** A step at the source, a range's or `__seqLast`'s, makes a new `#next`; only a
+  stage that takes one apart, such as `seq.map`, `seq.filter` or `seq.flatMap`, reuses it.

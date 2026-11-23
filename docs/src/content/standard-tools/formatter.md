@@ -86,7 +86,7 @@ the brackets precedence needs and drops those it doesn't, and adds or removes bl
 A definition whose signature fits on the def's line stays on it, even when its value spans lines. One whose signature
 doesn't fit breaks before its `:` and its `=`, each indented once:
 
-```nanyx
+```nanyx fragment
 def priceLine
   : list(Product), OrderLine -> #some(Priced) | #unknownSku(string) | #outOfStock(string)
   = { products, line ->
@@ -99,7 +99,7 @@ The parameters go one per line, each but the last followed by `,`, then `->` and
 result that is a union still too long for its line has one case per line, each after a `|`, as a long union type's
 cases are:
 
-```nanyx
+```nanyx fragment
 def lookup
   : string,
     Index
@@ -116,7 +116,7 @@ def lookup
 A list of contexts goes on a line of its own, with the rest of the type on the next, and breaks one context per line,
 under the first, if it still doesn't fit:
 
-```nanyx
+```nanyx fragment
 def serve
   : [Console, FileSystem, Http, Clock, Random, Environment, Log, Metrics]
     Request, ServerOptions -> Response
@@ -137,13 +137,13 @@ A def with a type annotation whose value is a lambda puts the lambda's body on t
 body is only a name or a literal, or a statement couldn't hold it without brackets, as with a range:
 
 ```nanyx
-def heading: [Log] string -> () = { title ->
-  log("== " ++ string.uppercase(title) ++ " ==")
+def heading: [Console] string -> () = { title ->
+  println("== " ++ string.uppercase(title) ++ " ==")
 }
 
 def id: a -> a = { x -> x }
 
-def upTo: int -> list(int) = { n -> 1..n }
+def upTo: int -> seq(int) = { n -> 1..n }
 ```
 
 A type or context whose body is a record of more than three fields, or one too long for the line, puts each field on
@@ -181,7 +181,7 @@ line of its own, indented once.
 A lambda whose body starts on the `->`'s line but spans lines indents the body once, and puts its `}` back at the
 indent of the line the lambda starts on, so two closing braces never line up:
 
-```nanyx
+```nanyx fragment
 def checkOrder = { products, lines -> proc {
     match lines
       | [] -> (return [])

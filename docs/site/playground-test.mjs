@@ -1,8 +1,8 @@
 // The headless test of the playground page (#2153) and the tour's runnable examples (#2248): it serves the built site as Vercel does, with the playground
 // cross-origin isolated (`vercel.json`), opens `/playground` in headless Chromium, and checks that the page loads the
 // compiler, runs hello world, gives a program its input, keeps each run's output, and opens share links and the
-// tour's links without running them; and that every example in its menu, the tour's runnable ones, runs under the
-// playground host; and that a tour page loads the compiler only on an example's first Run, runs an example where it is,
+// tour's links without running them; and that every example in its menu, the tour's runnable ones, and every example
+// that an "Open in the playground" link on another page opens, runs under the playground host; and that a tour page loads the compiler only on an example's first Run, runs an example where it is,
 // edits and runs it again, and opens it in the playground as edited; and that an example that only declares things gets
 // only its playground link. From `docs/`, with a compiler built for the browser:
 //
@@ -13,11 +13,12 @@
 // they aren't installed already). It exits with 1 when a check fails.
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateRawSync } from "node:zlib";
 import { remarkPlaygroundLinks } from "./playground-examples.mjs";
 
 const docs = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -111,6 +112,44 @@ const setEditor = async (code) => {
 /** The code of the tour page's first example that has a Run button: the block before its bar. */
 const firstRunnableCode = () =>
   page.locator("[data-tour-run]:has(.tour-run-button)").first().locator("xpath=preceding-sibling::*[1]").locator("xpath=descendant-or-self::pre").first();
+/** Runs the editor's code, ending its input whenever it waits for some, until it ends. */
+const runToTheEnd = async () => {
+  await page.click("[data-run]");
+  await page.waitForFunction(() => document.querySelector("[data-run]")?.hidden || document.querySelector("[data-run]")?.disabled);
+  const input = page.locator("[data-input-line] input");
+  for (;;) {
+    await page.waitForFunction(
+      () =>
+        !document.querySelector("[data-input-line]")?.hidden ||
+        (!document.querySelector("[data-run]")?.hidden && !document.querySelector("[data-run]")?.disabled),
+      null,
+      { timeout: 60_000 },
+    );
+    if (!(await input.isVisible())) break;
+    await input.press("Control+d");
+  }
+  await idle();
+};
+
+/**
+ * The code each "Open in the playground" link on the built pages outside the tour opens, which the tour's are in the
+ * playground's menu: each link's fragment, decoded as the playground decodes it.
+ */
+const otherPagesExamples = () => {
+  const pages = (/** @type {string} */ directory) =>
+    readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory() ? pages(join(directory, entry.name)) : entry.name.endsWith(".html") ? [join(directory, entry.name)] : [],
+    );
+  return pages(join(dist, "docs"))
+    .filter((file) => !file.startsWith(join(dist, "docs", "tour") + sep))
+    .sort()
+    .flatMap((file) =>
+      [...readFileSync(file, "utf8").matchAll(/class="tour-run-open" href="\/playground#code=([\w-]+)"/g)].map((link) => ({
+        page: file.slice(dist.length + 1),
+        code: inflateRawSync(Buffer.from(link[1], "base64url")).toString("utf8"),
+      })),
+    );
+};
 const helloWorld = JSON.parse(readFileSync(join(dist, "playground.html"), "utf8").match(/<script id="playground-data" type="application\/json">(.*?)<\/script>/s)[1]).defaultExample.code;
 
 const tests = [
@@ -200,6 +239,21 @@ const tests = [
     }
     assert.deepEqual(failed, []);
   }],
+  ["every runnable example on every other page opens and runs under the playground host", async () => {
+    await page.goto(`${origin}/playground`);
+    await ready();
+    const examples = otherPagesExamples();
+    assert.ok(examples.length > 150, `the pages outside the tour have ${examples.length} runnable examples`);
+    const failed = [];
+    for (const { page: from, code } of examples) {
+      await setEditor(code);
+      await runToTheEnd();
+      const last = page.locator(".pg-run").last();
+      const problems = await last.locator(".pg-diagnostic, .pg-stderr, .pg-end").allInnerTexts();
+      if (problems.length > 0) failed.push(`${from}: ${problems.join(" ").trim()}\n${code}`);
+    }
+    assert.deepEqual(failed, []);
+  }],
   ["a tour page doesn't load the compiler until an example's Run is pressed", async () => {
     // A page of its own, so that nothing the playground fetched is counted.
     await page.close();
@@ -263,6 +317,18 @@ const tests = [
     await page.waitForTimeout(500);
     assert.equal(await page.locator(".tour-run-editor").count(), 0);
     assert.equal(await page.locator(".tour-run-output").count(), 0);
+  }],
+  ["an example that needs another host, and the error reference's, get no playground link", async () => {
+    for (const value of ["match args()\n  | [name, ..._] -> println(name)\n  | [] -> ()", "::host acme.server ../server\n\nprintln(1)", "::dependency nanyx.json 0.2.0\n\nprintln(1)"]) {
+      const tree = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value }] };
+      remarkPlaygroundLinks()(tree, { path: "/docs/src/content/advanced/example.md" });
+      assert.equal(tree.children.length, 1, value);
+    }
+    // A program that declares its own `Request` is its own.
+    const own = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value: "type Request = (id: int)\n\nprintln(Request(id = 1))" }] };
+    remarkPlaygroundLinks()(own, { path: "/docs/src/content/advanced/example.md" });
+    assert.equal(own.children.length, 2);
+    assert.doesNotMatch(readFileSync(join(dist, "docs", "standard-tools", "errors.html"), "utf8"), /class="tour-run-open"/);
   }],
   ["an example that reads input gets only the playground link", async () => {
     const tree = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value: "match readLine()\n  | #some(line) -> println(line)\n  | _ -> ()" }] };
