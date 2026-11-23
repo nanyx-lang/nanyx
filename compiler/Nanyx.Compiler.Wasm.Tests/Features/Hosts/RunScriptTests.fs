@@ -62,7 +62,8 @@ println("first {line}")
 def main = { println("then main") }
 """
     let wat = transpileWatNotInlined source
-    Assert.Equal(2, countOccurrences "call $__host_run" wat)
+    // A call of the host's `run`, not its resume entry's tail call of it (see `TaskLowering`).
+    Assert.Equal(2, countOccurrences "    call $__host_run" wat)
     runSourceWithInput "a\n" source |> assertRan "first #some(a)\nthen main\n"
 
 [<Fact>]

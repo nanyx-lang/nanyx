@@ -19,7 +19,10 @@ type ExportTarget =
     { Function: string
       Parameters: IrType list
       Result: IrType
-      TakesOver: int -> bool }
+      TakesOver: int -> bool
+      /// The indirect type of the function's resume entry, when it is a state machine, which the export runs to the
+      /// end (see `TaskLowering.blockOn`).
+      Resumes: string option }
 
 /// How the functions write tags and records, and note the runtime helpers they call.
 type ExportContext =
@@ -66,7 +69,10 @@ let private exportFunctions (context: ExportContext) (index: int) (name: string)
         [ for argument in arguments do
               $"local.get {argument}"
           if types.IsEmpty && target.Parameters.Length = 1 then "i32.const 0"
-          $"call ${target.Function}" ]
+          $"call ${target.Function}"
+          match target.Resumes with
+          | Some resumeType -> TaskLowering.blockOn (generator.Local(CoreIrLayout.valueType target.Result)) (generator.Local "i32") resumeType
+          | None -> () ]
     let released =
         List.zip parameterIrs arguments
         |> List.indexed

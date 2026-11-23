@@ -26,9 +26,48 @@ cancellation, async streams and crash boundaries are not built yet; they are on
   requires it. A function's IR type says so instead (`IrFunction`'s `waits`, in `CoreIr.fs`), from the contexts its
   type requires (`CoreIrLowerTypes.toIrTypeIn`). A function generic in contexts is specialised on what its context
   variables stand for, so it is compiled apart for a function that can wait and for one that can't: `list.map` over
-  `http.get` and `list.map` over a pure lambda are two functions. This is the start of compiling tasks
-  ([#1890](https://github.com/nanyx-lang/nanyx/issues/1890)), where only the functions that can wait will be compiled
-  to state machines.
+  `http.get` and `list.map` over a pure lambda are two functions, and only the first is a state machine (below).
+
+# How tasks are compiled
+
+Tasks ([#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) need a function that waits to stop where it waits and
+carry on later, while other code runs on the same stack. The backend compiles such a function to a state machine, as
+C# and Rust compile async functions. `TaskLowering` decides how; it is the one place to change for another lowering,
+such as WebAssembly's stack switching once it is widely supported
+([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). Nothing stops yet: a wait still blocks its instance's thread
+(above), so today every call that could stop finishes, and the state machines are the path every `Async` program takes
+without ever stopping.
+
+- **Split points.** A function is a state machine when it can stop: when it calls a function value whose type waits,
+  or a function that is a state machine itself (`CoreIrSplitPoints.stateMachines`, over the module once it is counted).
+  Each such call is a split point, numbered from 1 in the order the code is written, so the states inside any
+  expression are a range. The start function and the getter of a cached value run state machines without being one
+  (below). A function that can't stop is compiled as before.
+- **Stopping.** A call that stops sets `__nanyx_suspending`, leaves its frame in `__nanyx_suspended`, and returns a value
+  no one reads. After each split point the caller checks the flag. When it is set, the caller copies the variables it
+  keeps there into a frame of its own, on the heap: those in scope that the code after it reads, which counting's own
+  reads (what it drops or reuses later) are among. With them go the table slot of its resume entry, its state and the
+  callee's frame. Then it returns the same way. Nothing is allocated unless a call does stop, and a call that finishes
+  costs one `global.get` and a branch. A tail call that can stop stays a tail call: the callee's frame takes the
+  caller's place.
+- **Carrying on.** A state machine's resume entry, `<name>__resume`, passes its frame in `__nanyx_resuming` and calls the
+  function, whose first code takes the frame back: it restores the variables, frees the frame, and goes through its own
+  code to the split point it stopped at, skipping what ran already. Each link of a chain before the one that holds the
+  state runs only when the function is not resuming or the state is in it; an `if`, a `match` or a loop resuming in a
+  branch takes that branch, without testing its condition or binding its pattern again; and counting before a body
+  that holds the state is skipped. At the split point, it calls the resume entry of the callee's frame instead of the
+  callee. So resuming a task resumes each function it stopped in, outermost first, as Rust polls a future: the code is
+  structured as before, with no jump table, and a crash's stack still shows each function.
+- **Temporaries.** A value the emitter would compute where it is used, on the stack (see `CoreIrEmit`), can't be there
+  when the function stops: a temporary whose value holds a split point, and those waiting to be used while it is
+  computed, are kept in locals instead (`SplitPlan.StoredTemps`).
+- **Running one to the end.** Code that calls a state machine without being one, the start function, the getter of a
+  cached value and a component's export, resumes it while it stops (`TaskLowering.blockOn`). With no tasks yet, that
+  is the whole scheduler.
+- **Testing it.** Since nothing stops yet, `WasmOptions.YieldAtEveryWait` (`nanyx run --yield-at-every-wait`, for
+  working on the compiler) makes every call of a function value that can wait stop once before it is made, through
+  `__nanyx_yield`, which has a frame of its own. The tests run programs that wait both ways, with memory checks, and
+  compare what they print: `RunStateMachineTests.fs`, and every test of the HTTP client.
 
 # Why it's built this way
 

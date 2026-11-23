@@ -214,6 +214,7 @@ internal static partial class CliCommands
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
     /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
+    /// <param name="yieldAtEveryWait">Make every call that can wait stop once and be resumed: for working on the compiler, to run each way a function that waits has of stopping and carrying on.</param>
     /// <param name="allowDir">A directory the program may read and write besides the current directory, which it always may. A path outside them is #permissionDenied.</param>
     /// <param name="profile">Sample the run with Wasmtime's guest profiler and write the profile to this file, in the Firefox profiler's format, to open at profiler.firefox.com.</param>
     [Consolo("run")]
@@ -223,12 +224,13 @@ internal static partial class CliCommands
         [Consolo("timings")] bool timings = false,
         [Consolo("host")] string? host = null,
         [Consolo("no-inline")] bool noInline = false,
+        [Consolo("yield-at-every-wait")] bool yieldAtEveryWait = false,
         [Consolo("allow-dir")] string? allowDir = null,
         [Consolo("profile")] string? profile = null,
         params string[] path)
     {
         var memoryCheck = memory ? MemoryCheck.Report : checkMemory ? MemoryCheck.Check : MemoryCheck.Off;
-        return RunIn(Shell.Process, memoryCheck, path, timings, host, !noInline, allowDir is null ? [] : [allowDir], profile);
+        return RunIn(Shell.Process, memoryCheck, path, timings, host, !noInline, allowDir is null ? [] : [allowDir], profile, yieldAtEveryWait);
     }
 
     /// <summary>
@@ -236,7 +238,7 @@ internal static partial class CliCommands
     /// and each of <paramref name="allowedDirectories"/>. With <paramref name="profile"/>, the run is profiled into that
     /// file (see <see cref="RunProgram"/>).
     /// </summary>
-    internal static int RunIn(Shell shell, MemoryCheck memoryCheck, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null)
+    internal static int RunIn(Shell shell, MemoryCheck memoryCheck, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false)
     {
         if (profile is not null && memoryCheck != MemoryCheck.Off)
         {
@@ -257,7 +259,7 @@ internal static partial class CliCommands
         if (single is not null && !IsPackagePath(shell, single))
         {
             return NoHostForScript(shell, host)
-                ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls, allowedDirectories: directories, profile: profile);
+                ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls, allowedDirectories: directories, profile: profile, yieldAtEveryWait: yieldAtEveryWait);
         }
 
         if (!TryUpdateLockfile(shell, single, frozen: false, out var failed) || !TryFindPackage(shell, single, host, out var package, out failed))
@@ -287,7 +289,7 @@ internal static partial class CliCommands
         }
 
         ReportDeferredRun(compiling, deferred, build.Diagnostics);
-        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls, directories, HostSettings.port(package.Host, package.Manifest.Host), package.Manifest.Root, profile);
+        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls, directories, HostSettings.port(package.Host, package.Manifest.Host), package.Manifest.Root, profile, yieldAtEveryWait);
     }
 
     /// <summary>
@@ -389,7 +391,7 @@ internal static partial class CliCommands
             ? FSharpList<ComponentFunction>.Empty
             : ComponentInterface.imports(entry.Value.Typed.Value);
         var exports = ListModule.OfSeq(functions.Select(function => Tuple.Create(ComponentInterface.exportName(witPackage, function.Export), function)));
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(library is null ? ComponentEntryModule.ofWorld(component.World) : ComponentEntry.Library), componentExports: exports), deferred, timings))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(library is null ? ComponentEntryModule.ofWorld(component.World) : ComponentEntry.Library), componentExports: exports, yieldAtEveryWait: false), deferred, timings))
         {
             return 1;
         }
@@ -1029,7 +1031,7 @@ internal static partial class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary, string[]? allowedDirectories = null, string? profile = null)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -1050,7 +1052,7 @@ internal static partial class CliCommands
 
         if (target == Target.Run)
         {
-            return RunScript(shell, inputFile, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile);
+            return RunScript(shell, inputFile, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile, yieldAtEveryWait);
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
@@ -1074,7 +1076,7 @@ internal static partial class CliCommands
     /// <paramref name="programArguments"/>, and it may read and write the shell's directory and each of
     /// <paramref name="allowedDirectories"/>, full paths. The Wasm tests call this to run programs in their own process.
     /// </summary>
-    internal static int RunScript(Shell shell, string inputFile, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null)
+    internal static int RunScript(Shell shell, string inputFile, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false)
     {
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it, and
         // on a terminal it goes in the run's box.
@@ -1094,7 +1096,7 @@ internal static partial class CliCommands
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(compiling, deferred, result.Diagnostics);
-        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile);
+        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait);
     }
 
     /// <summary>
@@ -1264,7 +1266,7 @@ internal static partial class CliCommands
     private static int RunWasm(Shell shell, CompileResult result, string inputFile, string? outputPath, bool release, ProgramFormat format)
     {
         var deferred = !release && ErrorsDeferred(result);
-        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty), deferred))
+        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false), deferred))
         {
             return 1;
         }

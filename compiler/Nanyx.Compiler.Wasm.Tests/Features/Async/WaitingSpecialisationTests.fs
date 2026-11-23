@@ -7,9 +7,13 @@ open System.Text.RegularExpressions
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// The names of the functions `wat` defines that start with `prefix`.
+/// The names of the functions `wat` defines that start with `prefix`, without their resume entries (see
+/// `TaskLowering`).
 let private functionsNamed (prefix: string) (wat: string) =
-    Regex.Matches(wat, $@"\(func \$({Regex.Escape prefix}\S*)") |> Seq.map _.Groups[1].Value |> List.ofSeq
+    Regex.Matches(wat, $@"\(func \$({Regex.Escape prefix}\S*)")
+    |> Seq.map _.Groups[1].Value
+    |> Seq.filter (fun name -> not (name.EndsWith "__resume"))
+    |> List.ofSeq
 
 [<Fact>]
 let ``A function generic in contexts is specialised apart for a function that waits and one that doesn't`` () =

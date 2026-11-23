@@ -20,13 +20,22 @@ import nanyx.http.core/http as http
 """
 
 /// What `nanyx run --check-memory` gives for `source` after `header`, saved as `main.nyx` in a directory of its own.
+/// It gives the same with `--yield-at-every-wait`, which makes each request stop and be resumed (see
+/// docs/src/content/deep-dives/async.md), and the outcomes are compared.
 let private run (source: string) =
-    use directory = new TempDirectory()
-    File.WriteAllText(Path.Combine(directory.Path, "main.nyx"), header + source.ReplaceLineEndings "\n")
-    let outcome = nanyxIn directory.Path [ "run"; "--check-memory"; "main.nyx" ]
-    { outcome with
-        StandardOutput = outcome.StandardOutput.ReplaceLineEndings "\n"
-        StandardError = outcome.StandardError.ReplaceLineEndings "\n" }
+    let runWith (options: string list) =
+        use directory = new TempDirectory()
+        File.WriteAllText(Path.Combine(directory.Path, "main.nyx"), header + source.ReplaceLineEndings "\n")
+        let outcome = nanyxIn directory.Path ([ "run"; "--check-memory" ] @ options @ [ "main.nyx" ])
+        { outcome with
+            StandardOutput = outcome.StandardOutput.ReplaceLineEndings "\n"
+            StandardError = outcome.StandardError.ReplaceLineEndings "\n" }
+    let outcome = runWith []
+    let yielding = runWith [ "--yield-at-every-wait" ]
+    Assert.Equal(outcome.StandardOutput, yielding.StandardOutput)
+    Assert.Equal(outcome.StandardError, yielding.StandardError)
+    Assert.Equal(outcome.ExitCode, yielding.ExitCode)
+    outcome
 
 /// Asserts that `outcome` ran cleanly and printed `expected`.
 let private assertPrinted (expected: string) (outcome: RunOutcome) =
