@@ -752,7 +752,12 @@ module Unifier =
                         let others = fields |> Map.filter (fun key _ -> not (openKeys.Contains key))
                         loop subst (pairs @ [ (TyVar row, TyRecord(others, FieldOrder.within others order), Equal, origin) ] @ rest)
                     else
-                        Error (recordKeyMessage openKeys (keySet fields) l r, origin, TypesDiffer)
+                        // The message names each side's own fields, whichever of the two is the open one.
+                        let lKeys, rKeys =
+                            match l with
+                            | TyOpenRecord _ -> openKeys, keySet fields
+                            | _ -> keySet fields, openKeys
+                        Error (recordKeyMessage lKeys rKeys l r, origin, TypesDiffer)
                 // Two open records: each row is the other's extra fields and a row they share, as with two open unions.
                 | TyOpenRecord(lFields, lRow), TyOpenRecord(rFields, rRow) ->
                     let lKeys = keySet lFields
