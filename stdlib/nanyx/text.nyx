@@ -18,9 +18,10 @@
   position, so it works on a string of any length.
 module text
 
--- Everything here is written over seven compiler intrinsics: `__nanyx_string_length`,
+-- Everything here is written over eight compiler intrinsics: `__nanyx_string_length`,
 -- `__nanyx_string_byte_at`, `__nanyx_string_slice`, `__nanyx_string_from_byte`,
--- `__nanyx_string_join`, which copies each piece of its result once, and `__nanyx_string_new` and
+-- `__nanyx_string_join`, which copies each piece of its result once,
+-- `__nanyx_string_index_between`, which finds a string in another, and `__nanyx_string_new` and
 -- `__nanyx_string_write`, which make a string whose length is known first and copy each stretch of
 -- it in once, as `repeat`, `padStart`, `padEnd`, `replace` and `reverse` do. `split` and `words`
 -- also build their results with `__nanyx_list_cons`, last first, and reverse them with the
@@ -81,18 +82,7 @@ export def string.endsWith: string, string -> bool = { s, suffix ->
 
 --| The byte index of the first occurrence of `needle` in `s` at or after `from`, or -1.
 def indexFrom: string, string, int -> int = { s, needle, from ->
-  def length = string.length(needle)
-  indexBetween(s, needle, length, from, string.length(s) - length)
-}
-
---| The byte index of the first occurrence of `needle`, of `length` bytes, in `s` starting at or
-  after `from` and at or before `last`, or -1.
-def indexBetween: string, string, int, int, int -> int = { s, needle, length, from, last ->
-  if from > last
-    then -1
-    else if matchesAt(s, needle, length, from, 0)
-      then from
-      else indexBetween(s, needle, length, from + 1, last)
+  __nanyx_string_index_between(s, needle, from, string.length(s))
 }
 
 --| The byte index of the last occurrence of `needle` in `s` starting at or before `from`, or -1.
@@ -660,7 +650,7 @@ export def StringSlice.startsWith: StringSlice, string -> bool = { s, prefix ->
   bytes `s` views, found without copying them. An empty `needle` is found at 0.
 export def StringSlice.indexOf: StringSlice, string -> #some(int) | #notFound = { s, needle ->
   def length = string.length(needle)
-  def index = indexBetween(s.text, needle, length, s.start, s.start + s.length - length)
+  def index = __nanyx_string_index_between(s.text, needle, s.start, s.start + s.length - length)
   if index >= 0 then #some(index - s.start) else #notFound
 }
 

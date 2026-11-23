@@ -50,6 +50,9 @@ module Intrinsics =
     /// `arrayWrite` make an array. The standard library checks each stretch is in range.
     let stringNew = prefix + "string_new"
     let stringWrite = prefix + "string_write"
+    /// The byte index of the first occurrence of a string in another that starts from one index to another, or -1. An
+    /// empty one is found at the first index, unless that is past the second.
+    let stringIndexBetween = prefix + "string_index_between"
     /// A list with an element added at the front.
     let listCons = prefix + "list_cons"
     /// The square root of a float (NaN for a negative one).
@@ -225,6 +228,7 @@ module Intrinsics =
           stringFromByte, TypeEnv.mono (TyFunc(intTy, stringTy, []))
           stringJoin, TypeEnv.mono (TyFunc(tuple [ listOf stringTy; stringTy ], stringTy, []))
           stringShiftBytes, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy; intTy ], stringTy, []))
+          stringIndexBetween, TypeEnv.mono (TyFunc(tuple [ stringTy; stringTy; intTy; intTy ], intTy, []))
           stringNew, TypeEnv.mono (TyFunc(intTy, stringTy, []))
           stringWrite, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; stringTy; intTy; intTy ], unitTy, []))
           floatSqrt, TypeEnv.mono (TyFunc(floatTy, floatTy, []))

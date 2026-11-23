@@ -13,27 +13,27 @@ let ``Run - string.replace replaces every occurrence, at either end, next to eac
     let source =
         normalized """import nanyx/text
 
-def show: string, string, string -> () = { s, pattern, replacement ->
-  println("[{string.replace(s, pattern = pattern, replacement = replacement)}]")
+def show: string, string, string -> string = { s, pattern, replacement ->
+  "[{string.replace(s, pattern = pattern, replacement = replacement)}]"
 }
 
 @entry
 def main = {
-  show("a-b--c", "-", "+")
-  show("-a-", "-", "+")
-  show("abc", "x", "+")
-  show("", "x", "+")
-  show("abc", "", "+")
-  show("abc", "abc", "")
-  show("aaa", "aa", "b")
-  show("a, b, c", ", ", "")
-  show("a-b", "-", " to ")
-  show("café crème", "é", "€")
-  show("x😀y😀", "😀", "é")
+  println(show("a-b--c", "-", "+"))
+  println(show("-a-", "-", "+"))
+  println(show("abc", "x", "+"))
+  println(show("", "x", "+"))
+  println(show("abc", "", "+"))
+  println(show("abc", "abc", ""))
+  println(show("aaa", "aa", "b"))
+  println(show("a, b, c", ", ", ""))
+  println(show("a-b", "-", " to "))
+  println(show("café été", "é", "€"))
+  println(show("x😀y😀", "😀", "é"))
 }
 """
     runSource source
-    |> assertRan "[a+b++c]\n[+a+]\n[abc]\n[]\n[abc]\n[]\n[ba]\n[abc]\n[a to b]\n[caf€ cr€me]\n[xéyé]\n"
+    |> assertRan "[a+b++c]\n[+a+]\n[abc]\n[]\n[abc]\n[]\n[ba]\n[abc]\n[a to b]\n[caf€ €t€]\n[xéyé]\n"
 
 [<Fact>]
 let ``Run - string.repeat repeats any number of times, and none for 0 or less`` () =
@@ -52,7 +52,7 @@ def main = {
     |> assertRan "[] [] []\n[ab] [abab] [abcabcabcabcabcabcabc]\n[é€é€é€]\n500005\n"
 
 [<Fact>]
-let ``Run - string.padStart and padEnd cut their fill at the width, and leave a string as wide as it unchanged`` () =
+let ``Run - string.padStart and padEnd cut their fill at the width, a byte count, and leave a string as wide as it unchanged`` () =
     let source =
         normalized """import nanyx/text
 
@@ -62,12 +62,13 @@ def main = {
   println("[{string.padStart("ab", width = 7, fill = "xyz")}] [{string.padEnd("ab", width = 7, fill = "xyz")}]")
   println("[{string.padStart("long", width = 4, fill = "0")}] [{string.padEnd("long", width = 2, fill = "0")}]")
   println("[{string.padStart("ab", width = 5, fill = "")}] [{string.padEnd("", width = 3, fill = "-")}]")
-  println("[{string.padStart("é", width = 6, fill = "€")}] [{string.padEnd("é", width = 5, fill = "é")}]")
+  println("[{string.padStart("é", width = 8, fill = "€")}] [{string.padEnd("é", width = 6, fill = "é")}]")
+  println(string.length(string.padStart("é", width = 6, fill = "€")))
   println(string.length(string.padStart("x", width = 100000, fill = "ab")))
 }
 """
     runSource source
-    |> assertRan "[007] [700]\n[xyzxyab] [abxyzxy]\n[long] [long]\n[ab] [---]\n[€é] [ééé]\n100000\n"
+    |> assertRan "[007] [700]\n[xyzxyab] [abxyzxy]\n[long] [long]\n[ab] [---]\n[€€é] [ééé]\n6\n100000\n"
 
 [<Fact>]
 let ``Run - string.reverse turns characters of one to four bytes around, each whole`` () =

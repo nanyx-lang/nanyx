@@ -126,6 +126,7 @@ module Helpers =
     let stringJoin = NyxCompiler.Intrinsics.stringJoin
     let stringShiftBytes = NyxCompiler.Intrinsics.stringShiftBytes
     let stringNew = NyxCompiler.Intrinsics.stringNew
+    let stringIndexBetween = NyxCompiler.Intrinsics.stringIndexBetween
     let stringWrite = NyxCompiler.Intrinsics.stringWrite
     let listCons = NyxCompiler.Intrinsics.listCons
     let floatSqrt = NyxCompiler.Intrinsics.floatSqrt
@@ -595,6 +596,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             $"  call ${Helpers.copyBytes}"
             "  local.get $out"
             ")" ]
+      Helpers.stringIndexBetween, lines (StringSearch.helper Helpers.stringIndexBetween Helpers.stringLength)
       // A new string of `$len` bytes, none for a length below 0, which the standard library writes before anything
       // reads it.
       Helpers.stringNew,
@@ -608,18 +610,52 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  select"
             $"  call ${Helpers.stringAlloc}"
             ")" ]
-      // `$count` bytes of `$source` from `$start` copied into the new string `$target` at `$at`.
+      // `$count` bytes of `$source` from `$start` copied into the new string `$target` at `$at`. A stretch of up to 16
+      // bytes is copied a byte at a time, which is several times faster than `memory.copy` for so few: what `replace`
+      // and `padStart` mostly copy.
       Helpers.stringWrite,
       lines
           [ $"(func ${Helpers.stringWrite} (param $target i32) (param $at i32) (param $source i32) (param $start i32) (param $count i32)"
+            "  (local $i i32)"
             "  local.get $target"
             "  local.get $at"
             "  i32.add"
+            "  local.set $target"
             "  local.get $source"
             "  local.get $start"
             "  i32.add"
+            "  local.set $source"
             "  local.get $count"
-            $"  call ${Helpers.copyBytes}"
+            "  i32.const 16"
+            "  i32.gt_u"
+            "  if"
+            "    local.get $target"
+            "    local.get $source"
+            "    local.get $count"
+            $"    call ${Helpers.copyBytes}"
+            "    return"
+            "  end"
+            "  block $done"
+            "    loop $each"
+            "      local.get $i"
+            "      local.get $count"
+            "      i32.ge_s"
+            "      br_if $done"
+            "      local.get $target"
+            "      local.get $i"
+            "      i32.add"
+            "      local.get $source"
+            "      local.get $i"
+            "      i32.add"
+            "      i32.load8_u"
+            "      i32.store8"
+            "      local.get $i"
+            "      i32.const 1"
+            "      i32.add"
+            "      local.set $i"
+            "      br $each"
+            "    end"
+            "  end"
             ")" ]
       Helpers.stringJoin,
       lines (
@@ -1208,7 +1244,8 @@ let helperDependencies =
       Helpers.intTextLength, []
       Helpers.intTextWrite, [ Helpers.intTextLength ]
       Helpers.stringNew, [ Helpers.stringAlloc ]
-      Helpers.stringWrite, [ Helpers.copyBytes ] ]
+      Helpers.stringWrite, [ Helpers.copyBytes ]
+      Helpers.stringIndexBetween, [ Helpers.stringLength ] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
     @ WasmRegions.dependencies
 
@@ -1218,7 +1255,6 @@ let helperDependencies =
 let private helpersWithoutMemory =
     set [ yield Helpers.stringSlice
           yield Helpers.stringNew
-          yield Helpers.stringWrite
           yield Helpers.stringConcat
           yield Helpers.exit
           yield Helpers.crashed
