@@ -78,3 +78,7 @@ let ``Any other type too long for one line goes on the next one, indented`` () =
         lines [ "type Handler ="; "  (SomeLongRequestTypeName, AnotherLongContextTypeName, YetAnotherLongTypeName) -> SomeResponseType" ],
         format "type Handler = (SomeLongRequestTypeName, AnotherLongContextTypeName, YetAnotherLongTypeName) -> SomeResponseType")
     unchanged "type Handler = (int, string) -> int\n"
+
+[<Fact>]
+let ``A tag's payload of positional types then named fields is written in the tag's own brackets`` () =
+    unchanged "type Shape = #circle(float) | #rect(string, width: float, height: float)\n"

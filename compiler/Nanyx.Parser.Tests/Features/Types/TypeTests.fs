@@ -87,6 +87,21 @@ let ``comma binds tighter than the arrow inside brackets too`` () =
     annotationOf "def t: #pair(int, a) = t" |> should equal (tag "pair" (Some pair))
     annotationOf "def t: #apply(int, a -> b) = t" |> should equal (tag "apply" (Some (func pair (var "b"))))
     annotationOf "def t: #field(name: int) = t" |> should equal (tag "field" (Some (ty (TypeRecord [ TypeField ("name", false, Some (named "int"), None) ]))))
+    // Positional types then named fields, as a record type writes them.
+    annotationOf "def t: #rect(string, width: float, height: float) = t"
+    |> should
+        equal
+        (tag
+            "rect"
+            (Some (
+                ty (
+                    TypeRecord [
+                        TypeField ("0", false, Some (named "string"), None)
+                        TypeField ("width", false, Some (named "float"), None)
+                        TypeField ("height", false, Some (named "float"), None)
+                    ]
+                )
+            )))
     // A union binds tighter than the arrow, so it needs no brackets on either side of one.
     let union = ty (TypeUnion [ tag "some" (Some (named "int")); tag "none" None ])
     annotationOf "def u: #some(int) | #none -> #some(int) | #none = u" |> should equal (func union union)

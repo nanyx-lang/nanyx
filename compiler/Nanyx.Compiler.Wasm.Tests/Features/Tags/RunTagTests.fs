@@ -180,3 +180,22 @@ println("{x}")
 println("{y}")
 """
     runSource source |> assertRan "#some(20)\n#none\n"
+
+[<Fact>]
+let ``Run - a tag's payload may be positional types then named fields, as a record type`` () =
+    runSource
+        """
+type Shape = #circle(float) | #rect(string, width: float, height: float)
+
+def area: Shape -> float = {
+  | #circle(r) -> 3.0 * r * r
+  | #rect(r) -> r.width * r.height
+}
+
+def s: Shape = #rect("box", width = 2.0, height = 3.0)
+
+match s
+  | #rect(r) -> println("{r.0}: {area(s)}")
+  | _ -> ()
+"""
+    |> assertRan "box: 6.0\n"
