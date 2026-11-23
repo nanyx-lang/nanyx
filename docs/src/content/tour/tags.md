@@ -62,6 +62,9 @@ type Shape = #circle(float) | #rectangle(width: float, height: float)
 type AuthResult = #authenticated(username: string) | #rejected(#invalidCredentials | #expiredToken)
 ```
 
+A record payload shares the tag's brackets, positional fields and all, as a record type writes them:
+`#rect(string, width: float, height: float)` is `#rect((string, width: float, height: float))`.
+
 A tag that carries the unit value `()` is written with empty brackets, in values and in types alike, just as a function that takes nothing is called `f()`. `#some()` is `#some(())`:
 
 ```nanyx
