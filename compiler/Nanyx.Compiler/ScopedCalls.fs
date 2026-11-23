@@ -256,27 +256,33 @@ let leave (call: Expression) (state: InferState) : InferState =
         let outside = state.OpenScopes @ written |> List.map resolve
         let declaredOutside (symbol: SymbolId) =
             state.Symbols |> Map.tryFind symbol |> Option.forall (fun declared -> not (SourceSpan.contains call.Span declared.Declaration))
+        // A def's own scope for its tasks, which the compiler wrote (see `TaskScopes`), is the def's, not a call's.
+        let tasks (message: string -> string) =
+            if callee = TaskScopeSyntax.scopeCall then
+                fun through ->
+                    $"A task can't leave the def that started it: what the def gives back holds one{through}. The def is the scope of its tasks, and waits for them before it returns"
+            else message
         let errors =
             supplied
             |> List.choose (fun (context, scope) ->
                 let scope = resolve scope
                 if List.contains scope outside then
                     let found = introducer state resolve call scope declaredOutside
-                    Some (escape call found (fun through ->
-                        $"'{context}' of this '{callee}' call would reach outside it{through}, which is bound outside the call: only what is made inside the call can require it"))
+                    Some (escape call found (tasks (fun through ->
+                        $"'{context}' of this '{callee}' call would reach outside it{through}, which is bound outside the call: only what is made inside the call can require it")))
                 elif mentions scope result then
                     let found = introducer state resolve call scope (fun _ -> true)
                     let instead = if context = MemoryCells.context then ": return what the cells hold instead" else ""
-                    Some (escape call found (fun through ->
-                        $"The result of this '{callee}' call requires its '{context}'{through}, so it cannot leave the call{instead}"))
+                    Some (escape call found (tasks (fun through ->
+                        $"The result of this '{callee}' call requires its '{context}'{through}, so it cannot leave the call{instead}")))
                 else
                     match outlivingHolder state resolve scope bound with
                     | Some (name, scheme) ->
                         let found =
                             introducer state resolve call scope (fun symbol -> scheme.Symbol = Some symbol)
                             |> Option.map (fun (node, _) -> node, $"'{name}'")
-                        Some (escape call found (fun through ->
-                            $"'{context}' of this '{callee}' call would reach outside it{through}, which is bound outside the call and outlives it: only what is made inside the call can hold what requires it"))
+                        Some (escape call found (tasks (fun through ->
+                            $"'{context}' of this '{callee}' call would reach outside it{through}, which is bound outside the call and outlives it: only what is made inside the call can hold what requires it")))
                     | None -> None)
         if errors.IsEmpty then state
         else

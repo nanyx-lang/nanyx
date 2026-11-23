@@ -191,14 +191,25 @@ module Attributes =
         (module' |> List.collect typeDefs) @ localTypeDefs
         |> List.collect (fun (modifiers, body) -> memberAttributes modifiers body)
 
+    /// The top-level defs of `module'` marked `@customKeywordType`, with the kind it names, by name: a `#delay` keyword
+    /// needs no builder, so a def can be one (`nanyx/async`'s `start`).
+    let private keywordDefs (module': Module) : (Identifier * KeywordKind) list =
+        module'
+        |> List.pairwise
+        |> List.choose (fun (attribute, def) ->
+            match attribute.Kind, def.Kind with
+            | Attribute(name, KeywordKindTag kind), Def (ValueDef(_, defName, _, _)) when name = customKeywordTypeAttribute -> Some (defName, kind)
+            | _ -> None)
+
     /// The kinds of the workflow keywords `module'`'s context declarations mark with `@customKeywordType`, by the
-    /// member's name (see `WorkflowDesugaring`).
+    /// member's name, and of the top-level defs it marks so (see `WorkflowDesugaring`).
     let keywordKinds (module': Module) : Map<Identifier, KeywordKind> =
         contextMemberAttributes module'
         |> List.choose (fun ((name, argument, _), field) ->
             match argument, field with
             | KeywordKindTag kind, TypeField(memberName, _, _, _) when name = customKeywordTypeAttribute -> Some (memberName, kind)
             | _ -> None)
+        |> List.append (keywordDefs module')
         |> Map.ofList
 
     /// `kinds` with the keywords of `nearer` added, whose kinds win where both have a keyword.
@@ -233,6 +244,15 @@ module Attributes =
                 Diagnostics.at DiagnosticCodes.KeywordMemberType span
                     $"'{memberName}' is a `#{tag}` keyword, which passes the expression after it as a function of no parameters, so its type must be of the form {expected}"
                 |> Diagnostics.about memberName)
+
+    /// The error for a `@customKeywordType` attribute, `name` at `span`, whose argument, `argument`, names no kind.
+    let private keywordKindError (name: Identifier) (span: SourceSpan) (argument: Expression option) =
+        let kinds = WorkflowSyntax.keywordKinds |> List.map (fun (kind, _) -> $"`#{kind}`") |> String.concat ", "
+        match argument with
+        | Some (Kind (TagExpr(kind, None))) ->
+            Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"The kinds are {kinds}" |> Diagnostics.about $"#{kind}")
+        | _ ->
+            Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Attribute '@{name}' takes the keyword's kind, as `@{name}(#bind)`: the kinds are {kinds}")
 
     /// The attributes written before the fields of `module'`'s record type definitions, which a type's description
     /// gives to a library (see `FieldAttribute`): each with its argument and span.
@@ -292,17 +312,13 @@ module Attributes =
             |> List.map (fun (name, span) ->
                 Diagnostics.at DiagnosticCodes.MisplacedAttribute span "It can only come before a field of a record type's definition or a member of a context declaration"
                 |> Diagnostics.about $"@{name}")
-        let kinds = WorkflowSyntax.keywordKinds |> List.map (fun (kind, _) -> $"`#{kind}`") |> String.concat ", "
         let onMember ((name: Identifier, argument: Expression option, span: SourceSpan), field: TypeRecordField) =
             match argument, field with
             | _ when name <> customKeywordTypeAttribute ->
                 Some (Diagnostics.at DiagnosticCodes.UnknownAttribute span $"A context's member can have only '@{customKeywordTypeAttribute}'" |> Diagnostics.about $"@{name}")
             | KeywordKindTag kind, TypeField(memberName, _, typeOpt, _) -> keywordTypeError span memberName kind typeOpt
             | KeywordKindTag _, _ -> None
-            | Some (Kind (TagExpr(kind, None))), _ ->
-                Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"The kinds are {kinds}" |> Diagnostics.about $"#{kind}")
-            | _ ->
-                Some (Diagnostics.at DiagnosticCodes.UnknownKeywordKind span $"Attribute '@{name}' takes the keyword's kind, as `@{name}(#bind)`: the kinds are {kinds}")
+            | _ -> keywordKindError name span argument
         misplaced @ unreadable @ List.choose onMember members
 
     /// The errors for the defs in `items` written with no value that no `@extern` declares a foreign function: those in
@@ -401,6 +417,19 @@ module Attributes =
                     let imported = { def with Kind = Def (ValueDef(isExport, defName, typeOpt, ComponentImportSyntax.import witInterface functionName parameters value)) }
                     loop rest (imported :: acc) entries externs errors
                 | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
+            // A `#delay` keyword can be a def, which takes the expression after the keyword as a function of no
+            // parameters: any other kind needs a workflow's builder, so only a context's member can be one.
+            | Kind (Attribute(name, argument)) as attribute :: (Kind (Def (ValueDef(_, defName, typeOpt, _))) as def) :: rest when name = customKeywordTypeAttribute ->
+                let error =
+                    match argument with
+                    | KeywordKindTag KeywordKind.Delay -> keywordTypeError attribute.Span defName KeywordKind.Delay typeOpt
+                    | KeywordKindTag _ ->
+                        Some (
+                            Diagnostics.at DiagnosticCodes.UnknownKeywordKind attribute.Span
+                                $"A definition can only be a `#delay` keyword, which rewrites nothing but itself: any other kind needs a workflow's builder, so it is a member of the builder's context"
+                            |> Diagnostics.about $"@{name}")
+                    | _ -> keywordKindError name attribute.Span argument
+                loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ Option.toList error @ errors)
             | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute && name <> componentAttribute && name <> componentImportAttribute ->
                 let error =
                     Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span
