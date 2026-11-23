@@ -180,6 +180,7 @@
     <Compile Include="Features\Operators\RunCompositionTests.fs" />
     <Compile Include="Features\Operators\RunCoalesceTests.fs" />
     <Compile Include="Features\Operators\RunComparisonLiteralTests.fs" />
+    <Compile Include="Features\Operators\RunShortCircuitTests.fs" />
     <Compile Include="Features\Ordering\RunOrderingTests.fs" />
     <Compile Include="Features\Packages\GitHubReferenceRunTests.fs" />
     <Compile Include="Features\Packages\ManifestCommandTests.fs" />
