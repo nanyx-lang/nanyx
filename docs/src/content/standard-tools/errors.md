@@ -2343,7 +2343,7 @@ members of a union, and write the type a type variable stands for.
 # NYX0278: Component import called outside a component
 
 A program calls a def marked `@import`, a function another component exports, in a program that isn't built as a
-component: `nanyx run`, `nanyx test`, or `nanyx build --core`. Only the component `nanyx build` writes imports the
+component: `nanyx run`, `nanyx wasm`, or `nanyx build --core`. Only the component `nanyx build` writes imports the
 function, and a runtime that runs it gives the other component's
 ([Components](../deep-dives/components#a-programs-own-imports)). It is reported at the def.
 
