@@ -470,37 +470,50 @@ stopped (`WasmRunner.runCounting`), so the report follows a trap, a failed check
 
 ## Regions
 
-Counting can't free a cycle, and a reference (`MRef`) can hold a value that holds the reference. The type checker makes
-sure that nothing the program can still reach refers to a mutable object once the `memory` block it was made under has
-ended ([Memory](../advanced/memory#values-cannot-escape-memory-scope)), so the block frees what is left of them when it
-ends, whatever their counts say ([#2232](https://github.com/nanyx-lang/nanyx/issues/2232)).
+Counting can't free a cycle, and a reference (`MRef`) can hold a value that holds the reference. So each `memory` block
+frees, when it ends, what is left of the references made while it was the innermost block running, whatever their counts
+say ([#2232](https://github.com/nanyx-lang/nanyx/issues/2232), [#2376](https://github.com/nanyx-lang/nanyx/issues/2376)).
 
-The outermost `memory` block running has a region (`WasmRegions.fs`), which `memory` starts and ends with the
-intrinsics `__nanyx_region_enter` and `__nanyx_region_exit`. They count the blocks running in a global: the first block
-to start makes the region, a block of three words held in another global, and the last to end ends it. Every block
-whose `Memory` an object can be made under runs inside the outermost one, so the region outlives everything that can
-refer to its objects. The cost is that a cycle made in an inner block lives until the outermost block ends; a region
-for each block, which needs the backend to know which block's `Memory` each call is given, is
-[#2376](https://github.com/nanyx-lang/nanyx/issues/2376).
+**The region stack.** Each `memory` block running has a region (`WasmRegions.fs`), which `memory` starts and ends with
+the intrinsics `__nanyx_region_enter` and `__nanyx_region_exit`. A region is a block of five words: no drop function,
+the first object on its list, the region it is inside (none for the outermost), the last object on its list, and its
+depth, 1 for the outermost. The innermost region is in a global, so the regions make a stack linked through the third
+word, and the outermost is in another global. The list is circular, with the region as its sentinel, so an object is
+linked and unlinked without asking whether it is first or last.
 
-An `MRef` is a box laid out as a record of four fields (`CoreIrRegions.boxType`): the table slot of the function that
-drops what it holds (`__nanyx_region_drop_…`, one for each type of box, called through the table as an environment's
-drop function is), the next and the previous object on the region's list, then the value. The link fields' names start
-with `-`, which no field of the program's can, so they are stored first and no record of the program's is taken for a
-box. The region's block is laid out as the links are, with no drop function, and the list is circular, with the region
-as its sentinel, so an object is linked and unlinked without asking whether it is first or last.
+**Boxes.** An `MRef` is a box laid out as a record of five fields (`CoreIrRegions.boxType`): the table slot of the
+function that drops what it holds (`__nanyx_region_drop_…`, one for each type of box, called through the table as an
+environment's drop function is), the next object on its region's list, the region it is on, the previous object, then
+the value. The link fields' names start with `-`, which no field of the program's can, so they are stored first and no
+record of the program's is taken for a box. A new box goes on the innermost region (`__nanyx_region_track`). When
+counting gives up a box's last reference, its drop function takes it off its region's list (`__nanyx_region_unlink`)
+before it drops its value and frees it, as any record's does, so a box that is not in a cycle is freed as early as it
+ever was.
 
-- `__nanyx_region_track` puts a new box on the region's list, with its drop function's table slot.
-- When counting gives up a box's last reference, its drop function takes it off the list (`__nanyx_region_unlink`)
-  before it drops its value and frees it, as any record's does. So a box that is not in a cycle is freed as early as
-  before, and costs only its three link words.
-- `__nanyx_region_end` takes a reference to every box still on the list, so that none is freed or taken off it while it
-  runs, then calls each box's drop function, which gives up the references the boxes hold to each other, then frees
-  each box, whatever its count says, and the region.
+**Promotion.** The invariant is that if a box can reach another, through what it holds or the immutable values in that,
+the other's region is its own or an outer one. Two kinds of place keep it (`CoreIrPromotion.fs`):
 
-A block can't be left without ending it: a crash ends the program, and a workflow's `try` or `return` in a block ends
-the block's lambda, after which `memory` ends the region as usual. The boxes of captured cells and `MArray`s are not on
-the region yet.
+- a store into a box (`MRef.set`) first promotes the stored value onto the box's region;
+- a block's result is promoted onto the region of the block around it, before the block's own region ends.
+
+To promote a value is to move each box it holds that is on a region deeper than the target onto the target
+(`__nanyx_region_move`), and to promote what that box holds in turn. A box already on the target or an outer region is
+left as it is, which also ends a walk around a cycle. Each type that can hold a box has a promote function
+(`__nanyx_promote_…`), generated as drop functions are, and a store of a value of any other type, a number, a string, a
+list of them, promotes nothing. What a function value or a boxed value holds can't be followed, so promoting one merges
+every region inside the target onto it (`__nanyx_region_merge`). A captured cell's box, an `MArray` and the cells of an
+`MList` aren't on a region yet, so a value stored into one is promoted onto the outermost region. Since a box made in a
+block can only stay reachable after the block ends through its result or a store into an outer block's box, both of
+which move it out, nothing the program can still reach refers to what is left on a block's region when it ends. This
+holds whatever the type checker allows, so a hole in the escape check
+([Memory](../advanced/memory#values-cannot-escape-memory-scope)) would make an object live longer, not be freed while
+it is used, except in the outermost block, whose result has no region to move to.
+
+**Ending a block.** `__nanyx_region_exit` pops the region and `__nanyx_region_end` frees what is on it: it takes a
+reference to every box on the list, so that none is freed or taken off it while it runs, then calls each box's drop
+function, which gives up the references the boxes hold to each other, then frees each box, whatever its count says, and
+the region. A block can't be left without ending it: a crash ends the program, and a workflow's `try` or `return` in a
+block ends the block's lambda, after which `memory` ends the region as usual.
 
 ## Things that need care
 

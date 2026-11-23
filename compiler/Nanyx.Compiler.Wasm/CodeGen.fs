@@ -1014,10 +1014,11 @@ let private supportFunctions
     (usedHelpers: System.Collections.Generic.HashSet<string>)
     : SupportFunctions =
     // A drop and a dup function for each type on the heap the functions above use, a function for what each of their
-    // closures captures, and `++` for each list of elements on the heap. A tag no function names has no cells to drop.
-    let drops = CoreIrDrop.collect functions
-    let renderedDrops = CoreIrDrop.render (fun name -> tagIdMap |> Map.tryFind name) drops |> String.concat "\n\n"
-    for helper in CoreIrDrop.helpersUsed drops do
+    // closures captures, `++` for each list of elements on the heap, and a promote function for each type a value of is
+    // stored where it may outlive its `memory` block. A tag no function names has no cells to drop.
+    let drops, promoted = CoreIrDrop.collect functions, CoreIrPromotion.collect functions
+    let renderedDrops = CoreIrDrop.render (fun name -> tagIdMap |> Map.tryFind name) drops @ CoreIrPromotion.render (fun name -> tagIdMap |> Map.tryFind name) promoted |> String.concat "\n\n"
+    for helper in CoreIrDrop.helpersUsed drops @ CoreIrPromotion.helpersUsed promoted do
         usedHelpers.Add helper |> ignore
     if drops.Types |> List.exists (function CoreIr.IrFunction _ | CoreIr.IrBox -> true | _ -> false) then
         functionTable.IndirectSignatures.Add([ "i32" ], "i32") |> ignore

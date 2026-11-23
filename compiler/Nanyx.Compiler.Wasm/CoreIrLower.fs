@@ -360,13 +360,18 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let body = k (Expr.make (Atom(AVar copy)) value.Type)
             Expr.make (Let(copy, value, body)) body.Type
         | AssignSyntax.Call(Kind (IdentifierExpr name), value) when scope.Vars.ContainsKey name ->
-            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (Assign(scope.Vars.[name], atoms.Head)) IrUnit))
+            // A cell isn't on a region yet, so what it is given goes onto the outermost one.
+            this.Atoms scope [ value ] (fun atoms ->
+                CoreIrRegions.withBarrier (newVar (uniqueName "__stored") Local) WasmRegions.Names.regionStoreOutermost atoms (fun atoms ->
+                    k (Expr.make (Assign(scope.Vars.[name], atoms.Head)) IrUnit)))
         // The box's node is the `mut`'s, so its type is the cell's.
         | FunctionCall(form, _, [ value ]) when form = CellSyntax.box ->
             this.Atoms scope [ value ] (fun atoms ->
                 k (Expr.make (MakeRecord [ "0", atoms.Head ]) (IrRecord [ "0", asCellType (tyOf expr) (atomType atoms.Head) ])))
         | FunctionCall(form, _, [ Kind (IdentifierExpr name); value ]) when form = CellSyntax.setBox && scope.Vars.ContainsKey name ->
-            this.Atoms scope [ value ] (fun atoms -> k (Expr.make (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit))
+            this.Atoms scope [ value ] (fun atoms ->
+                CoreIrRegions.withBarrier (newVar (uniqueName "__stored") Local) WasmRegions.Names.regionStoreOutermost atoms (fun atoms ->
+                    k (Expr.make (SetField(scope.Vars.[name], 0, atoms.Head)) IrUnit)))
         | CrashSyntax.Call message ->
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
@@ -430,16 +435,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, [ value ]) when Intrinsics.reinterpretations.Contains name && not (scope.Vars.ContainsKey name) ->
             // A map and the list of its entries are held the same way: the value is its argument.
             this.Complex scope value k
-        // A `box` (see `Boxes`) is made on the region of the outermost `memory` block running (see `CoreIrRegions`), and
-        // read and changed as a captured cell is.
+        // A `box` (see `Boxes`) is made on the region of the innermost `memory` block running (see `CoreIrRegions`), and
+        // read and changed as a captured cell is, a store into it promoting what it is given.
         | FunctionCall(name, _, [ value ]) when name = Intrinsics.boxNew && not (scope.Vars.ContainsKey name) ->
             this.Atoms scope [ value ] (fun atoms ->
-                let link = ASized(SizedInteger.I32, 0L)
-                let fields =
-                    [ CoreIrRegions.dropField, link
-                      CoreIrRegions.nextField, link
-                      CoreIrRegions.prevField, link
-                      CoreIrRegions.boxValueField, atoms.Head ]
+                let fields = CoreIrRegions.boxFields atoms.Head
                 let boxTy = CoreIrRegions.boxType (atomType atoms.Head)
                 let box = newVar (uniqueName "__box") Local boxTy
                 let tracked = newVar (uniqueName "__tracked") Local IrUnit
@@ -455,7 +455,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, args) when name = Intrinsics.boxSet && not (scope.Vars.ContainsKey name) ->
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 match atoms with
-                | [ AVar box; value ] -> k (Expr.make (SetField(box, CoreIrRegions.boxValueSlot, value)) IrUnit)
+                | [ AVar _; _ ] ->
+                    CoreIrRegions.withBarrier (newVar (uniqueName "__stored") Local) WasmRegions.Names.regionStore atoms (fun atoms ->
+                        match atoms with
+                        | [ AVar box; value ] -> k (Expr.make (SetField(box, CoreIrRegions.boxValueSlot, value)) IrUnit)
+                        | _ -> internalError "a box set with something other than a box and a value")
                 | _ -> internalError "a box set with something other than a box and a value")
         // The array of a collection literal's items, built in one block (see `CoreIrLowerArrayLiterals`).
         | FunctionCall(name, _, [ items ]) when name = CollectionSyntax.arrayOf && not (scope.Vars.ContainsKey name) ->
@@ -470,9 +474,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | FunctionCall(name, _, args) when Intrinsics.isIntrinsic name && not (scope.Vars.ContainsKey name) ->
             // A compiler intrinsic (only the standard library can call these, and a built-in property such as
             // `s.length` is one): the runtime helper of the same name. A mutable array is read as an array is.
+            // A mutable array, and a list's cells an `MList` changes, aren't on a region yet, so what they are given goes
+            // onto the outermost one.
             let ty = tyOf expr
+            let barrier = if name = Intrinsics.marraySet || name = Intrinsics.listSetHead then WasmRegions.Names.regionStoreOutermost else ""
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
-                k (Expr.make (CallRuntime(Intrinsics.asArrayIntrinsic name, atoms, not (Intrinsics.returnsUnit name))) ty))
+                let call atoms = k (Expr.make (CallRuntime(Intrinsics.asArrayIntrinsic name, atoms, not (Intrinsics.returnsUnit name))) ty)
+                if barrier = "" then call atoms else CoreIrRegions.withBarrier (newVar (uniqueName "__stored") Local) barrier atoms call)
         | FunctionCall(name, _, args) when input.Externs.ContainsKey name && not (scope.Vars.ContainsKey name) ->
             // A foreign function: a direct call to the module's import of it. It takes no context members: it requires
             // only `HostRuntime`, which marks who may call it.

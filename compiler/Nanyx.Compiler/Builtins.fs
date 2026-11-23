@@ -129,8 +129,9 @@ module Intrinsics =
     /// one block.
     let marrayNew = prefix + "marray_new"
     let marrayWrite = prefix + "marray_write"
-    /// The start and the end of a `memory` block. The outermost block running has a region, which every mutable object
-    /// made while it runs is on, and when it ends, the region drops what each object still on it holds and frees it (see
+    /// The start and the end of a `memory` block, which is given the block's result. Each block running has a region,
+    /// which every mutable object made while it is the innermost is on, and when it ends, its result is promoted onto the
+    /// region of the block around it and the region drops what each object still on it holds and frees it (see
     /// `CoreIrRegions` in the backend).
     let regionEnter = prefix + "region_enter"
     let regionExit = prefix + "region_exit"
@@ -258,7 +259,7 @@ module Intrinsics =
           arrayNew, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, Arrays.ofType element, []); Symbol = None; ProvidedBy = None }
           arrayWrite, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ Arrays.ofType element; intTy; element ], unitTy, []); Symbol = None; ProvidedBy = None }
           regionEnter, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
-          regionExit, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
+          regionExit, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, unitTy, []); Symbol = None; ProvidedBy = None }
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }
           listSetTail, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; listOf element ], unitTy, []); Symbol = None; ProvidedBy = None }
           listSetHead, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ listOf element; element ], unitTy, []); Symbol = None; ProvidedBy = None }
