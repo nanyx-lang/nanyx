@@ -144,6 +144,7 @@
     <Compile Include="Features\Memory\MemoryDeclarationTests.fs" />
     <Compile Include="Features\Memory\CellTests.fs" />
     <Compile Include="Features\Memory\RunMRefTests.fs" />
+    <Compile Include="Features\Memory\RegionTests.fs" />
     <Compile Include="Features\Memory\RunMutableCollectionTests.fs" />
     <Compile Include="Features\Memory\MListHandOverTests.fs" />
     <Compile Include="Features\Memory\MListSetTests.fs" />

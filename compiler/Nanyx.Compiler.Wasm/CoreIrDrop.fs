@@ -146,7 +146,8 @@ let helpersUsed (drops: Drops) : string list =
           Helpers.release
           Helpers.retain
           Helpers.free
-      if not drops.ListConcats.IsEmpty then Helpers.listCons ]
+      if not drops.ListConcats.IsEmpty then Helpers.listCons
+      if drops.Types |> List.exists (function CoreIrRegions.RegionBox _ -> true | _ -> false) then WasmRegions.Names.regionUnlink ]
 
 /// The code that drops the value at `load` (which leaves it on the stack), if it is of a type on the heap.
 let private dropField (ty: IrType) (load: string list) =
@@ -173,10 +174,16 @@ let private fieldDrops (tagId: string -> int option) (ty: IrType) : string list 
     match IrType.unfold ty with
     | IrString -> [], []
     | IrRecord fields ->
+        // A box comes off its region's list first (see `CoreIrRegions`).
+        let unlink =
+            match ty with
+            | CoreIrRegions.RegionBox _ -> [ "local.get $p"; $"call ${WasmRegions.Names.regionUnlink}" ]
+            | _ -> []
         [],
-        fields
-        |> List.mapi (fun slot (_, fieldTy) -> dropField fieldTy [ "local.get $p"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ])
-        |> List.concat
+        unlink
+        @ (fields
+           |> List.mapi (fun slot (_, fieldTy) -> dropField fieldTy [ "local.get $p"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ])
+           |> List.concat)
     | IrFunction _
     | IrBox ->
         // The function in the closure's info word drops what it captures.
@@ -435,6 +442,22 @@ let render (tagId: string -> int option) (drops: Drops) : string list =
                     |> List.map (fun line -> "  " + line)
                 "  i32.const 0"
                 ")" ])
+    // The function that drops what a box holds when its region ends, called through the function table (see
+    // `CoreIrRegions`).
+    let contentsDrops =
+        drops.Types
+        |> List.choose (fun ty ->
+            match ty with
+            | CoreIrRegions.RegionBox held ->
+                let fields = match ty with IrRecord fields -> fields | _ -> []
+                let offset = CoreIrLayout.fieldOffset fields CoreIrRegions.boxValueSlot
+                Some (
+                    lines [
+                        $"(func ${CoreIrRegions.dropContentsName ty} (param $p i32) (result i32)"
+                        yield! dropField held [ "local.get $p"; CoreIrLayout.load held offset ] |> List.map (fun line -> "  " + line)
+                        "  i32.const 0"
+                        ")" ])
+            | _ -> None)
     let pending =
         match drops.Types |> List.filter defers with
         | [] -> []
@@ -443,4 +466,4 @@ let render (tagId: string -> int option) (drops: Drops) : string list =
                   $"(global ${droppingName} (mut i32) (i32.const 0))"
                   yield! deferred |> List.map (fun ty -> $"(global ${pendingName ty} (mut i32) (i32.const 0))") ]
               lines (drainFunction deferred) ]
-    typeDrops @ environmentDrops @ listConcats @ pending
+    typeDrops @ environmentDrops @ listConcats @ contentsDrops @ pending
