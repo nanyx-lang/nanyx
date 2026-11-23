@@ -94,12 +94,12 @@ def items = seq({
   println("Yielding 1")
   seq.cons(1, {
     println("Yielding 2")
-    seq.cons(2, { seq.empty() })
+    __seqLast(2)
   })
 })
 ```
 
-`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.flatMap` over the loop's collection. As with a plain `for` loop, that can be anything `Iterable`: a sequence or a range, which is walked as it is, or a list, an array, a set, a map or a type of your own that attaches `toSeq`, which is read through its sequence. A loop in `list.build { ... }` walks a list as it is written, `for xs | x -> yield x`.
+`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `yield` the block ends with has no rest, and is `__seqLast(x)`, the sequence of `x` alone. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.flatMap` over the loop's collection. As with a plain `for` loop, that can be anything `Iterable`: a sequence or a range, which is walked as it is, or a list, an array, a set, a map or a type of your own that attaches `toSeq`, which is read through its sequence. A loop in `list.build { ... }` walks a list as it is written, `for xs | x -> yield x`.
 
 ```nanyx
 def evens = seq {
