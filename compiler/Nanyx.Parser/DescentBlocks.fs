@@ -32,7 +32,8 @@ let internal nextCodeStart (c: Cursor) =
     start
 
 /// That no comment comes between the last token taken and the next code token, where only spaces and line breaks may
-/// be: before a lambda's `}`, but after a body of statements on lines of their own. A comment there is a mistake.
+/// be: before the `}` of a lambda whose body starts on the `{`'s line. A comment there is a mistake. One after a body
+/// of statements, or of arms, on lines of their own is not.
 let internal noCommentBefore (c: Cursor) =
     let next = nextCodeStart c
     if c.Source.Substring(c.LastEnd, max 0 (next - c.LastEnd)).Contains "--" then
@@ -588,7 +589,6 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
             let armsStart = nextCodeStart c
             let written = arms c
             let armsSpan = c.SpanFrom armsStart
-            noCommentBefore c
             skipLayout c
             fun span ->
                 let scrutinees = named |> List.map (fun (name, _) -> Expression.at armsSpan (IdentifierExpr name))
@@ -623,7 +623,6 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
     // `{ | pattern -> ... }`: arms, matched against as many arguments as the most patterns an arm has.
     let matchArms () =
         let written = arms c
-        noCommentBefore c
         skipLayout c
         fun span ->
             let made kind = Expression.at span kind

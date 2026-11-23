@@ -182,7 +182,7 @@ Arguments are evaluated left to right, so in `f(crash("a"), g())` neither `g()` 
 
 ## Recursion not in tail position
 
-```nanyx skip=#2437
+```nanyx
 def length: list(a) -> int = {
   | [] -> 0
   | [_, ...tail] -> 1 + length(tail) -- Linter info: `length` calls itself here, but not in tail position: its result is an operand of `+`
