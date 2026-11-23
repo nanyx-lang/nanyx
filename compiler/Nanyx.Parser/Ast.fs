@@ -576,6 +576,10 @@ module SpreadSyntax =
 module RangeSyntax =
     let builtIn = "__range"
 
+    /// The name the type checker gives a range's bound, the first (`0`) or the last (`1`), once it is inferred, to call
+    /// the function the range is read as with it (see `InferCalls`).
+    let bound (index: int) = $"__rangeBound{index}"
+
     /// A range's start, and its end when it has one.
     let (|Call|_|) (kind: ExpressionKind) =
         match kind with
