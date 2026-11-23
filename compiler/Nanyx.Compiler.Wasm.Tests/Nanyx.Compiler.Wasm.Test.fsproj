@@ -220,6 +220,7 @@
     <Compile Include="Features\StdLib\RunMathSpecialFloatTests.fs" />
     <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
     <Compile Include="Features\StdLib\RunStringJoinTests.fs" />
+    <Compile Include="Features\StdLib\RunStringBuildTests.fs" />
     <Compile Include="Features\StdLib\RunStringSearchTests.fs" />
     <Compile Include="Features\StdLib\RunListInitReplicateTests.fs" />
     <Compile Include="Features\StdLib\RunListSelectTests.fs" />

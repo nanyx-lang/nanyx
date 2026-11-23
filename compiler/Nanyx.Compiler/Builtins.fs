@@ -46,6 +46,15 @@ module Intrinsics =
     /// A new string holding a string's bytes, with `delta` added to each from `low` to `high`, in one allocation: what
     /// changes the case of the ASCII letters.
     let stringShiftBytes = prefix + "string_shift_bytes"
+    /// A new string of a length (empty for a length of 0 or less) whose bytes are not yet written, and `count` bytes of a
+    /// string from `start` written into it at an index for the first time: how the standard library makes a string whose
+    /// length it knows in one allocation, writing each byte once before anything reads the string, as `arrayNew` and
+    /// `arrayWrite` make an array. The standard library checks each stretch is in range.
+    let stringNew = prefix + "string_new"
+    let stringWrite = prefix + "string_write"
+    /// The byte index of the first occurrence of a string in another that starts from one index to another, or -1. An
+    /// empty one is found at the first index, unless that is past the second.
+    let stringIndexBetween = prefix + "string_index_between"
     /// A list with an element added at the front.
     let listCons = prefix + "list_cons"
     /// The square root of a float (NaN for a negative one).
@@ -222,6 +231,9 @@ module Intrinsics =
           stringFromBytes, TypeEnv.mono (TyFunc(Arrays.ofType (SizedInteger.ty SizedInteger.U8), stringTy, []))
           stringJoin, TypeEnv.mono (TyFunc(tuple [ listOf stringTy; stringTy ], stringTy, []))
           stringShiftBytes, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy; intTy ], stringTy, []))
+          stringIndexBetween, TypeEnv.mono (TyFunc(tuple [ stringTy; stringTy; intTy; intTy ], intTy, []))
+          stringNew, TypeEnv.mono (TyFunc(intTy, stringTy, []))
+          stringWrite, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; stringTy; intTy; intTy ], unitTy, []))
           floatSqrt, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatFloor, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatCeil, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
