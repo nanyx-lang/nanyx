@@ -29,7 +29,7 @@ let ``The seq functions are attached to seq, and a pipe finds them`` () =
         clean """
 def doubled = (1..10) \seq.map { * 2 } \seq.toList
 def piped: [Console] () -> list(int) = { (1..3) \map { x -> x + 1 } \toList }
-def firstEvens = (0..) \seq.filter { x -> x % 2 == 0 } \seq.take(3) \Seq.toList
+def firstEvens = (0..) \seq.filter { x -> x % 2 == 0 } \seq.take(3) \Sequence.toList
 """
     Assert.Equal("list(int)", asciiTypeIn typed "doubled")
     Assert.Equal("list(int)", asciiTypeIn typed "firstEvens")
