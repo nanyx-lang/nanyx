@@ -271,6 +271,15 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
             |> List.map fst
         captured @ (ownerMembers @ usedMembers |> List.filter (fun name -> not (List.contains name captured)))
 
+    /// The names of `scope` that `liftedBody`, the body of a lambda that binds `bound` (its parameters, and every name
+    /// a def, pattern or lambda inside it binds), refers to from outside: those it names and does not bind, and those
+    /// it names before it binds them, as the value of a def that shadows the name does (`def x = x + 1`, `mut state =
+    /// #continue(state)`).
+    let capturedFrom (scope: Set<string>) (parameters: Set<string>) (bound: Set<string>) (liftedBody: Expression) =
+        let referenced = ClosureSyntax.references liftedBody |> List.map fst |> Set.ofList
+        let readBeforeBound = Set.difference (SyntaxTree.freeNames liftedBody |> Set.ofList) parameters
+        Set.union (Set.difference referenced bound) readBeforeBound |> Set.intersect scope |> Set.toList
+
     /// The closure block for the lifted function `liftedName` over the given captured names, standing in for `origin`.
     let closureOf (origin: Expression) (liftedName: string) (captured: string list) =
         ClosureSyntax.make origin liftedName (captured |> List.map (fun name -> Expression.synthetic (IdentifierExpr name)))
@@ -353,9 +362,7 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
                     let innerScope = Set.union parameterNames (boundNames body |> Set.ofList) |> Set.add name
                     let liftedBody = liftExpr (Set.union scope innerScope) body |> redirectSelfReferences name liftedName
                     let captured =
-                        Set.difference (ClosureSyntax.references liftedBody |> List.map fst |> Set.ofList) (innerScope |> Set.add liftedName |> Set.add ClosureSyntax.envParameter)
-                        |> Set.intersect scope
-                        |> Set.toList
+                        capturedFrom scope (parameterNames |> Set.add name |> Set.add liftedName) (innerScope |> Set.add liftedName |> Set.add ClosureSyntax.envParameter) liftedBody
                         |> withMembers (passedMembers lambda) body liftedBody
                     lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda lambda args captured liftedBody))))
                     origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda; Local = Some { Name = name; Statement = statement.Span } }
@@ -495,9 +502,7 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
         let liftedBody = liftExpr (Set.union scope innerScope) body
         useMembers <- outerUseMembers
         let captured =
-            Set.difference (ClosureSyntax.references liftedBody |> List.map fst |> Set.ofList) innerScope
-            |> Set.intersect scope
-            |> Set.toList
+            capturedFrom scope parameterNames innerScope liftedBody
             |> withMembers (passedMembers lambda) body liftedBody
         let name = $"__lambda_{counter}"
         counter <- counter + 1
