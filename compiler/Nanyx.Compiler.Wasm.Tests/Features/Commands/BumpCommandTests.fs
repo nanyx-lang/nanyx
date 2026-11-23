@@ -17,7 +17,7 @@ let private published (directory: TempDirectory) =
     directory.Write "index/config.json" """{ "format": 1, "index": "index/" }"""
     directory.Write
         "index/index/acme/acme.util.json"
-        $$"""{ "name": "acme.util", "versions": [{ "version": "1.0.0", "url": "../../artifacts/acme.util-1.0.0.nyxpkg", "sha256": "{{hash}}", "yanked": false, "available": true }] }"""
+        $$"""{ "name": "acme.util", "versions": [{ "version": "1.0.0", "url": "../../artifacts/acme.util-1.0.0.nyxpkg", "sha256": "{{hash}}", "unlisted": false, "available": true }] }"""
     store
 
 [<Fact>]

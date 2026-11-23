@@ -8,7 +8,7 @@ open System.Text.Json
 open System.Text.Json.Nodes
 open System.Threading.Tasks
 
-/// A request to GitHub's REST API, as `nanyx publish` and `nanyx yank` make them.
+/// A request to GitHub's REST API, as `nanyx publish` and `nanyx unlist` make them.
 type GitHubRequest =
     { Method: string
       /// The address, `https://api.github.com/...` or, for an asset's upload, `https://uploads.github.com/...`.
@@ -23,11 +23,11 @@ type GitHubResponse = { Status: int; Body: string }
 /// What sends requests to GitHub, signed in as someone: GitHub itself, or a fake one in tests.
 type GitHubClient = GitHubRequest -> Result<GitHubResponse, string>
 
-/// What `nanyx publish` and `nanyx yank` do on GitHub, through a `GitHubClient`: create a release with its asset, or
+/// What `nanyx publish` and `nanyx unlist` do on GitHub, through a `GitHubClient`: create a release with its asset, or
 /// finish one a publish left part way, and open a pull request on the package index's repository, from a branch of it
 /// for an account that can push to it, and from a fork of it otherwise.
 module GitHubApi =
-    /// The package index's repository, which registrations and yanks are pull requests to.
+    /// The package index's repository, which registrations and unlistings are pull requests to.
     let indexRepository = { Owner = "nanyx-lang"; Name = "packages" }
 
     let private api = "https://api.github.com"

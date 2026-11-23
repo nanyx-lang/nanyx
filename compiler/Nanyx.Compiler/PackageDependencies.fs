@@ -11,11 +11,18 @@ type DependencyEntry =
       Path: string option
       Location: SourceSpan }
 
+/// A lockfile chosen anew from the index: what it locks, a line for each package it locks anew, and a warning
+/// (`NYX0051`) for each version it keeps that the index has unlisted.
+type Relocked =
+    { Lockfile: Lockfile
+      Lines: string list
+      Warnings: Diagnostic list }
+
 /// What `nanyx install` makes: the manifest's new text, and the lockfile that locks the package it added, if that one
-/// is named by its version and the lockfile didn't lock it already, with a line for each package it locks anew.
+/// is named by its version and the lockfile didn't lock it already.
 type Installed =
     { Manifest: string
-      Lockfile: (Lockfile * string list) option }
+      Lockfile: Relocked option }
 
 /// Why the lockfile can't be brought up to date.
 type LockFailure =
@@ -72,10 +79,10 @@ module PackageDependencies =
             |> List.map (fun package -> $"Unlocked {package.Name} {package.Version}, which the build no longer needs")
         locked @ unlocked
 
-    /// The lockfile `manifest` needs, if `lockfile` doesn't satisfy what it asks for, chosen from the index of `store`,
-    /// with a line for each package it locks anew; none when `lockfile` satisfies it. With `frozen`, as
-    /// `nanyx build --locked` asks, a lockfile that doesn't satisfy the manifest is an error, naming what it lacks.
-    let private relock (store: PackageStore) (manifest: Manifest) (lockfile: Lockfile) (frozen: bool) : Result<(Lockfile * string list) option, LockFailure> =
+    /// The lockfile `manifest` needs, if `lockfile` doesn't satisfy what it asks for, chosen from the index of `store`;
+    /// none when `lockfile` satisfies it. With `frozen`, as `nanyx build --locked` asks, a lockfile that doesn't satisfy
+    /// the manifest is an error, naming what it lacks.
+    let private relock (store: PackageStore) (manifest: Manifest) (lockfile: Lockfile) (frozen: bool) : Result<Relocked option, LockFailure> =
         match Resolution.unsatisfied (Resolution.requirements store manifest) lockfile with
         | [] -> Result.Ok None
         | missing when frozen ->
@@ -87,40 +94,58 @@ module PackageDependencies =
             )
         | _ ->
             match Resolution.resolve store manifest lockfile with
-            | Result.Ok resolved -> Result.Ok(Some(resolved, changes lockfile resolved))
+            | Result.Ok resolved ->
+                Result.Ok(
+                    Some
+                        { Lockfile = resolved.Lockfile
+                          Lines = changes lockfile resolved.Lockfile
+                          Warnings = resolved.Unlisted |> List.map (fun (name, version) -> Resolution.lockedUnlisted name version) }
+                )
             | Result.Error(Conflict diagnostic) -> Result.Error(NoVersions diagnostic)
             | Result.Error(IndexUnreadable message) -> Result.Error(LockErrors [ message ])
 
-    /// Downloads into the cache of `store` each package `lockfile` locks that isn't there yet.
-    let private download (store: PackageStore) (lockfile: Lockfile) : Result<unit, LockFailure> =
-        match lockfile.Packages |> List.map (PackageIndex.download store) |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
-        | [] -> Result.Ok()
+    /// Downloads into the cache of `store` each package `lockfile` locks that isn't there yet, with a warning for each
+    /// of those the index has unlisted.
+    let private download (store: PackageStore) (lockfile: Lockfile) : Result<Diagnostic list, LockFailure> =
+        let fetched = lockfile.Packages |> List.map (fun locked -> locked, PackageIndex.fetch store locked)
+        match fetched |> List.choose (function _, Result.Error message -> Some message | _, Result.Ok _ -> None) with
+        | [] ->
+            fetched
+            |> List.choose (function
+                | locked, Result.Ok(_, Some indexed) when indexed.Unlisted -> Some(Resolution.lockedUnlisted locked.Name locked.Version)
+                | _ -> None)
+            |> Result.Ok
         | failed -> Result.Error(LockErrors failed)
 
     /// Brings the lockfile of the package whose manifest is at `manifestPath` up to date, as a build does before it reads
     /// the lockfile: when the manifest asks for something the lockfile doesn't satisfy (a new dependency, a changed
     /// requirement), chooses versions again from the index of `store`, keeping those still allowed, writes the lockfile and
-    /// downloads what it locks. Gives a line for each package it locks anew, none when it changes nothing. With `frozen`,
-    /// as `--locked` asks, a lockfile that doesn't satisfy the manifest is an error. A manifest or lockfile that doesn't
-    /// read is left for the build to report.
-    let update (store: PackageStore) (manifestPath: string) (frozen: bool) : Result<string list, LockFailure> =
+    /// downloads what it locks. Gives a line for each package it locks anew, none when it changes nothing, and a warning
+    /// for each version it keeps that the index has unlisted. With `frozen`, as `--locked` asks, a lockfile that doesn't
+    /// satisfy the manifest is an error. A manifest or lockfile that doesn't read is left for the build to report.
+    let update (store: PackageStore) (manifestPath: string) (frozen: bool) : Result<Pulled, LockFailure> =
+        let unchanged = { Lines = []; Warnings = [] }
         match Manifest.read manifestPath, Lockfile.read (Lockfile.pathIn (Path.GetDirectoryName(Path.GetFullPath manifestPath))) with
         | Result.Ok manifest, Result.Ok lockfile ->
             relock store manifest (defaultArg lockfile Lockfile.empty) frozen
             |> Result.bind (function
-                | None -> Result.Ok []
-                | Some(resolved, lines) ->
-                    File.WriteAllText(Lockfile.pathIn manifest.Root, Lockfile.write resolved)
-                    download store resolved |> Result.map (fun () -> lines))
-        | _ -> Result.Ok []
+                | None -> Result.Ok unchanged
+                | Some relocked ->
+                    File.WriteAllText(Lockfile.pathIn manifest.Root, Lockfile.write relocked.Lockfile)
+                    download store relocked.Lockfile
+                    |> Result.map (fun warnings ->
+                        { Lines = relocked.Lines
+                          Warnings = List.distinct (relocked.Warnings @ warnings) }))
+        | _ -> Result.Ok unchanged
 
     /// Pulls the dependencies of the package whose manifest is at `manifestPath`, from `store`: brings its lockfile up to
     /// date (see `update`), downloads into the cache each package `nanyx.lock` locks that isn't there yet, checking each
     /// against its SHA-256, then checks that every dependency is there. Gives a line for each package it locks anew, then
     /// one for each dependency, as `acme.util 0.3.0 (../util)` or `acme.web 1.2.0 (downloaded)`. Or what is wrong: no
     /// versions that satisfy every dependency, a download that fails, or anything a build would find wrong with the
-    /// dependencies.
-    let pull (store: PackageStore) (manifestPath: string) : Result<string list, LockFailure> =
+    /// dependencies. With them is a warning for each version it locks that the index has unlisted, when it read the index
+    /// for it.
+    let pull (store: PackageStore) (manifestPath: string) : Result<Pulled, LockFailure> =
         let root = Path.GetDirectoryName(Path.GetFullPath manifestPath)
         let before = Lockfile.read (Lockfile.pathIn root) |> Result.map (Option.defaultValue Lockfile.empty) |> Result.defaultValue Lockfile.empty
         let wasCached = before.Packages |> List.filter (fun locked -> Directory.Exists(PackageStore.directoryOf store locked.Name locked.Version))
@@ -130,8 +155,8 @@ module PackageDependencies =
             |> Result.map (Option.defaultValue Lockfile.empty)
             |> Result.mapError LockErrors
             |> Result.bind (fun lockfile -> download store lockfile)
-            |> Result.bind (fun () -> Package.ofManifestFrom store manifestPath |> Result.mapError LockErrors)
-            |> Result.map (fun package ->
+            |> Result.bind (fun warnings -> Package.ofManifestFrom store manifestPath |> Result.mapError LockErrors |> Result.map (fun package -> package, warnings))
+            |> Result.map (fun (package, warnings) ->
                 let root = package.Manifest.Root
                 let listed =
                     match reached package.Dependencies with
@@ -148,7 +173,8 @@ module PackageDependencies =
                                 else
                                     PackageModules.relativePath root dependency.Manifest.Root
                             $"{name} {version} ({where})")
-                locked @ listed))
+                { Lines = locked.Lines @ listed
+                  Warnings = List.distinct (locked.Warnings @ warnings) }))
 
     /// The name of the package whose manifest is in `directory`, or why there is none.
     let private packageIn (directory: string) : Result<string, string> =
@@ -184,8 +210,8 @@ module PackageDependencies =
         | _, None -> text
 
     /// The lockfile the manifest `text`, the new text of the one at `manifestPath`, needs, chosen from the index of
-    /// `store`, with a line for each package it locks anew; none if the lockfile beside it satisfies it already.
-    let private lockFor (store: PackageStore) (manifestPath: string) (text: string) : Result<(Lockfile * string list) option, LockFailure> =
+    /// `store`; none if the lockfile beside it satisfies it already.
+    let private lockFor (store: PackageStore) (manifestPath: string) (text: string) : Result<Relocked option, LockFailure> =
         match Manifest.check manifestPath text, Lockfile.read (Lockfile.pathIn (Path.GetDirectoryName manifestPath)) with
         | Result.Ok manifest, Result.Ok lockfile -> relock store manifest (defaultArg lockfile Lockfile.empty) false
         | Result.Error problems, _ -> Result.Error(LockErrors(problems |> List.map Manifest.describe))

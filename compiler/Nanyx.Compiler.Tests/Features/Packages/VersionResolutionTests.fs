@@ -127,7 +127,7 @@ let private indexAndApp (packages: (string * string list) list) (dependencies: s
 
 let private resolveIn (package: TempPackage) (lockfile: Lockfile) =
     let manifest = okOf (Manifest.read (package.Path "app/app.nyxp") |> Result.mapError (List.map Manifest.describe))
-    Resolution.resolve (storeOf package) manifest lockfile
+    Resolution.resolve (storeOf package) manifest lockfile |> Result.map _.Lockfile
 
 let private lockedVersions (resolved: Result<Lockfile, ResolutionError>) =
     match resolved with
@@ -159,28 +159,29 @@ let ``Resolution locks each package the build reaches, with its hash and depende
     | other -> failwith $"{other}"
 
 [<Fact>]
-let ``A yanked version is skipped for a new resolution, but kept when it is already locked`` () =
-    use package =
-        new TempPackage(
-            indexAndApp [ "acme.core", [ listed "1.0.0" [] ""; listed "1.1.0" [] """, "yanked": true""" ] ] [ """(package = "acme.core", version = "1.0")""" ]
-        )
-    Assert.Equal<string list>([ "acme.core 1.0.0" ], lockedVersions (resolveIn package Lockfile.empty))
-    let locked = { Name = "acme.core"; Version = version "1.1.0"; Sha256 = hashOf 'a'; Dependencies = [] }
-    Assert.Equal<string list>([ "acme.core 1.1.0" ], lockedVersions (resolveIn package { Packages = [ locked ] }))
+let ``An unlisted version is skipped for a new resolution, but kept when it is already locked, as an older index's yanked one is`` () =
+    for field in [ "unlisted"; "yanked" ] do
+        use package =
+            new TempPackage(
+                indexAndApp [ "acme.core", [ listed "1.0.0" [] ""; listed "1.1.0" [] $", \"{field}\": true" ] ] [ """(package = "acme.core", version = "1.0")""" ]
+            )
+        Assert.Equal<string list>([ "acme.core 1.0.0" ], lockedVersions (resolveIn package Lockfile.empty))
+        let locked = { Name = "acme.core"; Version = version "1.1.0"; Sha256 = hashOf 'a'; Dependencies = [] }
+        Assert.Equal<string list>([ "acme.core 1.1.0" ], lockedVersions (resolveIn package { Packages = [ locked ] }))
 
 [<Fact>]
-let ``A version missing from GitHub is never chosen, and a yanked one only when locked`` () =
+let ``A version missing from GitHub is never chosen, and an unlisted one only when locked`` () =
     use package =
         new TempPackage(
             indexAndApp
-                [ "acme.core", [ listed "1.0.0" [] """, "yanked": true"""; listed "1.1.0" [] """, "available": false""" ] ]
+                [ "acme.core", [ listed "1.0.0" [] """, "unlisted": true"""; listed "1.1.0" [] """, "available": false""" ] ]
                 [ """(package = "acme.core", version = "1.0")""" ]
         )
     let diagnostic = conflictOf (resolveIn package Lockfile.empty)
     Assert.Equal(DiagnosticCodes.VersionConflict.Code, diagnostic.Code)
     Assert.Equal("Version conflict 'app'", Diagnostics.headline diagnostic)
     Assert.Equal(
-        "Because acme.core 1.0.0 is yanked and acme.core 1.1.0 is missing from GitHub, no version of acme.core can be used.\n"
+        "Because acme.core 1.0.0 is unlisted and acme.core 1.1.0 is missing from GitHub, no version of acme.core can be used.\n"
         + "And because app depends on acme.core 1.0, the dependencies can't all be satisfied.",
         diagnostic.Message
     )
