@@ -27,10 +27,6 @@ can't do yet:
 - **A type that provides a library's context itself.** The design says such a type wins over walking its description,
   but a walker has no way to ask whether a field's type, which it never learns, has an instance, so for now a type is
   written another way by a decoder or encoder built by hand.
-- **A compiler bug the walker works around:** `map.map` at a boxed type
-  ([#2379](https://github.com/nanyx-lang/nanyx/issues/2379)). `Typed` for an imported function whose result names one
-  of its package's aliases, which held back `encodeValue: [Typed(a)] a -> Json`, is fixed
-  ([#2380](https://github.com/nanyx-lang/nanyx/issues/2380)).
 
 # Decisions
 
