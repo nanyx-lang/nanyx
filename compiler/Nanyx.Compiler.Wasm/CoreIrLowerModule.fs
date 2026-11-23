@@ -90,7 +90,7 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
             | Error _ when not messages.IsEmpty ->
                 let trap = FunctionLowering(input, definitions, subst, key, request)
                 try
-                    let func = trap.Trap key.Definition functionName key.TypeArguments messages
+                    let func = trap.Trap how key.Definition functionName key.TypeArguments messages
                     Ok (func, finish func)
                 with
                 | CannotLower reason -> Error (NotYet reason, None)
