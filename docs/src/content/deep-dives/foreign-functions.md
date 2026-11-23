@@ -36,13 +36,17 @@ in Work in progress. They are what [hosts](./hosts) are built on.
 - **The runtime's own imports.** What WASI preview 1 lacks, the `nanyx` runtime supplies under a module name of its
   own, `nanyx:<area>`. A component, which `nanyx build` writes, uses the standard WASI 0.3 interface instead
   ([Components](./components)). A core module that imports one runs under `nanyx run`, and fails to load under another
-  WASI runtime, which is accurate: it needs what only this runtime gives it. There are two. One is `nanyx:http`
+  WASI runtime, which is accurate: it needs what only this runtime gives it. There are three. One is `nanyx:http`
   (`Nanyx.Runtime.HttpImport`), which the console host implements `Http` on in a core module; in a component,
   `Http` is on `wasi:http/client`, with no change to programs, since they see only `Http`:
-  - `send(request: i32, length: i32, kind: i32) -> i32` makes the request written in the `length` bytes at `request`
-    with .NET's `HttpClient`, blocking until it is answered or its timeout passes, keeps the answer, writes what kind
-    of answer it is at `kind` (0 a response, 1 a timeout, 2 a connection that failed, 3 a URL that isn't an absolute
-    `http` or `https` one, 4 anything else) and gives the answer's length in bytes;
+  - `start(request: i32, length: i32) -> i32` starts the request written in the `length` bytes at `request` with
+    .NET's `HttpClient`, and gives a handle to it at once;
+  - `poll(handle: i32, kind: i32) -> i32` gives -1 while the request is in flight. Once it is answered or its timeout
+    has passed, it keeps the answer, writes what kind of answer it is at `kind` (0 a response, 1 a timeout, 2 a
+    connection that failed, 3 a URL that isn't an absolute `http` or `https` one, 4 anything else), gives the answer's
+    length in bytes, and is done with the handle;
+  - `send(request: i32, length: i32, kind: i32) -> i32` makes the request, blocking until it is answered, and keeps
+    the answer as `poll` does, for a module built before `start`;
   - `receive(destination: i32)` copies the kept answer to `destination`, where the program has allocated that many
     bytes, and forgets it.
 
@@ -50,10 +54,15 @@ in Work in progress. They are what [hosts](./hosts) are built on.
   and each header's name and value, then the body as it is. A response comes back the same way: the status, the number
   of headers, each header's name, in lower case, and value (several values of one header joined with `, `), then the
   body; a failed connection's and another failure's answer is the message saying why. The answer is kept per store,
-  so between the two calls nothing else may send. Two calls rather than one let the program allocate the answer's
+  so between a `poll` that gives a length and `receive` nothing else may poll or send. Two calls rather than one let the program allocate the answer's
   room itself, with the allocator every object uses, rather than the runtime writing into memory it doesn't own.
 
-  The other is `nanyx:serve` (`Nanyx.Runtime.WasmServer`), which the HTTP host answers requests on
+  Another is `nanyx:async` (`Nanyx.Runtime.AsyncImport`), the wait the scheduler makes when every task is waiting on
+  the host ([Async](./async#tasks-and-scopes)): `wait(timeout: i32)` blocks until a request has been answered or
+  `timeout` milliseconds have passed, or with -1 until a request has been answered. A request answered before the wait
+  makes it return at once; the tasks then poll again.
+
+  The third is `nanyx:serve` (`Nanyx.Runtime.WasmServer`), which the HTTP host answers requests on
   ([#1786](https://github.com/nanyx-lang/nanyx/issues/1786)): `requestLength() -> i32` and `request(destination: i32)`
   give the instance the request it was started for, written as above with a timeout of 0, and
   `respond(response: i32, length: i32)` gives the runtime the response. `nanyx run` serves a program whose module

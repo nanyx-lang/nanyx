@@ -63,7 +63,9 @@ module WasmServer =
                 use linker = new Linker(engine)
                 use store = new Store(engine)
                 linker.DefineWasi()
-                HttpImport.define linker
+                let waits = AsyncImport.Waits()
+                AsyncImport.define linker waits
+                HttpImport.define linker waits
                 linker.DefineFunction(moduleName, "requestLength", Func<int>(fun () -> request.Length))
                 linker.DefineFunction(
                     moduleName,

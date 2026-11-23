@@ -634,7 +634,8 @@ let freePort () =
     port
 
 /// A server on a port of its own on this machine, for as long as it is held, that answers each request with what
-/// `answer` makes of its method, path, headers and body: a status, headers and a body.
+/// `answer` makes of its method, path, headers and body: a status, headers and a body. It answers each on a thread of
+/// its own, so `answer` may wait for another request.
 type TestServer(answer: string -> string -> (string * string) list -> string -> int * (string * string) list * string) =
     let port = freePort ()
     let listener = new Net.HttpListener()
@@ -647,18 +648,21 @@ type TestServer(answer: string -> string -> (string * string) list -> string -> 
                 try
                     while listener.IsListening do
                         let context = listener.GetContext()
-                        let request = context.Request
-                        let headers = [ for name in request.Headers.AllKeys -> name.ToLowerInvariant(), request.Headers.[name] ]
-                        let body = (new StreamReader(request.InputStream)).ReadToEnd()
-                        let status, answerHeaders, text = answer request.HttpMethod request.Url.AbsolutePath headers body
-                        try
-                            context.Response.StatusCode <- status
-                            for name, value in answerHeaders do
-                                context.Response.Headers.Add(name, value)
-                            let bytes = Text.Encoding.UTF8.GetBytes(text: string)
-                            context.Response.OutputStream.Write(bytes, 0, bytes.Length)
-                            context.Response.Close()
-                        with _ -> ()
+                        // Each request is answered on a thread of its own, so that several can be in flight at once.
+                        Threading.ThreadPool.QueueUserWorkItem(fun _ ->
+                            try
+                                let request = context.Request
+                                let headers = [ for name in request.Headers.AllKeys -> name.ToLowerInvariant(), request.Headers.[name] ]
+                                let body = (new StreamReader(request.InputStream)).ReadToEnd()
+                                let status, answerHeaders, text = answer request.HttpMethod request.Url.AbsolutePath headers body
+                                context.Response.StatusCode <- status
+                                for name, value in answerHeaders do
+                                    context.Response.Headers.Add(name, value)
+                                let bytes = Text.Encoding.UTF8.GetBytes(text: string)
+                                context.Response.OutputStream.Write(bytes, 0, bytes.Length)
+                                context.Response.Close()
+                            with _ -> ())
+                        |> ignore
                 with _ -> ()),
             IsBackground = true)
     do serving.Start()

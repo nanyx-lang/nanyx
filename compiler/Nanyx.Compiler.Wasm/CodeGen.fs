@@ -1016,11 +1016,15 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             for helper in WasmScheduler.dependencies do
                 usedHelpers.Add helper |> ignore
             context.IndirectCall(TaskLowering.resumeTypeOf "i32")
+            // The host's wait is a function value of an `I32`: its closure and the timeout.
+            context.IndirectCall([ "i32"; "i32" ], "i32")
             let scheduler =
                 WasmScheduler.helpers
                     (context.FunctionSlot WasmScheduler.Names.waitResume 1)
                     (context.FunctionSlot WasmScheduler.Names.scopeExitResume 1)
+                    (context.FunctionSlot WasmScheduler.Names.hostWaitResume 1)
                     (TaskLowering.resumeTypeName "i32")
+                    (indirectTypeName [ "i32"; "i32" ] "i32")
             TaskLowering.globals @ yielding @ scheduler |> String.concat "\n"
 
     let support = supportFunctions (definitionFunctions @ Option.toList startFunction) tagIdMap functionTable usedHelpers

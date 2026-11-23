@@ -1,0 +1,21 @@
+--| How a host's code waits on the host without holding up the program's other tasks: it starts what it
+  waits for, such as a request, and looks whether it has finished, waiting on the host between looks.
+  Every function requires [`HostRuntime`], so only a host can call them.
+module host.async
+
+import (
+  nanyx/async as (Async)
+  nanyx/host.runtime
+)
+
+--| Waits until the scheduler has made the host's wait, then gives back: the code that called it
+  looks again at what it waits for. The scheduler makes it when every task is waiting, by calling
+  `wait`, the host's function that blocks until something the host started may have finished, with
+  the shortest timeout in milliseconds that the tasks waiting gave it, or -1 when none gave one.
+  `timeout` is this task's: how long it can wait before it must look again, or -1 for as long as
+  it takes.
+export def waitOnHost
+  : [Async, HostRuntime] ([HostRuntime] I32 -> ()), I32 -> ()
+  = { wait, timeout ->
+    __nanyx_host_wait(wait, timeout)
+  }

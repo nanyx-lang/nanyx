@@ -1,46 +1,89 @@
 --| The `nanyx` runtime's own `nanyx:http`, which the hosts' core roots send requests through, since
-  WASI preview 1 has no networking.
+  WASI preview 1 has no networking, and its `nanyx:async`, whose wait lets the program's other tasks run
+  while a request is in flight or a task sleeps.
 export module runtime
 
 import (
+  nanyx/async as (Async)
+  nanyx/host.async as (waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx.http.core/client as (HttpError)
   nanyx.http.core/request as (Request)
   nanyx.http.core/response as (Response)
   nanyx.http.core/wire as (readResponse, writeRequest)
+  preview1 as (millisecondsOn)
 )
 
-@extern("nanyx:http", "send")
-def httpSend: [HostRuntime] I32, I32, I32 -> I32
+@extern("nanyx:http", "start")
+def httpStart: [HostRuntime] I32, I32 -> I32
+
+@extern("nanyx:http", "poll")
+def httpPoll: [HostRuntime] I32, I32 -> I32
 
 @extern("nanyx:http", "receive")
 def httpReceive: [HostRuntime] I32 -> ()
 
+@extern("nanyx:async", "wait")
+def runtimeWait: [HostRuntime] I32 -> ()
+
 -- A request is passed to `nanyx:http` written as `nanyx.http.core/wire` writes it, and its response comes
--- back written the same way. What kind of answer `send` had, a response or why there is none, it writes
--- at the address it is given.
+-- back written the same way. `start` starts it and gives a handle to it, and `poll` gives -1 while it is
+-- in flight, and once it is answered, the answer's length, writing what kind of answer it had, a response
+-- or why there is none, at the address it is given.
 
---| Sends `request` through `nanyx:http`, and gives its response, or why there is none.
-export def sendThroughRuntime: [HostRuntime] Request -> #some(Response) | HttpError = { request ->
-  def wire = writeRequest(request)
-  def kind = allocate(4)
-  def length = httpSend(addressOf(wire), byteLength(wire), kind)
-  keepAlive(wire)
-  def buffer = allocate(length + 1)
-  httpReceive(buffer)
-  def answer = stringAt(buffer, length)
-  free(buffer)
-  def answered = readI32(kind)
-  free(kind)
+--| Waits until the runtime has answered the request of `handle`, while the program's other tasks run,
+  and gives the answer's length, with its kind at `kind`.
+def answerOf: [Async, HostRuntime] I32, I32 -> I32 = { handle, kind ->
+  def length = httpPoll(handle, kind)
 
-  match answered
-    | 0 ->
-      match readResponse(answer)
-        | #some(response) -> #some(response)
-        | #malformed -> #other("the runtime's answer to the request was malformed")
-    | 1 -> #timeout
-    | 2 -> #connectionFailed(answer)
-    | 3 -> #invalidUrl
-    | _ -> #other(answer)
+  if length >= 0 then length else
+    waitOnHost(runtimeWait, -1)
+    answerOf(handle, kind)
+}
+
+--| Sends `request` through `nanyx:http`, and gives its response, or why there is none. The program's other
+  tasks run while it is in flight.
+export def sendThroughRuntime
+  : [Async, HostRuntime] Request -> #some(Response) | HttpError
+  = { request ->
+    def wire = writeRequest(request)
+    def handle = httpStart(addressOf(wire), byteLength(wire))
+    keepAlive(wire)
+    def kind = allocate(4)
+    def length = answerOf(handle, kind)
+    def buffer = allocate(length + 1)
+    httpReceive(buffer)
+    def answer = stringAt(buffer, length)
+    free(buffer)
+    def answered = readI32(kind)
+    free(kind)
+
+    match answered
+      | 0 ->
+        match readResponse(answer)
+          | #some(response) -> #some(response)
+          | #malformed -> #other("the runtime's answer to the request was malformed")
+      | 1 -> #timeout
+      | 2 -> #connectionFailed(answer)
+      | 3 -> #invalidUrl
+      | _ -> #other(answer)
+  }
+
+--| Waits until `ms` milliseconds have passed on the monotonic clock, while the program's other tasks
+  run: until then, it waits on the runtime for no longer than is left.
+export def sleepOnRuntime: [Async, HostRuntime] int -> () = { ms ->
+  sleepUntil(millisecondsOn(1) + ms)
+}
+
+--| Waits until the monotonic clock reads `deadline`.
+def sleepUntil: [Async, HostRuntime] int -> () = { deadline ->
+  def left = deadline - millisecondsOn(1)
+
+  if left <= 0 then () else
+    match int.toI32(left)
+      | #some(timeout) -> waitOnHost(runtimeWait, timeout)
+      | #outOfRange -> waitOnHost(runtimeWait, 2_000_000_000)
+
+    sleepUntil(deadline)
 }

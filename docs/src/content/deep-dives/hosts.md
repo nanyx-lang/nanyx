@@ -155,10 +155,11 @@ in progress.
   level has it, and supplies it to the start's call of `run` as the runtime supplies `HostRuntime`; an unannotated def
   that calls something requiring it infers it; and an annotated def that doesn't declare it is `NYX0211`. A memberless
   context has nothing to pass at run time, so `Async` costs nothing in the generated code. `nanyx.http.core`'s
-  `sendRequest` and `nanyx.fs`'s members, and the functions written on them, require it. Waits are blocking host
-  calls, each in its instance's own thread: the console host has one instance, and the HTTP host runs each request's
-  instance on a thread of its own (`WasmServer.serve`), so a handler that waits on an outbound request holds only its
-  own (see [Async](./async)).
+  `sendRequest`, `Clock`'s `sleep` and `nanyx.fs`'s members, and the functions written on them, require it. A request
+  and a sleep stop the task that waits while the program's other tasks run; a file's functions are blocking host
+  calls, which hold the instance's thread. Each instance has a thread of its own: the console host has one instance,
+  and the HTTP host runs each request's instance on a thread of its own (`WasmServer.serve`), so a handler that waits
+  on an outbound request holds only its own (see [Async](./async)).
 - **`Http`** is declared in the shipped package `nanyx.http.core`, which the console host depends on; its prelude
   re-exports `Http` and `HttpError`, with `Request`, `Method` and `Response`. Its one member, `sendRequest`, is written
   on the runtime's own import `nanyx:http`, not on WASI, which has no networking (see
@@ -169,11 +170,14 @@ in progress.
   `systemBits` in the host library `nanyx.wasi` (`nanyx.wasi/preview1`), which their packages depend on.
   `random.seeded` is the library's own `Random`, SplitMix64 over a `mut` cell, so a test host, when there is one, can
   give its tests a fixed seed by running each under it.
-- **`Clock`** is declared in the standard library's `nanyx/clock`, with `now`, Unix milliseconds, and `ticks`,
-  milliseconds from a start the host chooses that never go backwards; both hosts' preludes re-export it. Each host
-  writes both members on WASI's `clock_time_get`, `now` on the realtime clock (0) and `ticks` on the monotonic one (1),
-  each giving nanoseconds in 8 bytes of the host's state that `readI64` reads and the host divides by a million. It
-  has no `sleep`: waiting belongs with `Async`.
+- **`Clock`** is declared in the standard library's `nanyx/clock`, with `now`, Unix milliseconds, `ticks`,
+  milliseconds from a start the host chooses that never go backwards, and `sleep`, which requires `Async`; both hosts'
+  preludes re-export it. Each host writes `now` and `ticks` on WASI's `clock_time_get`, `now` on the realtime clock (0)
+  and `ticks` on the monotonic one (1), each giving nanoseconds in 8 bytes of the host's state that `readI64` reads and
+  the host divides by a million. `sleep` is `nanyx.wasi/runtime`'s `sleepOnRuntime`, which waits on the runtime's
+  `nanyx:async` for what is left of it until the monotonic clock has passed its deadline, so the program's other tasks
+  run meanwhile. A sleep is a member, not a function of `nanyx/clock`, so that a test's `use Clock(...)` decides how
+  long it takes, as it decides the time.
 - **The HTTP host.** `packages/nanyx.http` declares itself a host with `host = (root = "http.host", prelude =
   "http.prelude", settings = (port = 3000))`. Its `run` takes the handler, `use`s an `Http` written on `nanyx:http` as
   the console host's is, takes the request from the runtime, calls the handler, and gives the runtime the response; a
@@ -189,7 +193,8 @@ in progress.
   and `use`s a `Console`, a `Random` and a `Clock` written on imports of its own, `nanyx:playground` `write`,
   `writeError` (each given the address and byte length of the text in the module's memory), `randomBits` (64 bits, as
   an `i64`), `now` and `ticks` (milliseconds, as `i64`s), and `readLine` and `takeLine`, which a page implements, not
-  on WASI. Its `Console`'s `readLine` calls the page's `readLine`, which waits for a line and gives its length in
+  on WASI. Its `Clock`'s `sleep` reads `ticks` until the time has passed; no code can call it yet, since the host
+  provides no `Async`. Its `Console`'s `readLine` calls the page's `readLine`, which waits for a line and gives its length in
   bytes, or -1 when the input has ended (`#endOfInput`), then allocates a buffer that long and has `takeLine`
   write the line into it; its `readToEnd` reads lines until the input ends, each followed by a line break
   ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)). Its prelude re-exports `Console`

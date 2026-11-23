@@ -9,8 +9,12 @@
 /// has a scope of its own for the tasks it starts directly, so it finishes only once they have; the main task, which
 /// runs the program's own code, is made when something first needs it, and freed when its outermost scope ends.
 ///
-/// The queue is first in, first out, so the order tasks run in is fixed. A task that waits, for another task or for a
-/// scope's tasks, stops and goes to the back of the queue, and looks again when it is resumed.
+/// The queue is first in, first out, so the order tasks run in is fixed. A task that waits, for another task, for a
+/// scope's tasks or on the host, stops and goes to the back of the queue, and looks again when it is resumed. A task that
+/// looks again and is still waiting has stalled. When every task in the queue has stalled since the last one that didn't,
+/// nothing can happen until the host has done something, so if a task waits on the host, the scheduler makes the host's
+/// wait: the function the last task to wait on it gave, for the shortest timeout any gave. Then each task that waited on
+/// the host carries on, and looks again at what it waits for.
 module internal Transpiler.Wasm.WasmScheduler
 
 open Transpiler.Wasm.WasmRuntime
@@ -23,6 +27,7 @@ module Names =
     let taskResult = NyxCompiler.Intrinsics.taskResult
     let scopeEnter = NyxCompiler.Intrinsics.scopeEnter
     let scopeExit = NyxCompiler.Intrinsics.scopeExit
+    let hostWait = NyxCompiler.Intrinsics.hostWait
     /// The task running, and the main task, the program's own code.
     let running = "__nanyx_task"
     let main = "__nanyx_task_main"
@@ -35,9 +40,25 @@ module Names =
     let runOthers = TaskLowering.Names.runOthers
     /// Frees the main task when it holds no scope.
     let settle = TaskLowering.Names.settleMain
-    /// The resume entries of the two waits.
+    /// The resume entries of the three waits.
     let waitResume = "__nanyx_task_wait_resume"
     let scopeExitResume = "__nanyx_scope_exit_resume"
+    let hostWaitResume = "__nanyx_host_wait_resume"
+    /// How many tasks the queue holds.
+    let queued = "__nanyx_task_queued"
+    /// Whether the task just resumed stalled, and how many have stalled in a row.
+    let stalled = "__nanyx_task_stalled"
+    let stalls = "__nanyx_task_stalls"
+    /// The host's wait that the scheduler makes next, if a task waits on the host (0 if none does), the shortest timeout
+    /// a task gave it, in milliseconds (-1 for none), and how many it has made: a task that waits on the host carries on
+    /// once it has made one more.
+    let hostWaiter = "__nanyx_host_waiter"
+    let hostTimeout = "__nanyx_host_timeout"
+    let hostRound = "__nanyx_host_round"
+    /// Makes the host's wait, when every task has stalled.
+    let idle = "__nanyx_task_idle"
+    /// Counts a task that stalled, or starts the count again.
+    let countStall = "__nanyx_task_count_stall"
     /// The helpers they share.
     let enqueue = "__nanyx_task_enqueue"
     let dequeue = "__nanyx_task_dequeue"
@@ -49,10 +70,11 @@ module Names =
     let leave = "__nanyx_scope_leave"
 
 /// The names `nanyx/async` calls: a module that calls one has the scheduler.
-let intrinsics = set [ Names.taskStart; Names.taskFinish; Names.taskWait; Names.taskResult; Names.scopeEnter; Names.scopeExit ]
+let intrinsics =
+    set [ Names.taskStart; Names.taskFinish; Names.taskWait; Names.taskResult; Names.scopeEnter; Names.scopeExit; Names.hostWait ]
 
 /// The intrinsics that can stop the task running: split points (see `CoreIrSplitPoints`).
-let waits = set [ Names.taskWait; Names.scopeExit ]
+let waits = set [ Names.taskWait; Names.scopeExit; Names.hostWait ]
 
 /// A task's fields, by their offsets.
 let private state = 0
@@ -80,9 +102,10 @@ let private parent = 0
 let private first = 4
 let private scopeSize = 8
 
-/// The helpers' code, given the function table slots of the two waits' resume entries, and the indirect type of a
-/// function of one `i32` that gives one, as a task's function and a resume entry are.
-let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) : string list =
+/// The helpers' code, given the function table slots of the three waits' resume entries, the indirect type of a
+/// function of one `i32` that gives one, as a task's function and a resume entry are, and that of a function of two,
+/// as the host's wait is, which is called with its closure and the timeout.
+let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (hostWaitResumeSlot: int) (oneToOne: string) (twoToOne: string) : string list =
     let alloc = Helpers.alloc
     let free = Helpers.free
     let zeroed (local: string) (size: int) =
@@ -107,6 +130,8 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
         [ $"(func ${name} (param $frame i32) (result i32)"
           yield! stillWaiting
           "if"
+          "  i32.const 1"
+          $"  global.set ${Names.stalled}"
           "  local.get $frame"
           $"  global.set ${TaskLowering.Names.suspended}"
           "  i32.const 1"
@@ -122,7 +147,13 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
     [ [ $"(global ${Names.running} (mut i32) (i32.const 0))"
         $"(global ${Names.main} (mut i32) (i32.const 0))"
         $"(global ${Names.queueHead} (mut i32) (i32.const 0))"
-        $"(global ${Names.queueTail} (mut i32) (i32.const 0))" ]
+        $"(global ${Names.queueTail} (mut i32) (i32.const 0))"
+        $"(global ${Names.queued} (mut i32) (i32.const 0))"
+        $"(global ${Names.stalled} (mut i32) (i32.const 0))"
+        $"(global ${Names.stalls} (mut i32) (i32.const 0))"
+        $"(global ${Names.hostWaiter} (mut i32) (i32.const 0))"
+        $"(global ${Names.hostTimeout} (mut i32) (i32.const -1))"
+        $"(global ${Names.hostRound} (mut i32) (i32.const 0))" ]
       [ $"(func ${Names.current} (result i32) (local $t i32)"
         $"global.get ${Names.running}"
         "local.tee $t"
@@ -140,6 +171,10 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
         "local.get $t"
         ")" ]
       [ $"(func ${Names.enqueue} (param $t i32)"
+        $"global.get ${Names.queued}"
+        "i32.const 1"
+        "i32.add"
+        $"global.set ${Names.queued}"
         "local.get $t"
         "i32.const 0"
         $"i32.store offset={next}"
@@ -159,6 +194,10 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
         $"global.get ${Names.queueHead}"
         "local.tee $t"
         "if"
+        $"global.get ${Names.queued}"
+        "i32.const 1"
+        "i32.sub"
+        $"global.set ${Names.queued}"
         "local.get $t"
         $"i32.load offset={next}"
         $"global.set ${Names.queueHead}"
@@ -359,6 +398,74 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
           Names.waitResume
           [ "local.get $frame"; "i32.load offset=16"; $"i32.load offset={state}"; $"i32.const {finished}"; "i32.ne" ]
           []
+      // Waits on the host: keeps `wait`, the host's function that waits, to make when every task has stalled, for the
+      // shortest timeout given, and stops until it has made it.
+      [ $"(func ${Names.hostWait} (param $wait i32) (param $timeout i32) (local $frame i32)"
+        "local.get $wait"
+        $"global.set ${Names.hostWaiter}"
+        "local.get $timeout"
+        "i32.const 0"
+        "i32.ge_s"
+        "if"
+        $"global.get ${Names.hostTimeout}"
+        "i32.const 0"
+        "i32.lt_s"
+        $"global.get ${Names.hostTimeout}"
+        "local.get $timeout"
+        "i32.gt_s"
+        "i32.or"
+        "if"
+        "local.get $timeout"
+        $"global.set ${Names.hostTimeout}"
+        "end"
+        "end"
+        yield! stopWith hostWaitResumeSlot [ $"global.get ${Names.hostRound}" ]
+        ")" ]
+      resumeWhile Names.hostWaitResume [ "local.get $frame"; "i32.load offset=16"; $"global.get ${Names.hostRound}"; "i32.eq" ] []
+      // Makes the host's wait when every task in the queue has stalled since one last didn't, and a task waits on the
+      // host.
+      [ $"(func ${Names.idle} (local $w i32)"
+        $"global.get ${Names.stalls}"
+        $"global.get ${Names.queued}"
+        "i32.ge_u"
+        $"global.get ${Names.hostWaiter}"
+        "i32.const 0"
+        "i32.ne"
+        "i32.and"
+        "if"
+        $"global.get ${Names.hostWaiter}"
+        "local.tee $w"
+        $"global.get ${Names.hostTimeout}"
+        "local.get $w"
+        "i32.load"
+        $"call_indirect (type ${twoToOne})"
+        "drop"
+        $"global.get ${Names.hostRound}"
+        "i32.const 1"
+        "i32.add"
+        $"global.set ${Names.hostRound}"
+        "i32.const 0"
+        $"global.set ${Names.hostWaiter}"
+        "i32.const -1"
+        $"global.set ${Names.hostTimeout}"
+        "i32.const 0"
+        $"global.set ${Names.stalls}"
+        "end"
+        ")" ]
+      // Counts the task just resumed as one more that stalled, or starts the count again.
+      [ $"(func ${Names.countStall} (param $stalled i32)"
+        "local.get $stalled"
+        "if (result i32)"
+        $"global.get ${Names.stalls}"
+        "i32.const 1"
+        "i32.add"
+        "else"
+        "i32.const 0"
+        "end"
+        $"global.set ${Names.stalls}"
+        "i32.const 0"
+        $"global.set ${Names.stalled}"
+        ")" ]
       // Makes `t` the task running, keeping the regions of the one that was.
       [ $"(func ${Names.switchTo} (param $t i32) (local $was i32)"
         $"global.get ${Names.running}"
@@ -383,9 +490,14 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
       // Runs `t` until it stops or finishes: it starts its function, or resumes the frame it stopped in, or, once its
       // function has returned, looks whether the tasks it started have finished. It goes back on the queue unless it
       // has finished, when its own scope ends.
-      [ $"(func ${Names.step} (param $t i32) (local $f i32)"
+      [ $"(func ${Names.step} (param $t i32) (local $f i32) (local $was i32)"
         "local.get $t"
         $"call ${Names.switchTo}"
+        "local.get $t"
+        $"i32.load offset={state}"
+        "local.set $was"
+        "i32.const 0"
+        $"global.set ${Names.stalled}"
         "local.get $t"
         $"i32.load offset={state}"
         $"i32.const {made}"
@@ -420,6 +532,8 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
         "if"
         "i32.const 0"
         $"global.set ${TaskLowering.Names.suspending}"
+        $"global.get ${Names.stalled}"
+        $"call ${Names.countStall}"
         "local.get $t"
         $"global.get ${TaskLowering.Names.suspended}"
         $"i32.store offset={frame}"
@@ -443,14 +557,21 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
         "i32.const 0"
         $"i32.store offset={work}"
         "end"
+        // It stalled if it was finishing already and its tasks still haven't.
         "local.get $t"
         $"i32.load offset={ownScope}"
         $"call ${Names.pending}"
         "if"
+        "local.get $was"
+        $"i32.const {finishing}"
+        "i32.eq"
+        $"call ${Names.countStall}"
         "local.get $t"
         $"call ${Names.enqueue}"
         "return"
         "end"
+        "i32.const 0"
+        $"call ${Names.countStall}"
         "local.get $t"
         $"i32.load offset={ownScope}"
         $"call ${Names.close}"
@@ -461,11 +582,16 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
         $"i32.const {finished}"
         $"i32.store offset={state}"
         ")" ]
+      // The task running stopped: it has stalled if it was resumed and is still waiting. It goes to the back of the
+      // queue, and the others run, until its turn comes again.
       [ $"(func ${Names.runOthers} (local $me i32) (local $t i32)"
+        $"global.get ${Names.stalled}"
+        $"call ${Names.countStall}"
         $"call ${Names.current}"
         "local.tee $me"
         $"call ${Names.enqueue}"
         "loop $each"
+        $"call ${Names.idle}"
         $"call ${Names.dequeue}"
         "local.tee $t"
         "local.get $me"

@@ -1,10 +1,11 @@
---| `wasi:clocks`, as `Clock` reads them: the time of day and the monotonic clock, in milliseconds.
+--| `wasi:clocks`, as `Clock` reads them: the time of day and the monotonic clock, in milliseconds, and
+  a wait on the monotonic clock.
 export module clocks
 
 import (
   nanyx/host.memory
   nanyx/host.runtime
-  abi as (aligned8)
+  abi as (aligned8, awaitCall)
 )
 
 @extern("wasi:clocks/system-clock@0.3.0", "now")
@@ -12,6 +13,9 @@ def systemClockNow: [HostRuntime] I32 -> ()
 
 @extern("wasi:clocks/monotonic-clock@0.3.0", "now")
 def monotonicClockNow: [HostRuntime] () -> I64
+
+@extern("wasi:clocks/monotonic-clock@0.3.0", "[async-lower]wait-for")
+def monotonicWaitFor: [HostRuntime] I64 -> I32
 
 --| The time of day in milliseconds since 1970: `wasi:clocks/system-clock`'s `now` writes it as
   seconds, then nanoseconds at 8.
@@ -27,4 +31,10 @@ export def timeOfDay: [HostRuntime] () -> int = { _ ->
 --| Milliseconds on `wasi:clocks/monotonic-clock`, which never goes backwards.
 export def ticks: [HostRuntime] () -> int = { _ ->
   monotonicClockNow() / 1_000_000
+}
+
+--| Waits until `ms` milliseconds have passed on `wasi:clocks/monotonic-clock`. It holds the
+  instance until they have, as the component roots' other waits do.
+export def sleepFor: [HostRuntime] int -> () = { ms ->
+  if ms > 0 then awaitCall(monotonicWaitFor(ms * 1_000_000)) else ()
 }

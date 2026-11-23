@@ -119,7 +119,7 @@ with the maintainer on 2026-11-17:
 
   ```nanyx fragment
   def fastest = race([{ http.get(mirrorA) }, { http.get(mirrorB) }])
-  def limited = race([{ #some(http.get(url)) }, { clock.sleep(seconds = 5); #timedOut }])
+  def limited = race([{ #some(http.get(url)) }, { sleep(5_000); #timedOut }])
   ```
 
 - **`concurrent` stays as an option,** an ordinary library function for a scope smaller than the def, such as
@@ -161,8 +161,9 @@ Decided by the maintainer on 2026-11-17 ([#1890](https://github.com/nanyx-lang/n
 
 ## How it runs
 
-The language doesn't change between these; the hosts and the backend do. Today a wait blocks its instance's thread
-and holds only that instance ([Async](../deep-dives/async#how-its-built)).
+The language doesn't change between these; the hosts and the backend do. Today a request or a sleep on the console and
+HTTP hosts' core roots lets the instance's other tasks run while it waits, and any other wait blocks its instance's
+thread and holds only that instance ([Async](../deep-dives/async#how-its-built)).
 
 - **Instances on fibers, maybe** ([#1901](https://github.com/nanyx-lang/nanyx/issues/1901)). Running an instance on
   Wasmtime's own fiber stack, so that a wait suspends it and frees the thread, would scale further, but the .NET
@@ -175,13 +176,26 @@ and holds only that instance ([Async](../deep-dives/async#how-its-built)).
   the locals that live across them in a frame on the heap, and a scheduler in the runtime runs an instance's tasks on
   one stack. It needs nothing from the runtime, so the same module runs under Wasmtime on every OS and in a browser.
   A function that can't wait is compiled as any other, and pays nothing. The lowering is built, with a scheduler that
-  runs an instance's tasks ([How tasks are compiled](../deep-dives/async#how-tasks-are-compiled)); a wait on the host
-  still holds the thread, so tasks take turns only where they wait for each other. Decided on 2026-11-23, with the plan
-  of PRs on #1890:
+  runs an instance's tasks and waits on the host when they all wait
+  ([How tasks are compiled](../deep-dives/async#how-tasks-are-compiled)). Decided on 2026-11-23, with the plan of PRs
+  on #1890:
   - A function generic in contexts is compiled twice where it is used both ways, with `Async` and without, so that
     only the first is a state machine.
-  - The host declares the wait the scheduler makes when every task is waiting, as a function with an attribute the
-    compiler finds, as it finds `run`; `Async` gets no members at run time.
+  - The host's code that waits passes the scheduler the host's wait, through `nanyx/host.async`'s `waitOnHost`, and
+    the scheduler makes it when every task is waiting; `Async` gets no members at run time. This replaces the
+    decision, earlier the same day, that the host would mark its wait with an attribute the compiler finds, as it finds
+    `run`: linking keeps only what something reaches, and nothing but the scheduler would reach the wait, so it would
+    need a path of its own through the compiler. A wait that is passed is an ordinary function, which a host can write
+    in Nanyx.
+  - `sleep` is a member of `Clock`, `[Async] int -> ()` in milliseconds, beside `now` and `ticks`, so that a test's
+    `use Clock(...)` decides how long a sleep takes, as it decides the time. A function of `nanyx/clock` over `ticks`
+    would break nothing, but would never return under a test's clock that doesn't move. Every `use Clock(...)` now
+    gives a `sleep`.
+  - The console and HTTP hosts' core roots wait on the runtime: `nanyx:http` starts a request and is polled for its
+    answer, and `nanyx:async`'s `wait` blocks until one is answered or a timeout passes. Next, the hosts' component
+    roots wait on one waitable set, which their requests and sleeps join, rather than one of each call's own; until
+    then they hold the instance. Files stay blocking under WASI preview 1, which has no way to start a read and come
+    back for it.
   - The scopes are module-level defs and a script's top level. Local defs and lambdas start tasks in the scope of the
     def they're in. Each task tracks its innermost scope as it runs.
   - A `Task` or a lambda that uses `start!` escaping its def is `NYX0233`, with a message about tasks; starting a task
@@ -220,7 +234,7 @@ In Nanyx:
 def ticks: [Async] seq(int) = seq.unfold(1) { i ->
   if i > 3 then #done
   else
-    clock.sleep(ms = 100)
+    sleep(100)
     #some(i, i + 1)
 }
 

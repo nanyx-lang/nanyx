@@ -40,6 +40,23 @@ export def waitFor: [HostRuntime] I32 -> I32 = { handle ->
   code
 }
 
+@extern("$root", "[subtask-drop]")
+def subtaskDrop: [HostRuntime] I32 -> ()
+
+--| The state a subtask has returned in: the canonical ABI's RETURNED.
+def returned: I32 = 2
+
+--| Waits until the subtask `subtask` has returned.
+def awaitReturn: [HostRuntime] I32 -> () = { subtask ->
+  if waitFor(subtask) >= returned then subtaskDrop(subtask) else awaitReturn(subtask)
+}
+
+--| Waits until the async call that gave `status` has returned: at once if it has, and else for the
+  subtask the status names, which it then drops.
+export def awaitCall: [HostRuntime] I32 -> () = { status ->
+  if status % 16 < returned then awaitReturn(status / 16) else ()
+}
+
 --| What a stream's read or write that may block gave, once it hasn't: `status` itself, or what
   waiting for `handle` gave.
 export def settled: [HostRuntime] I32, I32 -> I32 = { handle, status ->
