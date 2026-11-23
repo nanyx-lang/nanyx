@@ -83,7 +83,7 @@
     <Compile Include="Features\Embedding\EmbedderOptionsTests.fs" />
     <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
-    <Compile Include="Features\Docs\RunTourExampleTests.fs" />
+    <Compile Include="Features\Docs\RunDocExampleTests.fs" />
     <Compile Include="Features\Docs\StandardLibraryReferenceTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />
     <Compile Include="Features\Errors\RunErrorTests.fs" />
@@ -119,6 +119,7 @@
     <Compile Include="Features\Regex\RunRegexTests.fs" />
     <Compile Include="Features\Lists\RunListTests.fs" />
     <Compile Include="Features\Lists\RunListKeyTests.fs" />
+    <Compile Include="Features\Lists\ListFromSeqAllocationTests.fs" />
     <Compile Include="Features\Maps\RunMapTests.fs" />
     <Compile Include="Features\Maps\RunMapEqualityTests.fs" />
     <Compile Include="Features\Maps\RunMapMatchTests.fs" />

@@ -20,7 +20,7 @@ This page fills in the rest: how a test is written, how it fails, and how the ru
 
 A test is a definition marked with the `@test` [attribute](../tour/attributes). Its name is the definition's name, usually a sentence in backticks, and the module it is in groups it with the module's other tests:
 
-```nanyx
+```nanyx fragment
 module geometry
 
 type Point = (x: int, y: int)
@@ -67,7 +67,7 @@ Each test file declares a named module, as every file in a package does. It is p
 
 `assert` takes a `bool`. If it is `false`, `assert` crashes with the expression it was given and the values in it:
 
-```nanyx
+```nanyx fragment
 @test
 def `scales points` = {
   def p = Point(x = 1, y = 2)
@@ -94,7 +94,7 @@ A test runs under the test host, which provides `Console` and `Random`, and noth
 
 The code under test often needs more, such as `FileSystem` or `Clock`. A test provides those itself, with the `use` that any code has for [loading a context](../advanced/contexts#loading-a-context):
 
-```nanyx
+```nanyx fragment
 @test
 def `loads the defaults when there is no config file` = {
   use FileSystem(read = { _ -> #notFound })
@@ -115,7 +115,7 @@ So a unit test never touches the file system, the clock or the environment unles
 
 A test marked `@test(#io)` runs with the console host's contexts (`Console`, `Env` and `FileSystem`), real ones, for tests that are meant to read files or the environment:
 
-```nanyx
+```nanyx fragment
 @test(#io)
 def `reads the sample config` = {
   assert(config.load("tests/sample.toml") == #some(Config(port = 8080)))
@@ -170,7 +170,7 @@ These fit the design but are not part of the first version:
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
-- **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the tour's ([compilation](../deep-dives/compilation#tour-examples)); `nanyx test` could do the same for a package's.
+- **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the docs' ([compilation](../deep-dives/compilation#docs-examples)); `nanyx test` could do the same for a package's.
 
 # Prior art
 

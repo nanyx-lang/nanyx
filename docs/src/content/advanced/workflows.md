@@ -220,7 +220,7 @@ A block that uses no keyword is still the call of its builder: `proc { #some(1) 
 
 A workflow can provide a `try` keyword to short-circuit on errors. This is useful for chaining [option-like](option-like-types) steps.
 
-```nanyx
+```nanyx fragment
 def getCustomer: int -> #some(Customer) | #customerNotFound = ...
 def getLastOrder: Customer -> #some(Order) | #orderNotFound = ...
 
@@ -237,7 +237,7 @@ def lastOrderTotal: () -> #some(Money) | #customerNotFound | #orderNotFound = pr
 
 A workflow can also provide a `return` keyword that exits the block early, and a `defer` keyword, of kind `#bindF`, that runs the expression after it at the end of the block.
 
-```nanyx
+```nanyx fragment
 def main = {
   jobs {
     defer! println("This runs at the end of the block")
@@ -254,7 +254,7 @@ def main = {
 
 A keyword means the same wherever it is in the block. A `try` or `return` in a branch of an `if`, or in an arm of a `match`, has the rest of the block as its continuation, just as one outside the branch does. A failed `try` and a `return` end the whole block, not just the branch:
 
-```nanyx
+```nanyx fragment
 def check: int -> #some(int) | #negative | #odd = { n ->
   proc {
     if n < 0 then try #negative
@@ -324,7 +324,7 @@ A keyword whose continuation cannot be the rest of the block is an error:
 
 Workflows are a natural fit for DSLs. A query builder can turn a block into a pipeline of filtering, joining, and projection steps.
 
-```nanyx
+```nanyx fragment
 def result = query {
   def customer = from customers
   def order = from orders

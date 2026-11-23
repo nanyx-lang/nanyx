@@ -414,7 +414,7 @@ let docsContentDirectory =
     Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "docs", "src", "content"))
 
 /// What a docs example's fence says it is: the words after `nanyx` on its opening line. The conventions are in
-/// docs/src/content/deep-dives/compilation.md#tour-examples.
+/// docs/src/content/deep-dives/compilation.md#docs-examples.
 type DocExampleKind =
     /// A whole program, which compiles.
     | Program
@@ -422,6 +422,8 @@ type DocExampleKind =
     | Fragment
     /// A program the compiler gets wrong, which is skipped until the issue is fixed.
     | Skip of issue: int
+    /// Code shown as it was before formatting (the Formatter page's before-and-after examples), which is not compiled.
+    | Unformatted
 
 type DocExample =
     { Kind: DocExampleKind
@@ -432,8 +434,9 @@ let private docExampleKind (page: string) (line: int) (info: string) =
     match info.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray with
     | [ "nanyx" ] -> Program
     | [ "nanyx"; "fragment" ] -> Fragment
+    | [ "nanyx"; "unformatted" ] -> Unformatted
     | [ "nanyx"; tag ] when tag.StartsWith "skip=#" -> Skip(int (tag.Substring "skip=#".Length))
-    | _ -> failwith $"{page}:{line}: a docs example's fence is ```nanyx, ```nanyx fragment or ```nanyx skip=#<issue>, not ```{info}"
+    | _ -> failwith $"{page}:{line}: a docs example's fence is ```nanyx, ```nanyx fragment, ```nanyx skip=#<issue> or ```nanyx unformatted, not ```{info}"
 
 /// The ```nanyx blocks of the page at `path`, by the line of their opening fence.
 let docExamplesOf (path: string) : Map<int, DocExample> =
