@@ -301,3 +301,18 @@ println(viaTyped([1]))
 println(viaTyped(set.fromList([1])))
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "list\nset\nlist\nset\nlist\nset\n"
+
+[<Fact>]
+let ``Run - map.map at a type only known when the program runs maps its values`` () =
+    let source =
+        """def total: a, type a -> int = { value, t ->
+  match t
+    | #int -> value
+    | #map(_, item) -> list.sum(map.values(map.map(value, { x -> total(x, item) })))
+    | #record(r) -> list.sum(list.map(r.fields, { f -> total(f.get(value), f.type) }))
+    | else -> 0
+}
+
+println(total((m = ["a" => 1, "b" => 2]), type (m: map(string, int))))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n"
