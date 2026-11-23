@@ -11,6 +11,13 @@ let isRec (value: Expression) =
     | RecSyntax.Call _ -> true
     | _ -> false
 
+/// The value `value`'s def writes: for a `rec` def, the one inside the call that marks it, so that an annotated `rec`
+/// def whose value is a lambda runs in the contexts its type declares, and is checked against that type, as a `def` is.
+let written (value: Expression) =
+    match value.Kind with
+    | RecSyntax.Call inner -> inner
+    | _ -> value
+
 /// An error at each place the value of the local def `name` names it, when the def is not `rec` and `env`, the scope
 /// around the def, binds nothing of that name either.
 let selfReferences (env: TypeEnv) (name: Identifier) (value: Expression) : Diagnostic list =
