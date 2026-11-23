@@ -11,14 +11,18 @@ type PatternPrinter(source: string, sourceText: SourceText, literal: SourceSpan 
     let cat = Doc.concat
     let commaJoin docs = Doc.join (text ", ") docs
 
-    let rec pattern (p: Pattern) : Doc =
+    /// A tuple pattern's elements, and `...` after them where it leaves the other fields out.
+    let rec tupleItems (ps: Pattern list) (hasRest: bool) : Doc =
+        commaJoin (List.map pattern ps @ (if hasRest then [ text "..." ] else []))
+
+    and pattern (p: Pattern) : Doc =
         match p.Kind with
         | LiteralPattern l -> literal p.Span l
         | IdentifierPattern n -> text n
         | WildcardPattern -> text "_"
         | UnitPattern -> text "()"
         | ElsePattern -> text "else"
-        | TuplePattern ps -> cat [ text "("; commaJoin (List.map pattern ps); text ")" ]
+        | TuplePattern(ps, hasRest) -> cat [ text "("; tupleItems ps hasRest; text ")" ]
         | RecordPattern(n, ps) -> cat [ text n; text "("; commaJoin (List.map pattern ps); text ")" ]
         | RecordMemberPattern(fields, hasRest) ->
             let restDoc = if hasRest then [ text "..." ] else []
@@ -50,7 +54,7 @@ type PatternPrinter(source: string, sourceText: SourceText, literal: SourceSpan 
                 | _ -> cat [ text $"#{n} "; pattern payload ]
             else
                 match payload.Kind with
-                | TuplePattern ps -> cat [ text $"#{n}("; commaJoin (List.map pattern ps); text ")" ]
+                | TuplePattern(ps, hasRest) -> cat [ text $"#{n}("; tupleItems ps hasRest; text ")" ]
                 // A record payload's brackets are the tag's: `#some(count = 0, ...)`.
                 | RecordMemberPattern _ -> cat [ text $"#{n}"; pattern payload ]
                 | _ -> cat [ text $"#{n}("; pattern payload; text ")" ]
@@ -63,7 +67,7 @@ type PatternPrinter(source: string, sourceText: SourceText, literal: SourceSpan 
                 match payload with
                 | None -> []
                 | Some (Kind UnitPattern) -> [ text "()" ]
-                | Some (Kind (TuplePattern ps)) -> [ text "("; commaJoin (List.map pattern ps); text ")" ]
+                | Some (Kind (TuplePattern(ps, hasRest))) -> [ text "("; tupleItems ps hasRest; text ")" ]
                 | Some (Kind (RecordMemberPattern _) as record) -> [ pattern record ]
                 | Some single -> [ text "("; pattern single; text ")" ]
             cat ([ text $"#{n}("; commaJoin argDocs; text ")" ] @ payloadDoc)

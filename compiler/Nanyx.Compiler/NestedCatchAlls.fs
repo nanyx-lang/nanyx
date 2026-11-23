@@ -17,7 +17,9 @@ module internal NestedCatchAlls =
         match earlier.Kind, later.Kind with
         | TagPattern(tag, payload), IdentifierPattern name when nested && payload |> Option.forall PatternSpace.isCatchAll ->
             [ name, tag ]
-        | TuplePattern earlierItems, TuplePattern laterItems when earlierItems.Length = laterItems.Length ->
+        | TuplePattern(earlierItems, earlierRest), TuplePattern(laterItems, laterRest) when
+            earlierItems.Length = laterItems.Length && earlierRest = laterRest
+            ->
             parts true earlierItems laterItems
         | RecordPattern(earlierName, earlierItems), RecordPattern(laterName, laterItems) when
             earlierName = laterName && earlierItems.Length = laterItems.Length

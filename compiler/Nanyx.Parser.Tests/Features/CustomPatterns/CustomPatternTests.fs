@@ -92,7 +92,7 @@ let ``pattern is reserved`` () =
 [<Fact>]
 let ``a pattern tag's one group is its payload when it is a pattern, and its arguments when it is only an expression`` () =
     match armsOf "def f = { | #Hsl(h, s, l) -> 1 | #DivisibleBy(3) -> 2 | #DivisibleBy(n + 1) -> 3 | #Even -> 4 }" with
-    | [ [ Kind (TagPattern ("Hsl", Some (Kind (TuplePattern [ _; _; _ ])))) ]
+    | [ [ Kind (TagPattern ("Hsl", Some (Kind (TuplePattern([ _; _; _ ], false))))) ]
         [ Kind (TagPattern ("DivisibleBy", Some (Kind (LiteralPattern (IntLit64 3L))))) ]
         [ Kind (ArgumentTagPattern ("DivisibleBy", Kind (BinaryOp ("+", _, _, _)), None)) ]
         [ Kind (TagPattern ("Even", None)) ] ] -> ()
@@ -101,7 +101,7 @@ let ``a pattern tag's one group is its payload when it is a pattern, and its arg
 [<Fact>]
 let ``a pattern tag with two groups takes its arguments, then its payload`` () =
     match armsOf "def f = { | #SplitOn(\",\")(first, second) -> 1 | #Between(1, 2)(n) -> 2 | #DivisibleBy(3) & #DivisibleBy(5) -> 3 }" with
-    | [ [ Kind (ArgumentTagPattern ("SplitOn", Kind (LiteralExpr (StringLit ",")), Some (Kind (TuplePattern [ Kind (IdentifierPattern "first"); Kind (IdentifierPattern "second") ])))) ]
+    | [ [ Kind (ArgumentTagPattern ("SplitOn", Kind (LiteralExpr (StringLit ",")), Some (Kind (TuplePattern([ Kind (IdentifierPattern "first"); Kind (IdentifierPattern "second") ], false))))) ]
         [ Kind (ArgumentTagPattern ("Between", Kind (TupleExpr [ _; _ ]), Some (Kind (IdentifierPattern "n")))) ]
         [ Kind (AndPattern [ Kind (TagPattern ("DivisibleBy", Some _)); Kind (TagPattern ("DivisibleBy", Some _)) ]) ] ] -> ()
     | other -> failwith $"Unexpected arms: %A{other}"

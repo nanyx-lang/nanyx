@@ -27,3 +27,19 @@ let ``... in a record pattern comes after its members`` () =
     match parseModule "def f = { | (...) -> 1 }" with
     | Result.Error _ -> ()
     | Result.Ok parsed -> failwith $"Expected a parse error: %A{parsed}"
+
+[<Fact>]
+let ``a tuple pattern, or a tag's payload, may end in ... after fields without =`` () =
+    match armsOf "def f = { | (a, ...) -> 1 | (a, _ , ... ) -> 2 | #e(a, ...) -> 3 | #E(a, ...) -> 4 | (a, b) -> 5 }" with
+    | [ [ Kind (TuplePattern ([ Kind (IdentifierPattern "a") ], true)) ]
+        [ Kind (TuplePattern ([ Kind (IdentifierPattern "a"); Kind WildcardPattern ], true)) ]
+        [ Kind (TagPattern ("e", Some (Kind (TuplePattern ([ Kind (IdentifierPattern "a") ], true))))) ]
+        [ Kind (TagPattern ("E", Some (Kind (TuplePattern ([ Kind (IdentifierPattern "a") ], true))))) ]
+        [ Kind (TuplePattern ([ _; _ ], false)) ] ] -> ()
+    | other -> failwith $"Unexpected arms: %A{other}"
+
+[<Fact>]
+let ``... in a tuple pattern comes after its fields`` () =
+    match parseModule "def f = { | (..., a) -> 1 }" with
+    | Result.Error _ -> ()
+    | Result.Ok parsed -> failwith $"Expected a parse error: %A{parsed}"

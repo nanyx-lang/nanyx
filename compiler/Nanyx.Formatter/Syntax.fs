@@ -88,7 +88,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | WildcardPattern
             | UnitPattern
             | ElsePattern -> p.Kind
-            | TuplePattern ps -> TuplePattern(List.map pattern ps)
+            | TuplePattern(ps, hasRest) -> TuplePattern(List.map pattern ps, hasRest)
             | AndPattern ps -> AndPattern(List.map pattern ps)
             | RecordPattern(n, ps) -> RecordPattern(n, List.map pattern ps)
             | RecordMemberPattern(fields, hasRest) -> RecordMemberPattern(fields |> List.map (fun (n, p) -> n, pattern p), hasRest)

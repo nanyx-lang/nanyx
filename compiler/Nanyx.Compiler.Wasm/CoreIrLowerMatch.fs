@@ -84,10 +84,11 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
                 | Some inner, Some innerTy -> PTag(name, Some (lowerPattern false scrutinee innerTy inner))
                 | None, _ -> PTag(name, None)
                 | Some _, None -> cannot $"a payload pattern on `#{name}`, which has none"
-            | TuplePattern elements ->
+            // `(a, b)`, or `(a, ...)`, which leaves the other fields out.
+            | TuplePattern(elements, hasRest) ->
                 let fields =
                     match IrType.unfold valueTy with
-                    | IrRecord fields when fields.Length = elements.Length -> fields
+                    | IrRecord fields when fields.Length = elements.Length || (hasRest && fields.Length >= elements.Length) -> fields
                     | other -> cannot $"a tuple pattern on a value of type '{IrType.show other}'"
                 let names = fields |> List.map fst |> Set.ofList
                 PFields(elements |> List.mapi (fun index element ->

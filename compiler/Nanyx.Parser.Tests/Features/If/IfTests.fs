@@ -26,7 +26,7 @@ let ``a tag with no payload before then is the whole pattern`` () =
 let ``if-matching with else uses the else as the wildcard arm`` () =
     match parseModule "def x = if p is (a, 0) then a else 0" with
     | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (Match ([ Kind (IdentifierExpr "p") ],
-                                                               [ [ Kind (TuplePattern [ Kind (IdentifierPattern "a"); Kind (LiteralPattern (IntLit64 0L)) ]) ], Kind (IdentifierExpr "a")
+                                                               [ [ Kind (TuplePattern([ Kind (IdentifierPattern "a"); Kind (LiteralPattern (IntLit64 0L)) ], false)) ], Kind (IdentifierExpr "a")
                                                                  [ Kind WildcardPattern ], Kind (LiteralExpr (IntLit64 0L)) ]))))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"

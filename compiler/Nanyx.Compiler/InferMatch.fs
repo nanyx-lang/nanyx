@@ -130,7 +130,7 @@ let internal inferMatch
                             |> addConstraint scrutineeTy startTyped.Type
                             |> addConstraint startTyped.Type endTyped.Type
                         Ok (env', constrained, mkTypedPattern pattern scrutineeTy)
-            | TuplePattern patterns ->
+            | TuplePattern(patterns, hasRest) ->
                 let itemTypes, nextState = freshVars patterns state'
 
                 // A name alone matches the field it names, where the value is already known to be a record with
@@ -139,13 +139,16 @@ let internal inferMatch
                     if patterns |> List.exists (function Kind (IdentifierPattern _) -> true | _ -> false) then
                         recordFieldsSoFar state' scrutineeTy |> Option.map (Map.keys >> Set.ofSeq)
                     else None
-                let tupleRecord =
-                    match knownFields with
-                    | Some fields ->
-                        List.zip patterns itemTypes
-                        |> List.mapi (fun index (pat, ty) -> Pattern.tupleElementField fields index pat, ty)
-                        |> fun matched -> TyRecord(Map.ofList matched, FieldOrder.ofList matched)
-                    | None -> tupleRecordType itemTypes
+                let matched =
+                    let fields = knownFields |> Option.defaultValue Set.empty
+                    List.zip patterns itemTypes |> List.mapi (fun index (pat, ty) -> Pattern.tupleElementField fields index pat, ty)
+                // A record type is closed, so the pattern matches every field, unless it ends in `...`.
+                let tupleRecord, nextState =
+                    if hasRest then openRecordWith (Map.ofList matched) nextState
+                    else
+                        match knownFields with
+                        | Some _ -> TyRecord(Map.ofList matched, FieldOrder.ofList matched), nextState
+                        | None -> tupleRecordType itemTypes, nextState
                 let constrained = addConstraint scrutineeTy tupleRecord nextState
                 inferPatterns armBody env' constrained (List.zip patterns itemTypes)
                 |> Result.map (fun (innerEnv, innerState, _) -> innerEnv, innerState, mkTypedPattern pattern tupleRecord)

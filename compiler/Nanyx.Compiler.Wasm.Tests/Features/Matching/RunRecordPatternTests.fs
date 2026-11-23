@@ -70,3 +70,42 @@ Other pattern
 """
             .ReplaceLineEndings "\n"
     )
+
+// Fields without `=` may end in `...`, which leaves the other fields out: a name alone takes the field it names, and
+// any other pattern the field at its position.
+[<Fact>]
+let ``Run - a pattern of fields without = that ends in ... takes the fields it names or reaches by position`` () =
+    let source =
+        """
+type Shape = #point | #rectangle(width: float, height: float, label: string)
+
+pattern string -> #Email(localPart: string, domain: string) | _ = { s ->
+  if s == "a@b" then #Email(localPart = "a", domain = "b") else _
+}
+
+def describe: Shape -> string = {
+  | #point -> "point"
+  | #rectangle(label, width, ...) -> "{label} {width}"
+}
+
+def greet: string -> string = {
+  | #Email(localPart, ...) -> "hi {localPart}"
+  | _ -> "no"
+}
+
+def sum: (int, int, int) -> int = {
+  | (0, ...) -> 0
+  | (a, b, ...) -> a + b
+}
+
+def second = { (_, b, ...) -> b }
+
+println(describe(#rectangle(width = 2.0, height = 3.0, label = "box")))
+println(describe(#point))
+println(greet("a@b"))
+println(greet("x"))
+println(sum((0, 1, 2)))
+println(sum((1, 2, 3)))
+println(second((1, "two", 3.0)))
+"""
+    runSource source |> assertRan "box 2.0\npoint\nhi a\nno\n0\n3\ntwo\n"

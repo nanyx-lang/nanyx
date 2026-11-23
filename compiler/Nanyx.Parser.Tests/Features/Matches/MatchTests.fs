@@ -39,7 +39,7 @@ let ``a guard pattern nests inside other patterns`` () =
     match parseModule "def f = { | (0, { < 0 }) -> 1 | [{ % 2 == 0 }, ...] -> 2 | _ -> 3 }" with
     | Result.Ok [ Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Match (_, arms)), _))))) ] ->
         match arms |> List.map fst with
-        | [ [ Kind (TuplePattern [ Kind (LiteralPattern (IntLit64 0L)); Kind (GuardPattern (Kind (Lambda _))) ]) ]
+        | [ [ Kind (TuplePattern([ Kind (LiteralPattern (IntLit64 0L)); Kind (GuardPattern (Kind (Lambda _))) ], false)) ]
             [ Kind (ListPattern ([ Kind (GuardPattern (Kind (Lambda _))) ], Some _)) ]
             [ Kind WildcardPattern ] ] -> ()
         | other -> failwith $"Unexpected arms: %A{other}"
@@ -186,7 +186,7 @@ let ``() matches the unit value, and #tag() a tag carrying it`` () =
             [ Kind (TagPattern ("some", Some (Kind UnitPattern))) ]
             [ Kind (TagPattern ("some", Some (Kind UnitPattern))) ]
             [ Kind (TagPattern ("some", Some (Kind UnitPattern))) ]
-            [ Kind (TuplePattern [ Kind (IdentifierPattern "a"); Kind UnitPattern ]) ] ] -> ()
+            [ Kind (TuplePattern([ Kind (IdentifierPattern "a"); Kind UnitPattern ], false)) ] ] -> ()
         | other -> failwith $"Unexpected arms: %A{other}"
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"

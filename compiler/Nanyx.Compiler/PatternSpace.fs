@@ -20,8 +20,8 @@ module PatternSpace =
         | [ Kind ElsePattern as orElse ] when valueCount > 1 ->
             orElse :: List.init (valueCount - 1) (fun _ -> Pattern.at orElse.Span ElsePattern)
         | first :: _ :: _ when valueCount = 1 ->
-            [ Pattern.at (SourceSpan.between first.Span (List.last patterns).Span) (TuplePattern patterns) ]
-        | [ Kind (TuplePattern elements) ] when valueCount > 1 && elements.Length = valueCount -> elements
+            [ Pattern.at (SourceSpan.between first.Span (List.last patterns).Span) (TuplePattern(patterns, false)) ]
+        | [ Kind (TuplePattern(elements, false)) ] when valueCount > 1 && elements.Length = valueCount -> elements
         | _ -> patterns
 
     /// Whether `pattern` matches every value of its type. `(a, _)` matches every tuple: a tuple pattern is irrefutable
@@ -33,7 +33,7 @@ module PatternSpace =
         | UnitPattern
         | ElsePattern
         | IdentifierPattern _ -> true
-        | TuplePattern elements
+        | TuplePattern(elements, _)
         | RecordPattern(_, elements) -> elements |> List.forall isCatchAll
         | RecordMemberPattern(members, _) -> members |> List.forall (snd >> isCatchAll)
         | AndPattern parts -> parts |> List.forall isCatchAll
@@ -150,7 +150,7 @@ module PatternSpace =
             | Some low, Some high when low <= high -> Ints(low, high)
             | _ -> uncertain
         | TagPattern(name, payload) -> Tag(name, payload |> Option.map (spaceOf certain) |> Option.defaultValue Any)
-        | TuplePattern elements -> elements |> List.mapi (fun index element -> string index, spaceOf certain element) |> Map.ofList |> Fields
+        | TuplePattern(elements, _) -> elements |> List.mapi (fun index element -> string index, spaceOf certain element) |> Map.ofList |> Fields
         | RecordMemberPattern(members, _) -> members |> List.map (fun (name, member') -> name, spaceOf certain member') |> Map.ofList |> Fields
         | RecordPattern(name, elements) -> Named(name, elements |> List.map (spaceOf certain))
         | ListPattern(elements, rest) ->
