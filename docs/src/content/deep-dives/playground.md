@@ -74,7 +74,7 @@ example, and says so.
 **Examples.** The Examples menu is every runnable example in the [language tour](../tour/variables), grouped by its
 page in the tour's order, and named by the heading it is under. `docs/site/playground-examples.mjs` reads them: a block
 is runnable when it is fenced ` ```nanyx ` with nothing after `nanyx` and has no `-- error` comment, which are the
-blocks [the tests run](./compilation#tour-examples). As those tests do, it adds `import nanyx/text` to each that doesn't
+blocks [the tests run](./compilation#docs-examples). As those tests do, it adds `import nanyx/text` to each that doesn't
 import it or turn a linter on, after its module declaration or else after its directives. Choosing an example asks
 before it replaces code that was changed since it was opened. What a runnable block is (`isRunnable`) and the code it
 runs as (`playgroundCode`) are in `docs/site/playground-code.mjs`, which the tour's pages read in the browser too.

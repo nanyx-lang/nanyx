@@ -116,7 +116,8 @@ let ``Error reference example reports its section's code`` (line: int) =
     let example = docExamplesOf pagePath |> Map.find line
     match example.Kind with
     | Fragment
-    | Skip _ -> ()
+    | Skip _
+    | Unformatted -> ()
     | Program ->
         let errors = errorsOf example.Code
         let reported = errors |> List.map _.Code |> List.distinct

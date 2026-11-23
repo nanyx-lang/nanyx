@@ -83,7 +83,7 @@
     <Compile Include="Features\Embedding\EmbedderOptionsTests.fs" />
     <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
-    <Compile Include="Features\Docs\RunTourExampleTests.fs" />
+    <Compile Include="Features\Docs\RunDocExampleTests.fs" />
     <Compile Include="Features\Docs\StandardLibraryReferenceTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />
     <Compile Include="Features\Errors\RunErrorTests.fs" />

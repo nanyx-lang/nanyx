@@ -1,10 +1,10 @@
-/// Every ```nanyx block in the language tour (docs/src/content/tour), the Getting started pages
-/// (docs/src/content/getting-started), the standard library's pages (docs/src/content/stdlib), the custom patterns page (docs/src/content/advanced/custom-patterns.md) and the JSON and regular expressions cookbook pages (docs/src/content/cookbook/json-parsing.md and regular-expressions.md), compiled and run as `nanyx run` runs it, so that they keep describing what the compiler
-/// does. The words after `nanyx` on a block's opening fence say what kind of example it is; the conventions are in
-/// docs/src/content/deep-dives/compilation.md#tour-examples. A standard-library page's generated reference is
-/// left out: its blocks are signatures, and its doc comments' examples are checked where they are written. The home
-/// page's examples (docs/src/home/*.nyx) are whole programs, run as they are.
-module TranspilerWasmTests.Features.Docs.RunTourExamples
+/// Every ```nanyx block on the docs site's pages (docs/src/content), compiled and run as `nanyx run` runs it, so that
+/// they keep describing what the compiler does. The words after `nanyx` on a block's opening fence say what kind of
+/// example it is; the conventions are in docs/src/content/deep-dives/compilation.md#docs-examples. A standard-library
+/// page's generated reference is left out: its blocks are signatures, and its doc comments' examples are checked where
+/// they are written. So is the error reference, whose examples report errors (`ErrorReferenceTests.fs`). The home page's
+/// examples (docs/src/home/*.nyx) are whole programs, run as they are.
+module TranspilerWasmTests.Features.Docs.RunDocExamples
 
 open System
 open System.IO
@@ -13,8 +13,8 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-/// The ```nanyx blocks of `page` in the section `section` (`tour`, `getting-started`, `stdlib`, `advanced` or `cookbook`), by the line of their opening fence,
-/// but for those in a standard-library page's generated reference.
+/// The ```nanyx blocks of `page` in the section `section` (the directory under docs/src/content, such as `tour`), by the
+/// line of their opening fence, but for those in a standard-library page's generated reference.
 let private examplesOf (section: string) (page: string) =
     let path = Path.Combine(docsContentDirectory, section, page)
     let text = File.ReadAllText path
@@ -26,33 +26,21 @@ let private examplesOf (section: string) (page: string) =
         | _ -> fun _ -> false
     docExamplesOf path |> Map.filter (fun line _ -> not (generated line))
 
-let private examplesIn (section: string) : obj array seq =
-    Directory.GetFiles(Path.Combine(docsContentDirectory, section), "*.md")
+/// The error reference, whose examples `ErrorReferenceTests.fs` checks.
+let private errorReference = Path.Combine("standard-tools", "errors.md")
+
+/// Every example on every page, by its section, its page and its line.
+let docExamples () : obj array seq =
+    Directory.GetDirectories docsContentDirectory
     |> Array.sort
-    |> Seq.collect (fun path ->
-        let page = Path.GetFileName path
-        examplesOf section page |> Map.keys |> Seq.map (fun line -> [| box page; box line |]))
-
-let tourExamples () : obj array seq = examplesIn "tour"
-
-let gettingStartedExamples () : obj array seq = examplesIn "getting-started"
-
-let standardLibraryExamples () : obj array seq = examplesIn "stdlib"
-
-/// The custom patterns page's examples, which run as the tour's do while custom patterns are being built.
-let customPatternExamples () : obj array seq =
-    examplesOf "advanced" "custom-patterns.md" |> Map.keys |> Seq.map (fun line -> [| box "custom-patterns.md"; box line |])
-
-/// The JSON cookbook page's examples, which run as the tour's do: they show the package `nanyx.json`, from the index.
-let jsonCookbookExamples () : obj array seq =
-    examplesOf "cookbook" "json-parsing.md" |> Map.keys |> Seq.map (fun line -> [| box "json-parsing.md"; box line |])
-
-/// The regular expressions cookbook page's examples, which run as the tour's do: they show the shipped package
-/// `nanyx.regex`.
-let regexCookbookExamples () : obj array seq =
-    examplesOf "cookbook" "regular-expressions.md"
-    |> Map.keys
-    |> Seq.map (fun line -> [| box "regular-expressions.md"; box line |])
+    |> Seq.collect (fun directory ->
+        let section = Path.GetFileName directory
+        Directory.GetFiles(directory, "*.md")
+        |> Array.sort
+        |> Seq.filter (fun path -> Path.GetRelativePath(docsContentDirectory, path) <> errorReference)
+        |> Seq.collect (fun path ->
+            let page = Path.GetFileName path
+            examplesOf section page |> Map.keys |> Seq.map (fun line -> [| box section; box page; box line |])))
 
 /// The docs site's home page's examples, the `.nyx` files in docs/src/home.
 let private homePageDirectory = Path.GetFullPath(Path.Combine(docsContentDirectory, "..", "home"))
@@ -60,8 +48,8 @@ let private homePageDirectory = Path.GetFullPath(Path.Combine(docsContentDirecto
 let homePageExamples () : obj array seq =
     Directory.GetFiles(homePageDirectory, "*.nyx") |> Array.sort |> Seq.map (fun path -> [| box (Path.GetFileName path) |])
 
-/// The tour's examples work on strings with `nanyx/text` without importing it, as though each imported it: after its
-/// directives and its module declaration, if it has them, and before its first line of code. They print with the
+/// A docs example works on strings with `nanyx/text` without importing it, as though it imported it: after its
+/// directives and its module declaration, if it has them, and before its first line of code. It prints with the
 /// console host's prelude, which every program sees.
 let private withImports (code: string) =
     // An example that turns a linter on gets no import it doesn't write, which the linter would report unused.
@@ -113,9 +101,11 @@ let private errorCodes (code: string) =
 /// errors it says.
 let private check (section: string) (page: string) (line: int) =
     let example = examplesOf section page |> Map.find line
+    let page = $"{section}/{page}"
     match example.Kind, expectedErrors example.Code with
     | Fragment, _
-    | Skip _, _ -> ()
+    | Skip _, _
+    | Unformatted, _ -> ()
     | Program, [] ->
         let outcome = runSourceWith false "" (withImports example.Code)
         Assert.True((outcome.ExitCode = 0 && outcome.StandardError = ""), $"{page}:{line} failed with exit code {outcome.ExitCode}:\n{outcome.StandardError}")
@@ -130,28 +120,8 @@ let private check (section: string) (page: string) (line: int) =
     | Program, expected -> Assert.Equal<string list>(expected, errorCodes example.Code)
 
 [<Theory>]
-[<MemberData(nameof tourExamples)>]
-let ``Tour example compiles and runs`` (page: string, line: int) = check "tour" page line
-
-[<Theory>]
-[<MemberData(nameof gettingStartedExamples)>]
-let ``Getting started example compiles and runs`` (page: string, line: int) = check "getting-started" page line
-
-[<Theory>]
-[<MemberData(nameof standardLibraryExamples)>]
-let ``Standard library page example compiles and runs`` (page: string, line: int) = check "stdlib" page line
-
-[<Theory>]
-[<MemberData(nameof customPatternExamples)>]
-let ``Custom patterns example compiles and runs`` (page: string, line: int) = check "advanced" page line
-
-[<Theory>]
-[<MemberData(nameof jsonCookbookExamples)>]
-let ``JSON cookbook example compiles and runs`` (page: string, line: int) = check "cookbook" page line
-
-[<Theory>]
-[<MemberData(nameof regexCookbookExamples)>]
-let ``Regular expressions cookbook example compiles and runs`` (page: string, line: int) = check "cookbook" page line
+[<MemberData(nameof docExamples)>]
+let ``Docs example compiles and runs`` (section: string, page: string, line: int) = check section page line
 
 /// A home page example runs as it is, with no import added, since the page's "Run in the playground" link opens it so,
 /// and prints what its last comments say.

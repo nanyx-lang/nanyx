@@ -76,7 +76,7 @@ def greet: string, string -> string = { name, title ->
 
 ## Unused pattern variable
 
-```nanyx
+```nanyx fragment
 match response
   | #some(value) -> "Success" -- Linter warning: Unused binding 'value'
   | #failed(msg) -> "Failed" -- Linter warning: Unused binding 'msg'
@@ -130,7 +130,7 @@ version to use. A context variable, such as the `c` of `[c]`, is not a context.
 
 ## Unreachable match branch
 
-```nanyx
+```nanyx fragment
 match n
   | _ -> "always"
   | 0 -> "never reached" -- Linter warning: this arm can never match: an arm before it matches every value it does
@@ -150,7 +150,7 @@ The rule (`noTagInCommon`) reports `==` or `!=` on two values whose types are cl
 
 ## `use ... in` with a body in braces
 
-```nanyx
+```nanyx fragment
 def total = use Counter(next = { n -> n - 1 }) in { counted(3) } -- Linter warning: The braces make this a function of no arguments, not a block run with the context loaded
 ```
 
@@ -182,7 +182,7 @@ Arguments are evaluated left to right, so in `f(crash("a"), g())` neither `g()` 
 
 ## Recursion not in tail position
 
-```nanyx
+```nanyx skip=#2437
 def length: list(a) -> int = {
   | [] -> 0
   | [_, ...tail] -> 1 + length(tail) -- Linter info: `length` calls itself here, but not in tail position: its result is an operand of `+`

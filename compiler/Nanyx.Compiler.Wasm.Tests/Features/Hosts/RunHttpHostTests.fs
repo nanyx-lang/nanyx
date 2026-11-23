@@ -8,16 +8,16 @@ open System.IO
 open System.Net
 open System.Net.Http
 open System.Net.Sockets
-open System.Text.RegularExpressions
 open System.Threading
 open System.Threading.Tasks
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// The program of the HTTP server cookbook page, its one ```nanyx block.
+/// The program of the HTTP server cookbook page, its ```nanyx block that is the module `main`: a fragment there, since
+/// it is one file of a package, which is run here, under the HTTP host.
 let private cookbookProgram () =
-    let page = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "..", "docs", "src", "content", "cookbook", "http-server.md")
-    Regex.Match(File.ReadAllText(page).ReplaceLineEndings "\n", "```nanyx\n(.*?)```", RegexOptions.Singleline).Groups[1].Value
+    let page = Path.Combine(docsContentDirectory, "cookbook", "http-server.md")
+    docExamplesOf page |> Map.values |> Seq.map _.Code |> Seq.find _.StartsWith("module main\n")
 
 /// A package in `directory` whose host is the HTTP host, serving on `port`, with `main` as its one source file.
 let private writePackage (directory: string) (port: int) (main: string) =
