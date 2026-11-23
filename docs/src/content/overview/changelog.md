@@ -8,6 +8,53 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.36.0
+
+*23 November 2026*
+
+A release about patterns, loops and sequences. A pattern can name the fields it wants and leave out the rest, a
+`while` condition can bind names with `is`, and a builder's `for` walks any collection. Sequence blocks make about half
+as many allocations, a new lint catches a sequence with effects pulled twice, and a run of fixes closes holes in
+shadowing, workflows and comments.
+
+**Language**
+
+- A record or tag payload pattern whose fields have no `=` may end in `...`, which leaves the other fields out:
+  `(name, ...)`, `#rectangle(width, ...)` ([Pattern matching](../tour/pattern-matching)).
+- A `while` condition's `is` test binds its names in the loop's body, through an `and` chain, as an `if` condition does
+  in its `then` branch ([Loops](../tour/loops)).
+- A `for` loop that yields, in `seq { ... }` or `list.build { ... }`, walks any `Iterable` collection, not only a
+  sequence ([Workflows](../advanced/workflows)).
+
+**Tools**
+
+- The official linter's `repeatedPulls` rule warns when a sequence whose steps require contexts, such as
+  `[Log] seq(int)`, is pulled more than once, and offers to collect it into a list
+  ([Official linter](../standard-tools/official-linter#sequence-with-effects-pulled-more-than-once)).
+- `use` of a context that is misspelt or not imported is NYX0108, an unknown context, with a "did you mean" or the
+  import to add, instead of NYX0249 ([Errors](../standard-tools/errors)).
+- Hover at a call leaves out a context variable that resolved to no contexts: `list.select` shows no `[d]`.
+
+**Performance**
+
+- A sequence block makes fewer steps: a `seq { for 1..n | i -> yield i }` allocates 11 blocks per element, down from 20
+  ([Sequences and queries](../advanced/sequences-and-queries)).
+- A nested type is parsed once per level: `list(list(…))`, tuples, function types and tags 20 deep took minutes, and
+  now take a fraction of a second.
+- Checking a module after a type error no longer solves the whole module again for each type looked up: a large
+  package with one error is checked in seconds, not minutes.
+
+**Fixes**
+
+- A `def` or `mut` in a lambda that shadows an outer name can read that name in its own value, as
+  `mut state = #continue(state)` in a `memory` block does.
+- A recursive structural record can be built by its type's name: `S(next = ...)` for
+  `type S = (next: () -> #next(int, S) | #done)`.
+- A context member generic in its own type variables takes a tuple whole: `proc { return (try num(x), try num(y)) }`
+  runs instead of trapping.
+- A comment before a lambda's `}` is never a syntax error, whether after its last arm or after a one-line body, and the
+  formatter keeps it inside the lambda ([Formatter](../standard-tools/formatter)).
+
 # 0.35.0
 
 *23 November 2026*
