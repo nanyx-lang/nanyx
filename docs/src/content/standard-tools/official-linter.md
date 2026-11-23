@@ -32,6 +32,7 @@ The rules that report code which is unused or can never run also tell the editor
 | [`shadowedPreludeNames`](#name-that-hides-a-prelude-member) | warning | a name that hides one the prelude brings into scope |
 | [`semicolons`](#statements-separated-by-) | warning | statements separated by `;` |
 | [`unconstructibleType`](#exported-type-no-one-can-get) | error | an exported nominal type nothing its module exports gives out |
+| [`repeatedPulls`](#sequence-with-effects-pulled-more-than-once) | warning | a sequence whose steps require contexts pulled more than once |
 | [`unusedAllows`](#allow-that-suppresses-nothing) | warning | an `@allow` that suppresses nothing |
 | [`linterFailed`](#when-the-linter-fails) | warning | the linter could not check a module |
 
@@ -266,6 +267,45 @@ An exported def gives the type out when the type is in an output position of the
 Its fix adds an exported `of` after the type, which takes the type's representation and wraps it: `export def UserId.of: int -> UserId = { value -> UserId(value) }`.
 
 The linter sees one module at a time, so a type that another module of the same package gives out is reported too. Write `@allow(default/unconstructibleType)` before the type for it, and for a type with no values on purpose, such as a marker used only as a type argument.
+
+## Sequence with effects pulled more than once
+
+```nanyx
+context Log = (log: string -> ())
+
+def numbers: [Log] () -> [Log] seq(int) = { () ->
+  seq.map(1..3) { x ->
+    log("making {x}")
+    x
+  }
+}
+
+def main: [Log] () -> () = { () ->
+  def xs = numbers()
+  def count = seq.length(xs)
+  for xs | x -> log("{x} of {count}") -- Linter warning: 'xs' is pulled again here, and its steps, which require Log, run again
+}
+```
+
+A [sequence](../deep-dives/lazy-sequences) is a recipe: pulling it again runs its steps again from the start. When
+its steps require contexts, as a `[Log] seq(int)`'s or a `[FileSystem] seq(string)`'s do, that repeats their effects:
+it logs again, reads the file again, and may give other elements the second time. The rule (`repeatedPulls`) reports
+a local, a parameter or a pattern variable holding such a sequence that is pulled more than once on some path through
+a def, at the second pull, and points at the first.
+
+What pulls a sequence is worked out from types, so a function of your own counts as one of the standard library's
+does. A `for` loop over it pulls it, and so does passing it to a function that takes a `seq`, or anything `Iterable`,
+and gives back something that is not a `seq`, such as `seq.toList`, `seq.fold` or `seq.length`. A function that gives
+back a `seq`, such as `seq.filter` or `seq.map`, makes a new sequence from it, and pulling that one pulls it too, as a
+`for` loop whose body `yield`s does. Passing it anywhere else, such as into a record, doesn't count.
+
+Pulls in different arms of a `match` or an `if` are on different paths, so pulling it once in each is fine. A pull in a
+loop's body counts as many. A pull inside any other lambda counts once, where the lambda is written, since how often
+the lambda runs isn't known. A pure sequence, `seq(int)`, is not reported: pulling it again costs time but gives the
+same elements. Nor is one whose contexts are only a variable, the `c` of `[c] seq(a)`, which may stand for none.
+
+The fix, for a local whose type isn't written, pulls the sequence once into a list, `def xs = numbers() \seq.toList`,
+and passes the list on as a sequence, `\list.toSeq`, where a use of it needs a `seq`.
 
 ## `@allow` that suppresses nothing
 

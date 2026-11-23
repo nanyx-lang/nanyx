@@ -70,6 +70,11 @@ A sequence whose steps use a context says so in its type: reading lines gives a 
 be pulled only where `FileSystem` is available, and a sequence whose steps wait would be an `[Async] seq(a)`, which is
 what Kotlin calls a flow. No second sequence type is needed for impure sequences.
 
+Pulling such a sequence again runs its steps, and their effects, again. Since its type says so, the official linter's
+`repeatedPulls` rule warns when a def pulls one more than once on some path, and its fix pulls it once into a list
+([Sequence with effects pulled more than once](../standard-tools/official-linter#sequence-with-effects-pulled-more-than-once)).
+The rule is `RepeatedPulls`, in `LinterRepeatedPulls.fs`.
+
 Because a lazy function runs its callback when the result is pulled, not when it is called, it moves the callback's
 contexts into the type of its result, where an eager function requires them at the call:
 

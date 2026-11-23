@@ -37,6 +37,10 @@ Most errors, such as type errors and unknown names, don't stop a debug build: se
 One code is a warning, not an error: [`NYX0051`](#nyx0051), a version that has been unlisted, which the build goes on
 with. The command line shows it as `warning NYX0051`.
 
+A linter's diagnostics are not on this page. Their codes name the linter and the rule, such as `default/unusedBindings`
+or `default/repeatedPulls` (a sequence whose steps require contexts, pulled more than once), and the official linter's
+rules are described on the [Official style linter](./official-linter) page.
+
 The codes are grouped by what the compiler is doing when it finds the error:
 
 - `NYX00xx`: reading a file, its directives and its imports.
