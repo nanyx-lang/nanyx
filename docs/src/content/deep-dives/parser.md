@@ -41,6 +41,12 @@ open.
   through forward references (`DescentCursor.Forward`), which `DescentTopLevel.fill` fills before anything is read.
   `Api.runModuleParser` reads a whole file (`DescentTopLevel.tryReadModuleWithState`), and `parseTypeSignature`, which
   `nanyx search` reads a query's type with, reads a type alone (`DescentTypes.readTypeSignature`).
+  Going back throws away what the alternative read, so where an alternative would read what a later one then reads
+  again, it is tried only when a look ahead shows it may match, or the reading is shared: a type's arguments are read
+  once, named or not (`typeApply`), brackets and a tag's payload are read as a record only when a named field may be in
+  them (`mayHoldField`), and a capitalised call as `C(T).member` only when a `.` is straight after its `)`
+  (`DescentCursor.closingParen`). Each level of a nested type, `list(list(int))`, is read once: read twice, it doubled
+  the time with each level.
 - **Its errors.** A mistake the parser has a message of its own for is reported with that message where it is
   (`Reported`, raised by `Cursor.Report`): an operator that isn't spaced, `&&`, a prefix `!`, two operators that can't
   be written side by side, a `$` before a type's name, an escape that isn't one, a `_` not between two digits, and the

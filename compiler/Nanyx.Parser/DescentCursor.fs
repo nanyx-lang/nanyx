@@ -403,6 +403,23 @@ let many (cursor: Cursor) (item: unit -> 'a) : 'a list =
         | None -> going <- false
     List.ofSeq items
 
+/// The offset from the cursor of the `)` that closes the `(` at `offset`, if the text closes it. Lets a reading look past
+/// brackets before it commits to reading what is in them twice.
+let closingParen (c: Cursor) (offset: int) : int option =
+    let mutable i = offset + 1
+    let mutable depth = 1
+    let mutable found = None
+    while found.IsNone && depth > 0 do
+        match c.At i with
+        | Code token when token.Kind = EndOfFile -> depth <- 0
+        | Code token when token.Kind = LeftParen -> depth <- depth + 1
+        | Code token when token.Kind = RightParen ->
+            depth <- depth - 1
+            if depth = 0 then found <- Some i
+        | _ -> ()
+        i <- i + 1
+    found
+
 /// A cursor over the layout of `source`, the text of the file at `file`.
 let cursorOf (file: string) (source: string) =
     let lexed = Lexer.lex file source

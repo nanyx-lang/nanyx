@@ -53,6 +53,46 @@ let private optionalField (name: Identifier) =
 let private across (c: Cursor) (kind: TokenKind) (text: string option) =
     c.Across(fun c -> c.Is(kind, ?text = text))
 
+/// Whether the brackets that open at `offset` from the cursor may hold a named field, after the positional types that may
+/// come first: whether a field's start, an attribute, `mut`, or a name and a `:`, `::` or `?` after it, or something that
+/// can't start a type, is first in the brackets or after a `,` outside any brackets in them. Where none is, a reading as
+/// a record would read the types in them and be thrown away, and so is not tried (#2218).
+let private mayHoldField (c: Cursor) (offset: int) =
+    // The offset of the first code token at or after `i`, and the token.
+    let rec code (i: int) =
+        match c.At i with
+        | Code token -> i, token
+        | _ -> code (i + 1)
+    let startsField (first: Token) (afterFirst: int) =
+        let _, next = code afterFirst
+        match first.Kind with
+        | At -> true
+        | Keyword when c.Text first = "mut" -> true
+        | Name | Keyword | BacktickedName | LeftParen | LeftBracket | Hash ->
+            next.Kind = Colon || next.Kind = DoubleColon || (next.Kind = Operator && c.Text next = "?")
+        | _ -> true
+    let mutable i, current = code (offset + 1)
+    let mutable depth = 0
+    let mutable found = startsField current (i + 1)
+    let mutable going = not found
+    while going do
+        match current.Kind with
+        | EndOfFile -> going <- false
+        | LeftParen | LeftBracket -> depth <- depth + 1
+        | RightParen | RightBracket when depth = 0 -> going <- false
+        | RightParen | RightBracket -> depth <- depth - 1
+        | Comma when depth = 0 ->
+            let after, afterToken = code (i + 1)
+            if startsField afterToken (after + 1) then
+                found <- true
+                going <- false
+        | _ -> ()
+        if going then
+            let next, nextToken = code (i + 1)
+            i <- next
+            current <- nextToken
+    found
+
 let private typeIdentifier (c: Cursor) =
     noDollar c
     let start = c.Start
@@ -212,6 +252,7 @@ and private typeTag (c: Cursor) =
                     TypeExpr.at (c.SpanFrom fieldsStart) (TypeRecord items)
                 // Positional types, then named fields, as a record type writes them: `#rect(string, width: float)`.
                 let mixed () =
+                    if not (mayHoldField c -1) then raise NoMatch
                     let fieldsStart = c.Start
                     let positional =
                         many c (fun () ->
@@ -253,7 +294,9 @@ and private typeApply (c: Cursor) =
         let record = TypeExpr.at (c.SpanFrom fieldsStart) (TypeRecord fields)
         c.Declare RecordTypeFields record.Id (List.ofSeq declared)
         [ record ]
-    let withNamedArguments () =
+    // The arguments are read once, each as `name = T` or as a type, and are named arguments if any of them is named, or
+    // else types, which an arrow after them makes one function type (#2218).
+    let arguments () =
         let argument () =
             match c.Attempt(fun () ->
                 let argStart = c.Start
@@ -264,21 +307,19 @@ and private typeApply (c: Cursor) =
                 TypeExpr.at (c.SpanFrom argStart) (TypeNamedArgument(argName, value))) with
             | Some named -> named
             | None -> typeUnion c
+        let listStart = c.Start
         let args = sepBy1 c argument (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore)
-        if not (c.Is RightParen) then raise NoMatch
-        if args |> List.exists (fun arg -> match arg.Kind with TypeNamedArgument _ -> true | _ -> false) then args
-        else raise NoMatch
-    let typeArguments () =
-        match typeList c with
-        | (args, None), _ -> args
-        | list -> [ typeListToType list ]
+        if args |> List.exists (fun arg -> match arg.Kind with TypeNamedArgument _ -> true | _ -> false) then
+            if not (c.Is RightParen) then raise NoMatch
+            args
+        else
+            match c.Attempt(fun () -> (if not (across c Arrow None) then raise NoMatch); c.Take() |> ignore; typeExpr c) with
+            | Some result -> [ typeListToType ((args, Some result), c.SpanFrom listStart) ]
+            | None -> args
     let args =
         match c.Attempt recordArgument with
         | Some args -> args
-        | None ->
-            match c.Attempt withNamedArguments with
-            | Some args -> args
-            | None -> typeArguments ()
+        | None -> arguments ()
     c.Expect RightParen |> ignore
     TypeExpr.at (c.SpanFrom start) (TypeApply(applied, args))
 
@@ -333,7 +374,7 @@ and private typeAtom (c: Cursor) : TypeExpr =
           fun () -> typeTag c
           fun () -> typeApplyOrAssociated c
           fun () -> contextSet c
-          fun () -> typeRecord c
+          fun () -> if c.Is LeftParen && not (mayHoldField c 0) then raise NoMatch else typeRecord c
           fun () -> typeTupleOrParen c
           fun () -> typeIdentifier c
           fun () -> c.Fail "a type" ]
