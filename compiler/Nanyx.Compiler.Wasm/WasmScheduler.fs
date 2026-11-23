@@ -33,6 +33,8 @@ module Names =
     let current = TaskLowering.Names.currentTask
     /// Runs the other tasks until the running one's turn comes again.
     let runOthers = TaskLowering.Names.runOthers
+    /// Frees the main task when it holds no scope.
+    let settle = TaskLowering.Names.settleMain
     /// The resume entries of the two waits.
     let waitResume = "__nanyx_task_wait_resume"
     let scopeExitResume = "__nanyx_scope_exit_resume"
@@ -292,8 +294,33 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
         "local.get $s"
         $"call ${free}"
         ")" ]
+      // Frees the main task when it is running and holds no scope, so nothing is left of it: it is made again if
+      // anything needs it later.
+      [ $"(func ${Names.settle} (local $t i32)"
+        $"global.get ${Names.main}"
+        "local.tee $t"
+        $"global.get ${Names.running}"
+        "i32.eq"
+        "local.get $t"
+        "i32.const 0"
+        "i32.ne"
+        "i32.and"
+        "if"
+        "local.get $t"
+        $"i32.load offset={ownScope}"
+        "i32.eqz"
+        "if"
+        "local.get $t"
+        $"call ${free}"
+        "i32.const 0"
+        $"global.set ${Names.main}"
+        "i32.const 0"
+        $"global.set ${Names.running}"
+        "end"
+        "end"
+        ")" ]
       // Ends the running task's innermost scope, whose tasks have all finished. The main task is freed with its
-      // outermost scope, and made again if anything needs it later.
+      // outermost scope.
       [ $"(func ${Names.leave} (local $cur i32) (local $s i32)"
         $"call ${Names.current}"
         "local.tee $cur"
@@ -305,21 +332,7 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (oneToOne: string) 
         $"i32.store offset={ownScope}"
         "local.get $s"
         $"call ${Names.close}"
-        "local.get $cur"
-        $"global.get ${Names.main}"
-        "i32.eq"
-        "local.get $cur"
-        $"i32.load offset={ownScope}"
-        "i32.eqz"
-        "i32.and"
-        "if"
-        "local.get $cur"
-        $"call ${free}"
-        "i32.const 0"
-        $"global.set ${Names.main}"
-        "i32.const 0"
-        $"global.set ${Names.running}"
-        "end"
+        $"call ${Names.settle}"
         ")" ]
       [ $"(func ${Names.scopeExit} (local $frame i32)"
         $"call ${Names.current}"

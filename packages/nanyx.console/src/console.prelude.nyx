@@ -2,7 +2,7 @@
   `Console`, with `print`, `println`, `eprint` and `eprintln`; the process, `Env`, with `args`,
   `variable` and `exit`; the file system, `FileSystem`, with `Path` and `FsError`; outbound HTTP,
   `Http`, with `Request`, `Method`, `Response` and `HttpError`; `Async`, which the calls that wait
-  require; `Random`, the source of random numbers; and `Clock`, the time.
+  require, with `start` and `await`, which start a task and wait for it; `Random`, the source of random numbers; and `Clock`, the time.
 export module console.prelude
 
 export nanyx.console.core/console (Console, IoError, print, println, eprint, eprintln)

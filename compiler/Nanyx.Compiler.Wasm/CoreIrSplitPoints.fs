@@ -1,8 +1,9 @@
 /// Where a function that can wait can stop and carry on later: its split points, which a state machine resumes at (see
 /// "How tasks are compiled" in `docs/src/content/deep-dives/async.md`). A function is a state machine when it can stop:
 /// when it calls a function value that requires `Async` (`IrFunction`'s `waits`), waits for a task or for a scope's tasks
-/// (see `WasmScheduler`), or calls a function that is a state machine itself. Each such call is a split point. This module finds them in the core IR once it is counted, and what each
-/// keeps across it; `TaskLowering` turns them into code.
+/// (see `WasmScheduler`), or calls a function that is a state machine itself. Each such call is a split point. This
+/// module finds them in the core IR once it is counted, and what each keeps across it; `TaskLowering` turns them into
+/// code.
 module internal Transpiler.Wasm.CoreIrSplitPoints
 
 open System.Collections.Generic

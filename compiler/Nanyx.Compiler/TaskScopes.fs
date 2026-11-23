@@ -20,13 +20,18 @@ let scopeContext = "TaskScope"
 /// The name a task is started by: `start! e` is `start({ e })` (a `#delay` keyword, see `WorkflowDesugaring`).
 let startName = "start"
 
-/// Whether `expr` starts a task: whether it names `start`, called or as a value, anywhere in it, a lambda included.
-let private startsTask (expr: Expression) : bool =
-    SyntaxTree.expressionsWithin expr
-    |> List.exists (fun within ->
-        match within.Kind with
-        | FunctionCall(name, _, _)
-        | IdentifierExpr name -> name = startName
+/// Whether `expr` starts a task: whether it names `start`, called or as a value, anywhere in it, a lambda included,
+/// where nothing in it binds that name (a local `def start` is not the one that starts a task).
+let private startsTask (expr: Expression) : bool = SyntaxTree.freeNames expr |> List.contains startName
+
+/// Whether the module defines a `start` of its own, at its top level or in a module block, so that `start` in it is
+/// not the one that starts a task.
+let rec private definesStart (items: TopLevelItem list) : bool =
+    items
+    |> List.exists (fun item ->
+        match item.Kind with
+        | Def(ValueDef(_, name, _, _)) -> name = startName
+        | ModuleBlock(_, inner) -> definesStart inner
         | _ -> false)
 
 /// `body` as the block of a call of `scope`, at `body`'s span.
@@ -37,7 +42,7 @@ let private scoped (body: Expression) : Expression =
 /// `value`, the value of a module-level def, with its body a scope if it starts a task.
 let private scopedValue (value: Expression) : Expression option =
     match value.Kind with
-    | Lambda(parameters, body, takesUnit) when startsTask body -> Some { value with Kind = Lambda(parameters, scoped body, takesUnit) }
+    | Lambda(parameters, body, takesUnit) when startsTask value -> Some { value with Kind = Lambda(parameters, scoped body, takesUnit) }
     | _ -> None
 
 /// `items`, with each module-level def that starts a task a scope, and whether any is.
@@ -67,10 +72,13 @@ let rec private scopedItems (isEntry: Expression -> bool) (items: TopLevelItem l
             | _ -> item)
     items, any
 
-/// `module'` with each module-level def that starts a task, and a script's entry point if it does, a scope. `isEntry`
-/// says whether a top-level call is the one that runs the script's entry point. A module with a scope imports
-/// `nanyx/async` for it, under `TaskScopeSyntax.alias`.
+/// `module'` with each module-level def that starts a task, and a script's entry point if it does, a scope, unless the
+/// module defines a `start` of its own. `isEntry` says whether a top-level call is the one that runs the script's entry
+/// point. A module with a scope imports `nanyx/async` for it, under `TaskScopeSyntax.alias`.
 let wrap (isEntry: Expression -> bool) (module': Module) : Module =
-    match scopedItems isEntry module' with
-    | items, true -> TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport asyncModule) (Some TaskScopeSyntax.alias) ]) :: items
-    | items, false -> items
+    if definesStart module' then
+        module'
+    else
+        match scopedItems isEntry module' with
+        | items, true -> TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport asyncModule) (Some TaskScopeSyntax.alias) ]) :: items
+        | items, false -> items

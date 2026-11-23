@@ -37,6 +37,12 @@ Nothing starts `Async`: a host that can suspend provides it to the program's ent
 provides `Console`, and inference adds it to every function that calls one that waits. A function
 that doesn't require it provably never waits.
 
+To do several things at once, start a [`Task`](#task) for each with `start!`, and [`await`](#await) it: a task
+runs at the same time as the code that started it, in the same instance, and can't outlive the def
+that started it, which waits for its tasks before it returns. The hosts that provide `Async`
+export `start` and `await` beside it. How to use them is on the
+[Async](../advanced/async) page.
+
 ## `Async`
 
 ```nanyx fragment
@@ -48,5 +54,55 @@ The capability to wait. It has no members: the functions that wait, such as `htt
 exports `Async` and its `run` requires it, so the program's top level has it, and the host's `run`
 passes it on to the entry point. It is protected, so no `use` outside this module can make one,
 and a host that can't suspend doesn't provide it, so a program that needs it is an error there.
+
+## `TaskScope`
+
+```nanyx fragment
+scoped context TaskScope = protected ()
+```
+
+The scope a task belongs to: the def that started it, as a `memory` block is the scope of its cells. Starting a
+task requires it, and every module-level def whose body starts a task, and a script's top level, supplies it
+through [`scope`](#scope). It is scoped, so nothing that holds a task can leave the def that started it.
+
+## `Task`
+
+```nanyx fragment
+type Task(a) = [TaskScope] protected (handle: I32)
+```
+
+A task: something running at the same time as the code that started it, in the same instance, which gives back
+a value of type `a` when it finishes. [`start`](#start) starts one and [`await`](#await) waits for it. It belongs to the scope it
+was started in, so it can't leave that def.
+
+## `scope`
+
+```nanyx fragment
+def scope: [c] ([TaskScope, c] () -> a) -> a
+```
+
+Runs `block` as a scope for the tasks it starts, and gives back its result once every one of them has finished,
+awaited or not. The compiler makes the body of each module-level def that starts a task such a block, so a def
+is the scope of its tasks, and nothing that holds one can leave it.
+
+## `start`
+
+```nanyx fragment
+def start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a)
+```
+
+Starts a task that runs `work`, and gives it back at once: the task runs at the same time as the code that
+started it, from the next time that code waits. It belongs to the innermost scope, the def that started it. It
+is a `#delay` keyword: `start! e` is `start({ e })`, so `start! http.get(url) \orCrash("failed")` runs the
+`orCrash` in the task.
+
+## `await`
+
+```nanyx fragment
+def await: [Async, TaskScope] Task(a) -> a
+```
+
+Waits for `task` to finish, and gives back what it gave back. A task can be awaited more than once: each gives
+back the same value.
 
 <!-- End of the generated reference. -->

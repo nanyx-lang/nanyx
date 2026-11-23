@@ -5,6 +5,12 @@
   Nothing starts `Async`: a host that can suspend provides it to the program's entry point, as it
   provides `Console`, and inference adds it to every function that calls one that waits. A function
   that doesn't require it provably never waits.
+
+  To do several things at once, start a [`Task`] for each with `start!`, and [`await`] it: a task
+  runs at the same time as the code that started it, in the same instance, and can't outlive the def
+  that started it, which waits for its tasks before it returns. The hosts that provide `Async`
+  export `start` and `await` beside it. How to use them is on the
+  [Async](../advanced/async) page.
 module async
 
 --| The capability to wait. It has no members: the functions that wait, such as `http.get` and
@@ -43,10 +49,12 @@ export def start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = { work
   -- The task keeps what `work` gives back as a function that gives it, so that the scheduler can drop it, whatever
   -- its type, and each `await` gets a reference of its own.
   Task(
-    handle = __nanyx_task_start({
-      def value = work()
-      __nanyx_task_finish({ value })
-    })
+    handle = __nanyx_task_start(
+      {
+        def value = work()
+        __nanyx_task_finish({ value })
+      }
+    )
   )
 }
 

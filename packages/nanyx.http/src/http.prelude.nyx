@@ -1,6 +1,6 @@
 --| What every module of a program the HTTP host serves sees without importing it: `Request`,
   `Method` and `Response`; outbound HTTP, `Http`, with `HttpError`; `Async`, which the calls that
-  wait require; `Random`, the source of random numbers; and `Clock`, the time.
+  wait require, with `start` and `await`, which start a task and wait for it; `Random`, the source of random numbers; and `Clock`, the time.
 export module http.prelude
 
 export nanyx/async (Async, await, start)

@@ -36,9 +36,11 @@ module Names =
     /// The resume entry of the state machine `name`.
     let resumeEntry (name: string) = $"{name}__resume"
     /// The scheduler's helpers that `blockOn` calls (see `WasmScheduler`): the task running, made the main task if there
-    /// is none, and the one that runs the other tasks until the running one's turn comes again.
+    /// is none, the one that runs the other tasks until the running one's turn comes again, and the one that frees the
+    /// main task when it holds no scope, as when it was made only to wait in.
     let currentTask = "__nanyx_task_current"
     let runOthers = "__nanyx_task_run_others"
+    let settleMain = "__nanyx_task_settle"
 
 /// Where a task keeps the frame it stopped in (see `WasmScheduler`).
 let taskFrameOffset = 8
@@ -173,7 +175,8 @@ let resumable (resume: string) (child: string) (state: int) (resumeType: string)
 /// The code after a call of a state machine, from code that is not one, that runs it to the end: while it stops, the
 /// other tasks run until the running one's turn comes again (see `WasmScheduler`), and then it is resumed, through its
 /// frame's resume entry, of the indirect type `resumeType`. Its value, of type `result`, is kept in the local `value`
-/// meanwhile, and the frame in `frame`.
+/// meanwhile, and the frame in `frame`. The running task keeps the frame while the others run: the main task, made
+/// for it when there is none, is freed again after each turn if it holds no scope.
 let blockOn (value: string) (frame: string) (resumeType: string) : string =
     lines
         [ $"local.set ${value}"
@@ -195,6 +198,7 @@ let blockOn (value: string) (frame: string) (resumeType: string) : string =
           "i32.load"
           $"call_indirect (type ${resumeType})"
           $"local.set ${value}"
+          $"call ${Names.settleMain}"
           $"br $__resumed_{value}"
           "end"
           "end"

@@ -652,9 +652,13 @@ module Compiler =
                 // An error is deferred when the diagnostic itself was placed, its place included.
                 let placed = Set.ofList placed
                 let undeferred = moduleErrors |> List.filter (placed.Contains >> not)
-                // The module's own definitions win over imported ones of the same name.
+                // The module's own definitions win over imported ones of the same name, a script's values that run in
+                // its entry point among them.
                 let exported = SyntaxTree.exportedValueNames own
-                let ownNames = exported |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
+                let ownNames =
+                    exported
+                    |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
+                    |> Set.union state.ScriptEntryValues
                 let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =
                     merged.Inlined @ merged.PreludeInlined

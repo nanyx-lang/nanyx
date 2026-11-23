@@ -164,3 +164,19 @@ println("after")"""
         Assert.Equal(1, outcome.ExitCode)
         Assert.Contains("boom", outcome.StandardError)
         Assert.Equal("", outcome.StandardOutput)
+
+[<Fact>]
+let ``A def whose parameter or local def is named start starts no task, so it is no scope`` () =
+    let source =
+        """def from = { start: int, n: int -> start + n }
+
+def later = { _ ->
+  def start = 2
+  start * 3
+}
+
+println(from(1, 2))
+println(later())
+"""
+    Assert.DoesNotContain("$__nanyx_scope_enter", transpileWat source)
+    runSource source |> assertRan "3\n6\n"
