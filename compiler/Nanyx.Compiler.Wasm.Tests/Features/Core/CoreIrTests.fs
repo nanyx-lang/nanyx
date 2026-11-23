@@ -395,7 +395,7 @@ let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
       ContextArguments = fun _ _ _ _ -> Ok []
       FoundMember = fun _ _ _ _ -> None
       LocalCallees = Map.empty
-      ContextLayouts = { Plain = Map.empty; Parameterised = Map.empty }
+      ContextLayouts = { Plain = Map.empty; Parameterised = Map.empty; Waiting = Set.empty }
       AmbientMembers = Map.empty
       UseKeys = Map.empty
       UseBindingContexts = Map.empty

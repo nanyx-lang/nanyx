@@ -227,12 +227,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | Some ty -> toIrType ty
                     // A type argument the call does not fix is a type variable nothing constrains (see `toIrType`).
                     | None -> IrUnit)
+            // What each context variable stands for, as the function type that requires it: its members, and whether it
+            // can wait.
             let contextArguments =
                 contextVars
-                |> List.map (fun id -> bindings |> Map.tryFind id |> Option.map List.singleton |> Option.defaultValue [] |> membersOf)
+                |> List.map (fun id -> toIrType (TyFunc(TyPrimitive "unit", TyPrimitive "unit", bindings |> Map.tryFind id |> Option.toList)))
             let typeArguments =
-                if contextArguments |> List.forall List.isEmpty then typeArguments
-                else typeArguments @ (contextArguments |> List.map (fun members -> IrFunction(IrUnit, IrUnit, members)))
+                if contextArguments |> List.forall ((=) (IrFunction(IrUnit, IrUnit, [], false))) then typeArguments
+                else typeArguments @ contextArguments
             let described =
                 let variables = SpecKey.describedVariables scheme
                 typeVars |> List.filter variables.Contains |> List.map (fun id -> bindings |> Map.tryFind id |> Option.defaultValue (TyPrimitive "unit"))
@@ -583,7 +585,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// this instance (see `CoreIrLowerLifted.memberCalling`).
     member private this.MemberValue (expr: Expression) (key: ContextMemberKey) (memberVar: Var) (k: Expr -> Expr) : Expr =
         match input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst >> toIrType) with
-        | Some (IrFunction(_, _, wanted) as expected) when wanted |> List.exists (fst >> (=) key) ->
+        | Some (IrFunction(_, _, wanted, _) as expected) when wanted |> List.exists (fst >> (=) key) ->
             let functionName =
                 this.MemberTools.Request (SpecKey.plain $"__member_{sanitizeIdentifier (ContextMemberKey.text key)}_{IrType.mangle expected}" []) (this.MemberTools.Subst ()) (MemberCalling(key, expected))
             let arity = 1 + (adaptedValueTypes memberVar.Type expected).Length + wanted.Length
@@ -698,7 +700,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let instanceTy = substitute subst input.ExprTypes.[expr.Id]
         let passed =
             match ty with
-            | IrFunction(_, _, members) -> members |> List.map fst |> Set.ofList
+            | IrFunction(_, _, members, _) -> members |> List.map fst |> Set.ofList
             | _ -> Set.empty
         let specialised =
             input.DefinitionTypes |> Map.tryFind wrapped |> Option.exists (freeVars >> List.isEmpty >> not)
@@ -898,20 +900,20 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let bindElement = if boxing then bindLocal "__element" else bindTemp
         let members, parameterTys =
             match closure.Type with
-            | IrFunction(input, _, members) ->
+            | IrFunction(input, _, members, _) ->
                 members, (IrType.tupleElements input |> Option.map (List.map snd) |> Option.defaultValue [ input ])
             | _ -> [], []
         let call atoms =
             CoreIrLowerMembers.coerceAll this.MemberTools scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
                 match knownOf closure, closure.Type with
-                | Some (KnownFunction(wrapper, wrapped, at)), IrFunction(input, _, _) ->
+                | Some (KnownFunction(wrapper, wrapped, at)), IrFunction(input, _, _, _) ->
                     directArguments bindTemp (parameterNames wrapper).Tail.Length input atoms (fun atoms -> k (Expr.make (Call(callee wrapped at, atoms)) ty))
                 // A lambda that captures nothing is called as a call through its closure calls it, with the closure as
                 // its environment.
-                | Some (KnownLambda(lifted, closure)), IrFunction(_, output, [])
+                | Some (KnownLambda(lifted, closure)), IrFunction(_, output, [], _)
                     when not (CoreIrLowerBoxes.needsConversion output ty || CoreIrLowerMembers.differInContexts output ty) ->
                     k (Expr.make (Call(lifted, closure :: atoms)) ty)
-                | Some (KnownLambdaOver lifted), IrFunction(_, output, [])
+                | Some (KnownLambdaOver lifted), IrFunction(_, output, [], _)
                     when not (CoreIrLowerBoxes.needsConversion output ty || CoreIrLowerMembers.differInContexts output ty) ->
                     k (Expr.make (Call(lifted, AVar closure :: atoms)) ty)
                 | _ ->
@@ -919,19 +921,19 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         // A context member's result with values boxed, or a function that requires other contexts'
                         // members than the call has it require (#1899), is adapted to the type the call has it at.
                         match closure.Type with
-                        | IrFunction(_, output, _) when CoreIrLowerBoxes.needsConversion output ty || CoreIrLowerMembers.differInContexts output ty ->
+                        | IrFunction(_, output, _, _) when CoreIrLowerBoxes.needsConversion output ty || CoreIrLowerMembers.differInContexts output ty ->
                             bindTemp (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) output) (fun result ->
                                 CoreIrLowerMembers.coerce this.MemberTools scope result ty (fun atom -> k (Expr.make (Atom atom) ty)))
                         | _ -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) ty)))
         let elements =
             match closure.Type with
-            | IrFunction(input, _, _) -> IrType.tupleElements input
+            | IrFunction(input, _, _, _) -> IrType.tupleElements input
             | _ -> None
-        let takesOneValue = match closure.Type with IrFunction(input, _, _) -> CoreIrLowerArguments.takesOneValue input | _ -> false
+        let takesOneValue = match closure.Type with IrFunction(input, _, _, _) -> CoreIrLowerArguments.takesOneValue input | _ -> false
         match elements, (if takesOneValue then args else SyntaxTree.flattenCallArgs args) with
         | _, (_ :: _ :: _ as several) when takesOneValue ->
             atomsOf scope several (fun atoms -> CoreIrLowerArguments.asTuple bindElement atoms (fun tuple -> call [ tuple ]))
-        | _, flatArgs when (match closure.Type with IrFunction(IrUnit, _, _) -> true | _ -> false) ->
+        | _, flatArgs when (match closure.Type with IrFunction(IrUnit, _, _, _) -> true | _ -> false) ->
             // What the argument does is done first; its value, the unit, isn't passed.
             let rec run (remaining: Expression list) =
                 match remaining with

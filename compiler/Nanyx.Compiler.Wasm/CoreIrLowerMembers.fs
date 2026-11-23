@@ -81,7 +81,7 @@ let knownMembers (tools: MemberTools) (scope: Scope) (name: string) (node: NodeI
 let rec differInContexts (given: IrType) (wanted: IrType) : bool =
     match given, wanted with
     | _ when given = wanted -> false
-    | IrFunction(input, output, members), IrFunction(input', output', members') ->
+    | IrFunction(input, output, members, _), IrFunction(input', output', members', _) ->
         members <> members' || differInContexts input' input || differInContexts output output'
     | IrRecord givenFields, IrRecord wantedFields when List.map fst givenFields = List.map fst wantedFields ->
         List.exists2 (fun (_, givenTy) (_, wantedTy) -> differInContexts givenTy wantedTy) givenFields wantedFields
@@ -104,7 +104,7 @@ let rec differInContexts (given: IrType) (wanted: IrType) : bool =
 /// itself for the parts that are of the type again. A value of `expected`'s layout is left as it is.
 let rec coerce (tools: MemberTools) (scope: Scope) (atom: Atom) (expected: IrType) (k: Atom -> Expr) : Expr =
     match atomType atom, expected with
-    | IrFunction(_, _, given) as givenTy, IrFunction(_, _, wanted) when differInContexts givenTy expected || CoreIrLowerBoxes.needsConversion givenTy expected ->
+    | IrFunction(_, _, given, _) as givenTy, IrFunction(_, _, wanted, _) when differInContexts givenTy expected || CoreIrLowerBoxes.needsConversion givenTy expected ->
         let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
         memberAtoms tools scope None missing (fun captured ->
             let name = tools.Request (SpecKey.plain $"__adapt_{IrType.mangle givenTy}_to_{IrType.mangle expected}" []) (tools.Subst ()) (Adapting(givenTy, expected))

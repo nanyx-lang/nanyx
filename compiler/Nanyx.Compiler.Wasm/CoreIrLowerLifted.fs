@@ -115,7 +115,7 @@ let wrapperCalling (tools: LiftedTools) (wrapped: string) (instanceTy: Ty) (capt
     let valueParameters, bind, named = tools.ValueParameters parameterNames.Tail (List.map tools.ToIrType parameterTys)
     let passed =
         match tools.ToIrType instanceTy with
-        | IrFunction(_, _, members) -> members |> List.map (fun (key, ty) -> key, tools.NewVar (contextMemberParameter key) Param ty)
+        | IrFunction(_, _, members, _) -> members |> List.map (fun (key, ty) -> key, tools.NewVar (contextMemberParameter key) Param ty)
         | _ -> []
     let declared = tools.Input.ContextParameters |> Map.tryFind wrapped |> Option.map (fst >> List.map _.Key) |> Option.defaultValue []
     let order = declared @ (tools.VariableMembers wrapped (tools.BindingsAt wrapped instanceTy) |> List.map fst)
@@ -143,7 +143,7 @@ let wrapperCalling (tools: LiftedTools) (wrapped: string) (instanceTy: Ty) (capt
 let private adapting (tools: LiftedTools) (functionName: string) (fromMember: ContextMemberKey option) (givenTy: IrType) (expectedTy: IrType) : Function =
     let givenInput, givenOutput, given, result, wanted =
         match givenTy, expectedTy with
-        | IrFunction(givenInput, givenOutput, given), IrFunction(_, result, wanted) -> givenInput, givenOutput, given, result, wanted
+        | IrFunction(givenInput, givenOutput, given, _), IrFunction(_, result, wanted, _) -> givenInput, givenOutput, given, result, wanted
         | _ -> internalError $"an adapter from '{IrType.show givenTy}' to '{IrType.show expectedTy}'"
     let missing = given |> List.filter (fun (key, _) -> not (wanted |> List.exists (fst >> (=) key)))
     let held = if fromMember.IsSome then [] else [ "1", givenTy ]
@@ -200,7 +200,7 @@ let adapter (tools: LiftedTools) (functionName: string) (givenTy: IrType) (expec
 /// value is called would. What it calls is the instance where it is called, never one it was named under.
 let memberCalling (tools: LiftedTools) (functionName: string) (key: ContextMemberKey) (expectedTy: IrType) : Function =
     match expectedTy with
-    | IrFunction(_, _, wanted) ->
+    | IrFunction(_, _, wanted, _) ->
         match wanted |> List.tryFind (fst >> (=) key) with
         | Some (_, memberTy) -> adapting tools functionName (Some key) memberTy expectedTy
         | None -> internalError $"the member '{ContextMemberKey.text key}' named as a value of '{IrType.show expectedTy}', which doesn't take it"
