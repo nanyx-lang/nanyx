@@ -657,6 +657,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "      br $each"
             "    end"
             "  end"
+            ")" ]
       // A new string holding the bytes of an array of `U8`s, which are one each after its length (see
       // `CoreIrLayout.arrayElementOffset`), copied at once.
       Helpers.stringFromBytes,
