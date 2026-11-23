@@ -1016,7 +1016,8 @@ To fix it, define the type, or correct its name.
 # NYX0108: Unknown context
 
 A definition's type requires a context that is not defined, or requires an operator that no context in the prelude
-has.
+has, or a `use` loads a context whose name is not in scope, as in `use Countr(...)`; there, the message suggests the
+contexts with the closest names.
 
 ```nanyx
 def greet: [Telegraph] () -> () = { () }  -- error NYX0108: The signature of 'greet' names it, but it is not in scope
@@ -1882,7 +1883,7 @@ To fix it, write the instance in the `use` that loads it, `use Log(log = { m -> 
 # NYX0249: use of something other than a context instance
 
 A `use` loads something other than a context's constructor or a name a lambda bound with `context`: a record, a def's
-name, a call's result or a field. A `use` loads only a declared context, with its instance written there, so loose
+name, a call's result or a field. A call of a name that is not in scope at all is NYX0108 instead. A `use` loads only a declared context, with its instance written there, so loose
 members are never in scope ([Contexts](../advanced/contexts#loading-a-context)).
 
 ```nanyx
