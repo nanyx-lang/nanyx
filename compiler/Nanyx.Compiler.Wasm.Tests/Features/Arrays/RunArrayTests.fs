@@ -113,3 +113,15 @@ let ``Run - dbg writes an array after its type's name`` () =
     printing [ "def xs = dbg(array.fromList([\"a\", \"b\"]))"; "println(array.length(xs))" ]
     |> runSource
     |> withoutDbgLocations |> assertRan "2\nArray[\"a\", \"b\"]\n"
+
+[<Fact>]
+let ``Run - arrays of tuples and of records are written with interpolation`` () =
+    printing
+        [ "def pairs: Array((int, int)) = Array[(1, 2), (3, 4)]"
+          "println(\"{pairs}\")"
+          "def named: Array((string, int)) = Array[(\"a\" ++ \"b\", 1), (\"c\", 2)]"
+          "println(\"{named}\")"
+          "def points = Array[(x = 1, label = \"p\" ++ \"q\"), (x = 2, label = \"r\")]"
+          "println(\"{points}\")" ]
+    |> runSource
+    |> assertRan "[(1, 2), (3, 4)]\n[(ab, 1), (c, 2)]\n[(label = pq, x = 1), (label = r, x = 2)]\n"
