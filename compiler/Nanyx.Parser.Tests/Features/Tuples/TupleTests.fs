@@ -37,7 +37,7 @@ let ``def x, y is def (x, y) without the brackets`` () =
     | Result.Error err -> failwith $"Parse failed: {err}"
     // A pattern that may not match binds through a match, as with the brackets.
     match parseModule "def #some(x), y = pair" with
-    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Match (_, [ [ Kind (TuplePattern [ Kind (TagPattern ("some", _)); Kind (IdentifierPattern "y") ]) ], _ ])))))
+    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Match (_, [ [ Kind (TuplePattern([ Kind (TagPattern ("some", _)); Kind (IdentifierPattern "y") ], false)) ], _ ])))))
                   Kind (Def (ValueDef (_, "x", None, _)))
                   Kind (Def (ValueDef (_, "y", None, _))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
@@ -78,7 +78,7 @@ let ``def with a pattern that may not match binds through a one-arm match`` () =
     | Result.Error err -> failwith $"Parse failed: {err}"
     // A literal in a tuple pattern takes the same route, and a pattern binding no name is only the match.
     match parseModule "def (1, y) = point" with
-    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Match (_, [ [ Kind (TuplePattern [ Kind (LiteralPattern (IntLit64 1L)); Kind (IdentifierPattern "y") ]) ], Kind (IdentifierExpr "y") ])))))
+    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (Match (_, [ [ Kind (TuplePattern([ Kind (LiteralPattern (IntLit64 1L)); Kind (IdentifierPattern "y") ], false)) ], Kind (IdentifierExpr "y") ])))))
                   Kind (Def (ValueDef (_, "y", None, Kind (IdentifierExpr _)))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"

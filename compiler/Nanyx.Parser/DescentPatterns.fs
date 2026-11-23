@@ -60,15 +60,21 @@ let private literalOrRangePattern (c: Cursor) =
         let literal, _ = literal c
         Pattern.at (c.SpanFrom start) (LiteralPattern literal)
 
-/// `(p1, p2, ...)`: a tuple, or one pattern in brackets, which is that pattern.
+/// `, ...` after the elements of a tuple pattern, which leaves the value's other fields out: whether it is there.
+let private rest (c: Cursor) =
+    c.Attempt(fun () -> c.Expect Comma |> ignore; c.Expect Ellipsis |> ignore).IsSome
+
+/// `(p1, p2)`: a tuple, or one pattern in brackets, which is that pattern. `(p1, ...)` ends in `...` to leave the other
+/// fields out, even after one pattern.
 let rec private tuplePattern (c: Cursor) =
     let start = c.Start
     c.Expect LeftParen |> ignore
     let patterns = commaSeparated c (fun () -> pattern c)
+    let hasRest = rest c
     c.Expect RightParen |> ignore
     match patterns with
-    | [ single ] -> single
-    | multiple -> Pattern.at (c.SpanFrom start) (TuplePattern multiple)
+    | [ single ] when not hasRest -> single
+    | multiple -> Pattern.at (c.SpanFrom start) (TuplePattern(multiple, hasRest))
 
 /// `Name(p1, p2, ...)`: a record's fields by position, or what a nominal type wraps.
 and private recordPatternByPosition (c: Cursor) =
@@ -93,7 +99,7 @@ and private recordMemberPattern (c: Cursor) =
         name, value
     let firstMember = memberPattern ()
     let others = many c (fun () -> c.Expect Comma |> ignore; memberPattern ())
-    let hasRest = c.Attempt(fun () -> c.Expect Comma |> ignore; c.Expect Ellipsis |> ignore).IsSome
+    let hasRest = rest c
     c.Expect RightParen |> ignore
     Pattern.at (c.SpanFrom start) (RecordMemberPattern(firstMember :: others, hasRest))
 
@@ -157,11 +163,12 @@ and private tagPattern (c: Cursor) =
     let parenPayload () =
         let open' = c.Expect LeftParen
         let patterns = commaSeparated c (fun () -> pattern c)
+        let hasRest = rest c
         c.Expect RightParen |> ignore
         match patterns with
-        | [ single ] -> single
+        | [ single ] when not hasRest -> single
         // Several payload patterns match the payload as a tuple, written as the parenthesised list.
-        | multiple -> Pattern.at (c.SpanFrom open'.Start) (TuplePattern multiple)
+        | multiple -> Pattern.at (c.SpanFrom open'.Start) (TuplePattern(multiple, hasRest))
     // One pattern after spaces or tabs on the same line, and not a keyword: `if x is #zero then ...`.
     let inlinePayload () =
         let gap = c.Source.Substring(c.LastEnd, c.Start - c.LastEnd)

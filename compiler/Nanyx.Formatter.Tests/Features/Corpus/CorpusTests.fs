@@ -15,16 +15,23 @@ let private repositoryRoot = Corpus.repositoryRoot
 let private corpus =
     lazy ((Corpus.files.Value @ Corpus.docBlocks.Value) |> List.map (fun piece -> piece.Name, piece.Source))
 
-/// The pieces that parse, as their name, source and parse.
-let private parsed =
+/// Each piece, as its name, source and parse or the error that stops it parsing.
+let private parses =
     lazy
         corpus.Value
         |> Array.ofList
-        |> Array.Parallel.choose (fun (name, source) ->
-            match parseModuleWithTrivia name source with
+        |> Array.Parallel.map (fun (name, source) -> name, source, parseModuleWithTrivia name source)
+        |> List.ofArray
+
+/// The pieces that parse, as their name, source and parse. Not every piece is meant to: a test's input may be wrong on
+/// purpose. The examples always are (see `Every example parses`).
+let private parsed =
+    lazy
+        parses.Value
+        |> List.choose (fun (name, source, parse) ->
+            match parse with
             | Result.Ok parsed -> Some(name, source, parsed)
             | Result.Error _ -> None)
-        |> List.ofArray
 
 let private format (parsed: SourceModule) = Formatter.format Formatter.Options.defaults parsed
 
@@ -51,6 +58,18 @@ let private everyPiece (check: Formatted -> string option) =
 let ``The corpus has Nanyx in it, most of which parses`` () =
     Assert.True(corpus.Value.Length > 100, $"Only {corpus.Value.Length} pieces found under {repositoryRoot}")
     Assert.True(parsed.Value.Length > corpus.Value.Length / 2, $"Only {parsed.Value.Length} of {corpus.Value.Length} pieces parse")
+
+[<Fact>]
+let ``Every example parses`` () =
+    let examples = "examples" + string Path.DirectorySeparatorChar
+    let failures =
+        parses.Value
+        |> List.choose (fun (name, _, parse) ->
+            match parse with
+            | Result.Error error when name.StartsWith examples ->
+                Some $"{name}:{error.Span.StartLine + 1}:{error.Span.StartColumn + 1}: {error.Message}"
+            | _ -> None)
+    Assert.True(failures.IsEmpty, $"{failures.Length} examples don't parse:\n\n" + String.concat "\n" failures)
 
 [<Fact>]
 let ``Formatted code parses to the same tree`` () =

@@ -94,7 +94,7 @@ module IsSyntax =
             let bindings =
                 match names with
                 | [ name, span ] -> Pattern.at span (IdentifierPattern name)
-                | _ -> Pattern.at condition.Span (TuplePattern(names |> List.map (fun (name, span) -> Pattern.at span (IdentifierPattern name))))
+                | _ -> Pattern.at condition.Span (TuplePattern(names |> List.map (fun (name, span) -> Pattern.at span (IdentifierPattern name)), false))
             Some(
                 Match(
                     [ lowered ],

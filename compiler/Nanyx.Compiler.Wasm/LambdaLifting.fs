@@ -14,7 +14,7 @@ let rec private boundNamesPattern (pattern: Pattern) : string list =
     | IdentifierPattern name -> [ name ]
     | TagPattern(_, Some payload) -> boundNamesPattern payload
     | ArgumentTagPattern(_, arguments, payload) -> boundNames arguments @ (payload |> Option.map boundNamesPattern |> Option.defaultValue [])
-    | TuplePattern patterns
+    | TuplePattern(patterns, _)
     | AndPattern patterns -> patterns |> List.collect boundNamesPattern
     | ListPattern(patterns, rest) ->
         (patterns |> List.collect boundNamesPattern) @ (rest |> Option.map boundNamesPattern |> Option.defaultValue [])

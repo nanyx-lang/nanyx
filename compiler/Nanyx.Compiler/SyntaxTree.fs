@@ -333,7 +333,7 @@ module SyntaxTree =
         | RangePattern(startValue, endValue) -> referencedNames startValue @ referencedNames endValue
         | TagPattern(_, Some payload) -> referencedNamesInPattern payload
         | ArgumentTagPattern(_, arguments, payload) -> referencedNames arguments @ (payload |> Option.toList |> List.collect referencedNamesInPattern)
-        | TuplePattern patterns
+        | TuplePattern(patterns, _)
         | AndPattern patterns
         | ListPattern(patterns, _) -> patterns |> List.collect referencedNamesInPattern
         | ListSplatMiddle(before, after) -> (before @ after) |> List.collect referencedNamesInPattern

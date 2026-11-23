@@ -23,7 +23,7 @@ let ``an and-pattern joins two patterns or more with &`` () =
 let ``an and-pattern nests inside other patterns`` () =
     match armsOf "def f = { | #some(n & { > 1 }) -> 1 | (a & 1, b) -> 2 | [x & y, ...] -> 3 }" with
     | [ [ Kind (TagPattern ("some", Some (Kind (AndPattern [ Kind (IdentifierPattern "n"); Kind (GuardPattern _) ])))) ]
-        [ Kind (TuplePattern [ Kind (AndPattern [ Kind (IdentifierPattern "a"); Kind (LiteralPattern (IntLit64 1L)) ]); _ ]) ]
+        [ Kind (TuplePattern([ Kind (AndPattern [ Kind (IdentifierPattern "a"); Kind (LiteralPattern (IntLit64 1L)) ]); _ ], false)) ]
         [ Kind (ListPattern ([ Kind (AndPattern [ Kind (IdentifierPattern "x"); Kind (IdentifierPattern "y") ]) ], Some _)) ] ] -> ()
     | other -> failwith $"Unexpected arms: %A{other}"
 

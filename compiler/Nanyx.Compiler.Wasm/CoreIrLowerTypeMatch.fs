@@ -113,7 +113,7 @@ let private payloadPattern (tools: TypeMatchTools) (payloadTy: IrType) (pattern:
             PBind var, vars |> Map.add name var
         | _ -> PWildcard, vars
     match pattern.Kind, payloadTy with
-    | TuplePattern items, IrRecord fields ->
+    | TuplePattern(items, false), IrRecord fields ->
         let parts, vars =
             List.zip items fields
             |> List.indexed
