@@ -86,7 +86,7 @@ let rec private bindPayload (armBody: Expression) (pattern: Pattern) (ty: Ty) (e
     | IdentifierPattern name, _ ->
         let symbol, declared = declareSymbol ArmBody armBody.Id name PatternVariable false (Some armBody.Span.End) state
         Ok (TypeEnv.declare name symbol (TypeEnv.mono ty) env, recordSymbolType symbol ty declared)
-    | TuplePattern items, TyRecord(fields, _) when items.Length = fields.Count ->
+    | TuplePattern(items, false), TyRecord(fields, _) when items.Length = fields.Count ->
         List.zip items (List.init items.Length (fun index -> fields.[TypeResolution.tupleFieldName index]))
         |> List.fold (fun result (item, itemTy) -> result |> Result.bind (bindPayload armBody item itemTy)) (Ok (env, state))
     | _ -> Error [ wrongPattern pattern.Span "A description's payload is matched by a name or `_`" ]

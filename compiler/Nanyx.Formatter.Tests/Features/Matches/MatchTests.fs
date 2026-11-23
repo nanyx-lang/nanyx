@@ -66,6 +66,15 @@ let ``A tag's record payload pattern is written in the tag's brackets`` () =
     Assert.Equal("def g = { | #some(a = 1, ...) -> 1 }\n", format "def g = { | #some((a = 1, ...)) -> 1 }")
 
 [<Fact>]
+let ``Patterns of fields without = keep their ...`` () =
+    unchanged (normalized """def f = {
+  | (a, ...) -> 1
+  | #some(width, ...) -> 2
+  | #Email(localPart, ...) -> 3
+}""")
+    Assert.Equal("def g = { | (a, _, ...) -> 1 }\n", format "def g = { | ( a ,_,... ) -> 1 }")
+
+[<Fact>]
 let ``if, if-is and multi-branch if are printed as written`` () =
     unchanged "def a = { x -> if x > 0 then 1 else 0 }\n"
     unchanged "def b = { x -> if x is #some(y) then y else 0 }\n"

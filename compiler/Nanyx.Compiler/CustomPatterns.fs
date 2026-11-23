@@ -190,7 +190,7 @@ module internal CustomPatterns =
         | LiteralPattern literal -> at (LiteralExpr literal)
         | IdentifierPattern name -> at (IdentifierExpr name)
         | UnitPattern -> at UnitExpr
-        | TuplePattern items ->
+        | TuplePattern(items, false) ->
             let values = items |> List.map asArguments
             if values |> List.forall Option.isSome then at (TupleExpr(values |> List.choose id)) else None
         | TagPattern(tag, None) -> at (TagExpr(tag, None))

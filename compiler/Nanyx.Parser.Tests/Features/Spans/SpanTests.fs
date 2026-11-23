@@ -263,7 +263,7 @@ and private expressionsOfPattern (pattern: Pattern) =
     | WildcardPattern
     | UnitPattern
     | ElsePattern -> []
-    | TuplePattern patterns
+    | TuplePattern(patterns, _)
     | AndPattern patterns
     | RecordPattern (_, patterns) -> patterns |> List.collect expressionsOfPattern
     | RecordMemberPattern(members, _) -> members |> List.collect (snd >> expressionsOfPattern)
@@ -319,7 +319,7 @@ let rec private expressionsOfItem (item: TopLevelItem) =
 let rec private patternsWithin (pattern: Pattern) : Pattern list =
     pattern ::
         match pattern.Kind with
-        | TuplePattern patterns
+        | TuplePattern(patterns, _)
         | AndPattern patterns
         | RecordPattern (_, patterns) -> patterns |> List.collect patternsWithin
         | RecordMemberPattern(members, _) -> members |> List.collect (snd >> patternsWithin)
@@ -583,7 +583,7 @@ let ``each pattern spans its text, and nested patterns span theirs`` () =
         | TagPattern ("some", Some tuple) ->
             textOf source tuple.Span |> should equal "(a, _)"
             match tuple.Kind with
-            | TuplePattern [ a; wildcard ] ->
+            | TuplePattern([ a; wildcard ], false) ->
                 textOf source a.Span |> should equal "a"
                 a.Span.StartLine |> should equal 1
                 a.Span.StartColumn |> should equal 11
@@ -641,7 +641,7 @@ let ``a tag with several payload patterns matches them as a tuple spanning the p
         | TagPattern ("pair", Some payload) ->
             textOf source payload.Span |> should equal "(a, b)"
             match payload.Kind with
-            | TuplePattern [ a; b ] ->
+            | TuplePattern([ a; b ], false) ->
                 textOf source a.Span |> should equal "a"
                 textOf source b.Span |> should equal "b"
             | other -> failwith $"Expected a tuple payload, got %A{other}"

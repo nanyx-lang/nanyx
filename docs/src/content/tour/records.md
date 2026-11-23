@@ -144,7 +144,7 @@ An editor writes a record's fields in the order they are written, in its type or
 
 An annotation is taken exactly as written, so annotate with `...` when you mean "at least these fields".
 
-[Record patterns](./pattern-matching#records) follow the same rule. A pattern names every field of the record, or ends in `...` to leave the others out:
+[Record patterns](./pattern-matching#records) follow the same rule. A pattern names every field of the record, or ends in `...` to leave the others out, whether it writes them with `=` or not:
 
 ```nanyx fragment
 match person

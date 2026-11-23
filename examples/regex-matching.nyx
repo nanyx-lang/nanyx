@@ -1,22 +1,24 @@
+::dependency nanyx.regex
+
 module contactInformation
 
-import nanyx/text.regex
+import nanyx.regex/regex
 
 -- Custom patterns wrap the regular-expression matching, so that the match
 -- reads as if the language had email-address and phone-number literals.
 -- Single-quoted strings are raw, which suits regular expressions.
 
-def emailPattern = Regex('^(\w+)@(\w+(\.\w+)+)$')
-def phonePattern = Regex('^\d{3}-\d{3}-\d{4}$')
+def emailPattern = Regex.parse('^(\w+)@(\w+(\.\w+)+)$') \orCrash("bad pattern")
+def phonePattern = Regex.parse('^\d{3}-\d{3}-\d{4}$') \orCrash("bad pattern")
 
 pattern string -> #Email(localPart: string, domain: string) | _ = { s ->
-  match emailPattern \captures(s)
-    | #some([localPart, domain, ...]) -> #Email(localPart = localPart, domain = domain)
-    | _ -> _
+  match s \Regex.find(emailPattern)
+    | #some(m) -> #Email(localPart = m \group(1) \someOr(""), domain = m \group(2) \someOr(""))
+    | #notFound -> _
 }
 
 pattern string -> #Phone(string) | _ = { s ->
-  if phonePattern \matches(s) then #Phone(s) else _
+  if s \Regex.isMatch(phonePattern) then #Phone(s) else _
 }
 
 def saveContactInformation: [Console] string -> () = {

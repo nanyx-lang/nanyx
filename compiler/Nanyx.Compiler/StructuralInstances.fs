@@ -280,14 +280,14 @@ module internal StructuralInstances =
                     | None -> None, text [ StringText $"#{tagName}" ]
                     // A payload written out as a tuple or a record is written field by field, as the tag is made.
                     | Some (TyRecord(fields, _)) when isTuple fields ->
-                        Some (pattern (TuplePattern (positions fields.Count))), bracketed $"#{tagName}(" (positional (tupleItems fields))
+                        Some (pattern (TuplePattern(positions fields.Count, false))), bracketed $"#{tagName}(" (positional (tupleItems fields))
                     | Some (TyRecord(fields, _)) when not fields.IsEmpty ->
                         Some whole, bracketed $"#{tagName}(" (named (name (partName 0)) (Map.toList fields))
                     | Some (TyPrimitive "unit") -> Some (pattern UnitPattern), text [ StringText $"#{tagName}()" ]
                     | Some payload -> Some whole, bracketed $"#{tagName}(" [ part payload (name (partName 0)) ]
                 [ pattern (TagPattern(tagName, payloadPattern)) ], written
             expr (Match([ value ], tags |> List.map arm))
-        | TupleShape items -> expr (Match([ value ], [ [ pattern (TuplePattern (positions items.Length)) ], bracketed "(" (positional items) ]))
+        | TupleShape items -> expr (Match([ value ], [ [ pattern (TuplePattern(positions items.Length, false)) ], bracketed "(" (positional items) ]))
         | RecordShape fields -> bracketed "(" (named value fields)
         // A collection is written by a prelude function, passed what writes each part.
         | ListShape _
@@ -323,7 +323,7 @@ module internal StructuralInstances =
             match comparisons with
             | [] -> answer true
             | first :: rest -> rest |> List.fold (fun both next -> expr (BinaryOp("and", None, both, next))) first
-        let positions (partName: int -> Identifier) (count: int) = pattern (TuplePattern (List.init count (partName >> IdentifierPattern >> pattern)))
+        let positions (partName: int -> Identifier) (count: int) = pattern (TuplePattern(List.init count (partName >> IdentifierPattern >> pattern), false))
         let value, other = name valueName, name otherName
         let arm (tagName: string, payload: Ty option) : MatchArm =
             let tag (payloadPattern: PatternKind option) = pattern (TagPattern(tagName, payloadPattern |> Option.map pattern))
@@ -377,7 +377,7 @@ module internal StructuralInstances =
         let folded (seed: Expression) (parts: Expression list) =
             parts |> List.fold (fun hash part -> expr (FunctionCall(hashCombine, None, [ hash; hashOf part ]))) seed
         let seed = builtIn (expr (LiteralExpr (IntLit 0I)))
-        let positions (count: int) = pattern (TuplePattern (List.init count (partName >> IdentifierPattern >> pattern)))
+        let positions (count: int) = pattern (TuplePattern(List.init count (partName >> IdentifierPattern >> pattern), false))
         let value = name valueName
         match shape with
         | TagShape tags ->
