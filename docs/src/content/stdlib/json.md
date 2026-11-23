@@ -2,7 +2,7 @@
 title: json
 description: Reading and writing JSON
 order: 15.5
-package: nanyx.json 0.1.0
+package: nanyx.json 0.2.0
 ---
 
 `nanyx.json` isn't part of the standard library: it is a package published to the
@@ -64,7 +64,7 @@ To read a document into types of your own, and write them back, use the [decoder
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.1.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.2.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 JSON text, read into a [`Json`](#json) value and written back out.
 

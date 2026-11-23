@@ -2,7 +2,7 @@
 title: json, decoders
 description: Reading JSON into types of your own, and writing them back
 order: 15.6
-package: nanyx.json 0.1.0
+package: nanyx.json 0.2.0
 ---
 
 A `Decoder(a)` reads an `a` out of a `Json` value, and says where a document doesn't fit. The decoders are in
@@ -81,7 +81,7 @@ match json.decode('{"kind": "square", "side": 2}', shape)
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.1.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.2.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 ## `PathStep`
 

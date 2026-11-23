@@ -2,7 +2,7 @@
 title: encode
 description: Writing types of your own as JSON
 order: 15.7
-package: nanyx.json 0.1.0
+package: nanyx.json 0.2.0
 ---
 
 An encoder writes a value of your own type as a `Json` value, the other way from the
@@ -33,7 +33,7 @@ println(json.encode(User(name = "Ada", age = 36, nickname = #none), user))
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.1.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.2.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 Encoders: a value of a type of your own written as JSON, the other way from `json`'s decoders.
 
