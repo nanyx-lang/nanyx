@@ -402,7 +402,7 @@ let fieldGettingFunction (tools: TypeMatchTools) (functionName: string) (recordT
     let environment, boxed = getterParameters tools
     let recordTy = tools.ToIrType recordType
     let slot, fieldTy =
-        match recordTy with
+        match IrType.unfold recordTy with
         | IrRecord fields ->
             let slot = fields |> List.findIndex (fst >> (=) fieldName)
             slot, snd fields.[slot]
@@ -442,7 +442,7 @@ let caseGettingFunction (tools: TypeMatchTools) (functionName: string) (unionTyp
         find unionType |> Option.flatten
     let some (atom: Atom) = Expr.make (MakeTag("some", atom)) resultTy
     let matched =
-        match payload, unionTy with
+        match payload, IrType.unfold unionTy with
         | Some payloadType, IrTags tags ->
             let payloadVar = tools.NewVar (tools.UniqueName "__payload") PatternBound (tags |> List.find (fst >> (=) caseName) |> snd |> Option.get)
             { Patterns = [ PTag(caseName, Some (PBind payloadVar)) ]; Body = canonical tools payloadType (AVar payloadVar) some }
