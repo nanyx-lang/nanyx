@@ -4,8 +4,8 @@ open System
 open Xunit
 open TranspilerWasmTestHelpers
 
-// `nanyx/clock`: the `Clock` context, which the console host provides on WASI's `clock_time_get`, and which a `use`
-// can replace, as a test does.
+// `nanyx/clock`: the `Clock` context, which the console host provides on WASI's `clock_time_get` and the runtime's
+// `nanyx:async` wait, and which a `use` can replace, as a test does.
 
 [<Fact>]
 let ``Run - the console host's Clock gives the time of day in Unix milliseconds`` () =
@@ -38,8 +38,59 @@ def stamp: [Clock] string -> string = { text -> "{now()} {text} after {ticks()}"
 
 @entry
 def main = {
-  use Clock(now = { _ -> 1_700_000_000_000 }, ticks = { _ -> 5 })
+  use Clock(now = { _ -> 1_700_000_000_000 }, ticks = { _ -> 5 }, sleep = { _ -> () })
   println(stamp("hello"))
 }
 """
     runSource source |> assertRan "1700000000000 hello after 5\n"
+
+[<Fact>]
+let ``Run - the console host's sleep waits at least as long as it is asked`` () =
+    let source =
+        """def slept: [Async, Clock] int -> int = { ms ->
+  def before = ticks()
+  sleep(ms)
+  ticks() - before
+}
+
+println(slept(50) >= 50)
+println(slept(0) >= 0)
+"""
+    runSource source |> assertRan "true\ntrue\n"
+
+[<Fact>]
+let ``Run - another task runs while one sleeps`` () =
+    let source =
+        """def later: [Async, Clock, Console] string -> () = { text ->
+  sleep(100)
+  println(text)
+}
+
+def both = { _ ->
+  def first = start! later("the sleeper wakes")
+  def second = start! println("another task runs meanwhile")
+  await(first)
+  await(second)
+}
+
+both()
+"""
+    for inlineCalls in [ true; false ] do
+        runSourceWithOptions true inlineCalls "" source |> assertRan "another task runs meanwhile\nthe sleeper wakes\n"
+
+[<Fact>]
+let ``Run - a use of Clock gives a sleep that takes no time`` () =
+    let source =
+        """def nap: [Async, Clock] () -> string = { _ ->
+  sleep(3_600_000)
+  "woke at {now()}"
+}
+
+def faked = { _ ->
+  use Clock(now = { _ -> 42 }, ticks = { _ -> 0 }, sleep = { _ -> () })
+  nap()
+}
+
+println(faked())
+"""
+    runSource source |> assertRan "woke at 42\n"

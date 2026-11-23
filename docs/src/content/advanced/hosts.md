@@ -305,6 +305,33 @@ A foreign function deals in addresses in the module's linear memory: WASI's `fd_
 
 These are the only unchecked operations a host performs. A read or a write outside the module's memory traps, but one inside it where the host has no block reads or overwrites the program's own data.
 
+## Waiting on the host
+
+A call that waits, such as a request, shouldn't hold up the program's other [tasks](./async). A host's code that waits
+starts what it waits for, then looks whether it has finished, and between looks calls
+[`nanyx/host.async`](../stdlib/host-async)'s `waitOnHost`. That stops the task, and the scheduler runs the others. Once
+every task is waiting, the scheduler calls the host's wait, the function `waitOnHost` was given, which blocks until
+something the host started may have finished, or until a timeout. Then each task that waited on the host looks again.
+The console host's requests work this way, on the runtime's `nanyx:http` and its `nanyx:async` wait:
+
+```nanyx fragment
+@extern("nanyx:async", "wait")
+def runtimeWait: [HostRuntime] I32 -> ()
+
+def answerOf: [Async, HostRuntime] I32, I32 -> I32 = { handle, kind ->
+  def length = httpPoll(handle, kind)
+
+  if length >= 0 then length else
+    waitOnHost(runtimeWait, -1)
+    answerOf(handle, kind)
+}
+```
+
+The second argument is how long the task can wait before it must look again, in milliseconds, or -1 for as long as it
+takes: a sleep passes what is left of it. The scheduler calls the host's wait with the shortest any task passed. A host
+whose waits block, as WASI preview 1's file functions do, needs none of this: the call holds the instance until it is
+done, and the other tasks run after it.
+
 ## Host libraries
 
 Hosts share what they are written on through _host libraries_: packages whose manifest says `hostLibrary = true` in its `package`. A host library's modules may require `HostRuntime`, as a host's own do, when the build host's package depends on it, so two hosts call the same foreign functions without each declaring them:

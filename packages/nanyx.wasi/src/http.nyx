@@ -5,7 +5,7 @@ import (
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/text
-  abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, settled, takeString, waitFor, writableEnd, writeAll)
+  abi as (Output, aligned8, awaitCall, freeOptionalString, listFrom, readableEnd, settled, takeString, writableEnd, writeAll)
   nanyx.http.core/client as (HttpError)
   nanyx.http.core/request as (Method, Request)
   nanyx.http.core/response as (Response)
@@ -109,12 +109,6 @@ def trailersFutureDropReadable: [HostRuntime] I32 -> ()
 
 @extern("wasi:http/client@0.3.0", "[async-lower]send")
 def sendAsync: [HostRuntime] I32, I32 -> I32
-
-@extern("$root", "[subtask-drop]")
-def subtaskDrop: [HostRuntime] I32 -> ()
-
---| The state a subtask has returned in: the canonical ABI's RETURNED.
-def returned: I32 = 2
 
 --| The scheme, the authority and the path with its query of `url`, or `#invalidUrl` when it isn't
   an `http` or `https` URL: `http://localhost:3000/hello?name=ada` is `0`, `localhost:3000` and
@@ -273,11 +267,6 @@ def writeNoTrailers: [HostRuntime] I32 -> () = { writer ->
   free(block)
 }
 
---| Waits until the subtask `subtask` has returned.
-def awaitReturn: [HostRuntime] I32 -> () = { subtask ->
-  if waitFor(subtask) >= returned then subtaskDrop(subtask) else awaitReturn(subtask)
-}
-
 --| The blocks of the body stream `reader`, each read with `read` into the `chunkSize`-sized buffer
   at `buffer`, after `blocks` (the latest first), until it ends.
 def blocksFrom
@@ -386,7 +375,7 @@ def sendWith
     if hasBody then writeBody(writableEnd(body), request.body) else ()
 
     writeNoTrailers(writableEnd(trailers))
-    if status % 16 < returned then awaitReturn(status / 16) else ()
+    awaitCall(status)
     sentFutureDropReadable(sent)
 
     def answered = if readByte(answer) == 0

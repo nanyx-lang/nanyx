@@ -14,6 +14,8 @@ import (
   the shortest timeout in milliseconds that the tasks waiting gave it, or -1 when none gave one.
   `timeout` is this task's: how long it can wait before it must look again, or -1 for as long as
   it takes.
-export def waitOnHost: [Async, HostRuntime] ([HostRuntime] I32 -> ()), I32 -> () = { wait, timeout ->
-  __nanyx_host_wait(wait, timeout)
-}
+export def waitOnHost
+  : [Async, HostRuntime] ([HostRuntime] I32 -> ()), I32 -> ()
+  = { wait, timeout ->
+    __nanyx_host_wait(wait, timeout)
+  }
