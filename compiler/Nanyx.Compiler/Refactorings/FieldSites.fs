@@ -141,7 +141,7 @@ let rec private patternFields (typed: TypedModule) (ty: Ty option) (pattern: Pat
                 |> Option.map (fun span -> { Name = name; Span = span; Record = record; Shorthand = None })
                 |> Option.toList
             site @ patternFields typed (fieldType name) inner)
-    | TuplePattern elements ->
+    | TuplePattern(elements, _) ->
         let names = fields |> Option.map (fun fields -> fields.Keys |> Set.ofSeq) |> Option.defaultValue Set.empty
         elements
         |> List.mapi (fun index element ->

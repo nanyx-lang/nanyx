@@ -132,7 +132,7 @@ and internal destructuringDefinition (c: Cursor) (start: int) : Statement list =
                 let patternStart = c.Start
                 match sepBy1 c (fun () -> DescentPatterns.pattern c) (fun () -> c.Expect Comma |> ignore) with
                 | [ single ] -> single
-                | several -> Pattern.at (c.SpanFrom patternStart) (TuplePattern several)
+                | several -> Pattern.at (c.SpanFrom patternStart) (TuplePattern(several, false))
             with
             | GiveUp _
             | Reported _ -> raise NoMatch)

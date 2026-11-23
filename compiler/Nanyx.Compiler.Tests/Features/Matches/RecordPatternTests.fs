@@ -66,6 +66,37 @@ let ``A record pattern on a value of no known type yet takes exactly its fields,
     let result = Compiler.compile (atLeast + wider)
     Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
 
+// A pattern of fields without `=` may end in `...`: each reads as it would without it, a name alone by name where the
+// value is known to have that field and anything else by position, and the other fields are left out.
+[<Fact>]
+let ``A name alone before ... binds the field of that name and leaves the others out`` () =
+    let source =
+        normalized """def describe: (name: string, age: int, email: string) -> string = { r -> match r
+  | (age, ...) -> "{age}" }
+def area: #rectangle(width: float, height: float, label: string) -> float = { #rectangle(height, width, ...) -> width * height }
+"""
+    Assert.Equal<(string * string) list>(
+        [ "r", "(name: string, age: int, email: string)"; "age", "int"; "height", "float"; "width", "float" ],
+        localHintsOf source)
+
+[<Fact>]
+let ``A pattern by position that ends in ... matches a tuple's first elements`` () =
+    let source = "def f: (string, int, bool) -> int = { p -> match p\n  | (_, n, ...) -> n }\n"
+    Assert.Equal<(string * string) list>([ "p", "(string, int, bool)"; "n", "int" ], localHintsOf source)
+
+[<Fact>]
+let ``A pattern by position that ends in ... on a value of no known type yet takes a tuple of at least that many`` () =
+    let source = "def second = { (_, b, ...) -> b }\ndef n: int = second((1, 2, 3))\ndef m: string = second((1, \"two\"))\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+
+[<Fact>]
+let ``A name before ... that the record has no field of matches by position, which a record of named fields has none of`` () =
+    let result = Compiler.compile "def f: (width: float, height: float) -> float = { r -> match r\n  | (w, ...) -> w }\n"
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.StartsWith("Record field mismatch:", diagnostic.Message)
+
 // A list pattern's elements match the list's element type, so a member pattern in one finds the record's fields (#461).
 [<Fact>]
 let ``Record patterns in two elements of a list pattern match different tags of a field's union`` () =

@@ -251,7 +251,9 @@ and PatternKind =
     /// `()`: the unit value, the only value of its type, so it always matches what it is matched against.
     | UnitPattern
     | ElsePattern
-    | TuplePattern of Pattern list
+    /// `(p1, p2)`, a tuple's elements by position, or a record's fields, a name alone matching the field it names (see
+    /// `Pattern.tupleElementField`). Where `hasRest`, it ends in `...` to leave the other fields out: `(a, ...)`.
+    | TuplePattern of items: Pattern list * hasRest: bool
     | RecordPattern of Identifier * Pattern list  // Type name and patterns by position
     /// Patterns by member name, `(name = n, age = a)`. A record type is closed, so the pattern names every field
     /// unless `hasRest`, when it ends in `...` to leave the others out: `(name = "Alice", ...)`.
@@ -1132,7 +1134,7 @@ module Pattern =
         match pattern.Kind with
         | GuardPattern predicate -> [ predicate ]
         | RangePattern(low, high) -> [ low; high ]
-        | TuplePattern patterns
+        | TuplePattern(patterns, _)
         | AndPattern patterns
         | RecordPattern(_, patterns) -> patterns |> List.collect expressions
         | RecordMemberPattern(members, _) -> members |> List.collect (snd >> expressions)
@@ -1150,7 +1152,7 @@ module Pattern =
     let rec within (pattern: Pattern) : Pattern list =
         let inner =
             match pattern.Kind with
-            | TuplePattern patterns
+            | TuplePattern(patterns, _)
             | AndPattern patterns
             | RecordPattern(_, patterns) -> patterns
             | RecordMemberPattern(members, _) -> members |> List.map snd
@@ -1171,7 +1173,7 @@ module Pattern =
     let rec boundNames (pattern: Pattern) : Identifier list =
         match pattern.Kind with
         | IdentifierPattern name -> [ name ]
-        | TuplePattern patterns
+        | TuplePattern(patterns, _)
         | AndPattern patterns
         | RecordPattern(_, patterns) -> patterns |> List.collect boundNames
         | RecordMemberPattern(members, _) -> members |> List.collect (snd >> boundNames)
@@ -1189,7 +1191,8 @@ module Pattern =
     /// The field of a record with the fields `fields` that the `index`th element of a tuple pattern matches. A name
     /// alone is shorthand for `name = name` where the record has a field of that name, so `(name, age)` takes apart
     /// `(name: string, age: int)`, and `#some(x, y)` the payload of `#some(x: string, y: string)`. Any other element
-    /// matches the field at its position, as in a tuple.
+    /// matches the field at its position, as in a tuple. A pattern that ends in `...` reads its elements the same way,
+    /// so `(name, ...)` takes the field `name` and leaves the others out, and `(x, ...)` a tuple's first element.
     let tupleElementField (fields: Set<string>) (index: int) (element: Pattern) : string =
         match element.Kind with
         | IdentifierPattern name when fields.Contains name -> name
@@ -1206,7 +1209,7 @@ module Pattern =
             match pattern.Kind with
             | GuardPattern predicate -> GuardPattern(f predicate)
             | RangePattern(low, high) -> RangePattern(f low, f high)
-            | TuplePattern patterns -> TuplePattern(List.map recur patterns)
+            | TuplePattern(patterns, hasRest) -> TuplePattern(List.map recur patterns, hasRest)
             | AndPattern patterns -> AndPattern(List.map recur patterns)
             | RecordPattern(name, patterns) -> RecordPattern(name, List.map recur patterns)
             | RecordMemberPattern(members, hasRest) ->
@@ -1228,7 +1231,7 @@ module Pattern =
         let kind =
             match pattern.Kind with
             | RecordPattern(name, patterns) -> RecordPattern(f name, List.map recur patterns)
-            | TuplePattern patterns -> TuplePattern(List.map recur patterns)
+            | TuplePattern(patterns, hasRest) -> TuplePattern(List.map recur patterns, hasRest)
             | AndPattern patterns -> AndPattern(List.map recur patterns)
             | RecordMemberPattern(members, hasRest) ->
                 RecordMemberPattern(members |> List.map (fun (name, p) -> name, recur p), hasRest)

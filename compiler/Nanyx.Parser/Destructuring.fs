@@ -7,14 +7,14 @@ open Parser.Program
 // `def (x, y) = value`, or `def x, y = value` without the brackets, binds each element of a tuple. It is desugared
 // in the parser into a binding of the whole value plus one `def` per element (`def x = __tuple.0`), so the rest of
 // the compiler only ever sees plain defs. This form takes only names, `_` and nested tuples, which cannot fail to
-// match; any other pattern is bound through a match instead (see `matchingBindings`). The whole value is bound to
+// match; any other pattern, `(x, ...)` among them, is bound through a match instead (see `matchingBindings`). The whole value is bound to
 // `temp`, a made-up name (see `DestructuringSyntax.temp`).
 let internal destructuringBindings (temp: Identifier) (pattern: Pattern) (value: Expression) : (Identifier * Expression) list option =
     let rec bind (pattern: Pattern) (source: Expression) =
         match pattern.Kind with
         | IdentifierPattern name -> Some [ name, source ]
         | WildcardPattern -> Some []
-        | TuplePattern elements ->
+        | TuplePattern(elements, false) ->
             elements
             |> List.mapi (fun index element -> bind element (Expression.from value (MemberAccess(source, string index, None))))
             |> List.fold (fun acc next ->

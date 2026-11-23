@@ -125,6 +125,21 @@ Here, the pattern `(name = "Alice", ...)` matches any record where the `name` fi
 
 As with tuples, records patterns must be of the correct shape to match the type being matched, and all fields must be accounted for either by matching them directly or using the spread operator to ignore them.
 
+A pattern whose fields have no `=` can end in `...` too. Each field is read as it would be without the `...`: a name alone takes the field of that name, where the value is already known to have one, and any other pattern takes the field at its position, counting every field written before it. The `...` then leaves the other fields out:
+
+```nanyx
+def greet: (name: string, age: int, email: string) -> string = { | (name, ...) -> "Hello, {name}" }
+
+def point = (3, 4, 5)
+
+match point
+  | (x, ...) -> println("x is {x}")
+
+println(greet(name = "Alice", age = 30, email = "alice@example.com"))
+```
+
+Here `(name, ...)` is `(name = name, ...)`, and `(x, ...)` takes the tuple's first element. A name the record has no field of is read by position, so `(n, ...)` on `(name: string, age: int)` is an error: that record has no first positional field.
+
 ## Tags
 
 Tags can also be destructured in patterns, using the same syntax that is used to construct them. For example, if you have a sum type representing shapes:
@@ -140,7 +155,7 @@ def area: Shape -> float = { shape ->
 }
 ```
 
-A payload that is a record with named fields is taken apart by name, as any record is: with `#rectangle(width: float, height: float)`, the pattern `#rectangle(width, height)` binds each field to the local of the same name. This also works for a lambda's parameter, as in `{ #rectangle(width, height) -> width * height }`.
+A payload that is a record with named fields is taken apart by name, as any record is: with `#rectangle(width: float, height: float)`, the pattern `#rectangle(width, height)` binds each field to the local of the same name. This also works for a lambda's parameter, as in `{ #rectangle(width, height) -> width * height }`. As with a record, `...` leaves the other fields out: `#rectangle(width, ...)` binds `width` alone.
 
 A tag that carries the unit value is matched as it is written, with empty brackets, and `()` on its own matches the unit value:
 
