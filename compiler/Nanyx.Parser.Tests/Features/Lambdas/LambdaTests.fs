@@ -446,3 +446,20 @@ let ``a result annotation after the parameters types the body`` () =
     match (onlyValue "def f = { (a, b): int -> a }").Kind with
     | Lambda ([ _ ], Kind (Match (_, [ _, Kind (LambdaResultSyntax.Annotated (_, Kind (IdentifierExpr "a"))) ])), false) -> ()
     | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
+let ``a comment may come before the closing brace of a lambda whose body starts on the brace's line`` () =
+    // #2450: a comment is never a syntax error, after any body, the last arm of a same-line `match`, or none.
+    for source in
+        [ "def h = { x -> match x\n  | 0 -> 1\n  | n -> n -- a comment\n}"
+          "def a = { x -> x + 1 -- c\n}"
+          "def a = { x -> x + 1\n  -- c\n}"
+          "def a = {\n  -- c\n}"
+          "def a = { -- c\n}"
+          "def a = { .length -- c\n}"
+          "def a = { + -- c\n}"
+          "def a = { x -> match x | 0 -> 1 | n -> n -- c\n}" ] do
+        readsWhole source
+    match (onlyValue "def h = { x -> match x\n  | 0 -> 1\n  | n -> n -- a comment\n}").Kind with
+    | Lambda ([ ("x", None) ], Kind (Match ([ _ ], [ _; _ ])), false) -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
