@@ -1,9 +1,10 @@
-// The tour's runnable examples, each a small playground where it is: the docs build puts a bar under each
-// (`remarkPlaygroundLinks` in `site/playground-examples.mjs`), and this gives it a Run button and an output, as the
+// The docs' runnable examples, the tour's and every other page's, each a small playground where it is: the docs build
+// puts a bar under each (`remarkPlaygroundLinks` in `site/playground-examples.mjs`), and this gives it a Run button and
+// an output, as the
 // playground's, and makes the example's code editable in place. The compiler loads on the first Run on the page, not
 // with the page, and the editor when an example is first edited. Two kinds of example keep only their "Open in the
 // playground" link: one that only declares things (`data-no-output`), since running it would print nothing, and one
-// that reads input (`data-reads-input`), since a tour page isn't cross-origin isolated, so its programs can't read input.
+// that reads input (`data-reads-input`), since a docs page isn't cross-origin isolated, so its programs can't read input.
 
 import type { EditorView } from "@codemirror/view";
 import { playgroundCode } from "../../../site/playground-code.mjs";
