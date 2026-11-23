@@ -63,10 +63,13 @@ let private narrowEnv (state: InferState) (target: Ty) (narrowed: Ty) (env: Type
         | None -> current) env
 
 /// `state` with the type the match that ends `body`, a lambda's, gives expected to be `expected`, the lambda's
-/// declared result, so that its arms are checked against it narrowed (see `infer`).
+/// declared result, so that its arms are checked against it narrowed (see `infer`), and so the record or tuple literal
+/// that ends it, so that its fields are checked against the record's (see `ExpectedLiterals.intoRecordFields`).
 let rec expectResult (body: Expression) (expected: Ty) (state: InferState) : InferState =
     match body.Kind with
-    | Match _ -> ExpectedLiterals.expect expected state body
+    | Match _
+    | RecordExpr _
+    | TupleExpr _ -> ExpectedLiterals.expect expected state body
     | Block statements ->
         match SyntaxTree.blockValue statements with
         | Some last -> expectResult last expected state

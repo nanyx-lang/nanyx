@@ -272,6 +272,9 @@ writes its argument, since `int, int -> int` and `(int, int) -> int` are one typ
 tuple of two or more takes one argument for each element (`IrType.tupleElements` in `CoreIr.fs`): a lambda or wrapper of
 one parameter (`{ t -> ... }`, `{ (a, b) -> ... }`) takes the elements and builds the tuple again, and a call that
 passes a tuple whole (`f(t)`) reads the elements from it ([#441](https://github.com/nanyx-lang/nanyx/issues/441)).
+One whose input is a record that is not a tuple, `(channel: string, n: int) -> int`, takes the record whole, as a call
+passes it: a lambda or wrapper of several parameters (`{ channel, n -> ... }`) binds each to the field of its name
+(`IrType.recordTakenWhole`; [#2466](https://github.com/nanyx-lang/nanyx/issues/2466)).
 
 A function that requires contexts takes each of their members as a closure, in a parameter of its own after its
 others, typed from the context's definition. A call finds each member the callee requires where the type checker

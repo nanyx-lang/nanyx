@@ -40,7 +40,8 @@ let private joinCarried (state: InferState) (branchTypes: Ty list) : (Ty * Infer
 ///
 /// `rowVars` are the rest variables of the tag unions being matched on. A branch of one of those types
 /// (a catch-all arm returning what it caught) joins the union as its rest, so
-/// `| #some(a), f -> #some(f(a)) | other, _ -> other` is `#some(b) | r`.
+/// `| #some(a), f -> #some(f(a)) | other, _ -> other` is `#some(b) | r`. A rest the constraints so far have settled
+/// joins as the tags it stands for.
 ///
 /// A branch whose type nothing has settled yet, as a call to a function parameter's is, joins the other branches'
 /// tags as a fresh rest, and is that union. So `| #some(x), _ -> #some(x) | other, f -> f(other)` is
@@ -77,6 +78,15 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
             match resolveSoFar state ty with
             | TyUnion _ as union -> ofType union
             | _ -> None
+        // A rest the constraints so far have settled is the tags it stands for, which an arm's tag of the same name
+        // is unified with: a catch-all arm of a match on `#some(list(Score)) | #none` that handles `#none` is the
+        // rest `#some(list(Score))`, so an arm `#none -> #some([])` makes a `list(Score)` (#2464). Joined as a rest,
+        // the union would hold `#some` twice, and the `[]`'s element would be left free and generalised.
+        | TyVar _ ->
+            match resolveSoFar state ty with
+            | TyTag _
+            | TyUnion _ as settled -> ofType settled
+            | _ -> ofType ty
         | _ -> ofType ty
     // A branch that never gives a value (of type `undefined`) adds nothing to the whole's type, which is what the
     // other branches give: `undefined` only when no branch gives one.

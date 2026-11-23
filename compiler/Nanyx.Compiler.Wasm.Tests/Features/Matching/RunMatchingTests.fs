@@ -326,3 +326,31 @@ println(check)
     let outcome = runSource source
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("empty\n", outcome.StandardOutput)
+[<Fact>]
+let ``Run - a list taken from a tag a catch-all arm passed on keeps its elements counted`` () =
+    // `except` passes `#some(set)` on through a catch-all arm. That arm's tag was not joined with the `#some([])`, so
+    // `current` was a list of `unit`s, and spreading it took no reference to the records it shares with the game,
+    // which were freed while the game still held them (#2464). `runSource` checks that no block is left live.
+    let source =
+        normalized """type Score = (team: string, at: int)
+type Game = (id: int, score: list(list(Score)))
+
+def won: list(Score) -> bool = { set ->
+  set.length >= 3
+}
+
+def record: Game, string -> Game = { game, team ->
+  def finished = game.score \dropLast
+  def #some(current) = game.score \last except #emptyList -> #some([])
+  def set = [...current, Score(team = team, at = 0)]
+  def updated = (...game, score = [...finished, set])
+  if won(set) then (...updated, score = [...updated.score, []]) else updated
+}
+
+@entry
+def main = {
+  def final = ["Herons", "Herons", "Herons", "Crows"] \fold((id = 1, score = [[]])) { g, team -> record(g, team) }
+  println(final.score \map { set -> set \map { s -> s.team } })
+}
+"""
+    runSource source |> assertRan "[[Herons, Herons, Herons], [Crows]]\n"
