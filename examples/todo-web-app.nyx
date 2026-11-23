@@ -1,13 +1,47 @@
 module todo.server
 
-import (
-  nanyx/time
-  todo.shared
-)
+import nanyx/clock as (Clock)
 
--- A server for the todo protocol. The store is a context, so the same
+-- A server for a todo application. The store is a context, so the same
 -- implementation runs over a database in production and over an in-memory
 -- map in tests.
+
+export type TodoId = int
+
+-- `dateAdded` is milliseconds since 1970, as `Clock.now` gives it
+export type Todo = (
+  id: TodoId
+  description: string
+  completed: bool
+  dateAdded: int
+)
+
+export type TodoError =
+  | #todoDoesNotExist
+  | #insertNotSuccessful
+  | #updateNotSuccessful
+  | #deleteNotSuccessful
+
+export type DeleteResult = #deleted | #deleteError(TodoError)
+export type UpdateResult = #updated(Todo) | #updateError(TodoError)
+
+-- The protocol between client and server. Every member is a function from a
+-- request to its response, and the protocol is a context, so client code
+-- that requires it runs against the server implementation or a client proxy,
+-- whichever is in scope.
+export context TodoProtocol = (
+  allTodos: () -> list(Todo)
+  addTodo: string -> #some(Todo) | TodoError
+  toggleCompleted: TodoId -> UpdateResult
+  deleteTodo: TodoId -> DeleteResult
+)
+
+-- How routes are generated on the server and mapped from the client
+export def routeBuilder
+  : (typeName: string, methodName: string) -> string
+  = { typeName, methodName ->
+    "/api/{typeName}/{methodName}"
+  }
 
 context TodoStore = (
   findAll: () -> list(Todo)
@@ -19,7 +53,7 @@ context TodoStore = (
 
 -- The store assigns the id
 def newTodo: [Clock] string -> Todo = { description ->
-  Todo(id = 0, description = description, completed = false, dateAdded = Clock.now)
+  Todo(id = 0, description = description, completed = false, dateAdded = now())
 }
 
 def exists: (#some(Todo) | #notFound) -> #some(Todo) | #todoDoesNotExist = {
@@ -27,41 +61,78 @@ def exists: (#some(Todo) | #notFound) -> #some(Todo) | #todoDoesNotExist = {
   | #notFound -> #todoDoesNotExist
 }
 
-export def createProtocol: [TodoStore, Clock] () -> TodoProtocol = {
-  TodoProtocol(
-    allTodos = { async { findAll() } }
-    addTodo = { description -> async { insert(newTodo(description)) } }
-    toggleCompleted = { id -> async {
-        proc {
-          def existing = try exists(find(id))
-          return try update(existing with completed = not existing.completed)
-        } \match
-          | #some(todo) -> #updated(todo)
-          | e -> #updateError(e)
-      }
-    }
-    deleteTodo = { id -> async {
-        proc {
-          try exists(find(id))
-          try delete(id)
-          return ()
-        } \match
-          | #some() -> #deleted
-          | e -> #deleteError(e)
-      }
-    }
-  )
+def toggle: [TodoStore] TodoId -> UpdateResult = { id ->
+  match proc {
+    def existing = try exists(find(id))
+    return try update(existing with completed = not existing.completed)
+  }
+    | #some(todo) -> #updated(todo)
+    | #todoDoesNotExist -> #updateError(#todoDoesNotExist)
+    | #updateNotSuccessful -> #updateError(#updateNotSuccessful)
 }
 
--- An in-memory store that lives for the duration of `action`. The mutable
--- cells never leave the `memory` scope; only plain values come out.
-export def withInMemoryStore: [Clock] ([TodoStore] () -> a) -> a = { action ->
+def remove: [TodoStore] TodoId -> DeleteResult = { id ->
+  match proc {
+    try exists(find(id))
+    try delete(id)
+    return ()
+  }
+    | #some() -> #deleted
+    | #todoDoesNotExist -> #deleteError(#todoDoesNotExist)
+    | #deleteNotSuccessful -> #deleteError(#deleteNotSuccessful)
+}
+
+export def seedInitialData: [TodoStore, Clock] () -> () = {
+  for ["Learn Nanyx", "Write a web app", "Ship it"] | description ->
+    insert(newTodo(description))
+}
+
+def show: Todo -> string = { todo ->
+  def mark = if todo.completed then "x" else " "
+  "[{mark}] {todo.id}: {todo.description}"
+}
+
+-- A client of the protocol, which knows nothing of the store behind it
+def client: [TodoProtocol, Console] () -> () = {
+  match toggleCompleted(2)
+    | #updated(todo) -> println("Toggled {show(todo)}")
+    | #updateError(e) -> println("Could not toggle: {e}")
+
+  for [3, 3] | id ->
+    println(deleteTodo(id))
+
+  match addTodo("Celebrate")
+    | #some(todo) -> println("Added {show(todo)}")
+    | e -> println("Could not add: {e}")
+
+  for allTodos() | todo -> println(show(todo))
+}
+
+-- The server: seed the store, then answer the client
+def serve: [TodoStore, Clock, Console] () -> () = {
+  seedInitialData()
+
+  use TodoProtocol(
+    allTodos = { findAll() }
+    addTodo = { description -> insert(newTodo(description)) }
+    toggleCompleted = { id -> toggle(id) }
+    deleteTodo = { id -> remove(id) }
+  )
+
+  println(routeBuilder(typeName = "TodoProtocol", methodName = "toggleCompleted"))
+  client()
+}
+
+-- The server over an in-memory store. The mutable cells never leave the
+-- `memory` scope; only plain values come out.
+@entry
+def main = {
   memory {
-    mut todos: map(TodoId, Todo) = []
+    mut todos: map(TodoId, Todo) = map.empty
     mut nextId = 1
 
     use TodoStore(
-      findAll = { todos \map.values }
+      findAll = { todos \map.values \sortBy { todo -> todo.id } }
       find = { id -> todos(id) }
       insert = { todo ->
         def saved = todo with id = nextId
@@ -77,11 +148,6 @@ export def withInMemoryStore: [Clock] ([TodoStore] () -> a) -> a = { action ->
         todos := todos \map.remove(id)
         #some()
       }
-    ) in action()
+    ) in serve()
   }
-}
-
-export def seedInitialData: [TodoStore, Clock] () -> () = {
-  for ["Learn Nanyx", "Write a web app", "Ship it"] | description ->
-    insert(newTodo(description))
 }

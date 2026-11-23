@@ -7,8 +7,8 @@ def boardSize = 8
 def isSafe: list(int), int -> bool = { queens, col ->
   queens
     \reverse
-    \zip(1..)
-    \all { q, distance -> q != col and q != col - distance and q != col + distance }
+    \mapIndexed { i, q -> (q, i + 1) }
+    \all { (q, distance) -> q != col and q != col - distance and q != col + distance }
 }
 
 def solve: list(int) -> #some(list(int)) | #noSolution = { queens ->
@@ -28,7 +28,11 @@ def solve: list(int) -> #some(list(int)) | #noSolution = { queens ->
 
 def render: list(int) -> string = { queens ->
   queens
-    \map { q -> (0..boardSize - 1) \map { c -> if c == q then "Q " else ". " } \string.join("") }
+    \map { q -> (0..boardSize - 1)
+        \map { c -> if c == q then "Q" else "." }
+        \toList
+        \string.join(" ")
+    }
     \string.join("\n")
 }
 
