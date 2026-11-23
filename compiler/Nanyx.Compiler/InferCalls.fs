@@ -267,28 +267,37 @@ let internal inferCall
                 let argResults =
                     args
                     |> List.mapi (fun index arg ->
+                        let paramTy = paramTys |> Option.bind (List.tryItem index)
+                        let alone = Result.map (fun inferred -> inferred, None)
                         let inferred =
-                            match arg, paramTys |> Option.bind (List.tryItem index) with
+                            match arg, paramTy with
                             | Kind (Lambda(lambdaArgs, lambdaBody, _)), Some paramTy ->
-                                inferLambda current arg lambdaArgs lambdaBody (LambdaArguments.expectedInput current (Some paramTy) arg lambdaArgs) paramTy
+                                inferLambda current arg lambdaArgs lambdaBody (LambdaArguments.expectedInput current (Some paramTy) arg lambdaArgs) paramTy |> alone
                             | TupleOfParameters(items, itemTys), _ ->
                                 LambdaArguments.inferTupleItems inferItem inferLambda current items itemTys
-                                |> Result.map (fun (typedItems, next) ->
-                                    mkTypedExpr arg (tupleRecordType (typedItems |> List.map (fun typedItem -> typedItem.Type))) None None None, next)
-                                |> recordExprType
-                            | _, Some paramTy -> inferItem current arg paramTy
-                            | _ -> inferExpr env current arg
+                                |> Result.bind (fun (typedItems, next) ->
+                                    Ok (mkTypedExpr arg (tupleRecordType (typedItems |> List.map (fun typedItem -> typedItem.Type))) None None None, next)
+                                    |> recordExprType
+                                    |> Result.map (fun inferred -> inferred, Some (typedItems, itemTys)))
+                            | _, Some paramTy -> inferItem current arg paramTy |> alone
+                            | _ -> inferExpr env current arg |> alone
                         match inferred with
-                        | Ok (ty, next) ->
+                        | Ok ((ty, next), tupleItems) ->
+                            // A tuple of the callee's parameters is reported at the argument in it that does not fit
+                            // (see `LambdaArguments.reportedSpan`).
+                            let span =
+                                match paramTy, tupleItems with
+                                | Some paramTy, Some (typedItems, itemTys) -> LambdaArguments.reportedSpan next arg.Span typedItems itemTys ty.Type paramTy
+                                | _ -> arg.Span
                             current <-
-                                match paramTys |> Option.bind (List.tryItem index) with
-                                | Some paramTy -> addAssignableConstraintAt arg.Span ty.Type paramTy next
+                                match paramTy with
+                                | Some paramTy -> addAssignableConstraintAt span ty.Type paramTy next
                                 | None -> next
-                            Ok ty
+                            Ok (ty, span)
                         | Error err -> Error err)
                 let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
                 if errors.IsEmpty then
-                    let typedArgs = argResults |> List.choose (function Ok typedExpr -> Some typedExpr | _ -> None)
+                    let typedArgs, argSpans = argResults |> List.choose (function Ok typedArg -> Some typedArg | _ -> None) |> List.unzip
                     let positionalForNamed =
                         match Unifier.unalias (resolveSoFar current funcTy) with
                         | TyFunc(input, _, _) -> NamedArguments.check current expr name input args typedArgs
@@ -348,7 +357,7 @@ let internal inferCall
                     let inputTy = inputTypeFromArgs argTys
                     // A single argument is the call's input: a mismatch is that argument's. So is one with the
                     // callee's type when that is known to be a function, whose result is the call's already.
-                    let inputSpan = match args with [ single ] -> single.Span | _ -> SourceSpan.none
+                    let inputSpan = match argSpans with [ single ] -> single | _ -> SourceSpan.none
                     let funcSpan = if paramTys.IsSome then inputSpan else SourceSpan.none
                     let withFuncConstraint = addConstraintAt funcSpan funcTy (TyFunc(expectedInput, retTy, calleeContexts)) nextState2
                     let withAssignable = addAssignableConstraintAt inputSpan inputTy expectedInput withFuncConstraint
