@@ -1,34 +1,45 @@
+::dependency nanyx.regex
+
 module casing
 
-import nanyx/text.regex
+import (
+  nanyx/text
+  nanyx.regex/regex
+)
 
 export type Casing = #camel | #pascal | #kebab | #snake | #title | #sentence
 
--- Split on case changes, underscores, dashes and whitespace
+-- A word is a run of lower-case letters and digits, after at most one capital,
+-- or a run of capitals, so case changes, underscores, dashes and whitespace
+-- all separate words
+def word = Regex.parse('[A-Z]?[a-z0-9]+|[A-Z]+') \orCrash("bad pattern")
+
 def splitWords: string -> list(string) = { input ->
-  input \Regex.split('(?=[A-Z])|_|-|\s') \filter { != "" }
+  input \Regex.findAll(word) \map { m -> m.text } \toList
 }
 
 def capitalize: string -> string = { word ->
   match word \chars
     | [] -> ""
-    | [first, ...rest] -> first \toUpper ++ rest \string.join("") \toLower
+    | [first, ...rest] -> first \uppercase ++ rest \string.join("") \lowercase
 }
 
 export def rejoin: list(string), Casing -> string = { words, casing ->
   match casing
-    | #kebab -> words \map { .toLower } \string.join("-")
-    | #snake -> words \map { .toLower } \string.join("_")
+    | #kebab -> words \map { s -> s \lowercase } \string.join("-")
+    | #snake -> words \map { s -> s \lowercase } \string.join("_")
     | #pascal -> words \map(capitalize) \string.join("")
     | #title -> words \map(capitalize) \string.join(" ")
     | #camel ->
       match words
         | [] -> ""
-        | [first, ...rest] -> first \toLower ++ rest \map(capitalize) \string.join("")
+        | [first, ...rest] -> first \lowercase ++ rest \map(capitalize) \string.join("")
     | #sentence ->
       match words
         | [] -> ""
-        | [first, ...rest] -> capitalize(first) ++ " " ++ rest \map { .toLower } \string.join(" ")
+        | [first, ...rest] -> capitalize(first) ++ " " ++ rest
+          \map { s -> s \lowercase }
+          \string.join(" ")
 }
 
 export def convert: string, Casing -> string = { input, casing ->

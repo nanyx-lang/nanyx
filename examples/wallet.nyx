@@ -1,9 +1,9 @@
 module wallet
 
-import nanyx/encoding
+import nanyx/text
 
--- Classifying bitcoin addresses and deriving the script hash that an
--- Electrum-style server indexes them by.
+-- Classifying bitcoin addresses by their prefix, and resolving a wallet's
+-- aliases to the addresses they stand for.
 
 export type AddressType =
   | #p2pkh
@@ -34,47 +34,6 @@ export def AddressType.isTestnet: AddressType -> bool = {
   | _ -> false
 }
 
--- A pay-to-public-key-hash output script wraps the 20-byte hash of the key
-export def addressToP2PKH: string -> #some(string) | #invalidAddress = { address ->
-  proc {
-    def decoded = try Base58Check.decode(address) \Result.mapError { _ -> #invalidAddress }
-    def hash160 = decoded \Hex.encode \drop(2) -- drop the version byte
-    return "76a914{hash160}88ac"
-  }
-}
-
--- sha256 of the output script, byte-reversed
-export def scriptHash: Binary -> string = { script ->
-  script \Sha256.hash \Binary.reverse \Hex.encode
-}
-
-type ScriptInfo = (output: string, scriptHash: string, address: string)
-
-export def detectAddressTypeToScriptHash
-  : string -> #some(ScriptInfo) | #unrecognizedAddress | #invalidAddress
-  = { address ->
-    match addressType(address)
-      | #unknown -> #unrecognizedAddress
-      | #p2pkh | #p2pkhTestnet -> proc {
-        def output = try addressToP2PKH(address)
-
-        return ScriptInfo(
-          output = output
-          scriptHash = scriptHash(Hex.decode(output))
-          address = address
-        )
-      }
-      | _ -> proc {
-        def output = try Bech32.toOutputScript(address) \Result.mapError { _ -> #invalidAddress }
-
-        return ScriptInfo(
-          output = Hex.encode(output)
-          scriptHash = scriptHash(output)
-          address = address
-        )
-      }
-  }
-
 -- Replace the "primary" and "funding" aliases with real addresses from the wallet
 type WalletInfo = (primary: string, funding: string, imported: map(string, string))
 
@@ -85,4 +44,19 @@ export def resolveAlias: WalletInfo, string -> string = { wallet, alias ->
     | else ->
       def #some(address) = wallet.imported(alias) except #notFound -> #some(alias)
       address
+}
+
+@entry
+def main = {
+  def wallet = WalletInfo(
+    primary = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+    funding = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+    imported = ["cold" => "tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c"]
+  )
+
+  for ["primary", "funding", "cold", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "xyz"] | alias ->
+    def address = resolveAlias(wallet, alias)
+    def kind = addressType(address)
+    def network = if kind \isTestnet then "testnet" else "mainnet"
+    println("{alias}: {kind} on {network}")
 }

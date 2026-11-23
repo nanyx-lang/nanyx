@@ -88,7 +88,7 @@ export const exampleGroups = [
         file: "wallet.nyx",
         slug: "wallet",
         title: "Bitcoin address classification",
-        description: "Classify addresses and derive the script hash an Electrum-style server indexes by.",
+        description: "Classify addresses by their prefix and resolve a wallet's aliases.",
       },
       {
         file: "functional-argument-parsing.nyx",
@@ -133,16 +133,10 @@ export const exampleGroups = [
         description: "Database access through a connection context the caller supplies with use.",
       },
       {
-        file: "web-server-shared.nyx",
-        slug: "todo-shared",
-        title: "Todo app: shared types",
-        description: "The types and protocol a todo client and server have in common.",
-      },
-      {
         file: "todo-web-app.nyx",
         slug: "todo-server",
-        title: "Todo app: server",
-        description: "A server whose store is a context, so it runs over a database or an in-memory map.",
+        title: "Todo app server",
+        description: "A server whose store and protocol are contexts, run here over an in-memory map.",
       },
     ],
   },
@@ -178,19 +172,13 @@ export const exampleGroups = [
   },
   {
     title: "Talking to services",
-    description: "HTTP clients, JSON and error chaining with proc.",
+    description: "API clients and error chaining with proc.",
     examples: [
       {
         file: "EventSubscription.nyx",
         slug: "event-subscription",
         title: "Event ingestion client",
-        description: "A small API client with optional fields and a record of functions as an object.",
-      },
-      {
-        file: "malicious-shas.nyx",
-        slug: "malicious-shas",
-        title: "Malicious hash lookup",
-        description: "Check package hashes against an API and write the malicious ones to CSV.",
+        description: "A small API client with optional fields, a record of functions as an object, and its transport as a context.",
       },
     ],
   },

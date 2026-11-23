@@ -1,6 +1,6 @@
 module attestation
 
-import nanyx/time
+import nanyx/clock as (Clock)
 
 ---
 There are no classes in Nanyx. This example takes a class from another
@@ -13,9 +13,10 @@ expires, and models it the Nanyx way:
   - its dependencies become contexts
 ---
 
-type Attestation = (certificateChain: list(string), generatedAt: Instant)
+-- Times are milliseconds since 1970, as `Clock.now` gives them
+type Attestation = (certificateChain: list(string), generatedAt: int)
 
-type Settings = (tokenExpiry: Duration, maxRetryAttempts: int, retryDelay: Duration)
+type Settings = (tokenExpiryMs: int, maxRetryAttempts: int)
 
 export type AttestationCache = (settings: Settings, current: #some(Attestation) | #none)
 
@@ -26,7 +27,7 @@ export def AttestationCache.new: Settings -> AttestationCache = { settings ->
 def AttestationCache.needsRefresh: [Clock] AttestationCache -> bool = { cache ->
   match cache.current
     | #none -> true
-    | #some(attestation) -> Clock.now - attestation.generatedAt >= cache.settings.tokenExpiry
+    | #some(attestation) -> now() - attestation.generatedAt >= cache.settings.tokenExpiryMs
 }
 
 -- The service that produces attestations is a dependency, so it is a context
@@ -35,38 +36,28 @@ context Attester = (
   generateCertificateChain: string -> #some(list(string)) | #attestationFailed
 )
 
--- Retry an operation, waiting between attempts
-def retry
-  : [Clock] (times: int, delay: int -> Duration, operation: () -> #some(a) | r) -> #some(a) | r
-  = { times, delay, operation ->
-    rec attempt = { n ->
-      match operation()
-        | #some(value) -> #some(value)
-        | e ->
-          if n >= times then e else
-            Clock.sleep(delay(n))
-            attempt(n + 1)
-    }
-
-    attempt(1)
-  }
+-- Retry an operation until it succeeds or has been tried `times` times
+def retry: [c] int, ([c] () -> #some(a) | r) -> #some(a) | r = { times, operation ->
+  match operation()
+    | #some(value) -> #some(value)
+    | e -> if times <= 1 then e else retry(times - 1, operation)
+}
 
 -- Refresh the attestation if it is missing or expired. Returns the new cache;
 -- the old one is unchanged.
 export def AttestationCache.refresh
   : [Clock, Attester] AttestationCache -> #some(AttestationCache) | #attestationFailed
   = { cache ->
-    if not cache.needsRefresh
+    if not (cache \needsRefresh)
       then #some(cache)
       else proc {
         def chain = try retry(
-          times = cache.settings.maxRetryAttempts
-          delay = { n -> cache.settings.retryDelay * n }
-          operation = { generateCertificateChain(getChallenge()) }
+          cache.settings.maxRetryAttempts
+          { generateCertificateChain(getChallenge()) }
         )
 
         return cache with current = #some(
-          Attestation(certificateChain = chain, generatedAt = Clock.now)
+          Attestation(certificateChain = chain, generatedAt = now())
         )
       }
   }
@@ -74,5 +65,42 @@ export def AttestationCache.refresh
 export def AttestationCache.certificateChain
   : AttestationCache -> #some(list(string)) | #none
   = { cache ->
-    cache.current \mapSome { .certificateChain }
+    cache.current \mapSome { a -> a.certificateChain }
   }
+
+def show: (#some(AttestationCache) | #attestationFailed) -> string = {
+  | #some(cache) ->
+    match cache.current
+      | #some(a) -> "chain {a.certificateChain}, generated at {a.generatedAt}"
+      | #none -> "empty"
+  | #attestationFailed -> "attestation failed"
+}
+
+@entry
+def main = {
+  def settings = Settings(tokenExpiryMs = 60_000, maxRetryAttempts = 3)
+  def empty = AttestationCache.new(settings)
+
+  use Attester(
+    getChallenge = { "challenge" }
+    generateCertificateChain = { challenge -> #some(["leaf for {challenge}", "root"]) }
+  )
+
+  def first = use Clock(now = { 1_000 }, ticks = { 0 }) in empty \refresh
+  println(show(first))
+
+  match first
+    -- Still fresh a little later, so nothing is generated
+    | #some(cache) ->
+      println(show(use Clock(now = { 30_000 }, ticks = { 0 }) in cache \refresh))
+      -- Expired after a minute, so a new one is generated
+      println(show(use Clock(now = { 90_000 }, ticks = { 0 }) in cache \refresh))
+    | #attestationFailed -> ()
+
+  use Attester(
+    getChallenge = { "challenge" }
+    generateCertificateChain = { _ -> #attestationFailed }
+  )
+
+  println(show(use Clock(now = { 1_000 }, ticks = { 0 }) in empty \refresh))
+}
