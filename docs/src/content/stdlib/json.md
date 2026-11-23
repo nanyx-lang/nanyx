@@ -7,13 +7,18 @@ package: nanyx.json 0.2.0
 
 `nanyx.json` isn't part of the standard library: it is a package published to the
 [package index](https://github.com/nanyx-lang/packages) from [nanyx-lang/json](https://github.com/nanyx-lang/json). An
-application lists it in its manifest's `dependencies`, `(package = "nanyx.json", version = "0.1")`, which
-`nanyx install nanyx.json` adds, and a script names the version it uses in a `::dependency nanyx.json 0.1.0` line. Import
+application lists it in its manifest's `dependencies`, `(package = "nanyx.json", version = "0.2")`, which
+`nanyx install nanyx.json` adds, and a script names the version it uses in a `::dependency nanyx.json 0.2.0` line. Import
 `nanyx.json/json` under a name, `as json`, as these examples do: its `print` would otherwise clash with the console's.
 It is pure, so it needs no context.
 
+To write a value of your own type as JSON, and read it back, `json.encode(value)` and
+`json.decode(text, into = type T)` walk the type, with nothing written for it: see [reflection](json-reflection). To
+write or read one another way, build a [decoder](json-typed) or an [encoder](encode). This page is the `Json` value
+underneath them, which `json.parse` reads and `json.print` writes:
+
 ```nanyx
-::dependency nanyx.json 0.1.0
+::dependency nanyx.json 0.2.0
 
 import nanyx.json/json as json
 
@@ -21,7 +26,7 @@ def text = '{"name": "Ada", "born": 1815, "languages": ["English", "French"]}'
 
 match json.parse(text)
   | #some(value) -> println(json.print(value))
-  | #error(e) -> println("Not JSON: {e.message}")
+  | #invalidJson(e) -> println("Not JSON: {e.message}")
 
 -- {"name":"Ada","born":1815,"languages":["English","French"]}
 ```
@@ -30,7 +35,7 @@ A `Json` value is a tag union, so it is built and taken apart as any other is: a
 an array a `list(Json)`.
 
 ```nanyx
-::dependency nanyx.json 0.1.0
+::dependency nanyx.json 0.2.0
 
 import nanyx.json/json as json
 
@@ -45,22 +50,25 @@ An object keeps its keys in the order they were written, since a map keeps the o
 document read and written again keeps its keys where they were. Two objects with the same members in another order
 are still `==`.
 
-When the text isn't JSON, `parse` says where, by byte and by line and column, and what it found there:
+When the text isn't JSON, `parse` gives `#invalidJson`, which says where, by byte and by line and column, and what it
+found there. `json.describe` writes it as a message:
 
 ```nanyx
-::dependency nanyx.json 0.1.0
+::dependency nanyx.json 0.2.0
 
 import nanyx.json/json as json
 
 match json.parse("[1, 2")
   | #some(_) -> println("JSON")
-  | #error(e) -> println("{e.line}:{e.column}: {e.message}")
+  | #invalidJson(e) -> println("{e.line}:{e.column}: {e.message}")
+
+match json.parse('{"a" 1}')
+  | #some(_) -> println("JSON")
+  | failure -> println(json.describe(failure))
 
 -- 1:6: Expected ',' or ']' after an element of an array, found the end of the text
+-- Expected ':' after the name of a member, found '1', at line 1, column 6
 ```
-
-To read a document into types of your own, and write them back, use the [decoders](json-typed) and
-[encoders](encode).
 
 # Reference
 
@@ -70,7 +78,12 @@ JSON text, read into a [`Json`](#json) value and written back out.
 
 [`parse`](#parse) reads text into a `Json`, or says where it stops being JSON and why, as a
 [`JsonError`](#jsonerror). [`print`](#print) writes a value compactly, and [`printPretty`](#printpretty) writes it with each
-element and member on a line of its own. Nothing here needs a context. A program names
+element and member on a line of its own.
+
+[`encode`](json-reflection#encode) writes a value of any type as JSON text, and [`decode`](json-reflection#decode) reads one back, by walking
+the type, with no encoder or decoder written for it: `json.decode(text, into = type User)`. To
+write or read a type another way, build an `Encoder` or a `Decoder` from smaller ones, and
+run it with [`encodeWith`](json-typed#encodewith) or [`decodeWith`](json-typed#decodewith). A program names
 `nanyx.json` in its manifest's `dependencies`, or a script in a `::dependency` line, and imports
 it as `import nanyx.json/json as json`, to call `json.parse(text)` as the docs do.
 
@@ -99,20 +112,20 @@ members are values each named by a string.
 ## `JsonError`
 
 ```nanyx fragment
-type JsonError = (position: int, line: int, column: int, message: string)
+type JsonError = #invalidJson(position: int, line: int, column: int, message: string)
 ```
 
-Why [`parse`](#parse) read no value: where the text stops being JSON, and what it found there.
-`position` is the byte the problem is at, counting from 0, and `line` and `column` say where
-that byte is, each counting from 1, with `column` counting characters.
+Why [`parse`](#parse) read no value: `#invalidJson`, with where the text stops being JSON and what it
+found there. `position` is the byte the problem is at, counting from 0, and `line` and `column`
+say where that byte is, each counting from 1, with `column` counting characters.
 
 ## `parse`
 
 ```nanyx fragment
-def parse: string -> #some(Json) | #error(JsonError)
+def parse: string -> #some(Json) | #invalidJson(position: int, line: int, column: int, message: string)
 ```
 
-The JSON value `text` writes, or a [`JsonError`](#jsonerror) that says where it stops being JSON and why.
+The JSON value `text` writes, or an `#invalidJson` that says where it stops being JSON and why.
 The text is one value, with any whitespace before and after it: `json.parse('[1, "two", null]')`
 is `#some(#array([#number(1.0), #string("two"), #null]))`, and `json.parse("[1, 2")` is an error
 at the end of the text.
