@@ -67,6 +67,37 @@ module internal LambdaArguments =
                 ([], state, [])
         if errors.IsEmpty then Ok (inferred |> List.rev |> List.map fst, next) else Error errors
 
+    /// Where a call's arguments written as one tuple, `typedItems`, are reported when the tuple, `tupleTy`, does not
+    /// fit the callee's input, `inputTy`, whose parameters are `paramTys`: at the first argument that does not fit with
+    /// those before it, rather than at the whole tuple, `tupleSpan`. When that is a lambda whose result would fit
+    /// without an argument before it, the error is that argument's, which fixed the type the lambda's parameters took
+    /// (see `inferTupleItems`) too narrowly: in `map.fold(m, #none, { first, key, w -> if w > 0 then #some(w) else first })`,
+    /// the `#none` (#2452). Only where it is reported changes, not which constraints there are or their order.
+    let reportedSpan (state: InferState) (tupleSpan: SourceSpan) (typedItems: TypedExpr list) (paramTys: Ty list) (tupleTy: Ty) (inputTy: Ty) : SourceSpan =
+        // A number literal among them that nothing has settled yet is taken to be of its default type, as it is once
+        // the def is generalised, when the mismatch would be reported. An error earlier in the module is set aside
+        // (see `Solving.agreeing`).
+        let settled = NumericLiterals.settleWithin (typedItems |> List.map _.Type) state
+        let agreeing = Solving.agreeing settled.Constraints
+        // The constraints are solved first to last, as the tuple's would be.
+        let fits (constraints: Constraint list) = Solving.unify (constraints @ agreeing) |> Result.isOk
+        let assignable given expected : Constraint = (given, expected, Assignable, tupleSpan)
+        let items = List.zip typedItems paramTys
+        let upTo count = items |> List.truncate count |> List.map (fun (typed: TypedExpr, paramTy) -> assignable typed.Type paramTy)
+        if items.IsEmpty || fits [ assignable tupleTy inputTy ] then tupleSpan
+        else
+            match [ 1 .. items.Length ] |> List.tryFind (fun count -> not (fits (upTo count))) with
+            | None -> tupleSpan
+            | Some count ->
+                let typed, paramTy = items.[count - 1]
+                match typed.Expr, Unifier.unalias typed.Type, Unifier.unalias paramTy with
+                | Kind (Lambda _), TyFunc(_, output, _), TyFunc(_, expectedOutput, _) when fits [ assignable output expectedOutput ] ->
+                    [ 1 .. count - 1 ]
+                    |> List.tryFind (fun earlier -> not (fits (upTo earlier @ [ assignable output expectedOutput ])))
+                    |> Option.map (fun earlier -> (fst items.[earlier - 1]).Expr.Span)
+                    |> Option.defaultValue typed.Expr.Span
+                | _ -> typed.Expr.Span
+
     /// The fields of `arg`, the argument of a call to a constructor whose input is `input`, when it is a record written
     /// with each field named and each a field of `input`: their names, their values and the types `input` gives them.
     /// So `Log(log = { m -> println(m) })` gives `m` the input of `log`'s type, as `inferTupleItems` does.
