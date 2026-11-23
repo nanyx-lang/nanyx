@@ -158,6 +158,11 @@ A test that runs for longer than a time limit fails, with a message that says so
 
 `nanyx test` is a debug build, as `nanyx run` is. A type or name error is reported, and the test that reaches it fails with that error's message, as `` `parses a point` `` does above. The others run as usual, so a change can be tested while other code is still broken. `nanyx test --release` refuses to run if there is any error.
 
+The tests run in a core module, as `nanyx run`'s program does, so a test that reaches a call of an `@import` fails with
+`NYX0278` ([Components](../deep-dives/components#a-programs-own-imports)). When `nanyx test` is built, that error's message,
+the NYX0278 entry in the error reference, the tour's Attributes page and the Components deep dive name it beside
+`nanyx run` ([#2386](https://github.com/nanyx-lang/nanyx/issues/2386)).
+
 ## Editors
 
 `nanyx test --format json` writes one JSON object per test: its name, file, span, result and captured output. The VS Code extension uses it to fill the editor's test explorer and to put a "Run test" link above each `@test`.
