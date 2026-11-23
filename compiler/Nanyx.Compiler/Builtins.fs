@@ -39,6 +39,8 @@ module Intrinsics =
     let stringSlice = prefix + "string_slice"
     /// A new one-byte string.
     let stringFromByte = prefix + "string_from_byte"
+    /// A new string holding the bytes of an `Array(U8)`, which keeps them a byte each in order as a string does: one copy.
+    let stringFromBytes = prefix + "string_from_bytes"
     /// A new string holding a list's strings with a separator between each pair, each copied once.
     let stringJoin = prefix + "string_join"
     /// A new string holding a string's bytes, with `delta` added to each from `low` to `high`, in one allocation: what
@@ -226,6 +228,7 @@ module Intrinsics =
           stringByteAt, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy ], intTy, []))
           stringSlice, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy ], stringTy, []))
           stringFromByte, TypeEnv.mono (TyFunc(intTy, stringTy, []))
+          stringFromBytes, TypeEnv.mono (TyFunc(Arrays.ofType (SizedInteger.ty SizedInteger.U8), stringTy, []))
           stringJoin, TypeEnv.mono (TyFunc(tuple [ listOf stringTy; stringTy ], stringTy, []))
           stringShiftBytes, TypeEnv.mono (TyFunc(tuple [ stringTy; intTy; intTy; intTy ], stringTy, []))
           stringIndexBetween, TypeEnv.mono (TyFunc(tuple [ stringTy; stringTy; intTy; intTy ], intTy, []))

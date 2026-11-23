@@ -18,8 +18,9 @@
   position, so it works on a string of any length.
 module text
 
--- Everything here is written over eight compiler intrinsics: `__nanyx_string_length`,
+-- Everything here is written over nine compiler intrinsics: `__nanyx_string_length`,
 -- `__nanyx_string_byte_at`, `__nanyx_string_slice`, `__nanyx_string_from_byte`,
+-- `__nanyx_string_from_bytes`, which copies an `Array(U8)`'s bytes into a string at once,
 -- `__nanyx_string_join`, which copies each piece of its result once,
 -- `__nanyx_string_index_between`, which finds a string in another, and `__nanyx_string_new` and
 -- `__nanyx_string_write`, which make a string whose length is known first and copy each stretch of
@@ -566,17 +567,6 @@ def wellFormedFrom: Array(U8), int, int -> bool = { bytes, count, i ->
     else if length > 0 then wellFormedFrom(bytes, count, i + length) else false
 }
 
---| Each of the bytes of `bytes` before `stop` as a string of one byte, in order, in front of `acc`.
-def byteStringsBefore: Array(U8), int, list(string) -> list(string) = { bytes, stop, acc ->
-  if stop <= 0
-    then acc
-    else byteStringsBefore(
-      bytes
-      stop - 1
-      __nanyx_list_cons(__nanyx_string_from_byte(byteOf(bytes, stop - 1)), acc)
-    )
-}
-
 --| The string whose UTF-8 encoding is `bytes`: `string.fromUtf8([97, 195, 169])` is `#some("aé")`.
   Bytes that aren't well-formed UTF-8 give `#invalidUtf8`: a continuation byte with no lead byte, a
   sequence cut short, an overlong encoding, a surrogate (`0xD800` to `0xDFFF`) or a code point past
@@ -584,9 +574,7 @@ def byteStringsBefore: Array(U8), int, list(string) -> list(string) = { bytes, s
 export def string.fromUtf8: Array(U8) -> #some(string) | #invalidUtf8 = { bytes ->
   def count = __nanyx_array_length(bytes)
 
-  if wellFormedFrom(bytes, count, 0)
-    then #some(__nanyx_string_join(byteStringsBefore(bytes, count, []), ""))
-    else #invalidUtf8
+  if wellFormedFrom(bytes, count, 0) then #some(__nanyx_string_from_bytes(bytes)) else #invalidUtf8
 }
 
 -- String slices --------------------------------------------------------------------------------

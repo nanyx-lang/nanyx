@@ -122,3 +122,30 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "100000\n100000 true\n"
+
+let private decoding =
+    normalized """import nanyx/text
+import nanyx/array
+
+def encoded: int -> int = { n ->
+  array.length(string.toUtf8(string.repeat("aé€😀", n)))
+}
+
+def decoded: int -> int = { n ->
+  match string.fromUtf8(string.toUtf8(string.repeat("aé€😀", n)))
+    | #some(back) -> string.length(back)
+    | #invalidUtf8 -> -1
+}
+"""
+
+[<Fact>]
+let ``Memory - string.fromUtf8 copies its bytes into the string at once, whatever their number`` () =
+    use program = instantiateWasm decoding []
+    let liveBefore = program.LiveBlocks
+    let encodedAllocations, encodedLength = allocationsOf program "encoded" 10000
+    let decodedAllocations, decodedLength = allocationsOf program "decoded" 10000
+    Assert.Equal(100000, encodedLength)
+    Assert.Equal(100000, decodedLength)
+    // The string, where it made 2 for every byte (#2419).
+    Assert.Equal(1, decodedAllocations - encodedAllocations)
+    Assert.Equal(liveBefore, program.LiveBlocks)
