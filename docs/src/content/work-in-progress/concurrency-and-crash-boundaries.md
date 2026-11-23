@@ -108,43 +108,12 @@ def both: [Async, Http] () -> (Response, Response) = {
 def pages = { urls -> urls \map { url -> start! http.get(url) } \map(await) }   -- every one, at once, in order
 ```
 
-Decided with the maintainer on 2026-11-17:
+`start!`, `await` and each def as the scope of its tasks are built: how to use them is on [Async](../advanced/async),
+and how they are built on [Async](../deep-dives/async#tasks-and-scopes) in Deep dives. What is still to come was decided
+with the maintainer on 2026-11-17:
 
-- **`start!` is a member of `Async`,** so it's available wherever `Async` is, with no helper to open a scope.
-
-  ```nanyx fragment
-  context Async = (
-    @customKeywordType(#delay)
-    start: [Async] (() -> a) -> Task(a)
-  )
-
-  def await: [Async] Task(a) -> a
-  def race: [Async] list([Async] () -> a) -> a
-  ```
-
-- **`start!` is a keyword of kind [`#delay`](../advanced/workflows#keyword-kinds)**, which is built: `start! e`
-  is `start({ e })`, the expression wrapped in a lambda and nothing else rewritten: no workflow builder, no
-  continuation per `start!`. As with `try`, the keyword takes the whole expression after it: in
-  `start! http.get(urlA) \orCrash("a failed")` the `orCrash` runs in the task, not on the `Task`.
-- **Every def is a scope.** A def whose body uses `start!`, directly or in a lambda written in it, doesn't return
-  until every task it started has finished. At the top level of a script, the scope is the program. The scope is the
-  def, not the nearest block or lambda: in `pages` above, `start!` is in `map`'s lambda, and the tasks run at once
-  because the def, not the lambda, waits for them.
-- **The scope is still a scoped context, just not written.** The compiler runs such a def's body under a scoped
-  context, as a `memory` block runs under `Memory`, and `start!` requires it. So the
-  [escape](../advanced/memory#values-cannot-escape-memory-scope) rules keep a `Task`, or a lambda that starts one,
-  from leaving the def: a lambda stored and called after its def returned would start a task in a scope that's gone.
-- **A task nobody awaits is waited for,** as in Kotlin, not cancelled, as in Swift. `def f = { start! log(event); 42 }`
-  returns 42 after `log` finishes: a `start!` whose result is never used is probably fire-and-forget, and its effect
-  was wanted. A default-linter rule flags a task never awaited whose result isn't `()`, which is more likely a
-  forgotten `await`.
-- **`start!` gives back a `Task(a)`.** A task shares the instance and lives in a scope; a
-  [process](#processes-mailboxes-and-supervision) is isolated and comes from `process.start`. The names keep the two
-  levels apart.
-- **`await` is a function, not a keyword.** A keyword exists to capture the rest of a block; waiting on a task is an
-  ordinary call that suspends, like `http.get`, so it's written like one.
-- **A task never stands in for its value.** `a` is a `Task(Response)` until it's awaited. Having it awaited when it's
-  first read would be an implicit conversion, which Nanyx doesn't have.
+- **A default-linter rule flags a task never awaited whose result isn't `()`,** which is more likely a forgotten
+  `await` than a task started for what it does.
 - **`race` is the one helper that's needed:** "first to finish, the rest cancelled" can't be written with `start!` and
   `await`, which waits for one particular task. A timeout is a race against a sleep:
 
@@ -206,8 +175,9 @@ and holds only that instance ([Async](../deep-dives/async#how-its-built)).
   the locals that live across them in a frame on the heap, and a scheduler in the runtime runs an instance's tasks on
   one stack. It needs nothing from the runtime, so the same module runs under Wasmtime on every OS and in a browser.
   A function that can't wait is compiled as any other, and pays nothing. The lowering is built, with a scheduler that
-  runs one task ([How tasks are compiled](../deep-dives/async#how-tasks-are-compiled)); nothing stops yet.
-  Decided on 2026-11-23, with the plan of PRs on #1890:
+  runs an instance's tasks ([How tasks are compiled](../deep-dives/async#how-tasks-are-compiled)); a wait on the host
+  still holds the thread, so tasks take turns only where they wait for each other. Decided on 2026-11-23, with the plan
+  of PRs on #1890:
   - A function generic in contexts is compiled twice where it is used both ways, with `Async` and without, so that
     only the first is a state machine.
   - The host declares the wait the scheduler makes when every task is waiting, as a function with an attribute the
@@ -217,6 +187,9 @@ and holds only that instance ([Async](../deep-dives/async#how-its-built)).
   - A `Task` or a lambda that uses `start!` escaping its def is `NYX0233`, with a message about tasks; starting a task
     that captures an `MRef`, an `MList` or a cell is an error with a code of its own.
   - The playground host provides `Async` (`start!`, `await`, `sleep`), so a browser can run tasks.
+  - `start` and `await` are functions of `nanyx/async`, not members of `Async`, which has no members at all: `start` is a
+    `#delay` keyword that is a def, which the language allows for `#delay` only, and the hosts' preludes export both
+    beside `Async`, so `start!` is wherever `Async` is.
   - A top-level value whose building waits is built once: a task that reads it while it is built waits for it.
 - **Stack switching, later** ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). WebAssembly's
   stack-switching proposal gives a module many stacks and lets it switch between them, so a task is a stack and

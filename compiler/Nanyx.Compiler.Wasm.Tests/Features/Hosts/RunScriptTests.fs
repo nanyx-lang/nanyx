@@ -106,3 +106,13 @@ def log = handlers.log
 log("count {pureCaller(1)}")
 """
     runSource source |> assertRan "count 2\n"
+
+[<Fact>]
+let ``A script value that needs a context is the one its statements name, though the prelude exports the name`` () =
+    let source =
+        """def start = ticks()
+def await = ticks() - start
+
+println(await >= 0)
+"""
+    runSource source |> assertRan "true\n"
