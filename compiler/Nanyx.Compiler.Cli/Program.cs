@@ -34,7 +34,7 @@ internal sealed record Shell(string Directory, TextWriter Out, TextWriter Error,
     /// <summary>The package cache, the index and GitHub, as a build reads them: the user's (see <c>PackageStore.user</c>).</summary>
     public PackageStore Packages { get; init; } = PackageStoreModule.user();
 
-    /// <summary>What <c>nanyx publish</c> and <c>nanyx yank</c> send requests to GitHub with: none for GitHub itself,
+    /// <summary>What <c>nanyx publish</c> and <c>nanyx unlist</c> send requests to GitHub with: none for GitHub itself,
     /// signed in with <c>GITHUB_TOKEN</c> or the GitHub CLI's login (see <c>GitHubApi.token</c>); the Wasm tests give a
     /// fake one.</summary>
     public FSharpFunc<GitHubRequest, FSharpResult<GitHubResponse, string>>? GitHub { get; init; }
@@ -603,12 +603,13 @@ internal static partial class CliCommands
 
         if (listPulled)
         {
-            foreach (var line in pulled.ResultValue)
+            foreach (var line in pulled.ResultValue.Lines)
             {
                 shell.Out.WriteLine(line);
             }
         }
 
+        PrintWarnings(shell, pulled.ResultValue.Warnings);
         return true;
     }
 
@@ -693,12 +694,25 @@ internal static partial class CliCommands
             return false;
         }
 
-        foreach (var line in updated.ResultValue)
+        foreach (var line in updated.ResultValue.Lines)
         {
             shell.Error.WriteLine(line);
         }
 
+        PrintWarnings(shell, updated.ResultValue.Warnings);
         return true;
+    }
+
+    /// <summary>
+    /// Reports on stderr each of <paramref name="warnings"/>, once, such as a version a build uses that the index has
+    /// unlisted (<c>NYX0051</c>); the command goes on.
+    /// </summary>
+    private static void PrintWarnings(Shell shell, FSharpList<Diagnostic> warnings)
+    {
+        if (!warnings.IsEmpty)
+        {
+            PrintDiagnostics(shell, ListModule.Distinct(warnings), shell.Error);
+        }
     }
 
     /// <summary>Reports why a lockfile can't be brought up to date: a version conflict as a diagnostic, and anything

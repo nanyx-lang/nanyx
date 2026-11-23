@@ -22,7 +22,7 @@ nanyx pack [--out <directory>] [<package>]
 nanyx bump [<package>]
 nanyx api-check <older.nyxpkg> <newer.nyxpkg>
 nanyx publish [<package>]
-nanyx yank <package> <version>
+nanyx unlist <package> <version>
 nanyx manifest --json [<package>]
 nanyx search <query>
 nanyx lsp [<options>]
@@ -293,8 +293,8 @@ name you give, and a package already listed is an error.
 doesn't lock (a new dependency, or a requirement the version locked no longer satisfies), it chooses versions from the
 package index and writes the lockfile, saying what it locks: the newest version each package's dependencies accept,
 keeping every version the lockfile already locks while it is still accepted, so nothing is upgraded as a side effect.
-A yanked version isn't chosen anew, but stays where it is locked already, and a version that needs a newer compiler
-isn't chosen. When no versions satisfy every dependency, it explains why, a step at a time (`NYX0047`).
+An unlisted version isn't chosen anew, but stays where it is locked already, with a warning (`NYX0051`), and a version
+that needs a newer compiler isn't chosen. When no versions satisfy every dependency, it explains why, a step at a time (`NYX0047`).
 
 Then it downloads into the package cache each package the lockfile locks that isn't there yet, checking each against
 the SHA-256 the lockfile records, checks that each dependency of a package is there, as a build would, and lists them:
@@ -385,12 +385,14 @@ registration). `publish` signs in to GitHub with `GITHUB_TOKEN`, if it is set, o
 (`gh auth login`); the token must be able to create releases on the repository, and to push to or fork
 nanyx-lang/packages and open pull requests on it.
 
-## `nanyx yank`
+## `nanyx unlist`
 
-`nanyx yank acme.web 1.2.0` opens the pull request on the package index that marks a version yanked. Once it is
-merged, no new resolution chooses the version, but a lockfile that locks it keeps building. It signs in as `publish`
-does, opens its pull request from a branch `yank-<package>-<version>` in the same place `publish` would, and refuses a
-version the index doesn't have or has yanked already.
+`nanyx unlist acme.web 1.2.0` opens the pull request on the package index that marks a version unlisted. Once it is
+merged, no new resolution chooses the version, but a lockfile that locks it, or a script that pins it, keeps building.
+A command that reads the index for such a version, `pull`, `install`, `build` or `run`, warns that it is unlisted and
+goes on ([`NYX0051`](./errors#nyx0051)); one that reads it only from the package cache doesn't.
+`unlist` signs in as `publish` does, opens its pull request from a branch `unlist-<package>-<version>` in the same place
+`publish` would, and refuses a version the index doesn't have or has unlisted already.
 
 ## `nanyx manifest`
 

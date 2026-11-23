@@ -2,7 +2,8 @@ namespace NyxCompiler
 
 open Parser.Program
 
-/// How serious a diagnostic is. The compiler reports `Critical` and `Error`; `Warning`, `Info` and `Hint` are for linters.
+/// How serious a diagnostic is. The compiler reports `Critical` and `Error`, and `Warning` for an unlisted version a
+/// build uses (`NYX0051`); `Warning`, `Info` and `Hint` are otherwise for linters.
 [<RequireQualifiedAccess>]
 type Severity =
     /// Compilation cannot go on at all: there is no source to check.
@@ -112,6 +113,8 @@ module DiagnosticCodes =
     let DependencyNotLocked = code 48 "Dependency not locked" Severity.Error
     let PackageFileNotUtf8 = code 49 "Package file that isn't UTF-8" Severity.Error
     let KeywordsOutOfOrder = code 50 "Keywords in the wrong order" Severity.Error
+    /// A warning, not an error: the build goes on.
+    let UnlistedVersion = code 51 "Unlisted version" Severity.Warning
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -225,7 +228,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; VersionConflict; DependencyNotLocked; PackageFileNotUtf8; KeywordsOutOfOrder; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; VersionConflict; DependencyNotLocked; PackageFileNotUtf8; KeywordsOutOfOrder; UnlistedVersion; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField; UnknownPattern; AmbiguousPattern; ReExportClash
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers

@@ -9,17 +9,6 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-/// A store whose cache and index are directories in `directory`.
-let private storeIn (directory: TempDirectory) =
-    { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported }
-
-/// The library acme.core at `version`, whose `answer` is `answer`, in a directory of its own, published to the index of
-/// `store`, with `fields` in its index entry.
-let private publishCore (directory: TempDirectory) (store: PackageStore) (version: string) (answer: int) (fields: string) =
-    directory.Write $"core-{version}/core.nyxp" $"(package = (name = \"acme.core\", version = \"{version}\"))\n"
-    directory.Write $"core-{version}/core.nyx" $"export module core\n\nexport def answer = {answer}\n"
-    publishToIndex store (Path.Combine(directory.Path, $"core-{version}")) [] fields |> ignore
-
 /// The script `script.nyx` in its own directory under `directory`: `directives`, then a line that prints the answer of
 /// acme.core. Gives its path.
 let private scriptWith (directory: TempDirectory) (directives: string) =
@@ -59,10 +48,10 @@ let ``Run - the packages a pinned package depends on are chosen as a package's a
     Assert.Equal("30\n", normalised ran.StandardOutput)
 
 [<Fact>]
-let ``Run - a yanked version a script names still resolves`` () =
+let ``Run - an unlisted version a script names still resolves`` () =
     use directory = new TempDirectory()
     let store = storeIn directory
-    publishCore directory store "1.0.0" 7 """, "yanked": true"""
+    publishCore directory store "1.0.0" 7 """, "unlisted": true"""
     let script = scriptWith directory "::dependency acme.core 1.0.0"
     let outcome = nanyxInStore store (Path.GetDirectoryName script) [ "run"; "script.nyx" ]
     Assert.Equal("7\n", normalised outcome.StandardOutput)

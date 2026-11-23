@@ -143,7 +143,7 @@ let private packagesForTests =
          File.WriteAllText(Path.Combine(store.Index, "config.json"), """{ "format": 1, "index": "index/" }""")
          File.WriteAllText(
              Path.Combine(store.Index, "index", "nanyx", "nanyx.json.json"),
-             $$"""{ "name": "nanyx.json", "versions": [{ "version": "0.1.0", "url": "../../artifacts/nanyx.json-0.1.0.nyxpkg", "sha256": "{{sha256}}", "dependencies": {}, "yanked": false, "available": true }] }"""
+             $$"""{ "name": "nanyx.json", "versions": [{ "version": "0.1.0", "url": "../../artifacts/nanyx.json-0.1.0.nyxpkg", "sha256": "{{sha256}}", "dependencies": {}, "unlisted": false, "available": true }] }"""
          )
          let locked = { Name = "nanyx.json"; Version = (SemanticVersion.tryParse "0.1.0").Value; Sha256 = sha256; Dependencies = [] }
          match PackageIndex.download store locked with
@@ -226,7 +226,7 @@ let private command (arguments: string list) : Shell -> int =
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)
     | "publish" :: path -> fun shell -> CliCommands.PublishIn(shell, Array.ofList path)
-    | [ "yank"; package; version ] -> fun shell -> CliCommands.YankIn(shell, package, version)
+    | [ "unlist"; package; version ] -> fun shell -> CliCommands.UnlistIn(shell, package, version)
     | "pack" :: rest ->
         let outputPath, _, _, _, path = options (null, false, false, null, []) rest
         fun shell -> CliCommands.PackIn(shell, outputPath, path)
@@ -262,13 +262,13 @@ let nanyxInUntil (stop: Threading.CancellationToken) (directory: string) (argume
 let nanyxInStore (store: NyxCompiler.PackageStore) (directory: string) (arguments: string list) : RunOutcome =
     inProcessWith (Some store) None Threading.CancellationToken.None directory "" [] (command arguments)
 
-/// `nanyxInStore`, with `github` in place of GitHub: what `nanyx publish` and `nanyx yank` send their requests to.
+/// `nanyxInStore`, with `github` in place of GitHub: what `nanyx publish` and `nanyx unlist` send their requests to.
 let nanyxWithGitHub (store: NyxCompiler.PackageStore) (github: NyxCompiler.GitHubClient) (directory: string) (arguments: string list) : RunOutcome =
     inProcessWith (Some store) (Some github) Threading.CancellationToken.None directory "" [] (command arguments)
 
 /// Pulls the dependencies of the package in `packageDirectory` and packs it with `nanyx pack` into the `artifacts` directory of the index of `store`, a
 /// directory on disk, and lists it in the index after the versions listed already, as a release would, with
-/// `dependencies` as the index writes them and `fields`, more of its entry's JSON, such as `, "yanked": true`. Gives
+/// `dependencies` as the index writes them and `fields`, more of its entry's JSON, such as `, "unlisted": true`. Gives
 /// its SHA-256.
 let publishToIndex (store: NyxCompiler.PackageStore) (packageDirectory: string) (dependencies: (string * string) list) (fields: string) : string =
     let artifacts = Path.Combine(store.Index, "artifacts")
@@ -329,6 +329,17 @@ type TempDirectory() =
 
     interface IDisposable with
         member _.Dispose() = try Directory.Delete(path, true) with _ -> ()
+
+/// A store whose cache and index are directories in `directory`, which can't fetch from GitHub.
+let storeIn (directory: TempDirectory) : NyxCompiler.PackageStore =
+    { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = NyxCompiler.GitHub.unsupported }
+
+/// The library acme.core at `version`, whose `answer` is `answer`, in a directory of its own, `core-<version>` in
+/// `directory`, published to the index of `store` with `fields` in its index entry (see `publishToIndex`).
+let publishCore (directory: TempDirectory) (store: NyxCompiler.PackageStore) (version: string) (answer: int) (fields: string) =
+    directory.Write $"core-{version}/core.nyxp" $"(package = (name = \"acme.core\", version = \"{version}\"))\n"
+    directory.Write $"core-{version}/core.nyx" $"export module core\n\nexport def answer = {answer}\n"
+    publishToIndex store (Path.Combine(directory.Path, $"core-{version}")) [] fields |> ignore
 
 /// Runs `nanyx` with `arguments` (with `{package}` standing for the package's directory) on a package of `files`
 /// (paths under its `src` directory, with their text), made in a directory of its own and removed afterwards. Gives

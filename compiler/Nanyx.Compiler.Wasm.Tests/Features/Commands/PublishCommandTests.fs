@@ -1,5 +1,5 @@
-/// `nanyx publish` and `nanyx yank` (#865): a version checked, compared with the newest published, packed and released
-/// on the package's own repository, with the pull request that registers a new package; and a version yanked by a pull
+/// `nanyx publish` and `nanyx unlist` (#865): a version checked, compared with the newest published, packed and released
+/// on the package's own repository, with the pull request that registers a new package; and a version unlisted by a pull
 /// request to the index. GitHub is a fake that records what is asked of it, and the index is a directory on disk.
 module TranspilerWasmTests.Features.Commands.Publish
 
@@ -309,48 +309,55 @@ let ``A version published already, a package with no repository, and one not for
     Assert.Equal("error: strings.nyx isn't formatted: run `nanyx format --write` on the package\n", unformatted.StandardError.ReplaceLineEndings "\n")
     Assert.Empty(github.Requests)
 
-/// The index file of acme.util, listing 1.0.0 and 1.1.0, the second `yanked` already when `alreadyYanked`.
-let private indexFile (alreadyYanked: bool) =
-    let entry (version: string) (yanked: bool) =
-        $$"""{ "version": "{{version}}", "url": "u", "sha256": "s", "nanyx": null, "dependencies": {}, "yanked": {{(if yanked then "true" else "false")}}, "available": true }"""
-    $$"""{ "name": "acme.util", "repository": "https://github.com/acme/util", "versions": [{{entry "1.0.0" false}}, {{entry "1.1.0" alreadyYanked}}] }"""
+/// The index file of acme.util, listing 1.0.0 and 1.1.0, the second unlisted already when `unlistedAs` gives the field
+/// that says so: `unlisted`, or `yanked`, as an older index file writes it.
+let private indexFile (unlistedAs: string option) =
+    let entry (version: string) (field: string option) =
+        let unlisted = match field with Some name -> $", \"{name}\": true" | None -> ""
+        $$"""{ "version": "{{version}}", "url": "u", "sha256": "s", "nanyx": null, "dependencies": {}{{unlisted}}, "available": true }"""
+    $$"""{ "name": "acme.util", "repository": "https://github.com/acme/util", "versions": [{{entry "1.0.0" None}}, {{entry "1.1.0" unlistedAs}}] }"""
 
 [<Fact>]
-let ``Yanking opens the pull request that marks the version yanked in the index`` () =
+let ``Unlisting opens the pull request that marks the version unlisted in the index`` () =
     use directory = new TempDirectory()
     let store = storeIn directory false
-    let github = FakeGitHub [ "index/acme/acme.util.json", indexFile false ]
-    let outcome = nanyxWithGitHub store github.Client directory.Path [ "yank"; "acme.util"; "1.1.0" ]
+    let github = FakeGitHub [ "index/acme/acme.util.json", indexFile None ]
+    let outcome = nanyxWithGitHub store github.Client directory.Path [ "unlist"; "acme.util"; "1.1.0" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal(
-        "Opening the pull request that yanks acme.util 1.1.0\n"
+        "Opening the pull request that unlists acme.util 1.1.0\n"
         + "Opened https://github.com/nanyx-lang/packages/pull/7: once it is merged, new resolutions pass over acme.util 1.1.0\n",
         outcome.StandardOutput.ReplaceLineEndings "\n"
     )
     Assert.Equal(0, outcome.ExitCode)
     let path, text = List.exactlyOne github.Written
     Assert.Equal("index/acme/acme.util.json", path)
-    let versions = JsonNode.Parse(text).["versions"].AsArray() |> Seq.map (fun entry -> string entry.["version"], entry.["yanked"].GetValue<bool>()) |> List.ofSeq
+    let versions =
+        JsonNode.Parse(text).["versions"].AsArray()
+        |> Seq.map (fun entry -> string entry.["version"], (entry.["unlisted"] <> null && entry.["unlisted"].GetValue<bool>()))
+        |> List.ofSeq
     Assert.Equal<(string * bool) list>([ "1.0.0", false; "1.1.0", true ], versions)
-    Assert.Equal<(string * string) list>([ "Yank acme.util 1.1.0", "acme:yank-acme.util-1.1.0" ], github.Pulls)
+    Assert.Equal<(string * string) list>([ "Unlist acme.util 1.1.0", "acme:unlist-acme.util-1.1.0" ], github.Pulls)
 
 [<Fact>]
-let ``An account that can push to the index yanks from a branch of it`` () =
+let ``An account that can push to the index unlists from a branch of it`` () =
     use directory = new TempDirectory()
     let store = storeIn directory false
-    let github = FakeGitHub [ "index/acme/acme.util.json", indexFile false ]
+    let github = FakeGitHub [ "index/acme/acme.util.json", indexFile None ]
     github.CanPushToIndex <- true
-    let outcome = nanyxWithGitHub store github.Client directory.Path [ "yank"; "acme.util"; "1.1.0" ]
+    let outcome = nanyxWithGitHub store github.Client directory.Path [ "unlist"; "acme.util"; "1.1.0" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal(0, outcome.ExitCode)
-    Assert.Equal<string list>([ "nanyx-lang/packages:yank-acme.util-1.1.0" ], github.Branches)
-    Assert.Equal<(string * string) list>([ "Yank acme.util 1.1.0", "yank-acme.util-1.1.0" ], github.Pulls)
+    Assert.Equal<string list>([ "nanyx-lang/packages:unlist-acme.util-1.1.0" ], github.Branches)
+    Assert.Equal<(string * string) list>([ "Unlist acme.util 1.1.0", "unlist-acme.util-1.1.0" ], github.Pulls)
 
 [<Fact>]
-let ``A version yanked already, one the index doesn't have, or a package it doesn't have can't be yanked`` () =
+let ``A version unlisted already, one the index doesn't have, or a package it doesn't have can't be unlisted`` () =
     use directory = new TempDirectory()
     let store = storeIn directory false
-    let yank (github: FakeGitHub) (package: string) (version: string) = (nanyxWithGitHub store github.Client directory.Path [ "yank"; package; version ]).StandardError.ReplaceLineEndings "\n"
-    Assert.Equal("error: acme.util 1.1.0 is yanked already\n", yank (FakeGitHub [ "index/acme/acme.util.json", indexFile true ]) "acme.util" "1.1.0")
-    Assert.Equal("error: The index has no acme.util 2.0.0 to yank\n", yank (FakeGitHub [ "index/acme/acme.util.json", indexFile false ]) "acme.util" "2.0.0")
-    Assert.Equal("error: The package index has no package 'acme.nope'\n", yank (FakeGitHub []) "acme.nope" "1.0.0")
+    let unlist (github: FakeGitHub) (package: string) (version: string) =
+        (nanyxWithGitHub store github.Client directory.Path [ "unlist"; package; version ]).StandardError.ReplaceLineEndings "\n"
+    for field in [ "unlisted"; "yanked" ] do
+        Assert.Equal("error: acme.util 1.1.0 is unlisted already\n", unlist (FakeGitHub [ "index/acme/acme.util.json", indexFile (Some field) ]) "acme.util" "1.1.0")
+    Assert.Equal("error: The index has no acme.util 2.0.0 to unlist\n", unlist (FakeGitHub [ "index/acme/acme.util.json", indexFile None ]) "acme.util" "2.0.0")
+    Assert.Equal("error: The package index has no package 'acme.nope'\n", unlist (FakeGitHub []) "acme.nope" "1.0.0")

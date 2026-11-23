@@ -432,7 +432,7 @@ module PackageApi =
     let private baseline (store: PackageStore) (name: string) (version: SemanticVersion) : Result<(SemanticVersion * PackageApi) option, string> =
         PackageIndex.versions store.Index name
         |> Result.bind (fun (_, listed) ->
-            match listed |> List.filter (fun listedVersion -> listedVersion.Version <= version && listedVersion.Available && not listedVersion.Yanked) |> List.tryLast with
+            match listed |> List.filter (fun listedVersion -> listedVersion.Version <= version && listedVersion.Available && not listedVersion.Unlisted) |> List.tryLast with
             | None -> Result.Ok None
             | Some newest ->
                 PackageIndex.download store { Name = name; Version = newest.Version; Sha256 = newest.Sha256; Dependencies = [] }

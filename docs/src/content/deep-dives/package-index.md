@@ -22,8 +22,9 @@ client noticing. `PackageIndex.fs` reads it.
   first and builds every other address from it, so the index can move to another address with a change there and a
   redirect, not a client release. The compiler refuses a format it doesn't read.
 - **One file per package**, `<index><namespace>/<name>.json`, lists every version ever recorded with its `url`,
-  `sha256`, `nanyx` (the oldest compiler it builds with), `dependencies`, `yanked` and `available`
-  (`PackageIndex.versions`). A package the index doesn't list has no file: a 404, which is read as no versions.
+  `sha256`, `nanyx` (the oldest compiler it builds with), `dependencies`, `unlisted` and `available`
+  (`PackageIndex.versions`). An older file writes `unlisted` as `yanked`, which the compiler reads as the same. A
+  package the index doesn't list has no file: a 404, which is read as no versions.
 - **The index stores no artifacts and mirrors nothing.** A package's versions are the releases of its own GitHub
   repository: a release tagged `v1.2.0` or `1.2.0` with an asset named `<name>-<version>.nyxpkg`. The client also
   unpacks a zip of a package's directory, with its manifest in its one top-level folder (`PackageArchive.unpack`).
@@ -53,14 +54,15 @@ A version's hash is recorded once: a replaced asset is reported and the old hash
 asset. A version whose release disappears is marked `available: false` and reported, never removed.
 
 Before it records a version, Sync runs `nanyx api-check` on it and the newest version recorded below it that isn't
-yanked and is available, and a version whose number is too small for its API's changes is reported, not recorded. A
+unlisted and is available, and a version whose number is too small for its API's changes is reported, not recorded. A
 package's first version isn't checked.
 
-## Yanking
+## Unlisting
 
-Yanking is a pull request that sets `yanked` on a version, which `nanyx yank` opens. The Check workflow refuses any
-other change to an index file. A yanked version is ruled out of new resolutions, but still downloads, since a lockfile
-that locks it keeps building.
+Unlisting is a pull request that sets `unlisted` on a version, which `nanyx unlist` opens (`Publishing.unlist`). The
+Check workflow refuses any other change to an index file. An unlisted version is ruled out of new resolutions, but still
+downloads, since a lockfile that locks it, or a script that pins it, keeps building. A command that reads its entry in
+the index warns that it is unlisted (`NYX0051`).
 
 # The lockfile
 

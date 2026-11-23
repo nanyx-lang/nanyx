@@ -15,7 +15,8 @@ type IndexedVersion =
       Nanyx: string option
       /// Its dependencies, each a package's name and the versions it accepts, as the index writes them: `2.1` or `^2.1`.
       Dependencies: (string * string) list
-      Yanked: bool
+      /// Whether its author unlisted it, so that no new resolution chooses it. Older index files write this `yanked`.
+      Unlisted: bool
       /// Whether its release and asset are there to download.
       Available: bool }
 
@@ -119,7 +120,7 @@ module PackageIndex =
                                                 (if dependency.Value.ValueKind = JsonValueKind.String then dependency.Value.GetString() else string dependency.Value))
                                             |> List.ofSeq
                                         | _ -> []
-                                      Yanked = flag "yanked" entry
+                                      Unlisted = flag "unlisted" entry || flag "yanked" entry
                                       Available = property "available" entry |> Option.forall (fun value -> value.ValueKind <> JsonValueKind.False) }
                             | _ -> None)
                         |> List.ofSeq
@@ -128,13 +129,14 @@ module PackageIndex =
 
     /// The directory `locked` is unpacked in, in the cache of `store`: downloaded from the store's index, if it isn't
     /// there yet, and checked against the lockfile's SHA-256 before it is unpacked. Or why it can't be: the index
-    /// doesn't list it, its release is missing, or what is downloaded isn't what was locked. A yanked version still
-    /// downloads, since a lockfile that names it keeps building.
-    let download (store: PackageStore) (locked: LockedPackage) : Result<string, string> =
+    /// doesn't list it, its release is missing, or what is downloaded isn't what was locked. An unlisted version still
+    /// downloads, since a lockfile that names it keeps building. With the directory is the version as the index lists
+    /// it, when the index was read; none when the cache held it already.
+    let fetch (store: PackageStore) (locked: LockedPackage) : Result<string * IndexedVersion option, string> =
         let directory = PackageStore.directoryOf store locked.Name locked.Version
         let named = $"'{locked.Name}' {locked.Version}"
         if Directory.Exists directory then
-            Result.Ok directory
+            Result.Ok(directory, None)
         else
             versions store.Index locked.Name
             |> Result.bind (fun (file, listed) ->
@@ -163,4 +165,9 @@ module PackageIndex =
                                         Result.Error $"The download of {named} holds {what}"
                                 | Result.Error message ->
                                     Directory.Delete(directory, true)
-                                    Result.Error $"The download of {named} isn't a package: {message}")))
+                                    Result.Error $"The download of {named} isn't a package: {message}"))
+                    |> Result.map (fun directory -> directory, Some version))
+
+    /// The directory `locked` is unpacked in, in the cache of `store`, downloaded if it isn't there yet (see `fetch`).
+    let download (store: PackageStore) (locked: LockedPackage) : Result<string, string> =
+        fetch store locked |> Result.map fst
