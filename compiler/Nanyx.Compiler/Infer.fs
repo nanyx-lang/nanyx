@@ -264,7 +264,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             match state.ExpectedLambdaTypes |> Map.tryFind expr.Id with
             | Some (TyFunc(input, ret, _)) -> Some input, Some ret
             | _ -> None, None
-        state |> Contexts.outsideValue (fun state -> inferLambdaWithExpected env state expr args body expectedInput expectedReturn)
+        // Checked against a function type, as a record field's or a lambda's result, it can use the contexts that type
+        // requires, as a lambda argument can (see `Contexts.extendEnvForLambdaArgument`).
+        let expected = ExpectedLiterals.functionOf state expr
+        let lambdaEnv, state = Contexts.extendEnvForLambdaArgument env state expr expected
+        let instances = Contexts.instancesSuppliedToLambda state expr expected
+        state
+        |> Contexts.outsideValue (fun state -> inferLambdaWithExpected lambdaEnv state expr args body expectedInput expectedReturn)
+        |> Result.map (Contexts.withSuppliedInstances instances expr)
     | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
     | BinaryOp(op, _, left, right) when (CompositionOperators.functionFor op).IsSome ->
         inferAsCall (inferExpr env) state expr (CompositionOperators.functionFor op).Value [ left; right ]
@@ -304,9 +311,11 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | Block statements ->
         inferBlock env state expr statements
     | TupleExpr items ->
+        let state = ExpectedLiterals.intoRecordFields state expr (items |> List.map PositionalField)
         inferAll env state items
         |> Result.map (fun (itemExprs, current) -> mkTypedExpr expr (tupleRecordType (itemExprs |> List.map _.Type)) None None None, current)
     | RecordExpr fields ->
+        let state = ExpectedLiterals.intoRecordFields state expr fields
         // The positional fields are inferred first, then the named ones, each in the order they are written.
         let positional = fields |> List.choose (function PositionalField value -> Some value | NamedField _ -> None)
         let named = fields |> List.choose (function NamedField(name, value) -> Some (name, value) | PositionalField _ -> None)
