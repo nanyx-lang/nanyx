@@ -152,8 +152,28 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
         | _ -> None
 
     and tagPayload (payload: TypeExpr) : Doc =
+        let isPosition (n: string) = n.Length > 0 && Seq.forall Char.IsDigit n
+        // The name of a field with a type and nothing else.
+        let plainName =
+            function
+            | TypeField(n, false, Some _, None) -> Some n
+            | _ -> None
+        // Positional types, then named fields, as `#rect(string, width: float)` writes them.
+        let positionalThenNamed (fields: TypeRecordField list) =
+            match fields |> List.map plainName |> List.fold (fun acc n -> Option.map2 (fun xs x -> x :: xs) acc n) (Some []) with
+            | Some reversed ->
+                let names = List.rev reversed
+                let positional = names |> List.takeWhile isPosition
+                let named = names |> List.skip positional.Length
+                not positional.IsEmpty
+                && not named.IsEmpty
+                && positional |> List.mapi (fun i n -> n = string i) |> List.forall id
+                && named |> List.forall (isPosition >> not)
+            | None -> false
         match payload.Kind with
         | TypeWithContext _ -> parenType payload
+        | TypeRecord fields when positionalThenNamed fields ->
+            commaJoin (recordTypeFields fields)
         | _ -> bareRecord payload |> Option.defaultWith (fun () -> typeList payload)
 
     and recordTypeField (field: TypeRecordField) : Doc =

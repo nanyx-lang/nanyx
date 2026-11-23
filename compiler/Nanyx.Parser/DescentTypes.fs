@@ -200,20 +200,39 @@ and private typeTag (c: Cursor) =
                 c.Take() |> ignore
                 Some(TypeExpr.at (c.SpanFrom open'.Start) TypeUnit)
             else
+                let field () =
+                    let fieldName = identifier c
+                    noOptionalMarker c (optionalField fieldName)
+                    if not c.OnSameLine || not (c.Is Colon || c.Is DoubleColon) then raise NoMatch
+                    c.Take() |> ignore
+                    TypeField(fieldName, false, Some(typeExpr c), None)
                 let fields () =
                     let fieldsStart = c.Start
-                    let field () =
-                        let fieldName = identifier c
-                        noOptionalMarker c (optionalField fieldName)
-                        if not c.OnSameLine || not (c.Is Colon || c.Is DoubleColon) then raise NoMatch
-                        c.Take() |> ignore
-                        TypeField(fieldName, false, Some(typeExpr c), None)
                     let items = sepBy1 c field (fun () -> c.Expect Comma |> ignore)
                     TypeExpr.at (c.SpanFrom fieldsStart) (TypeRecord items)
+                // Positional types, then named fields, as a record type writes them: `#rect(string, width: float)`.
+                let mixed () =
+                    let fieldsStart = c.Start
+                    let positional =
+                        many c (fun () ->
+                            let item = typeExpr c
+                            c.Expect Comma |> ignore
+                            item)
+                        |> List.mapi (fun index typeValue -> TypeField(string index, false, Some typeValue, None))
+                    if positional.IsEmpty then raise NoMatch
+                    let named = sepBy1 c field (fun () -> c.Expect Comma |> ignore)
+                    TypeExpr.at (c.SpanFrom fieldsStart) (TypeRecord(positional @ named))
+                let closed (payload: unit -> TypeExpr) () =
+                    let r = payload ()
+                    if not (c.Is RightParen) then raise NoMatch
+                    r
                 let inner =
-                    match c.Attempt(fun () -> let r = fields () in (if not (c.Is RightParen) then raise NoMatch); r) with
+                    match c.Attempt(closed fields) with
                     | Some record -> record
-                    | None -> typeListToType (typeList c)
+                    | None ->
+                        match c.Attempt(closed mixed) with
+                        | Some record -> record
+                        | None -> typeListToType (typeList c)
                 c.Expect RightParen |> ignore
                 Some inner
         else None

@@ -68,8 +68,8 @@ let ``MList - toList followed by more adds gives two lists, the first unchanged`
     let liveBefore = program.LiveBlocks
     let copiedAllocations, result = allocationsOf program "copied" 10
     Assert.Equal(55 * 100000 + 1055, result)
-    // The first toList copies the ten cells, and the eleventh add makes a cell and a record; the second hands over.
-    Assert.Equal(buildAllocations + 10 + 2, copiedAllocations)
+    // The first toList copies the ten cells, and the eleventh add makes a cell; the second hands over.
+    Assert.Equal(buildAllocations + 10 + 1, copiedAllocations)
     Assert.Equal(liveBefore, program.LiveBlocks)
 
 [<Fact>]

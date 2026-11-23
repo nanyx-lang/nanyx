@@ -375,12 +375,13 @@ module WorkflowDesugaring =
             unreachable <- outerUnreachable
             yielding <- outerYielding
             desugared
-        // A builder's block, or a lambda's body, desugared. A sequence's body that is not a block is desugared as a
-        // block of one statement, so that a `yield` in it has the end of the block after it.
+        // A builder's block, or a lambda's body, desugared. A body that is not a block, as in `proc { return f(try g(x)) }`,
+        // is desugared as a block of one statement when it is a sequence or uses a workflow keyword, so that the keyword
+        // has the end of the block after it, as it would on a line of its own.
         and desugarBlockBody (body: Expression) =
             match body.Kind with
             | Block _ -> desugarExpr body
-            | _ when yielding -> madeFor body (Block(desugarBlock [ Statement.from body (ExprStatement body) ]))
+            | _ when yielding || usesKeyword body -> madeFor body (Block(desugarBlock [ Statement.from body (ExprStatement body) ]))
             | _ -> desugarExpr body
         // `{ value }`, desugared: how a `#delay` or `#bindF` keyword passes the expression after it.
         and desugarThunk (value: Expression) = desugarExpr (madeFor value (Lambda([], value, false)))
