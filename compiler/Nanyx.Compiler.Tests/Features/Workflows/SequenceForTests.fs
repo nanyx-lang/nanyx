@@ -39,3 +39,25 @@ let ``A for loop in a seq block over something that is not Iterable is a type mi
     let code, _, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     Assert.Equal("5", text)
+
+[<Fact>]
+let ``A for loop in a seq block over a sequence whose steps need a context checks`` () =
+    let source =
+        normalized """context Log = (log: string -> ())
+
+def numbers: [Log] () -> [Log] seq(int) = { () ->
+  seq.map(1..3) { x ->
+    log("x")
+    x
+  }
+}
+
+def doubled: [Log] () -> [Log] seq(int) = { () ->
+  def lines = numbers()
+  seq {
+    for lines | x -> yield x * 2
+  }
+}
+"""
+    let typed = compileClean source
+    Assert.Equal(typeIn typed "numbers", typeIn typed "doubled")
