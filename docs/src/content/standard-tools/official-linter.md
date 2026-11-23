@@ -304,6 +304,11 @@ loop's body counts as many. A pull inside any other lambda counts once, where th
 the lambda runs isn't known. A pure sequence, `seq(int)`, is not reported: pulling it again costs time but gives the
 same elements. Nor is one whose contexts are only a variable, the `c` of `[c] seq(a)`, which may stand for none.
 
+Two limits, which may be tuned later, follow from these rules. A pull inside a lambda that runs more than once is
+counted once, so `list.map(xs, { x -> seq.length(lines) })` pulls `lines` once for each element but isn't reported,
+and nor is a local function that pulls it and is called twice. A sequence whose contexts are a variable isn't
+reported either, though the variable may stand for contexts where the function is called.
+
 The fix, for a local whose type isn't written, pulls the sequence once into a list, `def xs = numbers() \seq.toList`,
 and passes the list on as a sequence, `\list.toSeq`, where a use of it needs a `seq`.
 
