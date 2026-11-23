@@ -55,6 +55,15 @@ let ``A record pattern that ends in ... leaves the other fields out`` () =
     Assert.Equal<(string * string) list>([ "r", "(name: string, age: int)"; "n", "string" ], localHintsOf source)
 
 [<Fact>]
+let ``A record pattern that ends in ... and names a field the record lacks says which record has which fields`` () =
+    let result = Compiler.compile "def f: (width: float, height: float) -> float = {\n  | (foo = w, ...) -> w\n}\n"
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.Equal(
+        "Record field mismatch: '(height: float, width: float)' vs '(foo: float, ...t1)', where only the first has 'height', 'width' and only the second has 'foo'",
+        diagnostic.Message)
+
+[<Fact>]
 let ``A record pattern on a value of no known type yet takes exactly its fields, or at least them with ...`` () =
     let exact = "def f = { r -> match r\n  | (x = 1) -> 1\n  | _ -> 0 }\n"
     let atLeast = "def f = { r -> match r\n  | (x = 1, ...) -> 1\n  | _ -> 0 }\n"
