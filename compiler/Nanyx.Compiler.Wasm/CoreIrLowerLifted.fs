@@ -76,8 +76,8 @@ let private valueParameters (tools: LiftedTools) (names: string list) (tys: IrTy
 
 /// The lifted lambda `name`, whose parameters are `parameterNames` (its environment first) and whose body is `body`,
 /// as a function made by `make`, its closure capturing values of `capturedTys` and the local functions in
-/// `capturedLocals`. `scopeOf` is the scope its parameters are in.
-let liftedCapturing (tools: LiftedTools) (name: string) (parameterNames: string list) (body: Expression) (scopeOf: Var list -> Scope) (make: Var list -> IrType -> Expr -> Function) (capturedTys: IrType list) (capturedLocals: Map<string, Ty * (IrType list * int) list>) : Function =
+/// `capturedLocals`. `scopeOf` is the scope its parameters are in, and `lowerBody` lowers its body in that scope.
+let liftedCapturing (tools: LiftedTools) (name: string) (parameterNames: string list) (body: Expression) (lowerBody: Scope -> Expression -> Expr) (scopeOf: Var list -> Scope) (make: Var list -> IrType -> Expr -> Function) (capturedTys: IrType list) (capturedLocals: Map<string, Ty * (IrType list * int) list>) : Function =
     let input = tools.Input
     let parameterOf (parameterName: string) (ty: IrType) = tools.NewVar (tools.UniqueName parameterName) Param ty
     // The environment first: the function's table slot, then what it captures. The rest are the lambda's
@@ -121,7 +121,7 @@ let liftedCapturing (tools: LiftedTools) (name: string) (parameterNames: string 
         { scope with
             Members = members @ written |> List.fold (fun acc (key, var) -> acc |> Map.add key var) scope.Members
             Vars = members |> List.fold (fun acc (key, var) -> acc |> Map.add (contextMemberParameter key) var) scope.Vars }
-    make (environmentParameter :: valueParameters @ List.map snd members) (tools.ToIrType resultTy) (bind (tools.Tail scope body))
+    make (environmentParameter :: valueParameters @ List.map snd members) (tools.ToIrType resultTy) (bind (lowerBody scope body))
 
 /// The wrapper, whose parameters are `parameterNames` (its environment first), that lets the top-level function
 /// `wrapped` be a value of type `instanceTy`, as a function made by `make`, its closure capturing the context members
