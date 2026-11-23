@@ -67,6 +67,7 @@
     <Compile Include="CoreIrSplitPoints.fs" />
     <Compile Include="TaskLowering.fs" />
     <Compile Include="CoreIrEmitIntrinsics.fs" />
+    <Compile Include="CoreIrEmitLocals.fs" />
     <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CoreIrCachedValues.fs" />
     <Compile Include="ComponentValues.fs" />

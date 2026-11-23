@@ -55,6 +55,13 @@ of the checkpoint's variables is solved on top of it, since the two share nothin
 can't show. Otherwise the whole list is solved afresh, newest first, so that the failure reported, and the order in
 which a union's tags are added, are what solving it afresh gives.
 
+The types the type checker looks up as it goes come from the list solved past its failures (`Solving.solve`): the
+constraints from where one failed are set aside and the rest solved again, until they agree. It remembers what agreed
+for each list it solved lately, and solves the constraints in front of one with those, rather than the whole list again
+(`Solving.agreeing`). A failure in the module would otherwise have each type looked up after it solve the whole module
+again, twice, and a package with an error in it take minutes to check
+([#2449](https://github.com/nanyx-lang/nanyx/issues/2449)).
+
 Solved on top of an earlier solution, a variable can stand for another that stands for another in turn: an else-if
 joins each branch to the next, so each branch's variable stands for the one before it. `Unifier.unifyFrom` follows such
 a chain of the earlier solution once and remembers where it ends for each variable on it, so a long else-if checks in

@@ -133,3 +133,9 @@ let ``Arms after a lambda's parameters are printed as written`` () =
     Assert.Equal(
         lines [ "def d = { m, f ->"; "  | #some(v), f -> f(v)"; "  | other, _ -> other"; "}" ],
         format "def d = {  m,f  ->  | #some(v), f -> f(v) | other, _ -> other }")
+
+[<Fact>]
+let ``A comment after a lambda's last arm stays where it is`` () =
+    // #2437: the parser reads a comment there, and the formatter keeps it on the arm's line, or on its own.
+    unchanged (lines [ "def f = {"; "  | 0 -> 0"; "  | n -> n -- a comment"; "}" ])
+    unchanged (lines [ "def f = {"; "  | 0 -> 0"; "  | n -> n"; "  -- a comment"; "}" ])
