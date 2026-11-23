@@ -95,6 +95,7 @@ def memory: [c] ([Memory, c] () -> a) -> a
 Runs `block` with `Memory`, so that it can declare cells with `mut` and change them with `:=`, and
 gives back its result. Nothing that uses a cell can leave the block: only what the cells hold. The block can
 name its `Memory`, `memory { context m -> ... }`, and `use m` in an inner block makes the cells after it belong
-to this one.
+to this one. When the outermost block running ends, it frees the references made while it ran, so a cycle
+through one is freed too.
 
 <!-- End of the generated reference. -->

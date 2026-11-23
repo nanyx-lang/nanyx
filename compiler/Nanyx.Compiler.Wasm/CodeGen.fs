@@ -1310,6 +1310,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     | _ -> ()
     let importFunctions = ComponentImports.functions exportContext componentImports
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
+    // Ending a region calls what drops each of its objects' contents through the function table (see `WasmRegions`).
+    if usedHelperSet.Contains WasmRegions.Names.regionExit then
+        functionTable.IndirectSignatures.Add([ "i32" ], "i32") |> ignore
     // Exiting is not a stream, but its WASI import is declared with stderr's.
     let moduleUsesStandardStreams = [ Helpers.writeStderr; Helpers.procExit ] |> List.exists usedHelperSet.Contains
     // Anything that writes to stderr, or `dbg`, shares the WASI import, the memory and the newline byte. A component's

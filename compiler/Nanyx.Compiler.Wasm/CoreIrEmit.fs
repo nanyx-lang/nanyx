@@ -825,6 +825,11 @@ type private FunctionEmitter(context: EmitContext) =
                 dropOld
                 $"local.get ${at}\n    local.get ${held}\n    {store element 0}"
                 "i32.const 0" ]
+        // A new object goes on its region's list with the table slot of the function that drops what it holds (see
+        // `CoreIrRegions`).
+        | CallRuntime(name, [ object ], _) when name = WasmRegions.Names.regionTrack ->
+            let slot = context.FunctionSlot (CoreIrRegions.dropContentsName (atomType object)) 1
+            join "\n    " [ atoms [ object ]; $"i32.const {slot}"; $"call ${helper name}"; "i32.const 0" ]
         // Whether the reference the intrinsic takes over is the only one, read from the count before it is given up. An
         // immortal object's count is 0, so it is never held exclusively.
         | CallRuntime(name, [ value ], _) when name = Intrinsics.isExclusive ->

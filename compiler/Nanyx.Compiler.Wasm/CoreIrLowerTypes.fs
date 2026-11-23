@@ -254,8 +254,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
         toIrType (TyRecord(Map.ofList members, FieldOrder.ofList members))
     // A cell passed to a function is the box it is held in (see `CellSyntax`).
     | FunctionContexts.CellType(held, _) -> IrRecord [ "0", toIrType held ]
-    // So is a `box`, which the standard library's `MRef` is (see `Boxes`).
-    | Boxes.BoxType held -> IrRecord [ "0", toIrType held ]
+    // A `box`, which the standard library's `MRef` is (see `Boxes`), is on its region's list (see `CoreIrRegions`).
+    | Boxes.BoxType held -> CoreIrRegions.boxType (toIrType held)
     | TyTag _
     | TyUnion _ as tags ->
         let rec members ty =
