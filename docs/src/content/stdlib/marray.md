@@ -16,7 +16,7 @@ def xs = memory {
 }
 ```
 
-`MArray.create(n)` fills each slot with the [`Default`](prelude-contexts#defaults) of the element type, so it needs to know that type: `def zeros: MArray(int) = MArray.create(3)`. `set` and `swap` give `#ok`, or `#outOfRange` for an index out of range, and leave the array as it was.
+`MArray.create(n)` fills each slot with the [`Default`](prelude-contexts#default) of the element type, so it needs to know that type: `def zeros: MArray(int) = MArray.create(3)`. `set` and `swap` give `#ok`, or `#outOfRange` for an index out of range, and leave the array as it was.
 
 # Reference
 
