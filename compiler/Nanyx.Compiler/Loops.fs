@@ -75,10 +75,12 @@ let inferFor
         | Error err -> Error err
 
 /// `while condition -> body`, at `expr`: the condition is a `bool`, and the body's value is thrown away each time
-/// round. Neither is a lambda, so what they use is used where the loop is written.
+/// round. Neither is a lambda, so what they use is used where the loop is written. A condition whose tests bind names
+/// is checked as the loop that binds them in the body (see `IsSyntax.whileAsIf`).
 let inferWhile
     (inferExpr: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>)
     (env: TypeEnv) (state: InferState) (expr: Expression) (condition: Expression) (body: Expression) =
+    let condition, body = IsSyntax.whileAsIf condition body |> Option.defaultValue (condition, body)
     inferExpr env state condition
     |> Result.bind (fun (typedCondition, afterCondition) ->
         let constrained = addConstraintAt condition.Span typedCondition.Type (TyPrimitive "bool") afterCondition

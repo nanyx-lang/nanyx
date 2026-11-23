@@ -34,7 +34,9 @@ open.
   `yield`, `name!`, `mut x` as an argument and `type T`), where `if value is pattern` is a match of the value against
   the pattern and `_`, and an `if` whose condition's chain of tests binds names stays an `if`, which the compiler
   checks and compiles as the match `IsSyntax.asMatch` makes of it, so the names are in scope in the `then` branch and
-  the `else` branch is written once; and the top level, with its directives blanked
+  the `else` branch is written once, and a `while` whose condition binds names stays a `while`, which the compiler
+  checks and compiles as the loop `IsSyntax.whileAsIf` makes of it, whose condition is that `if`, with the body in its
+  `then` branch; and the top level, with its directives blanked
   (`Directives.fs`). The files before `DescentControl.fs` read lambdas, expressions, arms and what starts with a keyword
   through forward references (`DescentCursor.Forward`), which `DescentTopLevel.fill` fills before anything is read.
   `Api.runModuleParser` reads a whole file (`DescentTopLevel.tryReadModuleWithState`), and `parseTypeSignature`, which

@@ -411,6 +411,7 @@ module WorkflowDesugaring =
             | ForSyntax.Call(iterables, loop, parameters, body) ->
                 let body' = within InLoopBody (fun () -> desugarExpr body)
                 FunctionCall(ForSyntax.builtIn, None, List.map desugarExpr iterables @ [ { loop with Kind = Lambda(parameters, body', false) } ])
+            | IsSyntax.BindingWhile loop -> desugarKind { expr with Kind = loop }
             | WhileSyntax.Call(condition, body) ->
                 FunctionCall(WhileSyntax.builtIn, None, within InWhileLoop (fun () -> [ desugarExpr condition; desugarExpr body ]))
             | FunctionCall(name, rangeOpt, args) ->
