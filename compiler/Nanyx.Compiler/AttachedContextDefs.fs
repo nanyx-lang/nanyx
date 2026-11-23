@@ -23,6 +23,9 @@ let private reached (env: TypeEnv) (state: InferState) (name: Identifier) : Iden
         let attached =
             env.Names
             |> Seq.filter (fun entry -> entry.Key.EndsWith suffix)
+            // Not through an import the compiler made up under an alias no code can write (`__async`, see
+            // `TaskScopes`): what only it brings in is not in scope.
+            |> Seq.filter (fun entry -> not (entry.Key.StartsWith "__"))
             |> Seq.choose (fun entry ->
                 let ctxName = entry.Key.Substring(0, entry.Key.Length - suffix.Length)
                 match TypeResolution.tryFindTypeDef ctxName state with

@@ -67,3 +67,4 @@ def greetsBack = { name: string -> hello(name) ++ "!" }"""
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'Greeter.hello' requires the context 'Greeter', which is not available here", message.Split('\n').[0])
     Assert.Equal("hello", at)
+
