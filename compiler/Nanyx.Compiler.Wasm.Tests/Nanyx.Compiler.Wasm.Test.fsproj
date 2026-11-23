@@ -154,6 +154,7 @@
     <Compile Include="Features\Memory\ClosureEntryTests.fs" />
     <Compile Include="Features\Memory\MatchBorrowingTests.fs" />
     <Compile Include="Features\Memory\HeapReuseTests.fs" />
+    <Compile Include="Features\Memory\SequenceStepTests.fs" />
     <Compile Include="Features\Memory\OutOfMemoryTests.fs" />
     <Compile Include="Features\Binary\WasmBinaryTests.fs" />
     <Compile Include="Features\Names\RunNameTests.fs" />
