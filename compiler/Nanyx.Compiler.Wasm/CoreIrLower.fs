@@ -944,7 +944,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | arg :: rest -> this.Complex scope arg (fun value -> let after = run rest in Expr.make (Do(value, after)) after.Type)
             run flatArgs
         | Some elements, [ tuple ] ->
-            atomsOf scope [ tuple ] (fun atoms ->
+            // Each element is read from the tuple, so one that is not a name is held in a local first.
+            this.AtomsInLocals scope [ tuple ] (fun atoms ->
                 let rec loadElements (remaining: (int * IrType) list) (acc: Atom list) =
                     match remaining with
                     | [] -> call (List.rev acc)
@@ -999,7 +1000,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// local on the way to its value (see `storesBeforeValue`) is lowered whole, its stores with it, into one
     /// temporary: it is computed where it is used, so nothing computed before it waits on the stack across its stores.
     member this.Atoms (scope: Scope) (exprs: Expression list) (k: Atom list -> Expr) : Expr =
-        // A call through a function value in scope whose type holds boxes holds its arguments in locals (see `CallValue`).
+        // A call through a function value in scope holds its arguments in locals where its type holds boxes, and a tuple
+        // passed whole to one whose input is a tuple where the tuple is not a name, as it reads each element from it
+        // (see `CallValue`).
         let callStores (call: Expression) =
             match call.Kind with
             | FunctionCall(name, _, args) when not (SyntaxTree.flattenCallArgs args).IsEmpty ->
@@ -1007,7 +1010,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     match scope.Vars |> Map.tryFind name with
                     | Some var -> Some var
                     | None -> scope.Members |> Map.tryFind (NamedMember name)
-                value |> Option.exists (fun var -> CoreIrLowerBoxes.holdsBox var.Type)
+                let tupleNotNamed (var: Var) =
+                    match var.Type, SyntaxTree.flattenCallArgs args with
+                    | IrFunction _, [ { Kind = IdentifierExpr _ } ] -> false
+                    | IrFunction(input, _, _, _), [ _ ] -> (IrType.tupleElements input).IsSome
+                    | _ -> false
+                value |> Option.exists (fun var -> CoreIrLowerBoxes.holdsBox var.Type || tupleNotNamed var)
             | _ -> false
         let rec go (acc: Atom list) (remaining: Expression list) =
             match remaining with
