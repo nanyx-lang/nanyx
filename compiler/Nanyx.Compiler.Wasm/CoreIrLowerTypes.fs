@@ -253,7 +253,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
         let members = if name = TypeValues.recordInfo then members @ [ makeMember, TyFunc(Lists.ofType boxedTy, boxedTy, []) ] else members
         toIrType (TyRecord(Map.ofList members, FieldOrder.ofList members))
     // A cell passed to a function is the box it is held in (see `CellSyntax`).
-    | FunctionContexts.CellType(held, _) -> IrRecord [ "0", toIrType held ]
+    | FunctionContexts.CellType(held, _) -> CoreIrRegions.boxType (toIrType held)
     // A `box`, which the standard library's `MRef` is (see `Boxes`), is on its region's list (see `CoreIrRegions`).
     | Boxes.BoxType held -> CoreIrRegions.boxType (toIrType held)
     | TyTag _
@@ -275,7 +275,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | Sets.SetType element -> IrList(toIrType element)
     | Arrays.ArrayType element -> IrArray(toIrType element)
     // A mutable array is laid out as an array is (see `MutableArrays`).
-    | MutableArrays.MutableArrayType element -> IrArray(toIrType element)
+    | MutableArrays.MutableArrayType element -> CoreIrRegions.boxType (IrArray(toIrType element))
     | TyVar _ -> IrUnit
     | TyPrimitive other -> cannot $"a value of type {other}"
     | TyFunc(input, output, contexts) ->

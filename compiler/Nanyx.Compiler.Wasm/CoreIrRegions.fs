@@ -80,6 +80,21 @@ let dropContentsName (box: IrType) = "__nanyx_region_drop_" + Identifiers.saniti
 /// `CoreIrPromotion`).
 let promoteName (ty: IrType) = "__nanyx_promote_" + Identifiers.sanitizeIdentifier (IrType.mangle ty)
 
+/// `k` of `operands`, each temporary among them held in a local, made by `newLocal`, first: so that code that reads
+/// them may run before what `k` makes, which reads them too.
+let private settled (newLocal: IrType -> Var) (operands: Atom list) (k: Atom list -> Expr) : Expr =
+    let bindings =
+        operands
+        |> List.map (fun atom ->
+            match atom with
+            | AVar v when v.Kind = Temp -> Some (newLocal v.Type, atom)
+            | _ -> None)
+    let body = k (List.map2 (fun binding atom -> match binding with Some (local, _) -> AVar local | None -> atom) bindings operands)
+    bindings
+    |> List.choose id
+    |> List.rev
+    |> List.fold (fun (acc: Expr) (local, atom) -> Expr.make (Let(local, Expr.make (Atom atom) local.Type, acc)) acc.Type) body
+
 /// `k` of `operands`, a store's (the stored value last), after the barrier `helper` promotes the stored value (see
 /// `CoreIrPromotion`), when it can hold a mutable object: `regionStore` onto the region of the object, the first operand,
 /// or `regionStoreOutermost` onto the outermost region. The barrier reads its operands as the store does, so each
@@ -87,19 +102,59 @@ let promoteName (ty: IrType) = "__nanyx_promote_" + Identifiers.sanitizeIdentifi
 let withBarrier (newLocal: IrType -> Var) (helper: string) (operands: Atom list) (k: Atom list -> Expr) : Expr =
     match List.tryLast operands with
     | Some value when canHoldMutable (atomType value) ->
-        let settled =
-            operands
-            |> List.map (fun atom ->
-                match atom with
-                | AVar v when v.Kind = Temp -> Some (newLocal v.Type, atom)
-                | _ -> None)
-        let operands = List.map2 (fun binding atom -> match binding with Some (local, _) -> AVar local | None -> atom) settled operands
-        let barrierOperands = if helper = WasmRegions.Names.regionStore then [ operands.Head; List.last operands ] else [ List.last operands ]
-        let stored = newLocal IrUnit
-        let body = k operands
-        let barrier = Expr.make (Let(stored, Expr.make (CallRuntime(helper, barrierOperands, false)) IrUnit, body)) body.Type
-        settled
-        |> List.choose id
-        |> List.rev
-        |> List.fold (fun (acc: Expr) (local, atom) -> Expr.make (Let(local, Expr.make (Atom atom) local.Type, acc)) acc.Type) barrier
+        settled newLocal operands (fun operands ->
+            let barrierOperands = if helper = WasmRegions.Names.regionStore then [ operands.Head; List.last operands ] else [ List.last operands ]
+            let stored = newLocal IrUnit
+            let body = k operands
+            Expr.make (Let(stored, Expr.make (CallRuntime(helper, barrierOperands, false)) IrUnit, body)) body.Type)
     | _ -> k operands
+
+/// `k` of a new box holding `value` as a value of `held`, on the innermost region (`WasmRegions`' `regionTrack`), in a
+/// local made by `newLocal`: an `MRef`'s, a captured cell's or an `MArray`'s.
+let tracked (newLocal: IrType -> Var) (held: IrType) (value: Atom) (k: Atom -> Expr) : Expr =
+    let boxTy = boxType held
+    let box = newLocal boxTy
+    let track = newLocal IrUnit
+    let body = k (AVar box)
+    let tracking = Expr.make (CallRuntime(WasmRegions.Names.regionTrack, [ AVar box ], false)) IrUnit
+    Expr.make (Let(box, Expr.make (MakeRecord (boxFields value)) boxTy, Expr.make (Let(track, tracking, body)) body.Type)) body.Type
+
+/// `k` of what the box `box` holds, with a reference of its own, in a local made by `newLocal`.
+let private unboxed (newLocal: IrType -> Var) (box: Atom) (k: Atom -> Expr) : Expr =
+    match atomType box with
+    | RegionBox held ->
+        let inner = newLocal held
+        let body = k (AVar inner)
+        Expr.make (Let(inner, Expr.make (Field(box, boxValueSlot)) held, body)) body.Type
+    | other -> internalError $"a mutable array of type '{IrType.show other}', which is not a box"
+
+/// The intrinsic `name` of a mutable array, on `atoms`, of type `resultTy`, passed to `k`: an `MArray` is a box holding
+/// an array (see `boxType`), so that it is on a region as an `MRef` is. One that makes an array makes it as an array's
+/// intrinsic does and puts it in a new box. One that reads the array, or writes an element for the first time, does so
+/// to what the box holds. `marraySet`, which changes an element, promotes the value onto the box's region first (see
+/// `withBarrier`), and changes the element of what the box holds in place.
+let mutableArray (newLocal: IrType -> Var) (name: string) (atoms: Atom list) (resultTy: IrType) (k: Expr -> Expr) : Expr =
+    let intrinsic = NyxCompiler.Intrinsics.asArrayIntrinsic name
+    let returns = not (NyxCompiler.Intrinsics.returnsUnit name)
+    let call (name: string) (atoms: Atom list) (ty: IrType) = Expr.make (CallRuntime(name, atoms, returns)) ty
+    if name = NyxCompiler.Intrinsics.marrayOfList || name = NyxCompiler.Intrinsics.marrayNew then
+        let arrayTy = match resultTy with RegionBox held -> held | other -> other
+        let array = newLocal arrayTy
+        let body = tracked newLocal arrayTy (AVar array) (fun box -> k (Expr.make (Atom box) (atomType box)))
+        Expr.make (Let(array, call intrinsic atoms arrayTy, body)) body.Type
+    else
+        // Reading what the box holds comes before the call, so the operands are held in locals first.
+        settled newLocal atoms (fun atoms ->
+            let apply (atoms: Atom list) = unboxed newLocal atoms.Head (fun array -> k (call intrinsic (array :: atoms.Tail) resultTy))
+            if name = NyxCompiler.Intrinsics.marraySet then withBarrier newLocal WasmRegions.Names.regionStore atoms apply else apply atoms)
+
+/// Whether `name` is an intrinsic of a mutable array (see `mutableArray`).
+let isMutableArrayIntrinsic (name: string) =
+    [ NyxCompiler.Intrinsics.marrayOfList
+      NyxCompiler.Intrinsics.marrayToList
+      NyxCompiler.Intrinsics.marrayLength
+      NyxCompiler.Intrinsics.marrayGet
+      NyxCompiler.Intrinsics.marraySet
+      NyxCompiler.Intrinsics.marrayNew
+      NyxCompiler.Intrinsics.marrayWrite ]
+    |> List.contains name
