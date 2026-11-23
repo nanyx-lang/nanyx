@@ -252,7 +252,9 @@ associated type nothing binds is boxed, as a member's own type variables are (`c
 Another of a function's contexts may name an associated type, as `ToString(elem)` does in
 `[Iterable(c), ToString(elem)] c -> ()`: it is determined, since the instance of `Iterable` fixes it
 (`Contexts.ensureContextTypesDetermined`), and at a call the contexts are read with one variable for each name across
-them (`ContextInstances.contextArgTysAtCall`), so the `ToString` found is for the `elem` the `Iterable` fixed.
+them (`ContextInstances.contextArgTysAtCall`), so the `ToString` found is for the `elem` the `Iterable` fixed. The
+callee's signature is read there as its own module writes it, so a type of its module that an aliased import makes the
+caller write as `m.K` is still read by its name `K`.
 
 ## Type arguments
 
