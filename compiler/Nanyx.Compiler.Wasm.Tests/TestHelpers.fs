@@ -256,6 +256,25 @@ let private command (arguments: string list) : Shell -> int =
 let nanyxWithInput (standardInput: string) (arguments: string list) : RunOutcome =
     inProcess (Directory.GetCurrentDirectory()) standardInput [] (command arguments)
 
+/// Runs `nanyx` with `arguments` in a process of its own: the CLI built beside the tests (`nanyx.dll`), started by the
+/// `dotnet` that runs them. For a command that measures the run, such as `run --profile`, which this process's
+/// collections of garbage would disturb: they stop its managed threads, though not the WebAssembly the run is executing
+/// (#2491).
+let nanyxProcess (arguments: string list) : RunOutcome =
+    let host = Environment.GetEnvironmentVariable "DOTNET_HOST_PATH" |> Option.ofObj |> Option.defaultValue "dotnet"
+    let start = ProcessStartInfo(host, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true)
+    start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "nanyx.dll"))
+    for argument in arguments do
+        start.ArgumentList.Add argument
+    use run = Process.Start start
+    run.StandardInput.Close()
+    let error = run.StandardError.ReadToEndAsync()
+    let output = run.StandardOutput.ReadToEnd()
+    run.WaitForExit()
+    { ExitCode = run.ExitCode
+      StandardOutput = output
+      StandardError = error.Result }
+
 /// Does what `nanyx` does with `arguments`, with the environment variables `variables` (see `nanyxWithInput`).
 let nanyxWithVariables (variables: (string * string) list) (arguments: string list) : RunOutcome =
     inProcess (Directory.GetCurrentDirectory()) "" variables (command arguments)
