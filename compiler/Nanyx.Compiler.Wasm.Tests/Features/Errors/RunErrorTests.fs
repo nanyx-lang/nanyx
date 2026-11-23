@@ -115,6 +115,34 @@ println("after")
     // The error says why the program stopped: there is no trap report after it.
     Assert.DoesNotContain("Runtime error", outcome.StandardError)
 
+[<Fact>]
+let ``Run - a lambda that cannot be compiled because of a deferred error reports it when a function value calls it`` () =
+    // The read of `x.value` can't be compiled, as the error left `x`'s fields open, so the lambda `memory` calls only
+    // reports the error: it still takes and returns what its type says, as `memory` calls it through a function value.
+    let source =
+        normalized """import nanyx/mref
+
+def cycle: int -> int = { n ->
+  memory {
+    def a = MRef.new(#none)
+    MRef.set(a, #some((value = n)))
+    match MRef.get(a)
+      | #some(x) -> x.value
+      | #none -> 0
+  }
+}
+
+@entry
+def main = {
+  println("{cycle(1)}")
+}
+"""
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    Assert.Contains(":6:17: error NYX0201: Type mismatch: '#some(value: int)' vs '#none' (deferred from compile time)", outcome.StandardError)
+    Assert.DoesNotContain("Runtime error", outcome.StandardError)
+
 /// A package whose @entry reaches a deferred error, with another file that has one it never reaches.
 let private packageWithDeferredErrors =
     let main =

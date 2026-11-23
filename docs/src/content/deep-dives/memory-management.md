@@ -295,7 +295,9 @@ turn and drops its value. A module with type or name errors is compiled all the 
 check is a `crash` that reports the error when it is reached, and a value of no known type because of it has a type of
 its own (still an `i32`). Matching on or interpolating such a value stops the program there, if the error has not
 already. A definition (or top-level expression) that holds such errors and cannot be lowered because of them is
-lowered to a trap that reports them as soon as it is called. A definition that is generic only because an error left
+lowered to a trap that reports them as soon as it is called. The trap takes the parameters and results in the type the
+definition would, so that a call through a function value, such as `memory`'s call of its block, reaches it at the
+signature the value's type gives; only where even those cannot be lowered does it take values of no known type. A definition that is generic only because an error left
 its type open, and is not specialised, is lowered with its type variables defaulted, so that it still exists.
 
 **Top-level values.** A top-level value that is not a lambda is lowered to a function of no parameters, one for each
