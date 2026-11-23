@@ -169,10 +169,8 @@ Without brackets, a parameter's annotation ends at the `->`, so `{ q: Point -> q
 Named fields can be destructured to a different local name with `field = localName`:
 
 ```nanyx skip=#443
-import nanyx/math as math
-
-def magnitude: (x: float, y: float) -> float = { x = innerX, y = innerY ->
-  math.sqrt(innerX * innerX + innerY * innerY)
+def magnitude: (x: int, y: int) -> float = { x = innerX, y = innerY ->
+  Math.sqrt(innerX * innerX + innerY * innerY)
 }
 ```
 
