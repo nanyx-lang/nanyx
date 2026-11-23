@@ -140,3 +140,47 @@ def later = { n ->
   loop(n)
 }
 """)
+
+// A local `rec` def that writes its type runs in the contexts its type declares, as a `def` does (#2465).
+
+[<Fact>]
+let ``An annotated local rec def that calls a context-polymorphic parameter must declare its context variable`` () =
+    let source =
+        """
+def retry: [c] int, ([c] () -> #some(a) | r) -> #some(a) | r = { times, operation ->
+  rec attempt: int -> #some(a) | r = { n ->
+    match operation()
+      | #some(value) -> #some(value)
+      | e -> if n >= times then e else attempt(n + 1)
+  }
+
+  attempt(1)
+}
+"""
+            .ReplaceLineEndings "\n"
+    let code, message, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
+    Assert.Equal("'operation' requires the contexts 'c', which 'attempt' does not declare: add [c] to the type of 'attempt'", message)
+    Assert.Equal("operation", at)
+
+[<Fact>]
+let ``An annotated local rec def that declares the context variable of the def around it can be given a lambda that requires a context`` () =
+    compileClean (
+        """
+context Source = (next: () -> #some(int) | #none)
+
+def retry: [c] int, ([c] () -> #some(a) | r) -> #some(a) | r = { times, operation ->
+  rec attempt: [c] int -> #some(a) | r = { n ->
+    match operation()
+      | #some(value) -> #some(value)
+      | e -> if n >= times then e else attempt(n + 1)
+  }
+
+  attempt(1)
+}
+
+def main: [Source] () -> #some(int) | #none = { -> retry(3, { next() }) }
+"""
+            .ReplaceLineEndings "\n"
+    )
+    |> ignore

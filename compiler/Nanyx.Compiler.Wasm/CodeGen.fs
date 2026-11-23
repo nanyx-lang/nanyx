@@ -297,10 +297,18 @@ let private foreignFunctions (typed: TypedModule) : Map<string, Extern> * TopLev
                 | _ -> true)
         declared |> List.map (fun (name, declared, _) -> name, declared) |> Map.ofList, others
 
-/// Each local function that requires parameterised contexts, written or inferred, by its lambda's node: the
-/// contexts as the type checker writes them (`TypedModule.LocalContexts`), its lambda's type, and the contexts in
-/// that type's variables. The type checker keeps them out of the lambda's type, so they are put there for the
-/// backend: a function value carries their members.
+/// Whether a local function's value carries the members of `context`, one of the contexts it requires (see
+/// `localContextsOf`): a parameterised context, or a context variable, which is the def around it's, as `c` in
+/// `def go: [c] int -> int` inside a `[c]` def.
+let private carried (context: Ty) =
+    match context with
+    | TyVar _ -> true
+    | _ -> isInstance context
+
+/// Each local function that requires parameterised contexts or context variables, written or inferred, by its lambda's
+/// node: the contexts as the type checker writes them (`TypedModule.LocalContexts`), its lambda's type, and the
+/// contexts in that type's variables. The type checker keeps them out of the lambda's type, so they are put there for
+/// the backend: a function value carries their members.
 let private localContextsOf (typed: TypedModule) (checkedTypes: Map<NodeId, Ty>) (liftedOrigins: Map<string, LambdaLifting.LiftedOrigin>) =
     let localSymbols = typed.Symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = LocalValue) |> List.ofSeq
     liftedOrigins
@@ -319,7 +327,7 @@ let private localContextsOf (typed: TypedModule) (checkedTypes: Map<NodeId, Ty>)
                     | TyAlias(name, args, _) -> TyApply(name, args)
                     | other -> other
                 match typed.LocalContexts |> Map.tryFind symbol.Id, typed.ContextTypes |> Map.tryFind symbol.Id |> Option.map (List.map applied), typed.SymbolTypes |> Map.tryFind symbol.Id with
-                | Some written, Some contexts, Some symbolTy when written.Length = contexts.Length && List.exists isInstance contexts ->
+                | Some written, Some contexts, Some symbolTy when written.Length = contexts.Length && List.exists carried contexts ->
                     try
                         let bindings = CoreIrLowerTypes.bindScheme Map.empty symbolTy lambdaTy
                         Some (origin.Lambda.Id, (symbol.Id, written, lambdaTy, contexts |> List.map (CoreIrLowerTypes.substitute bindings)))
@@ -531,7 +539,7 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
         localContexts
         |> Map.fold (fun (acc: Map<NodeId, Ty>) node (_, _, lambdaTy, contexts) ->
             match Unifier.unalias lambdaTy with
-            | TyFunc(input, output, own) -> acc |> Map.add node (TyFunc(input, output, own @ List.filter isInstance contexts))
+            | TyFunc(input, output, own) -> acc |> Map.add node (TyFunc(input, output, own @ List.filter carried contexts))
             | _ -> acc) exprTypes
     // Each name that refers to one of those functions, by its node, with the contexts it requires and its lambda's type.
     let localCallees =

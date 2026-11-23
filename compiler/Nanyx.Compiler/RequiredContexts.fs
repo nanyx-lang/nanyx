@@ -37,8 +37,15 @@ let ofDefs (state: InferState) (subst: Subst) (topLevel: Symbol list) : Map<Symb
                     | CallScope, _ -> None
                     | _, Some name -> Some (WrittenVar name, var)
                     | _, None -> None)
-            // `subst` can bind a named variable to an unnamed one, so the names are read before it too.
-            let named = byName (Unifier.apply subst defTy) @ byName defTy |> Map.ofList
+            // `subst` can bind a named variable to an unnamed one, so the names are read before it too. A local def's
+            // context variable its type does not name is the def around it's (see `LocalContextVariables`).
+            let outer =
+                state.LocalContextVariables
+                |> Map.tryFind symbol.Id
+                |> Option.defaultValue Map.empty
+                |> Map.toList
+                |> List.map (fun (name, var) -> WrittenVar name, var)
+            let named = outer @ byName (Unifier.apply subst defTy) @ byName defTy |> Map.ofList
             let written =
                 contexts
                 |> List.skip (min inferred.Length contexts.Length)
