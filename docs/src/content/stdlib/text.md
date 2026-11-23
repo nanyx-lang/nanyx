@@ -36,7 +36,8 @@ whitespace. Multi-byte characters pass through unchanged, except that `padStart`
 their fill at a byte count, so a multi-byte `fill` can be cut mid-character. `chars`, `reverse` and
 `codePoints` work by character, where a character is one Unicode code point: they read each UTF-8
 sequence's lead byte, so they never cut a character in half. `fromCodePoint` turns a code point
-back into a character.
+back into a character. `toUtf8` gives a string's bytes as an array, and `fromUtf8` turns bytes
+back into a string, checking that they are well-formed UTF-8.
 
 Every function here is stack-safe: each one that walks a string calls itself only in tail
 position, so it works on a string of any length.
@@ -319,6 +320,26 @@ def string.fromCodePoint: int -> #some(string) | #invalidCodePoint
 The character whose Unicode code point is `codePoint`, as a string: `string.fromCodePoint(233)` is
 `#some("é")`. A negative number, a surrogate (55296 to 57343, `0xD800` to `0xDFFF`) or a number past
 the last code point (1114111, `0x10FFFF`) gives `#invalidCodePoint`.
+
+## `string.toUtf8`
+
+```nanyx fragment
+def string.toUtf8: string -> array(U8)
+```
+
+The bytes of `s`, its UTF-8 encoding, in order: `"aé" \toUtf8` is `[97, 195, 169]`. Stack-safe:
+it works on a string of any length.
+
+## `string.fromUtf8`
+
+```nanyx fragment
+def string.fromUtf8: array(U8) -> #some(string) | #invalidUtf8
+```
+
+The string whose UTF-8 encoding is `bytes`: `string.fromUtf8([97, 195, 169])` is `#some("aé")`.
+Bytes that aren't well-formed UTF-8 give `#invalidUtf8`: a continuation byte with no lead byte, a
+sequence cut short, an overlong encoding, a surrogate (`0xD800` to `0xDFFF`) or a code point past
+`0x10FFFF`. Stack-safe: it works on any number of bytes.
 
 ## `StringSlice`
 
