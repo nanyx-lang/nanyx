@@ -241,3 +241,13 @@ let ``A block called from inside another frees its cycle when it ends`` () =
         Assert.Equal(liveBefore, program.LiveBlocks)
         program.PeakLiveBytes
     Assert.Equal(peakAfter 2, peakAfter 200)
+
+/// A script whose statement is a `memory` block that stores into its local `count` times, then prints it.
+let private storing (count: int) =
+    String.concat "\n" [ "memory {"; "  mut x = 0"; yield! List.replicate count "  x := x + 1"; "  println(x)"; "}"; "" ]
+
+[<Fact>]
+let ``Run - a script's memory block with hundreds of stores runs`` () =
+    // At 250 stores this once failed in the backend with a temporary used out of order (#2409).
+    for count in [ 250; 2000 ] do
+        runSource (storing count) |> assertRan $"{count}\n"
