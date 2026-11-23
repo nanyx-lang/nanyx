@@ -68,6 +68,50 @@ println(describe(shapes, type list(Shape)))
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "#circle 1.5\n[#square 4, #empty ()]\n"
 
+/// Counts the ints in a value, through its cases' and fields' `get`s.
+let private count =
+    """def count: a, type a -> int = { value, t ->
+  match t
+    | #int -> 1
+    | #list(elem) -> list.sum(list.map(value, { x -> count(x, elem) }))
+    | #record(r) -> list.sum(list.map(r.fields, { f -> count(f.get(value), f.type) }))
+    | #union(u) ->
+        list.sum(
+          list.map(u.cases, { c ->
+            match c.get(value)
+              | #some(p) -> count(p, c.type)
+              | #none -> 0
+          })
+        )
+    | else -> 0
+}
+
+"""
+
+[<Fact>]
+let ``Run - a recursive union's case gives its payload`` () =
+    let source =
+        count
+        + """type R = #rarr(list(R)) | #n(int)
+
+def r: R = #rarr([#n(1), #n(2)])
+
+println(count(r, type R))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "2\n"
+
+[<Fact>]
+let ``Run - a tree is walked through its cases and the fields of their payloads`` () =
+    let source =
+        count
+        + """type Tree = #node(Tree, int, Tree) | #leaf
+
+def tree: Tree = #node(#node(#leaf, 1, #leaf), 2, #node(#leaf, 3, #leaf))
+
+println(count(tree, type Tree))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n"
+
 [<Fact>]
 let ``Run - an arm at a type only known when the program runs gives a value of the narrowed type back`` () =
     let source =
@@ -227,6 +271,36 @@ def main = {
 """
     let outcome, _ = nanyxOnPackage [ "walker.nyx", walker; "main.nyx", main ] [ "run"; "{package}" ]
     assertRan "6\n" outcome
+
+[<Fact>]
+let ``Run - a Type match tells apart types that share a layout, as a list and a set do`` () =
+    let source =
+        """def kind: type a -> string = { t ->
+  match t
+    | #list(e) -> "list"
+    | #set(e) -> "set"
+    | else -> "other"
+}
+
+type Box(a) = (get: () -> string)
+
+def boxFor: type a -> Box(a) = { t -> Box(get = { -> kind(t) }) }
+
+def run: Box(a) -> string = { b ->
+  def get = b.get
+  get()
+}
+
+def viaTyped: [Typed(a)] a -> string = { x -> kind(typeOf) }
+
+println(run(boxFor(type list(int))))
+println(run(boxFor(type set(int))))
+println(kind(type list(int)))
+println(kind(type set(int)))
+println(viaTyped([1]))
+println(viaTyped(set.fromList([1])))
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "list\nset\nlist\nset\nlist\nset\n"
 
 [<Fact>]
 let ``Run - map.map at a type only known when the program runs maps its values`` () =

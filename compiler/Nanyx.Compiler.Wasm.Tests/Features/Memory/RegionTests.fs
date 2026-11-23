@@ -3,7 +3,8 @@ module TranspilerWasmTests.Features.Memory.Regions
 open Xunit
 open TranspilerWasmTestHelpers
 
-// A `memory` block frees its mutable objects when it ends, so a cycle through an `MRef` is freed (#2232). Each block has
+// A `memory` block frees its mutable objects when it ends, so a cycle through an `MRef`, a captured cell or an `MArray`
+// is freed (#2232). Each block has
 // a region, and a value stored into an outer block's object, or given back by a block, moves onto the outer block's
 // region first (#2376), so an inner block frees what it made that nothing outside it holds. The tests run with memory
 // checks on, so an object the regions don't free fails them, and so does one freed while something can still read it.
@@ -24,6 +25,62 @@ def n = memory {
 println(n)
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n"
+
+[<Fact>]
+let ``Run - a cycle through a captured cell is freed when the block ends`` () =
+    let source = """
+def apply: [c] ([c] int -> int), int -> int = { g, x -> g(x) }
+
+def n = memory {
+  mut countdown: [Memory] int -> int = { x -> x }
+  countdown := { x -> if x > 0 then apply(countdown, x - 1) else 10 }
+  apply(countdown, 3)
+}
+println(n)
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "10\n"
+
+[<Fact>]
+let ``Run - a cycle through an MArray is freed when the block ends`` () =
+    let source = """
+import nanyx/marray
+
+type Node = [Memory] protected (name: string, children: MArray(#some(Node) | #none))
+
+def n = memory {
+  def children: MArray(#some(Node) | #none) = MArray.init(2, { _ -> #none })
+  def a = Node(name = "abc", children = children)
+  MArray.set(children, 0, #some(a))
+  MArray.length(children)
+}
+println(n)
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "2\n"
+
+[<Fact>]
+let ``Run - an MArray made in an inner block under the outer block's Memory lives until the outer block ends`` () =
+    let source = """
+import (
+  nanyx/marray
+  nanyx/mref
+)
+
+def v = memory { context m ->
+  def r: MRef(#some(MArray(MRef(int))) | #none) = MRef.new(#none)
+  memory {
+    use m
+    MRef.set(r, #some(MArray.init(3, { i -> MRef.new(i * 2) })))
+  }
+  match MRef.get(r)
+    | #some(xs) ->
+      match MArray.at(xs, 2)
+        | #some(inner) -> MRef.get(inner)
+        | #notFound -> 0
+    | #none -> 0
+}
+println(v)
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "4\n"
 
 [<Fact>]
 let ``Run - two references that hold each other are freed when the block ends`` () =

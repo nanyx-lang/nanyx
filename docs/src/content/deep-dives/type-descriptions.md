@@ -124,7 +124,10 @@ from the type's definition (`TypeDefInfo.Doc`, filled from the module's doc comm
 
 `FunctionLowering.Match` hands a match on a `Type` to `CoreIrLowerTypeMatch.lower`:
 
-- **A known type.** In a function specialised at a type it knows, the match picks its arm at compile time. An arm that
+- **A known type.** In a function specialised at a type it knows, the match picks its arm at compile time. Since
+  types that share an IR type, `list(int)` and `set(int)`, would otherwise share a specialisation, a function is
+  specialised by the types its type variables stand for where a `Type` value it is given or makes can stand for them,
+  in a `Type(…)` or a `Typed(…)` its type names (`SpecKey.Described`), and a lambda lifted from it with it. An arm that
   narrows `a` matches if what it narrows it to fits the type, and what that finds of its skolems, the element type of a
   `#list(elem)` arm, is bound from there on (`CoreIrLowerTypes.substitute` maps a skolem by its number). An arm that
   reads nothing of the description is lowered alone; one that does matches on what `__describe` gives.
@@ -136,8 +139,8 @@ from the type's definition (`TypeDefInfo.Doc`, filled from the module's doc comm
 - **Canonical boxes.** For that to work whatever the value is, a boxed value of a collection holds its elements boxed:
   a list, a set or an array of boxes, and a map whose entries are tuples of boxes. A record or a union is boxed as it
   is, since only its description's `get`s read it. A field's `get` (`fieldGettingFunction`) and a case's `get`
-  (`caseGettingFunction`) are closures over functions of their own that unbox the value, read the part, and box it in
-  this form, through a function per collection type (`canonicalisingFunction`).
+  (`caseGettingFunction`) are closures over functions of their own that unbox the value, read the part (of the layout
+  a recursive type unfolds to, `IrType.unfold`), and box it in this form, through a function per collection type (`canonicalisingFunction`).
 
 # Building
 

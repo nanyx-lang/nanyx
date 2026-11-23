@@ -34,6 +34,9 @@ and private storesBeforeValueOf callStores found (expr: Expression) =
     | WhileSyntax.Call _ -> true
     // A read of a cell copies what it holds into a local of its own (see `CellSyntax`).
     | FunctionCall(name, _, [ _ ]) when name = CellSyntax.read || name = CellSyntax.unbox -> true
+    // A new box, a captured cell's or an `MRef`'s, is held in a local while it goes on its region, and a mutable array's
+    // intrinsic holds the box, or what it holds, in one (see `CoreIrRegions`).
+    | FunctionCall(name, _, _) when name = CellSyntax.box || name = Intrinsics.boxNew || CoreIrRegions.isMutableArrayIntrinsic name -> true
     | FunctionCall(_, _, args) -> callStores expr || args |> List.exists storesBeforeValue
     | TupleExpr items
     | ListExpr items -> items |> List.exists storesBeforeValue
