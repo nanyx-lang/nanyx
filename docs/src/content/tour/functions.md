@@ -169,8 +169,10 @@ Without brackets, a parameter's annotation ends at the `->`, so `{ q: Point -> q
 Named fields can be destructured to a different local name with `field = localName`:
 
 ```nanyx skip=#443
-def magnitude: (x: int, y: int) -> float = { x = innerX, y = innerY ->
-  Math.sqrt(innerX * innerX + innerY * innerY)
+import nanyx/math as math
+
+def magnitude: (x: float, y: float) -> float = { x = innerX, y = innerY ->
+  math.sqrt(innerX * innerX + innerY * innerY)
 }
 ```
 
@@ -480,13 +482,17 @@ def result = add(5)(10) -- 15
 
 With records, you can simulate partial application:
 
-```nanyx fragment
-def process: (config: Config, data: Data) -> Report = { config, data ->
-  -- processing logic
+```nanyx
+def process: (config: string, data: int) -> string = { config, data ->
+  "{config}: {data}"
 }
 
 -- Create a partially applied version
-def processWithConfig = { data -> process(myConfig, data) }
+def processWithConfig = { data -> process(config = "verbose", data = data) }
+
+println(processWithConfig(3))
+
+-- verbose: 3
 ```
 
 # Type Annotations for clarity

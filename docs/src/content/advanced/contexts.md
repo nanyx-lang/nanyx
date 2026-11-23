@@ -161,9 +161,15 @@ def double: [] int -> int = { x ->
 
 Use the `use` keyword to load an instance of a context into scope. Once loaded, any functions that require it can be called:
 
-```nanyx fragment
+```nanyx
+context Greeter = (greet: string -> ())
+
+def sayHello: [Greeter] () -> () = {
+  greet("world")
+}
+
 def main = {
-  use Console(write = { text -> hostPrint(text) })
+  use Greeter(greet = { name -> println("Hello, {name}!") })
 
   sayHello()
 }
@@ -194,8 +200,18 @@ An instance is always written at its `use`, so that is where what its members ne
 
 You can also load a context for a single expression with `use ... in`. The context is loaded for that expression only, which can start on the next line:
 
-```nanyx fragment
-def result = use Console(write = hostPrint) in println("Hello from a scoped context")
+```nanyx
+context Prefix = (prefix: string)
+
+def label: [Prefix] string -> string = { text ->
+  "{prefix}{text}"
+}
+
+def result = use Prefix(prefix = "> ") in label("hello")
+
+println(result)
+
+-- > hello
 ```
 
 After `in` there can also be a block of statements, on the lines after it and indented more than the line `use` is on. The block's value is the value of `use ... in`, and the context is loaded for the block only:
