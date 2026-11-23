@@ -19,8 +19,7 @@ def retry: [c] int, ([c] () -> #some(a) | r) -> #some(a) | r = { times, operatio
   attempt(1)
 }
 
-use Source(next = { #some(7) })
-println(retry(3, { next() }))
+use Source(next = { #some(7) }) in println(retry(3, { next() }))
 """
     runSource source |> assertRan "#some(7)\n"
 
@@ -34,8 +33,7 @@ def plusOne: [c] ([c] () -> int) -> int = { op ->
   go(1)
 }
 
-use Source(next = { 7 })
-println(plusOne({ next() }))
+use Source(next = { 7 }) in println(plusOne({ next() }))
 println(plusOne({ 3 }))
 """
     runSource source |> assertRan "8\n4\n"
