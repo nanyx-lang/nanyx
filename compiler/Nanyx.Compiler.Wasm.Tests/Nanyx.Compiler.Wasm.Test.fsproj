@@ -181,6 +181,7 @@
     <Compile Include="Features\Operators\RunCompositionTests.fs" />
     <Compile Include="Features\Operators\RunCoalesceTests.fs" />
     <Compile Include="Features\Operators\RunComparisonLiteralTests.fs" />
+    <Compile Include="Features\Operators\RunShortCircuitTests.fs" />
     <Compile Include="Features\Ordering\RunOrderingTests.fs" />
     <Compile Include="Features\Packages\GitHubReferenceRunTests.fs" />
     <Compile Include="Features\Packages\ManifestCommandTests.fs" />
@@ -221,6 +222,7 @@
     <Compile Include="Features\StdLib\RunMathSpecialFloatTests.fs" />
     <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
     <Compile Include="Features\StdLib\RunStringJoinTests.fs" />
+    <Compile Include="Features\StdLib\RunStringBuildTests.fs" />
     <Compile Include="Features\StdLib\RunStringSearchTests.fs" />
     <Compile Include="Features\StdLib\RunListInitReplicateTests.fs" />
     <Compile Include="Features\StdLib\RunListSelectTests.fs" />

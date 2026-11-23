@@ -43,9 +43,6 @@ type private Decision =
     | Fails
     | Unknown
 
-/// The operators that cannot trap: a value made with one of them that nothing reads need not be made.
-let private safeOperators = set [ "=="; "!="; "<"; "<="; ">"; ">="; "and"; "or" ]
-
 /// Whether evaluating `e` has no effect but its value: it writes nothing, calls nothing and cannot trap.
 let rec private isPure (e: Expr) =
     match e.Kind with
@@ -59,7 +56,7 @@ let rec private isPure (e: Expr) =
     | Interpolate _
     | Prim(Not, _)
     | Prim(FloatBinary _, _) -> true
-    | Prim(Binary op, _) -> safeOperators.Contains op
+    | Prim(Binary op, _) -> Expr.safeOperators.Contains op
     | Let _
     | Do _
     | If _

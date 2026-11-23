@@ -110,11 +110,10 @@ println(Slice.at(Slice.skip(part, 1), 0))
 
 [<Fact>]
 let ``Run - Slice.zip pairs elements as long as the shorter slice, and Slice.scan gives the running totals`` () =
-    // The pairs are written as a list: writing an array of tuples is #2391.
     runWithSlices
         """
-println("{array.toList(Slice.zip(part, Slice.skip(part, 1)))}")
-println("{array.toList(Slice.zip(part, none))}")
+println("{Slice.zip(part, Slice.skip(part, 1))}")
+println("{Slice.zip(part, none)}")
 println("{Slice.scan(part, 0, { total, x -> total + x })} {Slice.scan(none, 0, { total, x -> total + x })}")
 """
     |> assertRan "[(4, 7), (7, 2), (2, 8)]\n[]\n[0, 4, 11, 13, 21] [0]\n"

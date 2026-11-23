@@ -271,7 +271,9 @@ How a function value is called follows from its type, not from how its lambda na
 writes its argument, since `int, int -> int` and `(int, int) -> int` are one type. A function value whose input is a
 tuple of two or more takes one argument for each element (`IrType.tupleElements` in `CoreIr.fs`): a lambda or wrapper of
 one parameter (`{ t -> ... }`, `{ (a, b) -> ... }`) takes the elements and builds the tuple again, and a call that
-passes a tuple whole (`f(t)`) reads the elements from it ([#441](https://github.com/nanyx-lang/nanyx/issues/441)).
+passes a tuple whole (`f(t)`) reads the elements from it ([#441](https://github.com/nanyx-lang/nanyx/issues/441)),
+from a local of its own when the tuple is not a name, `f(xs(i))`, since a temporary is read only once
+([#2391](https://github.com/nanyx-lang/nanyx/issues/2391)).
 One whose input is a record that is not a tuple, `(channel: string, n: int) -> int`, takes the record whole, as a call
 passes it: a lambda or wrapper of several parameters (`{ channel, n -> ... }`) binds each to the field of its name
 (`IrType.recordTakenWhole`; [#2466](https://github.com/nanyx-lang/nanyx/issues/2466)).

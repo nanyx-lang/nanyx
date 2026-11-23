@@ -14,6 +14,7 @@
     <Compile Include="FloatText.fs" />
     <Compile Include="SizedIntegerCode.fs" />
     <Compile Include="StringJoin.fs" />
+    <Compile Include="StringSearch.fs" />
     <Compile Include="WasmAllocator.fs" />
     <Compile Include="WasmRegions.fs" />
     <Compile Include="WasmRuntime.fs" />

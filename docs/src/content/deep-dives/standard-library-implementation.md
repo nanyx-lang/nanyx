@@ -188,7 +188,12 @@ To add a module: create `stdlib/nanyx/<name>.nyx` declaring `module <name>`, mar
 only when a function genuinely cannot be written in Nanyx, or not without copying far more than it needs
 to: `__nanyx_string_join` joins a list of strings with one allocation (its body is in
 `Nanyx.Compiler.Wasm/StringJoin.fs`), where `++` would copy the result so far for every piece, so a
-string built from many pieces is built as a list of them and joined once. Give it a name and type in `Intrinsics`, and
+string built from many pieces is built as a list of them and joined once; and `__nanyx_string_new` and
+`__nanyx_string_write` make a string whose length is known first and copy each stretch of it in, so
+`string.replace`, `repeat`, `padStart`, `padEnd` and `reverse` make their result in one allocation.
+`__nanyx_string_index_between` (in `Nanyx.Compiler.Wasm/StringSearch.fs`) finds a string in another
+in a loop over the bytes, where a search written in Nanyx called a helper to add, one to clamp an
+index and one to read a byte at every place it tried. Give it a name and type in `Intrinsics`, and
 a WebAssembly body of the same name in `runtimeHelpers`, and list it, with the helpers it calls, in
 `helperDependencies` (the order of that list is the order helpers are emitted in, so add new ones at the end).
 

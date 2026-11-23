@@ -677,6 +677,29 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             this.Atoms scope [ left; right ] (fun atoms ->
                 let order = Expr.make (CallRuntime(Helpers.valueCompare, atoms, true)) IrInt
                 bindTemp order (fun result -> k (Expr.make (Prim(Binary op, [ result; AInt 0L ])) IrBool)))
+        | ("and" | "or"), _, _ ->
+            // `a and b` evaluates `b` only when `a` is true, and `a or b` only when `a` is false: an `if`. A `b` of a
+            // name or a literal, or an operator on those, that is one instruction that cannot trap or call anything, is
+            // evaluated anyway, with `i32.and` or `i32.or`, which costs less than a branch. Lowering it to see is done
+            // only for those, which lower to nothing but what they give.
+            let ty = tyOf expr
+            let isPlain (operand: Expression) =
+                match operand.Kind with
+                | LiteralExpr _
+                | IdentifierExpr _ -> true
+                | _ -> false
+            let isSmall =
+                match right.Kind with
+                | BinaryOp(_, _, rightLeft, rightRight) -> isPlain rightLeft && isPlain rightRight
+                | _ -> isPlain right
+            if isSmall && Expr.isSafeInstruction (this.Branch scope right ty) then
+                this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(Binary op, atoms)) ty))
+            else
+                this.Atoms scope [ left ] (fun atoms ->
+                    let decided = Expr.make (Atom(ABool(op = "or"))) ty
+                    let right = this.Branch scope right ty
+                    let ifTrue, ifFalse = if op = "and" then right, decided else decided, right
+                    k (Expr.make (If(atoms.Head, ifTrue, ifFalse)) ty))
         | _ when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
             // An instruction on the floats' values.
             // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
@@ -946,7 +969,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 | arg :: rest -> this.Complex scope arg (fun value -> let after = run rest in Expr.make (Do(value, after)) after.Type)
             run flatArgs
         | Some elements, [ tuple ] ->
-            atomsOf scope [ tuple ] (fun atoms ->
+            // Each element is read from the tuple, so one that is not a name is held in a local first.
+            this.AtomsInLocals scope [ tuple ] (fun atoms ->
                 let rec loadElements (remaining: (int * IrType) list) (acc: Atom list) =
                     match remaining with
                     | [] -> call (List.rev acc)
@@ -1001,7 +1025,9 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// local on the way to its value (see `storesBeforeValue`) is lowered whole, its stores with it, into one
     /// temporary: it is computed where it is used, so nothing computed before it waits on the stack across its stores.
     member this.Atoms (scope: Scope) (exprs: Expression list) (k: Atom list -> Expr) : Expr =
-        // A call through a function value in scope whose type holds boxes holds its arguments in locals (see `CallValue`).
+        // A call through a function value in scope holds its arguments in locals where its type holds boxes, and a tuple
+        // passed whole to one whose input is a tuple where the tuple is not a name, as it reads each element from it
+        // (see `CallValue`).
         let callStores (call: Expression) =
             match call.Kind with
             | FunctionCall(name, _, args) when not (SyntaxTree.flattenCallArgs args).IsEmpty ->
@@ -1009,7 +1035,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     match scope.Vars |> Map.tryFind name with
                     | Some var -> Some var
                     | None -> scope.Members |> Map.tryFind (NamedMember name)
-                value |> Option.exists (fun var -> CoreIrLowerBoxes.holdsBox var.Type)
+                let tupleNotNamed (var: Var) =
+                    match var.Type, SyntaxTree.flattenCallArgs args with
+                    | IrFunction _, [ { Kind = IdentifierExpr _ } ] -> false
+                    | IrFunction(input, _, _, _), [ _ ] -> (IrType.tupleElements input).IsSome
+                    | _ -> false
+                value |> Option.exists (fun var -> CoreIrLowerBoxes.holdsBox var.Type || tupleNotNamed var)
             | _ -> false
         let rec go (acc: Atom list) (remaining: Expression list) =
             match remaining with
