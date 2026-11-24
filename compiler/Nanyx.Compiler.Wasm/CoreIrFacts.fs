@@ -23,6 +23,9 @@ type ModuleFacts =
       /// Whether some function writes a float or an `F32` as text, which needs the scratch block the module sets aside
       /// for it (see `FloatText.scratchBytes`).
       UsesFloatText: bool
+      /// Whether a function reads the table of powers of five, so that the module needs it in its data (see
+      /// `PowersOfFive`).
+      UsesPowersOfFive: bool
       /// Whether some function has a debug probe (see `Probe`), which imports `nanyx:debug`.
       UsesProbes: bool }
 
@@ -35,6 +38,7 @@ let collect (functions: Function list) : ModuleFacts =
     let usesDbgHelpers = ref false
     let usesHostState = ref false
     let usesFloatText = ref false
+    let usesPowersOfFive = ref false
     let usesProbes = ref false
 
     // A temporary's value is emitted where the temporary is used, not where it is bound, so it is looked at there too:
@@ -83,6 +87,9 @@ let collect (functions: Function list) : ModuleFacts =
         | CallRuntime(name, _, _) when name = NyxCompiler.Intrinsics.hostState -> usesHostState.Value <- true
         | CallRuntime(name, atoms, _) when name = WasmRuntime.Helpers.floatToString || name = WasmRuntime.Helpers.f32ToString ->
             usesFloatText.Value <- true
+            atoms |> List.iter atom
+        | CallRuntime(name, atoms, _) when name = PowersOfFive.helper ->
+            usesPowersOfFive.Value <- true
             atoms |> List.iter atom
         | Prim(_, atoms)
         | Call(_, atoms)
@@ -158,4 +165,5 @@ let collect (functions: Function list) : ModuleFacts =
       UsesDbgHelpers = usesDbgHelpers.Value
       UsesHostState = usesHostState.Value
       UsesFloatText = usesFloatText.Value
+      UsesPowersOfFive = usesPowersOfFive.Value
       UsesProbes = usesProbes.Value }

@@ -66,7 +66,9 @@ The HTTP host, `nanyx.http`, serves a program whose entry point is a `Request ->
 - [json, decoders](./json-typed) — reading JSON into types of your own (`nanyx.json/json`)
 - [encode](./encode) — writing types of your own as JSON (`nanyx.json/encode`)
 
-And it ships `nanyx.regex`, for regular expressions that take linear time:
+`nanyx.regex`, for regular expressions that take linear time, is published to the package index too, from
+[nanyx-lang/regex](https://github.com/nanyx-lang/regex), and a program names it in its dependencies,
+`(package = "nanyx.regex", version = "0.1")`:
 
 - [regex](./regex) — finding, replacing and splitting with patterns (`nanyx.regex/regex`)
 

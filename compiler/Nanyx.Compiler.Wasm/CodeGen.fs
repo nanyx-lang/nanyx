@@ -883,7 +883,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // The block the host keeps its state in goes after them, 8-byte aligned, in a module whose host uses it.
     let dataEnd = stringDataEnd stringLiteralData + facts.StaticClosures.Length * staticClosureBytes
     let hostStateAddress = (dataEnd + 7) &&& ~~~7
-    let staticEnd = if facts.UsesHostState then hostStateAddress + hostStateSize else dataEnd
+    let hostStateEnd = if facts.UsesHostState then hostStateAddress + hostStateSize else dataEnd
+    // The table of powers of five that reading a float uses goes after it, 8-byte aligned (see `PowersOfFive`).
+    let powersOfFiveAddress = (hostStateEnd + 7) &&& ~~~7
+    let staticEnd = if facts.UsesPowersOfFive then powersOfFiveAddress + PowersOfFive.bytes else hostStateEnd
     // The scratch block that writing a float uses goes just below the heap, where the helpers find it (see `FloatText`).
     let heapBase = heapBaseAfter (if facts.UsesFloatText then staticEnd + FloatText.scratchBytes else staticEnd)
     let memoryDirective = $"  (memory {initialMemoryPages (heapStartOffset heapBase)})"
@@ -1156,7 +1159,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         [ renderDataSegments stringLiteralData
           yield!
               facts.StaticClosures
-              |> List.map (fun (name, arity) -> staticClosureData staticClosureMap.[name] (functionValueSlot functionTable withOwningEntry name arity)) ]
+              |> List.map (fun (name, arity) -> staticClosureData staticClosureMap.[name] (functionValueSlot functionTable withOwningEntry name arity))
+          if facts.UsesPowersOfFive then
+              $"""  (global {PowersOfFive.addressGlobal} i32 (i32.const {powersOfFiveAddress}))"""
+              $"""  (data (i32.const {powersOfFiveAddress}) "{escapeWasmData (PowersOfFive.data ())}")""" ]
         |> List.filter (fun segment -> segment <> "")
         |> String.concat "\n"
 

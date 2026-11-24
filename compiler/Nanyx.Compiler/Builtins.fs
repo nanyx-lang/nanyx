@@ -65,6 +65,11 @@ module Intrinsics =
     let floatCeil = prefix + "float_ceil"
     /// A float with its fraction dropped, towards zero.
     let floatTrunc = prefix + "float_trunc"
+    /// The 64-bit word at an index of the table of powers of five that reading a float uses (see the backend's
+    /// `PowersOfFive`).
+    let powerOfFive = prefix + "power_of_five"
+    /// The float whose 64 bits, as IEEE 754 lays them out, are an int's.
+    let floatFromBits = prefix + "float_from_bits"
     /// A whole float as an int. A float that is NaN, infinite or out of the range of `int` stops the program.
     let floatToInt = prefix + "float_to_int"
     /// An int as a float: the nearest one, which is exact up to 2^53. It never fails.
@@ -270,6 +275,8 @@ module Intrinsics =
           floatCeil, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatTrunc, TypeEnv.mono (TyFunc(floatTy, floatTy, []))
           floatToInt, TypeEnv.mono (TyFunc(floatTy, intTy, []))
+          powerOfFive, TypeEnv.mono (TyFunc(intTy, intTy, []))
+          floatFromBits, TypeEnv.mono (TyFunc(intTy, floatTy, []))
           intToFloat, TypeEnv.mono (TyFunc(intTy, floatTy, []))
           fromInt, { Quantified = set [ elementVar.Id ]; Type = TyFunc(intTy, element, []); Symbol = None; ProvidedBy = None }
           wrappingAdd, { Quantified = set [ elementVar.Id ]; Type = TyFunc(tuple [ element; element ], element, []); Symbol = None; ProvidedBy = None }
