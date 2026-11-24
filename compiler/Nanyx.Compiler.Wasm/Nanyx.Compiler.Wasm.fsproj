@@ -83,6 +83,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Nanyx.Compiler.Wasm.Test" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
     <ProjectReference Include="..\Nanyx.Compiler\NanyxCompiler.fsproj" />
   </ItemGroup>

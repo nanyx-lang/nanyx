@@ -459,22 +459,16 @@ let ``A broken invariant in the emitter is an internal error, said once, that as
 
 [<Fact>]
 let ``A function value that can stop where its type says it can't is an internal error, not wrong code`` () =
-    // `b` is not inferred yet where `a`'s lambda calls it, so the lambda's type doesn't require what `b` does: it can't
-    // wait, though it calls a function that does (#2558, #2590).
-    let source =
-        """def a = { (n: int) ->
-  if n == 0 then 0 else list.map([n], { x -> b(x) }) \list.sum
-}
-
-def b = { (x: int) ->
-  sleep(1)
-  a(x - 1) + 1
-}
-
-println(a(3))
-"""
-    match tryTranspileTypedModuleToWat (typedModule source) with
-    | Ok _ -> Assert.Fail "Expected the backend to refuse the function value"
-    | Error diagnostic ->
-        Assert.Equal(DiagnosticCodes.BackendInternalError.Code, diagnostic.Code)
-        Assert.Matches("the function value `__lambda_\\d+` can stop where it waits, but its type `\\(int -> int\\)` says it can't", diagnostic.Message)
+    // A caller knows that a function value can stop only from its type (#2558). No program type-checks to this, so it is
+    // made in the core IR: `waiting` calls a function value that waits, and `maker` makes a closure over it.
+    let waitingTy = CoreIr.IrFunction(CoreIr.IrInt, CoreIr.IrInt, [], true)
+    let f: CoreIr.Var = { Id = 1; Name = "f"; Kind = CoreIr.Param; Type = waitingTy }
+    let func name parameters result body : CoreIr.Function =
+        { Name = name; Source = name; TypeArguments = []; Params = parameters; Result = result; Body = body; Place = None }
+    let waiting = func "waiting" [ f ] CoreIr.IrInt (CoreIr.Expr.make (CoreIr.CallClosure(f, [ CoreIr.AInt 1L ], CoreIr.Borrowing)) CoreIr.IrInt)
+    let maker (closureTy: CoreIr.IrType) = func "maker" [] closureTy (CoreIr.Expr.make (CoreIr.Atom(CoreIr.AStaticClosure("waiting", 1, closureTy))) closureTy)
+    CoreIrSplitPoints.checkFunctionValues "start" [ waiting; maker waitingTy ]
+    let error =
+        Assert.Throws<CoreIr.InternalError>(fun () ->
+            CoreIrSplitPoints.checkFunctionValues "start" [ waiting; maker (CoreIr.IrFunction(CoreIr.IrInt, CoreIr.IrInt, [], false)) ])
+    Assert.Equal("the function value `waiting` can stop where it waits, but its type `(int -> int)` says it can't", error.Data0)

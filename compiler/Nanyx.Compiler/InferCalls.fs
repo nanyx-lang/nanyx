@@ -200,7 +200,12 @@ let rec internal inferCall
         let state =
             let written = contextsRequiredByCall env state name
             let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
-            state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
+            let state = state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
+            // A def not inferred yet, in a cycle with this one, is given a variable for its contexts, bound once they
+            // are known.
+            match pendingCallContexts env state name calleeSpan with
+            | Some (var, next) -> LambdaContexts.record [ var ] next
+            | None -> state
         // A callee a module block keeps from here is checked on as if it were reached (see `FailedCalls`).
         let reachErrors = TypeEnv.tryFind name env |> Option.map (fun scheme -> referenceErrors name expr scheme state) |> Option.defaultValue []
         let state = if FailedCalls.calleeKnown reachErrors && not reachErrors.IsEmpty then FailedCalls.failed expr reachErrors state else state
