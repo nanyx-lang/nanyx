@@ -179,8 +179,14 @@ def main = {
 
 `except` binds more loosely than every operator and pipe, so it applies to the whole expression before it:
 
-```nanyx fragment
-def #some(shift) = scores \indexOf(scores \max) except #notFound -> #some(0)
+```nanyx
+def scores = [3, 9, 4]
+
+def #some(shift) = scores \indexOf(4 + 5) except #notFound -> #some(0)
+
+println(shift)
+
+-- 1
 ```
 
 A pattern that the value can never match is a type error, as it is in a `match`. An `except` whose arms handle every case is a `match`, so write it as one.

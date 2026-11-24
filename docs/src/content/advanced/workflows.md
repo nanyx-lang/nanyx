@@ -26,10 +26,10 @@ someBuilder({
 
 The builder's type says the block requires the context, so the block can call the context's members, and the builder loads an instance of the context with `use` and calls the block under it. Inside the block, every keyword is a call to the member of that name with two arguments: the value the keyword was applied to, and a _continuation_ holding the rest of the block. This is the one desugaring rule for all workflows; everything else on this page is a consequence of it.
 
-The simplest possible workflow can be illustrated with a builder whose context has just a `log` member that prints the value it is given:
+The simplest possible workflow can be illustrated with a builder whose context has a `log` member that prints the value it is given, and a `zero`, the value of a block that ends without `return`:
 
-```nanyx fragment
-context Debug = (log: [c] (string, ([c] () -> ())) -> ())
+```nanyx
+context Debug = (log: [c] (string, ([c] () -> ())) -> (), zero: ())
 
 def debug: [c, Console] ([Debug, c] () -> ()) -> () = { block ->
   use Debug(
@@ -37,6 +37,7 @@ def debug: [c, Console] ([Debug, c] () -> ()) -> () = { block ->
       println(value)
       continue()
     }
+    zero = ()
   ) in block()
 }
 
@@ -52,7 +53,7 @@ The block content is rewritten to nested calls to the `log` member, each receivi
 debug({
   log("Debug message 1", {
     log("Debug message 2", {
-      -- end of block
+      zero
     })
   })
 })
