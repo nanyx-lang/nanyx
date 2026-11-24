@@ -185,7 +185,7 @@ let private compareBody (tagId: string -> int option) (ty: IrType) : string list
     | IrBox
     | IrError
     | IrRecursive _
-    | IrSelf
+    | IrSelf _
     // An array has no hash, so it is never a key, and nothing orders one by its structure.
     | IrArray _
     | IrWord -> internalError $"an ordering function for '{IrType.show ty}', which has no order"

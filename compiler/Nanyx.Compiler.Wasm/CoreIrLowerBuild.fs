@@ -41,8 +41,22 @@ let rec decanonical (tools: TypeMatchTools) (ty: Ty) (boxed: Var) (k: Atom -> Ex
                     bindLocal tools "__array" (call Intrinsics.arrayOfList [ AVar values ] (tools.ToIrType ty)) (AVar >> k))))
     | _ -> unboxed (tools.ToIrType ty) (AVar >> k)
 
-/// The function that gives a value of `collection`, a list, a set or a map, from its elements in their canonical form.
-let decanonicalisingFunction (tools: TypeMatchTools) (functionName: string) (collection: Ty) : Function =
+/// The function a closure that unboxes a value of `ty` from its canonical form is over: it takes the closure's
+/// environment and the box.
+let decanonicalisingValueFunction (tools: TypeMatchTools) (functionName: string) (ty: Ty) : Function =
+    let environment = tools.NewVar ClosureSyntax.envParameter Param (IrRecord [ "0", IrWord ])
+    let boxed = tools.NewVar "__boxed" Param IrBox
+    let result = tools.ToIrType ty
+    { Name = functionName
+      Source = functionName
+      TypeArguments = []
+      Params = [ environment; boxed ]
+      Result = result
+      Body = decanonical tools ty boxed (fun value -> Expr.make (Atom value) result)
+      Place = None }
+
+/// The function that gives a list from its elements in their canonical form.
+let private listDecanonicalisingFunction (tools: TypeMatchTools) (functionName: string) (elementTy: Ty) (collection: Ty) : Function =
     let given = canonicalElements tools collection
     let result = tools.ToIrType collection
     let element = match given with IrList element -> element | other -> internalError $"canonical elements of '{IrType.show other}'"
@@ -52,18 +66,8 @@ let decanonicalisingFunction (tools: TypeMatchTools) (functionName: string) (col
     let cons (value: Atom) =
         bindLocal tools "__rest" (Expr.make (Call(functionName, [ AVar tail ])) result) (fun rest ->
             Expr.make (CallRuntime(Helpers.listCons, [ value; AVar rest ], true)) result)
-    let body =
-        match Unifier.unalias collection, result with
-        | Maps.MapType(key, value), IrList entryTy ->
-            bindLocal tools "__key" (Expr.make (Field(AVar head, 0)) IrBox) (fun keyBox ->
-                bindLocal tools "__value" (Expr.make (Field(AVar head, 1)) IrBox) (fun valueBox ->
-                    decanonical tools key keyBox (fun keyValue ->
-                        decanonical tools value valueBox (fun valueValue ->
-                            bindLocal tools "__entry" (Expr.make (MakeRecord [ "0", keyValue; "1", valueValue ]) entryTy) (AVar >> cons)))))
-        | (Lists.ListType elementTy | Sets.SetType elementTy), _ -> decanonical tools elementTy head cons
-        | other, _ -> internalError $"decanonical elements of '{Unifier.tyToString other}'"
     let arms =
-        [ { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = body }
+        [ { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = decanonical tools elementTy head cons }
           { Patterns = [ PWildcard ]; Body = Expr.make (MakeList []) result } ]
     { Name = functionName
       Source = functionName
@@ -72,6 +76,18 @@ let decanonicalisingFunction (tools: TypeMatchTools) (functionName: string) (col
       Result = result
       Body = Expr.make (Match([ list ], arms)) result
       Place = None }
+
+/// The function that gives a value of `collection`, a list, a set or a map, from its canonical form: the inverse of
+/// `CoreIrLowerTypeMatch.canonicalisingFunction`. A map's or a set's store keeps its shape and hashes, so nothing is
+/// hashed again.
+let decanonicalisingFunction (tools: TypeMatchTools) (functionName: string) (collection: Ty) : Function =
+    match Unifier.unalias collection with
+    | Lists.ListType elementTy -> listDecanonicalisingFunction tools functionName elementTy collection
+    | Maps.MapType _
+    | Sets.SetType _ ->
+        let converter (ty: Ty) = tools.Request ("__decanonical_value_" + Identifiers.sanitizeIdentifier (Unifier.tyToString ty)) (DecanonicalisingValue ty)
+        storeConvertingFunction tools functionName collection (fun _ -> boxedTy) id converter
+    | other -> internalError $"decanonical elements of '{Unifier.tyToString other}'"
 
 /// The fields of the record type `recordType`, in the order its description has them (see
 /// `CoreIrLowerTypeMatch.descriptionOf`).

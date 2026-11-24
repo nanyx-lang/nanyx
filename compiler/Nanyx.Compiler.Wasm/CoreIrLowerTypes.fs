@@ -220,13 +220,14 @@ let rec toIrTypeIn (layouts: ContextLayouts) (ty: Ty) : IrType = toIrTypeExpandi
 /// `toIrTypeIn`, inside the members of the contexts `expanding`: a member's type that requires one of them again takes
 /// none of its members, so that a context whose member requires the context itself has an IR type. `recursing` is the
 /// recursive aliases `ty` is inside, innermost first, each by its definition and arguments: one of them again is
-/// `IrSelf`.
+/// `IrSelf` of where it is among them.
 and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>) (recursing: (Ty * Ty list) list) (ty: Ty) : IrType =
     let toIrType = toIrTypeExpanding layouts expanding recursing
     match recursiveReference ty with
-    | Some reference when recursing |> List.tryHead = Some reference -> IrSelf
+    // A recursive type it is inside, the innermost `IrSelf 0`.
+    | Some reference when recursing |> List.contains reference -> IrSelf(recursing |> List.findIndex ((=) reference))
     // A type that holds itself at other arguments, such as `#node(T(list(a)))` in `T(a)`, holds ever more types.
-    | Some reference when recursing |> List.contains reference || (recursing |> List.filter (fst >> (=) (fst reference)) |> List.length) > 8 ->
+    | Some reference when (recursing |> List.filter (fst >> (=) (fst reference)) |> List.length) > 8 ->
         cannot "a recursive type that holds itself at other type arguments"
     | Some reference -> IrRecursive(toIrTypeExpanding layouts expanding (reference :: recursing) (RecursiveNominals.underlying (Unifier.unalias ty)))
     | None ->
