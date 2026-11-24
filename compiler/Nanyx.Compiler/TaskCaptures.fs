@@ -79,3 +79,39 @@ let escapeErrors (resultOf: string -> Ty option) (module': Module) : Diagnostic 
                     at
                     $"A task can't leave the def that started it: '{name}' gives back what starts one, which would run once '{name}' has returned. The def is the scope of its tasks, and waits for them before it returns")
         | _ -> None)
+
+/// Whether the function type `ty` itself requires the scope of tasks where it is called.
+let private requiresTaskScope (ty: Ty) : bool =
+    match Unifier.unalias ty with
+    | TyFunc(_, _, contexts) ->
+        contexts |> List.exists (function FunctionContexts.ScopedContext(name, _) -> name = TaskScopes.scopeContext | _ -> false)
+    | _ -> false
+
+/// The errors of the module-level defs of `module'` that start a task but are not scopes, because their bodies start it
+/// without naming `start` (through `def go = Async.start`, say; see `TaskScopes`): their types, by `typeOf`, require
+/// the scope of tasks, which nothing outside a scope supplies. Each is reported at the def's first call whose callee,
+/// by its type at the call (`calleeType`), requires the scope. A def that writes its type is checked against it.
+let unscopedErrors (typeOf: string -> Ty option) (calleeType: NodeId -> Ty option) (module': Module) : Diagnostic list =
+    let rec defs (items: TopLevelItem list) =
+        items
+        |> List.collect (fun item ->
+            match item.Kind with
+            | Def(ValueDef(_, _, _, { Kind = Lambda(_, { Kind = FunctionCall(callee, _, _) }, _) })) when callee = TaskScopeSyntax.scopeCall -> []
+            | Def(ValueDef(_, name, None, ({ Kind = Lambda _ } as value))) -> [ name, value ]
+            | ModuleBlock(_, inner) -> defs inner
+            | _ -> [])
+    defs module'
+    |> List.choose (fun (name, value) ->
+        if typeOf name |> Option.exists requiresTaskScope then
+            SyntaxTree.expressionsWithin value
+            |> List.tryPick (fun within ->
+                match within.Kind with
+                | FunctionCall(callee, _, _) when calleeType within.Id |> Option.exists requiresTaskScope -> Some (callee, within.Span)
+                | _ -> None)
+            |> Option.map (fun (callee, at) ->
+                Diagnostics.at
+                    DiagnosticCodes.UndeclaredContext
+                    at
+                    $"'{callee}' starts a task, but '{name}' is not the scope of its tasks: only a def whose body names '{TaskScopes.startName}' is, and waits for the tasks it starts before it returns. Start the task with '{TaskScopes.startName}' in '{name}' itself")
+        else
+            None)
