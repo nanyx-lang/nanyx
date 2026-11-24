@@ -312,8 +312,9 @@ in the code.
 - **Wasm exceptions for user crashes.** WebAssembly 3.0 has `throw` and `try_table`. A `crash` that throws could make
   a boundary cheaper and let the compiler drop reference counts as it unwinds. Real traps (stack overflow, out of
   memory) still need the instance boundary, so this would be an optimisation, not a replacement.
-- **Effect handlers in general.** Only the host's `Async` suspends, for now. Should `Async` be designed as the first
-  case of a general feature that user contexts get later?
+- **Effect handlers in general.** Only the host's `Async` suspends, for now. [Effect handlers](./effect-handlers)
+  proposes making it the first case of a general feature, with `yield` the second, and records a spike of a generator
+  on async's state machines.
 - **A cancelled stream.** Does a pull in a cancelled task give `#done`, as [proposed](#streams-async-sequences)?
 - **Channels.** Bounded by default, and what a send to a full one does: wait (back-pressure), drop, or keep only the
   latest (`conflate`).
