@@ -100,3 +100,9 @@ let ``mut T is the type of a cell`` () =
     | Result.Ok [ Kind (Def (ValueDef (_, "inc", Some (Kind (TypeWithContext (_, Kind (TypeFunc (Kind (TypeApply ("mut", [ Kind (TypeName "int") ])), _))))), _))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
     | Result.Error err -> failwith $"Parse failed: {err}"
+[<Fact>]
+let ``mut at the top level declares a cell as a def whose value is a call to __mut, for the checker to report`` () =
+    match parseModule "mut count = 0\n" with
+    | Result.Ok [ Kind (Def (ValueDef (false, "count", None, Kind (FunctionCall ("__mut", None, [ Kind (LiteralExpr (IntLit64 0L)) ]))))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
