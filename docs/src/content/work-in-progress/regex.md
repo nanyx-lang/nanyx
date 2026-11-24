@@ -4,10 +4,10 @@ description: "Checking regex patterns at compile time, and where regular express
 order: 7
 ---
 
-The shipped package `nanyx.regex`, with its `#Matches` and `#MatchesRegex` patterns for `match` arms, is described on
-its [reference page](../stdlib/regex) and in the [cookbook](../cookbook/regular-expressions), and how it is built, and
-why, on [Shipped packages](../deep-dives/shipped-packages#why-regular-expressions-are-built-this-way). This page keeps
-what is left: checking literal patterns at compile time, and the open questions.
+`nanyx.regex`, with its `#Matches` and `#MatchesRegex` patterns for `match` arms, is a package from the index,
+published from [nanyx-lang/regex](https://github.com/nanyx-lang/regex), whose README says how its engine is built and
+why. It is described on its [reference page](../stdlib/regex) and in the [cookbook](../cookbook/regular-expressions).
+This page keeps what is left for the compiler: checking literal patterns at compile time, and the open questions.
 
 # Patterns checked at compile time
 
@@ -26,9 +26,6 @@ exists. Until then, a wrong literal gives `#invalidPattern` from `Regex.parse`, 
 
 - **Parser combinators.** A `nanyx.parse` package is often the better tool for structured text, and reads well with
   pipes and workflows. It would complement regexes, not replace them.
-- **Where it lives** if the standard library's public modules are reorganised
-  ([#2029](https://github.com/nanyx-lang/nanyx/issues/2029)): it fits under `nanyx/text` if it moves into the
-  standard library.
 
 # Plan
 
