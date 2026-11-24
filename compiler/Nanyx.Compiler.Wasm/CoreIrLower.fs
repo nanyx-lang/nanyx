@@ -1397,7 +1397,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
-        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
+        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools callee functionName printer
         | Describing -> CoreIrLowerTypeMatch.describingFunction this.TypeMatchTools functionName
         | FieldGetting(recordType, fieldName) -> CoreIrLowerTypeMatch.fieldGettingFunction this.TypeMatchTools functionName recordType fieldName
         | CaseGetting(unionType, caseName) -> CoreIrLowerTypeMatch.caseGettingFunction this.TypeMatchTools functionName unionType caseName

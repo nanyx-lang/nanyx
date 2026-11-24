@@ -822,7 +822,7 @@ def passed: [ToString(a)] a -> string = { value ->
 
 Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in the second `receipt` above `"{[Cents(250)]}"` would be `"[some cents]"`.
 
-A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/console#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`. A map's entries and a set's elements are written in the order they were first added, and the empty map writes `[=>]`.
+A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/console#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`. A map's entries and a set's elements are written in the order `map.toList` and `set.toList` give them, the order of their hashes, and the empty map writes `[=>]`.
 
 `println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
 

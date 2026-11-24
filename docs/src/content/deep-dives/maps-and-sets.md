@@ -23,10 +23,17 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   `Infer.fs`, which reads a call of an array as `array.at` the same way) and records it in `ReadAs`, and `ExpressionRewrites.writeAsRead` writes it as that call for the backend.
   A call of a field that holds a function, `statement.setInt(position, value)`, is read the same way, as a block that
   keeps the field's value in a local and calls it (`FieldCalls`, [#1513](https://github.com/nanyx-lang/nanyx/issues/1513)).
-- **Representation.** A map holds the list of its entries, each key once, in the order the keys were first added, and
-  a set the list of its elements. The prelude builds and reads them through four intrinsics,
+- **Representation.** A map holds the list of its entries, each key once, in the order of the keys' hashes, and a set
+  the list of its elements in the same order. Two hashes are ordered by their lowest five bits, then the five above
+  those, and so on, as a walk of a trie that reads a hash five bits at a time from its low end meets them; keys with the
+  same hash are ordered by the compiler's own order of their structure (`hashOrder` and `keyOrder` in
+  `prelude-maps.nyx`). So two maps with the same keys hold them in the same order however they were built. The order
+  is not one a program can rely on, and the docs call it unspecified. The prelude builds and reads them through four intrinsics,
   `__nanyx_map_of_entries`, `__nanyx_map_entries`, `__nanyx_set_of_elements` and `__nanyx_set_elements`, which the
-  backend compiles to nothing: a `map(k, v)` is held as a `list((k, v))`, and a `set(a)` as a `list(a)`.
+  backend compiles to nothing: a `map(k, v)` is held as a `list((k, v))`, and a `set(a)` as a `list(a)`. The compiler
+  itself reads a map's entries or a set's elements only through the prelude's `map.toList` and `set.toList`
+  (`Maps.toList` and `Sets.toList`), which linking always keeps: a `for` loop over a map walks the list `toList` gives
+  (`Loops.fs`), and so does `dbg` (`CoreIrLowerDbg.fs`).
 - **`==` compares contents, in any order** ([#618](https://github.com/nanyx-lang/nanyx/issues/618)). The compiler's
   own comparison, which works by structure, would compare the lists underneath in order, so a map or a set, and any
   structure that holds one, is always compared by an `==` the compiler derives from its parts (`MapShape` and

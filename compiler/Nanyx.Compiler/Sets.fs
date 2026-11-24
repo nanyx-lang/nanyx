@@ -6,6 +6,9 @@ module Sets =
     /// The type's name, as a type writes it, `set(int)`, and as the prelude's set functions are attached to it.
     let typeName = "set"
 
+    /// The function that gives a set's elements as a list: how the compiler reads a set's elements (see `Maps.toList`).
+    let toList = typeName + ".toList"
+
     /// Whether `name` names the type.
     let isTypeName (name: string) = name = typeName
 
