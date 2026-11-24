@@ -484,13 +484,17 @@ def result = add(5)(10) -- 15
 
 With records, you can simulate partial application:
 
-```nanyx fragment
-def process: (config: Config, data: Data) -> Report = { config, data ->
-  -- processing logic
+```nanyx
+def process: (config: string, data: int) -> string = { config, data ->
+  "{config}: {data}"
 }
 
 -- Create a partially applied version
-def processWithConfig = { data -> process(myConfig, data) }
+def processWithConfig = { data -> process(config = "verbose", data = data) }
+
+println(processWithConfig(3))
+
+-- verbose: 3
 ```
 
 # Type Annotations for clarity

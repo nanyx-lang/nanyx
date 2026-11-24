@@ -162,10 +162,11 @@ Nothing starts it: like `Console`, the host provides it.
   nothing, `{ value }`, so that the scheduler can drop it whatever its type, and each `await` gets a reference of its own
   by calling it. `await` requires `TaskScope` too, so a function that awaits a task it is given borrows its caller's
   scope rather than supplying one, which a function that takes a `Task` and doesn't require it would.
-- **`start!`.** `start` is a function, not a member of `Async`, which has no members: a `#delay` keyword rewrites
-  nothing but itself, so `Attributes.applyAttributes` allows `@customKeywordType(#delay)` on a top-level def, and
-  `Attributes.keywordKinds` reads it there (any other kind needs a builder, `NYX0019`). The hosts' preludes export
-  `start` and `await` beside `Async`.
+- **`start!`.** `start` and `await` are defs attached to `Async`, which has no members, `Async.start` and
+  `Async.await`, in scope by their bare names wherever `Async` is (`AttachedContextDefs`). A `#delay` keyword rewrites
+  nothing but itself, so `Attributes.applyAttributes` allows `@customKeywordType(#delay)` on a def attached to a context
+  the module declares, and `Attributes.keywordKinds` reads it there by the def's bare name (any other kind needs a
+  builder, and a def attached to no context can't be a keyword, `NYX0019`). The hosts' preludes export `Async` alone.
 - **Each def a scope.** `TaskScopes.wrap`, before inference, makes the body of each module-level def that names
   `start` where nothing in it binds the name (a parameter or a local def named `start` is not the one that starts a
   task), and a script's entry point if it does, the block of a call of `scope`; a module that defines a `start` of its

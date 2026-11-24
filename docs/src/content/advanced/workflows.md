@@ -26,10 +26,10 @@ someBuilder({
 
 The builder's type says the block requires the context, so the block can call the context's members, and the builder loads an instance of the context with `use` and calls the block under it. Inside the block, every keyword is a call to the member of that name with two arguments: the value the keyword was applied to, and a _continuation_ holding the rest of the block. This is the one desugaring rule for all workflows; everything else on this page is a consequence of it.
 
-The simplest possible workflow can be illustrated with a builder whose context has just a `log` member that prints the value it is given:
+The simplest possible workflow can be illustrated with a builder whose context has a `log` member that prints the value it is given, and a `zero`, the value of a block that ends without `return`:
 
-```nanyx fragment
-context Debug = (log: [c] (string, ([c] () -> ())) -> ())
+```nanyx
+context Debug = (log: [c] (string, ([c] () -> ())) -> (), zero: ())
 
 def debug: [c, Console] ([Debug, c] () -> ()) -> () = { block ->
   use Debug(
@@ -37,6 +37,7 @@ def debug: [c, Console] ([Debug, c] () -> ()) -> () = { block ->
       println(value)
       continue()
     }
+    zero = ()
   ) in block()
 }
 
@@ -52,7 +53,7 @@ The block content is rewritten to nested calls to the `log` member, each receivi
 debug({
   log("Debug message 1", {
     log("Debug message 2", {
-      -- end of block
+      zero
     })
   })
 })
@@ -158,7 +159,7 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 | `zero`   | The value of a block that produces no value (an `if` without `else`, or falling off the end without `return`) |
 | `for`    | Run a `for` loop whose body uses a keyword (see [Keywords in loops](#keywords-in-loops)) |
 | `defer`  | Run the expression after it once the rest of the block has finished (a `#bindF` keyword) |
-| `start`  | Start a task that runs the expression after it (a `#delay` keyword that is a def, `nanyx/async`'s `start`, see [Async](./async#tasks)) |
+| `start`  | Start a task that runs the expression after it (a `#delay` keyword that is a def attached to `Async`, `Async.start`, see [Async](./async#tasks)) |
 
 ## Keyword kinds
 
@@ -171,20 +172,20 @@ def retrying: [c] int, ([Retry, c] () -> Attempt(a)) -> Attempt(a) = { times, bl
 
 A member without the attribute is a `#bind` keyword. A `#bindF` member's first parameter is a function of no parameters, `[c] () -> a`, and its second the continuation. A `#delay` member takes only the function: its type is of the form `(() -> a) -> r`, with the lambda's contexts as usual (`[c] () -> a` where the member is generic in them). A member whose type doesn't take a function of no parameters where its kind passes one is a compile error at the attribute ([NYX0046](../standard-tools/errors#nyx0046)).
 
-A `#delay` keyword rewrites nothing but itself: `kw! e` is a call of the keyword's function with `{ e }`, wherever it's written. So it needs no builder, and a top-level def can be one, marked with the attribute as a member is; it can be used wherever the def is in scope, a lambda included. `nanyx/async`'s `start` is one:
+A `#delay` keyword rewrites nothing but itself: `kw! e` is a call of the keyword's function with `{ e }`, wherever it's written. So it needs no builder, and a def [attached to a context](./attached-definitions#attached-to-a-context) can be one, marked with the attribute as a member is. A keyword belongs to a context either way: an attached def is in scope by its bare name wherever its context is, as a member is, so the keyword is too, a lambda included. `nanyx/async`'s `Async.start` is one, so `start!` is wherever `Async` is:
 
 ```nanyx fragment
 @customKeywordType(#delay)
-export def start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = { work -> ... }
+export def Async.start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = { work -> ... }
 
 def pages = { urls -> urls \map { url -> start! http.get(url) } }   -- start({ http.get(url) })
 ```
 
 Like `try`, every keyword takes the whole expression after it. For a `#delay` keyword that matters: in `start! http.get(url) \orCrash("failed")` the pipe is inside the lambda, so `orCrash` runs in the task, not on the `Task` that `start!` gives back.
 
-A keyword's kind is the one its member's or def's declaration gives it, in the module or in a module it imports.
+A keyword's kind is the one its member's or attached def's declaration gives it, in the module or in a module it imports.
 
-A `#yield` keyword makes the lambda it is in a lazy sequence, as [above](#yield-and-sequences). The language's `yield` is one, declared by the prelude's `Yield` context, and a context of your own can declare another, used as `emit! x`. Any other kind is a compile error at the attribute ([NYX0019](../standard-tools/errors#nyx0019)), as is a kind other than `#delay` before a top-level def, which needs a builder. The attribute anywhere but before a member of a `context` declaration or a top-level def is an error too.
+A `#yield` keyword makes the lambda it is in a lazy sequence, as [above](#yield-and-sequences). The language's `yield` is one, declared by the prelude's `Yield` context, and a context of your own can declare another, used as `emit! x`. Any other kind is a compile error at the attribute ([NYX0019](../standard-tools/errors#nyx0019)), as is a kind other than `#delay` before an attached def, which needs a builder, and any kind before a def attached to no context. The attribute anywhere but before a member of a `context` declaration or a def attached to a context is an error too.
 
 # Workflow keywords
 

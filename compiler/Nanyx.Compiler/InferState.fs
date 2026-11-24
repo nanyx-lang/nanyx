@@ -402,6 +402,9 @@ type InferState =
             /// The instances a `use` loads that are written at it, by the node of each: their members' lambdas may
             /// need more contexts than the members' types declare (see `UseDischarge`).
             UseInstances: Set<NodeId>;
+            /// The name each bare name that reaches a def attached to a context stands for, by its node: `start` for
+            /// `Async.start` where `Async` is available (see `AttachedContextDefs`).
+            AttachedByBareName: Map<NodeId, Identifier>;
             /// How many lambdas were being inferred around each `use`, by the node of the value it loads (see
             /// `LambdaContexts.enterUse`).
             UseDepths: Map<NodeId, int>;
@@ -511,6 +514,7 @@ let emptyState =
             BodyDepths = Map.empty;
             InferredScopedContexts = Map.empty;
             UseInstances = Set.empty;
+            AttachedByBareName = Map.empty;
             UseDepths = Map.empty;
             SelfTypes = Map.empty;
             InferredContextVars = Map.empty;
