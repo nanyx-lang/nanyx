@@ -340,8 +340,8 @@ The result is the float nearest the decimal, however many digits it has, and of 
 near, the one whose last bit is 0, as IEEE 754 rounds. So every float `float.toString` writes reads
 back as itself, and `float.fromString("0.1")` is the float the literal `0.1` is. A number at least
 halfway from the largest float to 2 ** 1024 is infinity, and one at most half the smallest float
-above zero is 0. A decimal with at most 15 digits and a small exponent, as most text written by hand is, is
-read with one multiplication or division; any other is read with exact arithmetic on whole numbers
-of any size, which takes longer.
+above zero is 0. A decimal of at most 19 significant digits is read with a few multiplications of
+64-bit whole numbers; one of more digits that is very near halfway between two floats is read with
+exact arithmetic on whole numbers of any size, which takes longer.
 
 <!-- End of the generated reference. -->

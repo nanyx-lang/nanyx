@@ -12,6 +12,7 @@
     <Compile Include="ClosureSyntax.fs" />
     <Compile Include="LambdaLifting.fs" />
     <Compile Include="FloatText.fs" />
+    <Compile Include="PowersOfFive.fs" />
     <Compile Include="SizedIntegerCode.fs" />
     <Compile Include="StringJoin.fs" />
     <Compile Include="StringSearch.fs" />

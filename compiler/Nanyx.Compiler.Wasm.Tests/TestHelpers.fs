@@ -555,6 +555,15 @@ let withoutDbgLocations (outcome: RunOutcome) =
 let withoutStack (stderr: string) =
     stderr.ReplaceLineEndings("\n").Split('\n') |> Array.filter (fun line -> not (line.StartsWith "  ")) |> String.concat "\n"
 
+/// `x` as a Nanyx float literal, with all the digits it takes to be read back as `x`: `1.0e-300`, not .NET's `1E-300`.
+let floatLiteral (x: float) =
+    let text = x.ToString("R", Globalization.CultureInfo.InvariantCulture).Replace("E+", "e").Replace("E", "e")
+    let mantissa, exponent =
+        match text.IndexOf 'e' with
+        | -1 -> text, ""
+        | at -> text.Substring(0, at), text.Substring at
+    (if mantissa.Contains '.' then mantissa else mantissa + ".0") + exponent
+
 /// The options the in-process tests compile with: memory checks on, so that the counters are there to read.
 let checkedOptions = { WasmOptions.Default with CheckMemory = true }
 
