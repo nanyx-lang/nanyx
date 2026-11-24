@@ -1087,8 +1087,9 @@ To fix it, move the definition into the block, or into a block of its own that t
 
 # NYX0111: Not implemented
 
-The program has `???`, which stands for code not written yet. It type-checks as any type, so the rest of the program
-can be checked, but it cannot be run in a release build.
+The program has `???`, which stands for code not written yet. It has the type `undefined`, which fits wherever a value
+of any type is expected, so the rest of the program can be checked, and nothing that uses it is another error. It cannot
+be run in a release build.
 
 ```nanyx
 def total: int -> int = { x -> ??? }  -- error NYX0111: `???` stands for code not written yet
@@ -2468,6 +2469,31 @@ println(deserialise(type int, "abc"))
 
 To fix it, write `Type(a)` for `type a`, and `into: Type(into)` for `into: type`, as the editor's quick fix does. Calls
 don't change: they still pass `type int`.
+
+# NYX0283: Value of a type only a later use fixes
+
+A def that writes no type and whose value is not a function calls a function that requires a context of the type it
+gives back, and nothing in the def says what that type is. A later use of the value, such as
+`def person: Person = obj`, doesn't fix it: a value's type is fixed where it is defined.
+
+```nanyx
+type Person = (name: string)
+
+context Decode(a) = (decode: string -> a)
+
+def Person.decode: string -> Person = { s ->
+  Person(name = s)
+}
+
+def parse: [Decode(a)] string -> a = { json ->
+  decode(json)
+}
+
+def obj = parse("Ada")  -- error NYX0283: 'parse' requires 'Decode' of a type nothing in the definition of 'obj' fixes, ...
+```
+
+To fix it, write the type on the def, `def obj: Person = parse("Ada")`, or give the function a
+[type argument](../tour/functions#type-arguments) and pass the type: `parse(type Person, "Ada")`.
 
 # NYX0301: Not supported by the WebAssembly backend
 

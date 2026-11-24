@@ -697,6 +697,11 @@ let private optimised (options: WasmOptions) (cachedNames: Set<string>) (exporte
     let definitionFunctions =
         definitionFunctions |> List.map CoreIrReach.withoutUnreadClosures |> CoreIrReach.reachedFrom startFunction exported
 
+    // The regions of blocks that nothing can put an object on (see `CoreIrUnusedRegions`).
+    let definitionFunctions, startFunction =
+        let all = CoreIrUnusedRegions.withoutUnused (definitionFunctions @ Option.toList startFunction)
+        List.take definitionFunctions.Length all, startFunction |> Option.map (fun _ -> List.last all)
+
     // Reference counting, inserted over the whole module at once, since which parameters a function owns depends on
     // the functions it calls; then drop specialisation and reuse. Each function a closure is over gets its owning entry
     // first, and keeps it only if something can call it (see `CoreIrClosureEntries`).

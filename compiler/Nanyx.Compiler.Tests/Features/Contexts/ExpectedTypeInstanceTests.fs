@@ -47,13 +47,19 @@ def withInt: ([Monoid(int)] () -> b) -> b = { f -> use Monoid(int)(empty = 5, co
 // An instance at another type in scope puts the context's members in scope by name, but isn't the call's (#1653).
 [<Theory>]
 [<InlineData("""def s: string = use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in e()""", "'e' requires the context 'Monoid(string)', which is not loaded here, and 'string.combine' and 'string.empty' are not defined: define them, or load an instance with `use`")>]
-[<InlineData("""def t = use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in e()""", "'e' requires the context 'Monoid' at a type nothing here settles, and the instance in scope is a 'Monoid(int)': write the type the call gives, or load an instance of 'Monoid' for it with `use`")>]
 [<InlineData("""def h: string = withInt({ e() })""", "'e' requires the context 'Monoid(string)', which is not loaded here, and 'string.combine' and 'string.empty' are not defined: define them, or load an instance with `use`")>]
 let ``A call at a type an instance in scope is not for is an error`` (definition: string, message: string) =
     let result = Compiler.compile (normalized (monoid + definition + "\n"))
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
     Assert.Equal(message, diagnostic.Message)
+
+// A value of a type nothing settles is one only a later use could fix (see `ContextInference.unfixedValueType`).
+[<Fact>]
+let ``A value of a type nothing settles, beside an instance at another type, is an error at the def`` () =
+    let value = "def t = use Monoid(int)(empty = 0, combine = { x, y -> x + y }) in e()\n"
+    let diagnostic = Assert.Single((Compiler.compile (normalized (monoid + value))).Diagnostics)
+    Assert.Equal(DiagnosticCodes.ValueContextTypeOpen.Code, diagnostic.Code)
 
 [<Theory>]
 [<InlineData("""def w: string = use Monoid(string)(empty = "", combine = { x, y -> x ++ y }) in e()""")>]

@@ -169,6 +169,7 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
                 |> Result.map (ScopedCalls.leave expr)
                 |> Result.map (fun next -> typedExpr, next)
             | _ -> Ok (typedExpr, next))
+        |> Result.map (fun (typedExpr, next) -> typedExpr, Unreached.readAsNever env next expr)
     let recovered =
         match inferred with
         | Ok _ -> inferred
@@ -190,14 +191,16 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         |> Result.map (fun (_, current) -> mkTypedExpr expr (TyPrimitive "string") None None None, current)
     | UnitExpr ->
         Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, state)
-    // The placeholder for code not written yet is an error like any other, so a release build refuses it and a debug
-    // build defers it: it has the error type, and stops the program if reached.
     // A workflow keyword's call, or a builder block's `zero`, reads a member of the context the builder runs its block
     // under, which must be in scope by its name.
     | IdentifierExpr name
     | FunctionCall(name, _, _) when WorkflowMembers.isMissing env state expr.Id name -> Error [ WorkflowMembers.missing state expr.Id name ]
+    // The placeholder for code not written yet is an error, so a release build refuses it and a debug build defers it,
+    // stopping the program if it is reached. It has the type `undefined`, as `crash(...)` has: it never gives a value,
+    // so it fits any type without fixing a type variable, and nothing that uses it is another error.
     | IdentifierExpr name when name = Parser.Program.ImplicitNames.notImplemented ->
-        Error [ Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "`???` stands for code not written yet" ]
+        let error = Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "`???` stands for code not written yet"
+        Ok (mkTypedExpr expr Unifier.bottomType None None None, { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs })
     | IdentifierExpr name ->
         match TypeEnv.tryFind name env with
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
@@ -605,6 +608,8 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
             // What failed to check was reported where it failed; reading from it is not another error.
             | None when Unifier.isError baseTy ->
                 Ok (mkTypedExpr expr Unifier.errorType None None None, { next with UnknownTypeUses = expr.Id :: next.UnknownTypeUses })
+            // Nothing is read from what never gives a value, as `crash(...)` and `???` don't.
+            | None when Unifier.isBottom baseTy -> Ok (mkTypedExpr expr Unifier.bottomType None None None, next)
 
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
@@ -851,6 +856,11 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                     // The parameterised contexts a local def that writes no type requires are part of
                                     // its type, as if written.
                                     if expectedDeclaredOpt.IsNone && contextOpt.IsNone then
+                                        let earlier = pendingBefore |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
+                                        let calls = current.PendingContextInstances |> List.filter (fun p -> not (earlier.Contains (p.Call, p.Index)))
+                                        match ContextInference.unfixedValueType current name (declarationSpan current DefValue expr) declaredTy calls with
+                                        | [] -> ()
+                                        | err -> errors <- err
                                         scheme, ContextInference.resolveLocal name symbol scheme pendingBefore generalized
                                     else scheme, generalized
                             current <-
