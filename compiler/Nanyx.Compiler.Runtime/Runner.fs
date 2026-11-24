@@ -172,8 +172,11 @@ module WasmRunner =
     /// What the trap `ex` means, with the stack from `table`: out of memory when it is an `unreachable` in the allocator
     /// itself, a crash when it is the trap in `crashed`, out of stack when the call stack is exhausted, and an arithmetic
     /// fault (see `ArithmeticFault`), each of the last two in the innermost function on the stack that the source names.
+    /// A function of the runtime's that threw, such as one of `HttpImport`'s, is a bug in the runtime, not the program:
+    /// its exception is given whole, with its .NET stack, which the trap's message alone would lose.
     let internal trapped (table: SpanTable option) (ex: WasmtimeException) =
         match ex with
+        | _ when not (isNull ex.InnerException) -> Trapped(ex.InnerException.ToString(), [])
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some allocator ->
             OutOfMemory
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some crashed ->
