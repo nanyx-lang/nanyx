@@ -2442,9 +2442,13 @@ type Person = (name: string)
 
 context Decode(a) = (decode: string -> a)
 
-def Person.decode: string -> Person = { s -> Person(name = s) }
+def Person.decode: string -> Person = { s ->
+  Person(name = s)
+}
 
-def parse: [Decode(a)] string -> a = { json -> decode(json) }
+def parse: [Decode(a)] string -> a = { json ->
+  decode(json)
+}
 
 def obj = parse("Ada")  -- error NYX0281: 'parse' requires 'Decode' of a type nothing in the definition of 'obj' fixes, ...
 ```
