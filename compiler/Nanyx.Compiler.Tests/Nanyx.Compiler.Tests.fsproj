@@ -126,6 +126,7 @@
     <Compile Include="Features\Inference\CallArgumentMismatchTests.fs" />
     <Compile Include="Features\Lambdas\ArmsAfterParametersTests.fs" />
     <Compile Include="Features\Lambdas\IgnoredParameterTests.fs" />
+    <Compile Include="Features\Lambdas\ParameterFieldTests.fs" />
     <Compile Include="Features\Lambdas\ResultAnnotationTests.fs" />
     <Compile Include="Features\Lambdas\ReturnedLambdaTests.fs" />
     <Compile Include="Features\Linters\LinterTests.fs" />

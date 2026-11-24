@@ -2418,6 +2418,19 @@ def counts = { _ ->
 To fix it, give the task what the cell holds, and change the cell with what the task gives back:
 `def t = start! now + 1`, after `def now = total`, then `total := await(t)`.
 
+# NYX0280: Lambda parameter that names no field
+
+A lambda is given where a function whose input has named fields is expected, as in `(x: int, y: int) -> int`, and one
+of its parameters is not one of the fields' names. Such a lambda takes the fields by name, in any order, so
+`{ x, y -> ... }` and `{ y, x -> ... }` both work, but `{ a, b -> ... }` takes nothing.
+
+```nanyx
+def sum: (x: int, y: int) -> int = { a, b -> a + b }  -- error NYX0280: The parameter 'a' is not a field of the function's input, ...
+```
+
+To fix it, name the parameters after the fields, as in `{ x, y -> x + y }`, or rename the fields with a record pattern,
+in brackets: `{ (x = a, y = b) -> a + b }`.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

@@ -115,20 +115,27 @@ magnitude2(x = 3.0, y = 4.0) -- The correct way to call a function with named pa
 
 This is the one rule for named fields everywhere in the language: it applies equally when constructing a record from a type alias (see [Constructing records from a type alias](../tour/records#constructing-records-from-a-type-alias)), so `Point(x = 3, y = 4)` is correct and `Point(3, 4)` is an error for a type with named fields.
 
-Also, when fields in a function signature are named--as with any kind of deconstruction--deconstruction must also be by name in the function body (although if the deconstructed names are the same as the field names, you can collapse `field = field` to just `field`):
+Also, when fields in a function signature are named, a lambda for it takes them by name, as any deconstruction of named fields does: its parameters are the fields' names, in any order. To give a field another name, deconstruct the input with a record pattern, in brackets, where `field = localName` renames a field and `field` alone is short for `field = field`:
 
-```nanyx skip=#443
+```nanyx
 import nanyx/math as math
 
-def magnitude2: (x: float, y: float) -> float = { x, y -> math.sqrt(x * x + y * y) }
+def magnitude2: (x: float, y: float) -> float = { x, y ->
+  math.sqrt(x * x + y * y)
+}
 
--- or 
+-- or
 
-def magnitude3: (x: float, y: float) -> float
-    = { x = innerX, y = innerY -> 
-        math.sqrt(innerX * innerX + innerY * innerY) 
-    }
+def magnitude3: (x: float, y: float) -> float = { (x = innerX, y = innerY) ->
+  math.sqrt(innerX * innerX + innerY * innerY)
+}
+
+println(magnitude3(x = 3.0, y = 4.0))
+
+-- 5.0
 ```
+
+A parameter that is none of the fields' names, as in `{ a, b -> ... }` for `(x: float, y: float) -> float`, is an error ([NYX0280](../standard-tools/errors#nyx0280)).
 
 # Partial annotations
 
