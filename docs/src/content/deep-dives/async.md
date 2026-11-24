@@ -171,13 +171,16 @@ Nothing starts it: like `Console`, the host provides it.
   builder, and a def attached to no context can't be a keyword, `NYX0019`). The hosts' preludes export `Async` alone.
 - **Each def a scope.** `TaskScopes.wrap`, before inference, makes the body of each module-level def that names
   `start` where nothing in it binds the name (a parameter or a local def named `start` is not the one that starts a
-  task), and a script's entry point if it does, the block of a call of `Async.concurrent`; a module that defines a `start` of its
-  own has no scopes (`TaskScopeSyntax.scopeCall`, with
+  task), and a script's entry point if it does, the block of a call of `Async.concurrent`; in a module that defines a
+  `start` of its own, only `Async.start` makes one (`TaskScopeSyntax.scopeCall`, with
   `nanyx/async` imported under an alias no code can write). So the rules that keep what requires a scoped context in
   its call (`ScopedCalls`) keep a def's tasks in it: a `Task` given back is `NYX0233`, with a message about tasks
   rather than the call. A lambda requires its contexts where it is called, so nothing ties a lambda that starts a task
   to the def it is written in; `TaskCaptures.escapeErrors` reports a def that is a scope whose result holds one. Local
-  defs and lambdas are not scopes: their tasks belong to the def they are written in.
+  defs and lambdas are not scopes: their tasks belong to the def they are written in. A module-level def that writes no
+  type, isn't a scope, and is inferred to require `TaskScope` starts a task through another name (`def go =
+  Async.start`); `TaskCaptures.unscopedErrors` reports it (`NYX0211`) at its first call whose callee requires
+  `TaskScope`, and a script that calls it is then not told its entry point doesn't fit the host's `run`.
 - **Tasks share only values.** A function that uses a cell or a reference requires its `memory` block's `Memory`, and
   a task's function must not (`NYX0279`). The check is on types, not names (`TaskWork`): where inference names
   `Async.start` or `Async.race`, the context variables of the functions its type takes are _work variables_; a def
