@@ -91,12 +91,17 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
                 else Some (TyVar var, Unifier.apply closing solved))
     let held = Boxes.heldVariables closedTy
     let quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
-    // A variable of the def's type that a task's work stands for is a work variable of the def (see `TaskWork`).
+    // A variable of the def's type that a task's work stands for is a work variable of the def (see `TaskWork`). Only
+    // one among a function's contexts can be: a def whose type has none, as most have, looks at no work variable, which
+    // a def of many tasks has many of (#2551).
+    let workCandidates = Set.intersect quantified (TaskWork.contextVariables closedTy)
     let taskWork =
+        if workCandidates.IsEmpty then state.TaskWork
+        else
         state.TaskWork
         |> Map.fold (fun marked id at ->
             TypeEnv.freeTyVars (Unifier.apply subst (TyVar(TyVar.ordinary id None)))
-            |> Set.intersect quantified
+            |> Set.intersect workCandidates
             |> Set.fold (fun marked var -> if Map.containsKey var marked then marked else marked |> Map.add var at) marked) state.TaskWork
     { Quantified = quantified
       Type = closedTy
