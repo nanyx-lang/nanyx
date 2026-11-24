@@ -253,3 +253,27 @@ def rejoin: string -> string = { s ->
 
 println(rejoin("ab"))
 println(rejoin("ab"))"""
+
+[<Fact>]
+let ``A task that calls itself in tail position after a lambda it made waits frees the lambda once`` () =
+    // The lambda, which holds what it captures on the heap, is held only by the task, so the count the tail call takes of
+    // it has to come before the call that waits, which drops the reference that call read it with. A debug build's
+    // return probe stands between the two (#2591).
+    let source =
+        """def waitThen: [Async, Clock] int -> int = { x ->
+  sleep(1)
+  x + 1
+}
+
+def loopWith: [c] ([c] int -> int), int, int -> int = { f, n, acc ->
+  if n == 0 then acc else loopWith(f, n - 1, f(acc))
+}
+
+def both = { (step: int) ->
+  def once = start! loopWith({ x -> waitThen(x) + step }, 1, 100)
+  def thrice = start! loopWith({ x -> waitThen(x) + step }, 3, 100)
+  "{await(once)} {await(thrice)}"
+}
+
+println(both(10))"""
+    assertPrints "111 133\n" "111 133\n" source
