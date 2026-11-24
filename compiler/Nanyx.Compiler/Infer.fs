@@ -334,6 +334,9 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         // Checked against a `list(a)`, the items are checked against `a`, and the list is one (see `ExpectedLiterals`).
         let expectedElement = ExpectedLiterals.elementOf state expr
         let state = expectedElement |> Option.fold (fun state element -> items |> List.fold (ExpectedLiterals.expect element) state) state
+        // A lambda among them takes the input and gives the result of the function type expected of it, as a lambda
+        // argument does: `{ x, y -> ... }` for `(x: int, y: int) -> int` takes the fields by name.
+        let state = expectedElement |> Option.fold (fun state element -> ExpectedLiterals.intoLambdas element state items) state
         inferAll env state items
         |> Result.map (fun (typedItems, current) ->
             match typedItems with
