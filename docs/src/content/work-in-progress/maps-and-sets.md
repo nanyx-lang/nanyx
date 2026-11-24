@@ -6,8 +6,7 @@ order: 10
 
 What maps and sets do is described on [maps and sets](../stdlib/prelude-maps) and in
 [Collections](../tour/collections), and how they are built in [Maps and sets](../deep-dives/maps-and-sets) in the Deep
-dives section. Their keys require `Eq` and `Hash`, but both hold a list, so a lookup takes time in proportion to the
-size. This page keeps their known gaps, the move to hash-based maps, and the [open questions](#open-questions), which
+dives section. This page keeps their known gaps and the [open questions](#open-questions), which
 need the maintainer's answer; the defaults the code takes until then are marked.
 
 # Known gaps
@@ -19,13 +18,6 @@ need the maintainer's answer; the defaults the code takes until then are marked.
 - **Tag keys of different names.** An unannotated chain of inserts whose keys are tags of different names is a type
   error: the keys are not joined. A literal, `[#red => 1, #green => 2]`, is a `map(#red | #green, int)`, as a list
   literal's items are joined, and writing the key type works.
-
-# What is left: hash-based maps
-
-The list of entries is to become a persistent hash trie written in the prelude
-([#2642](https://github.com/nanyx-lang/nanyx/issues/2642)). The list already holds its entries in the order the trie
-will walk them, the order of their keys' hashes, which is unspecified
-([Representation](../deep-dives/maps-and-sets#how-it-works)), so the trie will not change it.
 
 # Open questions
 
