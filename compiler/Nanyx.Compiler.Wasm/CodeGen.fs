@@ -98,7 +98,12 @@ type WasmOptions =
       ComponentExports: (string * ComponentFunction) list
       /// Make each call of a function value that can wait stop once and be resumed before it is made (see
       /// `TaskLowering`), so that a test runs every state machine's way of stopping and carrying on.
-      YieldAtEveryWait: bool }
+      YieldAtEveryWait: bool
+      /// Give each state machine a drop entry beside its resume entry, and the module the helper
+      /// `TaskLowering.Names.frameDrop`, which frees a stopped frame and every frame it stopped in, with what each keeps,
+      /// without resuming them (#2426).
+      /// Nothing in the language drops a frame yet, so a program has none; a test turns it on.
+      FrameDrops: bool }
 
     static member Default =
         { CheckMemory = false
@@ -111,7 +116,8 @@ type WasmOptions =
           ExportStart = false
           Component = None
           ComponentExports = []
-          YieldAtEveryWait = false }
+          YieldAtEveryWait = false
+          FrameDrops = false }
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -598,7 +604,9 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
           ProbeId = (fun () -> 0)
           DbgToRuntime = false
           StateMachines = Set.empty
-          YieldAtEveryWait = false }
+          YieldAtEveryWait = false
+          FrameDrops = false
+          BorrowedIn = fun _ -> Set.empty }
     let lowered =
         let input: CoreIrLowerInput.LowerInput =
             { Definitions = defs |> List.map (fun (name, _, expr) -> name, expr)
@@ -934,7 +942,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           ProbeId = fun () -> (probes.Value <- probes.Value + 1; probes.Value)
           DbgToRuntime = options.Probes || options.DbgToEmbedder
           StateMachines = machines
-          YieldAtEveryWait = options.YieldAtEveryWait }
+          YieldAtEveryWait = options.YieldAtEveryWait
+          FrameDrops = options.FrameDrops
+          BorrowedIn = CoreIrCounting.borrowedIn ownership }
 
     let specialisations = lowered.Specialisations |> Map.values |> Seq.concat |> Seq.map (fun (func, _) -> func.Name) |> Set.ofSeq
 
@@ -942,6 +952,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let mutable functionsTouchMemory = false
 
     let cachedValues = definitionFunctions |> List.filter (fun func -> cachedNames.Contains func.Name)
+
+    // The table slot of each state machine's resume entry and the name of its drop entry (see `WasmOptions.FrameDrops`).
+    let frameDrops = ResizeArray<int * string>()
 
     /// The indirect type of the resume entry of a state machine that gives a value of type `result` (see `TaskLowering`).
     let resumeType (result: CoreIr.IrType) =
@@ -956,6 +969,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
             functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
+            emitted.FrameDrop |> Option.iter frameDrops.Add
             emitted.Text
         if cachedNames.Contains func.Name then
             let build = note (CoreIrEmit.emitFunction context { func with Name = CoreIrCachedValues.buildName func.Name } None)
@@ -999,6 +1013,11 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                     usedHelpers.Add Helpers.free |> ignore
                     TaskLowering.yieldHelpers (context.FunctionSlot TaskLowering.Names.yieldResume 1)
                 else []
+            let dropping =
+                if options.FrameDrops then
+                    usedHelpers.Add Helpers.free |> ignore
+                    [ TaskLowering.frameDrop (List.ofSeq frameDrops) ]
+                else []
             for helper in WasmScheduler.dependencies do
                 usedHelpers.Add helper |> ignore
             context.IndirectCall(TaskLowering.resumeTypeOf "i32")
@@ -1012,7 +1031,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                     (context.FunctionSlot WasmScheduler.Names.scopeWaitAnyResume 1)
                     (TaskLowering.resumeTypeName "i32")
                     (indirectTypeName [ "i32"; "i32" ] "i32")
-            TaskLowering.globals @ yielding @ scheduler |> String.concat "\n"
+            TaskLowering.globals @ yielding @ dropping @ scheduler |> String.concat "\n"
 
     let support = supportFunctions (definitionFunctions @ Option.toList startFunction) tagIdMap functionTable usedHelpers
 

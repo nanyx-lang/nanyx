@@ -61,6 +61,16 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   that holds the state is skipped. At the split point, it calls the resume entry of the callee's frame instead of the
   callee. So resuming a task resumes each function it stopped in, outermost first, as Rust polls a future: the code is
   structured as before, with no jump table, and a crash's stack still shows each function.
+- **Dropping a frame.** A stopped frame can be freed without being resumed, as a handler that never resumes, or a
+  sequence abandoned partway, will need ([#2426](https://github.com/nanyx-lang/nanyx/issues/2426)). With
+  `WasmOptions.FrameDrops`, each state machine has a drop entry, `<name>__drop`, beside its resume entry, and the module
+  has `__nanyx_frame_drop`, which takes a frame, finds its drop entry by the resume entry's table slot in its header,
+  and calls it. The drop entry drops the frame of the call it stopped in, then what the frame keeps at the state it
+  stopped in, then frees it. It drops each variable on the heap by its type's drop function, frees the block a reuse
+  token holds, and leaves alone what the function borrows (`CoreIrCounting.borrowedIn`), which the frame of the
+  function that owns it drops. A frame of the runtime's own, a yield's or a wait's, keeps only numbers, and is freed.
+  Nothing in the language drops a frame yet, so the option is off, and a program compiles as before; the tests in
+  `FrameDropTests.fs` stop a function and drop its frame instead of resuming it, with memory checks.
 - **Temporaries.** A value the emitter would compute where it is used, on the stack (see `CoreIrEmit`), can't be there
   when the function stops: a temporary whose value holds a split point, and those waiting to be used while it is
   computed, are kept in locals instead (`SplitPlan.StoredTemps`).

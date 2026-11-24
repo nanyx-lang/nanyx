@@ -391,7 +391,7 @@ internal static partial class CliCommands
             ? FSharpList<ComponentFunction>.Empty
             : ComponentInterface.imports(entry.Value.Typed.Value);
         var exports = ListModule.OfSeq(functions.Select(function => Tuple.Create(ComponentInterface.exportName(witPackage, function.Export), function)));
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(library is null ? ComponentEntryModule.ofWorld(component.World) : ComponentEntry.Library), componentExports: exports, yieldAtEveryWait: false), deferred, timings))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(library is null ? ComponentEntryModule.ofWorld(component.World) : ComponentEntry.Library), componentExports: exports, yieldAtEveryWait: false, frameDrops: false), deferred, timings))
         {
             return 1;
         }
@@ -1266,7 +1266,7 @@ internal static partial class CliCommands
     private static int RunWasm(Shell shell, CompileResult result, string inputFile, string? outputPath, bool release, ProgramFormat format)
     {
         var deferred = !release && ErrorsDeferred(result);
-        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false), deferred))
+        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false), deferred))
         {
             return 1;
         }

@@ -79,6 +79,7 @@
     <Compile Include="Features\Async\RunStateMachineTests.fs" />
     <Compile Include="Features\Async\RunTaskTests.fs" />
     <Compile Include="Features\Async\RunCancellationTests.fs" />
+    <Compile Include="Features\Async\FrameDropTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />

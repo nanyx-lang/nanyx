@@ -292,6 +292,26 @@ let internal inferOwnership (functions: Function list) : Ownership =
                     | _ -> ())
     current ()
 
+/// The variables `func` borrows, by id: its parameters on the heap that `ownership` says it borrows, and what they keep
+/// alive (see `borrowedFrom`). Every other variable on the heap holds a reference of its own.
+let internal borrowedIn (ownership: Ownership) (func: Function) : Set<int> =
+    func.Params
+    |> List.indexed
+    |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && parameterUse ownership func.Name index = Borrowed)
+    |> List.map (snd >> _.Id)
+    |> Set.ofList
+    |> borrowedFrom func
+
+/// The reuse tokens of `func`, by id: the variables a release keeps the block it gives up in (see `CoreIrReuse`).
+let internal reuseTokens (func: Function) : Set<int> =
+    nodes func.Body
+    |> Seq.choose (fun e ->
+        match e.Kind with
+        | Release(released, _) -> released.Token
+        | _ -> None)
+    |> Seq.map _.Id
+    |> Set.ofSeq
+
 /// Counts one function's body. `addresses` gives the strings a value is an address in (see `addressFlow`), which a use
 /// of the value uses too. `owningEntries` gives the owning entry of each function a closure is over that has one.
 type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEntries: Map<string, string>, func: Function) =
@@ -301,13 +321,7 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEn
     let free = Dictionary<Expr, Set<int>>(HashIdentity.Reference)
     let tails = HashSet<Expr>(results func.Body, HashIdentity.Reference)
     // The variables the function borrows: its borrowed parameters, and what they keep alive (see `borrowedFrom`).
-    let borrowed =
-        func.Params
-        |> List.indexed
-        |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && parameterUse ownership func.Name index = Borrowed)
-        |> List.map (snd >> _.Id)
-        |> Set.ofList
-        |> borrowedFrom func
+    let borrowed = borrowedIn ownership func
 
     do
         for parameter in func.Params do

@@ -35,6 +35,10 @@ module Names =
     let yieldResume = "__nanyx_yield_resume"
     /// The resume entry of the state machine `name`.
     let resumeEntry (name: string) = $"{name}__resume"
+    /// The drop entry of the state machine `name`, which frees a frame of it without resuming it (see `dropEntry`).
+    let dropEntry (name: string) = $"{name}__drop"
+    /// The helper that frees a stopped frame and the frames of the calls it stopped in (see `frameDrop`).
+    let frameDrop = "__nanyx_frame_drop"
     /// The scheduler's helpers that `blockOn` calls (see `WasmScheduler`): the task running, made the main task if there
     /// is none, the one that runs the other tasks until the running one's turn comes again, and the one that frees the
     /// main task when it holds no scope, as when it was made only to wait in.
@@ -90,6 +94,57 @@ let resumeEntry (name: string) (parameters: string list) (result: string) : stri
           $"global.set ${Names.resuming}"
           yield! parameters |> List.map (fun valueType -> $"{valueType}.const 0")
           $"return_call ${name}\n  )" ]
+
+/// A value a frame keeps that holds something: a reference, given up by the drop function named, or the block a reuse
+/// token holds, if it holds one, which is freed.
+type Held =
+    | Reference of dropFunction: string
+    | Token
+
+/// The drop entry of the state machine `name`, given what each of its states keeps that holds something, by its index
+/// among the variables the state keeps (see `stopAfter`): it frees the frame of the call the function stopped in, what
+/// the function's own frame holds at the state it stopped in, and the frame, without resuming it. A frame dropped is
+/// never resumed, nor a resumed one dropped: resuming frees the frame too (see `prologue`).
+let dropEntry (name: string) (held: Map<int, (int * Held) list>) : string =
+    let give (index: int, value: Held) =
+        let load = $"local.get $frame\n    i32.load offset={slotOffset index}"
+        match value with
+        | Reference dropFunction -> lines [ load; $"call ${dropFunction}" ]
+        | Token -> lines [ load; "local.tee $block"; "if"; "local.get $block"; $"call ${Helpers.free}"; "end" ]
+    let atState (state: int, values: (int * Held) list) =
+        lines [ "local.get $state"; $"i32.const {state}"; "i32.eq"; "if"; yield! values |> List.map give; "end" ]
+    lines
+        [ $"  (func ${Names.dropEntry name} (param $frame i32) (local $state i32) (local $block i32)"
+          "local.get $frame"
+          "i32.load offset=8"
+          $"call ${Names.frameDrop}"
+          "local.get $frame"
+          "i32.load offset=4"
+          "local.set $state"
+          yield! held |> Map.toList |> List.filter (snd >> List.isEmpty >> not) |> List.map atState
+          "local.get $frame"
+          $"call ${Helpers.free}\n  )" ]
+
+/// The helper that frees the stopped frame it is given, if any, and the frames of the calls it stopped in, without
+/// resuming them: a state machine's frame by its drop entry, found by the table slot of its resume entry among
+/// `entries` (each a resume entry's slot and the drop entry's name), and any other, a frame of the runtime's own that
+/// keeps only numbers, such as a yield's, by freeing it.
+let frameDrop (entries: (int * string) list) : string =
+    let byEntry (slot: int, dropEntry: string) =
+        lines [ "local.get $slot"; $"i32.const {slot}"; "i32.eq"; "if"; "local.get $frame"; $"call ${dropEntry}"; "return"; "end" ]
+    lines
+        [ $"  (func ${Names.frameDrop} (param $frame i32) (local $slot i32)"
+          "local.get $frame"
+          "i32.eqz"
+          "if"
+          "return"
+          "end"
+          "local.get $frame"
+          "i32.load"
+          "local.set $slot"
+          yield! entries |> List.map byEntry
+          "local.get $frame"
+          $"call ${Helpers.free}\n  )" ]
 
 /// The code a state machine starts with: when a resume entry passed it a frame, it takes the state and the frame of the
 /// call it stopped in into `resume` and `child`, restores the variables `saved` says each state keeps (each by its
