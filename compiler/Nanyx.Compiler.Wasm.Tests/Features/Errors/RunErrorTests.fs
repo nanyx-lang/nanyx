@@ -267,7 +267,7 @@ let ``Run - interpolating a call to a function with a deferred error runs up to 
 
 type Point = (x: int, y: int)
 
-def Point.dist = { p -> hypot(p.x, p.y) }
+def Point.dist = { p -> pythagoras(p.x, p.y) }
 
 def a = Point(x = 5, y = 4)
 
@@ -277,7 +277,7 @@ println("dist = {a \dist}")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("x = 5, y = 4\n", outcome.StandardOutput)
-    Assert.Contains(":7:25: error NYX0102: Unknown function 'hypot': 'hypot' is not in scope (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":7:25: error NYX0102: Unknown function 'pythagoras': 'pythagoras' is not in scope (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
 let ``Run - interpolating a value of no known type that does not stop the program stops it there`` () =
