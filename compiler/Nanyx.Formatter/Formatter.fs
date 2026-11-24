@@ -649,6 +649,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | ModuleBlock(n, items) -> cat [ text $"module {n} ="; nest (cat [ hard; topLevel true i.Span.Start i.Span.End items ]) ]
         | Def(PatternSyntax.Declaration _ & ValueDef(isExport, _, Some t, value)) -> patternDoc isExport t value
         | Def(ValueDef(isExport, n, t, Kind ExternSyntax.Bodiless)) -> declarationDoc isExport n t
+        | Def(ValueDef(false, n, t, Kind (MutSyntax.Call inner))) -> defDoc false "mut" n t inner
         | Def(ValueDef(isExport, n, t, value)) -> defDoc isExport "def" n t value
         | Def(TypeDef(n, modifiers, parameters, body)) -> typeDefDoc n modifiers parameters body
         | Import items -> importDoc i.Span.Start i.Span.End items
