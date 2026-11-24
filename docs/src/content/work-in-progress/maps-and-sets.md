@@ -11,10 +11,8 @@ need the maintainer's answer; the defaults the code takes until then are marked.
 
 # Known gaps
 
-- **Comparing maps in a local function.** A local function that compares values generic in their type is passed the
-  compiler's own `==`, which cannot compare a map, so it is an error when the type holds a map or a set.
-- **No order or hash of maps and sets.** `<` on a map or a set, or on anything holding one, is an error, and so is a
-  map or a set as a key or a set's element: hashing the list underneath would give equal maps different hashes.
+- **No order of maps and sets.** `<` on a map or a set, or on anything holding one, is an error: the order of a
+  map's trie means nothing to a reader.
 - **Tag keys of different names.** An unannotated chain of inserts whose keys are tags of different names is a type
   error: the keys are not joined. A literal, `[#red => 1, #green => 2]`, is a `map(#red | #green, int)`, as a list
   literal's items are joined, and writing the key type works.

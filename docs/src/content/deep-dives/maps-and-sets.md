@@ -51,18 +51,22 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   it stands for (`CoreIr.fs`).
 - **The compiler reads a map only through the prelude.** It reads a map's entries or a set's elements through the
   prelude's `map.toList` and `set.toList` (`Maps.toList` and `Sets.toList`), which linking always keeps: a `for` loop
-  over a map walks the list `toList` gives (`Loops.fs`), and so does `dbg` (`CoreIrLowerDbg.fs`). A type's
+  over a map walks the list `toList` gives (`Loops.fs`), which it makes on every pass, until the loop walks the
+  trie itself ([#2661](https://github.com/nanyx-lang/nanyx/issues/2661)), and so does `dbg` (`CoreIrLowerDbg.fs`). A type's
   description boxes a map's keys and values in place, and unboxes them again, through the prelude's
   `__mapStoreConverted` (`Maps.convertedStore`), which keeps the store's shape and hashes: nothing hashes or compares
   a boxed key, and a lookup by one is refused when the program compiles, as `==` on a box is.
-- **`==` compares contents, in any order** ([#618](https://github.com/nanyx-lang/nanyx/issues/618)). The compiler's
-  own comparison, which works by structure, would compare the lists underneath in order, so a map or a set, and any
-  structure that holds one, is always compared by an `==` the compiler derives from its parts (`MapShape` and
-  `SetShape` in `StructuralInstances.fs`, as for a list whose elements have their own `==`). The derived `==` calls
-  the prelude's `__mapEqualsBy` or `__setEqualsBy` with a function that compares two values or elements. It takes time
-  in proportion to the product of the sizes, as a lookup does. A type variable nothing solves in the structure, as
-  the element of an empty list's type, holds no value, so it is compared as `unit`, which the backend makes it
-  (`ContextInstances.derivedComparison`, [#2522](https://github.com/nanyx-lang/nanyx/issues/2522)).
+- **`==` and `hash` compare contents, in any order** ([#618](https://github.com/nanyx-lang/nanyx/issues/618)). Equal
+  maps hold the same trie, so the compiler's own `==` and hash, which read the store by its structure, compare and
+  hash them right, as they do a list: a map or a set, or anything holding one, is compared and hashed by them, and can
+  be a key or a set's element. Where a key's or a value's type has an `==` or a `hash` of its own, two equal maps can
+  hold different keys or values that it finds equal, so the compiler derives the map's from its parts instead (`MapShape`
+  and `SetShape` in `StructuralInstances.fs`), as for a list whose elements have their own. The derived `==` calls the
+  prelude's `__mapEqualsBy` or `__setEqualsBy`, which takes time in proportion to the product of the sizes, and the
+  derived `hash` calls `__mapHashBy` or `__setHashBy`, which combine the entries' hashes in no order. A type variable
+  nothing solves in a derived comparison, as the element of an empty list's type, holds no value, so it is compared as
+  `unit`, which the backend makes it (`ContextInstances.derivedComparison`,
+  [#2522](https://github.com/nanyx-lang/nanyx/issues/2522)). A map or a set has no order: `<` on one is an error.
 - **A call that needs `Eq` of a type with variables in it**, such as `list.distinct` on a `list(set(a))` inside a
   function that requires `[Eq(a)]`, is passed the derived `==` as a closure over the `Eq(a)` the function was given
   ([#630](https://github.com/nanyx-lang/nanyx/issues/630)).

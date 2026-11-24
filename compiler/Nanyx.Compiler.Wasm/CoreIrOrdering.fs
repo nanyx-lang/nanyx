@@ -8,8 +8,8 @@
 /// `Ord(a)` orders by its structure rather than through the instance (see the equality design page's `What is
 /// implemented`): it is then ordered field by field, in the order the fields are stored. Tags reach here only through
 /// the prelude's `__compare`, which orders the keys of a map whose hashes are the same (`keyOrder` in
-/// `prelude-maps.nyx`): they are ordered by their numbers, then by their payloads, and a recursive type as what it is
-/// made of. A tag's number is the program's own, so that order is the same throughout a run but not from one program to
+/// `prelude-maps.nyx`): they are ordered by their numbers, then by their payloads, a recursive type as what it is
+/// made of, and an array, inside the store of a map that is a key, element by element. A tag's number is the program's own, so that order is the same throughout a run but not from one program to
 /// another: nothing may rely on it beyond a run. An ordering function only reads its operands: it borrows them, as
 /// every runtime helper does.
 module Transpiler.Wasm.CoreIrOrdering
@@ -31,7 +31,8 @@ let private orderedParts (ty: IrType) : (int * IrType) list =
         |> List.mapi (fun slot (name, fieldTy) -> slot, name, fieldTy)
         |> List.sortBy (fun (slot, name, _) -> match System.Int32.TryParse name with | true, position -> position, slot | _ -> System.Int32.MaxValue, slot)
         |> List.map (fun (slot, _, fieldTy) -> slot, fieldTy)
-    | IrList element -> [ 0, element ]
+    | IrList element
+    | IrArray element -> [ 0, element ]
     | IrTags tags -> tags |> List.choose snd |> List.map (fun payloadTy -> 0, payloadTy)
     | _ -> []
 
@@ -152,6 +153,38 @@ let private compareBody (tagId: string -> int option) (ty: IrType) : string list
           "end"
           // One list ran out: it comes first, unless both did.
           yield! sign [ "local.get $a"; "i32.const 0"; "i32.ne" ] [ "local.get $b"; "i32.const 0"; "i32.ne" ] ]
+    | IrArray element ->
+        // Element by element, as a list is, a shorter array that is a prefix of the other first. An array a program
+        // writes has no order: this one only orders those inside a map's store, a map that is a key (see `Maps.storeOf`).
+        let size = CoreIrLayout.size element
+        let first var = [ $"local.get ${var}"; CoreIrLayout.load element (CoreIrLayout.arrayElementOffset element 0) ]
+        let next var = [ $"local.get ${var}"; $"i32.const {size}"; "i32.add"; $"local.set ${var}" ]
+        [ "(local $lena i32)"; "(local $lenb i32)"; "(local $n i32)"; "(local $order i32)" ],
+        [ "local.get $a"
+          "i32.load"
+          "local.tee $lena"
+          "local.get $b"
+          "i32.load"
+          "local.tee $lenb"
+          "local.get $lena"
+          "local.get $lenb"
+          "i32.lt_s"
+          "select"
+          "local.set $n"
+          "block $done"
+          "  loop $next"
+          "    local.get $n"
+          "    i32.eqz"
+          "    br_if $done"
+          yield! first "a" @ first "b" @ [ $"call ${compareName element}" ] @ orReturnOrder @ next "a" @ next "b" |> indent |> indent
+          "    local.get $n"
+          "    i32.const 1"
+          "    i32.sub"
+          "    local.set $n"
+          "    br $next"
+          "  end"
+          "end"
+          yield! sign [ "local.get $lena"; "local.get $lenb"; "i32.gt_s" ] [ "local.get $lena"; "local.get $lenb"; "i32.lt_s" ] ]
     | IrTags tags ->
         // A tag without a payload is its code, which is odd; one with a payload is a pointer to a cell that holds its
         // code and then its payload. Two tags are ordered by their codes, which follow the program's numbers of them,
@@ -186,8 +219,6 @@ let private compareBody (tagId: string -> int option) (ty: IrType) : string list
     | IrError
     | IrRecursive _
     | IrSelf _
-    // An array has no hash, so it is never a key, and nothing orders one by its structure.
-    | IrArray _
     | IrWord -> internalError $"an ordering function for '{IrType.show ty}', which has no order"
 
 /// The runtime helpers the ordering functions of `types` call.
