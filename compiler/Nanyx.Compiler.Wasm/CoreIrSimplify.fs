@@ -473,7 +473,8 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
         let mutable facts = facts
         let mutable remaining = links
         // How many links are left: the rules below rewrite only the links at the head, so what follows the link being
-        // gone over is the chain's own links from place `links.Length - left` on.
+        // gone over is the chain's own links from place `count - left` on. The count is taken once: a list's length is
+        // counted along it, which at each link made a chain of n links take n² time (#2488).
         let count = links.Length
         let mutable left = count
         let shape = lazy (ChainShape(links, chainEnd))

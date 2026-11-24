@@ -50,7 +50,9 @@ definitions a module reaches in the modules it imports (the prelude included) ar
 generation (`Inlined` in `Library.fs`), so every generic function's body is available to specialise.
 
 Tags keep their odd codes: a value of type `#some(string) | #none` is still a code or a cell, decided at run time,
-and its drop function checks the low bit before reading the cell.
+and its drop function checks the low bit before reading the cell. A `match` reads the code once, into a local, before
+its first tag arm, and each arm compares that local; a value of a union with no payloads is its own code, so a match on
+one compares the value itself ([#2309](https://github.com/nanyx-lang/nanyx/issues/2309)).
 
 If code size becomes a problem, the fallback is Koka and Lean's: box values only at the generic boundaries that are
 not specialised (see [Open questions](../work-in-progress/memory-management#open-questions)).
