@@ -193,16 +193,32 @@ module Attributes =
 
     /// The top-level defs of `module'` marked `@customKeywordType`, with the kind it names, by name: a `#delay` keyword
     /// needs no builder, so a def can be one (`nanyx/async`'s `start`).
+    /// The bare name of `defName`, if it is a def attached to a context `module'` declares, as `Async.start` is to
+    /// `Async`: the name the def is in scope by where the context is available.
+    let private attachedToContext (module': Module) (defName: Identifier) : Identifier option =
+        let dot = defName.LastIndexOf '.'
+        if dot <= 0 then None
+        else
+            let qualifier = defName.Substring(0, dot)
+            let declares =
+                module'
+                |> List.exists (function
+                    | Kind (Def (TypeDef(name, modifiers, _, _))) -> name = qualifier && modifiers |> List.contains Context
+                    | _ -> false)
+            if declares then Some (defName.Substring(dot + 1)) else None
+
     let private keywordDefs (module': Module) : (Identifier * KeywordKind) list =
         module'
         |> List.pairwise
         |> List.choose (fun (attribute, def) ->
             match attribute.Kind, def.Kind with
-            | Attribute(name, KeywordKindTag kind), Def (ValueDef(_, defName, _, _)) when name = customKeywordTypeAttribute -> Some (defName, kind)
+            | Attribute(name, KeywordKindTag kind), Def (ValueDef(_, defName, _, _)) when name = customKeywordTypeAttribute ->
+                attachedToContext module' defName |> Option.map (fun bare -> bare, kind)
             | _ -> None)
 
     /// The kinds of the workflow keywords `module'`'s context declarations mark with `@customKeywordType`, by the
-    /// member's name, and of the top-level defs it marks so (see `WorkflowDesugaring`).
+    /// member's name, and of the defs attached to its contexts it marks so, by their bare names, which reach them
+    /// where the context is available (see `WorkflowDesugaring`, `AttachedContextDefs`).
     let keywordKinds (module': Module) : Map<Identifier, KeywordKind> =
         contextMemberAttributes module'
         |> List.choose (fun ((name, argument, _), field) ->
@@ -417,16 +433,22 @@ module Attributes =
                     let imported = { def with Kind = Def (ValueDef(isExport, defName, typeOpt, ComponentImportSyntax.import witInterface functionName parameters value)) }
                     loop rest (imported :: acc) entries externs errors
                 | Error diagnostics -> loop rest (def :: acc) entries externs (List.rev diagnostics @ errors)
-            // A `#delay` keyword can be a def, which takes the expression after the keyword as a function of no
-            // parameters: any other kind needs a workflow's builder, so only a context's member can be one.
+            // A keyword belongs to a context: a def attached to one can be a `#delay` keyword, which takes the
+            // expression after the keyword as a function of no parameters. Any other kind needs a workflow's builder,
+            // so only a context's member can be one, and a def attached to nothing can be no keyword.
             | Kind (Attribute(name, argument)) as attribute :: (Kind (Def (ValueDef(_, defName, typeOpt, _))) as def) :: rest when name = customKeywordTypeAttribute ->
                 let error =
-                    match argument with
-                    | KeywordKindTag KeywordKind.Delay -> keywordTypeError attribute.Span defName KeywordKind.Delay typeOpt
-                    | KeywordKindTag _ ->
+                    match argument, attachedToContext module' defName with
+                    | KeywordKindTag _, None ->
                         Some (
                             Diagnostics.at DiagnosticCodes.UnknownKeywordKind attribute.Span
-                                $"A definition can only be a `#delay` keyword, which rewrites nothing but itself: any other kind needs a workflow's builder, so it is a member of the builder's context"
+                                $"A keyword belongs to a context: '@{name}' marks a member of a context, or a def attached to a context this module declares, as `def Async.start`, not '{defName}'"
+                            |> Diagnostics.about $"@{name}")
+                    | KeywordKindTag KeywordKind.Delay, Some _ -> keywordTypeError attribute.Span defName KeywordKind.Delay typeOpt
+                    | KeywordKindTag _, Some _ ->
+                        Some (
+                            Diagnostics.at DiagnosticCodes.UnknownKeywordKind attribute.Span
+                                $"A def attached to a context can only be a `#delay` keyword, which rewrites nothing but itself: any other kind needs a workflow's builder, so it is a member of the builder's context"
                             |> Diagnostics.about $"@{name}")
                     | _ -> keywordKindError name attribute.Span argument
                 loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ Option.toList error @ errors)

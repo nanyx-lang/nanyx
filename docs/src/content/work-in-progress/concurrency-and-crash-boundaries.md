@@ -201,9 +201,12 @@ thread and holds only that instance ([Async](../deep-dives/async#how-its-built))
   - A `Task` or a lambda that uses `start!` escaping its def is `NYX0233`, with a message about tasks; starting a task
     that captures an `MRef`, an `MList` or a cell is an error with a code of its own.
   - The playground host provides `Async` (`start!`, `await`, `sleep`), so a browser can run tasks.
-  - `start` and `await` are functions of `nanyx/async`, not members of `Async`, which has no members at all: `start` is a
-    `#delay` keyword that is a def, which the language allows for `#delay` only, and the hosts' preludes export both
-    beside `Async`, so `start!` is wherever `Async` is.
+  - `start` and `await` are defs attached to `Async`, `Async.start` and `Async.await`, not members of it, which has no
+    members at all. A def attached to a context is in scope by its bare name wherever the context is, so `start!` is
+    wherever `Async` is. `start` is a `#delay` keyword, which a def attached to a context may be: a keyword belongs to a
+    context ([#2493](https://github.com/nanyx-lang/nanyx/issues/2493)). This replaces the first form, built in #2489, of
+    `start` and `await` as plain top-level defs that the hosts' preludes exported beside `Async`, with `#delay` allowed
+    on any top-level def.
   - A top-level value whose building waits is built once: a task that reads it while it is built waits for it.
 - **Stack switching, later** ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). WebAssembly's
   stack-switching proposal gives a module many stacks and lets it switch between them, so a task is a stack and

@@ -17,12 +17,17 @@ let private asyncModule = StandardLibrary.importPrefix + ModuleOrigin.asyncName
 /// The scoped context a task belongs to, which `scope` supplies.
 let scopeContext = "TaskScope"
 
-/// The name a task is started by: `start! e` is `start({ e })` (a `#delay` keyword, see `WorkflowDesugaring`).
+/// The name a task is started by: `start! e` is `start({ e })` (a `#delay` keyword, see `WorkflowDesugaring`), the
+/// bare name of `Async.start`, which is in scope wherever `Async` is (see `AttachedContextDefs`).
 let startName = "start"
+
+/// The def that starts a task, as it is declared.
+let startDef = "Async." + startName
 
 /// Whether `expr` starts a task: whether it names `start`, called or as a value, anywhere in it, a lambda included,
 /// where nothing in it binds that name (a local `def start` is not the one that starts a task).
-let private startsTask (expr: Expression) : bool = SyntaxTree.freeNames expr |> List.contains startName
+let private startsTask (expr: Expression) : bool =
+    SyntaxTree.freeNames expr |> List.exists (fun name -> name = startName || name = startDef)
 
 /// Whether the module defines a `start` of its own, at its top level or in a module block, so that `start` in it is
 /// not the one that starts a task.
