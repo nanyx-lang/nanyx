@@ -20,7 +20,7 @@ let ``A list of values that never come is the list expected of it`` () =
 
 [<Fact>]
 let ``??? as a function's whole body leaves the annotation as general as it is written`` () =
-    Assert.Equal<(string * string) list>(notImplemented, codesAt "def f: (string, a: type) -> a = { s, a -> ??? }\n")
+    Assert.Equal<(string * string) list>(notImplemented, codesAt "def f: (string, a: Type(a)) -> a = { s, a -> ??? }\n")
 
 [<Theory>]
 [<InlineData("def g: int -> int = { n -> n }\ndef n = g(???)\n")>]
