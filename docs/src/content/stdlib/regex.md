@@ -100,6 +100,9 @@ def Regex.parse: string -> #some(Regex) | #invalidPattern(RegexError)
 
 The regex of `pattern`, or `#invalidPattern` with where it goes wrong and why. Groups nest
 at most 1000 deep, as in RE2, so a pattern taken from input can't run the program out of stack.
+Repeats nested in each other can count to at most 1000 between them (`(?:a{10}){100}`, but not
+`{101}`), as in RE2, and a pattern compiles to at most 100000 instructions: no pattern can make
+matching slow or take much memory. `*`, `+` and `?` count to 1 however they nest.
 
 ## `Regex.toString`
 
