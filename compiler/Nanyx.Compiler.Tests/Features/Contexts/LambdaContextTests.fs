@@ -237,3 +237,28 @@ def before: [Log] () -> ([Log] () -> ()) = {
     let source = source.ReplaceLineEndings "\n"
     Assert.Equal(Some "def nested: () -> () -> ()", hoverType source "nested")
     Assert.Equal(Some "def blocky: () -> () -> ()", hoverType source "blocky")
+/// Two unannotated defs in a cycle: `a`'s lambda calls `b`, which is not inferred yet where the lambda is (#2590).
+let private cycle (expected: string) =
+    $"""
+def {expected}
+
+def a = {{ (n: int) ->
+  if n == 0 then 0 else apply({{ x -> b(x) }}, n)
+}}
+
+def b = {{ (x: int) ->
+  println("b")
+  a(x - 1) + 1
+}}
+"""
+
+[<Fact>]
+let ``A lambda that calls a def in a cycle with its own requires the contexts that def does`` () =
+    let source = cycle "apply: [c] ([c] int -> int), int -> int = { f, x -> f(x) }"
+    Assert.Equal(Some "[Console] int -> int", hoverType source "{ x -> b")
+
+[<Fact>]
+let ``A lambda that calls a def in a cycle with its own cannot be given where a pure function is expected`` () =
+    let code, text = singleError (cycle "apply: (int -> int), int -> int = { f, x -> f(x) }")
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+    Assert.Equal("b", text)

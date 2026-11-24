@@ -193,6 +193,11 @@ type InferState =
             /// entry point, in the order written, rather than at the top level.
             ScriptEntryValues: Set<Identifier>;
             DeferredContextUses: DeferredContextUse list;
+            /// For each call from a lambda of an unannotated top-level def not inferred yet there, which is in a cycle
+            /// with the def the lambda is in, the def's name, the context variable the lambda uses for it and the call's
+            /// span. Bound to the ambient contexts the def requires once the module is inferred (see
+            /// `Contexts.pendingCallContexts`).
+            PendingCallContexts: (Identifier * Ty * SourceSpan) list;
             /// The calls whose instances are found once the def around them is inferred (see `PendingContextInstance`).
             PendingContextInstances: PendingContextInstance list;
             /// The nodes of the functions named as values among `PendingContextInstances`: one whose type is still open
@@ -468,6 +473,7 @@ let emptyState =
             ScriptValues = Map.empty;
             ScriptEntryValues = Set.empty;
             DeferredContextUses = [];
+            PendingCallContexts = [];
             PendingContextInstances = [];
             PendingReferences = Set.empty;
             PendingArithmetic = [];
