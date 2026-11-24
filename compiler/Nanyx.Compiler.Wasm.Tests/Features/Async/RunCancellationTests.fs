@@ -20,11 +20,15 @@ let private run (options: string list) (source: string) =
         StandardOutput = outcome.StandardOutput.ReplaceLineEndings "\n"
         StandardError = outcome.StandardError.ReplaceLineEndings "\n" }
 
-/// Asserts that `source` prints `expected` in every mode.
+/// Asserts that `source` prints `expected` in every mode. What it writes to stderr is shown whole, with the mode, since
+/// an exception from the runtime is written there with its stack (see `WasmRunner.trapped`), and an exception thrown out
+/// of a run says which mode it was thrown in, with the exception whole.
 let private assertPrints (expected: string) (source: string) =
     for options in [ []; [ "--yield-at-every-wait" ]; [ "--yield-at-every-wait"; "--no-inline" ] ] do
-        let outcome = run options source
-        Assert.Equal("", outcome.StandardError)
+        let outcome =
+            try run options source
+            with ex -> raise (Exception($"With %A{options}, the run threw:\n{ex}", ex))
+        Assert.True(outcome.StandardError = "", $"With %A{options}, it wrote to stderr:\n{outcome.StandardError}")
         Assert.Equal(normalized expected, outcome.StandardOutput)
         Assert.Equal(0, outcome.ExitCode)
 
