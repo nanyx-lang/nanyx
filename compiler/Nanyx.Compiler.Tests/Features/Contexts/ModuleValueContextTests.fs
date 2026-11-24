@@ -79,3 +79,20 @@ def greeting = println("Hi")
 dbg(0)
 """
     |> ignore
+
+let private greeter = "context Greeter = (greet: string -> ())\n"
+
+// A member a `use` gives a lambda runs with the instances where the `use` is, so the `Console` its lambda uses is the
+// value's to compute, as a call's would be. It was left to the backend, which couldn't compile it (#2512).
+[<Fact>]
+let ``A script's value that uses a context through the member a use gives is NYX0211`` () =
+    let errors = errorsOf (greeter + "\ndef result = use Greeter(greet = { name -> println(name) }) in greet(\"world\")\n")
+    Assert.Equal<(string * string * string) list>(
+        [ undeclared,
+          "result",
+          "'result' needs the context 'Console' to be computed, which only a script's statements run in: compute it in a statement, or make 'result' a function" ],
+        errors)
+
+[<Fact>]
+let ``A script's statement may use a context through the member a use gives`` () =
+    compileClean (greeter + "\nuse Greeter(greet = { name -> println(name) }) in greet(\"world\")\n") |> ignore
