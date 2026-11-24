@@ -52,3 +52,19 @@ def main = {{
     |> normalized
     |> runSource
     |> assertRan "3\n"
+
+[<Fact>]
+let ``Run - an option of an option falls back on the inner option's Default`` () =
+    $"""{valueOrDefault}
+def missing: #some(#some(int) | #none) | #none = #none
+def present: #some(#some(int) | #none) | #none = #some(#some(3))
+
+@entry
+def main = {{
+  println(valueOrDefault(missing))
+  println(valueOrDefault(present))
+}}
+"""
+    |> normalized
+    |> runSource
+    |> assertRan "#none\n#some(3)\n"
