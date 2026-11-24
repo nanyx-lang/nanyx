@@ -15,8 +15,9 @@ and **Stop** takes Run's place while it runs, to end a program that doesn't fini
 about 5.5 MB, when it opens, and says "Loading the compiler…" until it is ready.
 
 A program is a script, as `nanyx run` runs a single file, but under the playground's host, `nanyx.playground`, rather
-than the console's ([Hosts](../advanced/hosts)). It has `Console`, `Random` and `Clock`, and nothing else, so a program
-that needs `FileSystem`, HTTP, `Env` or `Async` is a compile error naming the host. A program can use the standard
+than the console's ([Hosts](../advanced/hosts)). It has `Console`, `Random`, `Clock` and `Async`, so a program can
+start [tasks](../advanced/async) and sleep, and nothing else, so a program that needs `FileSystem`, HTTP or `Env` is a
+compile error naming the host. A program can use the standard
 library, and the packages the compiler ships, but no package from the index. `Random` is seeded afresh for each run.
 
 The page keeps what you write in the browser's storage, so reloading it loses nothing.

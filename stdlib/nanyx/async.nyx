@@ -22,7 +22,7 @@ export context Async = protected ()
 
 --| The scope a task belongs to: the def that started it, as a `memory` block is the scope of its cells. Starting a
   task requires it, and every module-level def whose body starts a task, and a script's top level, supplies it
-  through [`scope`]. It is scoped, so nothing that holds a task can leave the def that started it.
+  through [`Async.concurrent`]. It is scoped, so nothing that holds a task can leave the def that started it.
 export scoped context TaskScope = protected ()
 
 --| A task: something running at the same time as the code that started it, in the same instance, which gives back
@@ -30,10 +30,13 @@ export scoped context TaskScope = protected ()
   was started in, so it can't leave that def.
 export type Task(a) = [TaskScope] protected (handle: I32)
 
---| Runs `block` as a scope for the tasks it starts, and gives back its result once every one of them has finished,
-  awaited or not. The compiler makes the body of each module-level def that starts a task such a block, so a def
-  is the scope of its tasks, and nothing that holds one can leave it.
-export def scope: [c] ([TaskScope, c] () -> a) -> a = { block ->
+--| Runs `block` as a scope of its own for the tasks it starts, and gives back its result once every
+  one of them has finished, awaited or not. The body of each module-level def that starts a task is
+  such a block, so a def is the scope of its tasks; a smaller one finishes, say, each batch before
+  the next starts: `for batches | batch -> concurrent({ batch \list.map { job -> start! run(job) } \list.map(await) })`.
+  Nothing that holds one of its tasks can leave it. It is a function, so its block is passed in
+  parentheses: `concurrent { ... }` would be a workflow's block.
+export def Async.concurrent: [c] ([TaskScope, c] () -> a) -> a = { block ->
   __nanyx_scope_enter()
   def result = use TaskScope() in block()
   __nanyx_scope_exit()
@@ -73,7 +76,7 @@ export def Async.await: [Async, TaskScope] Task(a) -> a = { task ->
   is empty, which has no first.
 export def Async.race: [Async, c] list(([Async, c] () -> a)) -> a = { contestants ->
   if list.isEmpty(contestants) then crash("race needs a contestant") else
-    scope(
+    Async.concurrent(
       {
         def tasks = list.map(contestants, { contestant -> Async.start(contestant) })
         __nanyx_scope_wait_any()
