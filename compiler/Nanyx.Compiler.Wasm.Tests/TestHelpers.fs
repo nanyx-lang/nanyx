@@ -360,6 +360,18 @@ type TempDirectory() =
     interface IDisposable with
         member _.Dispose() = try Directory.Delete(path, true) with _ -> ()
 
+/// `nanyx run --memory` on a script of `source`, which writes its memory report to stderr after the program's own.
+let runWithMemoryReport (source: string) : RunOutcome =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" source
+    nanyxWithInput "" [ "run"; "--memory"; Path.Combine(directory.Path, "main.nyx") ]
+
+/// The number the memory report in `outcome`'s stderr gives on the line of `measure`, such as `"peak live bytes"`.
+let reportedMemory (measure: string) (outcome: RunOutcome) : int64 =
+    let found = Regex.Match(outcome.StandardError, $@"{Regex.Escape measure} +([\d,]+)")
+    Assert.True(found.Success, $"no '{measure}' in:\n{outcome.StandardError}")
+    int64 (found.Groups.[1].Value.Replace(",", ""))
+
 /// A store whose cache and index are directories in `directory`, which can't fetch from GitHub.
 let storeIn (directory: TempDirectory) : NyxCompiler.PackageStore =
     { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = NyxCompiler.GitHub.unsupported }
