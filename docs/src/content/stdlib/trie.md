@@ -304,7 +304,7 @@ Whether any key in `trie` starts with `prefix`, or is `prefix`.
 ## `StringTrie.longestPrefixOf`
 
 ```nanyx fragment
-def StringTrie.longestPrefixOf: StringTrie(???), string -> #some(string, ???) | #none
+def StringTrie.longestPrefixOf: StringTrie(v), string -> #some(string, v) | #none
 ```
 
 The longest key in `trie` that `key` starts with, `key` itself included, and its value, or
