@@ -38,6 +38,13 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     protected static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
+    /// Gives the test's requests <see cref="Timeout"/> from now and <paramref name="work"/> besides: for a request that
+    /// checks something slow, given what checking it outside the server takes, measured just before, so that load on
+    /// the machine, which slows both alike, can't make the test time out.
+    /// </summary>
+    protected void AllowFor(TimeSpan work) => _cancellation.CancelAfter(Timeout + work);
+
+    /// <summary>
     /// The standard library checked, as the first compile in the process does. On a slow CI runner that took most of a
     /// test's timeout, so whichever test compiled first timed out. The process keeps what it checked, so it is done
     /// once, before any test's timeout starts.
