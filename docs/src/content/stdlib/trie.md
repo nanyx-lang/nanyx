@@ -189,7 +189,7 @@ in.
 ## `StringTrie`
 
 ```nanyx fragment
-type StringTrie(v) = protected Trie(string, v)
+type StringTrie(v) = protected Trie(char, v)
 ```
 
 A trie whose keys are strings, each read as its characters, as [`string.chars`](text#stringchars) gives them. Its
@@ -304,7 +304,7 @@ Whether any key in `trie` starts with `prefix`, or is `prefix`.
 ## `StringTrie.longestPrefixOf`
 
 ```nanyx fragment
-def StringTrie.longestPrefixOf: StringTrie(v), string -> #some(string, v) | #none
+def StringTrie.longestPrefixOf: StringTrie(???), string -> #some(string, ???) | #none
 ```
 
 The longest key in `trie` that `key` starts with, `key` itself included, and its value, or

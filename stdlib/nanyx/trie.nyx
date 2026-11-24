@@ -275,14 +275,14 @@ export def Trie.`==`: [Eq(k), Eq(v)] Trie(k, v), Trie(k, v) -> bool = { Trie(a),
 
 --| A trie whose keys are strings, each read as its characters, as [`string.chars`] gives them. Its
   functions take and give strings, and give its keys sorted.
-export type StringTrie(v) = protected Trie(string, v)
+export type StringTrie(v) = protected Trie(char, v)
 
 --| The string trie with no keys.
 export def StringTrie.empty: StringTrie(v) = StringTrie(Trie.empty)
 
 --| The pairs in `pairs`, each key joined back into a string, sorted by key.
-def sortedStrings: list((list(string), v)) -> list((string, v)) = { pairs ->
-  list.sortBy(list.map(pairs, { pair -> (string.concat(pair.0), pair.1) }), { pair -> pair.0 })
+def sortedStrings: list((list(char), v)) -> list((string, v)) = { pairs ->
+  list.sortBy(list.map(pairs, { pair -> (string.fromChars(pair.0), pair.1) }), { pair -> pair.0 })
 }
 
 --| `trie` with `key` mapped to `value`, in place of any value it had.

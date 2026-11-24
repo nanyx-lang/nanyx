@@ -75,6 +75,7 @@ let printable (toIrType: Ty -> IrType) (ty: Ty) =
         | _ ->
         match Unifier.unalias ty with
         | TyPrimitive("int" | "bool" | "float" | "F32" | "string")
+        | Chars.CharType
         | SizedIntegerType _ -> true
         | TyTag _
         | TyUnion _ as union -> tagsOf union |> List.forall (snd >> Option.forall part)
@@ -247,6 +248,10 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
             | TyPrimitive "float" -> Expr.make (CallRuntime(Helpers.floatToString, [ AVar value ], true)) IrString
             | TyPrimitive "F32" -> Expr.make (CallRuntime(Helpers.f32ToString, [ AVar value ], true)) IrString
             | TyPrimitive "string" -> Expr.make (CallRuntime(Helpers.stringQuote, [ AVar value ], true)) IrString
+            // A char is written as a string literal of it.
+            | Chars.CharType ->
+                let text = tools.NewTemp IrString
+                Expr.letIn text (Expr.make (CallRuntime(Helpers.charToString, [ AVar value ], true)) IrString) (Expr.make (CallRuntime(Helpers.stringQuote, [ AVar text ], true)) IrString)
             | TyTag _
             | TyUnion _ as union ->
                 let arm (tagName: string, payload: Ty option) =

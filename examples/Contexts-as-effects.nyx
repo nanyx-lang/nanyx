@@ -9,22 +9,15 @@ ordinary pure functions and pipes.
 
 def letters = "abcdefghijklmnopqrstuvwxyz" \chars
 
--- The code point of a one-character string
-def codePoint: string -> int = { c ->
-  match c \string.codePoints
-    | [p, ..._] -> p
-    | [] -> 0
-}
-
-def rotateChar: string, int -> string = { c, shift ->
+def rotateChar: char, int -> char = { c, shift ->
   if letters \contains(c) then
-    def base = codePoint(c) - codePoint("a")
-    string.fromCodePoint(codePoint("a") + (base + shift) % 26) ?? c
+    def base = char.toInt(c) - char.toInt("a")
+    char.fromInt(char.toInt("a") + (base + shift) % 26) ?? c
   else c
 }
 
 def rotate: string, int -> string = { s, shift ->
-  s \chars \map { c -> rotateChar(c, shift) } \string.join("")
+  s \chars \map { c -> rotateChar(c, shift) } \string.fromChars
 }
 
 -- The letter frequency table for English

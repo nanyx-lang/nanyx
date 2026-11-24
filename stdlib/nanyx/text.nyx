@@ -9,9 +9,9 @@
   only change ASCII letters, and the trimming and `words` functions only treat ASCII whitespace as
   whitespace. Multi-byte characters pass through unchanged, except that `padStart` and `padEnd` cut
   their fill at a byte count, so a multi-byte `fill` can be cut mid-character. `chars`, `reverse` and
-  `codePoints` work by character, where a character is one Unicode code point: they read each UTF-8
-  sequence's lead byte, so they never cut a character in half. `fromCodePoint` turns a code point
-  back into a character. `toUtf8` gives a string's bytes as an array, and `fromUtf8` turns bytes
+  `codePoints` work by character, where a character is one Unicode scalar value, a `char`: they read
+  each UTF-8 sequence's lead byte, so they never cut a character in half. `fromChars` and
+  `fromCodePoint` turn characters back into a string. `toUtf8` gives a string's bytes as an array, and `fromUtf8` turns bytes
   back into a string, checking that they are well-formed UTF-8.
 
   Every function here is stack-safe: each one that walks a string calls itself only in tail
@@ -437,8 +437,8 @@ def nextCharStart: string, int -> int = { s, i ->
   if isContinuationByte(__nanyx_string_byte_at(s, i)) then nextCharStart(s, i + 1) else i
 }
 
---| The characters of `s` before byte `stop`, in order, in front of `acc`.
-def charsBefore: string, int, list(string) -> list(string) = { s, stop, acc ->
+--| The chars of `s` before byte `stop`, in order, in front of `acc`.
+def charsBefore: string, int, list(char) -> list(char) = { s, stop, acc ->
   def start = charStart(s, stop - 1)
 
   if stop <= 0
@@ -446,15 +446,19 @@ def charsBefore: string, int, list(string) -> list(string) = { s, stop, acc ->
     else charsBefore(
       s
       start
-      __nanyx_list_cons(string.substring(s, start = start, length = stop - start), acc)
+      __nanyx_list_cons(__nanyx_from_int(codePointAt(s, start, stop)), acc)
     )
 }
 
---| Each character of `s` as a string of its own, in order. A character is one Unicode code point, so
-  "héllo" has five characters though it is six bytes long. Stack-safe: it works on a string of any
-  length.
-export def string.chars: string -> list(string) = { s ->
+--| Each character of `s`, in order. A character is one Unicode scalar value, a [`char`], so "héllo"
+  has five though it is six bytes long. Stack-safe: it works on a string of any length.
+export def string.chars: string -> list(char) = { s ->
   charsBefore(s, string.length(s), [])
+}
+
+--| The string of `chars`, in order: `string.fromChars(["h", "é"])` is `"hé"`.
+export def string.fromChars: list(char) -> string = { chars ->
+  string.join(list.map(chars, char.toString), "")
 }
 
 --| `made`, a new string as long as `s`, once each character of `s` from byte `start` on is written
@@ -501,38 +505,21 @@ def codePointsBefore: string, int, list(int) -> list(int) = { s, stop, acc ->
 }
 
 --| The Unicode code point of each character of `s`, in order: `"aé€" \codePoints` is
-  `[97, 233, 8364]`. It has one number for each of [`string.chars`]. Stack-safe: it works on a string
-  of any length.
+  `[97, 233, 8364]`. It has one number for each of [`string.chars`], which gives the chars
+  themselves, each of whose code point [`char.toInt`] gives: prefer those. Stack-safe: it works on a
+  string of any length.
 export def string.codePoints: string -> list(int) = { s ->
   codePointsBefore(s, string.length(s), [])
 }
 
---| The UTF-8 continuation byte that holds the six bits of `codePoint` above its lowest `shift`.
-def continuationByte: int, int -> string = { codePoint, shift ->
-  __nanyx_string_from_byte(128 + codePoint / shift % 64)
-}
-
---| The UTF-8 encoding of `codePoint`, which is a valid code point.
-def encodeCodePoint: int -> string = { codePoint ->
-  def lead = { first, shift -> __nanyx_string_from_byte(first + codePoint / shift) }
-  def next = { shift -> continuationByte(codePoint, shift) }
-
-  if codePoint < 128
-    then __nanyx_string_from_byte(codePoint)
-    else if codePoint < 2048
-      then lead(192, 64) ++ next(1)
-      else if codePoint < 65536
-        then lead(224, 4096) ++ next(64) ++ next(1)
-        else lead(240, 262144) ++ next(4096) ++ next(64) ++ next(1)
-}
-
 --| The character whose Unicode code point is `codePoint`, as a string: `string.fromCodePoint(233)` is
   `#some("é")`. A negative number, a surrogate (55296 to 57343, `0xD800` to `0xDFFF`) or a number past
-  the last code point (1114111, `0x10FFFF`) gives `#invalidCodePoint`.
+  the last code point (1114111, `0x10FFFF`) gives `#invalidCodePoint`. [`char.fromInt`] gives the
+  char itself, which [`char.toString`] makes a string: prefer those.
 export def string.fromCodePoint: int -> #some(string) | #invalidCodePoint = { codePoint ->
-  if codePoint < 0 or codePoint > 1114111 or codePoint >= 55296 and codePoint <= 57343
-    then #invalidCodePoint
-    else #some(encodeCodePoint(codePoint))
+  match char.fromInt(codePoint)
+    | #some(c) -> #some(char.toString(c))
+    | #invalidCodePoint -> #invalidCodePoint
 }
 
 -- UTF-8 bytes ----------------------------------------------------------------------------------
