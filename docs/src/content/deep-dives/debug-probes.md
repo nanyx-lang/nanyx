@@ -14,7 +14,10 @@ WebAssembly runtime, without the imports below, may run (`WasmOptions.Probes`).
 
 A probe is a core IR expression, `Probe(kind, locals)` (`CoreIr.fs`), of unit type, at a place (see
 [Crash stacks](./crash-stacks#places-in-the-core-ir)). The lowering puts one before each statement of a block, written
-to write the locals in scope there, and wraps each function the source writes, a lifted lambda among them, in
+to write the locals in scope there: the function's parameters, and the 64 locals bound last (`CoreIrProbes.probeLimit`,
+kept in order in the scope as each `def` binds one). Only a function with more than 64 locals in scope at once, which is
+code a program generates, shows fewer than all of them; writing them all made a function of n locals n² in size, and one
+of 8,000 ran the compiler out of memory ([#2488](https://github.com/nanyx-lang/nanyx/issues/2488)). It wraps each function the source writes, a lifted lambda among them, in
 `CoreIrProbes.around`: an entry probe, which names the function and writes its parameters, and a return probe at each
 place it ends. A function that ends in a call ends before the call, so that a tail call stays one, and the callee's
 entry follows; one that ends in another value ends once it has it, in a local. A local is written only if a `dbg`
@@ -32,7 +35,8 @@ The emitter writes a probe as a check of whether the runtime is probing: the sta
 copies it into a local when it starts, which can stay in a register. When it is set, the probe calls `nanyx:debug` `probe` with its
 number; if that gives 1, it writes each of its locals that is still alive there through its printer, and passes the
 local's name and text to `nanyx:debug` `local`. A local is still alive where the rest of the code reads it and doesn't
-bind it again (`CoreIrEmit.aliveAt`): one never read again may have been given up already. A probe that a printer
+bind it again (`CoreIrEmit.ChainReads`, worked out once for each chain): one never read again may have been given up
+already. A probe that a printer
 takes its argument over from first gives it a reference of its own.
 
 Before the probe's code go the marker of its place and its own, `;;@probe 3 statement` or `;;@probe 1 entry count`.

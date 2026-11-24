@@ -475,8 +475,10 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
         let mutable facts = facts
         let mutable remaining = links
         // How many links are left: the rules below rewrite only the links at the head, so what follows the link being
-        // gone over is the chain's own links from place `links.Length - left` on.
-        let mutable left = links.Length
+        // gone over is the chain's own links from place `count - left` on. The count is taken once: a list's length is
+        // counted along it, which at each link made a chain of n links take n² time (#2488).
+        let count = links.Length
+        let mutable left = count
         let shape = lazy (ChainShape(links, chainEnd))
         let mutable last = chainEnd
         let mutable branchedLast = None
@@ -524,7 +526,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                 renamed.[var.Id] <- source
             | Let(var, value, _), _ ->
                 let value = this.Value facts value
-                let following, chainEnd, start = remaining, last, links.Length - left
+                let following, chainEnd, start = remaining, last, count - left
                 let mayCopy branches limit = shape.Value.MayCopy var start branches limit
                 match this.Branched facts var value mayCopy (fun () -> Chain.rebuild Chain.relink following chainEnd |> rename), last.Kind with
                 | Some branched, _ ->
