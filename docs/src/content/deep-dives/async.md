@@ -6,8 +6,8 @@ order: 20
 
 A function that can wait requires the [`Async`](../stdlib/async) context, which the console and HTTP hosts provide
 ([Hosts](../advanced/hosts#the-console-host)), and tasks do several things at once
-([Async](../advanced/async)). This page says how they are built and why they have this shape. Cancellation, `race`,
-async streams and crash boundaries are not built yet; they are on
+([Async](../advanced/async)). This page says how they are built and why they have this shape. Async streams and crash
+boundaries are not built yet; they are on
 [Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries) in Work in progress.
 
 # How it's built
@@ -198,6 +198,16 @@ Nothing starts it: like `Console`, the host provides it.
   until the monotonic clock has passed its deadline. Passing the wait, rather than marking it for the compiler to
   find, keeps it a function like any other: nothing that only the scheduler calls has to survive linking, and a host
   can write its wait in Nanyx.
+- **Cancellation.** A task has a cancelled flag (`Intrinsics.taskCancel` sets it on the task and on every task in each
+  of its scopes, and theirs in turn; a task a cancelled task starts is cancelled from the start). Nothing stops a task:
+  a host's code that waits looks at it (`nanyx/host.async`'s `cancelled`) and gives back `#cancelled`, or, for a sleep,
+  returns. A task waiting on the host that is cancelled meanwhile carries on once at once, without the host's wait: the
+  frame of its wait keeps whether the task was cancelled when it stopped, and its resume entry stops again only while
+  that is unchanged and the host hasn't waited, so it waits again for real if its code waits again. `race` is
+  `nanyx/async`'s: in a `scope` of its own, it starts each contestant, waits until one has given back its value
+  (`Intrinsics.scopeWaitAny`, a split point), cancels the others, and awaits the winner; the scope waits for the losers.
+  The contestants may need different contexts: a list's elements that are functions join as a function that may need
+  them all (`BranchJoin.joinFunctions`).
 - **A crash in a task** traps, as any crash does, which ends the instance and its other tasks.
 
 ## Why tasks are built this way

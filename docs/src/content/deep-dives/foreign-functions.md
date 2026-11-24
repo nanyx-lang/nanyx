@@ -45,6 +45,8 @@ in Work in progress. They are what [hosts](./hosts) are built on.
     has passed, it keeps the answer, writes what kind of answer it is at `kind` (0 a response, 1 a timeout, 2 a
     connection that failed, 3 a URL that isn't an absolute `http` or `https` one, 4 anything else), gives the answer's
     length in bytes, and is done with the handle;
+  - `forget(handle: i32)` is done with a request without its answer, as the console host is when the request's task is
+    cancelled: the request is still answered, but nothing keeps the answer;
   - `send(request: i32, length: i32, kind: i32) -> i32` makes the request, blocking until it is answered, and keeps
     the answer as `poll` does, for a module built before `start`;
   - `receive(destination: i32)` copies the kept answer to `destination`, where the program has allocated that many

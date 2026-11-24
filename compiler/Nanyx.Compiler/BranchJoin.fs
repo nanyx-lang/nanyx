@@ -26,6 +26,24 @@ let private joinCarried (state: InferState) (branchTypes: Ty list) : (Ty * Infer
             joined, branchTypes |> List.fold (fun st ty -> addAssignableConstraint ty joined st) state)
     | _ -> None
 
+/// Branches that are functions requiring different contexts, as `{ 1 }` and `{ sleep(50); 2 }` do, join as a function
+/// requiring a variable that each branch's contexts fit in, as `joinCarried` joins types that carry them: a function that
+/// requires fewer contexts is given where one that may require more is expected, so `race([{ 1 }, { sleep(50); 2 }])`
+/// checks. Made equal, the branches would have to require the same contexts.
+let private joinFunctions (state: InferState) (branchTypes: Ty list) : (Ty * InferState) option =
+    let contextsOf ty =
+        match Unifier.unalias (resolveSoFar state ty) with
+        | TyFunc(_, _, contexts) -> Some contexts
+        | _ -> None
+    match branchTypes |> List.map contextsOf with
+    | branches when branches.Length > 1 && branches |> List.forall Option.isSome && (List.distinct branches).Length > 1 ->
+        let input, state = freshVar state
+        let output, state = freshVar state
+        let contexts, state = freshVar state
+        let joined = TyFunc(input, output, [ contexts ])
+        Some (joined, branchTypes |> List.fold (fun st ty -> addAssignableConstraint ty joined st) state)
+    | _ -> None
+
 /// The type of an `if` or `match` whose branches have the given types, or of a list literal's elements.
 ///
 /// When every branch is a tag (or a union of tags), the tags are collected into one union instead of
@@ -180,7 +198,7 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
             // A named record's fields have the types its declaration gives them, so there is nothing to join, and
             // joining them would lose the name: `[Point(x = 1, y = 2), Point(x = 3, y = 4)]` is a `list(Point)`.
             let isNamed = match head with TyAlias _ -> true | _ -> false
-            match joinCarried state branchTypes with
+            match joinCarried state branchTypes |> Option.orElseWith (fun () -> joinFunctions state branchTypes) with
             | Some joined -> joined
             | None ->
             match branchFields with

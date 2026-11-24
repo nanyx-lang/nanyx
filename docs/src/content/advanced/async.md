@@ -93,7 +93,48 @@ def pages: [Async, Http] list(string) -> list(string) = { urls ->
 
 A file's functions still hold the thread until they are done: the console host reads and writes files with WASI
 preview 1, which has no way to start a read and come back for it. So does every wait of a program built as a
-[component](./hosts#built-as-a-component), for now. Cancellation and `race` are what comes next
-([Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#plan)).
+[component](./hosts#built-as-a-component), for now.
 
 A crash in a task ends the program, the other tasks too, as any crash does.
+
+# Racing
+
+`race` runs each of the functions it is given as a task, and gives back what the first to finish gave back. It cancels
+the others, and waits for them to return before it does:
+
+```nanyx
+def fastest = { _ ->
+  race([{ sleep(50); "the quick one" }, { sleep(60_000); "the slow one" }])
+}
+
+println(fastest())
+-- the quick one
+```
+
+The functions may each need different contexts: the list is of functions that may need any of them. `race`, like
+`start` and `await`, is attached to `Async`, so it is wherever `Async` is.
+
+A timeout is a race against a sleep:
+
+```nanyx fragment
+def limited = { url: string -> race([{ #some(http.get(url)) }, { sleep(5_000); #timedOut }]) }
+```
+
+# Cancelling
+
+There is nothing to throw, so a cancelled task stops through its own error handling: each call that waits gives back
+`#cancelled`, a case of [`HttpError`](../stdlib/client#httperror) and of [`FsError`](../stdlib/filesystem#fserror), and a `sleep` returns at once.
+A request in flight stops waiting as soon as its task is cancelled; a file's function in a cancelled task does nothing.
+A task that never waits can't be cancelled until it does.
+
+```nanyx fragment
+match http.get(url)
+  | #some(response) -> response.body
+  | #cancelled -> ""  -- only once the task was cancelled; usually passed on with `try`
+  | e -> crash("failed: {e}")
+```
+
+Cancelling a task cancels every task it started, and every task those started, so a cancelled task finishes promptly,
+and `await` never reports cancellation: the task being awaited was started by the one awaiting it, and is cancelled
+with it. Today `race` is what cancels a task. A program built as a component finishes a request its task was cancelled
+in before it gives back `#cancelled`.

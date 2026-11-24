@@ -5,7 +5,7 @@ export module runtime
 
 import (
   nanyx/async as (Async)
-  nanyx/host.async as (waitOnHost)
+  nanyx/host.async as (cancelled, waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx.http.core/client as (HttpError)
@@ -21,6 +21,9 @@ def httpStart: [HostRuntime] I32, I32 -> I32
 @extern("nanyx:http", "poll")
 def httpPoll: [HostRuntime] I32, I32 -> I32
 
+@extern("nanyx:http", "forget")
+def httpForget: [HostRuntime] I32 -> ()
+
 @extern("nanyx:http", "receive")
 def httpReceive: [HostRuntime] I32 -> ()
 
@@ -33,45 +36,60 @@ def runtimeWait: [HostRuntime] I32 -> ()
 -- or why there is none, at the address it is given.
 
 --| Waits until the runtime has answered the request of `handle`, while the program's other tasks run,
-  and gives the answer's length, with its kind at `kind`.
+  and gives the answer's length, with its kind at `kind`; or -1, without waiting for the answer,
+  once the task is cancelled.
 def answerOf: [Async, HostRuntime] I32, I32 -> I32 = { handle, kind ->
   def length = httpPoll(handle, kind)
 
-  if length >= 0 then length else
+  if length >= 0 or cancelled() then length else
     waitOnHost(runtimeWait, -1)
     answerOf(handle, kind)
 }
 
---| Sends `request` through `nanyx:http`, and gives its response, or why there is none. The program's other
-  tasks run while it is in flight.
+--| Sends `request` through `nanyx:http`, and gives its response, or why there is none. The program's
+  other tasks run while it is in flight. In a cancelled task it gives `#cancelled`, and stops
+  waiting for the response once the task is cancelled.
 export def sendThroughRuntime
   : [Async, HostRuntime] Request -> #some(Response) | HttpError
   = { request ->
-    def wire = writeRequest(request)
-    def handle = httpStart(addressOf(wire), byteLength(wire))
-    keepAlive(wire)
-    def kind = allocate(4)
-    def length = answerOf(handle, kind)
-    def buffer = allocate(length + 1)
-    httpReceive(buffer)
-    def answer = stringAt(buffer, length)
-    free(buffer)
-    def answered = readI32(kind)
-    free(kind)
+    if cancelled() then #cancelled else
+      def wire = writeRequest(request)
+      def handle = httpStart(addressOf(wire), byteLength(wire))
+      keepAlive(wire)
+      def kind = allocate(4)
+      def length = answerOf(handle, kind)
 
-    match answered
-      | 0 ->
-        match readResponse(answer)
-          | #some(response) -> #some(response)
-          | #malformed -> #other("the runtime's answer to the request was malformed")
-      | 1 -> #timeout
-      | 2 -> #connectionFailed(answer)
-      | 3 -> #invalidUrl
-      | _ -> #other(answer)
+      if length < 0 then
+        httpForget(handle)
+        free(kind)
+        #cancelled
+      else
+        answered(kind, length)
   }
 
+--| The answer `nanyx:http` kept, `length` bytes long, of the kind written at `kind`, which it frees.
+def answered: [HostRuntime] I32, I32 -> #some(Response) | HttpError = { kind, length ->
+  def buffer = allocate(length + 1)
+  httpReceive(buffer)
+  def answer = stringAt(buffer, length)
+  free(buffer)
+  def answeredKind = readI32(kind)
+  free(kind)
+
+  match answeredKind
+    | 0 ->
+      match readResponse(answer)
+        | #some(response) -> #some(response)
+        | #malformed -> #other("the runtime's answer to the request was malformed")
+    | 1 -> #timeout
+    | 2 -> #connectionFailed(answer)
+    | 3 -> #invalidUrl
+    | _ -> #other(answer)
+}
+
 --| Waits until `ms` milliseconds have passed on the monotonic clock, while the program's other tasks
-  run: until then, it waits on the runtime for no longer than is left.
+  run: until then, it waits on the runtime for no longer than is left. In a cancelled task it
+  returns at once, or as soon as the task is cancelled.
 export def sleepOnRuntime: [Async, HostRuntime] int -> () = { ms ->
   sleepUntil(millisecondsOn(1) + ms)
 }
@@ -80,7 +98,7 @@ export def sleepOnRuntime: [Async, HostRuntime] int -> () = { ms ->
 def sleepUntil: [Async, HostRuntime] int -> () = { deadline ->
   def left = deadline - millisecondsOn(1)
 
-  if left <= 0 then () else
+  if left <= 0 or cancelled() then () else
     match int.toI32(left)
       | #some(timeout) -> waitOnHost(runtimeWait, timeout)
       | #outOfRange -> waitOnHost(runtimeWait, 2_000_000_000)

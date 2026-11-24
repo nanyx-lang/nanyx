@@ -14,9 +14,14 @@ import (
 )
 
 --| Why a request had no response: none came in the request's `timeout`, the server couldn't be
-  reached (with what the system said), the URL isn't an absolute `http` or `https` one, or another
-  reason, described.
-export type HttpError = #timeout | #connectionFailed(string) | #invalidUrl | #other(string)
+  reached (with what the system said), the URL isn't an absolute `http` or `https` one, the task it
+  was made in was cancelled, as a task `race` lost is, or another reason, described.
+export type HttpError =
+  | #timeout
+  | #connectionFailed(string)
+  | #invalidUrl
+  | #cancelled
+  | #other(string)
 
 --| Outbound HTTP, which a host supplies. Its member is what a host implements; code calls the
   functions of [`http`](http), which are written on it.

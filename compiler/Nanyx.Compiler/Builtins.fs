@@ -219,6 +219,15 @@ module Intrinsics =
     /// in milliseconds (-1 for none), with the shortest timeout the tasks waiting on it gave (see `nanyx/host.async`).
     /// A call that can stop.
     let hostWait = prefix + "host_wait"
+    /// Cancels the task of a handle, and every task it started: each waiting call in them gives back `#cancelled`
+    /// rather than waiting (see `nanyx/async`'s `race`).
+    let taskCancel = prefix + "task_cancel"
+    /// Whether the task running is cancelled.
+    let taskCancelled = prefix + "task_cancelled"
+    /// Whether the task of a handle has given back its value.
+    let taskDone = prefix + "task_done"
+    /// Waits until a task of the innermost scope has given back its value: a call that can stop.
+    let scopeWaitAny = prefix + "scope_wait_any"
 
     /// The contexts a task's function requires, whatever they are.
     let private contextsVar = TyVar.ordinary (-4) (Some "k")
@@ -303,6 +312,10 @@ module Intrinsics =
           taskResult, { Quantified = set [ elementVar.Id ]; Type = TyFunc(i32Ty, element, []); Symbol = None; ProvidedBy = None }
           scopeEnter, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
           scopeExit, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
+          taskCancel, TypeEnv.mono (TyFunc(i32Ty, unitTy, []))
+          taskCancelled, TypeEnv.mono (TyFunc(unitTy, TyPrimitive "bool", []))
+          taskDone, TypeEnv.mono (TyFunc(i32Ty, TyPrimitive "bool", []))
+          scopeWaitAny, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
           hostWait, { Quantified = set [ contextsVar.Id ]; Type = TyFunc(tuple [ TyFunc(i32Ty, unitTy, [ TyVar contextsVar ]); i32Ty ], unitTy, []); Symbol = None; ProvidedBy = None }
           regionExit, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, unitTy, []); Symbol = None; ProvidedBy = None }
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }

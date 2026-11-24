@@ -27,4 +27,13 @@ the shortest timeout in milliseconds that the tasks waiting gave it, or -1 when 
 `timeout` is this task's: how long it can wait before it must look again, or -1 for as long as
 it takes.
 
+## `cancelled`
+
+```nanyx fragment
+def cancelled: [Async, HostRuntime] () -> bool
+```
+
+Whether the task running is cancelled, as a task `race` lost is: a host's call that waits gives
+back `#cancelled` rather than waiting, or stops waiting when it is cancelled meanwhile.
+
 <!-- End of the generated reference. -->

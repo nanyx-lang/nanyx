@@ -129,3 +129,19 @@ def r = match o
   | other -> other
 """
     Assert.Equal("#some(list(int))", typeOf source "r")
+
+[<Fact>]
+let ``Branches that are functions requiring different contexts join as a function that may require them all`` () =
+    let source = """
+def pick = { b: bool -> if b then { 1 } else { println("y"); 2 } }
+"""
+    Assert.Equal("bool -> ([Console] () -> int)", typeIn (compileClean source) "pick")
+
+[<Fact>]
+let ``A list of lambdas requiring different contexts is a list of functions that may require them all`` () =
+    let source = """
+def run: [c] list(([c] () -> int)) -> int = { fs -> list.fold(fs, 0, { acc, f -> acc + f() }) }
+
+def total = { _ -> run([{ 1 }, { println("x"); 2 }]) }
+"""
+    Assert.Equal("t7 -> int", typeIn (compileClean source) "total")
