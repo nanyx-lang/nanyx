@@ -910,7 +910,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         definitionFunctions @ Option.toList startFunction
         |> List.map (fun func -> if cachedNames.Contains func.Name then { func with Name = CoreIrCachedValues.buildName func.Name } else func)
         |> CoreIrSplitPoints.stateMachines CoreIrLowerInput.startFunctionName
-    CoreIrSplitPoints.checkFunctionValues machines (definitionFunctions @ Option.toList startFunction)
+    CoreIrSplitPoints.checkFunctionValues CoreIrLowerInput.startFunctionName (definitionFunctions @ Option.toList startFunction)
 
     let context: CoreIrEmit.EmitContext =
         { TagId =

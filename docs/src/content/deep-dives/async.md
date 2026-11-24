@@ -34,8 +34,11 @@ boundaries are not built yet; they are on
   A lambda's type requires what the functions it calls require, a function that writes no type included, once it has
   been inferred (`Contexts.contextsRequiredByCall`), so `{ x -> waitThen(x) }` waits whether or not `waitThen` writes
   `[Async]`. A caller knows that a function value can stop only from its type, so the backend refuses a function value
-  that is a state machine but whose type can't wait, as a broken invariant (`CoreIrSplitPoints.checkFunctionValues`),
-  rather than leave its caller to carry on past a call that stopped. One such case is left: a lambda that calls a
+  whose type can't wait but that reaches what requires `Async` (a call of a function value that waits, or starting or
+  awaiting a task, a host's wait or `race`), as a broken invariant (`CoreIrSplitPoints.checkFunctionValues`), rather
+  than leave its caller to carry on past a call that stopped. The end of a scope doesn't count: it makes a function a
+  state machine, but one whose type can't wait starts no tasks, so its scopes have nothing to wait for. One such case
+  is left: a lambda that calls a
   function that waits and that is in a cycle with the def the lambda is in, which isn't inferred yet there
   ([#2590](https://github.com/nanyx-lang/nanyx/issues/2590)).
 
