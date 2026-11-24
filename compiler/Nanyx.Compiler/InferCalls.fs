@@ -198,7 +198,7 @@ let rec internal inferCall
     | Ok state ->
         // What the callee requires is used where the call runs, by the lambda around it if any (see `LambdaContexts`).
         let state =
-            let written = contextRequirementsOf env state name |> Option.defaultValue []
+            let written = contextsRequiredByCall env state name
             let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
             state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
         // A callee a module block keeps from here is checked on as if it were reached (see `FailedCalls`).

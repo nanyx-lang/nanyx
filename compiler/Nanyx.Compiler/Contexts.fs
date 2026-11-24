@@ -694,6 +694,18 @@ let internal inferredAmbientContexts (env: TypeEnv) (state: InferState) (name: I
         Some contexts[name]
     | _ -> None
 
+/// The contexts a call of the function `name`, as `env` binds it, requires where it runs, as its type writes them: those
+/// its type writes, and, for an unannotated top-level function already inferred, the ambient contexts it was inferred to
+/// require (see `inferredAmbientContexts`). A lambda that calls it uses them as it uses those of a function that writes
+/// its type, so it is typed alike either way, and a lambda that calls a function that waits has a type that waits.
+let internal contextsRequiredByCall (env: TypeEnv) (state: InferState) (name: Identifier) : TypeExpr list =
+    let written = contextRequirementsOf env state name |> Option.defaultValue []
+    let inferred =
+        inferredAmbientContexts env state (canonicalName env state name)
+        |> Option.map (Set.toList >> List.map (TypeName >> TypeExpr.synthetic))
+        |> Option.defaultValue []
+    written @ inferred
+
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
 /// of an unannotated top-level def, or of a script's value, is kept to check once its contexts are known. Where the use
 /// is the call `call`, what provides the context of a member it calls is recorded, as is, once known, what provides
