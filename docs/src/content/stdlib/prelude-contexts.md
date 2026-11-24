@@ -285,8 +285,8 @@ context Typed(a) = (
 ```
 
 The type `a` as a value, which the compiler gives for every type: a function that is given a
-value of type `a` can require `Typed(a)` and read `typeOf`, instead of also taking the type
-argument `type a`, `def encode: [Typed(a)] a -> Json = { value -> encodeAt(value, typeOf) }`. A
+value of type `a` can require `Typed(a)` and read `typeOf`, instead of also taking a parameter
+of type `Type(a)`, `def encode: [Typed(a)] a -> Json = { value -> encodeAt(value, typeOf) }`. A
 `use` can load another, but the only `Type(a)` value is `type a`, so it stands for the
 same type.
 

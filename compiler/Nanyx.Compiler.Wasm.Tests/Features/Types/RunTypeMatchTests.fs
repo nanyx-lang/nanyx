@@ -6,7 +6,7 @@ open Xunit
 open TranspilerWasmTestHelpers
 
 let private describe =
-    """def describe: a, type a -> string = { value, t ->
+    """def describe: a, Type(a) -> string = { value, t ->
   match t
     | #int -> "{value + 1}"
     | #float -> "{value}"
@@ -70,7 +70,7 @@ println(describe(shapes, type list(Shape)))
 
 /// Counts the ints in a value, through its cases' and fields' `get`s.
 let private count =
-    """def count: a, type a -> int = { value, t ->
+    """def count: a, Type(a) -> int = { value, t ->
   match t
     | #int -> 1
     | #list(elem) -> list.sum(list.map(value, { x -> count(x, elem) }))
@@ -116,7 +116,7 @@ println(count(tree, type Tree))
 let ``Run - an arm at a type only known when the program runs gives a value of the narrowed type back`` () =
     let source =
         describe
-        + """def zero: type a -> #some(a) | #none = { t ->
+        + """def zero: Type(a) -> #some(a) | #none = { t ->
   match t
     | #int -> #some(0)
     | #string -> #some("")
@@ -124,7 +124,7 @@ let ``Run - an arm at a type only known when the program runs gives a value of t
     | else -> #none
 }
 
-def zeros: a, type a -> string = { value, t ->
+def zeros: a, Type(a) -> string = { value, t ->
   match t
     | #record(r) ->
         r.fields
@@ -148,7 +148,7 @@ let ``Run - a generic encoder writes JSON for any record, union, list and built-
 
 import nanyx.json/json as json
 
-def encodeAt: a, type a -> json.Json = { value, t ->
+def encodeAt: a, Type(a) -> json.Json = { value, t ->
   match t
     | #int -> #number(int.toFloat(value))
     | #float -> #number(value)
@@ -185,7 +185,7 @@ let private naming =
     \string.join("")
 }
 
-def named: a, type a -> string = { value, t ->
+def named: a, Type(a) -> string = { value, t ->
   match t
     | #int -> "{value}"
     | #string -> value
@@ -252,7 +252,7 @@ let ``Run - a walker another module exports picks its arm at the types it is cal
     let walker =
         """module walker
 
-export def size: a, type a -> int = { value, t ->
+export def size: a, Type(a) -> int = { value, t ->
   match t
     | #int -> value
     | #list(elem) -> value \list.map { x -> size(x, elem) } \list.fold(0, { total, n -> total + n })
@@ -275,7 +275,7 @@ def main = {
 [<Fact>]
 let ``Run - a Type match tells apart types that share a layout, as a list and a set do`` () =
     let source =
-        """def kind: type a -> string = { t ->
+        """def kind: Type(a) -> string = { t ->
   match t
     | #list(e) -> "list"
     | #set(e) -> "set"
@@ -284,7 +284,7 @@ let ``Run - a Type match tells apart types that share a layout, as a list and a 
 
 type Box(a) = (get: () -> string)
 
-def boxFor: type a -> Box(a) = { t -> Box(get = { -> kind(t) }) }
+def boxFor: Type(a) -> Box(a) = { t -> Box(get = { -> kind(t) }) }
 
 def run: Box(a) -> string = { b ->
   def get = b.get
@@ -305,7 +305,7 @@ println(viaTyped(set.fromList([1])))
 [<Fact>]
 let ``Run - map.map at a type only known when the program runs maps its values`` () =
     let source =
-        """def total: a, type a -> int = { value, t ->
+        """def total: a, Type(a) -> int = { value, t ->
   match t
     | #int -> value
     | #map(_, item) -> list.sum(map.values(map.map(value, { x -> total(x, item) })))

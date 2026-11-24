@@ -1,5 +1,5 @@
 ---
-title: "Units and dimensions"
+title: "Proposal: Units and dimensions"
 description: "Compile-time units for numbers"
 order: 2
 ---

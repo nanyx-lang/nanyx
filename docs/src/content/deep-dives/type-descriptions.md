@@ -19,13 +19,13 @@ collections had to carry the element type everywhere, `[Iter(c, a)]`, though it 
 types ([Contexts](../advanced/contexts#associated-types)) answer the last; type arguments answer the other two. Both are
 the same thing: a record member whose value is a type.
 
-- **A type is passed as an argument,** `type a` or `into: type`, of type `Type(a)`, always written at the call. It is
-  the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`. The named form makes a type
-  parameter the same kind of member as an associated type, gives the argument a name at the call site, and matches the
-  constraint syntax; `type a` is its positional counterpart. A named type member is passed by name like any named
-  field: letting `deserialise(text, type Point)` skip that rule would make type arguments the one exception to a rule
-  that holds for every call and every record construction, and an author who wants positional calls declares
-  `type a`.
+- **A type is passed as an argument,** a value of type `Type(a)`, `type Point` at the call, always written there. It is
+  the same idea as Haskell's `Proxy a`, Scala's `ClassTag` and Kotlin's `KClass<T>`. Its parameter is written with its
+  actual type, positional `(Type(a), string) -> a` or named `(string, into: Type(a)) -> a`, so a type argument is a
+  value like any other and doesn't look like an associated type, `elem: type`, which is a member whose value is a type
+  rather than a value that stands for one. A named type parameter is passed by name like any named field: letting
+  `parse(text, type Point)` skip that rule would make type arguments the one exception to a rule that holds for every
+  call and every record construction, and an author who wants positional calls declares a positional `Type(a)`.
 - **Generic code is checked once, not per instantiation.** Inspection is type-checked when the generic function is
   defined, as all generic code is. Nanyx does not adopt compile-time templates, at least for now: in Zig's `comptime`
   and C++ templates, generic code is checked separately for each type it is used at, and errors appear inside library
@@ -40,7 +40,7 @@ the same thing: a record member whose value is a type.
 - **Customising an encoding:** a type that provides the library's context itself wins over walking its description, as
   an explicit instance wins over synthesis, and attributes on fields cover renames without one.
 - **`Typed(a)` is synthesised for every type,** nominal ones too, so a function given a value of type `a` needn't also
-  take `type a`. It is the implicit counterpart of a type argument, as Haskell's `Typeable` is of `Proxy`, and as
+  take a `Type(a)`. It is the implicit counterpart of a type argument, as Haskell's `Typeable` is of `Proxy`, and as
   Scala's `ClassTag` is usually an implicit parameter. The walker stays explicit: a record's fields have types the
   checker never learns, so there is no `Typed` instance for them, only `f.type`, and a library takes `Typed(a)` in its
   public function and passes the type explicitly in the code that walks it,
