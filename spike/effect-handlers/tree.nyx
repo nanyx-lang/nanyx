@@ -1,0 +1,20 @@
+import nanyx/gen
+
+type Tree = #leaf | #node(Tree, int, Tree)
+
+def walk: [Gen] Tree -> () = {
+  | #leaf -> ()
+  | #node(left, value, right) ->
+    walk(left)
+    gen.yield(value)
+    walk(right)
+}
+
+def build: int, int -> Tree = { low, high ->
+  def mid = (low + high) / 2
+  if low > high then #leaf else #node(build(low, mid - 1), mid, build(mid + 1, high))
+}
+
+def t = build(1, 10)
+println(generate { walk(t) } \seq.take(4) \seq.toList)
+println(generate { walk(t) } \seq.toList)

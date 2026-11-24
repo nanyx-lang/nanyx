@@ -80,6 +80,58 @@ let yieldHelpers (resumeSlot: int) : string list =
       $"    call ${Helpers.free}"
       "    i32.const 0\n  )" ]
 
+/// Spike (#2427, not for merging): a generator's helpers. `genYield` keeps its value and stops with a frame of its own,
+/// which its resume entry frees. `genStart` calls a function of nothing (a closure) and `genResume` carries on a frame;
+/// each clears the flag and gives the frame the function stopped in when it stopped, and 0 when it returned.
+let genHelpers (yieldResumeSlot: int) (oneToOne: string) : string list =
+    let afterRun =
+        [ "drop"
+          $"global.get ${Names.suspending}"
+          "if"
+          "i32.const 0"
+          $"global.set ${Names.suspending}"
+          $"global.get ${Names.suspended}"
+          "return"
+          "end"
+          "i32.const 0" ]
+    [ "  (global $__nanyx_gen_value_cell (mut i64) (i64.const 0))"
+      lines
+          [ $"  (func ${NyxCompiler.Intrinsics.genYield} (param $x i64) (local $frame i32)"
+            "local.get $x"
+            "global.set $__nanyx_gen_value_cell"
+            $"i32.const {headerSize}"
+            $"call ${Helpers.alloc}"
+            "local.tee $frame"
+            $"i32.const {yieldResumeSlot}"
+            "i32.store"
+            "local.get $frame"
+            $"global.set ${Names.suspended}"
+            "i32.const 1"
+            $"global.set ${Names.suspending}\n  )" ]
+      lines
+          [ "  (func $__nanyx_gen_yield_resume (param $frame i32) (result i32)"
+            "local.get $frame"
+            $"call ${Helpers.free}"
+            "i32.const 0\n  )" ]
+      lines [ $"  (func ${NyxCompiler.Intrinsics.genPrepare} (param $f i32) (result i32)"; "local.get $f\n  )" ]
+      lines [ $"  (func ${NyxCompiler.Intrinsics.genValue} (result i64)"; "global.get $__nanyx_gen_value_cell\n  )" ]
+      lines
+          [ $"  (func ${NyxCompiler.Intrinsics.genStart} (param $f i32) (result i32)"
+            "local.get $f"
+            "local.get $f"
+            "i32.load"
+            $"call_indirect (type ${oneToOne})"
+            yield! afterRun
+            "\n  )" ]
+      lines
+          [ $"  (func ${NyxCompiler.Intrinsics.genResume} (param $k i32) (result i32)"
+            "local.get $k"
+            "local.get $k"
+            "i32.load"
+            $"call_indirect (type ${oneToOne})"
+            yield! afterRun
+            "\n  )" ] ]
+
 /// The resume entry of the state machine `name`, which takes `parameters` (their WebAssembly types) and gives a value of
 /// type `result`: it passes the frame on, and calls the function with nothing in its parameters, which the frame
 /// gives back.

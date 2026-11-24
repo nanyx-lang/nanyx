@@ -1,0 +1,6 @@
+import nanyx/gen
+
+def run: int -> int = { n ->
+  generate { for 1..n | i -> gen.yield(i) } \seq.fold(0, { acc, x -> acc + x })
+}
+println(run(300000))

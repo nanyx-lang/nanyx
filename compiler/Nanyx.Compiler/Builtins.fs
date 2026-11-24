@@ -228,6 +228,14 @@ module Intrinsics =
     let taskDone = prefix + "task_done"
     /// Waits until a task of the innermost scope has given back its value: a call that can stop.
     let scopeWaitAny = prefix + "scope_wait_any"
+    /// Spike (#2427, not for merging): a generator on the state-machine lowering. `genStart` calls a function whose
+    /// `genYield`s stop it, and gives the frame it stopped in (0 once it has returned); `genResume` carries one on;
+    /// `genValue` is the value the last `genYield` gave.
+    let genPrepare = prefix + "gen_prepare"
+    let genStart = prefix + "gen_start"
+    let genResume = prefix + "gen_resume"
+    let genYield = prefix + "gen_yield"
+    let genValue = prefix + "gen_value"
 
     /// The contexts a task's function requires, whatever they are.
     let private contextsVar = TyVar.ordinary (-4) (Some "k")
@@ -316,6 +324,11 @@ module Intrinsics =
           taskCancelled, TypeEnv.mono (TyFunc(unitTy, TyPrimitive "bool", []))
           taskDone, TypeEnv.mono (TyFunc(i32Ty, TyPrimitive "bool", []))
           scopeWaitAny, TypeEnv.mono (TyFunc(unitTy, unitTy, []))
+          genPrepare, { Quantified = set [ contextsVar.Id ]; Type = TyFunc(TyFunc(unitTy, unitTy, [ TyVar contextsVar ]), i32Ty, []); Symbol = None; ProvidedBy = None }
+          genStart, TypeEnv.mono (TyFunc(i32Ty, i32Ty, []))
+          genResume, TypeEnv.mono (TyFunc(i32Ty, i32Ty, []))
+          genYield, TypeEnv.mono (TyFunc(intTy, unitTy, []))
+          genValue, TypeEnv.mono (TyFunc(unitTy, intTy, []))
           hostWait, { Quantified = set [ contextsVar.Id ]; Type = TyFunc(tuple [ TyFunc(i32Ty, unitTy, [ TyVar contextsVar ]); i32Ty ], unitTy, []); Symbol = None; ProvidedBy = None }
           regionExit, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, unitTy, []); Symbol = None; ProvidedBy = None }
           isExclusive, { Quantified = set [ elementVar.Id ]; Type = TyFunc(element, TyPrimitive "bool", []); Symbol = None; ProvidedBy = None }

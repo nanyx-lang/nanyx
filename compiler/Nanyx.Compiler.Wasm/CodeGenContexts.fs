@@ -188,7 +188,10 @@ let contextLayoutsOf (typeDefs: Map<string, TypeDefInfo>) (typeLayouts: Map<stri
       Parameterised = declared true |> List.map (fun (name, info, members) -> name, (info.Parameters, members)) |> Map.ofList
       Waiting =
         typeDefs
-        |> Map.filter (fun _ info -> info.IsContext && info.Name = "Async" && info.Home = StandardLibraryModule ModuleOrigin.asyncName)
+        |> Map.filter (fun _ info ->
+            info.IsContext
+            && ((info.Name = "Async" && info.Home = StandardLibraryModule ModuleOrigin.asyncName)
+                || (info.Name = "Gen" && info.Home = StandardLibraryModule "gen")))
         |> Map.keys
         |> Set.ofSeq }
 

@@ -180,6 +180,7 @@ module Helpers =
            || (name = NyxCompiler.Intrinsics.listSetHead && index = 1)
            || name = NyxCompiler.Intrinsics.isExclusive
            || name = NyxCompiler.Intrinsics.taskStart
+           || name = NyxCompiler.Intrinsics.genPrepare
            || name = NyxCompiler.Intrinsics.taskFinish then
             Owned
         else

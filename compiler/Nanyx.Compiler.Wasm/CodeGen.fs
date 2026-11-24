@@ -1012,7 +1012,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                     (context.FunctionSlot WasmScheduler.Names.scopeWaitAnyResume 1)
                     (TaskLowering.resumeTypeName "i32")
                     (indirectTypeName [ "i32"; "i32" ] "i32")
-            TaskLowering.globals @ yielding @ scheduler |> String.concat "\n"
+            let generators = TaskLowering.genHelpers (context.FunctionSlot "__nanyx_gen_yield_resume" 1) (TaskLowering.resumeTypeName "i32")
+            TaskLowering.globals @ yielding @ scheduler @ generators |> String.concat "\n"
 
     let support = supportFunctions (definitionFunctions @ Option.toList startFunction) tagIdMap functionTable usedHelpers
 

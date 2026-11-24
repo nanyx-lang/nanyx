@@ -1,0 +1,21 @@
+import nanyx/mlist
+
+context Emit(a) = (emit: a -> ())
+
+def select: [c] list(a), ([Emit(b), c] a -> ()) -> list(b) = { xs, f ->
+  memory {
+    def result = MList.empty()
+    use Emit(b)(emit = { y -> MList.add(result, y) }) in
+      for xs | x -> f(x)
+    MList.toList(result)
+  }
+}
+
+def run: int -> int = { n ->
+  def ys = select(list.fromSeq(0..n), { x ->
+    emit(x)
+    if x % 2 == 0 then emit(x + 1)
+  })
+  ys.length
+}
+println(run(300000))

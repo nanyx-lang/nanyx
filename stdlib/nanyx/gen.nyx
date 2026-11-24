@@ -1,0 +1,32 @@
+--| Spike (#2427, not for merging): a generator whose `yield` is a call that stops the block, on the
+  state-machine lowering that tasks use, instead of a rewrite into continuations.
+module gen
+
+--| What `gen.yield` needs: a block given to [`generate`] has it.
+export context Gen = protected ()
+
+--| Gives `x` as the next element of the sequence the block is running for.
+export def gen.yield: [Gen] int -> () = { x ->
+  __nanyx_gen_yield(x)
+}
+
+--| The sequence of what `block` yields. The block runs up to its next `gen.yield` each time the
+  sequence is pulled, and from the start each time the sequence itself is pulled. Pulling a later
+  step twice is not supported in the spike: its frame is used up.
+export def generate: [c] ([Gen, c] () -> ()) -> seq(int) = { block ->
+  -- The block as a function of nothing, holding the members of `c` (leaked in the spike).
+  def run = __nanyx_gen_prepare({ use Gen() in block() })
+  def start: #fresh | #at(I32) = #fresh
+
+  seq.unfold(
+    start
+    {
+      | #fresh -> stepOf(__nanyx_gen_start(run))
+      | #at(frame) -> stepOf(__nanyx_gen_resume(frame))
+    }
+  )
+}
+
+def stepOf: I32 -> #some(int, (#fresh | #at(I32))) | #done = { frame ->
+  if I32.toInt(frame) == 0 then #done else #some(__nanyx_gen_value(), #at(frame))
+}

@@ -1,0 +1,12 @@
+import nanyx/gen
+
+def items = generate {
+  println("before 1")
+  gen.yield(1)
+  println("before 2")
+  gen.yield(2)
+  println("after 2")
+}
+
+println(items \seq.take(1) \seq.toList)
+println(items \seq.toList)

@@ -1,0 +1,10 @@
+context Emit(a) = (emit: a -> ())
+
+def once: [Console, c] ([Emit(int), c] () -> ()) -> () = { block ->
+  use Emit(emit = { y -> println(y + 0) }) in block()
+}
+
+once {
+  emit(1)
+  emit(2)
+}

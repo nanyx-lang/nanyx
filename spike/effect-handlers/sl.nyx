@@ -1,0 +1,4 @@
+def run: int -> int = { n ->
+  seq { for 1..n | i -> yield i } \seq.fold(0, { acc, x -> acc + x })
+}
+println(run(300000))

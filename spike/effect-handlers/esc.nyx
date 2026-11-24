@@ -1,0 +1,12 @@
+import nanyx/mlist
+
+context Emit(a) = (emit: a -> ())
+
+def leak: () -> (int -> ()) = {
+  memory {
+    def result = MList.empty()
+    def handler = { y -> MList.add(result, y + 0) }
+    handler
+  }
+}
+leak()(1)
