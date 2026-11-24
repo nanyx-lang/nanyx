@@ -70,10 +70,10 @@ export def map.fromSeq: [Eq(k), Hash(k), c] ([c] seq((k, v))) -> map(k, v) = { s
   seq.fold(s, map.empty, { m, entry -> map.insert(m, entry.0, entry.1) })
 }
 
---| The map of the entries `block` yields: `map.build { yield ("a", 1) }`. The same as
-  `seq(block) \map.fromSeq`.
-export def map.build: [Eq(k), Hash(k), c, d] ([c] () -> [d] seq((k, v))) -> map(k, v) = { block ->
-  map.fromSeq(seq(block))
+--| The map of the entries `block` emits, through [`Emit`]: `map.build { emit(("a", 1)) }`. Of two
+  entries with the same key, the later wins. The same as `list.build(block) \map.fromList`.
+export def map.build: [Eq(k), Hash(k), c] ([c, Emit((k, v))] () -> ()) -> map(k, v) = { block ->
+  map.fromList(list.build(block))
 }
 
 --| The entries of `m`, each a key and its value, in the order the keys were first added.
@@ -294,10 +294,10 @@ export def set.fromSeq: [Eq(a), Hash(a), c] ([c] seq(a)) -> set(a) = { s ->
   set.fromList(seq.toList(s))
 }
 
---| The set of what `block` yields: `set.build { yield 1  yield 1 }` holds one `1`. The same as
-  `seq(block) \set.fromSeq`.
-export def set.build: [Eq(a), Hash(a), c, d] ([c] () -> [d] seq(a)) -> set(a) = { block ->
-  set.fromSeq(seq(block))
+--| The set of what `block` emits, through [`Emit`]: `set.build { emit(1); emit(1) }` holds one `1`.
+  The same as `list.build(block) \set.fromList`.
+export def set.build: [Eq(a), Hash(a), c] ([c, Emit(a)] () -> ()) -> set(a) = { block ->
+  set.fromList(list.build(block))
 }
 
 --| The elements of `s`, in the order they were first added.
@@ -367,10 +367,9 @@ export def set.filterMap
     set.fromList(list.filterMap(__nanyx_set_elements(s), f))
   }
 
---| The set of the values `f` yields for each element in turn. Values that come out equal are kept
-  once, where the first of them was. A lambda with `yield` in it is a sequence (see [`Yield`]), as
-  in [`list.select`].
-export def set.select: [Eq(b), Hash(b), c, d] set(a), ([c] a -> [d] seq(b)) -> set(b) = { s, f ->
+--| The set of the values `f` emits for each element in turn, through [`Emit`], as in
+  [`list.select`]. Values that come out equal are kept once, where the first of them was.
+export def set.select: [Eq(b), Hash(b), c] set(a), ([c, Emit(b)] a -> ()) -> set(b) = { s, f ->
   set.fromList(list.select(__nanyx_set_elements(s), f))
 }
 

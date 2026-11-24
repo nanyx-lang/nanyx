@@ -3,17 +3,17 @@ module TranspilerWasmTests.Features.StdLib.RunListSelect
 open Xunit
 open TranspilerWasmTestHelpers
 
-// `list.select` and `list.selectOne` take a lambda that yields, which is a lazy sequence (#1699), and give back the values
-// it yields for each element.
+// `list.select` takes a lambda that emits, through the prelude's `Emit` (#2566), and gives back the values it emits for
+// each element. `list.selectOne` takes a lambda that yields, which is a lazy sequence (#1699), and gives back the first.
 
 [<Fact>]
-let ``Run - list.select gives the values the function yields, in order`` () =
+let ``Run - list.select gives the values the function emits, in order`` () =
     let source =
         """type Person = (name: string, isActive: bool)
 
 def names: list(Person) -> list(string) = { people ->
   people \list.select { person ->
-    if person.isActive then yield person.name
+    if person.isActive then emit(person.name)
   }
 }
 
@@ -22,12 +22,12 @@ def items = [#other(1), #thing, #other(3)]
 @entry
 def main = {
   println(names([Person(name = "Ada", isActive = true), Person(name = "Bob", isActive = false), Person(name = "Cy", isActive = true)]))
-  println(items \list.select { item -> if item is #other(v) then yield v })
+  println(items \list.select { item -> if item is #other(v) then emit(v) })
   println([1, 2] \list.select { x ->
-    yield x
-    yield x * 10
+    emit(x)
+    emit(x * 10)
   })
-  println([1, 2] \list.select { x -> if x > 5 then yield x })
+  println([1, 2] \list.select { x -> if x > 5 then emit(x) })
 }
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "[Ada, Cy]\n[1, 3]\n[1, 10, 2, 20]\n[]\n"
@@ -88,7 +88,7 @@ let ``Run - the function list.select runs can use the caller's contexts`` () =
 def main = {
   def doubled = [1, 2] \list.select { x ->
     println("at {x}")
-    yield x * 2
+    emit(x * 2)
   }
   println(doubled)
 }

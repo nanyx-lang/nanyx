@@ -201,32 +201,41 @@ let probeLocal = "__nanyx_probe_local"
 /// `dbg`, which a debug build the runtime runs imports from `nanyx:debug` (see `EmitContext.DbgToRuntime`).
 let dbgImport = "__nanyx_dbg"
 
-/// The variables a probe at the start of `rest`, the rest of a chain, may write (see `CoreIrProbes`): those `rest` reads
-/// but does not bind itself. One it never reads again may have been given up already, so a probe leaves it out.
-let private aliveAt (rest: Expr) : Set<int> =
-    let read = HashSet<int>()
-    let bound = HashSet<int>()
-    for e in CoreIrRewrite.allExprs rest do
-        for atom in CoreIrRewrite.directAtoms e do
-            match atom with
-            | AVar var -> read.Add var.Id |> ignore
-            | _ -> ()
-        for var in CoreIrRewrite.directVars e do
-            read.Add var.Id |> ignore
-        match e.Kind with
-        | Let(var, _, _) -> bound.Add var.Id |> ignore
-        | Match(_, arms) ->
-            for arm in arms do
-                for pattern in arm.Patterns do
-                    for var in Pattern.binds pattern do
-                        bound.Add var.Id |> ignore
-        | ForEach loop ->
-            for stream in loop.Streams do
-                for var in [ stream.Element; stream.Cursor; stream.End ] do
-                    bound.Add var.Id |> ignore
-        | _ -> ()
-    read.ExceptWith bound
-    Set.ofSeq read
+/// Which variables a probe in a chain may write (see `CoreIrProbes`): those the rest of the chain after it reads but does
+/// not bind itself. One it never reads again may have been given up already, so a probe leaves it out. Where each
+/// variable is last read and last bound is worked out once for the chain, whose places are its links' indexes and, for
+/// what it ends in, the number of links, so that a chain of n probes takes time in proportion to n, not n² (#2488).
+type private ChainReads(links: Expr list, last: Expr) =
+    let lastRead = Dictionary<int, int>()
+    let lastBound = Dictionary<int, int>()
+    do
+        let parts = (links |> List.map (fun link -> Chain.relink link (Expr.make (Atom AUnit) IrUnit))) @ [ last ]
+        parts
+        |> List.iteri (fun place part ->
+            for e in CoreIrRewrite.allExprs part do
+                for atom in CoreIrRewrite.directAtoms e do
+                    match atom with
+                    | AVar var -> lastRead.[var.Id] <- place
+                    | _ -> ()
+                for var in CoreIrRewrite.directVars e do
+                    lastRead.[var.Id] <- place
+                match e.Kind with
+                | Let(var, _, _) -> lastBound.[var.Id] <- place
+                | Match(_, arms) ->
+                    for arm in arms do
+                        for pattern in arm.Patterns do
+                            for var in Pattern.binds pattern do
+                                lastBound.[var.Id] <- place
+                | ForEach loop ->
+                    for stream in loop.Streams do
+                        for var in [ stream.Element; stream.Cursor; stream.End ] do
+                            lastBound.[var.Id] <- place
+                | _ -> ())
+
+    /// Whether a probe at `place` may write `var`: what follows it reads it, and does not bind it.
+    member _.AliveAfter (place: int) (var: Var) =
+        let after (places: Dictionary<int, int>) = match places.TryGetValue var.Id with | true, at -> at > place | _ -> false
+        after lastRead && not (after lastBound)
 
 /// The code that gives up the value on top of the stack, of type `ty`: its drop function if it is on the heap.
 let private dropValue (ty: IrType) =
@@ -471,6 +480,14 @@ type private FunctionEmitter(context: EmitContext) =
                 | Let(_, value, _) | Do(value, _) -> unlessResuming (rangeOf value) code
                 | _ -> unlessResuming None code
 
+        // Where the chain's probes are, and what each may write.
+        let chainReads =
+            lazy
+                (let links, last = Chain.split expr
+                 let places = Dictionary<Expr, int>(HashIdentity.Reference)
+                 links |> List.iteri (fun place link -> places.[link] <- place)
+                 ChainReads(links, last), places)
+
         // A temporary a state machine keeps in a local (see `SplitPlan.StoredTemps`) is computed where a temporary that
         // waits would be, at its use: after the counting that comes between, and before the next code that runs. The
         // lowering counts before it computes a temporary that waits, as in `f(x, x.length)`, where `x.length` gives up
@@ -514,7 +531,8 @@ type private FunctionEmitter(context: EmitContext) =
                 walk body
             // A probe stores nothing a temporary waits on, so it can stand among them.
             | Do({ Kind = Probe(kind, locals) } as probe, rest) ->
-                addPart (guard expr (this.Probe probe kind locals (aliveAt rest)))
+                let reads, places = chainReads.Value
+                addPart (guard expr (this.Probe probe kind locals (reads.AliveAfter places.[expr])))
                 walk rest
             | Do(value, rest) ->
                 claim value
@@ -546,7 +564,7 @@ type private FunctionEmitter(context: EmitContext) =
     /// and, if the runtime asks, each of its locals `alive` has, written by its printer, passed with its name. Before it
     /// go the marker of its place and its own, `;;@probe 3 statement` (with the function's name after `entry`), from which `WasmBinary` tells the runtime where
     /// each probe is.
-    member this.Probe (probe: Expr) (kind: ProbeKind) (locals: ProbeLocal list) (alive: Set<int>) : string =
+    member this.Probe (probe: Expr) (kind: ProbeKind) (locals: ProbeLocal list) (isAlive: Var -> bool) : string =
         let id = context.ProbeId ()
         let place =
             match probe.Place, context.ShownFile with
@@ -559,7 +577,7 @@ type private FunctionEmitter(context: EmitContext) =
             | Return -> "return"
         let writes =
             locals
-            |> List.filter (fun local -> alive.Contains local.Var.Id && declared.Contains (localName local.Var))
+            |> List.filter (fun local -> isAlive local.Var && declared.Contains (localName local.Var))
             |> List.map (fun local ->
                 let text = probeText.Value
                 join "\n    " [
@@ -725,7 +743,7 @@ type private FunctionEmitter(context: EmitContext) =
         | Prim(FloatBinary op, _) -> internalError $"the operator `{op}` on floats with other than two operands"
         | FloatConstant value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}"
         | FloatConstant value -> $"f64.const {wasmFloatConst value}"
-        | Probe(kind, locals) -> join "\n    " [ this.Probe expr kind locals Set.empty; "i32.const 0" ]
+        | Probe(kind, locals) -> join "\n    " [ this.Probe expr kind locals (fun _ -> false); "i32.const 0" ]
         | Crash messages ->
             // Writes each message to stderr and traps in `Helpers.crashed`, so the runtime reports the stack. `unreachable`
             // after it, which is never reached, lets the code stand wherever a value is expected.
@@ -1057,16 +1075,25 @@ type private FunctionEmitter(context: EmitContext) =
     /// The code of the array intrinsic `name` (one of `arrayIntrinsics`) on `args`, whose code `atoms` gives, for a value
     /// of type `ty` (see `CoreIrArrays`).
     member _.ArrayIntrinsic (atoms: Atom list -> string) (ty: IrType) (name: string) (args: Atom list) : string =
+        // A mutable array is given as its box, whose array is read with no reference of its own: the box lives until the
+        // intrinsic is done (see `CoreIrRegions.mutableArray`).
+        let arrayTy (array: Atom) = CoreIrRegions.arrayIn (atomType array)
+        let arrayAt (array: Atom) =
+            match atomType array with
+            | CoreIrRegions.RegionBox held ->
+                let fields = match CoreIrRegions.boxType held with IrRecord fields -> fields | _ -> []
+                join "\n    " [ atoms [ array ]; load held (CoreIrLayout.fieldOffset fields CoreIrRegions.boxValueSlot) ]
+            | _ -> atoms [ array ]
         match args with
         // An array's length is the first word of its block, and its element at an index, which the standard library has
         // checked is in range, is after it, with a reference of its own taken (see `CoreIrArrays`).
         | [ array ] when name = Intrinsics.arrayLength ->
-            join "\n    " [ atoms [ array ]; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
+            join "\n    " [ arrayAt array; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
         // A mutable array's element at an index, which the standard library has checked is in range, is given up and
         // the value, which the array takes over, is stored in its place, as `SetField` does. A new array's element is
         // written the same way, with nothing to give up, since it was never written.
         | [ array; index; value ] when name = Intrinsics.marraySet || name = Intrinsics.arrayWrite ->
-            let element = arrayElement (atomType array)
+            let element = arrayElement (arrayTy array)
             let offset = CoreIrLayout.arrayElementOffset element 0
             let slot = freshLocal "__slot" "i32"
             let held = freshLocal "__set" (CoreIrLayout.valueType element)
@@ -1074,7 +1101,8 @@ type private FunctionEmitter(context: EmitContext) =
                 if name = Intrinsics.marraySet && CoreIrDrop.isHeapType element then $"local.get ${slot}\n    {load element offset}\n    {dropValue element}"
                 else ""
             join "\n    " [
-                atoms [ array; index ]
+                arrayAt array
+                atoms [ index ]
                 "i32.wrap_i64"
                 $"i32.const {CoreIrLayout.size element}"
                 "i32.mul"
@@ -1108,9 +1136,10 @@ type private FunctionEmitter(context: EmitContext) =
                 touching $"i32.store offset={CoreIrLayout.arrayLengthOffset}"
                 $"local.get ${array}" ]
         | [ array; index ] when name = Intrinsics.arrayGet ->
-            let element = arrayElement (atomType array)
+            let element = arrayElement (arrayTy array)
             join "\n    " [
-                atoms [ array; index ]
+                arrayAt array
+                atoms [ index ]
                 "i32.wrap_i64"
                 $"i32.const {CoreIrLayout.size element}"
                 "i32.mul"
@@ -1120,7 +1149,7 @@ type private FunctionEmitter(context: EmitContext) =
         | [ list ] when name = Intrinsics.arrayOfList ->
             join "\n    " [ atoms [ list ]; $"call ${CoreIrArrays.ofListName (arrayElement ty)}" ]
         | [ array ] when name = Intrinsics.arrayToList ->
-            join "\n    " [ atoms [ array ]; $"call ${CoreIrArrays.toListName (arrayElement (atomType array))}" ]
+            join "\n    " [ arrayAt array; $"call ${CoreIrArrays.toListName (arrayElement (arrayTy array))}" ]
         | _ -> internalError $"the array intrinsic '{name}' with {args.Length} arguments"
 
     /// The code that copies a spread array's elements, in `source`, into a new one, in `target`, from the index `at`: a loop
@@ -1299,6 +1328,28 @@ type private FunctionEmitter(context: EmitContext) =
 
     /// Tests each arm's patterns in turn: a chain of `if`s ending in `unreachable`.
     member this.Arms (tail: bool) (resultTy: IrType) (scrutinees: Var list) (arms: Arm list) : string =
+        // The code of each scrutinee of a union with payloads that two or more arms test a tag of, read once into a
+        // local before the first arm, by the code that reads the scrutinee (#2309).
+        let codeLocals = Dictionary<string, string>()
+        let rec testsTag (pattern: Pattern) =
+            match pattern with
+            | PTag _ -> true
+            | PAll parts -> parts |> List.exists testsTag
+            | _ -> false
+        let readCodes =
+            [ for index, scrutinee in List.indexed scrutinees do
+                  let testing = arms |> List.filter (fun arm -> testsTag arm.Patterns.[index]) |> List.length
+                  if testing >= 2 && not (CoreIrDrop.tagIsCode scrutinee.Type) then
+                      let local = freshLocal "__code" "i32"
+                      codeLocals.[$"local.get ${localName scrutinee}"] <- local
+                      $"local.get ${localName scrutinee}\n    call ${helper Helpers.tagCode}\n    local.set ${local}" ]
+        // The code of the tag the value `valueCode` leaves, of type `ty`, is: a value of a union with no payloads is its
+        // own code.
+        let tagCodeOf (valueCode: string) (ty: IrType) =
+            match codeLocals.TryGetValue valueCode with
+            | true, local -> $"local.get ${local}"
+            | _ when CoreIrDrop.tagIsCode ty -> valueCode
+            | _ -> $"{valueCode}\n      call ${helper Helpers.tagCode}"
         // The payload of the tag `name` of a value of `ty`, with its type.
         let tagPayloadCode (ty: IrType) (name: string) valueCode =
             let payloadTy =
@@ -1352,7 +1403,7 @@ type private FunctionEmitter(context: EmitContext) =
                 $"{valueCode}\n      i32.const {flag}\n      i32.eq"
             | PTag(name, payload) ->
                 let discriminant =
-                    $"{valueCode}\n      call ${helper Helpers.tagCode}\n      i32.const {tagCode (context.TagId name)}\n      i32.eq"
+                    $"{tagCodeOf valueCode ty}\n      i32.const {tagCode (context.TagId name)}\n      i32.eq"
                 match payload with
                 | None -> discriminant
                 | Some inner ->
@@ -1426,7 +1477,7 @@ type private FunctionEmitter(context: EmitContext) =
                 let armCode = join "\n    " [ bindCode; this.SequenceAs tail resultTy arm.Body ]
                 let result = CoreIrLayout.valueType resultTy
                 $"{allConditions}\n    (if (result {result})\n      (then\n        {armCode}\n      )\n      (else\n        {pieces.Add(emit rest)}\n      )\n    )"
-        emit arms
+        join "\n    " [ yield! readCodes; emit arms ]
 
 /// `code` without each place marker that says what the one before it said (see `placeMarker`).
 let private withoutRepeatedMarkers (code: string) =

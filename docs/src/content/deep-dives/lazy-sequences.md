@@ -165,9 +165,46 @@ function, `seq.delay` by another name. Where the branches of an `if` join, a pur
 carries what any branch's sequence does. There is no `yield` in a `while` loop: a `while` needs a cell, and a sequence
 that reads one can't leave its `memory` block anyway.
 
-`list.select` takes a lambda that yields, a sequence it flattens: `xs \list.select { x -> if x > 0 then yield x }`.
-Each collection type is made from a sequence with `fromSeq`, and from a `yield` block with `build`,
-`Array.build { yield 1 }`.
+# Pushing with `Emit`
+
+A builder that takes every value at once has no use for laziness, so it doesn't take a sequence. `list.build`,
+`list.select`, `Array.build`, `MArray.build`, `MList.build`, `set.build`, `set.select`, `map.build`, `Queue.build`,
+`Stack.build` and `Slice.select` take a function that requires the prelude's `Emit(a)`, whose one member is
+`emit: a -> ()`, and run it under a handler of their own:
+
+```nanyx fragment
+export def list.build: [c] ([c, Emit(a)] () -> ()) -> list(a) = { block ->
+  memory {
+    mut first = []
+    mut last = []
+
+    use Emit(a)(
+      emit = { y ->
+        def cell = [y]
+
+        match last
+          | [] -> (first := cell)
+          | previous -> __nanyx_list_set_tail(previous, cell)
+
+        last := cell
+      }
+    ) in block()
+
+    first
+  }
+}
+```
+
+`emit(x)` is an ordinary context call: the handler runs and returns, and the block carries on. So a `for` loop around
+an `emit` stays a loop, and a value costs what the handler makes for it, here one list cell. `list.select` is
+`list.build { for xs | x -> f(x) }`, and the other builders are `list.build` and the collection's `fromList`, but for
+`MList.build`, whose handler adds to the `MList` itself. The handler's cells are captured inside the builder's own
+`memory` block, which is allowed, and can't leave it ([Memory](../advanced/memory#values-cannot-escape-memory-scope)).
+
+`Emit` is the pushing counterpart of `Yield`. Where `yield` makes the lambda it is in a sequence, and the code after it
+waits to be pulled, `emit` hands the value over and runs on. `seq { ... }` and the `selectOne` functions, which stop
+at the first value, keep taking a sequence. Nothing else about `Emit` is special: a function that requires it can be
+passed around and called through other functions, and a user's own `use Emit(int)(emit = ...) in ...` handles it.
 
 # What a step costs
 

@@ -91,6 +91,11 @@ pass is `DeferredErrors.deferErrors`, and the backend lowers what it leaves to a
   the wrong number of them, is checked against the callee's type as any call is. Only what a failed argument would have
   decided is `???`: `list.map(xs, 5)` is a `list(???)`. A call whose callee is unknown, ambiguous or a context instance
   is `???` whole.
+- **`???` is typed `undefined`, not the error type.** The placeholder is recorded as failed at its node, so it is
+  deferred as any error is, but its type is the bottom type, as `crash(...)`'s is, so it fixes no type variable of an
+  annotation. An expression with a part that never gives a value, and only names or literals worked out before it, as
+  in `x.name`, `x + 1` or `x(1)` after `def x = ???` or `def x = crash("no")`, reports nothing more and is read as
+  that part (`Unreached`); if the part is a `???`, its error moves to the whole, which the deferral pass replaces.
 - **Conflicts among constraints.** Once the module is checked, its constraints are solved past each failure: the
   constraints from where it failed are set aside and the rest solved again, until they agree. The variables of a
   failed constraint's expected side that nothing else fixes are bound to the error type, solved after everything else

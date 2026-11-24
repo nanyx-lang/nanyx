@@ -28,10 +28,11 @@ module internal NumericLiterals =
         | BoolLit _ -> TypeResolution.literalType literal, state
 
     /// Whether `ty` is a type that is known not to be a number. A type variable, an open record and a nominal type
-    /// are left to unification, which reports them if they are not numbers; the error type is what failed to check.
+    /// are left to unification, which reports them if they are not numbers; the error type is what failed to check, and
+    /// `undefined` never gives a value to use.
     let isKnownNonNumber (ty: Ty) =
         match Unifier.unalias ty with
-        | ty when Unifier.isError ty -> false
+        | ty when Unifier.isError ty || Unifier.isBottom ty -> false
         | TyPrimitive("int" | "float")
         | SizedNumberType _
         | TyVar _

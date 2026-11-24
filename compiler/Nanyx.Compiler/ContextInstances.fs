@@ -379,6 +379,23 @@ let private otherInstanceInScope (env: TypeEnv) (state: InferState) (ctxName: Id
     |> Option.filter (fun _ -> (instanceInScope env state ctxName argTys).IsNone)
     |> Option.map (fun (_, instanceArgs) -> TyApply(ctxName, instanceArgs))
 
+/// `state` where a call that requires `ctxName` at `argTys` settles the nearest instance of that context in scope in
+/// `env`, when its arguments, as far as the constraints so far tell, still hold variables that `argTys` fit: a lambda
+/// checked against `[c, Emit(b)] () -> ()`, where `b` is a builder's own and still open, has the instance `Emit(b)` in
+/// scope, and a call inside it to a function that requires `Emit(int)` makes `b` an `int`, as calling the member `emit`
+/// with an `int` would (#2566). `None` when the nearest instance of the context is settled already, or the call doesn't
+/// fit it: a nearer one is never passed over for one further out. A variable a def's annotation writes is rigid, so
+/// settling one here is the error that check reports.
+let private settleInstanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : InferState option =
+    nearestInstance env state (fun name instanceArgs -> if name = ctxName then Some instanceArgs else None)
+    |> Option.bind (fun (_, instanceArgs) ->
+        let pairs = if instanceArgs.Length = argTys.Length then List.zip instanceArgs argTys else []
+        if not pairs.IsEmpty
+           && instanceArgs |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not)
+           && Solving.unify ((pairs |> List.map (fun (instanceArg, argTy) -> instanceArg, argTy, Equal, span)) @ Solving.agreeing state.Constraints) |> Result.isOk
+        then Some (pairs |> List.fold (fun current (instanceArg, argTy) -> addConstraintAt span instanceArg argTy current) state)
+        else None)
+
 /// The error for a call of `name`, at `span`, that requires `ctxName` at a type nothing settles, where the instance of
 /// it in scope is `other`, for another type.
 let private unsettledBesideOther (name: Identifier) (ctxName: Identifier) (other: Ty) (span: SourceSpan) : Diagnostic =
@@ -550,7 +567,23 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
 /// settled there finds its instance later, as such a call does (see `resolveReferenceInstances`).
 and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty option) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     let contexts = contextRequirementsOf env state name |> Option.defaultValue []
+    // A call with an argument that never gives a value (of type `undefined`) never happens: its parameter's type is
+    // left open, and it has every context, as a call with an argument that failed to check has.
+    let neverHappens =
+        match call.Kind with
+        | FunctionCall(_, _, args) when not reference ->
+            args |> List.exists (fun arg -> state.ExprTypes |> Map.tryFind arg.Id |> Option.exists (resolveSoFar state >> Unifier.isBottom))
+        | _ -> false
     match TypeEnv.tryFind name env, calleeTy with
+    | Some _, Some _ when neverHappens && not (InterpolationHoles.isHole name) && contexts |> List.exists (isParameterizedContext state) ->
+        let found =
+            contexts
+            |> List.map (fun ctx ->
+                match ctx.Kind with
+                | TypeApply(ctxName, _) when ctxName = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome ->
+                    Some (InstanceSynthesized InterpolationHoles.builtInMembers)
+                | _ -> None)
+        Ok (if found |> List.forall Option.isNone then state else { state with ContextInstances = state.ContextInstances |> Map.add call.Id found })
     | Some scheme, Some calleeTy when contexts |> List.exists (isParameterizedContext state) ->
         // The variables the call's contexts are read with, one variable for each name across them.
         let shared = ref Map.empty
@@ -577,6 +610,13 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     // Until the def around the call is inferred, any variable of the type may turn out to stand for one
                     // its callers choose, so a union open to more tags is left to the compiler's own.
                     let rigid = argTys |> List.map TypeEnv.freeTyVars |> Set.unionMany
+                    // The instance in scope whose open arguments the call settles, found with what it settles.
+                    let settledInScope (current: InferState) =
+                        settleInstanceInScope env current ctxName argTys calleeSpan
+                        |> Option.bind (fun next ->
+                            instanceInScope env next ctxName argTys
+                            |> Option.map (fun inScope ->
+                                found @ [ Some (InstanceInScope inScope) ], withAssociatedOfInstance env next calleeSpan ctxName argTys argTysAsRead))
                     let wellKnown =
                         if reference && not settled then None
                         else
@@ -619,9 +659,9 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                     HoleScopes = current.HoleScopes |> Map.add call.Id (env, annotatedDef) })
                         | Error _, _ -> Ok (found @ [ None ], current)
                     // A value that failed to check, or one made of such a value (a list of them), has every context, so
-                    // that the call is not an error too. It has the compiler's own `ToString`, so the backend still has
+                    // that the call is not an error too, and so does one that never gives a value (of type `undefined`). It has the compiler's own `ToString`, so the backend still has
                     // a member to pass. A hole of one is written by the backend, which reports the error where the hole is.
-                    | None, _ when not (InterpolationHoles.isHole name) && argTys |> List.exists Unifier.holdsError ->
+                    | None, _ when not (InterpolationHoles.isHole name) && argTys |> List.exists (fun ty -> Unifier.holdsError ty || Unifier.isBottom ty) ->
                         if ctxName = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome then
                             Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
                         else Ok (found @ [ None ], current)
@@ -666,10 +706,13 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     | None, None when TypeValues.passesBuiltIn env ctxName argTys ->
                         Ok (found @ [ Some (InstanceSynthesized TypeValues.builtInMembers) ], current)
                     | None, None when canSynthesize ctxName argTys ->
-                        synthesizeInstance env current name ctxName argTys calleeSpan
-                        |> Result.map (fun (instance, next) -> found @ [ Some instance ], next)
+                        match synthesizeInstance env current name ctxName argTys calleeSpan, settledInScope current with
+                        | Ok (instance, next), _ -> Ok (found @ [ Some instance ], next)
+                        | Error _, Some settled -> Ok settled
+                        | Error errors, None -> Error errors
                     | None, None when InterpolationHoles.isHole name ->
                         InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
+                    | None, None when (settledInScope current).IsSome -> Ok (settledInScope current).Value
                     | None, None ->
                         // An instance of the context at other arguments puts its members in scope by their names, but
                         // it is not one for a type the call leaves open: that is found once the type is known.
@@ -919,6 +962,11 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
             Some (EqualityOperators.resolvePending hasInstanceIn derive defScheme current pending argTys)
         elif OrderingOperators.isPending pending then
             Some (OrderingOperators.resolvePending (orderingInstance pending.Callee pending.Span) hasInstanceIn defScheme current pending argTys)
+        // A value that turned out never to give one has every context, as at a call (see `resolveCallInstances`).
+        elif argTys |> List.exists Unifier.isBottom then
+            if pending.Context = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome then
+                Some (Ok (Some (InstanceSynthesized InterpolationHoles.builtInMembers), current))
+            else Some (Ok (None, current))
         else
             // The def now requires a well-known context of each of its variables the call compares values of. A call left
             // to the end of the module needs an instance for each variable of the type the def around it writes, but

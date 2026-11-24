@@ -118,6 +118,7 @@
     <Compile Include="Features\Imports\SelectiveImportTests.fs" />
     <Compile Include="Features\Imports\ReExportTests.fs" />
     <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
+    <Compile Include="Features\Inference\OneErrorPerMistakeTests.fs" />
     <Compile Include="Features\Inference\FailedCallTypeTests.fs" />
     <Compile Include="Features\Inference\InferenceTests.fs" />
     <Compile Include="Features\Inference\ModuleSolveTests.fs" />
@@ -143,6 +144,7 @@
     <Compile Include="Features\Linters\UseInBracesTests.fs" />
     <Compile Include="Features\Linters\StrayDocCommentsTests.fs" />
     <Compile Include="Features\Linters\UnannotatedExportsTests.fs" />
+    <Compile Include="Features\Linters\ResultOnlyTypeVariableTests.fs" />
     <Compile Include="Features\Linters\UnusedResultsTests.fs" />
     <Compile Include="Features\Linters\UnawaitedTaskTests.fs" />
     <Compile Include="Features\Linters\UselessExpressionsTests.fs" />
@@ -227,6 +229,7 @@
     <Compile Include="Features\Tooling\TypeHintsTests.fs" />
     <Compile Include="Features\Types\AnnotationsTests.fs" />
     <Compile Include="Features\Types\BottomTypeTests.fs" />
+    <Compile Include="Features\Types\UndefinedUseTests.fs" />
     <Compile Include="Features\Types\GenericNominalsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
     <Compile Include="Features\Types\NominalUpdatesTests.fs" />

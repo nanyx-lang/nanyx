@@ -137,11 +137,11 @@ def total: list(int) -> int = { xs ->
 
 This pattern is called a **contextual lambda**: the higher-order function decides which context to provide, while the lambda body uses that context implicitly.
 
-A lambda with `yield` in it is a lazy sequence of the values it yields (see [Workflows](../advanced/workflows#yield-and-sequences)), so `list.select` takes one, and gives back every value it yields for each element:
+`list.select` takes a contextual lambda too: it runs the lambda for each element with the prelude's `Emit` context, and gives back every value the lambda passes to `emit`, none or several for each element ([Building a collection](../advanced/sequences-and-queries#building-a-collection)):
 
 ```nanyx
 def names = ["Ann", "", "Bo"] \list.select { name ->
-  if name != "" then yield name
+  if name != "" then emit(name)
 }
 
 println(names)
