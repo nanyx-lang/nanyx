@@ -57,6 +57,14 @@ let ``Record patterns by member name keep their ...`` () =
     Assert.Equal("def g = { | (a = 1, ...) -> 1 }\n", format "def g = { | ( a = 1 ,... ) -> 1 }")
 
 [<Fact>]
+let ``A record pattern keeps a field named alone, and one written name = name, as written`` () =
+    unchanged (normalized """def f = {
+  | (x, y = b) -> 1
+  | (x = x, y = b, ...) -> 2
+}""")
+    Assert.Equal("def g = { (x, y = b) -> x + b }\n", format "def g = { ( x ,y=b ) -> x + b }")
+
+[<Fact>]
 let ``A tag's record payload pattern is written in the tag's brackets`` () =
     unchanged (normalized """def f = {
   | #some(count = 0, ...) -> 0

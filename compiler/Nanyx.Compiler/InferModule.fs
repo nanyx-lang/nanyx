@@ -447,7 +447,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
             let blockName = fst (blockAround state.ModuleBlocks expr.Span).Value
             errors <- errors @ [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"'{blockName}' is a module block, which can only hold definitions, types and imports, not code to run" |> Diagnostics.about blockName ]
+        // A statement has type variables of its own too: a scope the def before it wrote is not one its own
+        // annotations name.
         | Expr expr ->
+            beginDef ()
             match inferExpr env state expr with
             | Ok (typedExpr, next) ->
                 state <- next
@@ -563,6 +566,30 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     errors <- errors @ [ contextInValue caller ctxName $"'{used.Callee}' requires" used.Span ]
             | _ -> ()
         state <- recordDeferredProviders required uses state |> recordInstanceProviders
+        // A lambda that calls a def in a cycle with its own requires the plain ambient contexts that def does: its
+        // variable for them takes them, or, where it was given since for a function type, fits them in there, as a
+        // function that requires them does (see `FunctionContexts.fit`).
+        for callee, var, span in List.rev state.PendingCallContexts do
+            let needed =
+                required |> Map.tryFind callee |> Option.defaultValue Set.empty
+                |> Set.filter (WrittenContexts.isScoped state >> not)
+                |> Set.toList
+                |> List.map (fun ctxName -> TyApply(ctxName, []))
+            match resolveSoFar state var with
+            | TyVar _ -> state <- addConstraintAt span var (TyUnion needed) state
+            | settled ->
+                let expected = match settled with TyUnion items -> items | other -> [ other ]
+                let fresh () =
+                    let made, next = freshVar state
+                    state <- next
+                    made
+                match FunctionContexts.fit fresh span needed expected with
+                | Ok constraints -> state <- { state with Constraints = List.rev constraints @ state.Constraints }
+                | Error extra ->
+                    let named = extra |> List.choose (function TyApply(name, _) -> Some $"'{name}'" | _ -> None) |> String.concat ", "
+                    let message =
+                        $"'{callee}' requires the contexts {named}, which the function this call is in is given where a function that does not require them is expected: write them on the type expected, or a context variable for any, as in `[c] a -> b`"
+                    errors <- errors @ [ Diagnostics.at DiagnosticCodes.ContextsNotAllowed span message ]
         // What an unannotated function needs is part of its type, as a context written in its type is. They come after
         // the parameterised contexts it requires, which its calls have already found instances of in that order.
         state <-

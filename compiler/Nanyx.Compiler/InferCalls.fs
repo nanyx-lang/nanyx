@@ -198,9 +198,14 @@ let rec internal inferCall
     | Ok state ->
         // What the callee requires is used where the call runs, by the lambda around it if any (see `LambdaContexts`).
         let state =
-            let written = contextRequirementsOf env state name |> Option.defaultValue []
+            let written = contextsRequiredByCall env state name
             let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
-            state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
+            let state = state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
+            // A def not inferred yet, in a cycle with this one, is given a variable for its contexts, bound once they
+            // are known.
+            match pendingCallContexts env state name calleeSpan with
+            | Some (var, next) -> LambdaContexts.record [ var ] next
+            | None -> state
         // A callee a module block keeps from here is checked on as if it were reached (see `FailedCalls`).
         let reachErrors = TypeEnv.tryFind name env |> Option.map (fun scheme -> referenceErrors name expr scheme state) |> Option.defaultValue []
         let state = if FailedCalls.calleeKnown reachErrors && not reachErrors.IsEmpty then FailedCalls.failed expr reachErrors state else state
@@ -210,7 +215,7 @@ let rec internal inferCall
         | Some (_, Some lookup) -> inferLookup inferExpr env state expr lookup (Expression.from expr (IdentifierExpr name)) spanOpt args
         | Some (scheme, None) ->
             let mutable current = state
-            let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
+            let funcTy, nextState = instantiate (recordReference expr scheme current |> HiddenKeywords.note env expr name scheme) scheme
             let written = contextRequirementsOf env state name |> Option.defaultValue []
             let env, funcTy, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
             current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }
@@ -270,6 +275,9 @@ let rec internal inferCall
                 // One whose contexts only the call's result carries is not run by the call (see
                 // `Contexts.asCarriedArgument`).
                 let inferLambda state lambda lambdaArgs lambdaBody expectedInput paramTy =
+                    match EmitLambdas.yieldGivenToEmitter state lambdaBody paramTy with
+                    | Some yieldsInstead -> Error [ yieldsInstead ]
+                    | None ->
                     let lambdaEnv, state = extendEnvForLambdaArgument env state lambda (Some paramTy)
                     let instances = instancesSuppliedToLambda state lambda (Some paramTy)
                     let ownContexts =
@@ -308,16 +316,19 @@ let rec internal inferCall
                         match inferred with
                         | Ok ((ty, next), tupleItems) ->
                             // A tuple of the callee's parameters is reported at the argument in it that does not fit
-                            // (see `LambdaArguments.reportedSpan`).
-                            let span =
+                            // (see `LambdaArguments.reportedSpan`), which is worked out once a mismatch at the tuple is
+                            // reported: each call working it out looked at every literal of the def before it (#2552).
+                            let next =
                                 match paramTy, tupleItems with
-                                | Some paramTy, Some (typedItems, itemTys) -> LambdaArguments.reportedSpan next arg.Span typedItems itemTys ty.Type paramTy
-                                | _ -> arg.Span
+                                | Some paramTy, Some (typedItems, itemTys) ->
+                                    let reported = lazy (LambdaArguments.reportedSpan next arg.Span typedItems itemTys ty.Type paramTy)
+                                    { next with ArgumentSpans = next.ArgumentSpans |> Map.add arg.Span reported }
+                                | _ -> next
                             current <-
                                 match paramTy with
-                                | Some paramTy -> addAssignableConstraintAt span ty.Type paramTy next
+                                | Some paramTy -> addAssignableConstraintAt arg.Span ty.Type paramTy next
                                 | None -> next
-                            Ok (ty, span)
+                            Ok (ty, arg.Span)
                         | Error err -> Error err)
                 let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
                 if errors.IsEmpty then

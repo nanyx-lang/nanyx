@@ -147,11 +147,28 @@ jobs:
 
       # A Nanyx component and Rust components call each other: a Rust command calls the Nanyx component's exports,
       # which call a Rust component's, composed with wac and run under Wasmtime (see ComponentInterop/run.sh).
+      # wac's own build of its release, checked against its SHA-256, rather than compiled from source with
+      # `cargo install`, which took over two minutes (#2405).
       - name: Install wac and Rust's wasm32-wasip2 target
         if: matrix.os == 'ubuntu-latest'
         run: |
           rustup target add wasm32-wasip2
-          cargo install wac-cli --version 0.12.0 --locked
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/wac" \
+            https://github.com/bytecodealliance/wac/releases/download/v0.12.0/wac-cli-x86_64-unknown-linux-musl
+          echo "7cd490edbd452221ef89e6750fc43eacc9b71b1242095eb577cb9a3bf0d3beda  $RUNNER_TEMP/wac" | sha256sum --check --strict
+          install -m 755 "$RUNNER_TEMP/wac" "$HOME/.cargo/bin/wac"
+          wac --version
+
+      # The Rust crates the interop test builds, and what Cargo downloads for them, kept between runs.
+      - name: Cache the interop crates' dependencies and builds
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            compiler/ComponentInterop/units/target
+            compiler/ComponentInterop/app/target
+          key: interop-${{ runner.os }}-${{ hashFiles('compiler/ComponentInterop/*/Cargo.lock') }}
 
       - name: Call between a Nanyx component and Rust components under Wasmtime
         if: matrix.os == 'ubuntu-latest'
@@ -201,9 +218,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
 
+      # Without the .br and .gz copies of each file a publish writes by default, which nothing here reads: the zip leaves
+      # them out, and the site that serves it compresses what it serves itself (#2554).
       - name: Publish the compiler built for the browser
-        run: dotnet publish Nanyx.Browser/Nanyx.Browser.csproj --configuration Release
+        run: dotnet publish Nanyx.Browser/Nanyx.Browser.csproj --configuration Release -p:CompressionEnabled=false
 
       - name: Install Playwright and Chromium
         working-directory: compiler/Nanyx.Browser
@@ -214,8 +235,8 @@ jobs:
       - name: Test
         run: node Nanyx.Browser/playground-test.mjs
 
-      # The published page, with the shipped packages and the playground host's runner, without the .br and .gz copies
-      # the publish writes beside each file: the site that serves it compresses what it serves itself.
+      # The published page, with the shipped packages and the playground host's runner. The publish writes no .br or .gz
+      # copies, which the zip would leave out anyway.
       - name: Package
         working-directory: compiler/Nanyx.Browser/bin/Release/net10.0/publish/wwwroot
         run: |
