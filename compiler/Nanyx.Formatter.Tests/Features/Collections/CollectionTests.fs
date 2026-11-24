@@ -33,6 +33,8 @@ def main = {
 let ``List spreads are printed as written`` () =
     unchanged "def a = [1, ...xs, 2, ...ys]\n"
     unchanged "def b = [1] ++ xs\n"
+    unchanged "def c = [...xs]\n"
+    unchanged "def d = [...xs, ...ys]\n"
 
 [<Fact>]
 let ``Map literals are printed as written, one entry per line when they do not fit`` () =
