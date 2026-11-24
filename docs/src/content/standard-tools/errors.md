@@ -2469,6 +2469,31 @@ println(deserialise(type int, "abc"))
 To fix it, write `Type(a)` for `type a`, and `into: Type(into)` for `into: type`, as the editor's quick fix does. Calls
 don't change: they still pass `type int`.
 
+# NYX0283: Value of a type only a later use fixes
+
+A def that writes no type and whose value is not a function calls a function that requires a context of the type it
+gives back, and nothing in the def says what that type is. A later use of the value, such as
+`def person: Person = obj`, doesn't fix it: a value's type is fixed where it is defined.
+
+```nanyx
+type Person = (name: string)
+
+context Decode(a) = (decode: string -> a)
+
+def Person.decode: string -> Person = { s ->
+  Person(name = s)
+}
+
+def parse: [Decode(a)] string -> a = { json ->
+  decode(json)
+}
+
+def obj = parse("Ada")  -- error NYX0283: 'parse' requires 'Decode' of a type nothing in the definition of 'obj' fixes, ...
+```
+
+To fix it, write the type on the def, `def obj: Person = parse("Ada")`, or give the function a
+[type argument](../tour/functions#type-arguments) and pass the type: `parse(type Person, "Ada")`.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

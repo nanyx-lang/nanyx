@@ -851,6 +851,11 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                     // The parameterised contexts a local def that writes no type requires are part of
                                     // its type, as if written.
                                     if expectedDeclaredOpt.IsNone && contextOpt.IsNone then
+                                        let earlier = pendingBefore |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
+                                        let calls = current.PendingContextInstances |> List.filter (fun p -> not (earlier.Contains (p.Call, p.Index)))
+                                        match ContextInference.unfixedValueType current name (declarationSpan current DefValue expr) declaredTy calls with
+                                        | [] -> ()
+                                        | err -> errors <- err
                                         scheme, ContextInference.resolveLocal name symbol scheme pendingBefore generalized
                                     else scheme, generalized
                             current <-
