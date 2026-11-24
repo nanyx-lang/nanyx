@@ -907,10 +907,20 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 toIrType (substitute subst (TyFunc(inputTy, resultTy, requiredContexts lambdaTy)))
             | None -> tyOf expr
         let arity = IrType.closureArity (parameterNames target) ty
+        // The members the lambda captures that this function knows, which it is specialised on in turn, and not
+        // captured when they come last: a lambda that captured only them is a static closure, made once. A local
+        // function generic in variables of its own keeps them, since it finds its captures by its own keys (#2311).
+        let knownOf (name: string) =
+            match scope.Vars |> Map.tryFind name with
+            | Some var -> match known.TryGetValue var.Id with | true, (_, knownMember) -> Some knownMember | _ -> None
+            | None -> None
+        let knownCaptured, kept = CoreIrLowerKnown.knownCaptures input target knownOf captured
+        let captured = if bindings.IsEmpty && typeArguments.IsEmpty then kept else captured
         this.Atoms scope captured (fun atoms ->
             CoreIrLowerLocals.capturedInstances this.LocalTools scope target bindings captured atoms (fun atoms capturedLocals ->
                 let capturedTys = atoms |> List.map atomType
-                let name = request { SpecKey.plain target (self.TypeArguments @ typeArguments) with Described = self.Described } subst (LiftedCapturing(capturedTys, capturedLocals))
+                let key = { SpecKey.plain target (self.TypeArguments @ typeArguments) with Described = self.Described; Known = knownCaptured }
+                let name = request key subst (LiftedCapturing(capturedTys, capturedLocals))
                 k (closureOver name arity atoms ty)))
 
     /// What lowering a local function generic in variables of its own needs from this function's lowering (see
@@ -1163,9 +1173,25 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // The local is named before its value is lowered, so that locals are declared in the order they are
             // written. Its type is its value's, which a local lambda lifting made has as well.
             let localName = uniqueName name
+            // A captured member the lambda is specialised on is known in it, as in the function that made it: it is
+            // given its value here rather than read from the environment, which may not hold it (see `Closure`).
+            let ownerParameter = if scope.CapturedMembers.ContainsKey name then CoreIrLowerKnown.ownerParameter input self.Definition name else None
+            let knownCapture =
+                ownerParameter
+                |> Option.bind (fun parameter ->
+                    self.Known |> List.tryFind (fun (key, knownMember) -> key = parameter.Key && not (KnownMember.isPassed knownMember)))
+            let valueOf (k: Expr -> Expr) =
+                match knownCapture with
+                | Some (_, knownMember) ->
+                    CoreIrLowerMembers.valueOfKnown this.MemberTools knownMember (fun value ->
+                        match ownerParameter |> Option.bind _.Type |> Option.map (substitute subst >> toIrType) with
+                        | Some ty -> CoreIrLowerMembers.coerce this.MemberTools scope value ty (fun value -> k (Expr.make (Atom value) ty))
+                        | None -> k (Expr.make (Atom value) (atomType value)))
+                | None -> this.Complex scope rhs k
             let statement =
-                this.Complex scope rhs (fun value ->
+                valueOf (fun value ->
                     let local = newVar localName Local value.Type
+                    knownCapture |> Option.iter (fun (_, knownMember) -> known.[local.Id] <- (local, knownMember))
                     this.NoteDefinedKnown local rhs value
                     input.ExprTypes |> Map.tryFind rhs.Id |> Option.iter (fun ty -> noteProbed name local (substitute subst ty))
                     let members =
