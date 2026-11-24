@@ -149,6 +149,9 @@ def sayHello: [Console] () -> () = {
 }
 ```
 
+A context's members are in scope in such a function by their bare names, and so are the definitions
+[attached to the context](./attached-definitions#attached-to-a-context), as `start` is wherever `Async` is.
+
 A function whose type lists no contexts requires none, so calling `println` in its body is an error (`NYX0211`). To say on purpose that a function must stay pure, write an empty list, `[]`. It means the same as leaving the list out, and the formatter keeps it:
 
 ```nanyx

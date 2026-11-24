@@ -8,7 +8,7 @@ open Nanyx.Compiler.Tests.TestSupport
 
 /// `source` after the import of what starts and awaits tasks.
 let private withTasks (source: string) =
-    withFinalNewline ("import nanyx/async as (start, await, Task)\n\n" + normalized source)
+    withFinalNewline ("import nanyx/async as (Async, Task)\n\n" + normalized source)
 
 [<Fact>]
 let ``A def that starts tasks doesn't require their scope`` () =
@@ -76,7 +76,7 @@ let ``Starting a task whose function uses a cell is an error`` () =
 let ``Starting a task whose function holds an MRef is an error`` () =
     let source =
         withFinalNewline
-            """import nanyx/async as (start, await)
+            """import nanyx/async as (Async)
 import nanyx/mref
 
 def reads = { _ ->

@@ -193,3 +193,23 @@ println(check(1))
 println(check(5))
 println(check(-1))"""
     assertPrints "false\ntrue\ntrue\n" "false\ntrue\ntrue\n" source
+
+[<Fact>]
+let ``A local def or a parameter named start wins over Async's`` () =
+    let source =
+        """def local = { _ ->
+  def start = { n: int -> n + 1 }
+  start(41)
+}
+
+def given = { start: string -> "given {start}" }
+
+def both = { _ ->
+  def task = start! 1
+  await(task)
+}
+
+println(local())
+println(given("x"))
+println(both())"""
+    assertPrints "42\ngiven x\n1\n" "42\ngiven x\n1\n" source

@@ -256,7 +256,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 |> Result.map (fun next ->
                     let symbol = scheme.Symbol |> Option.bind next.Symbols.TryFind
                     mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name |> LambdaContexts.recordNamed symbol ty)
-        | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"'{name}' is not in scope" env.Names.Keys name ]
+        | None ->
+            // A def attached to a context available here, by its bare name.
+            match AttachedContextDefs.qualifiedFor env state name expr.Span with
+            | Some (Ok qualified) -> inferExpr env (AttachedContextDefs.record expr.Id qualified state) { expr with Kind = IdentifierExpr qualified }
+            | Some (Error errors) -> Error errors
+            | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"'{name}' is not in scope" env.Names.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->

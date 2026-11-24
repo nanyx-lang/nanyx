@@ -37,10 +37,10 @@ Nothing starts `Async`: a host that can suspend provides it to the program's ent
 provides `Console`, and inference adds it to every function that calls one that waits. A function
 that doesn't require it provably never waits.
 
-To do several things at once, start a [`Task`](#task) for each with `start!`, and [`await`](#await) it: a task
+To do several things at once, start a [`Task`](#task) for each with `start!`, and [`Async.await`](#asyncawait) it: a task
 runs at the same time as the code that started it, in the same instance, and can't outlive the def
-that started it, which waits for its tasks before it returns. The hosts that provide `Async`
-export `start` and `await` beside it. How to use them is on the
+that started it, which waits for its tasks before it returns. `start` and `await` are attached to
+`Async`, so they are in scope wherever it is. How to use them is on the
 [Async](../advanced/async) page.
 
 ## `Async`
@@ -72,7 +72,7 @@ type Task(a) = [TaskScope] protected (handle: I32)
 ```
 
 A task: something running at the same time as the code that started it, in the same instance, which gives back
-a value of type `a` when it finishes. [`start`](#start) starts one and [`await`](#await) waits for it. It belongs to the scope it
+a value of type `a` when it finishes. [`Async.start`](#asyncstart) starts one and [`Async.await`](#asyncawait) waits for it. It belongs to the scope it
 was started in, so it can't leave that def.
 
 ## `scope`
@@ -85,10 +85,10 @@ Runs `block` as a scope for the tasks it starts, and gives back its result once 
 awaited or not. The compiler makes the body of each module-level def that starts a task such a block, so a def
 is the scope of its tasks, and nothing that holds one can leave it.
 
-## `start`
+## `Async.start`
 
 ```nanyx fragment
-def start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a)
+def Async.start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a)
 ```
 
 Starts a task that runs `work`, and gives it back at once: the task runs at the same time as the code that
@@ -96,10 +96,10 @@ started it, from the next time that code waits. It belongs to the innermost scop
 is a `#delay` keyword: `start! e` is `start({ e })`, so `start! http.get(url) \orCrash("failed")` runs the
 `orCrash` in the task.
 
-## `await`
+## `Async.await`
 
 ```nanyx fragment
-def await: [Async, TaskScope] Task(a) -> a
+def Async.await: [Async, TaskScope] Task(a) -> a
 ```
 
 Waits for `task` to finish, and gives back what it gave back. A task can be awaited more than once: each gives
