@@ -2443,9 +2443,13 @@ will be errors in a later release.
 ```nanyx
 context Decode(a) = (decode: string -> a)
 
-def int.decode: string -> int = { text -> text.length }
+def int.decode: string -> int = { text ->
+  text.length
+}
 
-def deserialise: [Decode(a)] type a, string -> a = { t, text -> decode(text) }  -- warning NYX0281: A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`. `type a` will be an error in a later release
+def deserialise: [Decode(a)] type a, string -> a = { t, text ->
+  decode(text)
+} -- warning NYX0281: A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`. `type a` will be an error in a later release
 
 println(deserialise(type int, "abc"))
 ```
