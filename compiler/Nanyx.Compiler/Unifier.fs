@@ -874,13 +874,6 @@ module Unifier =
                 let r = applyIn subst right
                 if l = r then
                     loop subst rest
-                // A variable an annotation writes stands for any type, so the error type, which agrees with anything,
-                // fixes nothing about it: a value that failed to check given where an `a` is expected leaves `a` as it
-                // is, and the def's annotation is not then too general because of it.
-                elif (match l, r with
-                      | TyVar v, other | other, TyVar v -> v.Name.IsSome && not (isMadeUpRest v) && isError other
-                      | _ -> false) then
-                    loop subst rest
                 // A variable takes the error type, as it would any other; anything else agrees with it. What a call to
                 // a value that failed to check gives back failed to check too: the variables of a function type's
                 // result take the error type, so that a function the result is passed to finds it has every context.
