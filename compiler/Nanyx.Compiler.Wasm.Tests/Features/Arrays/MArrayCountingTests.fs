@@ -18,8 +18,7 @@ def churn: [Memory] MArray(int), int, int -> int = {{ xs, i, acc ->
 }}
 
 println(memory {{
-  def xs = MArray.create(1000)
-  churn(xs, {steps}, 0)
+  churn(MArray.create(1000), {steps}, 0)
 }})
 """
 
