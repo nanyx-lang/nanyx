@@ -52,6 +52,21 @@ let intoRecordFields (state: InferState) (expr: Expression) (fields: RecordField
             | _ -> state) state
     | _ -> state
 
+/// `state` with each of `exprs` that is a lambda checked against `expected`, if that is a function type, as a lambda
+/// argument is: it takes the input that type says, and uses its contexts, but its result is only checked where the
+/// lambda is, so a result of the wrong type is reported once (see `InferState.ExpectedLambdaTypes`).
+let intoLambdas (expected: Ty) (state: InferState) (exprs: Expression list) : InferState =
+    match resolveSoFar state expected |> Unifier.unalias with
+    | TyFunc(input, _, contexts) ->
+        exprs
+        |> List.fold (fun state expr ->
+            match expr.Kind with
+            | Lambda _ ->
+                let result, state = freshVar state
+                { state with ExpectedLambdaTypes = state.ExpectedLambdaTypes |> Map.add expr.Id (TyFunc(input, result, contexts)) }
+            | _ -> state) state
+    | _ -> state
+
 /// The function type the lambda `expr` is checked against, if what it is written in expects one: a record field's, or the
 /// result of a lambda around it (see `InferState.ExpectedLambdaTypes`).
 let functionOf (state: InferState) (expr: Expression) : Ty option =
