@@ -137,7 +137,8 @@ module internal ModuleLinking =
     /// runtime's `Console`, say) without anything naming it. So is each attached definition an instance the type
     /// checker built for a call in `own`, or in a definition kept, is made of (`instances`, by the call's node), as
     /// `int.toString` for a `ToString(int)`: the backend passes it where the instance is required, unnamed. And so is
-    /// each definition a component exports (`exported`), which the program needn't name either.
+    /// each definition a component exports (`exported`), which the program needn't name either. And so are a map's and a
+    /// set's `toList`, which the backend calls to read one, as `dbg` does, where nothing names them (see `Maps.toList`).
     let internal reachedItems (instances: Map<NodeId, ContextInstance option list>) (own: Module) (exported: string list) (inlined: TopLevelItem list) : TopLevelItem list =
         let bodies =
             inlined
@@ -178,7 +179,7 @@ module internal ModuleLinking =
             else
                 let referenced = newlyReached |> List.collect (fun (_, value) -> SyntaxTree.referencedNames value @ synthesizedMembersIn instances value) |> List.fold (fun acc name -> Set.add name acc) referenced
                 reach referenced (newlyReached |> List.fold (fun acc (name, _) -> Set.add name acc) reached)
-        let reached = reach (Set.ofList (rootNames @ exported)) Set.empty
+        let reached = reach (Set.ofList (rootNames @ exported @ [ Maps.toList; Sets.toList ])) Set.empty
         inlined
         |> List.filter (function
             | Kind (Def (ValueDef(_, name, _, _))) -> reached.Contains name

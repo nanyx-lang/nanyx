@@ -10,6 +10,10 @@ module Maps =
     /// The function a call of a map is: `m(k)` is `map.get(m, k)`.
     let lookup = typeName + ".get"
 
+    /// The function that gives a map's entries, each a key and its value, as a list: how the compiler reads a map's
+    /// entries, as a `for` loop and `dbg` do, so that only the prelude knows how a map is held.
+    let toList = typeName + ".toList"
+
     /// Whether `name` names the type.
     let isTypeName (name: string) = name = typeName
 
