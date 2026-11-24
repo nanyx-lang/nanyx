@@ -220,15 +220,26 @@ def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound
 
 The first element `matches` holds for, or `#notFound`.
 
+## `list.build`
+
+```nanyx fragment
+def list.build: [c] ([c, Emit(a)] () -> ()) -> list(a)
+```
+
+The list of what `block` emits, in the order it emits it: `list.build { emit(1); if more then
+emit(2) }`. `block` runs once, now, under a handler of `Emit` that puts each value in a new cell at
+the end of the list, so a `for` loop in it stays a loop and nothing else is made per value.
+
 ## `list.select`
 
 ```nanyx fragment
-def list.select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b)
+def list.select: [c] list(a), ([c, Emit(b)] a -> ()) -> list(b)
 ```
 
-The values `f` yields for each element in turn, in the order it yields them. A lambda with
-`yield` in it is a sequence (see `Yield`), so `items \list.select { item -> if item is #other(v)
-then yield v }` gives the payload of each `#other`.
+The values `f` emits for each element in turn, in the order it emits them: `items \list.select {
+item -> if item is #other(v) then emit(v) }` gives the payload of each `#other`. `f` can emit any
+number of values for an element, none included, through `Emit`. A lambda that gives a list
+instead is [`list.flatMap`](#listflatmap)'s.
 
 ## `list.selectOne`
 
@@ -236,9 +247,10 @@ then yield v }` gives the payload of each `#other`.
 def list.selectOne: [c, d] list(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
 ```
 
-The first value `f` yields, running it on the elements in turn as [`list.select`](#listselect) does, or `#notFound`
-when it yields none. It stops at the first yield: `f` runs on no element after the one it yields
-for, and the code after that `yield` doesn't run.
+The first value `f` yields, running it on the elements in turn, or `#notFound` when it yields
+none. A lambda with `yield` in it is a lazy sequence (see `Yield`), so this stops at the first
+yield: `f` runs on no element after the one it yields for, and the code after that `yield` doesn't
+run.
 
 ## `list.all`
 

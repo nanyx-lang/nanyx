@@ -67,18 +67,18 @@ let ``Run - set filterMap keeps the some values, once each`` () =
     runSource source |> assertRan "[1, 2, 3]\n3\ntrue\n"
 
 [<Fact>]
-let ``Run - set select keeps the values yielded, once each`` () =
+let ``Run - set select keeps the values emitted, once each`` () =
     let source =
         program
             """  def s = set.fromList([1, 2, 3])
   def selected = s \set.select { x ->
-    yield x
-    yield x + 1
+    emit(x)
+    emit(x + 1)
   }
   println(selected)
   println(set.length(selected))
   def none: set(int) = set.empty
-  println(set.isEmpty(none \set.select { x -> yield x }))"""
+  println(set.isEmpty(none \set.select { x -> emit(x) }))"""
     runSource source |> assertRan "[1, 2, 3, 4]\n4\ntrue\n"
 
 [<Fact>]

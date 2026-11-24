@@ -59,14 +59,14 @@ public sealed class HoverTests : LanguageServerTestBase
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("hover-call-contexts.nyx"));
 
-        // `list.select` is `[c, d] list(a), ([c] a -> [d] seq(b)) -> list(b)`, and this lambda requires nothing.
+        // `list.select` is `[c] list(a), ([c, Emit(b)] a -> ()) -> list(b)`, and this lambda requires nothing but `Emit`.
         Open(uri, """
             type Item = #foo(string) | #bar
 
             def items: list(Item) = [#foo("a"), #bar]
 
             def r: list(string) = items \select { x ->
-              if x is #foo(s) then yield s
+              if x is #foo(s) then emit(s)
             }
 
             """);
@@ -74,7 +74,7 @@ public sealed class HoverTests : LanguageServerTestBase
 
         var callee = await HoverAt(uri, 4, 31);
         Assert.StartsWith(
-            "```nanyx\ndef list.select: list(Item), (Item -> seq(string)) -> list(string)\n```",
+            "```nanyx\ndef list.select: list(Item), ([Emit(string)] Item -> ()) -> list(string)\n```",
             callee?.Contents.MarkupContent?.Value);
     }
 

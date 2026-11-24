@@ -178,11 +178,11 @@ for: a `map` and a `filter` in one walk.
 ## `Slice.select`
 
 ```nanyx fragment
-def Slice.select: [c, d] Slice(a), ([c] a -> [d] seq(b)) -> array(b)
+def Slice.select: [c] Slice(a), ([c, Emit(b)] a -> ()) -> array(b)
 ```
 
-An array of the values `f` yields for each element in turn, in the order it yields them, as
-[`list.select`](prelude-lists#listselect) gives them.
+An array of the values `f` emits for each element in turn, in the order it emits them, as
+[`list.select`](prelude-lists#listselect) gives them: `f` calls `Emit`'s `emit` for each.
 
 ## `Slice.selectOne`
 
@@ -190,9 +190,9 @@ An array of the values `f` yields for each element in turn, in the order it yiel
 def Slice.selectOne: [c, d] Slice(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
 ```
 
-The first value `f` yields, running it on the elements in turn as [`Slice.select`](#sliceselect) does, or
-`#notFound` when it yields none. It stops at the first yield: `f` runs on no element after the one
-it yields for.
+The first value `f` yields, running it on the elements in turn, or `#notFound` when it yields
+none. A lambda with `yield` in it is a lazy sequence (see `Yield`), so this stops at the first
+yield: `f` runs on no element after the one it yields for.
 
 ## `Slice.find`
 

@@ -63,11 +63,11 @@ ends: cut it with `seq.take`.
 ## `array.build`
 
 ```nanyx fragment
-def array.build: [c, d] ([c] () -> [d] seq(a)) -> array(a)
+def array.build: [c] ([c, Emit(a)] () -> ()) -> array(a)
 ```
 
-An array of what `block` yields: `Array.build { yield 1  if more then yield 2 }`. The same as
-`seq(block) \array.fromSeq`.
+An array of what `block` emits, through `Emit`: `Array.build { emit(1); if more then emit(2) }`.
+The same as `list.build(block) \array.fromList`.
 
 ## `array.toList`
 

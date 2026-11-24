@@ -50,9 +50,11 @@ export def MList.fromSeq: [Memory, c] ([c] seq(a)) -> MList(a) = { s ->
   items
 }
 
---| A new list of what `block` yields. The same as `seq(block) \MList.fromSeq`.
-export def MList.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MList(a) = { block ->
-  MList.fromSeq(seq(block))
+--| A new list of what `block` emits, through [`Emit`]: each value is added at the end as it comes.
+export def MList.build: [Memory, c] ([c, Emit(a)] () -> ()) -> MList(a) = { block ->
+  def items = MList.empty()
+  use Emit(a)(emit = { x -> MList.add(items, x) }) in block()
+  items
 }
 
 --| Adds `value` at the end of `items`.
