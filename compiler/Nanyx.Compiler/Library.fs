@@ -345,8 +345,8 @@ module Compiler =
                 | errors -> Error (Parsed, syntaxDiagnostics @ errors))
             |> Result.bind (fun (ast, docComments, (items, declared, moduleBlocks), syntaxDiagnostics) ->
                 match WorkflowDesugaring.desugarWithDiagnostics (importedKeywordKinds (importsOf moduleBlocks items)) items with
-                | _, (_ :: _ as errors), _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
-                | desugaredAst, [], memberPlaces, lowered ->
+                | _, (_ :: _ as errors), _, _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
+                | desugaredAst, [], memberPlaces, lowered, delayCalls ->
                     Attributes.applyAttributes host desugaredAst
                     |> Result.map (fun (desugared, entries, components) ->
                         // A module's statements run as an entry point of their own (see `Scripts`).
@@ -365,11 +365,11 @@ module Compiler =
                         let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered
                         // The keywords it declares, read before `applyAttributes` takes a def's attribute away.
                         let ownKeywordKinds = Attributes.keywordKinds items
-                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, syntaxDiagnostics @ nameErrors, ownKeywordKinds)
+                        (ast, docComments), declared, moduleBlocks, desugared, (memberPlaces, delayCalls), lowered, entries, components, script, syntaxDiagnostics @ nameErrors, ownKeywordKinds)
                     |> Result.mapError (fun diagnostics -> Desugared, syntaxDiagnostics @ diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, nameErrors, ownKeywordKinds) ->
+        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, (memberPlaces, delayCalls), lowered, entries, components, script, nameErrors, ownKeywordKinds) ->
             let imports = importsOf moduleBlocks desugared
             let initial =
                 { Env =
@@ -382,6 +382,7 @@ module Compiler =
                         Declared = declared
                         ModuleBlocks = moduleBlocks
                         WorkflowMemberPlaces = memberPlaces
+                        DelayCalls = delayCalls
                         Home = origin
                         ScriptEntry = script |> Option.map snd
                         StandardLibraryExports = CheckedLibrary.standardLibraryExportPaths }
@@ -526,10 +527,18 @@ module Compiler =
                     |> List.distinct
                 let mismatchErrors =
                     mismatches
+                    // A mismatch of a call's arguments is reported at the one that doesn't fit (see `ArgumentSpans`).
+                    |> List.map (fun (text, span, kind) ->
+                        match state.ArgumentSpans |> Map.tryFind span with
+                        | Some reported -> text, reported.Value, kind
+                        | None -> text, span, kind)
                     |> List.sortBy (fun (_, span, _) -> span.Start)
                     |> List.map (fun (text, span, kind) ->
                         let message = text (Unifier.tyToStringIn state.TypeDefs)
                         match entries |> List.tryFind (fun entry -> entry.Argument = span), provided |> List.tryFind (fun export -> export.Argument = span) with
+                        // A keyword's call that calls a local in the keyword's def's place says so (see `HiddenKeywords`).
+                        | _ when state.HiddenKeywords.ContainsKey span ->
+                            HiddenKeywords.diagnostic (Unifier.apply subst >> Unifier.tyToStringIn state.TypeDefs) state.HiddenKeywords.[span]
                         | Some entry, _ -> entryMismatch entry
                         | None, Some export -> exportMismatch export
                         | None, None ->
@@ -572,14 +581,19 @@ module Compiler =
                             | Some (TyFunc(_, result, _)) -> Some result
                             | _ -> None)
                         desugared
+                    @ TaskCaptures.unscopedErrors
+                        (fun name -> types |> Map.tryFind name |> Option.map (Unifier.apply subst))
+                        (fun call -> state.CalleeTypes |> Map.tryFind call |> Option.map (Unifier.apply subst))
+                        desugared
                 let runtimeErrors =
                     Hosts.runtimeErrors isHost origin (entries @ provided @ (script |> Option.map fst |> Option.toList)) (provided |> List.map (_.Name >> Hosts.providedExportName) |> Set.ofList) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
-                // A script whose statements need `HostRuntime` is told so where they need it, and one whose statements use
-                // what escaped a scoped call is told of the escape (NYX0233): that its entry point, which has no span,
-                // then doesn't fit the host's `run` says nothing more.
+                // A script whose statements need `HostRuntime` is told so where they need it, one whose statements use
+                // what escaped a scoped call is told of the escape (NYX0233), and one that calls a def that starts a task
+                // it can't keep is told where (see `TaskCaptures`): that its entry point, which has no span, then doesn't
+                // fit the host's `run` says nothing more.
                 let mismatchErrors =
                     match script with
-                    | Some _ when not runtimeErrors.IsEmpty || not state.EscapedContexts.IsEmpty ->
+                    | Some _ when not runtimeErrors.IsEmpty || not state.EscapedContexts.IsEmpty || not taskErrors.IsEmpty ->
                         mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
                     | _ -> mismatchErrors
                 // What the file gives from its own blocks by re-exporting them, and what those blocks re-export of other

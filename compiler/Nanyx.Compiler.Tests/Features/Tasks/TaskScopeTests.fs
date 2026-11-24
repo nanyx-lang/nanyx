@@ -167,3 +167,53 @@ let ``A task may be given what a cell holds`` () =
   }
 }"""
     Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
+let ``A def that starts a task without naming start is told so at the call`` () =
+    let source =
+        withTasks
+            """def go = Async.start
+
+def f = { _ -> go({ println("task runs") }) }
+
+f()"""
+    let code, message, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
+    Assert.StartsWith("'go' starts a task, but 'f' is not the scope of its tasks", message)
+    Assert.Equal("""go({ println("task runs") })""", at)
+
+[<Fact>]
+let ``A def that names Async.start is a scope in a module that defines its own start`` () =
+    let source =
+        withTasks
+            """def start = 5
+
+def f = { _ ->
+  Async.start({ println("task runs") })
+  start
+}
+
+println(f())"""
+    Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
+let ``A script whose def gives back what starts a task is told only of the escape`` () =
+    let source =
+        withTasks
+            """def s = { _ -> seq.init(3, { i -> await(start! i * 10) }) }
+
+println(s() \seq.toList)"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, code)
+    Assert.Equal("start! i * 10", at)
+
+[<Fact>]
+let ``A smaller scope may await a task of the def's scope`` () =
+    let source =
+        withTasks
+            """def outer = { _ ->
+  def t = start! 20
+  def inner = concurrent({ await(t) + await(start! 1) })
+  inner + 1
+}"""
+    Assert.Empty((Compiler.compile source).Diagnostics)

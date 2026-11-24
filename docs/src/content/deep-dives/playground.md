@@ -86,7 +86,9 @@ Ctrl+D, checks that runs keep the output before them, that a compile error links
 code without running it, that a bad link opens hello world, that a reload keeps the code, that a tour link opens its
 example in an isolated page, and runs every example in the menu, checking that none fails; and the docs' examples
 (below), running every example on the pages outside the tour, as its "Open in the playground" link opens it, ending its
-input if it reads any, and checking that none fails. The Compiler workflow's
+input if it reads any, and checking that none fails. Those two run their examples on four playground pages at once,
+each with a compiler of its own, a quarter of them each
+([#2554](https://github.com/nanyx-lang/nanyx/issues/2554)). The Compiler workflow's
 `Browser test` job builds the site with the compiler it published and runs it.
 
 # The docs' examples
