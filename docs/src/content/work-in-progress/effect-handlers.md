@@ -34,6 +34,10 @@ Giving one `yield` two meanings, chosen by what the lambda is passed to, doesn't
 inference, so the choice would need desugaring driven by types, and `xs \select { ... }` finds its `select` by the
 type of `xs`.
 
+So pushing and capturing are two contexts, `Emit` and `Yield`, and stay so (decided 2026-11-24). One keyword whose
+kind each builder's context declares, one with a plain `yield: a -> ()` and another with a capturing `yield` that
+takes the continuation (Koka's `fun` and `ctl`), would come back only if the rewrite were ever driven by types.
+
 # Pushing: `Emit(a)`
 
 Decided, and being built in [#2566](https://github.com/nanyx-lang/nanyx/issues/2566). A pushing operation is a
