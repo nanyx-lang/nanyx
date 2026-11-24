@@ -708,7 +708,8 @@ let private optimised (options: WasmOptions) (cachedNames: Set<string>) (exporte
     let closureTargets = CoreIrClosureEntries.targets (definitionFunctions @ Option.toList startFunction)
     let owningEntries = closureTargets |> Set.map CoreIrClosureEntries.owningName
     // How each function uses its parameters, which a probe reads too (see `CoreIrEmit.EmitContext.TakesOver`).
-    let definitions = CoreIrClosureEntries.withOwningEntries closureTargets definitionFunctions
+    let definitions =
+        CoreIrClosureEntries.withOwningEntries closureTargets (CoreIrClosureEntries.memberCounts (definitionFunctions @ Option.toList startFunction)) definitionFunctions
     let all = definitions @ Option.toList startFunction
     let ownership = CoreIrCounting.inferOwnership all
     let counted = CoreIrCounting.insert ownership all |> CoreIrReuse.insert

@@ -392,12 +392,14 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
   that dies there calls the owning entry (`CallClosure` with `Owning`, which reads the slot and adds 1), since the
   caller could not drop the closure after the call; so does a call by name in tail position that passes such a
   closure as the environment, as the simplifier makes of a call of a closure it knows. Every other call of a closure
-  calls the borrowing entry, and a closure that dies there is dropped after the call. A function whose closures
-  capture nothing has no copy: they are static data, which a drop leaves alone, so it is its own owning entry. Once
-  the module is counted, an
-  owning entry nothing can call is left out: one no call names, and of a type no call through a closure that calls
-  the owning entry has. A closure called in a loop, as `list.fold` calls the function it is given, is then counted
-  neither up nor down at each call.
+  calls the borrowing entry, and a closure that dies there is dropped after the call. The borrowing entry borrows
+  the context members the call passes after its arguments too, which the caller holds throughout, and the owning
+  entry owns them ([#2559](https://github.com/nanyx-lang/nanyx/issues/2559)). A function whose closures capture
+  nothing and are called with no members has no copy: they are static data, which a drop leaves alone, so it is its
+  own owning entry. Once the module is counted, an owning entry nothing can call is left out: one no call names, and
+  of a type no call through a closure that calls the owning entry has. A closure called in a loop, as `list.fold`
+  calls the function it is given, is then counted neither up nor down at each call, and nor are the members of the
+  contexts it requires.
 - **Runtime helpers borrow.** Every helper, the ones that write to stdout and stderr among them, borrows its
   operands and returns a value of its own, except `list.cons` (which takes both over) and `++` on lists (which
   takes the second over, and copies the first's cells with a reference to each element). Strings handed to the
