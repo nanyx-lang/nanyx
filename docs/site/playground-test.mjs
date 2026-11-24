@@ -208,7 +208,7 @@ const tests = [
   }],
   ["tasks take turns where one sleeps", async () => {
     await setEditor(tasks);
-    await run();
+    await runToTheEnd();
     const printed = (await page.locator(".pg-run").last().innerText()).replace(/^Run \d+.*\n/, "").trim();
     assert.equal(printed, "another task runs meanwhile\nthe sleeper wakes");
   }],
