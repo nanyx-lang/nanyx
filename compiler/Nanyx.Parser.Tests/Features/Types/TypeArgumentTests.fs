@@ -5,8 +5,8 @@ open FsUnit.Xunit
 open Parser.Program
 open ParserTestHelpers
 
-// Type arguments: a parameter that takes a type, `type a` or `into: type`, and the value `type Point` passed for it (see
-// the Functions page).
+// Type arguments: a parameter that takes a type, written `Type(a)` (or the old way, `type a` or `into: type`), and the
+// value `type Point` passed for it (see the Functions page).
 
 let private ty kind = TypeExpr.synthetic kind
 let private named name = ty (TypeName name)
@@ -23,17 +23,31 @@ let private valueOf source =
     | other -> failwith $"Unexpected parse: %A{other}"
 
 [<Fact>]
-let ``A positional type parameter is written type a`` () =
+let ``A positional type parameter is written Type(a)`` () =
+    annotationOf "def f: (Type(a), string) -> a = f"
+    |> should equal (ty (TypeFunc (ty (TypeTuple [ ty (TypeApply ("Type", [ var "a" ])); named "string" ]), var "a")))
+
+[<Fact>]
+let ``A named type parameter is written into: Type(a)`` () =
+    match annotationOf "def f: (string, into: Type(a)) -> a = f" with
+    | Kind (TypeFunc (Kind (TypeRecord [ TypeField ("0", false, Some text, None); TypeField ("into", false, Some written, None) ]), result)) ->
+        text |> should equal (named "string")
+        written |> should equal (ty (TypeApply ("Type", [ var "a" ])))
+        result |> should equal (var "a")
+    | other -> failwith $"Unexpected annotation: %A{other}"
+
+[<Fact>]
+let ``The old positional type parameter type a still parses`` () =
     annotationOf "def f: (type a, string) -> a = f"
     |> should equal (ty (TypeFunc (ty (TypeTuple [ ty (TypeArgument (var "a")); named "string" ]), var "a")))
 
 [<Fact>]
-let ``A positional type parameter can follow the other positional parameters`` () =
+let ``The old positional type parameter can follow the other positional parameters`` () =
     annotationOf "def f: (string, type a) -> a = f"
     |> should equal (ty (TypeFunc (ty (TypeTuple [ named "string"; ty (TypeArgument (var "a")) ]), var "a")))
 
 [<Fact>]
-let ``A named type parameter is written into: type`` () =
+let ``The old named type parameter into: type still parses`` () =
     match annotationOf "def f: (string, into: type) -> into = f" with
     | Kind (TypeFunc (Kind (TypeRecord [ TypeField ("0", false, Some text, None); TypeField ("into", false, Some keyword, None) ]), result)) ->
         text |> should equal (named "string")
@@ -42,9 +56,9 @@ let ``A named type parameter is written into: type`` () =
     | other -> failwith $"Unexpected annotation: %A{other}"
 
 [<Fact>]
-let ``A positional type parameter is a type variable`` () =
+let ``The old positional type parameter is a type variable`` () =
     let message, at = parseErrorOf "def f: (type Point, string) -> Point = f\n"
-    Assert.Contains("A positional type parameter is written with a type variable", message)
+    Assert.Contains("A parameter that takes a type is written with its type, as in `Type(a)`", message)
     Assert.StartsWith("Point", at)
 
 [<Fact>]

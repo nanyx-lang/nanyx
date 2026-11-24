@@ -148,7 +148,7 @@ def int.nameOf: Type(int) -> string = { t -> "int" }
 
 def string.nameOf: Type(string) -> string = { t -> "string" }
 
-def describe: [Named(a)] type a -> string = { t -> nameOf(t) }
+def describe: [Named(a)] Type(a) -> string = { t -> nameOf(t) }
 
 def describeElements: [Iterable(c), Named(elem)] c -> string = { xs -> describe(type Iterable(c).elem) }
 

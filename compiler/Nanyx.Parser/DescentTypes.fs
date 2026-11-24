@@ -130,7 +130,8 @@ let rec private typeOf (c: Cursor) =
         else path ()
     TypeExpr.at (c.SpanFrom start) (TypeOf operand)
 
-/// `type a`, a positional parameter that takes a type argument.
+/// `type a`, the old form of a positional parameter that takes a type argument, now written `Type(a)`: it still
+/// compiles, with a warning (see the compiler's `TypeArguments`).
 and private typeArgument (c: Cursor) =
     let start = c.Start
     c.Expect(Keyword, "type") |> ignore
@@ -138,7 +139,7 @@ and private typeArgument (c: Cursor) =
     let operand = typeIdentifier c
     match operand.Kind with
     | TypeVar _ -> TypeExpr.at (c.SpanFrom start) (TypeArgument operand)
-    | _ -> c.Report operand.Span.Start "A positional type parameter is written with a type variable, as in `type a`: a named one is written `into: type`"
+    | _ -> c.Report operand.Span.Start "A parameter that takes a type is written with its type, as in `Type(a)`"
 
 /// `@name(argument)` before a field, on its line or the one above (see `TypeFieldAttribute`).
 and private fieldAttribute (c: Cursor) =
