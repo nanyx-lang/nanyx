@@ -142,9 +142,10 @@ let ``A list of a nominal type cannot hold its shape`` () =
     let main = withFinalNewline """module main
 import people
 def all: list(Person) = [ Person.new("Ada"), (name = "Grace") ]"""
+    // Each element is given where a `Person` is expected, so the shape is the error a shape given for one is.
     match compiledWithPeople main with
-    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    | other -> failwith $"Expected one type mismatch, got %A{other}"
+    | [ code, _ ] -> Assert.Equal(DiagnosticCodes.ProtectedShape.Code, code)
+    | other -> failwith $"Expected one error about the shape, got %A{other}"
 
 [<Fact>]
 let ``A list of a nominal type is assignable to a list of its shape`` () =
