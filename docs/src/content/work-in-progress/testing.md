@@ -1,5 +1,5 @@
 ---
-title: "Testing"
+title: "Proposal: Testing"
 description: "Writing tests with @test and assert, and running them with nanyx test"
 order: 7
 ---
