@@ -121,7 +121,7 @@ match r
   | (name, age) -> "{name} is {age} years old"
 ```
 
-Here, the pattern `(name = "Alice", ...)` matches any record where the `name` field is "Alice", while ignoring all other fields. The second pattern matches any record with `name` and `age` fields, binding them to variables. Writing a named field as just `name` is shorthand for `name = name`, binding the field to a local of the same name.
+Here, the pattern `(name = "Alice", ...)` matches any record where the `name` field is "Alice", while ignoring all other fields. The second pattern matches any record with `name` and `age` fields, binding them to variables. Writing a named field as just `name` is shorthand for `name = name`, binding the field to a local of the same name. The two may be mixed in one pattern: `(name, age = years)` binds `name` and gives `age` the name `years`.
 
 As with tuples, records patterns must be of the correct shape to match the type being matched, and all fields must be accounted for either by matching them directly or using the spread operator to ignore them.
 
