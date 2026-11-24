@@ -265,6 +265,12 @@ export def Trie.toString: [ToString(k), ToString(v)] Trie(k, v) -> string = { tr
     | pairs -> "Trie{__listToString(pairs, { pair -> "{pair.0} => {pair.1}" })}"
 }
 
+--| Whether `a` and `b` hold the same keys with the same values, whatever order the keys were added
+  in.
+export def Trie.`==`: [Eq(k), Eq(v)] Trie(k, v), Trie(k, v) -> bool = { Trie(a), Trie(b) ->
+  a == b
+}
+
 -- StringTrie ------------------------------------------------------------------------------------
 
 --| A trie whose keys are strings, each read as its characters, as [`string.chars`] gives them. Its
@@ -362,3 +368,11 @@ export def StringTrie.toString: [ToString(v)] StringTrie(v) -> string = { trie -
     | [] -> "StringTrie[=>]"
     | pairs -> "StringTrie{__listToString(pairs, { pair -> "{pair.0} => {pair.1}" })}"
 }
+
+--| Whether `a` and `b` hold the same keys with the same values, whatever order the keys were added
+  in.
+export def StringTrie.`==`
+  : [Eq(v)] StringTrie(v), StringTrie(v) -> bool
+  = { StringTrie(a), StringTrie(b) ->
+    a == b
+  }
