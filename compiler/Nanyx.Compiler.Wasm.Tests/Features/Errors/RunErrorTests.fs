@@ -244,6 +244,22 @@ def main = {
     Assert.Contains(":9:11: error: the value used here has no known type, because of an error deferred from compile time", outcome.StandardError)
 
 [<Fact>]
+let ``Run - an unknown name given where an annotation's variable is expected stops the program there`` () =
+    let source =
+        normalized """def f: (string, a: type) -> a = { s, a ->
+  def x: a = arts
+  x
+}
+
+println("start")
+println(f("s", a = type int))
+"""
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("start\n", outcome.StandardOutput)
+    Assert.Contains(":2:14: error NYX0101: Unknown identifier 'arts'", outcome.StandardError)
+
+[<Fact>]
 let ``Run - ??? runs until it is reached, and stops the program there`` () =
     let source =
         normalized """def replace: string, string, string -> string = { s, pattern, replacement -> ??? }
