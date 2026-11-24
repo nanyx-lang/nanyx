@@ -867,9 +867,9 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
               Helpers.floatToString
               Helpers.f32ToString
               { NewObject = Helpers.newObject
-                Alloc = Helpers.alloc
-                Free = Helpers.free
-                CopyBytes = Helpers.copyBytes }
+                CopyBytes = Helpers.copyBytes
+                // A module that writes a float sets the scratch block aside just below its heap (see `CodeGen`).
+                Scratch = heapBase - FloatText.scratchBytes }
           |> List.map (fun (name, body) -> name, lines body)
       // The float intrinsics that are one WebAssembly instruction.
       yield!
@@ -1196,15 +1196,14 @@ let dbgStrNewlineOffset = 224
 /// What the helpers that write a float or an `F32` as text call.
 let private floatTextDependencies =
     [ Helpers.newObject
-      Helpers.alloc
-      Helpers.free
       Helpers.copyBytes
       FloatText.bigSet
       FloatText.bigMulSmall
       FloatText.bigMulPow10
       FloatText.bigAdd
       FloatText.bigSub
-      FloatText.bigCompare ]
+      FloatText.bigCompare
+      FloatText.bigSubMul ]
 
 // The variants of the storing helper `name`, one for each `Storage`, each with what it calls.
 let private storingDependencies (name: string) (calls: Storage -> string list) =
@@ -1244,6 +1243,7 @@ let helperDependencies =
       FloatText.bigAdd, []
       FloatText.bigSub, []
       FloatText.bigCompare, []
+      FloatText.bigSubMul, []
       yield! storingDependencies Helpers.listConcat (fun storage -> [ Helpers.forStorage Helpers.listCons storage ])
       Helpers.reuseObject, [ Helpers.newObject ]
       yield! storingDependencies Helpers.listConsAt (fun storage -> [ Helpers.forStorage Helpers.listCons storage ])
