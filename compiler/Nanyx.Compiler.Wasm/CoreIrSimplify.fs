@@ -306,6 +306,9 @@ type private ChainShape(links: Expr list, last: Expr) =
         let unchanged = keptFrom.[start] - (changing |> Seq.sumBy (fun place -> if place = n then keptFrom.[n] else kept.[place]))
         branches * unchanged <= fromPlace.[start] + limit
 
+/// The most temporaries a record made of temporaries can have for them to be made locals (see `RecordOfTemps`).
+let private recordTemps = 32
+
 /// One pass of the simplifier over the body of `f`, given the functions it may call.
 type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     // How often each kind and name of variable is bound in the function: those of a variable that is the only one with
@@ -472,8 +475,11 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     /// how many of `remaining` that takes, and the links again, from `link` to the record's, with the temporaries made
     /// locals. A record used whole is left as it is, since what is read from it can't be known.
     member private _.RecordOfTemps (link: Expr) (remaining: Expr list) : (int * Expr list) option =
+        // At most `recordTemps` temporaries are looked through, so that a long chain of temporaries, as `1 + 1 + ...`
+        // makes, isn't looked through from each of them (#2351).
         let rec collect (bound: Expr list) (rest: Expr list) =
             match rest with
+            | _ when bound.Length > recordTemps -> None
             | ({ Kind = Let(var, { Kind = MakeRecord fields }, _) } as record) :: _ when var.Kind <> Temp && not (usedWhole.Contains var.Id) ->
                 let temps = bound |> List.rev |> List.map (fun link -> match link.Kind with Let(temp, _, _) -> temp.Id | _ -> -1)
                 let read = fields |> List.choose (function _, AVar v when v.Kind = Temp -> Some v.Id | _ -> None)
