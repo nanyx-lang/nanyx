@@ -494,7 +494,9 @@ environment's drop function is), the next object on its region's list, the regio
 the value. The link fields' names start with `-`, which no field of the program's can, so they are stored first and no
 record of the program's is taken for a box. An `MRef` holds its value, a captured cell's box holds the cell's value, and
 an `MArray` holds the array its elements are in, which is laid out as an `Array` is, so reading or writing an element
-reads the box's value and then does what the array's intrinsic does (`CoreIrRegions.mutableArray`). A new box goes on
+does what the array's intrinsic does, given the box, whose array it reads with no reference of its own: the box lives
+until the intrinsic is done, and nothing puts another array in it (`CoreIrRegions.mutableArray`,
+`CoreIrEmit.ArrayIntrinsic`, [#2417](https://github.com/nanyx-lang/nanyx/issues/2417)). A new box goes on
 the innermost region (`__nanyx_region_track`). When
 counting gives up a box's last reference, its drop function takes it off its region's list (`__nanyx_region_unlink`)
 before it drops its value and frees it, as any record's does, so a box that is not in a cycle is freed as early as it

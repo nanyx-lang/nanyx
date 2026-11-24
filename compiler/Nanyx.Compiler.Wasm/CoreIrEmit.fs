@@ -1030,16 +1030,25 @@ type private FunctionEmitter(context: EmitContext) =
     /// The code of the array intrinsic `name` (one of `arrayIntrinsics`) on `args`, whose code `atoms` gives, for a value
     /// of type `ty` (see `CoreIrArrays`).
     member _.ArrayIntrinsic (atoms: Atom list -> string) (ty: IrType) (name: string) (args: Atom list) : string =
+        // A mutable array is given as its box, whose array is read with no reference of its own: the box lives until the
+        // intrinsic is done (see `CoreIrRegions.mutableArray`).
+        let arrayTy (array: Atom) = CoreIrRegions.arrayIn (atomType array)
+        let arrayAt (array: Atom) =
+            match atomType array with
+            | CoreIrRegions.RegionBox held ->
+                let fields = match CoreIrRegions.boxType held with IrRecord fields -> fields | _ -> []
+                join "\n    " [ atoms [ array ]; load held (CoreIrLayout.fieldOffset fields CoreIrRegions.boxValueSlot) ]
+            | _ -> atoms [ array ]
         match args with
         // An array's length is the first word of its block, and its element at an index, which the standard library has
         // checked is in range, is after it, with a reference of its own taken (see `CoreIrArrays`).
         | [ array ] when name = Intrinsics.arrayLength ->
-            join "\n    " [ atoms [ array ]; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
+            join "\n    " [ arrayAt array; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
         // A mutable array's element at an index, which the standard library has checked is in range, is given up and
         // the value, which the array takes over, is stored in its place, as `SetField` does. A new array's element is
         // written the same way, with nothing to give up, since it was never written.
         | [ array; index; value ] when name = Intrinsics.marraySet || name = Intrinsics.arrayWrite ->
-            let element = arrayElement (atomType array)
+            let element = arrayElement (arrayTy array)
             let offset = CoreIrLayout.arrayElementOffset element 0
             let slot = freshLocal "__slot" "i32"
             let held = freshLocal "__set" (CoreIrLayout.valueType element)
@@ -1047,7 +1056,8 @@ type private FunctionEmitter(context: EmitContext) =
                 if name = Intrinsics.marraySet && CoreIrDrop.isHeapType element then $"local.get ${slot}\n    {load element offset}\n    {dropValue element}"
                 else ""
             join "\n    " [
-                atoms [ array; index ]
+                arrayAt array
+                atoms [ index ]
                 "i32.wrap_i64"
                 $"i32.const {CoreIrLayout.size element}"
                 "i32.mul"
@@ -1081,9 +1091,10 @@ type private FunctionEmitter(context: EmitContext) =
                 touching $"i32.store offset={CoreIrLayout.arrayLengthOffset}"
                 $"local.get ${array}" ]
         | [ array; index ] when name = Intrinsics.arrayGet ->
-            let element = arrayElement (atomType array)
+            let element = arrayElement (arrayTy array)
             join "\n    " [
-                atoms [ array; index ]
+                arrayAt array
+                atoms [ index ]
                 "i32.wrap_i64"
                 $"i32.const {CoreIrLayout.size element}"
                 "i32.mul"
@@ -1093,7 +1104,7 @@ type private FunctionEmitter(context: EmitContext) =
         | [ list ] when name = Intrinsics.arrayOfList ->
             join "\n    " [ atoms [ list ]; $"call ${CoreIrArrays.ofListName (arrayElement ty)}" ]
         | [ array ] when name = Intrinsics.arrayToList ->
-            join "\n    " [ atoms [ array ]; $"call ${CoreIrArrays.toListName (arrayElement (atomType array))}" ]
+            join "\n    " [ arrayAt array; $"call ${CoreIrArrays.toListName (arrayElement (arrayTy array))}" ]
         | _ -> internalError $"the array intrinsic '{name}' with {args.Length} arguments"
 
     /// The code that copies a spread array's elements, in `source`, into a new one, in `target`, from the index `at`: a loop
