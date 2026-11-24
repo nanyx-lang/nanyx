@@ -37,6 +37,12 @@ internal static partial class CliCommands
             return 1;
         }
 
+        if (manifest.Nanyx?.Value is null)
+        {
+            shell.Error.WriteLine($"error: {manifest.Name} doesn't say the oldest compiler it builds with, which the package index records so that an older one never chooses it: add `nanyx = \"{NewPackage.nanyxOf(Toolchain.version)}\"` to the `package` in {shell.DisplayPath(manifest.Path)}");
+            return 1;
+        }
+
         shell.Out.WriteLine($"Publishing {manifest.Name} {manifest.Version} to {repository}");
         shell.Out.WriteLine("Checking that it builds");
         var build = BuildPackage(shell, package, timings: false);
