@@ -238,6 +238,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyPrimitive "string" -> IrString
     | TyPrimitive "float" -> IrFloat
     | TyPrimitive "F32" -> IrF32
+    // A `char` is its code point, which fits in 32 bits and is never negative.
+    | Chars.CharType -> IrSized SizedInteger.U32
     | TyPrimitive "?error" -> IrError
     | BoxedType -> IrBox
     // A scoped context's scope means nothing at run time: a value of the context's type is unit.

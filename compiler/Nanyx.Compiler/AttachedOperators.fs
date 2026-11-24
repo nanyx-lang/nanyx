@@ -34,7 +34,7 @@ module internal AttachedOperators =
             match typeName with
             | "int" | "float" | "bool" | "string" | "unit" -> Some (BuiltIn typeName)
             | _ when Lists.isTypeName typeName -> Some (BuiltIn typeName)
-            | _ when SizedNumber.isName typeName -> Some (BuiltIn typeName)
+            | _ when SizedNumber.isName typeName || typeName = Chars.name -> Some (BuiltIn typeName)
             | _ -> None
 
     /// The error for the definition `name`, attached to a type and written at `span`, if that type may not attach it.

@@ -28,7 +28,7 @@ module internal BuiltinTypeNames =
     let private libraryAliases = Map.ofList [ Seqs.alias, Seqs.typeName ]
 
     /// Each spelling that is not a type and the alias to write instead.
-    let private notTypes = Map.ofList [ "Int", "int"; "Float", "float"; "Bool", "bool" ]
+    let private notTypes = Map.ofList [ "Int", "int"; "Float", "float"; "Bool", "bool"; "Char", Chars.name ]
 
     /// The error for `written`, which is not a type, at `span`, with the fix that writes `alias`.
     let private error (span: SourceSpan) (written: string) (alias: string) : Diagnostic =

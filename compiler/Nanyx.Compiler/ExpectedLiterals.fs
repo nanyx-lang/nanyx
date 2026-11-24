@@ -18,6 +18,12 @@ let expect (expected: Ty) (state: InferState) (expr: Expression) : InferState =
 let private expectedOf (state: InferState) (expr: Expression) : Ty option =
     state.ExpectedTypes |> Map.tryFind expr.Id |> Option.map (resolveSoFar state >> Unifier.unalias)
 
+/// Whether what `expr` is written in expects a `char` of it (see `CharLiterals`).
+let expectsChar (state: InferState) (expr: Expression) : bool =
+    match expectedOf state expr with
+    | Some Chars.CharType -> true
+    | _ -> false
+
 /// The type the items of the list literal `expr` are checked against: the element type of the list expected of it.
 let elementOf (state: InferState) (expr: Expression) : Ty option =
     match expectedOf state expr with
