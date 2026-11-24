@@ -65,6 +65,6 @@ let ``A page that pins a version the index doesn't have, or a pin written wrong,
 [<Fact>]
 let ``A page of a published package's file has its reference from the version the page pins`` () =
     let page = File.ReadAllText(Path.Combine(docsContentDirectory, "stdlib", "encode.md"))
-    Assert.Equal(Result.Ok(Some("nanyx.json", (SemanticVersion.tryParse "0.2.0").Value)), StandardLibraryDocs.pinOf page)
-    Assert.Contains(StandardLibraryDocs.beginMarkerOf (Some("nanyx.json", (SemanticVersion.tryParse "0.2.0").Value)), page)
+    Assert.Equal(Result.Ok(Some("nanyx.json", (SemanticVersion.tryParse "0.4.0").Value)), StandardLibraryDocs.pinOf page)
+    Assert.Contains(StandardLibraryDocs.beginMarkerOf (Some("nanyx.json", (SemanticVersion.tryParse "0.4.0").Value)), page)
     Assert.Contains("## `string`", page)
