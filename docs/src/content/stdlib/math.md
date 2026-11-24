@@ -36,8 +36,9 @@ take an `int`. `abs`, `sign`, `mod`, [`min`](#min), [`max`](#max), [`minMax`](#m
 `Ord(a)`, so the last four take a value of any type that has an order, a `string` among them. [`sqrt`](#sqrt), [`exp`](#exp),
 [`ln`](#ln), [`log10`](#log10), [`log2`](#log2), [`floor`](#floor), [`ceil`](#ceil), [`round`](#round) and [`truncate`](#truncate) take a `float`, and so
 do the trigonometric functions, [`sin`](#sin), [`cos`](#cos), [`tan`](#tan), [`asin`](#asin), [`acos`](#acos), [`atan`](#atan) and
-[`atan2`](#atan2), whose angles are in radians. [`pi`](#pi), [`e`](#e),
-[`infinity`](#infinity) and [`nan`](#nan) are constants, and [`isNaN`](#isnan), [`isInfinite`](#isinfinite) and [`isFinite`](#isfinite) tell the
+[`atan2`](#atan2), whose angles are in radians, the hyperbolic functions, [`sinh`](#sinh), [`cosh`](#cosh), [`tanh`](#tanh),
+[`asinh`](#asinh), [`acosh`](#acosh) and [`atanh`](#atanh), and [`hypot`](#hypot) and [`cbrt`](#cbrt). [`pi`](#pi), [`e`](#e), [`infinity`](#infinity) and
+[`nan`](#nan) are constants, and [`isNaN`](#isnan), [`isInfinite`](#isinfinite) and [`isFinite`](#isfinite) tell the
 special floats from the others.
 
 Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified to
@@ -291,6 +292,77 @@ def atan2: float, float -> float
 The angle of the point (`x`, `y`) from the positive x axis, in (-pi, pi]. It takes `y` first, then
 `x`, as C, .NET, Rust and Python do: `atan2(1.0, -1.0)` is `3.0 * pi / 4.0`. Unlike `atan(y / x)`,
 it tells the four quarters apart, and is defined where `x` is zero.
+
+## `sinh`
+
+```nanyx fragment
+def sinh: float -> float
+```
+
+The hyperbolic sine of `x`, `(e ** x - e ** -x) / 2`: `sinh(0.0)` is `0.0` and `sinh(1.0e-10)` is
+`1.0e-10`.
+
+## `cosh`
+
+```nanyx fragment
+def cosh: float -> float
+```
+
+The hyperbolic cosine of `x`, `(e ** x + e ** -x) / 2`: `cosh(0.0)` is `1.0`.
+
+## `tanh`
+
+```nanyx fragment
+def tanh: float -> float
+```
+
+The hyperbolic tangent of `x`, `sinh(x) / cosh(x)`: `tanh(0.0)` is `0.0`, and it is `1.0` or `-1.0`
+for an `x` far enough from zero, `tanh(1000.0)` among them.
+
+## `asinh`
+
+```nanyx fragment
+def asinh: float -> float
+```
+
+The inverse hyperbolic sine of `x`, the number whose `sinh` is `x`: `asinh(0.0)` is `0.0`.
+
+## `acosh`
+
+```nanyx fragment
+def acosh: float -> float
+```
+
+The inverse hyperbolic cosine of `x`, the number not below zero whose `cosh` is `x`: `acosh(1.0)` is
+`0.0`. NaN below 1.0.
+
+## `atanh`
+
+```nanyx fragment
+def atanh: float -> float
+```
+
+The inverse hyperbolic tangent of `x`, the number whose `tanh` is `x`: `atanh(0.0)` is `0.0`. NaN
+outside -1.0 to 1.0, infinity at 1.0 and minus infinity at -1.0.
+
+## `hypot`
+
+```nanyx fragment
+def hypot: float, float -> float
+```
+
+`sqrt(x * x + y * y)`, the length of the hypotenuse of a right triangle whose other sides are `x`
+and `y`, without the squares overflowing or underflowing on the way: `hypot(3.0, 4.0)` is `5.0`, and
+`hypot(1.0e200, 1.0e200)` is finite. It is infinity if either is infinite, even when the other is NaN.
+
+## `cbrt`
+
+```nanyx fragment
+def cbrt: float -> float
+```
+
+The real cube root of `x`, the number whose cube is `x`: `cbrt(27.0)` is `3.0` and `cbrt(-8.0)` is
+`-2.0`. Unlike `float.pow(x, 1.0 / 3.0)`, it is defined for a negative `x`.
 
 ## `floor`
 

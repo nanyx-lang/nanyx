@@ -512,6 +512,29 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.Equal(expectedOutput, outcome.StandardOutput)
     Assert.Equal("", outcome.StandardError)
 
+/// The calls `calls`, each a call in Nanyx and the `float` it should give, run in one program that imports `nanyx/math`
+/// as `math`: each value it prints must be the expected one when that is NaN, zero or infinite, and otherwise as near
+/// it as `close expected actual` asks.
+let assertPrintsFloats (close: float -> float -> bool) (calls: (string * float) list) =
+    let source =
+        "import nanyx/math as math\n\n" + (calls |> List.map (fun (call, _) -> $"println({call})") |> String.concat "\n") + "\n"
+    let outcome = runSource source
+    Assert.True((outcome.ExitCode = 0), outcome.StandardError)
+    let printed = outcome.StandardOutput.ReplaceLineEndings("\n").TrimEnd().Split('\n')
+    Assert.Equal(calls.Length, printed.Length)
+    for (call, expected), line in List.zip calls (List.ofArray printed) do
+        let actual =
+            match line with
+            | "NaN" -> nan
+            | "Infinity" -> infinity
+            | "-Infinity" -> -infinity
+            | _ -> Double.Parse(line, Globalization.CultureInfo.InvariantCulture)
+        let near =
+            if Double.IsNaN expected then Double.IsNaN actual
+            elif expected = 0.0 || Double.IsInfinity expected then actual = expected
+            else close expected actual
+        Assert.True(near, $"{call} is {line}, but should be {expected:R}")
+
 /// Asserts that `outcome` ran to its end, writing `expectedOutput` to stdout and `expectedDbg`, what its `dbg`s printed,
 /// to stderr.
 let assertRanWithDbg (expectedOutput: string) (expectedDbg: string) (outcome: RunOutcome) =
