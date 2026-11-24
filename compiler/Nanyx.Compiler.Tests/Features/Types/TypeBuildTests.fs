@@ -13,7 +13,7 @@ let ``A generic function builds records and union cases from their descriptions`
     let typed =
         compileClean (
             normalized
-                """def zeroOf: type a -> #some(a) | #error(string) = { t ->
+                """def zeroOf: Type(a) -> #some(a) | #error(string) = { t ->
   match t
     | #int -> #some(0)
     | #string -> #some("")
@@ -37,7 +37,7 @@ let ``The function build is given must give a value of the field's type, whateve
     let code, at =
         singleError (
             normalized
-                """def wrong: type a -> #some(a) | #error(string) = { t ->
+                """def wrong: Type(a) -> #some(a) | #error(string) = { t ->
   match t
     | #record(r) -> r.build { f -> #some(1) }
     | else -> #error("no")
@@ -52,7 +52,7 @@ let ``A nominal type seen from outside its home module has no build`` () =
     let code, at =
         singleError (
             normalized
-                """def make: type a -> #some(a) | #none = { t ->
+                """def make: Type(a) -> #some(a) | #none = { t ->
   match t
     | #nominal(n) -> n.build { f -> #none }
     | else -> #none

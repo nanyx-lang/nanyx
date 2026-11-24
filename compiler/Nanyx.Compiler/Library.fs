@@ -629,7 +629,9 @@ module Compiler =
                         components.Exports
                         components.Imports
                     @ unprovidedErrors
-                let moduleErrors = componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ taskErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                let moduleDiagnostics = componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ taskErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                // A warning doesn't stop the module running or being imported (see `CheckedModule.Warnings`).
+                let moduleErrors, moduleWarnings = moduleDiagnostics |> List.partition Diagnostics.isError
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []
@@ -744,6 +746,7 @@ module Compiler =
                           Declared = state.Declared }
                      Errors = moduleErrors
                      Undeferred = undeferred
+                     Warnings = moduleWarnings
                      Own = own
                      Inlined = inlined
                      Name = FileImports.declaredName moduleBlocks desugared
@@ -1111,15 +1114,17 @@ module Compiler =
                 let syntaxErrors = checkedModule.Errors |> List.filter isSyntaxError
                 if not syntaxErrors.IsEmpty then syntaxErrors
                 elif checkedModule.Errors.IsEmpty then
-                    Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments typed)
+                    checkedModule.Warnings
+                    @ Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments typed)
                 else
                     // A name another module of the package, or of a package it depends on, exports gets its import too.
                     let packageExports =
                         match checkedModules.Package, origin with
                         | Some package, SourceFile path when PackageModules.contains package path -> PackageExports.importable package checkedModules.ReadFile path
                         | _ -> []
-                    ImportFixes.addFrom packageExports CheckedLibrary.standardLibraryExportPaths.Value (normalizeSource source) checkedModule.Syntax checkedModule.Errors
-                    |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax
+                    (ImportFixes.addFrom packageExports CheckedLibrary.standardLibraryExportPaths.Value (normalizeSource source) checkedModule.Syntax checkedModule.Errors
+                     |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax)
+                    @ checkedModule.Warnings
               Typed = Some typed
               TypeChecked = checkedModule.Errors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
