@@ -15,7 +15,7 @@ open TranspilerWasmTestHelpers
 
 /// The ```nanyx blocks of `page` in the section `section` (the directory under docs/src/content, such as `tour`), by the
 /// line of their opening fence, but for those in a standard-library page's generated reference.
-let private examplesOf (section: string) (page: string) =
+let private readExamples (section: string, page: string) =
     let path = Path.Combine(docsContentDirectory, section, page)
     let text = File.ReadAllText path
     let lines = text.ReplaceLineEndings("\n").Split('\n')
@@ -26,13 +26,23 @@ let private examplesOf (section: string) (page: string) =
         | _ -> fun _ -> false
     docExamplesOf path |> Map.filter (fun line _ -> not (generated line))
 
+/// The pages read so far, each read once, since each of its examples is a test of its own and they run side by side.
+let private pages = System.Collections.Concurrent.ConcurrentDictionary<string * string, Lazy<Map<int, DocExample>>>()
+
+/// `readExamples`, of each page once.
+let private examplesOf (section: string) (page: string) =
+    pages.GetOrAdd((section, page), fun key -> lazy (readExamples key)).Value
+
 /// The error reference, whose examples `ErrorReferenceTests.fs` checks.
 let private errorReference = Path.Combine("standard-tools", "errors.md")
 
-/// Every example on every page, by its section, its page and its line.
-let docExamples () : obj array seq =
+/// Every example on every page of the sections `included` says, by its section, its page and its line. The sections are
+/// split among the modules of `RunDocExampleSectionTests.fs`, each a test collection of its own, so that they run side
+/// by side: an example's rows run one after another (#2553).
+let docExamplesIn (included: string -> bool) : obj array seq =
     Directory.GetDirectories docsContentDirectory
     |> Array.sort
+    |> Seq.filter (Path.GetFileName >> included)
     |> Seq.collect (fun directory ->
         let section = Path.GetFileName directory
         Directory.GetFiles(directory, "*.md")
@@ -99,7 +109,7 @@ let private errorCodes (code: string) =
 
 /// Compiles and runs the example at `line` of `page` in `section`, and checks it prints what it says, or reports the
 /// errors it says.
-let private check (section: string) (page: string) (line: int) =
+let check (section: string) (page: string) (line: int) =
     let example = examplesOf section page |> Map.find line
     let page = $"{section}/{page}"
     match example.Kind, expectedErrors example.Code with
@@ -107,21 +117,16 @@ let private check (section: string) (page: string) (line: int) =
     | Skip _, _
     | Unformatted, _ -> ()
     | Program, [] ->
-        let outcome = runSourceWith false "" (withImports example.Code)
+        let outcome, notInlined = runSourceBothWays (withImports example.Code)
         Assert.True((outcome.ExitCode = 0 && outcome.StandardError = ""), $"{page}:{line} failed with exit code {outcome.ExitCode}:\n{outcome.StandardError}")
         let printed = outcome.StandardOutput.ReplaceLineEndings("\n").TrimEnd()
         let expected = expectedOutput example.Code
         if printed <> "" && expected <> "" then
             Assert.Equal(expected, printed)
-        // Inlining changes no behaviour: compiled without it, the example prints the same (see `CoreIrInline`).
-        let notInlined = runSourceWithOptions false false "" (withImports example.Code)
+        // Inlining changes no behaviour: emitted without it, the example prints the same (see `CoreIrInline`).
         Assert.Equal(outcome.ExitCode, notInlined.ExitCode)
         Assert.Equal(outcome.StandardOutput, notInlined.StandardOutput)
     | Program, expected -> Assert.Equal<string list>(expected, errorCodes example.Code)
-
-[<Theory>]
-[<MemberData(nameof docExamples)>]
-let ``Docs example compiles and runs`` (section: string, page: string, line: int) = check section page line
 
 /// A home page example runs as it is, with no import added, since the page's "Run in the playground" link opens it so,
 /// and prints what its last comments say.

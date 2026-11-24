@@ -91,6 +91,7 @@
     <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
     <Compile Include="Features\Docs\RunDocExampleTests.fs" />
+    <Compile Include="Features\Docs\RunDocExampleSectionTests.fs" />
     <Compile Include="Features\Docs\StandardLibraryReferenceTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />
     <Compile Include="Features\Errors\RunErrorTests.fs" />
