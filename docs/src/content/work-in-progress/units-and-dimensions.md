@@ -4,261 +4,127 @@ description: "Compile-time units for numbers"
 order: 2
 ---
 
-> **Status: proposal.** Units of measure are not yet implemented. This page records the intended design and the questions that remain open; see [Open questions](#open-questions) at the end. The code on this page is proposed syntax, which the compiler does not read yet.
+> **Status: designed, not built.** The first step, single dimensions, is settled below and is being built; derived
+> dimensions such as `Length/Time` come second and still have open questions (see [Step 2](#step-2-derived-dimensions)).
+> The code on this page is proposed syntax, which the compiler does not read yet.
 
-Nanyx will support units of measure for numeric types, allowing you to express time, sizes, and rates safely.
+Nanyx will check units of measure at compile time, so a length cannot be added to a time, and a call reads as what
+it means:
 
 ```nanyx fragment
+sleep(500ms)
 def lookback = 30d
-def timeout = 3000ms
-def maxFilesize = 50MB
+def maxFileSize = 50MiB
 ```
 
-This page defines the design direction for units, with two goals:
+# Dimensions and units
 
-1. Unit-safe arithmetic with automatic unit derivation (for example `m / s -> m/s`)
-2. Ergonomic value construction at call sites (for example `delay(500ms)`)
+A **dimension** is a kind of quantity: `Time`, `Length`, `Bytes`. A dimension is a **type**, and its values are
+quantities of it: `500ms` and `2min` are both `Time`, and `sleep: [Async] Time -> ()` takes either.
 
-# Two concepts: dimensions and units
+A **unit** is a named scale within one dimension: `ns`, `ms`, `s`. Units make values (`500ms`) and read them back
+(`t / 1s`); they are never part of a type. A function takes a `Time`, not a time in milliseconds.
 
-Nanyx should model **dimensions** and **units** separately:
+`Time` is the dimension of physics and mechanics: how long something takes. A point in time is a different type,
+`Instant`, like .NET's `DateTime` (see [Instant](#instant)).
 
-- **Dimension**: the physical kind used by type checking (`Time`, `Length`, `Mass`, `Length/Time`)
-- **Unit**: a named scale for a dimension (`ms`, `s`, `min`, `km`)
-
-Type checking operates on dimensions. Units are syntax and conversion metadata for constructing and displaying values.
-
-# Defining units
-
-Units are always numeric in Nanyx. Unit declarations do not specify an underlying primitive type.
-
-```nanyx fragment
-dimension Time
-dimension Bytes
-dimension Length
-
-@baseUnit unit(m) Metres: Length
-
-@baseUnit unit(s) Seconds: Time
-unit(ms) Milliseconds: Time = 0.001s
-unit(min) Minutes: Time = 60s
-unit(hr) Hours: Time = 60min
-unit(d) Days: Time = 24hr
-
-@baseUnit unit(B) Byte: Bytes
-unit(KB) Kilobyte: Bytes = 1024B
-unit(MB) Megabyte: Bytes = 1024KB
-```
-
-## Base vs derived units
-
-A dimension defines at least one base unit.
-
-- A unit marked with `@baseUnit` is a base unit.
-- A unit declared with `=` is a derived unit.
-- `=` never defines a base unit; it always means “defined in terms of other units”.
-
-Every derived unit must resolve through a finite chain to a base unit of the same dimension.
+# Declaring dimensions and units
 
 ```nanyx fragment
 dimension Time
 
-@baseUnit unit(s) Seconds: Time
-
-unit(ms) Milliseconds: Time = 0.001s
-unit(min) Minutes: Time = 60s
+@baseUnit unit ns: Time
+unit us: Time = 1_000ns
+unit ms: Time = 1_000us
+unit s: Time = 1_000ms
+unit min: Time = 60s
+unit hr: Time = 60min
+unit d: Time = 24hr
 ```
 
-Whether a dimension may have more than one base unit (for example both `s` and `tick` for `Time`) is unresolved; see [Open questions](#open-questions).
+- `dimension` declares a dimension, which is a type.
+- `unit <name>: <dimension>` declares a unit. Each dimension has exactly one unit marked `@baseUnit`, and it is the
+  dimension's **smallest** unit.
+- Every other unit is declared with `=` as a whole multiple of a unit of the same dimension, so of the base unit in
+  the end. A chain of definitions that comes back to where it started is an error, as is a unit defined in another
+  dimension's units.
+- `dimension` and `unit` are not reserved words. They begin a declaration only at the start of a top-level line, so
+  code that uses them as names keeps working.
+- Units are names of their own kind, apart from values and types: `500ms` means the unit `ms` even where a value named
+  `ms` is in scope. A module exports and imports units as it does types.
 
-Cycles are invalid and must be rejected by the compiler:
+Months and years are not units, as their lengths vary; they belong to a calendar library over `Instant`. Byte units
+are decimal or binary by name: `KB` is `1_000B` and `KiB` is `1_024B`.
 
-```nanyx fragment
-unit(a) A: Time = 2b
-unit(b) B: Time = 3a
--- error: cyclic derived-unit definition (A -> B -> A)
-```
+# Storage
 
-## Design model
+A dimension's values are `f64`s at run time, measured in its base unit. Dimensions and units are erased after type
+checking: a `Time` costs what a `float` does.
 
-Each measured numeric type carries a compile-time _dimension vector_.
+Because the base is the smallest unit and every unit is a whole multiple of it, sums of whole units are exact:
+`100ms + 200ms == 300ms`, which would not hold with `s` as the base (`0.1 + 0.2` is not `0.3`). With `ns` as `Time`'s
+base, an `f64` holds every whole number of nanoseconds up to about 104 days exactly.
 
-This page writes a measured type as `number(Dimension)`. The dimension is expected to become a parameter on the concrete numeric type instead, for example `float(Time)` or `int(Bytes)` (see [Arithmetic on measured values](#arithmetic-on-measured-values)); the rules below are unaffected by that spelling.
+# Literals
 
-- `number` is dimensionless (`1`)
-- Base dimensions are independent (for example `Length`, `Time`, `Mass`)
-- Units map to a scale within one dimension
+A number followed by a unit with no space between them is one literal: `500ms`, `1_000ns`, `0.5s`, `1.5e3ms`. Its type
+is the unit's dimension, and the compiler scales it to the base unit: `0.5s` is stored as `500_000_000.0`. `100 ms` is
+the number `100` followed by the name `ms`. Hexadecimal, octal and binary literals take no unit, as `0x1B` is a number.
 
-Conceptually:
+A literal with no unit is never a measured value: `sleep(0)` is an error. `zero`, from `Add`, is the zero of any
+dimension.
 
-- `number(Length)` means a quantity of length
-- `number(Time)` means a quantity of time
-- `number(Length/Time)` is speed
-- `number(Mass*Length/Time^2)` is force
+# Arithmetic
 
-The compiler stores normalized dimensions (sorted bases + integer exponents), so equivalent forms unify:
+| Expression | Type | |
+|---|---|---|
+| `a + b`, `a - b`, `-a` | `Time` | Both `Time`; through `Add` and `Sub` |
+| `a == b`, `a < b`, ... | `bool` | Both `Time` |
+| `a * 2.0`, `2.0 * a`, `a / 2.0` | `Time` | Scaling by a plain number |
+| `a / b` | `float` | Both `Time`: how many `b`s in `a`, so `t / 1s` reads `t` in seconds |
+| `a % b` | `Time` | Both `Time` |
 
-- `Length/Time` == `Length*Time^-1`
-- `(Length/Time)*Time` == `Length`
+A dimension has `Add` and `Sub` instances, so generic code such as `[Add(a)] a, a -> a` sums times. It has no `Num`
+instance: `Num`'s `*` is `(a, a) -> a`, and a `Time` times a `Time` is not a `Time`. The compiler types `*` and `/` on
+measured values itself, by the rules above.
 
-# Derived units
+# Display
 
-```nanyx fragment
-def transferRate = 50MB / s
-```
+A measured value prints in the largest unit in which it is a whole number: `"{1.5s}"` is `1500ms`, `"{120s}"` is
+`2min`, and `"{16.5ms}"` is `16500us`. The dimension is known at compile time, so this costs nothing at run time.
 
-# Type rules (F#-style behavior)
+# Instant
 
-Dimensions participate in type inference and unification, not runtime values.
+`Instant` is a point in time: an `int` of nanoseconds since the start of 1970, UTC, which covers about 292 years either
+side exactly. `Clock`'s `now` returns one.
 
-For arithmetic operators on measured numeric values:
+| Expression | Type |
+|---|---|
+| `i - j` | `Time` |
+| `i + t`, `i - t` | `Instant` |
+| `i + j` | error |
 
-- `+` and `-` require identical dimensions
-- `*` adds exponents (`d1 * d2`)
-- `/` subtracts exponents (`d1 / d2`)
-- `pow(x, n)` multiplies exponents by `n` (for integer `n`)
+# Step 2: derived dimensions
 
-Examples:
+Not part of the first step, and not settled.
 
-```nanyx fragment
-def d = 100m
-def t = 9.58s
-def v = d / t -- inferred: number(Length/Time)
-def a = v / t -- inferred: number(Length/Time^2)
-```
+- **Derived dimensions.** `Length / Time` is a type expression, and `type Speed = Length / Time` names it. The compiler
+  stores a dimension as sorted base dimensions with integer exponents, so `Length / Time` and `Length * Time^-1` are
+  the same type, and `*` and `/` add and subtract exponents: `100m / 9.58s` is a `Length / Time`.
+- **Dimension variables.** `def square: d -> d^2` (spelling open) needs unification that solves equations such as
+  `d * d = Length^2`. This is the largest piece of the work; Kennedy's "Types for Units-of-Measure" gives an algorithm
+  that fits a Hindley–Milner checker.
+- **Integer dimensions.** `dimension Bytes = int` would store a dimension as an `int`. On one, a unit must not be a
+  fraction of another, `b / c` is a `float`, and scaling by a `float` is an error. Open: what a derived dimension of an
+  `int` and a `float` dimension is stored as.
+- **Affine quantities.** `Instant` and `Time` are a point and a distance. Temperature has the same shape (a
+  temperature and a temperature difference). Open: whether the language has a general form for this, or each is a
+  library type.
 
-Addition mismatch is rejected:
+# Prior art
 
-```nanyx fragment
-def bad = 10m + 2s
--- error: cannot add number(Length) and number(Time)
-```
-
-## Generic constraints over dimensions
-
-Functions can stay generic over dimensions:
-
-```nanyx fragment
-def square: number(d) -> number(d^2) = { x -> x * x }
-def avgSpeed: (number(Length), number(Time)) -> number(Length/Time) = { dist, time -> dist / time }
-```
-
-This keeps APIs reusable while preserving dimension correctness.
-
-## Arithmetic on measured values
-
-The prelude's numeric contexts are `Add(a)`, with `zero` and `+`, `Sub(a)`, with `-` and `negate`, and `Num(a)`, which
-adds `*`, `/`, `%` and `fromInt` ([Add(a)](../advanced/contexts#adda), [Sub(a)](../advanced/contexts#suba),
-[Num(a)](../advanced/contexts#numa)). Units need `*` and `/` to
-change the type: `float(Length) / float(Time)` is `float(Length/Time)`. No context of the form `(a, a) -> a` can say
-that, so the plan is:
-
-- **Measured types have `Add` and `Sub` but not `Num`.** `+`, `-` and `negate` on measured values go through `Add`
-  and `Sub`, which require identical dimensions: `3m + 4m` is a length, but `3m * 4m` is an area.
-- **`*` and `/` on measured values** are typed by the dimension rules above, by the compiler, not through a context:
-  when either operand is measured, `a * b` is the underlying type's multiplication at the product of the dimensions.
-  Scaling, `2.0 * 3m`, is the case where one dimension is `1`.
-- **Generic code over dimensions** uses dimension variables, as `float(d) -> float(d^2)` does, not `Num`. A
-  `[Num(a)] square` cannot be called with a length; a dimension-generic `square` can.
-- **`%` on measured values** keeps the dimension (`7m % 2m` is `1m`); `**` with a literal exponent multiplies it, as
-  `pow` does.
-
-So the dimension is a parameter of the concrete numeric type, and `Num` is the context of dimensionless numbers.
-
-**Alternative.** *Contexts with an output type* (Rust's `Mul<Rhs, Output = ...>`), so `*` stays a context member and
-units are ordinary instances. That needs multi-parameter contexts, associated types and instances that compute
-dimensions, all to describe something the compiler has to know about anyway to unify `Length/Time` with
-`Length*Time^-1`.
-
-# Conversion rules
-
-Unit declarations define scale factors between units of the same dimension.
-
-```nanyx fragment
-@baseUnit unit(s) Seconds: Time
-unit(ms) Milliseconds: Time = 0.001s
-unit(min) Minutes: Time = 60s
-```
-
-Conversions are compile-time checked and only allowed within equivalent dimensions:
-
-```nanyx fragment
-def timeout: number(Time) = 500ms
-def twoMinutes = 120s as min -- explicit conversion syntax (proposed)
-```
-
-Invalid conversion is rejected:
-
-```nanyx fragment
-def impossible = 1m as s
-```
-
-# Ergonomics for `delay(500ms)`
-
-Use unit suffix literals as typed numeric constructors.
-
-- `500ms` parses as numeric literal `500` with unit suffix `ms`
-- Type is inferred as `number(Time)` (carrying source unit metadata for conversions/formatting)
-- Works anywhere a numeric expression works
-
-```nanyx fragment
-type Duration = number(Time)
-
-def delay: Duration -> () = { d -> ... }
-
-delay(500ms)      -- ok
-delay(0.5s)       -- ok
-delay(2min)       -- ok
-delay(42)         -- error: expected Duration, found dimensionless number
-```
-
-# Function parameters: dimensions vs units
-
-Both are useful, but they should mean different things.
-
-- **Default**: functions accept a dimension (`number(Time)`, `number(Length/Time)`, etc.)
-- **Optional strict mode**: functions can request an exact unit when protocol/interop requires it (for example milliseconds only)
-
-Dimension-first API (recommended):
-
-```nanyx fragment
-def delay: number(Time) -> () = { d -> ... }
-
-delay(500ms)
-delay(0.5s)
-delay(2min)
-```
-
-Unit-specific API (proposed constraint form):
-
-```nanyx fragment
-def setTimeoutRaw: number(Time) where unit = ms -> () = { d -> ... }
-
-setTimeoutRaw(500ms)   -- ok
-setTimeoutRaw(1s)      -- error (or require explicit `as ms`)
-```
-
-Recommendation: keep most APIs dimension-based, and reserve unit-specific parameters for boundaries (wire formats, hardware APIs, legacy contracts).
-
-## Why this satisfies both goals
-
-- Goal 1: unit algebra happens in inference/unification, so results derive automatically
-- Goal 2: suffix literals construct measured values directly at call sites
-
-# Runtime model
-
-Dimensions and units are erased after type checking.
-
-- Runtime carries only the underlying numeric representation
-- No runtime penalty for unit checking
-- Optional debug metadata can be emitted by tooling, not required by execution
-
-# Open questions
-
-The following need answers before this design can be implemented. They are listed in the order in which their answers constrain the rest.
-
-1. **Where the scale lives.** If the unit is not part of the type, then `500ms + 1s` must be computed in a canonical unit, which means every literal is converted to a per-dimension base at compile time and the "source unit metadata" mentioned above is for display only. That in turn requires exactly one base unit per dimension, or a declared scale between any additional base units. The current text allows several base units with no relation between them, which cannot work.
-2. **Integers.** `0.001s` and `1024B` mean conversions are not closed over `int`. If the canonical unit for `Time` is `s`, then `500ms` is `0.5` and every `Time` is a float. For integer-flavoured dimensions such as `Bytes` the base unit probably needs to be the smallest unit, with larger units as integer multiples.
-3. **Interaction with `Num(a)`.** Answered by [Arithmetic on measured values](#arithmetic-on-measured-values): a dimension parameter on the concrete numeric type (`float(Time)`, `int(Bytes)`), which also gives a per-dimension answer to question 2. Measured types have `Add` but not `Num`, and `*` and `/` on them follow the dimension rules above. The sized numbers, `I8` to `U64` and `F32`, have their `Add` and `Num` instances already ([#343](https://github.com/nanyx-lang/nanyx/issues/343)).
-4. **Type-level exponent arithmetic.** `number(d^2)` and `Length/Time^2` need integer exponents in the type language and unification that can solve equations such as `d * d = Length^2`. This is the largest implementation piece; Kennedy's "Types for Units-of-Measure" describes an algorithm that fits an HM-style checker.
-5. **Lexing of suffix literals.** `100m` must be a single literal while `100 m` is not, `m` must not collide with an identifier in scope (such as an import alias), and the interaction with exponent notation (`1e5`) and underscores (`1_000ms`) needs stating.
+- **F#** puts the unit in the type: `float<ms>` and `float<s>` are different types, and converting is multiplying by a
+  constant. Nanyx puts the dimension in the type, so `sleep` takes any `Time`.
+- **Rust's uom** types quantities by dimension and stores them in a base unit, as Nanyx does, and is generic over the
+  storage type.
+- **Kotlin's `Duration`** is one dimension stored as whole nanoseconds, made with `500.milliseconds`.
