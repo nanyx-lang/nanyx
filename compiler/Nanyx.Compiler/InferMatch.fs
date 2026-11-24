@@ -188,9 +188,10 @@ let internal inferMatch
                 let constrained = addConstraint scrutineeTy (listType elementTy) nextState
                 inferPatterns armBody env' constrained (prefix @ suffix |> List.map (fun pat -> pat, elementTy))
                 |> Result.map (fun (innerEnv, innerState, _) -> innerEnv, innerState, mkTypedPattern pattern scrutineeTy)
-            // `Email(raw)` takes a nominal value apart: the payload pattern matches the value's shape. A protected
-            // type's shape is hidden outside its home module, so only that module can look inside one.
-            | RecordPattern(typeName, [ payload ]) when (tryFindTypeDef typeName state' |> Option.exists isNominal) ->
+            // `Email(raw)` takes a nominal value apart: the patterns in its brackets match the value's shape (see
+            // `Pattern.constructorPayload`). A private type's shape is hidden outside its home module, so only that
+            // module can look inside one.
+            | RecordPattern(typeName, patterns) when (tryFindTypeDef typeName state' |> Option.exists isNominal) ->
                 let info = (tryFindTypeDef typeName state').Value
                 let isolation = blockIsolationAt state' typeName info.Symbol pattern.Span
                 if not isolation.IsEmpty then
@@ -200,9 +201,18 @@ let internal inferMatch
                 else
                     let nominalTy, underlying, _, instantiated = freshNominalType state' info
                     let constrained = addConstraint scrutineeTy nominalTy instantiated
-                    match inferPattern armBody env' constrained underlying payload with
+                    match inferPattern armBody env' constrained underlying (Pattern.constructorPayload pattern patterns) with
                     | Ok (nextEnv, nextState, _) -> Ok (nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
                     | Error err -> Error err
+            // `Point(x, y)` on a type that names a shape: the value is that shape, which the patterns match as they
+            // match a nominal type's.
+            | RecordPattern(typeName, patterns) when (tryFindTypeDef typeName state' |> Option.exists (fun info -> not info.IsContext)) ->
+                let info = (tryFindTypeDef typeName state').Value
+                let argTys, nextState = freshVars info.Parameters state'
+                let shape = Unifier.applyToParameters info.Parameters argTys info.Underlying
+                match inferPattern armBody env' (addConstraint scrutineeTy shape nextState) scrutineeTy (Pattern.constructorPayload pattern patterns) with
+                | Ok (nextEnv, nextState, _) -> Ok (nextEnv, nextState, mkTypedPattern pattern scrutineeTy)
+                | Error err -> Error err
             | RecordPattern(typeName, patterns) ->
                 let itemTypes, nextState = freshVars patterns state'
 

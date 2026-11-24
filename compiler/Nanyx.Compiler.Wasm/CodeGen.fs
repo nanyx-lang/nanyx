@@ -484,19 +484,6 @@ type private LoweredModule =
       Lowered: CoreIrLowerInput.Lowered<unit> }
 
 /// `typed` lowered to the core IR, with the first thing that cannot be compiled reported where it is written.
-/// The names of the nominal types a pattern may take apart: those the module can name, and those of the values its
-/// expressions have, among them the types of a library module the program reaches only through another, whose
-/// functions' bodies take their own types apart (`MArray(xs)` in `nanyx/marray`, under `nanyx/random`).
-let private nominalTypeNames (typeDefs: Map<string, TypeDefInfo>) (exprTypes: Map<NodeId, Ty>) =
-    let rec collect (names: Set<string>) (ty: Ty) =
-        let names =
-            match ty with
-            | TyNominal(id, _, _, _) -> names.Add id.Name
-            | _ -> names
-        Ty.children ty |> List.fold collect names
-    let named = typeDefs |> Map.filter (fun _ info -> info.IsNominal) |> Map.keys |> Set.ofSeq
-    exprTypes |> Map.values |> Seq.distinct |> Seq.fold collect named
-
 let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : LoweredModule =
     let contextInstances = typed.ContextInstances
     let checkedTypes = typed.ExprTypes
@@ -669,7 +656,6 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
                 |> Map.ofSeq
               RecordConstructors = typeLayouts.Keys |> Set.ofSeq
               ShapeWrappers = shapeWrappers
-              NominalTypes = nominalTypeNames typed.TypeDefs allExprTypes
               Lifted =
                 [ yield! liftedOrigins |> Map.toList |> List.map (fun (name, origin) ->
                     let written = localContexts |> Map.tryFind origin.Lambda.Id |> Option.map (fun (_, written, _, _) -> written) |> Option.defaultValue []
