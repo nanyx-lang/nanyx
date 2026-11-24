@@ -63,7 +63,9 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   structured as before, with no jump table, and a crash's stack still shows each function.
 - **Temporaries.** A value the emitter would compute where it is used, on the stack (see `CoreIrEmit`), can't be there
   when the function stops: a temporary whose value holds a split point, and those waiting to be used while it is
-  computed, are kept in locals instead (`SplitPlan.StoredTemps`).
+  computed, are kept in locals instead (`SplitPlan.StoredTemps`). Each is computed where it would have been used: after
+  the counting between its definition and its use, which the lowering puts before it, as in `f(x, x.length)`, where the
+  count `x` takes for the first argument comes before `x.length` gives up the reference the code held.
 - **Running one to the end.** Code that calls a state machine without being one, the start function, the getter of a
   cached value and a component's export, runs it to the end (`TaskLowering.blockOn`): while it stops, the scheduler
   runs the other tasks until its turn comes again (below), and then resumes it.
