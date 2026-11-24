@@ -88,16 +88,16 @@ println([1, 2, 3, 4] \list.product)
 
 This prints `10`, `#some(120)`, `#none` and `24`.
 
-Each collection is made from a [sequence](../stdlib/prelude-sequences) with `fromSeq`, which pulls the whole sequence, and from a block that `yield`s its elements with `build`, which is `fromSeq` of the block's `seq { }`:
+Each collection is made from a [sequence](../stdlib/prelude-sequences) with `fromSeq`, which pulls the whole sequence, and from a block that `emit`s its elements with `build`, which adds each element as it is emitted ([Building a collection](../advanced/sequences-and-queries#building-a-collection)):
 
 ```nanyx
 def squares = (1..4) \seq.map { n -> n * n } \Array.fromSeq
 def withZero = true
 
 def numbers = Array.build {
-  yield 1
-  yield 2
-  if withZero then yield 0
+  emit(1)
+  emit(2)
+  if withZero then emit(0)
 }
 
 println(squares)

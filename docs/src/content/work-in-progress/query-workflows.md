@@ -61,8 +61,8 @@ Both keywords are ordinary `#bind` keywords:
 - `where! customer.age > 18` is `where(customer.age > 18, { rest })`: the rest runs only when the test holds.
 
 A second `from!` in the same block is a join: the rest runs for every pair. This is the list monad, which is what
-LINQ's `SelectMany` and `Where` are underneath, and it is close to what `seq { for ... yield }` and
-[`list.select`](../stdlib/prelude-lists) already do with `yield`.
+LINQ's `SelectMany` and `Where` are underneath, and it is close to what `seq { for ... yield }` already does with
+`yield`, and [`list.select`](../stdlib/prelude-lists) with `emit`.
 
 # Open questions
 

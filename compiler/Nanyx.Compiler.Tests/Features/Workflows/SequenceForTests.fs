@@ -8,12 +8,12 @@ open Nanyx.Compiler.Tests.TestSupport
 // through its `Iterable`.
 
 [<Fact>]
-let ``A for loop in a builder block over a list checks`` () =
+let ``A for loop in a seq block over a list checks`` () =
     let source =
         normalized """def plusOne = { xs: list(int) ->
-  list.build {
+  seq {
     for xs | x -> yield x + 1
-  }
+  } \list.fromSeq
 }
 """
     Assert.Equal("list(int) -> list(int)", typeIn (compileClean source) "plusOne")

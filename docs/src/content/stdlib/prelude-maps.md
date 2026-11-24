@@ -85,11 +85,11 @@ key, the later wins, as in [`map.fromList`](#mapfromlist). It requires the conte
 ## `map.build`
 
 ```nanyx fragment
-def map.build: [Eq(k), Hash(k), c, d] ([c] () -> [d] seq((k, v))) -> map(k, v)
+def map.build: [Eq(k), Hash(k), c] ([c, Emit((k, v))] () -> ()) -> map(k, v)
 ```
 
-The map of the entries `block` yields: `map.build { yield ("a", 1) }`. The same as
-`seq(block) \map.fromSeq`.
+The map of the entries `block` emits, through `Emit`: `map.build { emit(("a", 1)) }`. Of two
+entries with the same key, the later wins. The same as `list.build(block) \map.fromList`.
 
 ## `map.toList`
 
@@ -306,11 +306,11 @@ requires the contexts the sequence's steps do.
 ## `set.build`
 
 ```nanyx fragment
-def set.build: [Eq(a), Hash(a), c, d] ([c] () -> [d] seq(a)) -> set(a)
+def set.build: [Eq(a), Hash(a), c] ([c, Emit(a)] () -> ()) -> set(a)
 ```
 
-The set of what `block` yields: `set.build { yield 1  yield 1 }` holds one `1`. The same as
-`seq(block) \set.fromSeq`.
+The set of what `block` emits, through `Emit`: `set.build { emit(1); emit(1) }` holds one `1`.
+The same as `list.build(block) \set.fromList`.
 
 ## `set.toList`
 
@@ -416,12 +416,11 @@ first of them was.
 ## `set.select`
 
 ```nanyx fragment
-def set.select: [Eq(b), Hash(b), c, d] set(a), ([c] a -> [d] seq(b)) -> set(b)
+def set.select: [Eq(b), Hash(b), c] set(a), ([c, Emit(b)] a -> ()) -> set(b)
 ```
 
-The set of the values `f` yields for each element in turn. Values that come out equal are kept
-once, where the first of them was. A lambda with `yield` in it is a sequence (see `Yield`), as
-in [`list.select`](prelude-lists#listselect).
+The set of the values `f` emits for each element in turn, through `Emit`, as in
+[`list.select`](prelude-lists#listselect). Values that come out equal are kept once, where the first of them was.
 
 ## `set.any`
 

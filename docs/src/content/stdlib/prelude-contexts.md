@@ -352,8 +352,25 @@ context Yield(a) = (
 
 The keyword `yield`, of kind `#yield`: a block or lambda with `yield x` in it is a lazy sequence of
 the values it yields, and the code after a `yield` runs only when the sequence is pulled that far.
-`seq { yield 1  yield 2 }` gives `1` and `2`, and `xs \list.select { x -> if x > 0 then yield x }`
-keeps the positive ones. Nothing loads this context: the compiler rewrites the block into calls to
-`seq.cons` and `seq.empty`, so the sequence needs no context of its own.
+`seq { yield 1  yield 2 }` gives `1` and `2`. Nothing loads this context: the compiler rewrites the
+block into calls to `seq.cons` and `seq.empty`, so the sequence needs no context of its own. A
+builder that takes every value at once, such as [`list.build`](prelude-lists#listbuild) or [`list.select`](prelude-lists#listselect), takes a function
+that calls [`Emit`](#emit)'s `emit` instead, which pushes each value as it comes and makes no sequence.
+
+## `Emit`
+
+```nanyx fragment
+context Emit(a) = (
+  emit: a -> ()
+)
+```
+
+Values pushed one at a time to whatever handles them: `emit(x)` hands `x` to the handler in scope
+and carries on once it returns. It is the pushing counterpart of [`Yield`](#yield): nothing is made per value
+but what the handler makes, and a `for` loop around an `emit` stays a loop. The builders that take
+every value at once, such as [`list.build`](prelude-lists#listbuild) and [`list.select`](prelude-lists#listselect), take a function that requires
+`Emit` and run it under a handler that adds each value to what they build: `xs \list.select { x ->
+if x > 0 then emit(x) }` keeps the positive ones. A handler of your own is a `use`: `use Emit(int)(emit
+= { x -> println(x) }) in walk(tree)` prints each value `walk` emits.
 
 <!-- End of the generated reference. -->

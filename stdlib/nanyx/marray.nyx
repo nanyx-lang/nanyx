@@ -77,9 +77,9 @@ export def MArray.fromSeq: [Memory, c] ([c] seq(a)) -> MArray(a) = { s ->
   MArray(__nanyx_marray_of_list(seq.toList(s)))
 }
 
---| A new array of what `block` yields. The same as `seq(block) \MArray.fromSeq`.
-export def MArray.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MArray(a) = { block ->
-  MArray.fromSeq(seq(block))
+--| A new array of what `block` emits, through [`Emit`]. The same as `list.build(block) \MArray.fromList`.
+export def MArray.build: [Memory, c] ([c, Emit(a)] () -> ()) -> MArray(a) = { block ->
+  MArray.fromList(list.build(block))
 }
 
 --| A new array of a copy of the elements of `xs`, in order: changing it leaves `xs` as it is.
