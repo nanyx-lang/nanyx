@@ -341,45 +341,51 @@ def atan2Of: float, float, float -> float = { y, x, magnitude ->
 }
 
 -- The hyperbolic functions and their inverses are written over `exp`, `ln` and `sqrt` much as musl's
--- are, with a series near zero, where the plain formula would lose digits. A series is added up by Horner's
--- rule, the smallest terms first, and what is small next to the first term is added to it last, so
--- that the result is rounded once.
+-- are, with a series near zero, where the plain formula would lose digits. What is small next to the
+-- series' first term is added to it last, so that the result is rounded once; a series of a fixed
+-- length is added up by Horner's rule, the smallest terms first.
 
---| The terms from the `k`th on, counting from 1, of the series `1 + x ** 2 / 3! + x ** 4 / 5! + ...`
-  for `sinh(x) / x`, over the `k`th, for an `x` of at most 1 with `xx` its square. Twelve terms are
-  enough.
-def sinhSeries: float, int -> float = { xx, k ->
-  if k > 12 then 1.0 else 1.0 + xx / int.toFloat(2 * k * (2 * k + 1)) * sinhSeries(xx, k + 1)
+--| The terms from the second on of the series `1 + x ** 2 / 3! + x ** 4 / 5! + ...` for `sinh(x) / x`,
+  over the second, for an `x` of at most 1 with `xx` its square, by Horner's rule from the twelfth
+  term: `acc` is the terms after the `k`th, over the one after it. Twelve terms are enough.
+def sinhSeries: float, int, float -> float = { xx, k, acc ->
+  if k < 2 then acc else sinhSeries(xx, k - 1, 1.0 + xx / int.toFloat(2 * k * (2 * k + 1)) * acc)
 }
 
---| The terms from the `k`th on, counting from 1, of the series `1 + x ** 2 / 2! + x ** 4 / 4! + ...`
-  for `cosh(x)`, over the `k`th, for an `x` of at most 1 with `xx` its square. Twelve terms are enough.
-def coshSeries: float, int -> float = { xx, k ->
-  if k > 12 then 1.0 else 1.0 + xx / int.toFloat((2 * k - 1) * (2 * k)) * coshSeries(xx, k + 1)
+--| The terms from the second on of the series `1 + x ** 2 / 2! + x ** 4 / 4! + ...` for `cosh(x)`,
+  over the second, for an `x` of at most 1 with `xx` its square, by Horner's rule from the twelfth
+  term: `acc` is the terms after the `k`th, over the one after it. Twelve terms are enough.
+def coshSeries: float, int, float -> float = { xx, k, acc ->
+  if k < 2 then acc else coshSeries(xx, k - 1, 1.0 + xx / int.toFloat((2 * k - 1) * (2 * k)) * acc)
 }
 
---| The terms from the `k`th on, counting from 0, of the series `1 + t ** 2 / 3 + t ** 4 / 5 + ...` for
-  `atanh(t) / t`, over `t ** 2k`, for a `t` below 1/3 with `tt` its square. Thirty terms are enough.
-def atanhSeries: float, int -> float = { tt, k ->
-  if k > 30
-    then 1.0 / int.toFloat(2 * k + 1)
-    else 1.0 / int.toFloat(2 * k + 1) + tt * atanhSeries(tt, k + 1)
+--| The terms from the second on of the series `1 + t ** 2 / 3 + t ** 4 / 5 + ...` for `atanh(t) / t`,
+  over `t ** 2`, for a `t` below 1/3 with `tt` its square, by Horner's rule from the thirty-first term:
+  `acc` is the terms after the `k`th, counting from 0, over `t ** 2 (k + 1)`. Thirty terms are enough.
+def atanhSeries: float, int, float -> float = { tt, k, acc ->
+  if k < 1 then acc else atanhSeries(tt, k - 1, 1.0 / int.toFloat(2 * k + 1) + tt * acc)
 }
 
---| The terms from the `n`th on, counting from 0, of the series `1 - x ** 2 / 6 + 3 * x ** 4 / 40 - ...`
-  for `asinh(x) / x`, over `x ** 2n`, for an `x` below 1/2 with `xx` its square, given `b`, the `n`th
-  term's binomial coefficient, `(-1/4) ** n * (2n)! / n! ** 2`. Forty terms are enough.
-def asinhSeries: float, float, int -> float = { xx, b, n ->
+--| The terms from the second on of the series `1 - x ** 2 / 6 + 3 * x ** 4 / 40 - ...` for
+  `asinh(x) / x`, over `x ** 2`, for an `x` below 1/2 with `xx` its square: `sum` is the terms before
+  the `n`th, counting from 0, `b` is the `n`th term's coefficient before its division by `2n + 1`,
+  `(-1/4) ** n * (2n)! / n! ** 2`, and `power` is `xx ** (n - 1)`. Forty terms are enough.
+def asinhSeries: float, float, float, float, int -> float = { xx, b, power, sum, n ->
   if n > 40
-    then 0.0
-    else b / int.toFloat(2 * n + 1) +
-      xx * asinhSeries(xx, b * int.toFloat(-(2 * n + 1)) / int.toFloat(2 * n + 2), n + 1)
+    then sum
+    else asinhSeries(
+      xx
+      b * int.toFloat(-(2 * n + 1)) / int.toFloat(2 * n + 2)
+      power * xx
+      sum + b * power / int.toFloat(2 * n + 1)
+      n + 1
+    )
 }
 
 --| `atanh(t)`, for a `t` below 1/3.
 def atanhOfSmall: float -> float = { t ->
   def tt = t * t
-  t + t * (tt * atanhSeries(tt, 1))
+  t + t * (tt * atanhSeries(tt, 30, 1.0 / 63.0))
 }
 
 --| `ln(1 + u)`, for a `u` not below zero, without losing the digits of a small `u`.
@@ -421,7 +427,7 @@ def sinhOfMagnitude: float -> float = { a ->
 --| `sinh(a) - a`, for an `a` of at most 1.
 def sinhLessX: float -> float = { a ->
   def xx = a * a
-  a * (xx / 6.0 * sinhSeries(xx, 2))
+  a * (xx / 6.0 * sinhSeries(xx, 12, 1.0))
 }
 
 --| The hyperbolic cosine of `x`, `(e ** x + e ** -x) / 2`: `cosh(0.0)` is `1.0`.
@@ -439,7 +445,7 @@ def coshOfMagnitude: float -> float = { a ->
 --| `cosh(a) - 1`, for an `a` of at most 1.
 def coshLessOne: float -> float = { a ->
   def xx = a * a
-  xx / 2.0 * coshSeries(xx, 2)
+  xx / 2.0 * coshSeries(xx, 12, 1.0)
 }
 
 --| The hyperbolic tangent of `x`, `sinh(x) / cosh(x)`: `tanh(0.0)` is `0.0`, and it is `1.0` or `-1.0`
@@ -471,7 +477,7 @@ def asinhOfMagnitude: float -> float = { a ->
     else if a > 2.0
       then ln(2.0 * a + 1.0 / (sqrt(a * a + 1.0) + a))
       else if a < 0.5
-        then a + a * (a * a * asinhSeries(a * a, -0.5, 1))
+        then a + a * (a * a * asinhSeries(a * a, -0.5, 1.0, 0.0, 1))
         else log1p(a + a * a / (1.0 + sqrt(1.0 + a * a)))
 }
 
