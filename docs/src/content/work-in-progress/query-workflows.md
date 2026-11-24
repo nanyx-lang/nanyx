@@ -1,5 +1,5 @@
 ---
-title: "Query workflows"
+title: "Proposal: Query workflows"
 description: "LINQ-style queries as a workflow: what works today, and what sorting, grouping and remote queries would need"
 order: 36
 ---

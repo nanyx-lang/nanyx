@@ -413,13 +413,22 @@ let rec internal inferCall
                             | Some (names, values, memberTys) ->
                                 // A constructor does not run the lambdas it is given, so in a value they are inferred
                                 // outside it, as a record's are (see `Contexts.asConstructorField`). One given for a
-                                // field whose type requires contexts can use them, as a lambda argument can.
+                                // field whose type requires contexts can use them, as a lambda argument can. A
+                                // context's constructor is written only in a `use`, whose members run with the
+                                // instances there, so a lambda for a member whose contexts are all named is inferred
+                                // where the `use` is: what it needs besides them is required there (see
+                                // `UseDischarge.fit`, which leaves a member with a context variable as it is too).
                                 let inferLambda state lambda lambdaArgs lambdaBody expectedInput fieldTy =
                                     let lambdaEnv, state = Contexts.extendEnvForLambdaArgument env state lambda (Some fieldTy)
                                     let instances = Contexts.instancesSuppliedToLambda state lambda (Some fieldTy)
+                                    let infer state expectedInput = inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None
+                                    let namesItsContexts =
+                                        match Unifier.unalias (resolveSoFar state fieldTy) with
+                                        | TyFunc(_, _, declared) -> declared |> List.forall (resolveSoFar state >> function TyVar _ -> false | _ -> true)
+                                        | _ -> false
                                     match expectedInput with
-                                    | Some expectedInput ->
-                                        state |> Contexts.asConstructorField fieldTy (fun state -> inferLambdaWithExpected lambdaEnv state lambda lambdaArgs lambdaBody (Some expectedInput) None)
+                                    | Some expectedInput when info.IsContext && namesItsContexts -> infer state expectedInput
+                                    | Some expectedInput -> state |> Contexts.asConstructorField fieldTy (fun state -> infer state expectedInput)
                                     | None -> inferExpr lambdaEnv state lambda
                                     |> Result.map (Contexts.withSuppliedInstances instances lambda)
                                 LambdaArguments.inferTupleItems (fun state item _ -> inferExpr env state item) inferLambda current values memberTys

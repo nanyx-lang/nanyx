@@ -197,3 +197,9 @@ let ``A module block takes its own nominal value apart by its type's name`` () =
 println(ids.UserId.value(ids.UserId.new(3)))
 """
     Assert.Empty(codesAt source)
+
+[<Fact>]
+let ``A destructuring def in a module block binds names the block exports, and keeps the others private`` () =
+    let block = normalized "module m =\n  def pair = (1, 2)\n  export def (a, b) = pair\n  def (c, d) = pair\n\n"
+    Assert.Empty(codesAt (block + "import m\n\ndef sum: int = a + b\n"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownIdentifier.Code, "c" ], codesAt (block + "import m\n\ndef s = c\n"))

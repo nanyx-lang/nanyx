@@ -128,3 +128,10 @@ def pulled: () -> [Console] seq(int) = {
 println(seq.cons(0, { pulled() }) \seq.append(list.toSeq([3])) \seq.toList)
 """
     |> assertRan "at 1\nat 2\n[1, 2]\npull 1\npull 2\n[0, 1, 2, 3]\n"
+
+[<Fact>]
+let ``Run - a range in a range's bound, nested 20 deep, counts as the innermost range does`` () =
+    // `seq.length(1..seq.length(1..3))`, nested 20 deep: each range from 1 has as many elements as its end says.
+    let nested = [ 1..20 ] |> List.fold (fun inner _ -> $"seq.length(1..{inner})") "3"
+    runSource $"println(seq.length(1..seq.length(1..3)))\ndef deep = {nested}\nprintln(deep)\nprintln({nested})\n"
+    |> assertRan "3\n3\n3\n"

@@ -51,6 +51,31 @@ def main = {
     runSource (source.ReplaceLineEndings "\n") |> assertRan "[app] hello world\n"
 
 
+[<Fact>]
+let ``Run - a use's member that requires Async prints through the Console in scope where the use is written`` () =
+    let source =
+        """context Nap = (nap: [Async] int -> ())
+
+def go: [Async, Nap] () -> string = { _ ->
+  nap(1)
+  "done"
+}
+
+def faked = { _ ->
+  use Nap(nap = { ms -> println("nap {ms}") })
+  go()
+}
+
+println(faked())
+"""
+    runSource (source.ReplaceLineEndings "\n") |> assertRan "nap 1\ndone\n"
+
+
+[<Fact>]
+let ``Run - a script's use statement runs its member with the Console of the top level`` () =
+    let source = "context Greeter = (greet: string -> ())\n\nuse Greeter(greet = { name -> println(name) }) in greet(\"world\")\n"
+    runSource source |> assertRan "world\n"
+
 let private choose =
     """
 context Choose = (choose: () -> bool)
