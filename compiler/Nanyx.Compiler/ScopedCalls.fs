@@ -31,6 +31,33 @@ let rec private pairScopes (general: Ty) (instantiated: Ty) : (string * Ty * Ty)
 let private scopedIn (state: InferState) (written: TypeExpr list) : TypeExpr list =
     written |> List.filter (fun ctx -> match ctx.Kind with TypeName name -> WrittenContexts.isScoped state name | _ -> false)
 
+/// `required`, the contexts a call of the type `calleeTy` requires itself, with each scoped one made of the scope of the
+/// call whose block the call is in, where that call supplies the context and nothing else says which scope it is: the
+/// callee's input doesn't hold its scope. So `start` requires the `TaskScope` of the `Async.concurrent` whose block it is
+/// in (see `TaskScopes`). The block's type would make it so once its lambda is inferred, as it does a `memory` block's
+/// `Memory` (see `MemoryCells.settleBlock`); made so now, the block's lambda uses the context once, not once for each
+/// call, which each local def it generalises would look at (#2551). A call that is given what holds the scope, as
+/// `await` is given a task, may be given one of another block's, and is left alone.
+let private ofBlockScope (calleeTy: Ty) (required: Ty list) (state: InferState) : Ty list * InferState =
+    let depth = state.LambdaContexts.Length - 1
+    let inInput =
+        match Unifier.unalias calleeTy with
+        | TyFunc(input, _, _) -> TypeEnv.freeTyVars input
+        | _ -> Set.empty
+    let blockScopeOf (context: string) =
+        state.OpenScopes
+        |> List.tryFind (function
+            | TyVar { Id = id; Name = Some name; Kind = CallScope } -> name = context && state.CallDepths.TryFind id = Some depth
+            | _ -> false)
+    required
+    |> List.mapFold (fun current context ->
+        match context with
+        | FunctionContexts.ScopedContext(name, (TyVar v as scope)) when v.Kind <> CallScope && not (inInput.Contains v.Id) ->
+            match blockScopeOf name with
+            | Some blockScope -> FunctionContexts.scoped name blockScope, addConstraint scope blockScope current
+            | None -> context, current
+        | _ -> context, current) state
+
 /// The environment the arguments of the call `call` to `callee` are checked in, the callee's type there, and `state` as
 /// they start to be. `scheme` is the callee as `env` binds it, `calleeTy` its type at the call, and `written` the
 /// contexts its type declares. A scoped context the callee requires itself is used where the call runs, of the scope
@@ -38,6 +65,7 @@ let private scopedIn (state: InferState) (written: TypeExpr list) : TypeExpr lis
 /// `FunctionContexts.isCallScope`) where its type is instantiated to one, and a `memory` block can make cells of it.
 let enter (env: TypeEnv) (state: InferState) (call: Expression) (callee: Identifier) (scheme: TypeScheme) (calleeTy: Ty) (written: TypeExpr list) =
     let required, state = WrittenContexts.plain state calleeTy (scopedIn state written)
+    let required, state = ofBlockScope calleeTy required state
     let state = LambdaContexts.recordUnsupplied env required state
     let own = required |> List.choose (function FunctionContexts.PlainContext name -> Some name | _ -> None) |> Set.ofList
     let supplied =

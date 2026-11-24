@@ -103,6 +103,7 @@
     <Compile Include="Features\Hashing\HashTests.fs" />
     <Compile Include="Features\Hosts\AsyncTests.fs" />
     <Compile Include="Features\Tasks\TaskScopeTests.fs" />
+    <Compile Include="Features\Tasks\TaskCheckTimeTests.fs" />
     <Compile Include="Features\Hosts\ConsoleHostTests.fs" />
     <Compile Include="Features\Hosts\ExternTests.fs" />
     <Compile Include="Features\Hosts\PlaygroundHostTests.fs" />
