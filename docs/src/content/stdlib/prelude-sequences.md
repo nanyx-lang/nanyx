@@ -218,9 +218,9 @@ The elements of each sequence of `s`, one after another: `[[1, 2], [3]] \list.ma
 def seq.select: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b)
 ```
 
-The values `f` yields for each element in turn, in the order it yields them, as
-[`list.select`](prelude-lists#listselect) gives them for a list: [`seq.flatMap`](#sequenceflatmap) for a lambda with `yield` in it. Lazy: the
-code after a `yield` runs only when the sequence is pulled that far.
+The values `f` yields for each element in turn, in the order it yields them: [`seq.flatMap`](#sequenceflatmap) for
+a lambda with `yield` in it, which is a lazy sequence (see `Yield`). Lazy: the code after a
+`yield` runs only when the sequence is pulled that far.
 
 ## `seq.filterMap`
 
@@ -416,15 +416,6 @@ def list.fromSeq: [c] ([c] seq(a)) -> list(a)
 
 The elements of `s`, pulled now, as a list: `(1..3) \list.fromSeq` is `[1, 2, 3]`. It requires
 the contexts the sequence's steps do. An endless sequence never ends: cut it with [`seq.take`](#sequencetake).
-
-## `list.build`
-
-```nanyx fragment
-def list.build: [c, d] ([c] () -> [d] seq(a)) -> list(a)
-```
-
-The list of what `block` yields: `list.build { yield 1  if more then yield 2 }`. The same as
-`seq(block) \list.fromSeq`.
 
 ## `seq.find`
 

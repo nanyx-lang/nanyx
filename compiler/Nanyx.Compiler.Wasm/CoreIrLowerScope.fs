@@ -65,6 +65,9 @@ type internal LocalClosure = Map<int, Ty> -> IrType list -> (Expr -> Expr) -> Ex
 /// What names refer to in the expression being lowered.
 type internal Scope =
     { Vars: Map<string, Var>
+      /// In a debug build, the locals a `def` binds in scope that a probe can write, the one bound last first (see
+      /// `CoreIrProbes`).
+      Probed: Var list
       /// How many scrutinees enclose the expression: the next `match` holds its own from this number on.
       MatchDepth: int
       /// The names of the pattern-bound locals of the arms that enclose the expression, which a nested arm must not

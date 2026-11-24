@@ -64,6 +64,7 @@
     <Compile Include="CoreIrCounting.fs" />
     <Compile Include="CoreIrReuse.fs" />
     <Compile Include="CoreIrReach.fs" />
+    <Compile Include="CoreIrUnusedRegions.fs" />
     <Compile Include="WatPieces.fs" />
     <Compile Include="CoreIrSplitPoints.fs" />
     <Compile Include="TaskLowering.fs" />

@@ -38,10 +38,10 @@ export def Queue.fromSeq: [c] ([c] seq(a)) -> Queue(a) = { s ->
   Queue.fromList(seq.toList(s))
 }
 
---| A queue of what `block` yields, the first at the front. The same as
-  `seq(block) \Queue.fromSeq`.
-export def Queue.build: [c, d] ([c] () -> [d] seq(a)) -> Queue(a) = { block ->
-  Queue.fromSeq(seq(block))
+--| A queue of what `block` emits, through [`Emit`], the first at the front. The same as
+  `list.build(block) \Queue.fromList`.
+export def Queue.build: [c] ([c, Emit(a)] () -> ()) -> Queue(a) = { block ->
+  Queue.fromList(list.build(block))
 }
 
 -- The front list is empty only when the queue is: `dequeue` reverses the back list into it as soon

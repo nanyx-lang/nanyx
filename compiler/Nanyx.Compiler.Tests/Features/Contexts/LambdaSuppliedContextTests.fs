@@ -150,3 +150,55 @@ let ``The instance a lambda is given is at the parameter's types only`` () =
 def s: string = withM { twice("a") }
 """
     Assert.Equal((DiagnosticCodes.MissingContextMembers.Code, "twice"), singleError (source.ReplaceLineEndings "\n"))
+// A lambda's parameter that requires a parameterised context at a type the function leaves open, `Emit(b)` in
+// `list.build`, puts an instance in scope whose type a call in the lambda settles: calling a function that requires
+// `Emit(int)` makes `b` an `int`, as calling `emit` with an `int` does (#2566).
+
+let private walk = """type Tree = #leaf(int) | #node(Tree, Tree)
+
+def walk: [Emit(int)] Tree -> () = {
+  | #leaf(n) -> emit(n)
+  | #node(left, right) ->
+    walk(left)
+    walk(right)
+}
+"""
+
+[<Fact>]
+let ``A call in a lambda settles the open type of the instance the lambda's parameter supplies`` () =
+    let source = walk + "\ndef leaves = { tree: Tree -> list.build { walk(tree) } }\n"
+    Assert.Equal("Tree -> list(int)", typeIn (compileClean source) "leaves")
+
+[<Fact>]
+let ``A call that settles a type a def's annotation writes is too general for it`` () =
+    let source = walk + "\ndef leaves: [Emit(a)] a, Tree -> () = { x, tree -> walk(tree) }\n"
+    let code, _, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.AnnotationTooGeneral.Code, code)
+    Assert.Equal("leaves", text)
+
+[<Fact>]
+let ``A call settles only the nearest instance of the context, and a settled one nearer is the one it finds`` () =
+    let inner =
+        walk
+        + """
+def inner: Tree -> list(string) = { tree ->
+  list.build {
+    emit("x")
+    use Emit(int)(emit = { n -> () }) in walk(tree)
+  }
+}
+"""
+    Assert.Equal("Tree -> list(string)", typeIn (compileClean inner) "inner")
+    // The nearest `Emit` is a `string`'s, which `walk` doesn't fit, and the builder's further out is not settled.
+    let between =
+        walk
+        + """
+def between = { tree: Tree ->
+  list.build {
+    use Emit(string)(emit = { s -> () }) in walk(tree)
+  }
+}
+"""
+    let code, _, text = onlyDiagnostic between
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
+    Assert.Equal("walk", text)

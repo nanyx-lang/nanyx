@@ -42,6 +42,11 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
   ([#2042](https://github.com/nanyx-lang/nanyx/issues/2042)).
 - **Stepping backwards:** how often to snapshot, and how the adapter presents it
   ([#2043](https://github.com/nanyx-lang/nanyx/issues/2043)).
+- **Every local of a long function.** A statement's probe writes the parameters and the 64 locals bound last (see
+  [Debug probes](../deep-dives/debug-probes)), so a frame with more in scope shows only those. To show them all and stay
+  linear, a probe could write each local once, where it is bound, with the runtime's frame keeping its text until its
+  block ends, and a mutable object written again when it changes; that changes `nanyx:debug`, the runtime and the
+  adapter, and has a debug session write every local whether it stops there or not.
 - **Evaluating an expression at a breakpoint** means compiling a snippet against the paused frame's scope. Not
   planned yet.
 - **Leak checks:** a debug run reporting reference-counted values still alive at exit, on top of the memory report.

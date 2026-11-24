@@ -80,12 +80,32 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     // `CoreIrProbes`).
     let probedLocals = System.Collections.Generic.Dictionary<int, string * Ty>()
 
+    // The parameters a probe writes, in order.
+    let probedParameters = ResizeArray<Var>()
+
     /// Notes that a probe writes `var`, named `name` and of `ty`, in a debug build, if a printer can write it.
     let noteProbed (name: string) (var: Var) (ty: Ty) =
         let ty = unconstrainedAsUnit ty
         // A cell's local holds its box, not the value its type is the type of.
         if input.Probes && not (MadeUpNames.isMadeUp name) && CoreIrLowerDbg.printable toIrType ty && toIrType ty = var.Type then
             probedLocals.[var.Id] <- (name, ty)
+            if var.Kind = Param then probedParameters.Add var
+
+    /// What a statement's probe writes in `scope`: the parameters, and the `probeLimit` locals bound last, of those in
+    /// scope, by name. A probe that wrote every local would make a function of n locals n² in size (#2488).
+    let probedInScope (scope: Scope) : Var list =
+        let nameOf (var: Var) = fst probedLocals.[var.Id]
+        let inScope (var: Var) = scope.Vars |> Map.tryFind (nameOf var) |> Option.exists (fun bound -> bound.Id = var.Id)
+        // A local that a later one of its name hides is passed over, but only so many, so that a long run of them
+        // costs no more than the limit.
+        let rec nearest (found: Var list) (count: int) (looked: int) (remaining: Var list) =
+            match remaining with
+            | var :: rest when count < CoreIrProbes.probeLimit && looked < 4 * CoreIrProbes.probeLimit ->
+                if inScope var then nearest (var :: found) (count + 1) (looked + 1) rest
+                else nearest found count (looked + 1) rest
+            | _ -> found
+        (probedParameters |> Seq.filter inScope |> List.ofSeq) @ nearest [] 0 0 scope.Probed
+        |> List.sortWith (fun a b -> System.String.CompareOrdinal(nameOf a, nameOf b))
 
     /// What a probe writes of `vars`: those `noteProbed` noted, each with its type's printer.
     let probeLocals (vars: Var seq) : ProbeLocal list =
@@ -246,6 +266,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// A scope with nothing in it, as at the top of the start function.
     let emptyScope =
         { Vars = Map.empty
+          Probed = []
           MatchDepth = 0
           LivePayloads = Set.empty
           InterpolationDepth = 0
@@ -1089,7 +1110,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | _ -> None
                 match written with
                 | Some place when input.Probes ->
-                    let probe = CoreIrProbes.probe ProbeKind.Statement (probeLocals (Map.values scope.Vars)) (Some place)
+                    let probe = CoreIrProbes.probe ProbeKind.Statement (probeLocals (probedInScope scope)) (Some place)
                     { lowered with Kind = Do(probe, lowered) }, rest
                 | _ -> lowered, rest)
             scope
@@ -1152,7 +1173,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                         match scope.CapturedMembers |> Map.tryFind name with
                         | Some keys -> keys |> List.fold (fun acc key -> acc |> Map.add key local) scope.Members
                         | None -> scope.Members
-                    restScope.Value <- { scope with Vars = scope.Vars |> Map.add name local; Members = members }
+                    let probed = if probedLocals.ContainsKey local.Id then local :: scope.Probed else scope.Probed
+                    restScope.Value <- { scope with Vars = scope.Vars |> Map.add name local; Probed = probed; Members = members }
                     Expr.make (Let(local, value, hole)) hole.Type)
             statement, Some (hole, restScope.Value, rest)
         | ExprStatement first :: rest -> this.Complex scope first (fun value -> Expr.make (Do(value, hole)) hole.Type), Some (hole, scope, rest)

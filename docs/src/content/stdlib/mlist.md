@@ -77,10 +77,10 @@ sequence's steps do.
 ## `MList.build`
 
 ```nanyx fragment
-def MList.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MList(a)
+def MList.build: [Memory, c] ([c, Emit(a)] () -> ()) -> MList(a)
 ```
 
-A new list of what `block` yields. The same as `seq(block) \MList.fromSeq`.
+A new list of what `block` emits, through `Emit`: each value is added at the end as it comes.
 
 ## `MList.add`
 

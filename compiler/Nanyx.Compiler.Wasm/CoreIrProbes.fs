@@ -10,6 +10,11 @@ module internal Transpiler.Wasm.CoreIrProbes
 
 open Transpiler.Wasm.CoreIr
 
+/// The most locals bound in a function's body that a statement's probe writes: those bound last, of those in scope, with
+/// the parameters besides (see `CoreIrLower`'s `probedInScope`). Only a function with more in scope at once, which is
+/// code a program generates, shows fewer than all of them.
+let probeLimit = 64
+
 /// The probe of `kind`, writing `locals`, at `place`.
 let probe (kind: ProbeKind) (locals: ProbeLocal list) (place: Place option) : Expr =
     { Kind = Probe(kind, locals); Type = IrUnit; Place = place }

@@ -218,9 +218,9 @@ export def seq.flatten: ([c] seq(seq(a))) -> [c] seq(a) = { s ->
   seq.flatMap(s, { inner -> inner })
 }
 
---| The values `f` yields for each element in turn, in the order it yields them, as
-  [`list.select`] gives them for a list: [`seq.flatMap`] for a lambda with `yield` in it. Lazy: the
-  code after a `yield` runs only when the sequence is pulled that far.
+--| The values `f` yields for each element in turn, in the order it yields them: [`seq.flatMap`] for
+  a lambda with `yield` in it, which is a lazy sequence (see [`Yield`]). Lazy: the code after a
+  `yield` runs only when the sequence is pulled that far.
 export def seq.select: ([c] seq(a)), ([d] a -> [d] seq(b)) -> [c, d] seq(b) = { s, f ->
   seq.flatMap(s, f)
 }
@@ -526,12 +526,6 @@ export def seq.toList: [c] ([c] seq(a)) -> list(a) = { s ->
   the contexts the sequence's steps do. An endless sequence never ends: cut it with [`seq.take`].
 export def list.fromSeq: [c] ([c] seq(a)) -> list(a) = { s ->
   seq.toList(s)
-}
-
---| The list of what `block` yields: `list.build { yield 1  if more then yield 2 }`. The same as
-  `seq(block) \list.fromSeq`.
-export def list.build: [c, d] ([c] () -> [d] seq(a)) -> list(a) = { block ->
-  list.fromSeq(seq(block))
 }
 
 -- Reading a sequence until the answer is known. These pull `s` now, and stop at the first element
