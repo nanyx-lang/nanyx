@@ -29,8 +29,9 @@ module text
 -- prelude's `list.reverse`. `toUtf8` and `fromUtf8` also use the array intrinsics
 -- `__nanyx_array_new`, `__nanyx_array_write`, `__nanyx_array_get` and `__nanyx_array_length`, so
 -- that this module needs no import. `++` (concatenation) and `==` on strings are language
--- operators. A string built from many pieces whose length isn't known first is built as a list of
--- them and joined once, since `++` copies both its operands.
+-- operators. A string built from many pieces whose length isn't known first is built with
+-- `string.build`, which copies each piece once into a growing buffer, since `++` copies both its
+-- operands.
 
 --| The number of bytes in `s`.
 export def string.length: string -> int = { s ->
@@ -306,6 +307,47 @@ export def string.join: list(string), string -> string = { pieces, separator ->
 --| The `pieces` concatenated end to end.
 export def string.concat: list(string) -> string = { pieces ->
   string.join(pieces, "")
+}
+
+--| `capacity` doubled until it holds `needed` bytes.
+def grownCapacity: int, int -> int = { capacity, needed ->
+  if capacity >= needed then capacity else grownCapacity(capacity * 2, needed)
+}
+
+--| A new string of `capacity` bytes that starts with the first `used` bytes of `buffer`.
+def copiedInto: string, int, int -> string = { buffer, used, capacity ->
+  def made = __nanyx_string_new(capacity)
+  __nanyx_string_write(made, 0, buffer, 0, used)
+  made
+}
+
+--| The string of the pieces `block` emits, through [`Emit`], in the order it emits them:
+  `string.build { for rows | row -> emit(row.name); emit(",") }`. `block` runs once, now, under a
+  handler that copies each piece into one buffer, of 64 bytes at first, and into one twice its size
+  when it is full, and then into a string of the length written. So it takes time in proportion to
+  the length of the result, and allocates a number of blocks that grows with the log of that length,
+  where joining the pieces one at a time with `++` copies the string so far for each of them.
+export def string.build: [c] ([c, Emit(string)] () -> ()) -> string = { block ->
+  memory {
+    mut buffer = __nanyx_string_new(64)
+    mut used = 0
+
+    use Emit(string)(
+      emit = { piece ->
+        def size = string.length(piece)
+
+        if used + size > string.length(buffer) then
+          buffer := copiedInto(buffer, used, grownCapacity(string.length(buffer) * 2, used + size))
+
+        __nanyx_string_write(buffer, used, piece, 0, size)
+        used := used + size
+      }
+    ) in block()
+
+    if used == 0
+      then ""
+      else if used == string.length(buffer) then buffer else copiedInto(buffer, used, used)
+  }
 }
 
 --| `made`, a new string, once the bytes of `s` from `from` on are written into it from `at`, with

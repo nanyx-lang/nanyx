@@ -597,6 +597,25 @@ let allocationsOf (program: WasmProgram) (name: string) (argument: int) =
     let result = program.Call(name, argument)
     program.Allocations - before, result
 
+/// Asserts that `name(n)` in `program` takes time that grows with `n`, not with its square: less than ten times what
+/// `name(n / 4)` takes. A linear function takes about 4 times as long, and a quadratic one 16. When the first runs miss,
+/// each size runs again in turn, and each one's quickest run counts, so that load on the machine, which slows one run
+/// and not the other, can't make the test fail (#2388).
+let callsInLinearTime (program: WasmProgram) (name: string) (n: int) =
+    let time (size: int) =
+        let clock = System.Diagnostics.Stopwatch.StartNew()
+        program.Call(name, size) |> ignore
+        clock.Elapsed.TotalMilliseconds
+    program.Call(name, n / 4) |> ignore
+    let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
+    let atQuarter, atN = time (n / 4), time n
+    let atQuarter, atN =
+        if isLinear atQuarter atN then atQuarter, atN
+        else
+            let again = List.init 3 (fun _ -> time (n / 4), time n)
+            min atQuarter (again |> List.map fst |> List.min), min atN (again |> List.map snd |> List.min)
+    Assert.True(isLinear atQuarter atN, $"{name}({n:N0}) took {atN:F1} ms, {atN / atQuarter:F1} times the {atQuarter:F1} ms of {name}({n / 4:N0})")
+
 /// `wat`, a module compiled with `checkedOptions`, instantiated and run (see `WasmProgram`), with the drop functions of `dropped`
 /// exported.
 let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
