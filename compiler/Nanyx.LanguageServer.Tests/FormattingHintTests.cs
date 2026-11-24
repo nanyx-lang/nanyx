@@ -76,7 +76,7 @@ public sealed class FormattingHintTests : LanguageServerTestBase
 
         var whole = actions[1];
         Assert.Equal(2, whole.Diagnostics!.Count());
-        Assert.Equal("def a = { 1 }\ndef b = 2\ndef c = (3, 4)\n", Applied(text, whole.Edit!.Changes![uri]));
+        Assert.Equal("def a = { 1 }\ndef b = 2\ndef c = 3, 4\n", Applied(text, whole.Edit!.Changes![uri]));
 
         // No formatting fix where the lines are formatted.
         Assert.DoesNotContain(await CodeActionsIn(uri, new Range(1, 2, 1, 2)), action => action.Kind == CodeActionKind.QuickFix);
@@ -92,7 +92,7 @@ public sealed class FormattingHintTests : LanguageServerTestBase
 
         var fix = (await CodeActionsIn(uri, new Range(1, 0, 1, 0))).First(action => action.Title == "Format these lines");
         var edit = Assert.Single(fix.Edit!.Changes![uri]);
-        Assert.Equal((new Range(1, 0, 3, 0), "def b = (2, 3)\r\n"), (edit.Range, edit.NewText));
+        Assert.Equal((new Range(1, 0, 3, 0), "def b = 2, 3\r\n"), (edit.Range, edit.NewText));
     }
 
     [Fact]
