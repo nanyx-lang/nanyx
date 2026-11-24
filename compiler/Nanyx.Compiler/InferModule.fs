@@ -46,6 +46,8 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
                         |> List.take index
                         |> List.tryFind (fun (_, otherTy) -> otherTy = ty)
                         |> Option.map (fun (otherName, _) -> $"'{varName}' would have to be '{otherName}'")
+                    // What failed to check was reported where it failed: it is not another error here.
+                    | concrete when Unifier.holdsError concrete -> None
                     | concrete -> Some $"'{varName}' would have to be '{Unifier.tyToString (Unifier.apply displayNames concrete)}'")
                 |> List.choose id
             if problems.IsEmpty then
