@@ -31,10 +31,10 @@ let rec private pairScopes (general: Ty) (instantiated: Ty) : (string * Ty * Ty)
 let private scopedIn (state: InferState) (written: TypeExpr list) : TypeExpr list =
     written |> List.filter (fun ctx -> match ctx.Kind with TypeName name -> WrittenContexts.isScoped state name | _ -> false)
 
-/// `required`, the contexts a call of the type `calleeTy` requires itself, with each scoped one made of the scope of the
-/// call whose block the call is in, where that call supplies the context and nothing else says which scope it is: the
-/// callee's input doesn't hold its scope. So `start` requires the `TaskScope` of the `Async.concurrent` whose block it is
-/// in (see `TaskScopes`). The block's type would make it so once its lambda is inferred, as it does a `memory` block's
+/// `required`, the contexts a call of the type `calleeTy` requires itself, with a `TaskScope` made of the scope of the
+/// call whose block the call is in, where that call supplies it and nothing else says which scope it is: the callee's
+/// input doesn't hold its scope. So `start` requires the `TaskScope` of the `Async.concurrent` whose block it is in (see
+/// `TaskScopes`). A `memory` block's `Memory` is not: a block may use an outer block's (`use m`). The block's type would make it so once its lambda is inferred, as it does a `memory` block's
 /// `Memory` (see `MemoryCells.settleBlock`); made so now, the block's lambda uses the context once, not once for each
 /// call, which each local def it generalises would look at (#2551). A call that is given what holds the scope, as
 /// `await` is given a task, may be given one of another block's, and is left alone.
@@ -52,7 +52,7 @@ let private ofBlockScope (calleeTy: Ty) (required: Ty list) (state: InferState) 
     required
     |> List.mapFold (fun current context ->
         match context with
-        | FunctionContexts.ScopedContext(name, (TyVar v as scope)) when v.Kind <> CallScope && not (inInput.Contains v.Id) ->
+        | FunctionContexts.ScopedContext(name, (TyVar v as scope)) when name = TaskScopeSyntax.context && v.Kind <> CallScope && not (inInput.Contains v.Id) ->
             match blockScopeOf name with
             | Some blockScope -> FunctionContexts.scoped name blockScope, addConstraint scope blockScope current
             | None -> context, current

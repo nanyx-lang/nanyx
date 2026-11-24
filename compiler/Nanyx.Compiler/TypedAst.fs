@@ -82,6 +82,8 @@ module ModuleOrigin =
 /// The call the compiler makes the body of each def that starts a task into (see `TaskScopes`): `nanyx/async`'s
 /// `Async.concurrent`, imported under an alias no code can write.
 module TaskScopeSyntax =
+    /// The scoped context a task belongs to, which `Async.concurrent` supplies.
+    let context = "TaskScope"
     let alias = "__async"
     let scopeCall = alias + ".Async.concurrent"
 
