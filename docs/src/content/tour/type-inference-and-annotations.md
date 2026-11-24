@@ -214,6 +214,6 @@ println(person.name) -- Ada
 ```
 
 A later use doesn't fix a value's type. `def obj = parse("Ada")` followed by `def person: Person = obj` is an error
-([NYX0281](../standard-tools/errors#nyx0281)), since nothing in `obj`'s definition says which `Decode` to use. Write the
+([NYX0282](../standard-tools/errors#nyx0282)), since nothing in `obj`'s definition says which `Decode` to use. Write the
 type on the def, as above, or give the function a [type argument](functions#type-arguments), `type a`, and pass the
 type to it: `parse(type Person, "Ada")`.

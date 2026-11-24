@@ -269,6 +269,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
 
     let check (item: TopLevelItem) =
         match item.Kind with
+        // A cell, `mut x = 0`, which no `memory` block can be around at the top level.
+        | Def (ValueDef(isExport, name, _, ({ Kind = MutSyntax.Call _ } as written))) ->
+            beginDef ()
+            let message =
+                $"A cell can't be declared at the top level, where no `memory` block can be around it: declare '{name}' inside a `memory {{ ... }}` block, in the body of a def"
+            abandon isExport name written [ Diagnostics.at DiagnosticCodes.TopLevelCell { written.Span with End = written.Span.Start + 3 } message |> Diagnostics.about name ]
         | Def (ValueDef(isExport, name, typeOpt, written)) ->
             beginDef ()
             // `def p = println` is read as the lambda that calls `println`, so that it requires `ToString` at its own

@@ -2431,7 +2431,19 @@ def sum: (x: int, y: int) -> int = { a, b -> a + b }  -- error NYX0280: The para
 To fix it, name the parameters after the fields, as in `{ x, y -> x + y }`, or rename the fields with a record pattern,
 in brackets: `{ (x = a, y = b) -> a + b }`.
 
-# NYX0281: Value of a type only a later use fixes
+# NYX0281: Cell declared at the top level
+
+A cell is declared with `mut` at the top level. A cell needs the context `Memory`, which only a `memory { ... }` block
+provides, and no block can be around a top-level definition ([Memory](../advanced/memory#no-global-mutable-state)).
+
+```nanyx
+mut count = 0  -- error NYX0281: A cell can't be declared at the top level, where no `memory` block can be around it: ...
+```
+
+To fix it, declare the cell inside a `memory { ... }` block, in the body of a def, and give back what it ends up
+holding: `def count = memory { mut n = 0 ... n }`.
+
+# NYX0282: Value of a type only a later use fixes
 
 A def that writes no type and whose value is not a function calls a function that requires a context of the type it
 gives back, and nothing in the def says what that type is. A later use of the value, such as
@@ -2450,7 +2462,7 @@ def parse: [Decode(a)] string -> a = { json ->
   decode(json)
 }
 
-def obj = parse("Ada")  -- error NYX0281: 'parse' requires 'Decode' of a type nothing in the definition of 'obj' fixes, ...
+def obj = parse("Ada")  -- error NYX0282: 'parse' requires 'Decode' of a type nothing in the definition of 'obj' fixes, ...
 ```
 
 To fix it, write the type on the def, `def obj: Person = parse("Ada")`, or give the function a
