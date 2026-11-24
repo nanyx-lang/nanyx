@@ -252,7 +252,7 @@ let ``Run - an unknown name given where an annotation's variable is expected sto
 }
 
 println("start")
-println(f("s", type int))
+println(f("s", a = type int))
 """
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
