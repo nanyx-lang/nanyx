@@ -307,9 +307,17 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
     public async Task A_standard_library_file_is_checked_as_the_library_module_it_is(string fileName)
     {
         // Its calls to the compiler's intrinsics check, and the prelude's files do not clash with the prelude.
-        var uri = DocumentUri.FromFileSystemPath(TempPath("nanyx", fileName));
+        var path = TempPath("nanyx", fileName);
+        var uri = DocumentUri.FromFileSystemPath(path);
+        var text = NyxCompiler.StandardLibrary.tryLoadFile("nanyx/" + fileName).Value;
 
-        Open(uri, NyxCompiler.StandardLibrary.tryLoadFile("nanyx/" + fileName).Value);
+        // Checking one of the prelude's files checks the whole prelude, which takes seconds: the server is given three
+        // times what it takes here, as loaded as the machine is now.
+        var checking = System.Diagnostics.Stopwatch.StartNew();
+        NyxCompiler.Compiler.compileStandardLibraryFile(NyxCompiler.Linters.none, path, text);
+        AllowFor(3 * checking.Elapsed);
+
+        Open(uri, text);
 
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
     }
