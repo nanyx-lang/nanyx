@@ -43,3 +43,14 @@ let ``... in a tuple pattern comes after its fields`` () =
     match parseModule "def f = { | (..., a) -> 1 }" with
     | Result.Error _ -> ()
     | Result.Ok parsed -> failwith $"Expected a parse error: %A{parsed}"
+
+[<Fact>]
+let ``a constructor pattern's brackets read as a tag's payload's do`` () =
+    // #2504: by position, ending in `...` to leave the other fields out, or by name.
+    match armsOf "def f = { | Email(s) -> 1 | P(a, b) -> 2 | P(a, ...) -> 3 | Email(address = s) -> 4 | P(a = 1, ...) -> 5 }" with
+    | [ [ Kind (RecordPattern ("Email", [ Kind (IdentifierPattern "s") ])) ]
+        [ Kind (RecordPattern ("P", [ Kind (IdentifierPattern "a"); Kind (IdentifierPattern "b") ])) ]
+        [ Kind (RecordPattern ("P", [ Kind (TuplePattern ([ Kind (IdentifierPattern "a") ], true)) ])) ]
+        [ Kind (RecordPattern ("Email", [ Kind (RecordMemberPattern ([ "address", Kind (IdentifierPattern "s") ], false)) ])) ]
+        [ Kind (RecordPattern ("P", [ Kind (RecordMemberPattern ([ "a", _ ], true)) ])) ] ] -> ()
+    | other -> failwith $"Unexpected arms: %A{other}"

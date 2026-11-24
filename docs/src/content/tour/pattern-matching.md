@@ -166,6 +166,34 @@ def describe: (#some() | #rejected(string)) -> string = {
 }
 ```
 
+## Named types
+
+A value of a named type is taken apart by the type's name, as its constructor is written. One pattern in the brackets matches the whole of what the type is made from: `Email(s)` binds the string a `protected string` holds, and `Point(p)` the whole record a record type is. Several patterns, a trailing `...`, or fields named with `=` take a record's fields instead, read as a record pattern reads them:
+
+```nanyx
+type Email = protected string
+type Point = protected (x: int, y: int)
+type Pair = (int, int)
+
+def address: Email -> string = { Email(s) -> s }
+def sum = { Pair(a, b) -> a + b }
+
+def describe: Point -> string = {
+  | Point(x = 0, ...) -> "on the y axis"
+  | Point(x, y) -> "at {x}, {y}"
+}
+
+def Point(p) = Point(x = 3, y = 4)
+
+println(address(Email("ada@example.com")))
+println(sum(Pair(1, 2)))
+println(describe(Point(x = 0, y = 7)))
+println(describe(Point(x = 1, y = 2)))
+println(p.x + p.y)
+```
+
+A private type can only be taken apart in the module that defines it, as its fields can only be read there (NYX0212).
+
 # Nesting patterns
 
 Where pattern matching really shines is in its ability to nest patterns inside each other, allowing you to make complex data structure comparisons and extract values in a single expression. Below is an artificial complex example that demonstrates this:
