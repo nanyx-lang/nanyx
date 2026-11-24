@@ -11,6 +11,17 @@ type PatternPrinter(source: string, sourceText: SourceText, literal: SourceSpan 
     let cat = Doc.concat
     let commaJoin docs = Doc.join (text ", ") docs
 
+    /// Whether the field `n` of a record member pattern, matched by `p`, is written by its name alone, `x` in
+    /// `(x, y = b)`: `p` binds the name, and no `=` is written before it.
+    let punned (n: Identifier) (p: Pattern) =
+        match p.Kind with
+        | IdentifierPattern bound when bound = n && sourceText.Valid p.Span ->
+            let mutable before = p.Span.Start - 1
+            while before >= 0 && System.Char.IsWhiteSpace source[before] do
+                before <- before - 1
+            before < 0 || source[before] <> '='
+        | _ -> false
+
     /// A tuple pattern's elements, and `...` after them where it leaves the other fields out.
     let rec tupleItems (ps: Pattern list) (hasRest: bool) : Doc =
         commaJoin (List.map pattern ps @ (if hasRest then [ text "..." ] else []))
@@ -29,7 +40,8 @@ type PatternPrinter(source: string, sourceText: SourceText, literal: SourceSpan 
         | RecordPattern(n, ps) -> cat [ text n; text "("; commaJoin (List.map pattern ps); text ")" ]
         | RecordMemberPattern(fields, hasRest) ->
             let restDoc = if hasRest then [ text "..." ] else []
-            cat [ text "("; commaJoin ((fields |> List.map (fun (n, p) -> cat [ text n; text " = "; pattern p ])) @ restDoc); text ")" ]
+            let field (n, p: Pattern) = if punned n p then text n else cat [ text n; text " = "; pattern p ]
+            cat [ text "("; commaJoin ((fields |> List.map field) @ restDoc); text ")" ]
         | ListPattern(ps, rest) ->
             let restDoc =
                 match rest with
