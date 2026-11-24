@@ -6,7 +6,7 @@
 /// time, so it is never chosen with `if` or `match`, nor held in a list with another type's.
 ///
 /// The old forms, `type a` as a positional parameter and `into: type` as a named one, still compile for one release,
-/// each with a warning (NYX0281) whose fix writes it as `Type(a)` or `into: Type(into)`.
+/// each with a warning (NYX0282) whose fix writes it as `Type(a)` or `into: Type(into)`.
 module internal NyxCompiler.TypeArguments
 
 open Parser.Program

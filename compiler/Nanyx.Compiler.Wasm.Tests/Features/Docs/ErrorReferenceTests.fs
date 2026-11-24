@@ -88,7 +88,7 @@ let private filesOf (code: string) =
     | _ -> [ "main.nyx", code ]
 
 /// The codes of the errors compiling `code` reports, with the backend's if the type checker reports none, or else the
-/// compiler's warnings, such as NYX0281's. An example whose first file is a manifest, `-- file: demo.nyxp`, reports what
+/// compiler's warnings, such as NYX0282's. An example whose first file is a manifest, `-- file: demo.nyxp`, reports what
 /// reading that manifest and its dependencies finds.
 let private errorsOf (code: string) =
     use directory = new TempDirectory()

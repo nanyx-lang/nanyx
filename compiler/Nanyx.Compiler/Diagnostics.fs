@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 
 /// How serious a diagnostic is. The compiler reports `Critical` and `Error`, and `Warning` for an unlisted version a
-/// build uses (`NYX0051`) and a type parameter written the old way (`NYX0281`); `Warning`, `Info` and `Hint` are
+/// build uses (`NYX0051`) and a type parameter written the old way (`NYX0282`); `Warning`, `Info` and `Hint` are
 /// otherwise for linters.
 [<RequireQualifiedAccess>]
 type Severity =
@@ -217,7 +217,8 @@ module DiagnosticCodes =
     let ComponentImportOutsideComponent = code 278 "Component import called outside a component" Severity.Error
     let TaskHoldsMemory = code 279 "Task that holds what belongs to a memory block" Severity.Error
     let ParameterNamesNoField = code 280 "Lambda parameter that names no field" Severity.Error
-    let OldFormTypeParameter = code 281 "Type parameter written the old way" Severity.Warning
+    let TopLevelCell = code 281 "Cell declared at the top level" Severity.Error
+    let OldFormTypeParameter = code 282 "Type parameter written the old way" Severity.Warning
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -249,7 +250,7 @@ module DiagnosticCodes =
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
-          ParameterNamesNoField; OldFormTypeParameter
+          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

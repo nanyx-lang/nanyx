@@ -42,7 +42,7 @@ type internal CheckedModule =
       Errors: Diagnostic list
       /// Those of `Errors` that are not compiled to a trap in `Own`, so a debug build cannot run the module.
       Undeferred: Diagnostic list
-      /// The warnings found checking the module itself, such as a type parameter written the old way (NYX0281). A
+      /// The warnings found checking the module itself, such as a type parameter written the old way (NYX0282). A
       /// module with warnings is run and imported as one without; only the module compiled reports them.
       Warnings: Diagnostic list
       /// The module's own items (imports removed), as the backend will see them.

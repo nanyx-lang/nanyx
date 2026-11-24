@@ -2432,7 +2432,19 @@ def sum: (x: int, y: int) -> int = { a, b -> a + b }  -- error NYX0280: The para
 To fix it, name the parameters after the fields, as in `{ x, y -> x + y }`, or rename the fields with a record pattern,
 in brackets: `{ (x = a, y = b) -> a + b }`.
 
-# NYX0281: Type parameter written the old way
+# NYX0281: Cell declared at the top level
+
+A cell is declared with `mut` at the top level. A cell needs the context `Memory`, which only a `memory { ... }` block
+provides, and no block can be around a top-level definition ([Memory](../advanced/memory#no-global-mutable-state)).
+
+```nanyx
+mut count = 0  -- error NYX0281: A cell can't be declared at the top level, where no `memory` block can be around it: ...
+```
+
+To fix it, declare the cell inside a `memory { ... }` block, in the body of a def, and give back what it ends up
+holding: `def count = memory { mut n = 0 ... n }`.
+
+# NYX0282: Type parameter written the old way
 
 A warning, not an error: the program compiles. A function's parameter that takes a
 [type argument](../tour/functions#type-arguments) is written the old way, `type a` for a positional one or `into: type`
@@ -2449,7 +2461,7 @@ def int.decode: string -> int = { text ->
 
 def deserialise: [Decode(a)] type a, string -> a = { t, text ->
   decode(text)
-} -- warning NYX0281: A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`. `type a` will be an error in a later release
+} -- warning NYX0282: A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`. `type a` will be an error in a later release
 
 println(deserialise(type int, "abc"))
 ```

@@ -272,7 +272,7 @@ field's own name, it writes `into` wherever the def writes it as a type, in its 
 its value (`type into` among them), as the type variable it is; `into: Type(a)` needs nothing, since `a` is a type
 variable already. The old forms, `type a` as a positional parameter (a `TypeArgument` type, read as `Type(a)`) and
 `into: type` as a named one (written as `into: Type(into)`), still compile for one release, and `TypeArguments.rewrite`
-gives each a warning whose fix rewrites it (NYX0281). `AssociatedTypes` then reads the type in a `type Iter(c).elem` or
+gives each a warning whose fix rewrites it (NYX0282). `AssociatedTypes` then reads the type in a `type Iter(c).elem` or
 `type elem` as it reads any type written in a def's value, so an associated type is a type argument too. It also reports a type parameter declared wrongly (NYX0270), and
 a `Type` value chosen with `if` or `match` or held in a list with another type's (NYX0272), each read then as the
 first, so that inference has no conflict among them to report again.

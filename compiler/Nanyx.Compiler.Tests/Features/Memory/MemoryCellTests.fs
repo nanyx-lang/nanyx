@@ -118,6 +118,16 @@ def f = memory {
     Assert.Equal(Some "add: int -> int", hoverOn source "add" 0)
 
 [<Fact>]
+let ``A mut declaration at the top level is an error at the mut that says to declare it in a memory block`` () =
+    for source in [ "mut count = 0\nprintln(count)\n"; "def f = { -> 1 }\n\nmut total: int = 0\n" ] do
+        let source = normalized source
+        let diagnostic = Assert.Single (Compiler.compile source).Diagnostics
+        Assert.Equal(DiagnosticCodes.TopLevelCell.Code, diagnostic.Code)
+        Assert.Equal(source.IndexOf "mut ", diagnostic.Span.Value.Start)
+        Assert.Equal(source.IndexOf "mut " + 3, diagnostic.Span.Value.End)
+        Assert.Contains("inside a `memory { ... }` block", diagnostic.Message)
+
+[<Fact>]
 let ``A mut declaration outside a memory block is an error that names the context`` () =
     let source = """
 def f = {
