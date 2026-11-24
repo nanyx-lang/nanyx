@@ -214,9 +214,22 @@ let internal useInstance (env: TypeEnv) (state: InferState) (value: Expression) 
         match ContextInference.typeExprOf (ContextInference.varNames context) context with
         | Some written ->
             bindInstanceOf env (FromUse value.Id) ctxName argTys written,
-            { state with UseContexts = state.UseContexts |> Map.add value.Id written }
+            { state with
+                UseContexts = state.UseContexts |> Map.add value.Id written
+                UseContextTypes = state.UseContextTypes |> Map.add value.Id context }
         | None -> env, state
     | _ -> env, state
+
+/// The instance each `use` loads (see `useInstance`), written again where the rest of the module settled a type it left
+/// open when the `use` was checked: a builder's `use Emit(emit = { y -> ... })`, whose element type only the block it
+/// runs settles, loads an `Emit(int)`, and the backend finds its members by that (#2550). One still open once the
+/// module is inferred, with `subst`, is written as it was.
+let internal settledUseContexts (state: InferState) (subst: Subst) : Map<NodeId, TypeExpr> =
+    state.UseContexts
+    |> Map.map (fun id written ->
+        match state.UseContextTypes |> Map.tryFind id |> Option.map (Unifier.applySolved subst) with
+        | Some settled when (TypeEnv.freeTyVars settled).IsEmpty -> ContextInference.typeExprOf Map.empty settled |> Option.defaultValue written
+        | _ -> written)
 
 /// Where a call that requires `ctxName` at `argTys` finds it when no instance is in scope, if the context is a
 /// well-known one (see `WellKnownContexts.atCall`). `hasInstance` says whether an instance of a type is in scope: a part

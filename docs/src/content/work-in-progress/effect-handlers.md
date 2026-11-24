@@ -222,8 +222,9 @@ tested both halves.
 ## Pushing
 
 `list.select` written with a context of its own, `context Emit(a) = (emit: a -> ())` as #2566 adds, and a builder
-that loads it, compiles on main today, once its `use` writes the instance's type, `use Emit(b)(emit = { y -> MList.add(result, y) })`
-([#2550](https://github.com/nanyx-lang/nanyx/issues/2550) is the bug without it). Over 300,000 elements yielding 1.5
+that loads it, `use Emit(emit = { y -> MList.add(result, y) })`, compiles on main (since
+[#2550](https://github.com/nanyx-lang/nanyx/issues/2550); before it, the `use` had to write the instance's type,
+`use Emit(b)(...)`). Over 300,000 elements yielding 1.5
 values each:
 
 | | allocations beyond the input | bytes allocated |
@@ -262,7 +263,7 @@ stops again as soon as it is resumed could keep its block.
 
 | Step | Issue | Stage |
 |---|---|---|
-| A `use` whose instance's type is settled after it finds its members | [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) | Working set |
+| A `use` whose instance's type is settled after it finds its members | [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) | done |
 | `Emit(a)`, and the builders pushing through it | [#2566](https://github.com/nanyx-lang/nanyx/issues/2566) | done |
 | A builder inside a `use` of `Emit` at another type finds its own handler | [#2570](https://github.com/nanyx-lang/nanyx/issues/2570) | Ready |
 | A frame can be dropped: a drop function for each state, beside its resume entry, from the types the emitter knows where it saves the variables | | proposed |
