@@ -201,9 +201,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
 
+      # Without the .br and .gz copies of each file a publish writes by default, which nothing here reads: the zip leaves
+      # them out, and the site that serves it compresses what it serves itself (#2554).
       - name: Publish the compiler built for the browser
-        run: dotnet publish Nanyx.Browser/Nanyx.Browser.csproj --configuration Release
+        run: dotnet publish Nanyx.Browser/Nanyx.Browser.csproj --configuration Release -p:CompressionEnabled=false
 
       - name: Install Playwright and Chromium
         working-directory: compiler/Nanyx.Browser
@@ -214,8 +218,8 @@ jobs:
       - name: Test
         run: node Nanyx.Browser/playground-test.mjs
 
-      # The published page, with the shipped packages and the playground host's runner, without the .br and .gz copies
-      # the publish writes beside each file: the site that serves it compresses what it serves itself.
+      # The published page, with the shipped packages and the playground host's runner. The publish writes no .br or .gz
+      # copies, which the zip would leave out anyway.
       - name: Package
         working-directory: compiler/Nanyx.Browser/bin/Release/net10.0/publish/wwwroot
         run: |
