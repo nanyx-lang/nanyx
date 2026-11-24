@@ -42,7 +42,7 @@ def main: [Console, Env] () -> () = { println("hi") }"""
         Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, diagnostic.Code)
         Assert.StartsWith(
             """It doesn't fit the host 'nanyx.playground/playground.host'
-  expected: [Clock, Console, Random] () -> a
+  expected: [Async, Clock, Console, Random] () -> a
 """.ReplaceLineEndings "\n",
             diagnostic.Message)
     | diagnostics -> Assert.Fail $"Expected one error, got %A{diagnostics}"
@@ -61,7 +61,7 @@ ignore(file.read(path.of("notes.txt")))"""
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
         Assert.Equal(
-            "'file.read' requires the contexts 'Async' and 'FileSystem', which the host 'nanyx.playground/playground.host' does not provide",
+            "'file.read' requires the context 'FileSystem', which the host 'nanyx.playground/playground.host' does not provide",
             diagnostic.Message)
         Assert.Equal(6, diagnostic.Span.Value.StartLine)
     | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
@@ -101,12 +101,21 @@ ignore(file.read(path.of("notes.txt")))"""
     | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
 
 [<Fact>]
-let ``start isn't in scope under the playground host, which provides no Async`` () =
-    // A def that starts a task is a scope, through an import of `nanyx/async` under an alias no code can write (see
-    // `TaskScopes`), but what only that import brings in isn't in scope: `Async.start` is in scope where `Async` is.
-    let source = withFinalNewline "::host nanyx.playground\n\ndef started = { _ -> start! 1 }"
-    match diagnosticsOf source with
-    | [ diagnostic ] ->
-        Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
-        Assert.Equal("'start' is not in scope", diagnostic.Message.Split('\n').[0])
-    | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
+let ``A program that starts tasks and sleeps compiles under the playground host, which provides Async`` () =
+    let source =
+        withFinalNewline """::host nanyx.playground
+
+def later: [Async, Clock, Console] string -> () = { text ->
+  sleep(100)
+  println(text)
+}
+
+def both = { _ ->
+  def first = start! later("the sleeper wakes")
+  def second = start! println("another task runs meanwhile")
+  await(first)
+  await(second)
+}
+
+both()"""
+    Assert.Empty(diagnosticsOf source)

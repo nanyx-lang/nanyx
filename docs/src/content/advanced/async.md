@@ -6,7 +6,7 @@ order: 5.5
 
 A function that can wait, such as `http.get` or `file.read`, requires the `Async` context. It is otherwise an ordinary
 function: there is no `async` block and no `await` keyword at the point where it waits, and a call that waits reads as
-one that blocks. The console and HTTP hosts provide `Async`; inference adds it to every function that calls one that
+one that blocks. The console, HTTP and playground hosts provide `Async`; inference adds it to every function that calls one that
 waits, as it adds `Console`. Why it is built this way is on [Async](../deep-dives/async) in Deep dives.
 
 # Tasks
@@ -64,11 +64,37 @@ println(notify())
 ```
 
 A task nobody awaits is waited for, not cancelled: one started for what it does, such as writing a log, does it.
+The linter warns about one that gives back something other than `()`, since nothing reads it
+([`unawaitedTask`](../standard-tools/official-linter#task-that-is-never-awaited)).
 
 Nothing that holds a task can leave its def: giving back a `Task`, or a lambda that starts one, is an error
 ([NYX0233](../standard-tools/errors#nyx0233)), as a lambda over a cell can't leave its [`memory`](./memory) block. The
 scope is the def, not the nearest lambda: a task started in a local def or a lambda belongs to the def it is written
 in. A function that awaits a task it is given borrows its caller's scope.
+
+# A smaller scope
+
+`concurrent` runs a block as a scope of its own, and gives back what the block gives back once every task started in it
+has finished. Use it to finish one batch of work before the next starts:
+
+```nanyx
+def batches = { _ ->
+  for [[1, 2], [3, 4]] | batch ->
+    concurrent({ for batch | x -> start! println("job {x}") })
+    println("batch done")
+}
+
+batches()
+-- job 1
+-- job 2
+-- batch done
+-- job 3
+-- job 4
+-- batch done
+```
+
+It is a function, so its block is passed in parentheses: `concurrent { ... }` would be a
+[workflow's block](./workflows). Like `start`, it is attached to `Async`.
 
 # Tasks share only values
 
