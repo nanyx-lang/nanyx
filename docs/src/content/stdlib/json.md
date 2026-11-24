@@ -2,23 +2,23 @@
 title: json
 description: Reading and writing JSON
 order: 15.5
-package: nanyx.json 0.2.0
+package: nanyx.json 0.4.0
 ---
 
 `nanyx.json` isn't part of the standard library: it is a package published to the
 [package index](https://github.com/nanyx-lang/packages) from [nanyx-lang/json](https://github.com/nanyx-lang/json). An
 application lists it in its manifest's `dependencies`, `(package = "nanyx.json", version = "0.2")`, which
-`nanyx install nanyx.json` adds, and a script names the version it uses in a `::dependency nanyx.json 0.2.0` line. Import
+`nanyx install nanyx.json` adds, and a script names the version it uses in a `::dependency nanyx.json 0.4.0` line. Import
 `nanyx.json/json` under a name, `as json`, as these examples do: its `print` would otherwise clash with the console's.
 It is pure, so it needs no context.
 
 To write a value of your own type as JSON, and read it back, `json.encode(value)` and
-`json.decode(text, into = type T)` walk the type, with nothing written for it: see [reflection](json-reflection). To
+`json.decode(type T, text)` walk the type, with nothing written for it: see [reflection](json-reflection). To
 write or read one another way, build a [decoder](json-typed) or an [encoder](encode). This page is the `Json` value
 underneath them, which `json.parse` reads and `json.print` writes:
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import nanyx.json/json as json
 
@@ -35,7 +35,7 @@ A `Json` value is a tag union, so it is built and taken apart as any other is: a
 an array a `list(Json)`.
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import nanyx.json/json as json
 
@@ -54,7 +54,7 @@ When the text isn't JSON, `parse` gives `#invalidJson`, which says where, by byt
 found there. `json.describe` writes it as a message:
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import nanyx.json/json as json
 
@@ -72,7 +72,7 @@ match json.parse('{"a" 1}')
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.2.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.4.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 JSON text, read into a [`Json`](#json) value and written back out.
 
@@ -81,7 +81,7 @@ JSON text, read into a [`Json`](#json) value and written back out.
 element and member on a line of its own.
 
 [`encode`](json-reflection#encode) writes a value of any type as JSON text, and [`decode`](json-reflection#decode) reads one back, by walking
-the type, with no encoder or decoder written for it: `json.decode(text, into = type User)`. To
+the type, with no encoder or decoder written for it: `json.decode(type User, text)`. To
 write or read a type another way, build an `Encoder` or a `Decoder` from smaller ones, and
 run it with [`encodeWith`](json-typed#encodewith) or [`decodeWith`](json-typed#decodewith). A program names
 `nanyx.json` in its manifest's `dependencies`, or a script in a `::dependency` line, and imports

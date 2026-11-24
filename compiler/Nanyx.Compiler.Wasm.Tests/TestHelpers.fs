@@ -124,7 +124,7 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (github: NyxC
         File.Delete inputFile
 
 /// The packages from the index that the tests' programs and the docs' examples use, though the compiler doesn't ship
-/// them, so that no test needs the network: `nanyx.json` 0.1.0 and 0.2.0, and `nanyx.regex` 0.1.0, the `.nyxpkg`s their
+/// them, so that no test needs the network: `nanyx.json` 0.1.0, 0.2.0 and 0.4.0, and `nanyx.regex` 0.1.0, the `.nyxpkg`s their
 /// releases on nanyx-lang/json and nanyx-lang/regex carry (`Packages/<package>-<version>.nyxpkg`, downloaded from the
 /// releases, whose SHA-256s the index records). They are listed in an index on disk, in a directory of its own, and
 /// downloaded into the store's cache once, before any test reads them, so that tests run in parallel never unpack one at
@@ -139,7 +139,7 @@ let private packagesForTests =
          Directory.CreateDirectory(Path.Combine(store.Index, "artifacts")) |> ignore
          Directory.CreateDirectory(Path.Combine(store.Index, "index", "nanyx")) |> ignore
          File.WriteAllText(Path.Combine(store.Index, "config.json"), """{ "format": 1, "index": "index/" }""")
-         for name, versions in [ "nanyx.json", [ "0.1.0"; "0.2.0" ]; "nanyx.regex", [ "0.1.0" ] ] do
+         for name, versions in [ "nanyx.json", [ "0.1.0"; "0.2.0"; "0.4.0" ]; "nanyx.regex", [ "0.1.0" ] ] do
              let versions =
                  versions
                  |> List.map (fun version ->
