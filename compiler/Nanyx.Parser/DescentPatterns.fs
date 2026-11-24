@@ -96,21 +96,29 @@ and private recordPatternByPosition (c: Cursor) =
         | None -> byPosition ()
     Pattern.at (c.SpanFrom start) (RecordPattern(typeName, patterns))
 
-/// `(name = p, ...)`: a record's fields by name, ending in `...` to leave the others out.
+/// `(name = p, ...)`: a record's fields by name, ending in `...` to leave the others out. A field may be named alone,
+/// short for `name = name`, beside one that isn't: `(x, y = b)`. With none that is, the brackets are a tuple pattern,
+/// `(x, y)`, which takes a record's fields by name too (see `TuplePattern`).
 and private recordMemberPattern (c: Cursor) =
     let start = c.Start
     c.Expect LeftParen |> ignore
     let memberPattern () =
-        let name, nameSpan = identifierWithSpan c
-        c.Expect Equals |> ignore
-        let value = pattern c
-        c.Declare NamedFieldValue value.Id [ name, nameSpan ]
-        name, value
+        match c.Attempt(fun () -> let named = identifierWithSpan c in c.Expect Equals |> ignore; named) with
+        | Some (name, nameSpan) ->
+            let value = pattern c
+            c.Declare NamedFieldValue value.Id [ name, nameSpan ]
+            name, value, true
+        | None ->
+            let name, nameSpan = boundName c
+            if name = "_" then raise NoMatch
+            name, Pattern.at nameSpan (IdentifierPattern name), false
     let firstMember = memberPattern ()
     let others = many c (fun () -> c.Expect Comma |> ignore; memberPattern ())
+    let members = firstMember :: others
+    if members |> List.forall (fun (_, _, renamed) -> not renamed) then raise NoMatch
     let hasRest = rest c
     c.Expect RightParen |> ignore
-    Pattern.at (c.SpanFrom start) (RecordMemberPattern(firstMember :: others, hasRest))
+    Pattern.at (c.SpanFrom start) (RecordMemberPattern(members |> List.map (fun (name, value, _) -> name, value), hasRest))
 
 /// `[p1, p2]`, `[p1, ...rest]`, `[first, ..., last]`.
 and private listPattern (c: Cursor) =
