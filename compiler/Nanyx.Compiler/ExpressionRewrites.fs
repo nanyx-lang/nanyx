@@ -98,6 +98,11 @@ module internal ExpressionRewrites =
                 | FunctionCall(name, _, args), Some { Kind = FunctionCall(callee, _, readArgs) } when name = callee && args.Length = readArgs.Length -> kind
                 | FunctionCall(_, _, args), Some { Kind = FunctionCall(callee, span, receiver :: readArgs) } when readArgs.Length = args.Length ->
                     FunctionCall(callee, span, receiver :: args)
+                // A call read as one of another callee with the same arguments, as a range of `int`s is read as the
+                // counting function's (see `InferCalls.inferRange`), keeps its arguments as they are rewritten.
+                | FunctionCall(_, _, args), Some { Kind = FunctionCall(callee, span, readArgs) } when
+                    readArgs.Length = args.Length && List.forall2 (fun (arg: Expression) (read: Expression) -> arg.Id = read.Id) args readArgs ->
+                    FunctionCall(callee, span, args)
                 // A call of a record's function field is read as a block that calls it (see `FieldCalls`).
                 | FunctionCall(_, _, args), Some read ->
                     match read with
