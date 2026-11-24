@@ -198,7 +198,9 @@ export def list.build: [c] ([c, Emit(a)] () -> ()) -> list(a) = { block ->
 `emit(x)` is an ordinary context call: the handler runs and returns, and the block carries on. So a `for` loop around
 an `emit` stays a loop, and a value costs what the handler makes for it, here one list cell. `list.select` is
 `list.build { for xs | x -> f(x) }`, and the other builders are `list.build` and the collection's `fromList`, but for
-`MList.build`, whose handler adds to the `MList` itself. The handler's cells are captured inside the builder's own
+`MList.build`, whose handler adds to the `MList` itself, and `string.build`, whose handler copies each piece it is
+given into one buffer that doubles when it is full, and makes the string of the bytes written at the end
+([#2597](https://github.com/nanyx-lang/nanyx/issues/2597)). The handler's cells are captured inside the builder's own
 `memory` block, which is allowed, and can't leave it ([Memory](../advanced/memory#values-cannot-escape-memory-scope)).
 
 `Emit` is the pushing counterpart of `Yield`. Where `yield` makes the lambda it is in a sequence, and the code after it
