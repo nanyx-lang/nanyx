@@ -111,6 +111,26 @@ module internal ModuleLinking =
             | Expr value -> { item with Kind = Expr (rewrite value) }
             | _ -> item)
 
+    /// `module'` with each bare name that reaches a def attached to a context written as that def's name, `start` as
+    /// `Async.start` (see `AttachedContextDefs`), so that what follows inference sees the def it names.
+    let internal writeAttachedNames (state: NyxCompiler.Infer.InferState) (module': Module) : Module =
+        if state.AttachedByBareName.IsEmpty then module'
+        else
+            let resolved (node: Expression) (name: string) = state.AttachedByBareName |> Map.tryFind node.Id |> Option.defaultValue name
+            let rewrite =
+                mapExpressionKinds (fun current kind ->
+                    match kind with
+                    | IdentifierExpr name -> IdentifierExpr(resolved current name)
+                    | FunctionCall(name, rangeOpt, args) -> FunctionCall(resolved current name, rangeOpt, args)
+                    | Pipe(value, name, rangeOpt, args) -> Pipe(value, resolved current name, rangeOpt, args)
+                    | other -> other)
+            module'
+            |> List.map (fun item ->
+                match item.Kind with
+                | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, typeOpt, rewrite value)) }
+                | Expr value -> { item with Kind = Expr (rewrite value) }
+                | _ -> item)
+
     /// The inlined items `own` uses: the value definitions it reaches, directly or through other inlined
     /// definitions, and every type definition, in their original order. A definition named like a member of a
     /// context is always kept, because the backend supplies it as the ambient instance of that context (the

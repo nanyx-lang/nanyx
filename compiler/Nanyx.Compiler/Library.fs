@@ -636,7 +636,7 @@ module Compiler =
                     else DeferredErrors.deferErrors (DeferredErrors.sitesOf state mismatchErrors)
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own, placed = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems
-                let own = own |> ModuleLinking.writeBlockAliases state |> ModuleLinking.writeMemberAliases state |> writeCells state |> writeContextNames state |> nameIgnoredParameters state.ExprTypes subst
+                let own = own |> ModuleLinking.writeBlockAliases state |> ModuleLinking.writeMemberAliases state |> ModuleLinking.writeAttachedNames state |> writeCells state |> writeContextNames state |> nameIgnoredParameters state.ExprTypes subst
                 // A script's entry point is a def of its own, with the values that need a context in it (see `Scripts`),
                 // which the call of the host's `run` names: typed as the entry point's lambda is.
                 let own, resolvedTypes, state =

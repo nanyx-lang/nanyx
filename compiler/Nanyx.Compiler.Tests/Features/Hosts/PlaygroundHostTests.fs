@@ -99,3 +99,14 @@ ignore(file.read(path.of("notes.txt")))"""
         Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
         Assert.EndsWith("which the host 'nanyx.playground/playground.host' does not provide", diagnostic.Message)
     | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
+
+[<Fact>]
+let ``start isn't in scope under the playground host, which provides no Async`` () =
+    // A def that starts a task is a scope, through an import of `nanyx/async` under an alias no code can write (see
+    // `TaskScopes`), but what only that import brings in isn't in scope: `Async.start` is in scope where `Async` is.
+    let source = withFinalNewline "::host nanyx.playground\n\ndef started = { _ -> start! 1 }"
+    match diagnosticsOf source with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
+        Assert.Equal("'start' is not in scope", diagnostic.Message.Split('\n').[0])
+    | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"

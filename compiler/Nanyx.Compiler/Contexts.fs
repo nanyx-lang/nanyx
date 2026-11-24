@@ -444,6 +444,19 @@ let private availableAmbientContexts (env: TypeEnv) (state: InferState) : Set<Id
     | ValueScope _
     | ScriptValueScope _ -> fromMembers
 
+/// Whether the context `ctxName` is available to code in `env`: something nearer than the host supplies it, a def that
+/// declares it or a `use` of it, which binds its members or, for one with none, supplies it (see `withSupplied`); or
+/// it is an ambient context, which the host provides.
+let internal isAvailable (env: TypeEnv) (state: InferState) (ctxName: Identifier) =
+    match tryFindTypeDef ctxName state with
+    | Some info when info.IsContext ->
+        isSupplied env state ctxName
+        || ambientContexts state |> Set.contains ctxName
+        || info.Members
+           |> Map.exists (fun memberName symbol ->
+               TypeEnv.tryFind memberName env |> Option.exists (fun scheme -> scheme.Symbol = Some symbol))
+    | _ -> false
+
 /// What provides an ambient context to code in `scope` where the ambient instance supplies it: the runtime at the top
 /// level, and inference in a def that does not write its type. None in a def that writes its type, or in a named
 /// module's value, where that is an error.

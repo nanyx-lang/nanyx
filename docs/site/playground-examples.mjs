@@ -69,24 +69,33 @@ function preludeNames(file) {
   return names;
 }
 
-/** The members of the context `name` that `module` exports, by name: each of its lines `  member: type`. */
+/**
+ * The names the context `name` that `module` exports brings into scope with it: its members, each of its lines
+ * `  member: type`, and the defs attached to it, `export def Name.x`, which are in scope by their bare names wherever
+ * the context is, as `start` and `await` are with `Async`.
+ */
 function contextMembers(/** @type {string} */ module, /** @type {string} */ name) {
   const file = moduleFile(module);
   if (!existsSync(file)) return [];
   const lines = readFileSync(file, "utf8").replace(/\r\n/g, "\n").split("\n");
+  const attached = lines.flatMap((line) => {
+    const def = new RegExp(`^export def ${name}\\.(\\w+)`).exec(line);
+    return def ? [def[1]] : [];
+  });
   const start = lines.findIndex((line) => line.startsWith(`export context ${name} = (`));
-  if (start < 0) return [];
+  if (start < 0) return attached;
   const members = [];
   for (let index = start + 1; index < lines.length && !lines[index].startsWith(")"); index++) {
     const member = /^  (\w+)\s*:/.exec(lines[index]);
     if (member) members.push(member[1]);
   }
-  return members;
+  return [...members, ...attached];
 }
 
 /**
  * What only the console host gives a program, and the playground's host doesn't: the names its prelude brings in that
- * the playground's doesn't, with the members of the contexts among them (`args`, `exit`, `readFile`, ...); and what an
+ * the playground's doesn't, with the members of the contexts among them (`args`, `exit`, `readFile`, ...) and the defs
+ * attached to them (`start`, `await`); and what an
  * import of the modules they come from names: the module (`nanyx.console.core/env`) when the playground's prelude takes
  * something else from its package, else the package (`nanyx.fs`).
  *

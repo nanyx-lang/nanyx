@@ -6,10 +6,10 @@
   provides `Console`, and inference adds it to every function that calls one that waits. A function
   that doesn't require it provably never waits.
 
-  To do several things at once, start a [`Task`] for each with `start!`, and [`await`] it: a task
+  To do several things at once, start a [`Task`] for each with `start!`, and [`Async.await`] it: a task
   runs at the same time as the code that started it, in the same instance, and can't outlive the def
-  that started it, which waits for its tasks before it returns. The hosts that provide `Async`
-  export `start` and `await` beside it. How to use them is on the
+  that started it, which waits for its tasks before it returns. `start` and `await` are attached to
+  `Async`, so they are in scope wherever it is. How to use them is on the
   [Async](../advanced/async) page.
 module async
 
@@ -26,7 +26,7 @@ export context Async = protected ()
 export scoped context TaskScope = protected ()
 
 --| A task: something running at the same time as the code that started it, in the same instance, which gives back
-  a value of type `a` when it finishes. [`start`] starts one and [`await`] waits for it. It belongs to the scope it
+  a value of type `a` when it finishes. [`Async.start`] starts one and [`Async.await`] waits for it. It belongs to the scope it
   was started in, so it can't leave that def.
 export type Task(a) = [TaskScope] protected (handle: I32)
 
@@ -45,7 +45,7 @@ export def scope: [c] ([TaskScope, c] () -> a) -> a = { block ->
   is a `#delay` keyword: `start! e` is `start({ e })`, so `start! http.get(url) \orCrash("failed")` runs the
   `orCrash` in the task.
 @customKeywordType(#delay)
-export def start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = { work ->
+export def Async.start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = { work ->
   -- The task keeps what `work` gives back as a function that gives it, so that the scheduler can drop it, whatever
   -- its type, and each `await` gets a reference of its own.
   Task(
@@ -60,7 +60,7 @@ export def start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = { work
 
 --| Waits for `task` to finish, and gives back what it gave back. A task can be awaited more than once: each gives
   back the same value.
-export def await: [Async, TaskScope] Task(a) -> a = { task ->
+export def Async.await: [Async, TaskScope] Task(a) -> a = { task ->
   __nanyx_task_wait(task.handle)
   __nanyx_task_result(task.handle)
 }

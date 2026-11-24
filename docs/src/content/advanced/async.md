@@ -40,8 +40,9 @@ println(squares([1, 2, 3]))
 -- [1, 4, 9]
 ```
 
-`start!` and `await` are in the host's prelude, beside `Async`: `start` is a function of `nanyx/async` that is a
-[`#delay` keyword](./workflows#keyword-kinds), so `start! e` is `start({ e })`.
+`start` and `await` are [attached to `Async`](./attached-definitions#attached-to-a-context), so they are in scope
+wherever `Async` is. `start` is a [`#delay` keyword](./workflows#keyword-kinds), so `start! e` is `start({ e })`. A
+name of your own wins over them: a local def or a parameter named `start` is yours.
 
 # Each def is a scope
 
