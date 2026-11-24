@@ -66,17 +66,22 @@ let ``undefined is assignable to every type, binding nothing`` () =
         | Error (message, _) -> Assert.Fail($"undefined given for {other}: {message}")
 
 [<Fact>]
-let ``No other type is assignable to undefined, nor equal to it`` () =
+let ``No other type is assignable to undefined, nor equal to one expected to be undefined`` () =
     // A closed union is left out: two closed unions agree when one's tags are among the other's, and `undefined` is
     // the union of no tags.
     for other in others |> List.filter (function TyUnion _ -> false | _ -> true) do
         for constraint' in
             [ (other, Unifier.bottomType, Assignable, SourceSpan.none)
-              (Unifier.bottomType, other, Equal, SourceSpan.none)
               (other, Unifier.bottomType, Equal, SourceSpan.none) ] do
             match Solving.unify [ constraint' ] with
             | Ok _ -> Assert.Fail($"%A{constraint'} was satisfied")
             | Error _ -> ()
+
+[<Fact>]
+let ``undefined is equal to any type expected of it`` () =
+    // `[crash("no")]` is a `list(int)` where one is expected (#2530).
+    for other in others do
+        Assert.True(Solving.unify [ (Unifier.bottomType, other, Equal, SourceSpan.none) ] |> Result.isOk, $"%A{other}")
 
 [<Fact>]
 let ``undefined given where a variable is expected binds nothing, so the variable takes the other value's type`` () =

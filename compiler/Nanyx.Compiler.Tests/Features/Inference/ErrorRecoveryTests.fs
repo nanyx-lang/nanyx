@@ -117,14 +117,14 @@ let ``A module that imports one with errors is not typed`` () =
     Assert.Equal("'missing' is not in scope", (Assert.Single result.Diagnostics).Message)
 
 [<Fact>]
-let ``??? is reported as not implemented, deferred, and typed ???`` () =
+let ``??? is reported as not implemented, deferred, and typed undefined`` () =
     let result = Compiler.compile "def area = { r -> ??? }\ndef total: int = area(2) + 1"
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.NotImplemented.Code, diagnostic.Code)
     Assert.Equal("`???` stands for code not written yet", diagnostic.Message)
     Assert.True(result.ErrorsDeferred)
     // Its uses check: `area(2) + 1` is an int.
-    Assert.EndsWith("-> ???", Unifier.tyToString result.Typed.Value.Types.["area"])
+    Assert.EndsWith("-> undefined", Unifier.tyToString result.Typed.Value.Types.["area"])
     Assert.Equal(TyPrimitive "int", result.Typed.Value.Types.["total"])
 
 [<Fact>]
