@@ -320,6 +320,11 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
     elif not inBlock && (c.IsKeyword "pattern" || (c.IsKeyword "export" && nextText = "pattern")) then
         patternDefinition c start
     elif isDef then valueDefinition c start
+    // `mut x = 0`, a cell, which can't be at the top level: a def of it, as in a block, for the checker to report.
+    elif c.IsKeyword "mut" && (match c.At 1 with Code next -> next.Kind = Name || next.Kind = BacktickedName | _ -> false) then
+        match (DescentBlocks.statement c).Kind with
+        | DefStatement(isExport, name, typeOpt, value) -> single (Def(ValueDef(isExport, name, typeOpt, value)))
+        | _ -> c.GiveUp "a `mut` declaration that isn't a def"
     else
         let value = DescentControl.statementValue c
         single (Expr value)
