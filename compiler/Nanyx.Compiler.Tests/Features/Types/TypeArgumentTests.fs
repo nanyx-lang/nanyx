@@ -4,7 +4,7 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-// Type arguments: a parameter that takes a type, `type a` or `into: type`, of type `Type(a)`, and `type Point`, a value
+// Type arguments: a parameter that takes a type, of type `Type(a)`, and `type Point`, a value
 // of type `Type(Point)` (see `TypeArguments`).
 
 let private decode =
@@ -14,9 +14,9 @@ type Point = (x: int, y: int)
 
 def Point.decode: string -> Point = { text -> (x = text.length, y = 0) }
 
-def deserialise: [Decode(a)] (type a, string) -> a = { t, text -> decode(text) }
+def deserialise: [Decode(a)] (Type(a), string) -> a = { t, text -> decode(text) }
 
-def parse: [Decode(into)] (string, into: type) -> into = { text, into -> decode(text) }
+def parse: [Decode(into)] (string, into: Type(into)) -> into = { text, into -> decode(text) }
 """
 
 let private withDecode (source: string) = normalized (decode + source)
@@ -48,7 +48,7 @@ let ``Generic code passes on a type argument of its own type variable`` () =
     let source =
         withDecode
             """
-def again: [Decode(a)] (type a, string) -> a = { t, text -> parse(text, into = type a) }
+def again: [Decode(a)] (Type(a), string) -> a = { t, text -> parse(text, into = type a) }
 
 def r = again(type Point, "ab")
 """
@@ -102,15 +102,114 @@ let ``A list can't hold Type values of different types`` () =
 
 [<Fact>]
 let ``A built-in type can't name a type parameter`` () =
-    let error = onlyError DiagnosticCodes.InvalidTypeParameter (withDecode "\ndef f: (string, list: type) -> int = { text, list -> 1 }\n")
+    let error = onlyError DiagnosticCodes.InvalidTypeParameter (withDecode "\ndef f: (string, list: Type(list)) -> int = { text, list -> 1 }\n")
     Assert.Equal("'list' is a built-in type, so it can't be the name of a type parameter", error.Message)
 
 [<Fact>]
 let ``A type parameter has no default`` () =
-    let error = onlyError DiagnosticCodes.InvalidTypeParameter (withDecode "\ndef f: (string, into: type = 1) -> int = { text, into -> 1 }\n")
+    let error = onlyError DiagnosticCodes.InvalidTypeParameter (withDecode "\ndef f: (string, into: Type(into) = 1) -> int = { text, into -> 1 }\n")
     Assert.StartsWith("A type parameter can't have a default", error.Message)
 
 [<Fact>]
 let ``type names a type that exists`` () =
     let error = onlyError DiagnosticCodes.UnknownType (withDecode "\ndef t = type Pointt\n")
     Assert.StartsWith("'Pointt' is not in scope", error.Message)
+
+[<Fact>]
+let ``A named type parameter's field and its type variable can have different names`` () =
+    let source =
+        withDecode
+            """
+def into: [Decode(a)] (string, into: Type(a)) -> a = { text, into -> decode(text) }
+
+def q = into("abc", into = type Point)
+"""
+    let typed = compileClean source
+    Assert.Equal("Point", Unifier.tyToString typed.Types.["q"])
+    Assert.Equal("(string, into: Type(a)) -> a", Unifier.tyToString typed.Types.["into"])
+
+[<Fact>]
+let ``A lambda's parameter takes a type argument written as Type(a)`` () =
+    let source =
+        withDecode
+            """
+def read = { t: Type(a), text: string -> deserialise(t, text) }
+
+def p = read(type Point, "abc")
+"""
+    let typed = compileClean source
+    Assert.Equal("Point", Unifier.tyToString typed.Types.["p"])
+
+[<Fact>]
+let ``Typed(a)'s typeOf is passed for a Type(a) parameter`` () =
+    let source =
+        withDecode
+            """
+def viaTyped: [Typed(a), Decode(a)] string -> a = { text -> deserialise(typeOf, text) }
+
+def p: Point = viaTyped("abc")
+"""
+    let typed = compileClean source
+    Assert.Equal("Point", Unifier.tyToString typed.Types.["p"])
+
+/// The warning compiling `source` gives for a type parameter written the old way, and `source` with its fix applied.
+let private oldForm (source: string) =
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.OldFormTypeParameter.Code, diagnostic.Code)
+    Assert.Equal(Severity.Warning, diagnostic.Severity)
+    let fix = Assert.Single(diagnostic.Fixes)
+    diagnostic, applyFix source fix, fix.Title
+
+[<Fact>]
+let ``A positional type parameter written type a still compiles, with a warning whose fix writes Type(a)`` () =
+    let source = normalized "context Decode(a) = (decode: string -> a)\n\ndef f: [Decode(a)] type a, string -> a = { t, text -> decode(text) }\n"
+    let diagnostic, fixedSource, title = oldForm source
+    Assert.Equal(
+        "A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`. `type a` will be an error in a later release",
+        diagnostic.Message
+    )
+    Assert.Equal("Write `Type(a)`", title)
+    Assert.Contains("def f: [Decode(a)] Type(a), string -> a", fixedSource)
+    let typed = compileClean fixedSource
+    Assert.Equal("Type(a), string -> a", Unifier.tyToString typed.Types.["f"])
+
+[<Fact>]
+let ``A named type parameter written into: type still compiles, with a warning whose fix writes into: Type(into)`` () =
+    let source =
+        normalized "context Decode(a) = (decode: string -> a)\n\ndef f: [Decode(into)] (string, into: type) -> into = { text, into -> decode(text) }\n"
+    let diagnostic, fixedSource, title = oldForm source
+    Assert.Equal("Write `into: Type(into)`", title)
+    Assert.StartsWith("A parameter that takes a type is written with its type, `Type(a)`: write `into: Type(into)`", diagnostic.Message)
+    Assert.Contains("(string, into: Type(into)) -> into", fixedSource)
+    compileClean fixedSource |> ignore
+
+[<Fact>]
+let ``A type parameter written the old way in a function type's parameter gets the warning too`` () =
+    let source = normalized "def build: ((type a) -> list(a)) -> list(a) = { f -> f(type a) }\n"
+    let _, fixedSource, _ = oldForm source
+    Assert.Contains("def build: ((Type(a)) -> list(a)) -> list(a) = { f -> f(type a) }", fixedSource)
+    compileClean fixedSource |> ignore
+
+[<Fact>]
+let ``A program that writes type parameters the old way still runs as before`` () =
+    let source = withDecode "\ndef old: [Decode(a)] type a, string -> a = { t, text -> decode(text) }\n\ndef p = old(type Point, \"abc\")\n"
+    let result = Compiler.compile source
+    Assert.Equal<string list>([ DiagnosticCodes.OldFormTypeParameter.Code ], result.Diagnostics |> List.map _.Code)
+    Assert.Equal("Point", Unifier.tyToString result.Typed.Value.Types.["p"])
+
+[<Fact>]
+let ``A built-in type's name written the old way is only the error, without the warning`` () =
+    let result = Compiler.compile (withDecode "\ndef f: (string, list: type) -> int = { text, list -> 1 }\n")
+    Assert.Equal<string list>([ DiagnosticCodes.InvalidTypeParameter.Code ], result.Diagnostics |> List.map _.Code)
+
+[<Fact>]
+let ``A module that imports one writing a type parameter the old way compiles, and only that one reports the warning`` () =
+    let old = "module old\n\nexport def none: type a -> list(a) = { t -> [] }\n"
+    let main = "module main\n\nimport app/old\n\ndef xs: list(int) = none(type int)\n"
+    use package =
+        new TempPackage([ "app.nyxp", """(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))"""; "src/old.nyx", old; "src/main.nyx", main ])
+    let results = (Package.compilePackageReading System.IO.File.ReadAllText (package.Path "src/main.nyx")).Value
+    let codesOf (name: string) =
+        results |> List.find (fun (file, _) -> System.IO.Path.GetFileName file = name) |> snd |> _.Diagnostics |> List.map _.Code
+    Assert.Equal<string list>([], codesOf "main.nyx")
+    Assert.Equal<string list>([ DiagnosticCodes.OldFormTypeParameter.Code ], codesOf "old.nyx")

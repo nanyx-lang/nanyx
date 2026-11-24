@@ -265,11 +265,14 @@ caller write as `m.K` is still read by its name `K`.
 ## Type arguments
 
 A [type argument](../tour/functions#type-arguments) chooses an instance as any argument whose type mentions a type
-variable does. `type a` in a signature is a `TypeArgument` type, read as the built-in `Type(a)` (`TypeValues.fs`), and
-the expression `type Point` is a `TypeValue`, of type `Type(Point)` (`TypeArguments.infer`). `TypeArguments.rewrite`
-runs before `AssociatedTypes`: it writes each named parameter `into: type` of a def's signature as one of type
-`Type(into)`, and `into` wherever the def writes it as a type, in its signature and in the types written in its value
-(`type into` among them), as the type variable it is. `AssociatedTypes` then reads the type in a `type Iter(c).elem` or
+variable does. A parameter that takes one is written with the built-in type `Type(a)` (`TypeValues.fs`), and the
+expression `type Point` is a `TypeValue`, of type `Type(Point)` (`TypeArguments.infer`). `TypeArguments.rewrite` runs
+before `AssociatedTypes`: for each named parameter `into: Type(into)` of a def's signature, whose type names the
+field's own name, it writes `into` wherever the def writes it as a type, in its signature and in the types written in
+its value (`type into` among them), as the type variable it is; `into: Type(a)` needs nothing, since `a` is a type
+variable already. The old forms, `type a` as a positional parameter (a `TypeArgument` type, read as `Type(a)`) and
+`into: type` as a named one (written as `into: Type(into)`), still compile for one release, and `TypeArguments.rewrite`
+gives each a warning whose fix rewrites it (NYX0282). `AssociatedTypes` then reads the type in a `type Iter(c).elem` or
 `type elem` as it reads any type written in a def's value, so an associated type is a type argument too. It also reports a type parameter declared wrongly (NYX0270), and
 a `Type` value chosen with `if` or `match` or held in a list with another type's (NYX0272), each read then as the
 first, so that inference has no conflict among them to report again.
