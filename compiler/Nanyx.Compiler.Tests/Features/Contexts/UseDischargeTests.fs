@@ -35,6 +35,24 @@ def main = {
     Assert.Equal(Some "message: string", hoverType source "message")
 
 [<Fact>]
+let ``A member that requires contexts may be given a lambda that needs more, which the def around the use requires`` () =
+    let source =
+        """context Nap = (nap: [Async] int -> ())
+
+def rest: [Async] int -> () = { ms -> () }
+
+def faked = { _ ->
+  use Nap(nap = { ms ->
+    rest(ms)
+    println("nap {ms}")
+  })
+  println("faked")
+}
+"""
+    // The member's own `Async` is supplied where the member is called; `Console` is needed besides (#2495).
+    Assert.Equal(Some "def faked: [Console] α -> ()", hoverType source "faked")
+
+[<Fact>]
 let ``A member's lambda calls the instance in scope where the use is written`` () =
     compileClean (
         log

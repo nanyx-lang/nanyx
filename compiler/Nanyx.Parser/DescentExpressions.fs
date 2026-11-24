@@ -325,11 +325,16 @@ and private table (c: Cursor) : Expression =
     c.Expect RightBracket |> ignore
     Expression.at (c.SpanFrom start) (ListExpr(List.ofSeq rows))
 
-/// `[a, b]`, `[a, ...xs]` or `[k => v]`: a list, a concatenation of its runs and spreads, or a map.
+/// `[a, b]`, `[a, ...xs]` or `[k => v]`: a list, a concatenation of its runs and spreads, or a map. A literal that is
+/// one spread, `[...xs]`, is `[] ++ xs`, so that it is still a literal, whose spread is checked as any other is.
 and private list (c: Cursor) : Expression =
     if (match c.At 1 with Code next -> next.Kind = Bar && next.Start = c.Start + 1 | _ -> false) then table c else
     match bracketItems c with
     | Choice1Of2 segments, span ->
+        let segments =
+            match segments with
+            | [ Choice2Of2 _ ] -> Choice1Of2 [] :: segments
+            | _ -> segments
         let segments = segments |> List.map (function Choice1Of2 elements -> Expression.at span (ListExpr elements) | Choice2Of2 spread -> spread)
         match segments with
         | [] -> Expression.at span (ListExpr [])

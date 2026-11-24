@@ -23,6 +23,19 @@ println(ys)
     |> assertRan "[1, 2, 3]\n[0, 1, 2, 3, 9]\n"
 
 [<Fact>]
+let ``Run - a list literal that is only a spread is a list of the elements`` () =
+    runSource
+        """
+def xs = [1, 2]
+def s = set[3, 4]
+
+println([...xs] == xs)
+println([...s])
+println([...(5..6)])
+"""
+    |> assertRan "true\n[3, 4]\n[5, 6]\n"
+
+[<Fact>]
 let ``Run - a literal of another type spreads a set, a slice and a sequence`` () =
     runSource
         """
