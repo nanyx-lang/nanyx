@@ -630,7 +630,7 @@ and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOpera
             let value, valueText = left
             // `not x is p` is `(not x) is p`, as `not a == b` is `(not a) == b`.
             match value.Kind with
-            | FunctionCall(name, _, [ _ ]) when name = NotSyntax.builtIn && c.Source.AsSpan(valueText.Start).StartsWith("not") ->
+            | FunctionCall(name, _, [ _ ]) when name = NotSyntax.builtIn && c.Source.AsSpan(valueText.Start).StartsWith(NotSyntax.builtIn) ->
                 c.Report valueText.Start "`not` binds tighter than `is`: write `not (x is p)` to negate the test"
             | _ -> ()
             let isSpan = c.SpanOf(c.Take())
