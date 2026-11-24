@@ -14,22 +14,21 @@ module Maps =
     let storeName = "__mapStore"
 
     /// The type a map from `key` to `value` is held as, its store: a hash trie,
-    /// `#empty | #leaf(int, k, v) | #collision(int, list((k, v))) | #node(int, array(__mapStore(k, v)))`. A leaf holds
-    /// one key, with its hash and its value; a collision two or more keys of the same hash, in the compiler's own order
-    /// of their structure; a node the keys whose hashes agree on the bits the nodes above it read, split by the next
-    /// five, with a bit of its `int` set for each five-bit value some key has and a trie for each in its array, in the
-    /// order of the values. `#empty` is only ever a whole map. The shape is defined here, and every algorithm that
-    /// builds or reads it is in the prelude, in `stdlib/nanyx/prelude-maps.nyx`, which turns a map into its store and
-    /// back through two intrinsics (see `Intrinsics`): whoever changes one changes the other. The backend lays a map out
-    /// as its store, and reads one only through the prelude (see `toList`).
+    /// `#empty | #bucket(int, list((k, v))) | #node(int, array(__mapStore(k, v)))`. A bucket holds the entries, each a
+    /// key and its value, of the keys whose hash is its `int`: one, or more whose hashes collide, in the compiler's own
+    /// order of their keys' structure. A node holds the keys whose hashes agree on the bits the nodes above it read,
+    /// split by the next five, with a bit of its `int` set for each five-bit value some key has and a trie for each in
+    /// its array, in the order of the values. `#empty` is only ever a whole map. The shape is defined here, and every
+    /// algorithm that builds or reads it is in the prelude, in `stdlib/nanyx/prelude-maps.nyx`, which turns a map into
+    /// its store and back through two intrinsics (see `Intrinsics`): whoever changes one changes the other. The backend
+    /// lays a map out as its store, and reads one only through the prelude (see `toList`).
     let storeOf (key: Ty) (value: Ty) =
         let tuple (items: Ty list) = TyRecord(items |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
         let intTy = TyPrimitive "int"
         let body =
             TyUnion
-                [ TyTag("collision", Some (tuple [ intTy; Lists.ofType (tuple [ TyParam 0; TyParam 1 ]) ]))
+                [ TyTag("bucket", Some (tuple [ intTy; Lists.ofType (tuple [ TyParam 0; TyParam 1 ]) ]))
                   TyTag("empty", None)
-                  TyTag("leaf", Some (tuple [ intTy; TyParam 0; TyParam 1 ]))
                   TyTag("node", Some (tuple [ intTy; Arrays.ofType (TySelf [ TyParam 0; TyParam 1 ]) ])) ]
         RecursiveAliases.reference storeName body [ key; value ]
 

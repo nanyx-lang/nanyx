@@ -30,16 +30,17 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   `stdlib/nanyx/prelude-maps.nyx`: whoever changes one changes the other. The prelude turns a map into its store and
   back through four intrinsics, `__nanyx_map_of_store`, `__nanyx_map_store`, `__nanyx_set_of_store` and
   `__nanyx_set_store`, which the backend compiles to nothing, and the backend lays a map out as its store.
-- **The store** is a hash trie: `#empty`, the map with no keys; `#leaf(h, key, value)`, one key with its hash;
-  `#collision(h, entries)`, keys whose hashes are all `h`; and `#node(bits, children)`, the keys whose hashes agree on
-  the bits the nodes above read, split by the next five bits of the hash, from its low end, with a bit of `bits` set for
-  each five-bit value some key has and a trie for each in the array `children`, in the order of the values. A set is the
-  store of a map from its elements to `()`. A lookup, an insert or a remove reads one node a level, and a level takes
-  five bits of a 64-bit hash, so it takes time that grows with the log of the size (`findIn`, `insertedIn` and
-  `removedFrom` in `prelude-maps.nyx`). An insert makes only the nodes on the key's path new, and shares the rest.
+- **The store** is a hash trie: `#empty`, the map with no keys; `#bucket(h, entries)`, the entries, each a key and its
+  value, of the keys whose hash is `h`, one or, when hashes collide, more; and `#node(bits, children)`, the keys whose
+  hashes agree on the bits the nodes above read, split by the next five bits of the hash, from its low end, with a bit
+  of `bits` set for each five-bit value some key has and a trie for each in the array `children`, in the order of the
+  values. A set is the store of a map from its elements to `()`. A lookup, an insert or a remove reads one node a level,
+  and a level takes five bits of a 64-bit hash, so it takes time that grows with the log of the size (`findIn`,
+  `insertedIn` and `removedFrom` in `prelude-maps.nyx`). An insert makes only the nodes on the key's path new, and
+  shares the rest.
 - **One trie for one set of keys.** A node has two children or more, or one that is a node, as inserting two keys whose
-  hashes agree on more bits makes; a node left with one leaf or collision by a remove, or by `map.filter`, is that child
-  instead. Keys in a collision are in the compiler's own order of their structure, which the backend has for every type
+  hashes agree on more bits makes; a node left with one bucket by a remove, or by `map.filter`, is that bucket instead. The
+  keys in a bucket are in the compiler's own order of their structure, which the backend has for every type
   a key can be (`CoreIrOrdering.fs`): tags by their numbers and then their payloads, and a recursive type as what it is
   made of, though neither has an `Ord`, so `<` on them is still an error. So the same keys make the same trie however
   they were added and removed, and its walk gives them in one order: by the lowest five bits of their hashes, then the

@@ -14,16 +14,16 @@
 -- (`Maps.storeOf`) and every algorithm on which is here. Each key is kept with its hash, `h`:
 --
 --   #empty                     the map with no keys, never part of another trie
---   #leaf(h, key, value)       one key
---   #collision(h, entries)     two or more keys of the same hash, in the compiler's own order of
---                              their structure (`__compare`)
+--   #bucket(h, entries)        the entries of the keys whose hash is `h`, one or more, each a key
+--                              and its value, in the compiler's own order of their keys' structure
+--                              (`__compare`)
 --   #node(bits, children)      the keys whose hashes agree on the bits the nodes above read, split by
 --                              the next five: `bits` has bit `c` set for each five-bit value `c` some
 --                              key has there, and `children` a trie for each, in the order of `c`
 --
 -- A node at depth `d` reads bits `5d` to `5d + 4` of a hash, from its low end. A node has two
 -- children or more, or one that is a node, as inserting two keys whose hashes agree on more bits
--- makes; never one leaf or collision alone, which removing a key collapses into its place. So the
+-- makes; never one bucket alone, which removing a key collapses into its place. So the
 -- same keys make the same trie however they were added and removed, and its walk gives them in one
 -- order, that of their hashes read five bits at a time from the low end: unspecified, but the same
 -- for equal maps (see docs/src/content/deep-dives/maps-and-sets.md).
@@ -98,7 +98,7 @@ def findEntry: [Eq(k)] list((k, v)), k -> #some(v) | #notFound = {
     else findEntry(rest, key)
 }
 
---| `entries`, a collision's, without `key`. `acc` holds the entries before, last first.
+--| `entries`, a bucket's, without `key`. `acc` holds the entries before, last first.
 def withoutEntry: [Eq(k)] list((k, v)), k, list((k, v)) -> list((k, v)) = {
   | [], _, acc -> reverseOnto(acc, [])
   | [(entryKey, value), ...rest], key, acc -> if entryKey == key
@@ -106,7 +106,7 @@ def withoutEntry: [Eq(k)] list((k, v)), k, list((k, v)) -> list((k, v)) = {
     else withoutEntry(rest, key, [(entryKey, value), ...acc])
 }
 
---| `entries`, a collision's, in the compiler's own order of their keys' structure and without `key`,
+--| `entries`, a bucket's, in the compiler's own order of their keys' structure and without `key`,
   with `key` holding `value` in its place in that order. `acc` holds the entries before, last first.
 def placedEntry: list((k, v)), k, v, list((k, v)) -> list((k, v)) = {
   | [], key, value, acc -> reverseOnto(acc, [(key, value)])
@@ -121,10 +121,7 @@ def findIn
   = { store, key, h, shift ->
     match store
       | #empty -> #notFound
-      | #leaf(leafHash, leafKey, value) -> (if leafHash == h and leafKey == key
-        then #some(value)
-        else #notFound)
-      | #collision(collisionHash, entries) -> (if collisionHash == h
+      | #bucket(bucketHash, entries) -> (if bucketHash == h
         then findEntry(entries, key)
         else #notFound)
       | #node(bits, children) ->
@@ -161,21 +158,16 @@ def insertedIn
   : [Eq(k)] __mapStore(k, v), k, int, v, int -> __mapStore(k, v)
   = { store, key, h, value, shift ->
     match store
-      | #empty -> #leaf(h, key, value)
-      | #leaf(leafHash, leafKey, leafValue) -> (if leafHash != h
-        then joined(store, leafHash, #leaf(h, key, value), h, shift)
-        else if leafKey == key
-          then #leaf(h, key, value)
-          else #collision(h, placedEntry([(leafKey, leafValue)], key, value, [])))
-      | #collision(collisionHash, entries) -> (if collisionHash != h
-        then joined(store, collisionHash, #leaf(h, key, value), h, shift)
-        else #collision(h, placedEntry(withoutEntry(entries, key, []), key, value, [])))
+      | #empty -> #bucket(h, [(key, value)])
+      | #bucket(bucketHash, entries) -> (if bucketHash != h
+        then joined(store, bucketHash, #bucket(h, [(key, value)]), h, shift)
+        else #bucket(h, placedEntry(withoutEntry(entries, key, []), key, value, [])))
       | #node(bits, children) ->
         def bit = int.shiftLeft(1, chunkOf(h, shift))
         def slot = slotOf(bits, bit)
 
         if int.bitAnd(bits, bit) == 0
-          then #node(int.bitOr(bits, bit), insertedAt(children, slot, #leaf(h, key, value)))
+          then #node(int.bitOr(bits, bit), insertedAt(children, slot, #bucket(h, [(key, value)])))
           else #node(
             bits
             replacedAt(
@@ -199,12 +191,11 @@ def removedFrom
   = { store, key, h, shift ->
     match store
       | #empty -> store
-      | #leaf(leafHash, leafKey, _) -> (if leafHash == h and leafKey == key then #empty else store)
-      | #collision(collisionHash, entries) -> (if collisionHash != h
+      | #bucket(bucketHash, entries) -> (if bucketHash != h
         then store
         else match withoutEntry(entries, key, [])
-          | [(onlyKey, onlyValue)] -> #leaf(h, onlyKey, onlyValue)
-          | left -> #collision(h, left))
+          | [] -> #empty
+          | left -> #bucket(h, left))
       | #node(bits, children) ->
         def bit = int.shiftLeft(1, chunkOf(h, shift))
         def slot = slotOf(bits, bit)
@@ -230,8 +221,8 @@ def withoutChild: int, array(__mapStore(k, v)) -> __mapStore(k, v) = { bits, chi
 def entriesOnto: __mapStore(k, v), list((k, v)) -> list((k, v)) = { store, rest ->
   match store
     | #empty -> rest
-    | #leaf(_, key, value) -> [(key, value), ...rest]
-    | #collision(_, entries) -> reverseOnto(reverseOnto(entries, []), rest)
+    | #bucket(_, [entry]) -> [entry, ...rest]
+    | #bucket(_, entries) -> reverseOnto(reverseOnto(entries, []), rest)
     | #node(_, children) -> childrenOnto(children, __nanyx_array_length(children) - 1, rest)
 }
 
@@ -248,12 +239,7 @@ def childrenOnto
 def foldStore: [c] __mapStore(k, v), b, ([c] b, k, v -> b) -> b = { store, acc, step ->
   match store
     | #empty -> acc
-    | #leaf(_, key, value) -> step(acc, key, value)
-    | #collision(_, entries) -> list.fold(
-      entries
-      acc
-      { acc, entry -> step(acc, entry.0, entry.1) }
-    )
+    | #bucket(_, entries) -> list.fold(entries, acc, { acc, entry -> step(acc, entry.0, entry.1) })
     | #node(_, children) -> foldChildren(children, 0, acc, step)
 }
 
@@ -278,11 +264,7 @@ def convertedStore
   = { store, convertKey, convertValue ->
     match store
       | #empty -> #empty
-      | #leaf(h, key, value) -> convertedLeaf(h, key, value, convertKey, convertValue)
-      | #collision(h, entries) -> #collision(
-        h
-        convertedEntries(entries, convertKey, convertValue, [])
-      )
+      | #bucket(h, entries) -> #bucket(h, convertedEntries(entries, convertKey, convertValue, []))
       | #node(bits, children) -> #node(
         bits
         convertedChildren(
@@ -295,7 +277,7 @@ def convertedStore
       )
   }
 
---| `entries`, a collision's, with `convertKey` of each key and `convertValue` of each value in its
+--| `entries`, a bucket's, with `convertKey` of each key and `convertValue` of each value in its
   place, after `acc`, the ones before, last first.
 def convertedEntries: [c] list((k, v)), ([c] k -> j), ([c] v -> w), list((j, w)) -> list((j, w)) = {
   | [], _, _, acc -> reverseOnto(acc, [])
@@ -307,21 +289,10 @@ def convertedEntries: [c] list((k, v)), ([c] k -> j), ([c] v -> w), list((j, w))
   )
 }
 
---| The leaf of `h` with `convertKey` of `key` and `convertValue` of `value`. The functions the
-  compiler calls a map through make no lambda, which would be numbered ahead of the program's own,
-  so no arm of theirs holds statements, which would make one. The calls are made before the leaf, as
-  `def`s, because the backend can't yet inline them into its arguments (#2662): with that fixed, this
-  and [`convertedEntry`] can go.
-def convertedLeaf
-  : [c] int, k, v, ([c] k -> j), ([c] v -> w) -> __mapStore(j, w)
-  = { h, key, value, convertKey, convertValue ->
-    def convertedKey = convertKey(key)
-    def convertedValue = convertValue(value)
-
-    #leaf(h, convertedKey, convertedValue)
-  }
-
---| The entry of `convertKey` of `key` and `convertValue` of `value`.
+--| The entry of `convertKey` of `key` and `convertValue` of `value`. The functions the compiler
+  calls a map through make no lambda, which would be numbered ahead of the program's own, so no arm
+  of theirs holds statements, which would make one. The calls are made before the entry, as `def`s,
+  because the backend can't yet inline them into its arguments (#2662): with that fixed, this can go.
 def convertedEntry
   : [c] k, v, ([c] k -> j), ([c] v -> w) -> (j, w)
   = { key, value, convertKey, convertValue ->
@@ -382,13 +353,9 @@ def chosenStore
   = { store, f ->
     match store
       | #empty -> #empty
-      | #leaf(h, key, value) -> (match f(key, value)
-        | #some(chosen) -> #leaf(h, key, chosen)
-        | #skip -> #empty)
-      | #collision(h, entries) -> (match chosenEntries(entries, f, [])
+      | #bucket(h, entries) -> (match chosenEntries(entries, f, [])
         | [] -> #empty
-        | [(onlyKey, onlyValue)] -> #leaf(h, onlyKey, onlyValue)
-        | chosen -> #collision(h, chosen))
+        | chosen -> #bucket(h, chosen))
       | #node(bits, children) -> chosenChildren(children, bits, 0, 0, [], f)
   }
 
