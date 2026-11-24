@@ -346,12 +346,16 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | [] ->
                 let elementTy, nextState = freshVar current
                 mkTypedExpr expr (listType elementTy) None None None, nextState
+            // Checked against a `list(a)`, each element is given where an `a` is expected, as an argument is: two
+            // lambdas that give back different tags of the union `a`'s result is fit it, though they don't join.
+            | typedItems when expectedElement.IsSome ->
+                let element = expectedElement.Value
+                mkTypedExpr expr (listType element) None None None,
+                typedItems |> List.fold (fun constrained item -> addAssignableConstraintAt item.Expr.Span item.Type element constrained) current
             | typedItems ->
                 // The elements are joined as an `if`'s branches are, so `[#red, #green]` is a `list(#red | #green)`.
                 let elementTy, constrained = joinBranchTypes Set.empty current (typedItems |> List.map _.Type)
-                match expectedElement with
-                | Some element -> mkTypedExpr expr (listType element) None None None, addConstraint elementTy element constrained
-                | None -> mkTypedExpr expr (listType elementTy) None None None, constrained)
+                mkTypedExpr expr (listType elementTy) None None None, constrained)
     | TagExpr(name, payloadOpt) ->
         match payloadOpt with
         | None -> Ok (mkTypedExpr expr (TyTag(name, None)) None None None, state)
