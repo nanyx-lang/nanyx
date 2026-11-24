@@ -167,8 +167,10 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   reach 256 bytes so that the strings and records programs make most of never go on that list
   ([#1464](https://github.com/nanyx-lang/nanyx/issues/1464)).
 - **Lists.** The heads are a table of 65 words at the start of the heap, and `$heap_ptr` starts after it. The
-  string literals and static closures run from address 256, and the table goes at 4096 or, when they end past that,
-  after them,
+  string literals and static closures run from address 256, followed in a module that needs them by its host's block,
+  the table of powers of five that reading a float uses (see
+  [Standard library implementation](./standard-library-implementation#adding-to-it)) and the scratch block that writing
+  one uses. The table of heads goes at 4096 or, when those end past that, after them,
   8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. On a small size's list, `free` pushes onto the
   front and `alloc` takes from the front, so the most recently freed block is reused first.
 - **Large blocks.** `free` joins a large block with the free large blocks just before and after it, and a block that
