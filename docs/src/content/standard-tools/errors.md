@@ -1087,8 +1087,9 @@ To fix it, move the definition into the block, or into a block of its own that t
 
 # NYX0111: Not implemented
 
-The program has `???`, which stands for code not written yet. It type-checks as any type, so the rest of the program
-can be checked, but it cannot be run in a release build.
+The program has `???`, which stands for code not written yet. It has the type `undefined`, which fits wherever a value
+of any type is expected, so the rest of the program can be checked, and nothing that uses it is another error. It cannot
+be run in a release build.
 
 ```nanyx
 def total: int -> int = { x -> ??? }  -- error NYX0111: `???` stands for code not written yet

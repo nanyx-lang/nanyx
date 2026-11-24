@@ -883,6 +883,16 @@ module Unifier =
                         let resultVars = varOccurrences output |> List.distinct |> List.map (fun v -> TyVar v, errorType, Equal, origin)
                         loop subst (resultVars @ rest)
                     | _ -> loop subst rest
+                // `undefined`, the type of what never gives a value, agrees with anything expected of it where types
+                // must be the same, as the error type does: nothing follows it at run time, so `[crash("no")]` is a
+                // `list(int)` where one is expected. What a call to it gives back never comes either. Only that way:
+                // a value is not an `undefined`.
+                elif kind = Equal && isBottom l && not (match r with TyVar _ -> true | _ -> false) then
+                    match r with
+                    | TyFunc(_, output, _) ->
+                        let resultVars = varOccurrences output |> List.distinct |> List.map (fun v -> TyVar v, bottomType, Equal, origin)
+                        loop subst (resultVars @ rest)
+                    | _ -> loop subst rest
                 else
                     match kind with
                     | Assignable | AssignableLater ->
