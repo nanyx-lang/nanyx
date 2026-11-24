@@ -223,11 +223,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 state <- { state with ScriptValues = state.ScriptValues |> Map.add name symbol }
             | _ -> ()
             let contextOpt, declaredTypeExprOpt = extractDefContexts typeOpt value
-            // The contexts its type writes are known before it is inferred, so a def inferred first, as one in a cycle
-            // with it is, finds them where it calls it: a lambda there requires them (#2610).
-            match contextOpt with
-            | Some contexts -> state <- registerContextRequirement state name contexts declaredTypeExprOpt
-            | None -> ()
+            // The plain contexts its type writes are known before it is inferred, so a def inferred first, as one in a
+            // cycle with it is, finds them where it calls it: a lambda there requires them (#2610). One with type
+            // arguments is read with the def's type, which may be wrong, so it is registered as the def is inferred.
+            match contextOpt |> Option.map (List.filter (fun ctx -> match ctx.Kind with TypeName _ -> true | _ -> false)) with
+            | Some (_ :: _ as plain) -> state <- registerContextRequirement state name plain declaredTypeExprOpt
+            | _ -> ()
             match declaredTypeExprOpt with
             // An annotation with a `typeof` can only be read once the values it names are in scope, so the def is
             // pre-bound as an unannotated one is, and its annotation is unified with that once it has been read. So is
