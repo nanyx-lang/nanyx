@@ -32,14 +32,15 @@ let ``New - makes a package that runs its greeting and builds cleanly`` () =
     Assert.Contains("No diagnostics.", built.StandardOutput)
 
 [<Fact>]
-let ``New - writes a formatted manifest naming the compiler's version for its linter and host`` () =
+let ``New - writes a formatted manifest naming the compiler's version for its linter and host, and its minor version as the oldest it builds with`` () =
     use directory = new TempDirectory()
     assertSucceeded (nanyxIn directory.Path [ "new"; "acme.demo" ])
     let manifest = Path.Combine(directory.Path, "demo", "acme.demo.nyxp")
     let version = (nanyxIn directory.Path [ "--version" ]).StandardOutput.Trim()
+    let minor = version.Substring(0, version.LastIndexOf '.')
     Assert.Equal(
         $"""(
-  package = (name = "acme.demo", version = "0.1.0", sources = ["src/**/*.nyx"])
+  package = (name = "acme.demo", version = "0.1.0", sources = ["src/**/*.nyx"], nanyx = "{minor}")
   linters = [(package = "nanyx.lint", version = "{version}")]
   host = (package = "nanyx.console", version = "{version}")
 )

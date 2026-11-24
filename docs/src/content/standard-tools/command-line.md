@@ -249,8 +249,8 @@ See [Formatter](./formatter) for the style, the settings and what happens to a f
 
 `nanyx new acme.demo` makes a package in a new directory, named for the last part of the package's name, `demo`,
 unless you give another: `nanyx new acme.demo tools/demo`. The directory must be new or empty. The package has a
-manifest, `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, and
-`src/main.nyx`, whose `@entry` prints "Hello, World!". A package's name is lower case, with words separated by dots.
+manifest, `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, the
+compiler's minor version as the oldest the package builds with, `nanyx = "0.39"`, and `src/main.nyx`, whose `@entry` prints "Hello, World!". A package's name is lower case, with words separated by dots.
 
 ## `nanyx migrate`
 
@@ -362,7 +362,8 @@ packages.
 `nanyx publish` publishes the version a package's manifest gives, saying what it is doing at each step and stopping
 at the first that fails:
 
-1. it checks that the package builds and that its files are formatted;
+1. it checks that the manifest says the oldest compiler the package builds with, `nanyx`, which the package index
+   records, and that the package builds and that its files are formatted;
 2. it compares its API with the newest version published below it, as [`nanyx api-check`](#nanyx-api-check) does, and
    refuses a version published already or a bump too small for the changes, listing them;
 3. it packs the package, as [`nanyx pack`](#nanyx-pack) does;

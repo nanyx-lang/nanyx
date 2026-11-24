@@ -352,7 +352,7 @@ linter's `settings`, or its `rules`. The message lists the fields it takes.
 ```nanyx
 -- file: demo.nyxp
 (
-  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: Package has no field 'src': its fields are 'name', 'version', 'sources', 'repository', 'host'
+  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: Package has no field 'src': its fields are 'name', 'version', 'sources', 'repository', 'nanyx', 'host', 'hostLibrary'
 )
 ```
 
@@ -903,6 +903,20 @@ warning NYX0051: Unlisted version 'acme.json 0.1.1'
 To move to a listed version in a package, delete the version's entry from `nanyx.lock`: `nanyx pull`, or the next
 build, locks the newest listed version the manifest accepts. If it accepts none, change the version it asks for first.
 In a script, change the version its `::dependency` names. Or keep the version, if you need it.
+
+# NYX0052: Package that needs a newer compiler
+
+The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running.
+The message names both versions:
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0", nanyx = "99.0")  -- error NYX0052: The package builds with nanyx 99.0 or later
+)
+```
+
+To fix it, install a newer compiler. If the package does build with this one, lower its `nanyx`.
 
 # NYX0101: Unknown identifier
 
