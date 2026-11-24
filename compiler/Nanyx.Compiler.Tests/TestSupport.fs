@@ -243,32 +243,38 @@ let compileClean (source: string) =
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
     result.Typed.Value
 
-/// How long compiling `source` takes, in milliseconds.
-let compileTime (source: string) =
-    let watch = System.Diagnostics.Stopwatch.StartNew()
-    Compiler.compile source |> ignore
-    watch.ElapsedMilliseconds
-
-/// Asserts that what `time size` measures, in milliseconds, grows with the size, not with its square: at `n` it takes
-/// less than ten times what it takes at a quarter of `n`. Something linear takes about 4 times as long, and something
-/// quadratic 16. It is measured once at a quarter of `n` first, to warm up. When the first runs miss, both sizes are
-/// measured again and each one's quicker run counts, so that load on the machine, which slows one run and not the
-/// other, can't make the test fail (as `runsInLinearTime` does for the Wasm tests, #2388).
-let takesLinearTime (n: int) (time: int -> float) =
+/// Asserts that `run` takes time that grows with the size of its input, not with its square: on `prepare n` it takes less
+/// than ten times what it takes on `prepare (n / 4)`. Something linear takes about 4 times as long, and something
+/// quadratic 16. Both inputs are prepared first, outside the timing, and each run starts with what earlier runs and
+/// the preparing left collected, so that a collection of their garbage doesn't land in it (#2636). Each size is timed
+/// twice, in turn, after a run to warm up, and its quickest run counts; when they miss, each is timed five times
+/// more, so that load on the machine, which slows some runs and not others, can't make the test fail (#2388).
+let takesLinearTime (n: int) (prepare: int -> 'input) (run: 'input -> unit) =
     let quarter = n / 4
-    time quarter |> ignore
-    let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
-    let atQuarter, atN = time quarter, time n
-    if not (isLinear atQuarter atN) then
-        let atQuarter = min atQuarter (time quarter)
-        let atN = min atN (time n)
-        Assert.True(isLinear atQuarter atN, $"{n:N0} took {atN:F0} ms, {atN / atQuarter:F1} times the {atQuarter:F0} ms of {quarter:N0}")
+    let small, large = prepare quarter, prepare n
+    let time (input: 'input) =
+        System.GC.Collect()
+        System.GC.WaitForPendingFinalizers()
+        System.GC.Collect()
+        let watch = System.Diagnostics.Stopwatch.StartNew()
+        run input
+        watch.Elapsed.TotalMilliseconds
+    let quickest (runs: int) = List.init runs (fun _ -> time small, time large) |> List.reduce (fun (a, b) (c, d) -> min a c, min b d)
+    time small |> ignore
+    let isLinear (atQuarter: float, atN: float) = atN < 10.0 * atQuarter
+    let first = quickest 2
+    let atQuarter, atN =
+        if isLinear first then first
+        else
+            let again = quickest 5
+            min (fst first) (fst again), min (snd first) (snd again)
+    Assert.True(isLinear (atQuarter, atN), $"{n:N0} took {atN:F1} ms, {atN / atQuarter:F1} times the {atQuarter:F1} ms of {quarter:N0}")
 
 /// Asserts that `source n` compiles in time that grows with `n`, not with its square (see `takesLinearTime`). What
 /// `source` gives is compiled as it is, so a test checks its diagnostics itself; `checksInLinearTime` is for one that
 /// has none.
 let compilesInLinearTime (n: int) (source: int -> string) =
-    takesLinearTime n (fun size -> float (compileTime (source size)))
+    takesLinearTime n source (Compiler.compile >> ignore)
 
 /// `compilesInLinearTime`, for a `source` with no diagnostics at a quarter of `n`.
 let checksInLinearTime (n: int) (source: int -> string) =
