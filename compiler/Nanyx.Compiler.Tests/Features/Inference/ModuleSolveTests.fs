@@ -59,10 +59,6 @@ let private pipeDefs (from: int) (count: int) =
 let ``A failure early in a module leaves the defs after it solved on top of what agrees, not afresh`` () =
     // Each type looked up after a failure solved the whole module again, twice, so checking took time in proportion to
     // the square of the module's size, and minutes for a package's (#2449).
-    let clean = moduleOf ([ "def first: int = 1" ] @ pipeDefs 1 40)
-    let failing = moduleOf ([ "def first: int = \"one\"" ] @ pipeDefs 1 40)
-    Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' vs 'int'", "\"one\""), onlyDiagnostic failing)
-    compileTime clean |> ignore
-    let cleanTime = compileTime clean
-    let failingTime = compileTime failing
-    Assert.True(failingTime < 3L * cleanTime + 1000L, $"With the failure: {failingTime} ms; without it: {cleanTime} ms")
+    let failing count = moduleOf ([ "def first: int = \"one\"" ] @ pipeDefs 1 count)
+    Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' vs 'int'", "\"one\""), onlyDiagnostic (failing 20))
+    compilesInLinearTime 80 failing
