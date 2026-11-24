@@ -87,8 +87,9 @@ let private filesOf (code: string) =
     | first :: _ when isMarker first -> split lines
     | _ -> [ "main.nyx", code ]
 
-/// The codes of the errors compiling `code` reports, with the backend's if the type checker reports none. An example
-/// whose first file is a manifest, `-- file: demo.nyxp`, reports what reading that manifest and its dependencies finds.
+/// The codes of the errors compiling `code` reports, with the backend's if the type checker reports none, or else the
+/// compiler's warnings, such as NYX0281's. An example whose first file is a manifest, `-- file: demo.nyxp`, reports what
+/// reading that manifest and its dependencies finds.
 let private errorsOf (code: string) =
     use directory = new TempDirectory()
     let files = filesOf code
@@ -103,11 +104,12 @@ let private errorsOf (code: string) =
     else
         let result = Script.compileSource (Path.Combine(directory.Path, name)) text
         let errors = result.Diagnostics |> List.filter Diagnostics.isError
+        let warnings = result.Diagnostics |> List.filter (fun diagnostic -> (DiagnosticCodes.referenceUrl diagnostic.Code).IsSome)
         match errors, result.Typed with
         | [], Some typed ->
             match CodeGen.tryTranspileTypedModuleToWat typed with
             | Error diagnostic -> [ diagnostic ]
-            | Ok _ -> []
+            | Ok _ -> warnings
         | _ -> errors
 
 [<Theory>]

@@ -186,7 +186,9 @@ println(magnitude(x = 3.0, y = 4.0))
 
 ## Type arguments
 
-A function can take a type as an argument. This is how a caller says which type it wants where nothing else says it, as for a function that only gives back a value of the type, such as a decoder. A positional parameter that takes a type is written `type a`, and the caller passes the type with `type` in front of it:
+A function can take a type as an argument. This is how a caller says which type it wants where nothing else says it, as for a function that only gives back a value of the type, such as a decoder.
+
+A type argument is a value. The expression `type int` is a value that stands for the type `int`, and its type is `Type(int)`: `Type(a)` is the built-in type of a value that stands for the type `a`. So a parameter that takes a type is written with that type, `Type(a)`, as any other parameter is written with its own, and the caller passes the type with `type` in front of it:
 
 ```nanyx
 context Decode(a) = (decode: string -> a)
@@ -199,7 +201,7 @@ def bool.decode: string -> bool = { text ->
   text == "yes"
 }
 
-def deserialise: [Decode(a)] type a, string -> a = { t, text ->
+def deserialise: [Decode(a)] Type(a), string -> a = { t, text ->
   decode(text)
 }
 
@@ -207,9 +209,9 @@ println(deserialise(type int, "abc")) -- 3
 println(deserialise(type bool, "yes")) -- true
 ```
 
-The parameter is a value of type `Type(a)`, and `a` is a type variable like any other: the expression `type int` has type `Type(int)`, and passing it fixes `a` as `int`, which picks the [context](../advanced/contexts) instance `Decode(int)`. Inside generic code, `type a` passes on a type variable of its own.
+`a` is a type variable like any other: passing `type int`, a `Type(int)`, where a `Type(a)` is expected fixes `a` as `int`, which picks the [context](../advanced/contexts) instance `Decode(int)`. Inside generic code, `type a` passes on a type variable of its own.
 
-A named parameter that takes a type is written `into: type`. Like any [named parameter](#named-parameters), it is passed by name, `into = type int`, and the lambda names it as the field. Its name is the type variable, so the signature uses it as one, in its contexts and its result:
+A named parameter can take a type too, as `into: Type(a)`. Like any [named parameter](#named-parameters), it is passed by name, `into = type int`, and the lambda names it as the field:
 
 ```nanyx
 context Decode(a) = (decode: string -> a)
@@ -218,20 +220,24 @@ def int.decode: string -> int = { text ->
   text.length
 }
 
-def parse: [Decode(into)] (string, into: type) -> into = { text, into ->
+def parse: [Decode(a)] (string, into: Type(a)) -> a = { text, into ->
   decode(text)
 }
 
 println(parse("abcd", into = type int)) -- 4
 ```
 
-The type's name can't be a built-in type's, as `list: type` would be (NYX0270).
+A positional and a named type argument differ only in whether the parameter has a name. The field's name and the type variable are separate, but a signature can make them one, `into: Type(into)`, and then names the type `into` in its contexts and its result, `[Decode(into)] (string, into: Type(into)) -> into`. That name can't be a built-in type's, as `list: Type(list)` would be (NYX0270).
+
+A type argument is not an [associated type](../advanced/contexts#associated-types). An associated type, written `elem: type` in a context, is a member whose value is a type, which an instance fixes and a signature names; a type argument is a value that stands for a type, which a caller passes. The two meet where a generic function passes its associated type on as a value, `type elem`.
+
+Earlier releases wrote a type argument's parameter `type a`, or `into: type` for a named one. Those forms still compile, with a warning whose fix rewrites them (NYX0281), and will be errors in a later release.
 
 `type` is always written at the call, and a type argument is never left out, even where the type the call gives back would say what it is: `def n: int = deserialise("abc")` is an error that says to pass `type int` (NYX0271). A function that takes a type argument is otherwise a function like any other, so it can be piped into, wrapped in a lambda and passed as a value.
 
 A type argument is known at compile time: it is never chosen with `if` or `match`, and a list never holds two of different types (NYX0272). It costs nothing when the program runs.
 
-A function that is given a value of type `a` needn't take `type a` as well: it can require the prelude's context `Typed(a)`, whose one member is the value `typeOf: Type(a)`. The compiler gives an instance of it for every type, so the caller passes nothing more:
+A function that is given a value of type `a` needn't take a `Type(a)` as well: it can require the prelude's context `Typed(a)`, whose one member is the value `typeOf: Type(a)`. The compiler gives an instance of it for every type, so the caller passes nothing more:
 
 ```nanyx
 context Show(a) = (show: a -> string)
@@ -240,7 +246,7 @@ def int.show: int -> string = { n ->
   "int {n}"
 }
 
-def showAt: [Show(a)] a, type a -> string = { value, t ->
+def showAt: [Show(a)] a, Type(a) -> string = { value, t ->
   show(value)
 }
 
@@ -258,7 +264,7 @@ println(describe(5)) -- int 5
 Generic code inspects a type argument by matching on it. Each arm is a tag of the type's description, and an arm that says what the type is tells the checker too: in the `#int` arm below, `a` is `int`, so `value + 1` checks, and in the `#string` arm it is `string`. The function is checked once, as all generic code is, not once for each type it is called at:
 
 ```nanyx
-def describe: a, type a -> string = { value, t ->
+def describe: a, Type(a) -> string = { value, t ->
   match t
     | #int -> "the int {value + 1}"
     | #string -> "the string " ++ value
@@ -292,7 +298,7 @@ A `match` on a type that leaves out a tag and has no `else` is a non-exhaustive 
 A description builds a value as well as taking one apart, which is what a decoder needs. A record's `r.build` is given a function that gives each field's value, as `#some(value)`, or fails; it calls it with each field in turn and gives `#some` of the record, or the first failure, with no record made. A case's `c.build` makes a value of its union from a payload of the case's type:
 
 ```nanyx
-def zeroOf: type a -> #some(a) | #noCases | #noZero = { t ->
+def zeroOf: Type(a) -> #some(a) | #noCases | #noZero = { t ->
   match t
     | #int -> #some(0)
     | #string -> #some("none")

@@ -6,7 +6,7 @@ open Xunit
 open TranspilerWasmTestHelpers
 
 let private zeroOf =
-    """def zeroOf: type a -> #some(a) | #error(string) = { t ->
+    """def zeroOf: Type(a) -> #some(a) | #error(string) = { t ->
   match t
     | #int -> #some(0)
     | #string -> #some("none")
@@ -64,7 +64,7 @@ let ``Run - a generic decoder reads JSON into any record, union, list and built-
 
 import nanyx.json/json as json
 
-def decodeAt: json.Json, type a -> #some(a) | #error(string) = { j, t ->
+def decodeAt: json.Json, Type(a) -> #some(a) | #error(string) = { j, t ->
   match t
     | #int ->
       match j
@@ -115,7 +115,7 @@ def decodeAt: json.Json, type a -> #some(a) | #error(string) = { j, t ->
     | else -> #error("can't decode this type")
 }
 
-def decodeAll: list(json.Json), type b -> #some(list(b)) | #error(string) = { items, t ->
+def decodeAll: list(json.Json), Type(b) -> #some(list(b)) | #error(string) = { items, t ->
   match items
     | [] -> #some([])
     | [first, ...rest] ->

@@ -1,9 +1,12 @@
-/// Type arguments: a function's parameter that takes a type, positional `type a` or named `into: type`, and the value
-/// `type Point` passed for it, of type `Type(Point)` (see `TypeValues`). A parameter `into: type` is one of type
-/// `Type(into)`, where `into` is a type variable of the whole signature, so `[Decode(into)]` and `-> into` name it as they
-/// would `a`; `type a` is one of type `Type(a)`. Inference then needs nothing new: unifying `Type(Point)` with
-/// `Type(into)` fixes `into`. A `Type` value is known at compile time, so it is never chosen with `if` or `match`, nor
-/// held in a list with another type's.
+/// Type arguments: a function's parameter that takes a type, written as one of type `Type(a)`, positional
+/// `(Type(a), string) -> a` or named `(string, into: Type(a)) -> a`, and the value `type Point` passed for it, of type
+/// `Type(Point)` (see `TypeValues`). A named parameter `into: Type(into)`, whose type names the field's own name, makes
+/// that name a type variable of the whole signature, so `[Decode(into)]` and `-> into` name it as they would `a`.
+/// Inference then needs nothing new: unifying `Type(Point)` with `Type(a)` fixes `a`. A `Type` value is known at compile
+/// time, so it is never chosen with `if` or `match`, nor held in a list with another type's.
+///
+/// The old forms, `type a` as a positional parameter and `into: type` as a named one, still compile for one release,
+/// each with a warning (NYX0281) whose fix writes it as `Type(a)` or `into: Type(into)`.
 module internal NyxCompiler.TypeArguments
 
 open Parser.Program
@@ -14,6 +17,13 @@ let private isTypeKeyword (t: TypeExpr) =
     | TypeKeyword -> true
     | _ -> false
 
+/// Whether `t`, the type of the field `name`, is `Type(name)`: the field is a named type parameter whose name is its
+/// type variable.
+let private isTypeOfOwnName (name: Identifier) (t: TypeExpr) =
+    match t.Kind with
+    | TypeApply(typeName, [ { Kind = TypeName inner | TypeVar inner } ]) -> TypeValues.isTypeName typeName && inner = name
+    | _ -> false
+
 /// The fields of a function's parameters, `input`, when they are a record.
 let private parameterFields (input: TypeExpr) =
     match input.Kind with
@@ -21,8 +31,8 @@ let private parameterFields (input: TypeExpr) =
     | TypeOpenRecord(fields, _) -> fields
     | _ -> []
 
-/// The named type parameters, `into: type`, of the functions `annotation` writes, each with the field's type and
-/// default.
+/// The named type parameters whose name is their type variable, `into: Type(into)` or the old `into: type`, of the
+/// functions `annotation` writes, each with the field's type and default.
 let private namedParameters (annotation: TypeExpr) : (Identifier * bool * TypeExpr * Expression option) list =
     TypeExpr.within annotation
     |> List.collect (fun t ->
@@ -30,19 +40,45 @@ let private namedParameters (annotation: TypeExpr) : (Identifier * bool * TypeEx
         | TypeFunc(input, _) ->
             parameterFields input
             |> List.choose (function
-                | TypeField(name, isMutable, Some keyword, defaultOpt) when isTypeKeyword keyword -> Some (name, isMutable, keyword, defaultOpt)
+                | TypeField(name, isMutable, Some written, defaultOpt) when isTypeKeyword written || isTypeOfOwnName name written ->
+                    Some (name, isMutable, written, defaultOpt)
+                | _ -> None)
+        | _ -> [])
+
+/// The warning for a type parameter written the old way, `written`, which should be `now`, with the fix that writes
+/// `newText` at `span`.
+let private oldForm (span: SourceSpan) (written: string) (now: string) (newText: string) : Diagnostic =
+    { (Diagnostics.at DiagnosticCodes.OldFormTypeParameter span
+           $"A parameter that takes a type is written with its type, `Type(a)`: write `{now}`. `{written}` will be an error in a later release"
+       |> Diagnostics.about written) with
+        Fixes = [ { Title = $"Write `{now}`"; Edits = [ { Span = span; NewText = newText } ] } ] }
+
+/// The warnings for the type parameters written the old way in `module'`: each `type a` as a positional parameter, and
+/// each `into: type` as a function's named one.
+let private oldForms (module': Module) : Diagnostic list =
+    SyntaxTree.writtenTypes module'
+    |> List.collect (fun written -> TypeExpr.within written.Type)
+    |> List.collect (fun t ->
+        match t.Kind with
+        | TypeArgument({ Kind = TypeVar variable }) -> [ oldForm t.Span $"type {variable}" $"Type({variable})" $"Type({variable})" ]
+        | TypeFunc(input, _) ->
+            parameterFields input
+            |> List.choose (function
+                // A built-in type's name is an error already (see `parameterErrors`), which `Type(list)` wouldn't fix.
+                | TypeField(name, _, Some keyword, _) when isTypeKeyword keyword && not (TypeResolution.isBuiltInTypeName name) ->
+                    Some (oldForm keyword.Span $"{name}: type" $"{name}: Type({name})" $"Type({name})")
                 | _ -> None)
         | _ -> [])
 
 /// The errors for the named type parameters `annotation` declares that are declared wrongly.
 let private parameterErrors (annotation: TypeExpr) : Diagnostic list =
     namedParameters annotation
-    |> List.collect (fun (name, isMutable, keyword, defaultOpt) ->
+    |> List.collect (fun (name, isMutable, written, defaultOpt) ->
         [ if TypeResolution.isBuiltInTypeName name then
-              Diagnostics.at DiagnosticCodes.InvalidTypeParameter keyword.Span
+              Diagnostics.at DiagnosticCodes.InvalidTypeParameter written.Span
                   $"'{name}' is a built-in type, so it can't be the name of a type parameter" |> Diagnostics.about name
           if isMutable then
-              Diagnostics.at DiagnosticCodes.InvalidTypeParameter keyword.Span "A type parameter can't be `mut`" |> Diagnostics.about name
+              Diagnostics.at DiagnosticCodes.InvalidTypeParameter written.Span "A type parameter can't be `mut`" |> Diagnostics.about name
           match defaultOpt with
           | Some value ->
               Diagnostics.at DiagnosticCodes.InvalidTypeParameter value.Span
@@ -145,9 +181,10 @@ let rec private inValue (names: Set<Identifier>) (errors: ResizeArray<Diagnostic
     | _ -> rewritten
 
 /// `module'` with each named type parameter written as a parameter of type `Type(name)`, and `name` as a type variable
-/// wherever its def writes it, and the errors for type parameters declared wrongly and `Type` values chosen at run time.
+/// wherever its def writes it, and the diagnostics: a warning for each type parameter written the old way, and the
+/// errors for type parameters declared wrongly and `Type` values chosen at run time.
 let rewrite (module': Module) : Module * Diagnostic list =
-    let errors = ResizeArray<Diagnostic>()
+    let errors = ResizeArray<Diagnostic>(oldForms module')
     let def (annotationOpt: TypeExpr option) (value: Expression) =
         let value = unchosen errors value
         match annotationOpt with
