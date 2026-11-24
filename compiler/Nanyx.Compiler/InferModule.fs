@@ -296,6 +296,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     state <- { unannotated with ReadAs = unannotated.ReadAs |> Map.add written.Id lambda }
                     lambda
                 | None -> written
+            let pendingBefore = state.PendingContextInstances |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
             // A def's own name is not in scope in its annotation: `def x: typeof x` says nothing.
             match DefAnnotations.read inferTypeOfValues currentModule (Ok ()) (withoutTopLevel name env) env state name typeOpt expr with
             | Error err -> abandon isExport name expr err
@@ -379,7 +380,19 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     // A function named point-free finds its instances at the type the def writes.
                     let valueResolved =
                         if expectedDeclaredOpt.IsSome then resolveValueInstances envWithRec state expr else Ok state
-                    match rigidResult |> Result.bind (fun () -> Result.map ignore settledType) |> Result.bind (fun () -> valueResolved) |> Result.bind (fun state -> synthesizeSettledInstances env state name) with
+                    // A value that is not a function can't require a context of a type a later use would fix. Its
+                    // calls are not left to the end of the module, which would report them again.
+                    let unfixed =
+                        if expectedDeclaredOpt.IsNone && contextOpt.IsNone then
+                            let isOwn (p: PendingContextInstance) = not (pendingBefore.Contains (p.Call, p.Index))
+                            let calls = state.PendingContextInstances |> List.filter isOwn
+                            match ContextInference.unfixedValueType state name (declarationSpan state DefValue expr) declaredTy calls with
+                            | [] -> Ok ()
+                            | err ->
+                                state <- { state with PendingContextInstances = state.PendingContextInstances |> List.filter (isOwn >> not) }
+                                Error err
+                        else Ok ()
+                    match rigidResult |> Result.bind (fun () -> unfixed) |> Result.bind (fun () -> Result.map ignore settledType) |> Result.bind (fun () -> valueResolved) |> Result.bind (fun state -> synthesizeSettledInstances env state name) with
                     | Error err -> abandon isExport name expr err
                     | Ok synthesizedState ->
                         state <- synthesizedState

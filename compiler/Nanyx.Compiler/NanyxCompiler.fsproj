@@ -91,6 +91,7 @@
     <Compile Include="RecordSpread.fs" />
     <Compile Include="CollectionLiterals.fs" />
     <Compile Include="ExpectedLiterals.fs" />
+    <Compile Include="Unreached.fs" />
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
     <Compile Include="AttachedContextDefs.fs" />

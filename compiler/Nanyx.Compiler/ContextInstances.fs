@@ -550,7 +550,23 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
 /// settled there finds its instance later, as such a call does (see `resolveReferenceInstances`).
 and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty option) (calleeSpan: SourceSpan) : Result<InferState, Diagnostic list> =
     let contexts = contextRequirementsOf env state name |> Option.defaultValue []
+    // A call with an argument that never gives a value (of type `undefined`) never happens: its parameter's type is
+    // left open, and it has every context, as a call with an argument that failed to check has.
+    let neverHappens =
+        match call.Kind with
+        | FunctionCall(_, _, args) when not reference ->
+            args |> List.exists (fun arg -> state.ExprTypes |> Map.tryFind arg.Id |> Option.exists (resolveSoFar state >> Unifier.isBottom))
+        | _ -> false
     match TypeEnv.tryFind name env, calleeTy with
+    | Some _, Some _ when neverHappens && not (InterpolationHoles.isHole name) && contexts |> List.exists (isParameterizedContext state) ->
+        let found =
+            contexts
+            |> List.map (fun ctx ->
+                match ctx.Kind with
+                | TypeApply(ctxName, _) when ctxName = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome ->
+                    Some (InstanceSynthesized InterpolationHoles.builtInMembers)
+                | _ -> None)
+        Ok (if found |> List.forall Option.isNone then state else { state with ContextInstances = state.ContextInstances |> Map.add call.Id found })
     | Some scheme, Some calleeTy when contexts |> List.exists (isParameterizedContext state) ->
         // The variables the call's contexts are read with, one variable for each name across them.
         let shared = ref Map.empty
@@ -619,9 +635,9 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                     HoleScopes = current.HoleScopes |> Map.add call.Id (env, annotatedDef) })
                         | Error _, _ -> Ok (found @ [ None ], current)
                     // A value that failed to check, or one made of such a value (a list of them), has every context, so
-                    // that the call is not an error too. It has the compiler's own `ToString`, so the backend still has
+                    // that the call is not an error too, and so does one that never gives a value (of type `undefined`). It has the compiler's own `ToString`, so the backend still has
                     // a member to pass. A hole of one is written by the backend, which reports the error where the hole is.
-                    | None, _ when not (InterpolationHoles.isHole name) && argTys |> List.exists Unifier.holdsError ->
+                    | None, _ when not (InterpolationHoles.isHole name) && argTys |> List.exists (fun ty -> Unifier.holdsError ty || Unifier.isBottom ty) ->
                         if ctxName = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome then
                             Ok (found @ [ Some (InstanceSynthesized InterpolationHoles.builtInMembers) ], current)
                         else Ok (found @ [ None ], current)
@@ -919,6 +935,11 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
             Some (EqualityOperators.resolvePending hasInstanceIn derive defScheme current pending argTys)
         elif OrderingOperators.isPending pending then
             Some (OrderingOperators.resolvePending (orderingInstance pending.Callee pending.Span) hasInstanceIn defScheme current pending argTys)
+        // A value that turned out never to give one has every context, as at a call (see `resolveCallInstances`).
+        elif argTys |> List.exists Unifier.isBottom then
+            if pending.Context = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome then
+                Some (Ok (Some (InstanceSynthesized InterpolationHoles.builtInMembers), current))
+            else Some (Ok (None, current))
         else
             // The def now requires a well-known context of each of its variables the call compares values of. A call left
             // to the end of the module needs an instance for each variable of the type the def around it writes, but

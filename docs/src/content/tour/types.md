@@ -89,7 +89,9 @@ def stop: int -> undefined = { x ->
 def double = { n -> if n > 0 then n * 2 else stop(n) } -- int -> int
 ```
 
-The items of a list literal are joined the same way, so `[1, crash("no")]` is a `list(int)`. It only works one way: nothing but an expression that never gives a value can be given where an `undefined` is expected.
+The items of a list literal are joined the same way, so `[1, crash("no")]` is a `list(int)`, and `[crash("no")]` is one where a `list(int)` is expected. It only works one way: nothing but an expression that never gives a value can be given where an `undefined` is expected.
+
+Using a value of type `undefined`, as in `crash("no").name`, or `x + 1` after `def x = crash("no")`, is not an error either: the value is worked out first and stops the program, so what uses it is never reached. `???`, the placeholder for [code not written yet](../getting-started/basics#unimplemented-code), has this type too.
 
 # Tuple types
 
