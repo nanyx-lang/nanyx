@@ -223,6 +223,7 @@
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />
     <Compile Include="Features\StdLib\RunMathTrigonometryTests.fs" />
     <Compile Include="Features\StdLib\RunMathSpecialFloatTests.fs" />
+    <Compile Include="Features\StdLib\RunMathModGcdLcmTests.fs" />
     <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
     <Compile Include="Features\StdLib\RunStringJoinTests.fs" />
     <Compile Include="Features\StdLib\RunStringBuildTests.fs" />
