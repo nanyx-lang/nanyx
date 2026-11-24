@@ -109,6 +109,26 @@ let stateMachines (start: string) (functions: Function list) : Set<string> =
         if more.IsEmpty then machines else grow (Set.union machines (Set.ofList more))
     grow Set.empty
 
+/// Checks that each function among `functions` made into a function value, by a closure over it or one that captures
+/// nothing, has a type that waits if it is one of the state machines `machines`. A caller knows whether a function value
+/// can stop only by its type, so one that can stop where its type says it can't would leave its caller to read the
+/// value of a call that stopped and carry on (#2558): a broken invariant of the type checker, not code to emit.
+let checkFunctionValues (machines: Set<string>) (functions: Function list) : unit =
+    let check (name: string) (ty: IrType) =
+        match ty with
+        | IrFunction(_, _, _, false) when machines.Contains name ->
+            internalError $"the function value `{name}` can stop where it waits, but its type `{IrType.show ty}` says it can't"
+        | _ -> ()
+    for func in functions do
+        for expr in CoreIrRewrite.allExprs func.Body do
+            match expr.Kind with
+            | MakeClosure(name, _, _) -> check name expr.Type
+            | _ -> ()
+            for atom in CoreIrRewrite.directAtoms expr do
+                match atom with
+                | AStaticClosure(name, _, ty) -> check name ty
+                | _ -> ()
+
 /// The value a link of a chain computes, if it computes one: a `Let`'s or a `Do`'s.
 let private linkValue (link: Expr) : Expr option =
     match link.Kind with

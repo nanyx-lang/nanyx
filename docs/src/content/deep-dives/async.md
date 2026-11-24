@@ -31,6 +31,13 @@ boundaries are not built yet; they are on
   type requires (`CoreIrLowerTypes.toIrTypeIn`). A function generic in contexts is specialised on what its context
   variables stand for, so it is compiled apart for a function that can wait and for one that can't: `list.map` over
   `http.get` and `list.map` over a pure lambda are two functions, and only the first is a state machine (below).
+  A lambda's type requires what the functions it calls require, a function that writes no type included, once it has
+  been inferred (`Contexts.contextsRequiredByCall`), so `{ x -> waitThen(x) }` waits whether or not `waitThen` writes
+  `[Async]`. A caller knows that a function value can stop only from its type, so the backend refuses a function value
+  that is a state machine but whose type can't wait, as a broken invariant (`CoreIrSplitPoints.checkFunctionValues`),
+  rather than leave its caller to carry on past a call that stopped. One such case is left: a lambda that calls a
+  function that waits and that is in a cycle with the def the lambda is in, which isn't inferred yet there
+  ([#2590](https://github.com/nanyx-lang/nanyx/issues/2590)).
 
 # How tasks are compiled
 

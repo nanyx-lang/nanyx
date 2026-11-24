@@ -191,3 +191,21 @@ match file.lines(path.of("b.txt"))
         Assert.Equal("", outcome.StandardError.ReplaceLineEndings "\n")
         Assert.Equal("[> one, > two, > three, > four]\n", outcome.StandardOutput.ReplaceLineEndings "\n")
         Assert.Equal(0, outcome.ExitCode)
+
+[<Fact>]
+let ``A lambda that calls a def that waits without writing its type waits too, through list.map, list.fold and a function of the program's own`` () =
+    // The lambda requires what the def was inferred to, as it does when the def writes its type, so the function it is
+    // given to is the one specialised on a function that waits (#2558).
+    assertRuns
+        "[2, 3, 4]\n9\n5\n"
+        (waiting
+         + """
+def waitThen = { (x: int) -> call({ x + 1 }) }
+
+def loopWith: [c] ([c] int -> int), int, int -> int = { f, n, acc ->
+  if n == 0 then acc else loopWith(f, n - 1, f(acc))
+}
+
+println(list.map([1, 2, 3], { x -> waitThen(x) }))
+println(list.fold([1, 2, 3], 0, { acc, x -> acc + waitThen(x) }))
+println(loopWith({ x -> waitThen(x) }, 5, 0))""")
