@@ -90,6 +90,72 @@ def reads = { _ ->
     Assert.Equal("{ MRef.get(r) }", at)
 
 [<Fact>]
+let ``Starting a task through another name for start with a function that holds an MRef is an error`` () =
+    let source =
+        withFinalNewline
+            """import nanyx/async as (Async)
+import nanyx/mref
+
+def reads = { _ ->
+  def go = start
+  memory {
+    def r = MRef.new([1, 2, 3])
+    go({ MRef.get(r) })
+    1
+  }
+}"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.TaskHoldsMemory.Code, code)
+    Assert.Equal("{ MRef.get(r) }", at)
+
+[<Fact>]
+let ``Starting a task through a local def that passes on its function, with one that uses a cell, is an error`` () =
+    let source =
+        withTasks
+            """def counts = { _ ->
+  def spawn = { f -> start(f) }
+  memory {
+    mut total = 0
+    spawn({ total := total + 1 })
+    total
+  }
+}"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.TaskHoldsMemory.Code, code)
+    Assert.Equal("{ total := total + 1 }", at)
+
+[<Fact>]
+let ``Racing functions that use a cell is an error`` () =
+    let source =
+        withFinalNewline
+            """import nanyx/async as (Async)
+
+def counts = { _ ->
+  memory {
+    mut total = 0
+    def winner = race([{ sleep(1); total := total + 1; "a" }, { sleep(1); total := total + 10; "b" }])
+    "{winner} {total}"
+  }
+}"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.TaskHoldsMemory.Code, code)
+    Assert.Equal("""[{ sleep(1); total := total + 1; "a" }, { sleep(1); total := total + 10; "b" }]""", at)
+
+[<Fact>]
+let ``A local def that passes on its function may start a task with one that holds nothing of a block`` () =
+    let source =
+        withTasks
+            """def counts = { _ ->
+  def spawn = { f -> start(f) }
+  memory {
+    mut total = 41
+    def now = total
+    await(spawn({ now + 1 }))
+  }
+}"""
+    Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
 let ``A task may be given what a cell holds`` () =
     let source =
         withTasks

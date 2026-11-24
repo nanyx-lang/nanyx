@@ -403,7 +403,11 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
                     let evaluated, contextType, bindings =
                         match value.Kind with
                         | RecordExpr fields -> [], None, namedFields fields
-                        | FunctionCall(contextName, _, [ Kind (RecordExpr fields) ]) -> [], Some (TypeExpr.synthetic (TypeName contextName)), namedFields fields
+                        // A parameterised context's instance is the one the type checker settled, `Emit(int)` for
+                        // `use Emit(emit = ...)`, whose type arguments the `use` leaves to the rest of the def (#2550).
+                        // One still open, `Emit(b)` in a def generic in `b`, is evaluated as any other instance is, below.
+                        | FunctionCall(contextName, _, [ Kind (RecordExpr fields) ]) when instance |> Option.forall (TypeExpr.variablesOf >> List.isEmpty) ->
+                            [], instance |> Option.orElse (Some (TypeExpr.synthetic (TypeName contextName))), namedFields fields
                         | IdentifierExpr recordName when localRecords.ContainsKey recordName ->
                             [], instance, fieldsOf (Expression.from value (IdentifierExpr recordName)) localRecords.[recordName]
                         // A top-level record of a plain context (one of a parameterised context is read below): read

@@ -98,7 +98,8 @@ points from 1, and what is wrong there.
 def Regex.parse: string -> #some(Regex) | #invalidPattern(RegexError)
 ```
 
-The regex of `pattern`, or `#invalidPattern` with where it goes wrong and why.
+The regex of `pattern`, or `#invalidPattern` with where it goes wrong and why. Groups nest
+at most 1000 deep, as in RE2, so a pattern taken from input can't run the program out of stack.
 
 ## `Regex.toString`
 

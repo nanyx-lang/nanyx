@@ -103,7 +103,8 @@ It is a function, so its block is passed in parentheses: `concurrent { ... }` wo
 # Tasks share only values
 
 A task can't use what belongs to a `memory` block: starting one with a function that uses a cell or a reference
-(`MRef`, `MList`) is an error ([NYX0279](../standard-tools/errors#nyx0279)). Values are immutable, so a task can never
+(`MRef`, `MList`) is an error ([NYX0279](../standard-tools/errors#nyx0279)), whether `start` starts it, `race` does, or a
+function that passes on what it is given to either. Values are immutable, so a task can never
 change what another holds; give a task what a cell holds, and change the cell with what the task gives back.
 
 # How tasks take turns

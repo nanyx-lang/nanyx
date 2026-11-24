@@ -565,7 +565,7 @@ module Compiler =
                     ofDef @ ofType
                 // A task holds nothing of a `memory` block (see `TaskCaptures`).
                 let taskErrors =
-                    TaskCaptures.captureErrors state.Symbols state.References (fun node -> state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst)) desugared
+                    TaskCaptures.captureErrors state.TaskWork (Unifier.apply subst) desugared
                     @ TaskCaptures.escapeErrors
                         (fun name ->
                             match types |> Map.tryFind name |> Option.map (Unifier.apply subst >> Unifier.unalias) with
@@ -717,7 +717,7 @@ module Compiler =
                           ImportedTypes = imported |> List.map (fun (_, id, ty) -> id, ty) |> Map.ofList
                           ContextInstances = state.ContextInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
                           ContextProviders = state.ContextProviders
-                          UseContexts = state.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
+                          UseContexts = ContextInstances.settledUseContexts state subst |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
                           AssociatedArguments =
                             state.AssociatedArguments
                             |> Map.fold (fun acc id named -> acc |> Map.add id (named |> Map.map (fun _ ty -> Unifier.apply subst ty))) merged.InlinedAssociatedArguments
