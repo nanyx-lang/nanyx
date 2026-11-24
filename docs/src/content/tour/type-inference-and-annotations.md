@@ -192,18 +192,24 @@ Although the language itself doesn't mandate this practice, the [official style 
 
 # Target typing
 
-Nanyx can infer types based on how values are used:
+A call can take its type from where it is written: the type a def writes, or the parameter it is passed to. A function
+that only gives back a value of a type, such as a decoder, finds the context for the type it is expected to give:
 
-```nanyx fragment
-def parse: string -> a = { json -> ... }
+```nanyx
+type Person = (name: string)
 
-def obj = parse("{}")
+context Decode(a) = (decode: string -> a)
 
-def person: Person = obj
+def Person.decode: string -> Person = { s -> Person(name = s) }
+
+def parse: [Decode(a)] string -> a = { json -> decode(json) }
+
+def person: Person = parse("Ada")
+
+println(person.name) -- Ada
 ```
 
-You can also guide inference by writing the type on the `def`:
-
-```nanyx fragment
-def obj: Person = parse("...")
-```
+A later use doesn't fix a value's type. `def obj = parse("Ada")` followed by `def person: Person = obj` is an error
+([NYX0281](../standard-tools/errors#nyx0281)), since nothing in `obj`'s definition says which `Decode` to use. Write the
+type on the def, as above, or give the function a [type argument](functions#type-arguments), `type a`, and pass the
+type to it: `parse(type Person, "Ada")`.

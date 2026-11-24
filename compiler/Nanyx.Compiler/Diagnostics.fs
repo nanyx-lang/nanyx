@@ -216,6 +216,7 @@ module DiagnosticCodes =
     let ComponentImportOutsideComponent = code 278 "Component import called outside a component" Severity.Error
     let TaskHoldsMemory = code 279 "Task that holds what belongs to a memory block" Severity.Error
     let ParameterNamesNoField = code 280 "Lambda parameter that names no field" Severity.Error
+    let ValueContextTypeOpen = code 281 "Value of a type only a later use fixes" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -247,7 +248,7 @@ module DiagnosticCodes =
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
-          ParameterNamesNoField
+          ParameterNamesNoField; ValueContextTypeOpen
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as
