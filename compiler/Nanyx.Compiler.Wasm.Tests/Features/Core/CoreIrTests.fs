@@ -404,7 +404,6 @@ let private lowerInput (typed: TypedModule) : CoreIrLowerInput.LowerInput =
       DefinitionSpans = Map.empty
       RecordConstructors = Set.empty
       ShapeWrappers = Set.empty
-      NominalTypes = Set.empty
       Lifted = Map.empty
       TopLevel = []
       NamedTypes = Map.empty

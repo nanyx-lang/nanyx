@@ -75,6 +75,18 @@ let ``Patterns of fields without = keep their ...`` () =
     Assert.Equal("def g = { | (a, _, ...) -> 1 }\n", format "def g = { | ( a ,_,... ) -> 1 }")
 
 [<Fact>]
+let ``A constructor pattern's brackets are printed as written`` () =
+    // #2504: as a tag's payload's, brackets that leave fields out or name them are the constructor's.
+    unchanged (normalized """def f = {
+  | Email(s) -> 1
+  | P(a, b) -> 2
+  | P(a, ...) -> 3
+  | Email(address = s) -> 4
+  | P(a = 1, ...) -> 5
+}""")
+    Assert.Equal("def g = { | P(a = 1) -> 1 }\n", format "def g = { | P((a = 1)) -> 1 }")
+
+[<Fact>]
 let ``if, if-is and multi-branch if are printed as written`` () =
     unchanged "def a = { x -> if x > 0 then 1 else 0 }\n"
     unchanged "def b = { x -> if x is #some(y) then y else 0 }\n"
