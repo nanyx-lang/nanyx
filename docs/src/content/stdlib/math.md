@@ -29,9 +29,11 @@ println(math.min("pear", "apple"))
 
 Numeric utilities.
 
-[`abs`](#abs), [`sign`](#sign) and [`pow`](#pow) are generic over the `Num(a)` context, so they take an `int` or a
-`float`. `abs`, `sign`, [`min`](#min), [`max`](#max), [`minMax`](#minmax) and [`clamp`](#clamp) compare through `Ord(a)`, so the
-last four take a value of any type that has an order, a `string` among them. [`sqrt`](#sqrt), [`exp`](#exp),
+[`abs`](#abs), [`sign`](#sign), [`mod`](#mod) and [`pow`](#pow) are generic over the `Num(a)` context, so they take an `int`
+or a `float`. `mod` is the modulo with the sign of the divisor, where `%` gives the remainder with
+the sign of the dividend, so `mod(i - 1, length)` wraps an index into a range. [`gcd`](#gcd) and [`lcm`](#lcm)
+take an `int`. `abs`, `sign`, `mod`, [`min`](#min), [`max`](#max), [`minMax`](#minmax) and [`clamp`](#clamp) compare through
+`Ord(a)`, so the last four take a value of any type that has an order, a `string` among them. [`sqrt`](#sqrt), [`exp`](#exp),
 [`ln`](#ln), [`log10`](#log10), [`log2`](#log2), [`floor`](#floor), [`ceil`](#ceil), [`round`](#round) and [`truncate`](#truncate) take a `float`, and so
 do the trigonometric functions, [`sin`](#sin), [`cos`](#cos), [`tan`](#tan), [`asin`](#asin), [`acos`](#acos), [`atan`](#atan) and
 [`atan2`](#atan2), whose angles are in radians, the hyperbolic functions, [`sinh`](#sinh), [`cosh`](#cosh), [`tanh`](#tanh),
@@ -116,6 +118,33 @@ def sign: [Num(a), Ord(a)] a -> a
 
 `-1`, `0` or `1`, of the type of `n`, as `n` is below, neither below nor above, or above `zero`:
 `sign(-2.5)` is `-1.0` and `sign(-0.0)` is `0.0`.
+
+## `mod`
+
+```nanyx fragment
+def mod: [Num(a), Ord(a)] a, a -> a
+```
+
+`x` modulo `n`, with the sign of `n`: `mod(-7, 3)` is `2`, `mod(7, -3)` is `-2`, and for a positive
+`n` the result is always in 0..n-1. It works on a `float` too: `mod(-1.5, 1.0)` is `0.5`. `mod(x, 0)`
+does what `x % 0` does.
+
+## `gcd`
+
+```nanyx fragment
+def gcd: int, int -> int
+```
+
+The greatest common divisor of `a` and `b`, never negative: `gcd(12, -18)` is `6`, `gcd(0, 0)` is `0`.
+
+## `lcm`
+
+```nanyx fragment
+def lcm: int, int -> int
+```
+
+The least common multiple of `a` and `b`, never negative: `lcm(4, 6)` is `12`, and `lcm(0, n)` is `0`.
+It divides before it multiplies, so it overflows only when the result does.
 
 ## `min`
 

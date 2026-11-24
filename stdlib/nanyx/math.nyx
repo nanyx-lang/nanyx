@@ -1,8 +1,10 @@
 --| Numeric utilities.
 
-  [`abs`], [`sign`] and [`pow`] are generic over the `Num(a)` context, so they take an `int` or a
-  `float`. `abs`, `sign`, [`min`], [`max`], [`minMax`] and [`clamp`] compare through `Ord(a)`, so the
-  last four take a value of any type that has an order, a `string` among them. [`sqrt`], [`exp`],
+  [`abs`], [`sign`], [`mod`] and [`pow`] are generic over the `Num(a)` context, so they take an `int`
+  or a `float`. `mod` is the modulo with the sign of the divisor, where `%` gives the remainder with
+  the sign of the dividend, so `mod(i - 1, length)` wraps an index into a range. [`gcd`] and [`lcm`]
+  take an `int`. `abs`, `sign`, `mod`, [`min`], [`max`], [`minMax`] and [`clamp`] compare through
+  `Ord(a)`, so the last four take a value of any type that has an order, a `string` among them. [`sqrt`], [`exp`],
   [`ln`], [`log10`], [`log2`], [`floor`], [`ceil`], [`round`] and [`truncate`] take a `float`, and so
   do the trigonometric functions, [`sin`], [`cos`], [`tan`], [`asin`], [`acos`], [`atan`] and
   [`atan2`], whose angles are in radians, the hyperbolic functions, [`sinh`], [`cosh`], [`tanh`],
@@ -59,6 +61,31 @@ export def sign: [Num(a), Ord(a)] a -> a = { n ->
     | #less -> -fromInt(1)
     | #greater -> fromInt(1)
     | #equal -> zero
+}
+
+--| `x` modulo `n`, with the sign of `n`: `mod(-7, 3)` is `2`, `mod(7, -3)` is `-2`, and for a positive
+  `n` the result is always in 0..n-1. It works on a `float` too: `mod(-1.5, 1.0)` is `0.5`. `mod(x, 0)`
+  does what `x % 0` does.
+export def mod: [Num(a), Ord(a)] a, a -> a = { x, n ->
+  def r = x % n
+
+  if r < zero and n > zero or r > zero and n < zero then r + n else r
+}
+
+--| The greatest common divisor of `a` and `b`, never negative: `gcd(12, -18)` is `6`, `gcd(0, 0)` is `0`.
+export def gcd: int, int -> int = { a, b ->
+  euclid(abs(a), abs(b))
+}
+
+--| The greatest common divisor of `a` and `b`, neither of them negative, by Euclid's algorithm.
+def euclid: int, int -> int = { a, b ->
+  if b == 0 then a else euclid(b, a % b)
+}
+
+--| The least common multiple of `a` and `b`, never negative: `lcm(4, 6)` is `12`, and `lcm(0, n)` is `0`.
+  It divides before it multiplies, so it overflows only when the result does.
+export def lcm: int, int -> int = { a, b ->
+  if a == 0 or b == 0 then 0 else abs(a) / gcd(a, b) * abs(b)
 }
 
 --| The smaller of `a` and `b`.
