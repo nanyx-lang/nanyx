@@ -201,32 +201,41 @@ let probeLocal = "__nanyx_probe_local"
 /// `dbg`, which a debug build the runtime runs imports from `nanyx:debug` (see `EmitContext.DbgToRuntime`).
 let dbgImport = "__nanyx_dbg"
 
-/// The variables a probe at the start of `rest`, the rest of a chain, may write (see `CoreIrProbes`): those `rest` reads
-/// but does not bind itself. One it never reads again may have been given up already, so a probe leaves it out.
-let private aliveAt (rest: Expr) : Set<int> =
-    let read = HashSet<int>()
-    let bound = HashSet<int>()
-    for e in CoreIrRewrite.allExprs rest do
-        for atom in CoreIrRewrite.directAtoms e do
-            match atom with
-            | AVar var -> read.Add var.Id |> ignore
-            | _ -> ()
-        for var in CoreIrRewrite.directVars e do
-            read.Add var.Id |> ignore
-        match e.Kind with
-        | Let(var, _, _) -> bound.Add var.Id |> ignore
-        | Match(_, arms) ->
-            for arm in arms do
-                for pattern in arm.Patterns do
-                    for var in Pattern.binds pattern do
-                        bound.Add var.Id |> ignore
-        | ForEach loop ->
-            for stream in loop.Streams do
-                for var in [ stream.Element; stream.Cursor; stream.End ] do
-                    bound.Add var.Id |> ignore
-        | _ -> ()
-    read.ExceptWith bound
-    Set.ofSeq read
+/// Which variables a probe in a chain may write (see `CoreIrProbes`): those the rest of the chain after it reads but does
+/// not bind itself. One it never reads again may have been given up already, so a probe leaves it out. Where each
+/// variable is last read and last bound is worked out once for the chain, whose places are its links' indexes and, for
+/// what it ends in, the number of links, so that a chain of n probes takes time in proportion to n, not n² (#2488).
+type private ChainReads(links: Expr list, last: Expr) =
+    let lastRead = Dictionary<int, int>()
+    let lastBound = Dictionary<int, int>()
+    do
+        let parts = (links |> List.map (fun link -> Chain.relink link (Expr.make (Atom AUnit) IrUnit))) @ [ last ]
+        parts
+        |> List.iteri (fun place part ->
+            for e in CoreIrRewrite.allExprs part do
+                for atom in CoreIrRewrite.directAtoms e do
+                    match atom with
+                    | AVar var -> lastRead.[var.Id] <- place
+                    | _ -> ()
+                for var in CoreIrRewrite.directVars e do
+                    lastRead.[var.Id] <- place
+                match e.Kind with
+                | Let(var, _, _) -> lastBound.[var.Id] <- place
+                | Match(_, arms) ->
+                    for arm in arms do
+                        for pattern in arm.Patterns do
+                            for var in Pattern.binds pattern do
+                                lastBound.[var.Id] <- place
+                | ForEach loop ->
+                    for stream in loop.Streams do
+                        for var in [ stream.Element; stream.Cursor; stream.End ] do
+                            lastBound.[var.Id] <- place
+                | _ -> ())
+
+    /// Whether a probe at `place` may write `var`: what follows it reads it, and does not bind it.
+    member _.AliveAfter (place: int) (var: Var) =
+        let after (places: Dictionary<int, int>) = match places.TryGetValue var.Id with | true, at -> at > place | _ -> false
+        after lastRead && not (after lastBound)
 
 /// The code that gives up the value on top of the stack, of type `ty`: its drop function if it is on the heap.
 let private dropValue (ty: IrType) =
@@ -471,6 +480,14 @@ type private FunctionEmitter(context: EmitContext) =
                 | Let(_, value, _) | Do(value, _) -> unlessResuming (rangeOf value) code
                 | _ -> unlessResuming None code
 
+        // Where the chain's probes are, and what each may write.
+        let chainReads =
+            lazy
+                (let links, last = Chain.split expr
+                 let places = Dictionary<Expr, int>(HashIdentity.Reference)
+                 links |> List.iteri (fun place link -> places.[link] <- place)
+                 ChainReads(links, last), places)
+
         // A temporary a state machine keeps in a local (see `SplitPlan.StoredTemps`) is computed where a temporary that
         // waits would be, at its use: after the counting that comes between, and before the next code that runs. The
         // lowering counts before it computes a temporary that waits, as in `f(x, x.length)`, where `x.length` gives up
@@ -514,7 +531,8 @@ type private FunctionEmitter(context: EmitContext) =
                 walk body
             // A probe stores nothing a temporary waits on, so it can stand among them.
             | Do({ Kind = Probe(kind, locals) } as probe, rest) ->
-                addPart (guard expr (this.Probe probe kind locals (aliveAt rest)))
+                let reads, places = chainReads.Value
+                addPart (guard expr (this.Probe probe kind locals (reads.AliveAfter places.[expr])))
                 walk rest
             | Do(value, rest) ->
                 claim value
@@ -546,7 +564,7 @@ type private FunctionEmitter(context: EmitContext) =
     /// and, if the runtime asks, each of its locals `alive` has, written by its printer, passed with its name. Before it
     /// go the marker of its place and its own, `;;@probe 3 statement` (with the function's name after `entry`), from which `WasmBinary` tells the runtime where
     /// each probe is.
-    member this.Probe (probe: Expr) (kind: ProbeKind) (locals: ProbeLocal list) (alive: Set<int>) : string =
+    member this.Probe (probe: Expr) (kind: ProbeKind) (locals: ProbeLocal list) (isAlive: Var -> bool) : string =
         let id = context.ProbeId ()
         let place =
             match probe.Place, context.ShownFile with
@@ -559,7 +577,7 @@ type private FunctionEmitter(context: EmitContext) =
             | Return -> "return"
         let writes =
             locals
-            |> List.filter (fun local -> alive.Contains local.Var.Id && declared.Contains (localName local.Var))
+            |> List.filter (fun local -> isAlive local.Var && declared.Contains (localName local.Var))
             |> List.map (fun local ->
                 let text = probeText.Value
                 join "\n    " [
@@ -725,7 +743,7 @@ type private FunctionEmitter(context: EmitContext) =
         | Prim(FloatBinary op, _) -> internalError $"the operator `{op}` on floats with other than two operands"
         | FloatConstant value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}"
         | FloatConstant value -> $"f64.const {wasmFloatConst value}"
-        | Probe(kind, locals) -> join "\n    " [ this.Probe expr kind locals Set.empty; "i32.const 0" ]
+        | Probe(kind, locals) -> join "\n    " [ this.Probe expr kind locals (fun _ -> false); "i32.const 0" ]
         | Crash messages ->
             // Writes each message to stderr and traps in `Helpers.crashed`, so the runtime reports the stack. `unreachable`
             // after it, which is never reached, lets the code stand wherever a value is expected.
