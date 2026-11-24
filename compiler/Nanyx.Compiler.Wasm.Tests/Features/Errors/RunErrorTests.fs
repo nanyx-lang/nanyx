@@ -258,6 +258,18 @@ println("never")
     Assert.Contains(":1:78: error NYX0111: Not implemented: `???` stands for code not written yet (deferred from compile time)", outcome.StandardError)
 
 [<Fact>]
+let ``Run - a use of ??? stops the program at the ???`` () =
+    let source =
+        normalized """println("start")
+println(???.name + 1)
+println("never")
+"""
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("start\n", outcome.StandardOutput)
+    Assert.Contains(":2:9: error NYX0111: Not implemented: `???` stands for code not written yet (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
 let ``Run - interpolating a call to a function with a deferred error runs up to the call`` () =
     // `dist` cannot be typed, so neither can `a \dist`: the line before it still runs, and the call reports the error.
     let source =

@@ -488,6 +488,28 @@ type private FunctionEmitter(context: EmitContext) =
                  links |> List.iteri (fun place link -> places.[link] <- place)
                  ChainReads(links, last), places)
 
+        // A temporary a state machine keeps in a local (see `SplitPlan.StoredTemps`) is computed where a temporary that
+        // waits would be, at its use: after the counting that comes between, and before the next code that runs. The
+        // lowering counts before it computes a temporary that waits, as in `f(x, x.length)`, where `x.length` gives up
+        // the reference to `x` that the count before the call took (#2490). So the stored temporaries wait in
+        // `storedParts`, after the counting links that follow them and the counting a later stored value starts with.
+        let storedParts = ResizeArray<string>()
+        let addPart (code: string) =
+            parts.AddRange storedParts
+            storedParts.Clear()
+            parts.Add code
+        // Counting peeled off a stored value runs once, before the function first stops: never again as it resumes.
+        let counting (link: Expr) (code: string) = if guarded.Contains link then unlessResuming None code else code
+        let rec peelCounting (link: Expr) (value: Expr) =
+            match value.Kind with
+            | Dup(vars, inner) when storedParts.Count > 0 ->
+                parts.Add(counting link (this.DupVars vars))
+                peelCounting link inner
+            | Drop(vars, inner) when storedParts.Count > 0 ->
+                parts.Add(counting link (dropVars localOf vars))
+                peelCounting link inner
+            | _ -> value
+
         let rec walk (expr: Expr) =
             match expr.Kind with
             | Let(var, value, body) when var.Kind = Temp && not (plan |> Option.exists (fun plan -> plan.StoredTemps.Contains var.Id)) ->
@@ -495,22 +517,27 @@ type private FunctionEmitter(context: EmitContext) =
                 deferred.[var.Id] <- value
                 waiting.Add var
                 walk body
+            | Let(var, value, body) when var.Kind = Temp ->
+                claim value
+                flush ()
+                storedTemps.[var.Id] <- freshLocal "__kept" (CoreIrLayout.valueType var.Type)
+                let value = peelCounting expr value
+                storedParts.Add(guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
+                walk body
             | Let(var, value, body) ->
                 claim value
                 flush ()
-                // A temporary a state machine keeps in a local is stored as a local is (see `SplitPlan.StoredTemps`).
-                if var.Kind = Temp then storedTemps.[var.Id] <- freshLocal "__kept" (CoreIrLayout.valueType var.Type)
-                parts.Add(guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
+                addPart (guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
                 walk body
             // A probe stores nothing a temporary waits on, so it can stand among them.
             | Do({ Kind = Probe(kind, locals) } as probe, rest) ->
                 let reads, places = chainReads.Value
-                parts.Add(guard expr (this.Probe probe kind locals (reads.AliveAfter places.[expr])))
+                addPart (guard expr (this.Probe probe kind locals (reads.AliveAfter places.[expr])))
                 walk rest
             | Do(value, rest) ->
                 claim value
                 flush ()
-                parts.Add(guard expr (join "\n    " [ this.Value false deferred onStack value; dropValue value.Type ]))
+                addPart (guard expr (join "\n    " [ this.Value false deferred onStack value; dropValue value.Type ]))
                 walk rest
             // Counting leaves the stack as it is, so it can happen while temporaries wait to be used.
             | Dup(vars, body) ->
@@ -528,7 +555,7 @@ type private FunctionEmitter(context: EmitContext) =
             | _ ->
                 claim expr
                 if waiting.Count > 0 then internalError "a temporary in the core IR is never used"
-                parts.Add(this.Value tail deferred onStack expr)
+                addPart (this.Value tail deferred onStack expr)
         walk expr
         if deferred.Count > 0 || onStack.Count > 0 then internalError "a temporary in the core IR is used out of order"
         pieces.Add(join "\n    " parts)
