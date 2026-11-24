@@ -441,7 +441,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
             let blockName = fst (blockAround state.ModuleBlocks expr.Span).Value
             errors <- errors @ [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"'{blockName}' is a module block, which can only hold definitions, types and imports, not code to run" |> Diagnostics.about blockName ]
+        // A statement has type variables of its own too: a scope the def before it wrote is not one its own
+        // annotations name.
         | Expr expr ->
+            beginDef ()
             match inferExpr env state expr with
             | Ok (typedExpr, next) ->
                 state <- next
