@@ -62,13 +62,13 @@ The rule (`unannotatedExports`) reports an exported top-level def that does not 
 ```nanyx
 context Decode(a) = (decode: string -> a)
 
--- Linter warning: Type variable only in the result 'parse': take it as a type argument, `type a`, ...
+-- Linter warning: Type variable only in the result 'parse': take it as a type argument, `Type(a)`, ...
 def parse: [Decode(a)] string -> a = { json ->
   decode(json)
 }
 ```
 
-The rule (`resultOnlyTypeVariable`) reports a top-level function whose result has a type variable that a context it requires names, but that no parameter fixes. Nothing at a call then says which type the variable is but a type written on the result, `def p: Person = parse(s)`, and a value whose type only a later use would fix is an error. A [type argument](../tour/functions#type-arguments) says it at the call: `def parse: [Decode(a)] type a, string -> a`, called as `parse(type Person, s)`, or a named one, `into: type`. A parameter fixes a variable its type has, and so does a context that also names one a parameter fixes, as `[Iterable(c, elem = a)] c -> a` fixes `a` through `c`. A def that requires `Typed` is not reported. It has no fix, since taking a type argument changes every call.
+The rule (`resultOnlyTypeVariable`) reports a top-level function whose result has a type variable that a context it requires names, but that no parameter fixes. Nothing at a call then says which type the variable is but a type written on the result, `def p: Person = parse(s)`, and a value whose type only a later use would fix is an error. A [type argument](../tour/functions#type-arguments) says it at the call: `def parse: [Decode(a)] (Type(a), string) -> a`, called as `parse(type Person, s)`, or a named one, `into: Type(into)`. A type argument written the old way, `type a` or `into: type`, fixes its variable too. A parameter fixes a variable its type has, and so does a context that also names one a parameter fixes, as `[Iterable(c, elem = a)] c -> a` fixes `a` through `c`. A def that requires `Typed` is not reported. It has no fix, since taking a type argument changes every call.
 
 ## Unused local value
 

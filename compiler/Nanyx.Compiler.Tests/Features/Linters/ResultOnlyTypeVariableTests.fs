@@ -23,7 +23,7 @@ let private reported (source: string) =
 [<Fact>]
 let ``A context's type variable only in the result is reported at the def's name`` () =
     Assert.Equal<(string * string) list>(
-        [ "Only its result has 'a', which a context it requires names, so nothing at a call says which type it is but a type written on the result: take it as a type argument, `type a`, or a named one, `a: type`, which a call passes as `type T`",
+        [ "Only its result has 'a', which a context it requires names, so nothing at a call says which type it is but a type written on the result: take it as a type argument, `Type(a)`, or a named one, `a: Type(a)`, which a call passes as `type T`",
           "parse" ],
         reported (decode + "def parse: [Decode(a)] string -> a = { json -> decode(json) }\n"))
     Assert.Equal<string list>([ "fallback" ], reported "def fallback: [Default(a)] () -> a = { -> default }\n" |> List.map snd)
@@ -34,6 +34,8 @@ let ``A def whose type is inferred is reported too`` () =
     Assert.Equal<string list>([ "parse"; "read" ], reported source |> List.map snd)
 
 [<Theory>]
+[<InlineData("def parse: [Decode(a)] (Type(a), string) -> a = { t, json -> decode(json) }\n")>]
+[<InlineData("def parse: [Decode(into)] (string, into: Type(into)) -> into = { json, into -> decode(json) }\n")>]
 [<InlineData("def parse: [Decode(a)] type a, string -> a = { t, json -> decode(json) }\n")>]
 [<InlineData("def parse: [Decode(into)] (string, into: type) -> into = { json, into -> decode(json) }\n")>]
 [<InlineData("def total: [Add(a)] list(a) -> a = { xs -> xs \\head ?? crash(\"none\") }\n")>]

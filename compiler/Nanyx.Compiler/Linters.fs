@@ -760,7 +760,7 @@ module ResultOnlyTypeVariables =
                           Span = symbol.Declaration
                           Message =
                             $"Only its result has {quoted}, which a context it requires names, so nothing at a call says which type it is but a type written on the result: "
-                            + $"take it as a type argument, `type {first}`, or a named one, `{first}: type`, which a call passes as `type T`"
+                            + $"take it as a type argument, `Type({first})`, or a named one, `{first}: Type({first})`, which a call passes as `type T`"
                           Related = []
                           Fixes = [] }
             | _ -> None)
