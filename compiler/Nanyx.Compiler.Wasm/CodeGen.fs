@@ -1009,6 +1009,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                     (context.FunctionSlot WasmScheduler.Names.waitResume 1)
                     (context.FunctionSlot WasmScheduler.Names.scopeExitResume 1)
                     (context.FunctionSlot WasmScheduler.Names.hostWaitResume 1)
+                    (context.FunctionSlot WasmScheduler.Names.scopeWaitAnyResume 1)
                     (TaskLowering.resumeTypeName "i32")
                     (indirectTypeName [ "i32"; "i32" ] "i32")
             TaskLowering.globals @ yielding @ scheduler |> String.concat "\n"

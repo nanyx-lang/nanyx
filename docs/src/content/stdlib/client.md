@@ -43,12 +43,12 @@ program reaches the network. A library depends on `nanyx.http.core` and imports
 ## `HttpError`
 
 ```nanyx fragment
-type HttpError = #timeout | #connectionFailed(string) | #invalidUrl | #other(string)
+type HttpError = #timeout | #connectionFailed(string) | #invalidUrl | #cancelled | #other(string)
 ```
 
 Why a request had no response: none came in the request's `timeout`, the server couldn't be
-reached (with what the system said), the URL isn't an absolute `http` or `https` one, or another
-reason, described.
+reached (with what the system said), the URL isn't an absolute `http` or `https` one, the task it
+was made in was cancelled, as a task `race` lost is, or another reason, described.
 
 ## `Http`
 

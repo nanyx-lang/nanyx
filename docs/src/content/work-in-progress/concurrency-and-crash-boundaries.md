@@ -108,20 +108,12 @@ def both: [Async, Http] () -> (Response, Response) = {
 def pages = { urls -> urls \map { url -> start! http.get(url) } \map(await) }   -- every one, at once, in order
 ```
 
-`start!`, `await` and each def as the scope of its tasks are built: how to use them is on [Async](../advanced/async),
-and how they are built on [Async](../deep-dives/async#tasks-and-scopes) in Deep dives. What is still to come was decided
-with the maintainer on 2026-11-17:
+`start!`, `await`, each def as the scope of its tasks, `race` and cancellation are built: how to use them is on
+[Async](../advanced/async), and how they are built on [Async](../deep-dives/async#tasks-and-scopes) in Deep dives.
+What is still to come was decided with the maintainer on 2026-11-17:
 
 - **A default-linter rule flags a task never awaited whose result isn't `()`,** which is more likely a forgotten
   `await` than a task started for what it does.
-- **`race` is the one helper that's needed:** "first to finish, the rest cancelled" can't be written with `start!` and
-  `await`, which waits for one particular task. A timeout is a race against a sleep:
-
-  ```nanyx fragment
-  def fastest = race([{ http.get(mirrorA) }, { http.get(mirrorB) }])
-  def limited = race([{ #some(http.get(url)) }, { sleep(5_000); #timedOut }])
-  ```
-
 - **`concurrent` stays as an option,** an ordinary library function for a scope smaller than the def, such as
   finishing each batch before starting the next:
 
@@ -132,32 +124,18 @@ with the maintainer on 2026-11-17:
 
 Why structured, not free `spawn`: a task can't leak, a def's type says everything it needs, and the scope is where a
 task's crash and cancellation go. A free-running task is a process (below), which is explicit about it.
-## Cancellation without exceptions
+## Cancellation
 
-A cancelled task has to stop, and there's nothing to throw. **Cancellation arrives as a value at the next point where
-the task waits:** every call that waits can give back `#cancelled`, and keeps giving it back for the rest of the
-task, so the code returns through its ordinary error handling:
+Cancellation arrives as a value at the next point where a task waits, as decided with the maintainer on 2026-11-17
+([#1890](https://github.com/nanyx-lang/nanyx/issues/1890)), and is built: `#cancelled` is a case of `HttpError` and
+`FsError`, cancelling a task cancels every task it started, `await` never reports it, and `race` cancels the losers
+([Cancelling](../advanced/async#cancelling)). Still open:
 
-```nanyx fragment
-match http.get(url)
-  | #some(response) -> response
-  | #cancelled -> ...      -- only after the task was cancelled; usually just passed on with try
-  | e -> ...
-```
-
-The task unwinds by returning, so reference counts are dropped as usual and nothing leaks. A loop that never waits
-can't be cancelled until it does, as in Go.
-
-Decided by the maintainer on 2026-11-17 ([#1890](https://github.com/nanyx-lang/nanyx/issues/1890)):
-
-- **`#cancelled` is a case of every waiting call's error type,** such as `HttpError`, not a wrapper around it, so it's
-  matched and passed on like any other failure.
-- **Cancelling a task cancels every task it started,** in its scope.
-- **So `await` never reports cancellation.** A `Task` can't leave its scope, so the task being awaited was always
-  started by the awaiting one, is cancelled with it, and finishes promptly through its own waiting calls. `await`
-  stays `[Async] Task(a) -> a` and gives back whatever that task returned.
-- **`race` cancels the losers,** and **`timeout`** gives `#some(a) | #timedOut`, cancelling the task when time runs
-  out.
+- **`timeout`,** which gives `#some(a) | #timedOut`, cancelling the task when time runs out: `race` against a sleep does
+  it today, so it is a convenience.
+- **A request in flight in a component.** The component roots finish a request whose task was cancelled before they give
+  back `#cancelled`; the canonical ABI's `subtask.cancel` would let them stop waiting at once, as the runtime's do.
+- **What else cancels a task.** Only `race` does today; a crash boundary or a process that ends may too (below).
 
 ## How it runs
 

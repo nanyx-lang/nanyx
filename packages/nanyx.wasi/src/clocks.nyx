@@ -4,6 +4,7 @@ export module clocks
 
 import (
   nanyx/async as (Async)
+  nanyx/host.async as (cancelled)
   nanyx/host.memory
   nanyx/host.runtime
   abi as (aligned8)
@@ -36,7 +37,8 @@ export def ticks: [HostRuntime] () -> int = { _ ->
 }
 
 --| Waits until `ms` milliseconds have passed on `wasi:clocks/monotonic-clock`, while the program's
-  other tasks run: the wait is a subtask, which the shared waitable set waits on (see `waits`).
+  other tasks run: the wait is a subtask, which the shared waitable set waits on (see `waits`). In a
+  cancelled task it returns at once; in one cancelled while it sleeps, once the time has passed.
 export def sleepFor: [Async, HostRuntime] int -> () = { ms ->
-  if ms > 0 then awaitCallAsync(monotonicWaitFor(ms * 1_000_000)) else ()
+  if ms > 0 and not cancelled() then awaitCallAsync(monotonicWaitFor(ms * 1_000_000)) else ()
 }

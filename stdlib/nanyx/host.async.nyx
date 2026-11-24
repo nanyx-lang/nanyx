@@ -19,3 +19,9 @@ export def waitOnHost
   = { wait, timeout ->
     __nanyx_host_wait(wait, timeout)
   }
+
+--| Whether the task running is cancelled, as a task `race` lost is: a host's call that waits gives
+  back `#cancelled` rather than waiting, or stops waiting when it is cancelled meanwhile.
+export def cancelled: [Async, HostRuntime] () -> bool = { _ ->
+  __nanyx_task_cancelled()
+}
