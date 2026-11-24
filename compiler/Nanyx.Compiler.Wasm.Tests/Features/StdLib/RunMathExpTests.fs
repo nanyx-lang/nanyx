@@ -19,6 +19,16 @@ println("{math.exp(2.0)} {math.exp(-1.0)} {math.ln(math.exp(2.0))}")
     |> assertRan "true 2.718281828459045 1.0\n1.0 0.0\n7.38905609893065 0.36787944117144233 2.0\n"
 
 [<Fact>]
+let ``Run - nanyx/math exp reaches the largest floats and the floats below the smallest normal one`` () =
+    let source =
+        """import nanyx/math as math
+
+println("{math.exp(709.78)} {math.exp(-740.0)}")
+"""
+
+    runSource source |> assertRan "1.7928227943945155e308 4.2e-322\n"
+
+[<Fact>]
 let ``Run - nanyx/math ln is NaN below zero and minus infinity at zero`` () =
     let source =
         """import nanyx/math as math
