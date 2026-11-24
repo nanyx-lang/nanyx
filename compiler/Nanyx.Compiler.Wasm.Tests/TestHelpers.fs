@@ -488,6 +488,30 @@ let runSourceWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput:
     try runScriptWithOptions checkMemory inlineCalls standardInput inputPath
     finally Directory.Delete(directory, true)
 
+/// `source` compiled once, as `nanyx run` compiles a script, and run as it would run it, with inlining and without it:
+/// what each run gives, inlined first. Compiling is most of what a run takes, so this takes about half what running it
+/// both ways with `runSourceWithOptions` does (#2553).
+let runSourceBothWays (source: string) : RunOutcome * RunOutcome =
+    let directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}")).FullName
+    let inputPath = Path.Combine(directory, "main.nyx")
+    File.WriteAllText(inputPath, source.ReplaceLineEndings "\n")
+    try
+        let mutable compiled = None
+        let compiling =
+            inProcess (Directory.GetCurrentDirectory()) "" [] (fun shell ->
+                if CliCommands.TryPullScript(shell, inputPath) then
+                    compiled <- Some(CliCommands.CompileScript(shell, inputPath, false))
+                    0
+                else 1)
+        match compiled with
+        | Some result ->
+            let run (inlineCalls: bool) =
+                inProcess (Directory.GetCurrentDirectory()) "" [] (fun shell ->
+                    CliCommands.RunCompiledScript(shell, inputPath, result, MemoryCheck.Off, false, null, inlineCalls))
+            run true, run false
+        | None -> compiling, compiling
+    finally Directory.Delete(directory, true)
+
 let runSourceWith (checkMemory: bool) (standardInput: string) (source: string) : RunOutcome =
     runSourceWithOptions checkMemory true standardInput source
 
