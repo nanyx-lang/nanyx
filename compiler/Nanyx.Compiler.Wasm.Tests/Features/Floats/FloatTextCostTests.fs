@@ -94,16 +94,24 @@ let ``Writing a float as text costs a small multiple of writing an int`` () =
     use program = instantiateWasm writing []
     let time (name: string) =
         program.Call(name, 1000) |> ignore
-        List.init 3 (fun _ ->
-            let clock = Diagnostics.Stopwatch.StartNew()
-            program.Call(name, 100000) |> ignore
-            clock.Elapsed.TotalMilliseconds)
-        |> List.min
-    let floats = time "floats"
-    let wholes = time "wholes"
-    let ints = time "ints"
-    let measured = $"100,000 floats took {floats:F1} ms, whole numbers {wholes:F1} ms, and ints {ints:F1} ms"
+        let clock = Diagnostics.Stopwatch.StartNew()
+        program.Call(name, 100000) |> ignore
+        clock.Elapsed.TotalMilliseconds
+    let measure () = time "floats", time "wholes", time "ints"
     // With big integers of 40 limbs each, a float of 17 digits took over 200 times as long as an int, and a whole
     // number about a hundred times (#2310).
-    Assert.True(floats / ints < 60.0, measured)
-    Assert.True(wholes / ints < 10.0, measured)
+    let holds (floats, wholes, ints) = floats / ints < 60.0 && wholes / ints < 10.0
+    // When the first runs miss, each is run again in turn, and each one's quickest run counts, so that load on the
+    // machine, which slows one run and not another, can't make the test fail (#2388).
+    let first = measure ()
+    let floats, wholes, ints =
+        if holds first then first
+        else
+            let runs = first :: List.init 5 (fun _ -> measure ())
+            runs |> List.map (fun (f, _, _) -> f) |> List.min,
+            runs |> List.map (fun (_, w, _) -> w) |> List.min,
+            runs |> List.map (fun (_, _, i) -> i) |> List.min
+    Assert.True(
+        holds (floats, wholes, ints),
+        $"100,000 floats took {floats:F1} ms, whole numbers {wholes:F1} ms, and ints {ints:F1} ms"
+    )
