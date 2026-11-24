@@ -189,12 +189,13 @@ in progress.
   `Request.path` takes the path from the whole URL the runtime passes. Its component root, `http.host.wasi`, which
   `nanyx build` builds a `wasi:http/service` component from, is on [Components](./components#the-http-hosts-component-root).
 - **The playground host.** `packages/nanyx.playground` declares itself a host with `host = (root = "playground.host",
-  prelude = "playground.prelude")`, and depends only on `nanyx.console.core`. Its `run` takes `[Clock, Console, Random] () -> a`
+  prelude = "playground.prelude")`, and depends only on `nanyx.console.core`. Its `run` takes `[Async, Clock, Console, Random] () -> a`
   and `use`s a `Console`, a `Random` and a `Clock` written on imports of its own, `nanyx:playground` `write`,
   `writeError` (each given the address and byte length of the text in the module's memory), `randomBits` (64 bits, as
   an `i64`), `now` and `ticks` (milliseconds, as `i64`s), and `readLine` and `takeLine`, which a page implements, not
-  on WASI. Its `Clock`'s `sleep` reads `ticks` until the time has passed; no code can call it yet, since the host
-  provides no `Async`. Its `Console`'s `readLine` calls the page's `readLine`, which waits for a line and gives its length in
+  on WASI. It provides `Async`, and its prelude exports it. Its `Clock`'s `sleep` waits on the host, as the core
+  roots' does (see [Async](./async#tasks-and-scopes)), for what is left of it: a page has nothing to wait on but the
+  time, so the host's wait reads `ticks` until the timeout has passed, while every task is waiting. Its `Console`'s `readLine` calls the page's `readLine`, which waits for a line and gives its length in
   bytes, or -1 when the input has ended (`#endOfInput`), then allocates a buffer that long and has `takeLine`
   write the line into it; its `readToEnd` reads lines until the input ends, each followed by a line break
   ([#2151](https://github.com/nanyx-lang/nanyx/issues/2151)). Its prelude re-exports `Console`

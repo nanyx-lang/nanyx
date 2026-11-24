@@ -121,6 +121,7 @@
     <Compile Include="Signatures.fs" />
     <Compile Include="LinterModel.fs" />
     <Compile Include="LinterResultRules.fs" />
+    <Compile Include="LinterTaskRules.fs" />
     <Compile Include="LinterRepeatedPulls.fs" />
     <Compile Include="Linters.fs" />
     <Compile Include="ImportFixes.fs" />

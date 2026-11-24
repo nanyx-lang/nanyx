@@ -28,6 +28,7 @@ The rules that report code which is unused or can never run also tell the editor
 | [`unreachableCode`](#unreachable-code-path) | warning, faint | statements, or a call's arguments, after one that never gives a value or a `return` |
 | [`nonTailRecursion`](#recursion-not-in-tail-position) | info | a function calling itself other than in tail position |
 | [`unusedResults`](#unused-return-value) | error | a statement whose value is thrown away |
+| [`unawaitedTask`](#task-that-is-never-awaited) | warning | a started task whose result is never read |
 | [`uselessExpressions`](#expression-that-does-nothing) | error | a pure statement whose value is thrown away |
 | [`shadowedPreludeNames`](#name-that-hides-a-prelude-member) | warning | a name that hides one the prelude brings into scope |
 | [`semicolons`](#statements-separated-by-) | warning | statements separated by `;` |
@@ -208,7 +209,18 @@ def compute: [Console] int -> int = { n ->
 
 The rule (`unusedResults`) reports a statement of a block, other than its last, whose value is thrown away though it is not `()`: a call made for its effects, whose result nobody reads. A `for` loop is `()` and throws away what its body gives, so it also reports the value a loop's body ends with, `for names | name -> printGreeting(name)`, and in each arm of an `if` or a `match` the body ends with. It is an error by default. Bind the value to a name, or pass it to [`ignore`](../stdlib/prelude#ignore) to say you don't need it, which is what its fix does: `ignore(readLine())`.
 
-It leaves alone a statement whose type is `()`, such as a call to `println`; the last statement of a block, which is the block's value; a workflow keyword's statement, such as `try check(args)` in a `proc` block, whose value the workflow takes; a call of the built-in `dbg`, `dbg(xs)` or `xs \dbg`, written on a line of its own to print a value; a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), which `unreachableCode` is about; and a pure statement, which `uselessExpressions` reports.
+It leaves alone a statement whose type is `()`, such as a call to `println`; the last statement of a block, which is the block's value; a workflow keyword's statement, such as `try check(args)` in a `proc` block, whose value the workflow takes; a call of the built-in `dbg`, `dbg(xs)` or `xs \dbg`, written on a line of its own to print a value; a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), which `unreachableCode` is about; a pure statement, which `uselessExpressions` reports; and a [task](../advanced/async), which `unawaitedTask` is about.
+
+## Task that is never awaited
+
+```nanyx fragment
+def main: [Async, Console] () -> () = {
+  start! compute(21) -- Linter warning: This task gives back a 'int', which is never read: await it, or start it for what it does, giving back `()`
+  println("done")
+}
+```
+
+The rule (`unawaitedTask`) reports a [task](../advanced/async) that is started and then dropped though what it gives back is not `()`: a `start!` written as a statement of its own, or a call that gives back a `Task` whose value is thrown away. The task still runs, since the def that started it waits for it before it returns, but nothing reads what it gives back, which usually means an `await` left out. It is a warning by default. Await the task, bind it to a name and await it later, or, if it is started for what it does, have it give back `()`. `unusedResults` leaves such a statement alone, so it is reported once.
 
 ## Expression that does nothing
 

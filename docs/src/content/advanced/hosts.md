@@ -147,12 +147,13 @@ A component is built from the host's component root, `http.host.wasi`, which pro
 
 The playground host, `nanyx.playground`, runs a console program in a web page, as the [playground](../standard-tools/playground)
 does. It stands in for the console host: it provides the same `Console`, from `nanyx.console.core`, whose output goes
-to the page, `Random`, drawn from a generator the page seeds, and `Clock`, the browser's time, so a program that needs
-only those compiles under it unchanged. It provides nothing else, no `Env`, `FileSystem`, `Http` or `Async`, so a program that needs one of them is
-an error naming the host:
+to the page, `Random`, drawn from a generator the page seeds, `Clock`, the browser's time, and `Async`, so that a
+program can start [tasks](./async) and sleep, so a program that needs only those compiles under it unchanged. It
+provides nothing else, no `Env`, `FileSystem` or `Http`, so a program that needs one of them is an error naming the
+host:
 
 ```
-error NYX0205: 'file.read' requires the contexts 'Async' and 'FileSystem', which the host 'nanyx.playground/playground.host' does not provide
+error NYX0205: 'file.read' requires the context 'FileSystem', which the host 'nanyx.playground/playground.host' does not provide
 ```
 
 The compiler built for the browser runs a script under it unless the script's `::host` names another; elsewhere a
