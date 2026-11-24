@@ -1,0 +1,17 @@
+module main
+
+--| Sleeps for `ms` milliseconds, then says so.
+def wakeAfter: [Async, Clock, Console] string, int -> () = { name, ms ->
+  sleep(ms)
+  println("{name} wakes")
+}
+
+@entry
+def main = {
+  def slow = start! wakeAfter("the slow sleeper", 300)
+  def quick = start! wakeAfter("the quick sleeper", 50)
+  println("both are asleep")
+  await(slow)
+  await(quick)
+  println("both are awake")
+}
