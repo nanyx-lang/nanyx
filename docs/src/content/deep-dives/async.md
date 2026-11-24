@@ -178,8 +178,13 @@ Nothing starts it: like `Console`, the host provides it.
   rather than the call. A lambda requires its contexts where it is called, so nothing ties a lambda that starts a task
   to the def it is written in; `TaskCaptures.escapeErrors` reports a def that is a scope whose result holds one. Local
   defs and lambdas are not scopes: their tasks belong to the def they are written in.
-- **Tasks share only values.** `TaskCaptures.captureErrors` reports a call of `start` whose function requires a
-  `memory` block's `Memory`, as one that uses a cell or a reference does (`NYX0279`).
+- **Tasks share only values.** A function that uses a cell or a reference requires its `memory` block's `Memory`, and
+  a task's function must not (`NYX0279`). The check is on types, not names (`TaskWork`): where inference names
+  `Async.start` or `Async.race`, the context variables of the functions its type takes are _work variables_; a def
+  generalised over what a work variable came to stand for has work variables of its own, so `def spawn = { f -> start(f) }`
+  and `def go = start` start tasks as far as the check is concerned, at each place they are named. Once the module is
+  inferred, `TaskCaptures.captureErrors` reports each place where a work variable stands for contexts with a `Memory`,
+  at the call's argument.
 - **The scheduler** (`WasmScheduler`) runs an instance's tasks on its one stack, as state machines. A task is a block
   of the function it runs, the frame it stopped in, its scope and its own innermost scope, the function that gives its
   result, and the regions of the `memory` blocks it is in, which the scheduler swaps in when it runs it. The queue is

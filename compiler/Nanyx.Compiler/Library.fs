@@ -565,7 +565,7 @@ module Compiler =
                     ofDef @ ofType
                 // A task holds nothing of a `memory` block (see `TaskCaptures`).
                 let taskErrors =
-                    TaskCaptures.captureErrors state.Symbols state.References (fun node -> state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst)) desugared
+                    TaskCaptures.captureErrors state.TaskWork (Unifier.apply subst) desugared
                     @ TaskCaptures.escapeErrors
                         (fun name ->
                             match types |> Map.tryFind name |> Option.map (Unifier.apply subst >> Unifier.unalias) with
