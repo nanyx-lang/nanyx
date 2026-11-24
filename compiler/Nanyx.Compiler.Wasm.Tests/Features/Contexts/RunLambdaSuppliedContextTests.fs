@@ -136,3 +136,60 @@ let ``Run - a lambda inside a handler's lambda uses the instance it is given`` (
 println(additive { [1, 2, 3] \list.map { x -> combine(x, combineAll([x, 10])) } \combineAll })
 """
     runSource (normalized source) |> assertRan "42\n"
+// A lambda given an instance of a parameterised context finds that instance's members by their names, even inside a
+// `use` of the same context at other type arguments, whose members the lambda captures as well (#2570).
+
+let private gathering =
+    """context Pushed(a) = (push: a -> ())
+
+def gather: [c] ([c, Pushed(b)] () -> ()) -> list(b) = { block ->
+  memory {
+    mut found = []
+    use Pushed(b)(push = { x -> found := [x, ...found] }) in block()
+    list.reverse(found)
+  }
+}
+
+def gatherInts: ([Pushed(int)] () -> ()) -> list(int) = { block ->
+  memory {
+    mut found = []
+    use Pushed(int)(push = { x -> found := [x, ...found] }) in block()
+    list.reverse(found)
+  }
+}
+
+def pushTwice: [Pushed(int)] int -> () = { n ->
+  push(n)
+  push(n * 10)
+}
+"""
+
+[<Fact>]
+let ``Run - a lambda inside a use of the same context at another type finds the instance it is given`` () =
+    let source =
+        gathering
+        + """
+@entry
+def main = {
+  use Pushed(string)(push = { s -> println("outer {s}") }) in
+    println(gather { push(1) })
+    println(gatherInts { pushTwice(2) })
+    push("still outer")
+}
+"""
+    runSource (normalized source) |> assertRan "[1]\n[2, 20]\nouter still outer\n"
+
+[<Fact>]
+let ``Run - a use inside the lambda of the same context at another type is the one its own calls find`` () =
+    let source =
+        gathering
+        + """
+@entry
+def main = {
+  println(gather {
+    push(0)
+    use Pushed(string)(push = { s -> println("inner {s}") }) in push("a")
+  })
+}
+"""
+    runSource (normalized source) |> assertRan "inner a\n[0]\n"

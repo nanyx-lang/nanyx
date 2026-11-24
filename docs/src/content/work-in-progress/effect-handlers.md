@@ -55,10 +55,9 @@ builders that take a function requiring it and run it under a handler that appen
 [Lazy sequences](../deep-dives/lazy-sequences#pushing-with-emit). What is left:
 
 - **No keyword yet.** `emit! x` would need a keyword kind for a plain call, which is undecided.
-- **The builders write their instance's type,** `use Emit(a)(emit = ...)`, until
-  [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) lets a `use` find its members once its type is settled.
-- **A builder inside a `use` of `Emit` at another type** binds the builder's `emit` to the outer handler in the
-  backend ([#2570](https://github.com/nanyx-lang/nanyx/issues/2570)).
+- **The builders still write their instance's type,** `use Emit(a)(emit = ...)`. Since
+  [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) a `use` finds its members once its type is settled, so the
+  `(a)` can go.
 - **`seq { }` stays lazy,** and its block keeps the type `[c] () -> [d] seq(a)` the `#yield` rewrite gives it. It
   becomes `[Yield(a)] () -> ()` when `seq` is a capturing handler of `Yield`
   ([#2426](https://github.com/nanyx-lang/nanyx/issues/2426)).
@@ -265,7 +264,7 @@ stops again as soon as it is resumed could keep its block.
 |---|---|---|
 | A `use` whose instance's type is settled after it finds its members | [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) | done |
 | `Emit(a)`, and the builders pushing through it | [#2566](https://github.com/nanyx-lang/nanyx/issues/2566) | done |
-| A builder inside a `use` of `Emit` at another type finds its own handler | [#2570](https://github.com/nanyx-lang/nanyx/issues/2570) | Ready |
+| A builder inside a `use` of `Emit` at another type finds its own handler | [#2570](https://github.com/nanyx-lang/nanyx/issues/2570) | done |
 | A frame can be dropped: a drop function for each state, beside its resume entry, from the types the emitter knows where it saves the variables | | proposed |
 | `@resumes(#once \| #many)`: split points for capturing members, a delimiter at each `use`, `k` given to the handler, each stop marked with the handler it is for, and the scoped-context rule | | proposed |
 | A frame can be copied, for `#many`: a copy function for each state, and a resume that copies only when the frames are shared | | proposed |
