@@ -210,7 +210,7 @@ let rec internal inferCall
         | Some (_, Some lookup) -> inferLookup inferExpr env state expr lookup (Expression.from expr (IdentifierExpr name)) spanOpt args
         | Some (scheme, None) ->
             let mutable current = state
-            let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
+            let funcTy, nextState = instantiate (recordReference expr scheme current |> HiddenKeywords.note env expr name scheme) scheme
             let written = contextRequirementsOf env state name |> Option.defaultValue []
             let env, funcTy, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
             current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }
