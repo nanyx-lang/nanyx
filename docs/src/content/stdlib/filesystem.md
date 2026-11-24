@@ -50,13 +50,14 @@ depends on `nanyx.fs` and imports `nanyx.fs/filesystem`.
 ## `FsError`
 
 ```nanyx fragment
-type FsError = #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #other(string)
+type FsError = #notFound | #permissionDenied | #isDirectory | #notDirectory | #alreadyExists | #cancelled | #other(string)
 ```
 
 Why a file or directory couldn't be read, written, deleted or made: there is nothing at the path;
 the program may not reach it (a path outside the directories the host gave it is this too); it
-is a directory where a file was meant, or the other way round; or there is something at the path
-already. Anything else is `#other`, with what the host said.
+is a directory where a file was meant, or the other way round; there is something at the path
+already; or the task it was asked in was cancelled, as a task `race` lost is, so nothing was done.
+Anything else is `#other`, with what the host said.
 
 ## `FileSystem`
 

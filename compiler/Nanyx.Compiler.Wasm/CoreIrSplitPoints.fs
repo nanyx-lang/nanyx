@@ -32,7 +32,8 @@ type SplitPlan =
       Count: int }
 
 /// The intrinsics that can stop the task running (see `WasmScheduler`): a wait for a task, and the end of a scope.
-let private waitingIntrinsics = set [ NyxCompiler.Intrinsics.taskWait; NyxCompiler.Intrinsics.scopeExit; NyxCompiler.Intrinsics.hostWait ]
+let private waitingIntrinsics =
+    set [ NyxCompiler.Intrinsics.taskWait; NyxCompiler.Intrinsics.scopeExit; NyxCompiler.Intrinsics.hostWait; NyxCompiler.Intrinsics.scopeWaitAny ]
 
 /// Whether `expr` is a split point, given the functions that are state machines.
 let isSplit (machines: Set<string>) (expr: Expr) : bool =

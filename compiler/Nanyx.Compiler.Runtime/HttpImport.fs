@@ -15,6 +15,8 @@ open Wasmtime
 ///   while it is in flight;
 /// - `poll(handle, kind) -> i32` gives -1 while the request is in flight; once it is answered, it keeps the answer,
 ///   writes what kind of answer it is at `kind` (see `Answer`), gives its length in bytes, and is done with the handle;
+/// - `forget(handle)` is done with the request of `handle` without its answer, as a cancelled task is: it is answered,
+///   but nothing keeps the answer;
 /// - `send(request, length, kind) -> i32` makes the request, blocking until it is answered, and keeps the answer as
 ///   `poll` does, for a module built before `start`;
 /// - `receive(destination)` copies the kept answer to `destination`, where the program has made room for it.
@@ -162,6 +164,7 @@ module HttpImport =
                     inFlight.Remove handle |> ignore
                     keep (caller.GetMemory "memory") kind answered.Result
                 | _ -> -1))
+        linker.DefineFunction(moduleName, "forget", Action<int>(fun handle -> inFlight.Remove handle |> ignore))
         linker.DefineFunction(
             moduleName,
             "send",

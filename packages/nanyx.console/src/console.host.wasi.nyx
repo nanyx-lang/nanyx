@@ -19,6 +19,7 @@
 import (
   nanyx/async as (Async)
   nanyx/clock as (Clock)
+  nanyx/host.async as (cancelled)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/random as (Random)
@@ -139,15 +140,30 @@ export def provide
     )
 
     use FileSystem(
-      readFile = { at -> readWith(at, { address, count -> stringAt(address, count) }) }
-      readFileBytes = { at -> readWith(at, { address, count -> bytesAt(address, count) }) }
-      readFileChunk = { at, offset, length -> chunkAt(at, offset, length) }
-      writeFile = { at, text -> writeWith(at, text, createFlag + truncateFlag, overwriting) }
-      appendFile = { at, text -> writeWith(at, text, createFlag, appending) }
-      pathExists = { at -> existsAt(at) }
-      deleteFile = { at -> deleteAt(at) }
-      listDirectory = { at -> namesAt(at) }
-      createDirectory = { at -> createDirectoryAt(at) }
+      readFile = { at -> if cancelled()
+          then #cancelled
+          else readWith(at, { address, count -> stringAt(address, count) })
+      }
+      readFileBytes = { at -> if cancelled()
+          then #cancelled
+          else readWith(at, { address, count -> bytesAt(address, count) })
+      }
+      readFileChunk = { at, offset, length -> if cancelled()
+          then #cancelled
+          else chunkAt(at, offset, length)
+      }
+      writeFile = { at, text -> if cancelled()
+          then #cancelled
+          else writeWith(at, text, createFlag + truncateFlag, overwriting)
+      }
+      appendFile = { at, text -> if cancelled()
+          then #cancelled
+          else writeWith(at, text, createFlag, appending)
+      }
+      pathExists = { at -> if cancelled() then false else existsAt(at) }
+      deleteFile = { at -> if cancelled() then #cancelled else deleteAt(at) }
+      listDirectory = { at -> if cancelled() then #cancelled else namesAt(at) }
+      createDirectory = { at -> if cancelled() then #cancelled else createDirectoryAt(at) }
     )
 
     use Http(sendRequest = { request -> sendThroughWasi(request) })
