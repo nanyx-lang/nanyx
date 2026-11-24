@@ -96,7 +96,7 @@ def insertAll: [Eq(k), Hash(k)] map(k, v), list((k, v)) -> map(k, v) = {
 }
 
 --| The map with no keys. `[]` where a map is expected is this map.
-export def map.empty: map(k, v) = __nanyx_map_of_entries([])
+export def map.empty: map(k, v) = __nanyx_map_of_store([])
 
 --| What the compiler makes a map literal call: `["a" => 1, "b" => 2]` is
   `__map([("a", 1), ("b", 2)])`. A key written twice holds the value written last.
@@ -131,37 +131,37 @@ export def map.build: [Eq(k), Hash(k), c] ([c, Emit((k, v))] () -> ()) -> map(k,
   is the same for two maps with the same keys, however they were built, but that a program should
   not rely on. Sort the list for an order of your own: `map.toList(m) \list.sortBy { entry -> entry.0 }`.
 export def map.toList: map(k, v) -> list((k, v)) = { m ->
-  __nanyx_map_entries(m)
+  __nanyx_map_store(m)
 }
 
 --| The entries of `m` as a sequence of key-value pairs, in the order [`map.toList`] gives them.
 export def map.toSeq: map(k, v) -> seq((k, v)) = { m ->
-  list.toSeq(__nanyx_map_entries(m))
+  list.toSeq(__nanyx_map_store(m))
 }
 
 --| The value `m` holds for `key`, or `#notFound`. Calling the map, `m(key)`, is the same.
 export def map.get: [Eq(k), Hash(k)] map(k, v), k -> #some(v) | #notFound = { m, key ->
-  lookupEntry(__nanyx_map_entries(m), key, hash(key))
+  lookupEntry(__nanyx_map_store(m), key, hash(key))
 }
 
 --| Whether `m` holds a value for `key`.
 export def map.containsKey: [Eq(k), Hash(k)] map(k, v), k -> bool = { m, key ->
-  isSome(lookupEntry(__nanyx_map_entries(m), key, hash(key)))
+  isSome(lookupEntry(__nanyx_map_store(m), key, hash(key)))
 }
 
 --| `m` with `key` holding `value`, in place of any value it held before.
 export def map.insert: [Eq(k), Hash(k)] map(k, v), k, v -> map(k, v) = { m, key, value ->
-  __nanyx_map_of_entries(insertEntry(__nanyx_map_entries(m), key, value))
+  __nanyx_map_of_store(insertEntry(__nanyx_map_store(m), key, value))
 }
 
 --| `m` without `key` or its value. A map that has no `key` is given back as it is.
 export def map.remove: [Eq(k), Hash(k)] map(k, v), k -> map(k, v) = { m, key ->
-  __nanyx_map_of_entries(removeEntry(__nanyx_map_entries(m), key, hash(key), []))
+  __nanyx_map_of_store(removeEntry(__nanyx_map_store(m), key, hash(key), []))
 }
 
 --| The number of keys.
 export def map.length: map(k, v) -> int = { m ->
-  list.length(__nanyx_map_entries(m))
+  list.length(__nanyx_map_store(m))
 }
 
 --| `groups` with the elements of `xs` added, each to the front of the group of its key.
@@ -175,28 +175,28 @@ def groupInto: [Eq(b), Hash(b), c] list(a), ([c] a -> b), map(b, list(a)) -> map
 --| The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
   order.
 export def list.groupBy: [Eq(b), Hash(b), c] list(a), ([c] a -> b) -> map(b, list(a)) = { xs, key ->
-  def groups = __nanyx_map_entries(groupInto(xs, key, map.empty))
-  __nanyx_map_of_entries(list.map(groups, { group -> (group.0, list.reverse(group.1)) }))
+  def groups = __nanyx_map_store(groupInto(xs, key, map.empty))
+  __nanyx_map_of_store(list.map(groups, { group -> (group.0, list.reverse(group.1)) }))
 }
 
 --| The keys of `m`, in the order of [`map.toList`].
 export def map.keys: map(k, v) -> list(k) = { m ->
-  list.map(__nanyx_map_entries(m), { entry -> entry.0 })
+  list.map(__nanyx_map_store(m), { entry -> entry.0 })
 }
 
 --| The values of `m`, in the order of [`map.toList`].
 export def map.values: map(k, v) -> list(v) = { m ->
-  list.map(__nanyx_map_entries(m), { entry -> entry.1 })
+  list.map(__nanyx_map_store(m), { entry -> entry.1 })
 }
 
 --| Whether `m` has no keys.
 export def map.isEmpty: map(k, v) -> bool = { m ->
-  list.isEmpty(__nanyx_map_entries(m))
+  list.isEmpty(__nanyx_map_store(m))
 }
 
 --| `step` applied to `acc` and each key and value of `m` in turn, in the order of [`map.toList`].
 export def map.fold: [c] map(k, v), b, ([c] b, k, v -> b) -> b = { m, acc, step ->
-  list.fold(__nanyx_map_entries(m), acc, { acc, entry -> step(acc, entry.0, entry.1) })
+  list.fold(__nanyx_map_store(m), acc, { acc, entry -> step(acc, entry.0, entry.1) })
 }
 
 --| The values of `m` combined with `f`, in the order of [`map.toList`], starting from the first: `["a" => 4, "b" => 5]
@@ -208,21 +208,21 @@ export def map.reduce: [c] map(k, v), ([c] v, v -> v) -> #some(v) | #none = { m,
 
 --| `m` with `f` applied to each value. The keys stay as they are, in the same order.
 export def map.map: [c] map(k, v), ([c] v -> w) -> map(k, w) = { m, f ->
-  __nanyx_map_of_entries(list.map(__nanyx_map_entries(m), { entry -> (entry.0, f(entry.1)) }))
+  __nanyx_map_of_store(list.map(__nanyx_map_store(m), { entry -> (entry.0, f(entry.1)) }))
 }
 
 --| The entries of `m` whose key and value pass `keep`, in the same order.
 export def map.filter: [c] map(k, v), ([c] k, v -> bool) -> map(k, v) = { m, keep ->
-  __nanyx_map_of_entries(list.filter(__nanyx_map_entries(m), { entry -> keep(entry.0, entry.1) }))
+  __nanyx_map_of_store(list.filter(__nanyx_map_store(m), { entry -> keep(entry.0, entry.1) }))
 }
 
 --| The entries of `m` whose key and value `f` gives `#some` for, each with the new value it gives,
   in the same order: a [`map.filter`] and a [`map.map`] in one walk. Keys `f` gives `#skip` for
   are left out.
 export def map.filterMap: [c] map(k, v), ([c] k, v -> #some(w) | #skip) -> map(k, w) = { m, f ->
-  __nanyx_map_of_entries(
+  __nanyx_map_of_store(
     list.filterMap(
-      __nanyx_map_entries(m)
+      __nanyx_map_store(m)
       { entry ->
         match f(entry.0, entry.1)
           | #some(value) -> #some(entry.0, value)
@@ -235,13 +235,13 @@ export def map.filterMap: [c] map(k, v), ([c] k, v -> #some(w) | #skip) -> map(k
 --| Whether `test` holds for any key and its value (so `false` for an empty map). It stops at the
   first entry it holds for.
 export def map.any: [c] map(k, v), ([c] k, v -> bool) -> bool = { m, test ->
-  list.any(__nanyx_map_entries(m), { entry -> test(entry.0, entry.1) })
+  list.any(__nanyx_map_store(m), { entry -> test(entry.0, entry.1) })
 }
 
 --| Whether `test` holds for every key and its value (so `true` for an empty map). It stops at the
   first entry it fails for.
 export def map.all: [c] map(k, v), ([c] k, v -> bool) -> bool = { m, test ->
-  list.all(__nanyx_map_entries(m), { entry -> test(entry.0, entry.1) })
+  list.all(__nanyx_map_store(m), { entry -> test(entry.0, entry.1) })
 }
 
 --| Whether the maps `m` and `n` hold the same keys, compared with `==`, and equal values for each,
@@ -250,12 +250,12 @@ export def map.all: [c] map(k, v), ([c] k, v -> bool) -> bool = { m, test ->
 export def __mapEqualsBy
   : [Eq(k), c] map(k, v), map(k, v), ([c] v, v -> bool) -> bool
   = { m, n, same ->
-    def theirs = __nanyx_map_entries(n)
+    def theirs = __nanyx_map_store(n)
 
-    if list.length(__nanyx_map_entries(m)) != list.length(theirs)
+    if list.length(__nanyx_map_store(m)) != list.length(theirs)
       then false
       else list.all(
-        __nanyx_map_entries(m)
+        __nanyx_map_store(m)
         { entry ->
           match findEntry(theirs, entry.0)
             | #some(value) -> same(entry.1, value)
@@ -270,7 +270,7 @@ export def __mapEqualsBy
 export def __mapToString
   : [c] map(k, v), ([c] k -> string), ([c] v -> string) -> string
   = { m, showKey, showValue ->
-    match __nanyx_map_entries(m)
+    match __nanyx_map_store(m)
       | [] -> "[=>]"
       | entries -> __listToString(
         entries
@@ -290,7 +290,7 @@ export def map.update
   the value is `other`'s, as a later entry wins in `map.fromList`, so `defaults \map.union(overrides)`
   gives the overrides.
 export def map.union: [Eq(k), Hash(k)] map(k, v), map(k, v) -> map(k, v) = { m, other ->
-  insertAll(m, __nanyx_map_entries(other))
+  insertAll(m, __nanyx_map_store(other))
 }
 
 --| `m` with each of `entries` inserted in turn, where `m` has the key already holding `combine` of
@@ -314,7 +314,7 @@ def combineAll: [Eq(k), Hash(k), c] map(k, v), list((k, v)), ([c] v, v -> v) -> 
 export def map.unionWith
   : [Eq(k), Hash(k), c] map(k, v), map(k, v), ([c] v, v -> v) -> map(k, v)
   = { m, other, combine ->
-    combineAll(m, __nanyx_map_entries(other), combine)
+    combineAll(m, __nanyx_map_store(other), combine)
   }
 
 -- Sets ------------------------------------------------------------------------------------------
@@ -348,7 +348,7 @@ def placeElement: [Hash(a)] list(a), a, int, list(a) -> list(a) = {
 }
 
 --| The set with no elements.
-export def set.empty: set(a) = __nanyx_set_of_elements([])
+export def set.empty: set(a) = __nanyx_set_of_store([])
 
 --| The set of the elements of `xs`, each once.
 export def set.fromList: [Eq(a), Hash(a)] list(a) -> set(a) = { xs ->
@@ -376,64 +376,64 @@ export def set.build: [Eq(a), Hash(a), c] ([c, Emit(a)] () -> ()) -> set(a) = { 
 --| The elements of `s`, in the order of their hashes, as [`map.toList`] gives a map's keys: the same
   for two sets with the same elements, however they were built, but not one a program should rely on.
 export def set.toList: set(a) -> list(a) = { s ->
-  __nanyx_set_elements(s)
+  __nanyx_set_store(s)
 }
 
 --| The elements of `s` as a sequence, in the order [`set.toList`] gives them.
 export def set.toSeq: set(a) -> seq(a) = { s ->
-  list.toSeq(__nanyx_set_elements(s))
+  list.toSeq(__nanyx_set_store(s))
 }
 
 --| Whether `s` holds `x`.
 export def set.contains: [Eq(a), Hash(a)] set(a), a -> bool = { s, x ->
-  holdsElement(__nanyx_set_elements(s), x, hash(x))
+  holdsElement(__nanyx_set_store(s), x, hash(x))
 }
 
 --| `s` with `x` added. A set that holds `x` is given back as it is.
 export def set.insert: [Eq(a), Hash(a)] set(a), a -> set(a) = { s, x ->
   def h = hash(x)
 
-  if holdsElement(__nanyx_set_elements(s), x, h)
+  if holdsElement(__nanyx_set_store(s), x, h)
     then s
-    else __nanyx_set_of_elements(placeElement(__nanyx_set_elements(s), x, h, []))
+    else __nanyx_set_of_store(placeElement(__nanyx_set_store(s), x, h, []))
 }
 
 --| `s` without `x`. A set that does not hold `x` is given back as it is.
 export def set.remove: [Eq(a), Hash(a)] set(a), a -> set(a) = { s, x ->
-  __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), { y -> y != x }))
+  __nanyx_set_of_store(list.filter(__nanyx_set_store(s), { y -> y != x }))
 }
 
 --| The number of elements.
 export def set.length: set(a) -> int = { s ->
-  list.length(__nanyx_set_elements(s))
+  list.length(__nanyx_set_store(s))
 }
 
 --| Whether `s` has no elements.
 export def set.isEmpty: set(a) -> bool = { s ->
-  list.isEmpty(__nanyx_set_elements(s))
+  list.isEmpty(__nanyx_set_store(s))
 }
 
 --| `step` applied to `acc` and each element of `s` in turn, in the order of [`set.toList`].
 export def set.fold: [c] set(a), b, ([c] b, a -> b) -> b = { s, acc, step ->
-  list.fold(__nanyx_set_elements(s), acc, step)
+  list.fold(__nanyx_set_store(s), acc, step)
 }
 
 --| The elements of `s` combined with `f`, in the order of [`set.toList`], starting from the first: `set[1, 2, 3, 4, 5]
   \set.reduce { * }` is `#some(120)`, and an empty set, having no first element, gives `#none`. To
   start from another value, use [`set.fold`].
 export def set.reduce: [c] set(a), ([c] a, a -> a) -> #some(a) | #none = { s, f ->
-  list.reduce(__nanyx_set_elements(s), f)
+  list.reduce(__nanyx_set_store(s), f)
 }
 
 --| The set of `f` of each element of `s`. Elements that `f` makes equal are kept once, where the
   first of them was.
 export def set.map: [Eq(b), Hash(b), c] set(a), ([c] a -> b) -> set(b) = { s, f ->
-  set.fromList(list.map(__nanyx_set_elements(s), f))
+  set.fromList(list.map(__nanyx_set_store(s), f))
 }
 
 --| The elements of `s` that pass `keep`, in the same order.
 export def set.filter: [c] set(a), ([c] a -> bool) -> set(a) = { s, keep ->
-  __nanyx_set_of_elements(list.filter(__nanyx_set_elements(s), keep))
+  __nanyx_set_of_store(list.filter(__nanyx_set_store(s), keep))
 }
 
 --| The set of the values `f` gives as `#some`, leaving out the elements it gives `#skip` for: a
@@ -442,67 +442,67 @@ export def set.filter: [c] set(a), ([c] a -> bool) -> set(a) = { s, keep ->
 export def set.filterMap
   : [Eq(b), Hash(b), c] set(a), ([c] a -> #some(b) | #skip) -> set(b)
   = { s, f ->
-    set.fromList(list.filterMap(__nanyx_set_elements(s), f))
+    set.fromList(list.filterMap(__nanyx_set_store(s), f))
   }
 
 --| The set of the values `f` emits for each element in turn, through [`Emit`], as in
   [`list.select`]. Values that come out equal are kept once, where the first of them was.
 export def set.select: [Eq(b), Hash(b), c] set(a), ([c, Emit(b)] a -> ()) -> set(b) = { s, f ->
-  set.fromList(list.select(__nanyx_set_elements(s), f))
+  set.fromList(list.select(__nanyx_set_store(s), f))
 }
 
 --| Whether `test` holds for any element (so `false` for an empty set). It stops at the first element
   it holds for.
 export def set.any: [c] set(a), ([c] a -> bool) -> bool = { s, test ->
-  list.any(__nanyx_set_elements(s), test)
+  list.any(__nanyx_set_store(s), test)
 }
 
 --| Whether `test` holds for every element (so `true` for an empty set). It stops at the first
   element it fails for.
 export def set.all: [c] set(a), ([c] a -> bool) -> bool = { s, test ->
-  list.all(__nanyx_set_elements(s), test)
+  list.all(__nanyx_set_store(s), test)
 }
 
 --| Whether `t` holds every element of `s`.
 export def set.isSubset: [Eq(a), Hash(a)] set(a), set(a) -> bool = { s, t ->
-  list.all(__nanyx_set_elements(s), { x -> set.contains(t, x) })
+  list.all(__nanyx_set_store(s), { x -> set.contains(t, x) })
 }
 
 --| Whether the sets `s` and `t` hold the same elements, as `same` compares two, whatever order they
   were added in. The `==` the compiler derives for a set calls it.
 export def __setEqualsBy: [c] set(a), set(a), ([c] a, a -> bool) -> bool = { s, t, same ->
-  def theirs = __nanyx_set_elements(t)
+  def theirs = __nanyx_set_store(t)
 
-  if list.length(__nanyx_set_elements(s)) != list.length(theirs)
+  if list.length(__nanyx_set_store(s)) != list.length(theirs)
     then false
-    else list.all(__nanyx_set_elements(s), { x -> list.any(theirs, { y -> same(x, y) }) })
+    else list.all(__nanyx_set_store(s), { x -> list.any(theirs, { y -> same(x, y) }) })
 }
 
 --| What the derived `toString` of a set calls: the elements of `s` as a list of them is written,
   each written by `show`: `[1, 2]`.
 export def __setToString: [c] set(a), ([c] a -> string) -> string = { s, show ->
-  __listToString(__nanyx_set_elements(s), show)
+  __listToString(__nanyx_set_store(s), show)
 }
 
 --| The elements of `s` and those of `t`.
 export def set.union: [Eq(a), Hash(a)] set(a), set(a) -> set(a) = { s, t ->
-  list.fold(__nanyx_set_elements(t), s, set.insert)
+  list.fold(__nanyx_set_store(t), s, set.insert)
 }
 
 --| The elements of `s` that `t` holds too.
 export def set.intersection: [Eq(a), Hash(a)] set(a), set(a) -> set(a) = { s, t ->
-  def theirs = __nanyx_set_elements(t)
+  def theirs = __nanyx_set_store(t)
 
-  __nanyx_set_of_elements(
-    list.filter(__nanyx_set_elements(s), { x -> list.any(theirs, { y -> y == x }) })
+  __nanyx_set_of_store(
+    list.filter(__nanyx_set_store(s), { x -> list.any(theirs, { y -> y == x }) })
   )
 }
 
 --| The elements of `s` that `t` does not hold.
 export def set.difference: [Eq(a), Hash(a)] set(a), set(a) -> set(a) = { s, t ->
-  def theirs = __nanyx_set_elements(t)
+  def theirs = __nanyx_set_store(t)
 
-  __nanyx_set_of_elements(
-    list.filter(__nanyx_set_elements(s), { x -> not list.any(theirs, { y -> y == x }) })
+  __nanyx_set_of_store(
+    list.filter(__nanyx_set_store(s), { x -> not list.any(theirs, { y -> y == x }) })
   )
 }

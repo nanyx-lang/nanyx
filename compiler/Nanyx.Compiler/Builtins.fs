@@ -98,16 +98,15 @@ module Intrinsics =
     /// The hash of a value of a type the compiler hashes (see `WellKnownContexts.hashing`), by its structure: values
     /// that `==` compares equal by their structure have the same hash.
     let hash = prefix + "hash"
-    /// A map holding a list's entries, each a key and its value. The list is what the map holds, as it is: the prelude
-    /// keeps each key in it once.
-    let mapOfEntries = prefix + "map_of_entries"
-    /// The entries a map holds, as the list it was made of.
-    let mapEntries = prefix + "map_entries"
-    /// A set holding a list's elements. The list is what the set holds, as it is: the prelude keeps each element in
-    /// it once.
-    let setOfElements = prefix + "set_of_elements"
-    /// The elements a set holds, as the list it was made of.
-    let setElements = prefix + "set_elements"
+    /// The map a store holds (see `Maps.storeOf`): the store is what the map holds, as it is, which the prelude keeps
+    /// in its shape.
+    let mapOfStore = prefix + "map_of_store"
+    /// The store a map holds, as it was made of.
+    let mapStore = prefix + "map_store"
+    /// The set a store holds (see `Sets.storeOf`), as it is.
+    let setOfStore = prefix + "set_of_store"
+    /// The store a set holds, as it was made of.
+    let setStore = prefix + "set_store"
     /// An array holding a list's elements, in order, each laid out flat in one block (see `Arrays`).
     let arrayOfList = prefix + "array_of_list"
     /// The elements an array holds, as a list, in order.
@@ -198,7 +197,7 @@ module Intrinsics =
     let hostState = prefix + "host_state"
 
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
-    let reinterpretations : Set<string> = set [ mapOfEntries; mapEntries; setOfElements; setElements ]
+    let reinterpretations : Set<string> = set [ mapOfStore; mapStore; setOfStore; setStore ]
 
     /// The intrinsics of tasks, which `nanyx/async` is written on (see `TaskLowering` in the backend and
     /// `docs/src/content/deep-dives/async.md`). A task is known by its handle, an `I32`.
@@ -234,7 +233,7 @@ module Intrinsics =
 
     let private keyVar = TyVar.ordinary (-2) (Some "k")
     let private valueVar = TyVar.ordinary (-3) (Some "v")
-    let private entries = listOf (tuple [ TyVar keyVar; TyVar valueVar ])
+    let private store = Maps.storeOf (TyVar keyVar) (TyVar valueVar)
     let private map = Maps.ofTypes (TyVar keyVar) (TyVar valueVar)
     let private overEntries (ty: Ty) = { Quantified = set [ keyVar.Id; valueVar.Id ]; Type = ty; Symbol = None; ProvidedBy = None }
 
@@ -285,10 +284,10 @@ module Intrinsics =
           shiftRightUnsigned, TypeEnv.mono (TyFunc(tuple [ intTy; intTy ], intTy, []))
           intCast, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None; ProvidedBy = None }
           toFloat, { Quantified = set [ elementVar.Id; valueVar.Id ]; Type = TyFunc(element, TyVar valueVar, []); Symbol = None; ProvidedBy = None }
-          mapOfEntries, overEntries (TyFunc(entries, map, []))
-          mapEntries, overEntries (TyFunc(map, entries, []))
-          setOfElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Sets.ofType element, []); Symbol = None; ProvidedBy = None }
-          setElements, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.ofType element, listOf element, []); Symbol = None; ProvidedBy = None }
+          mapOfStore, overEntries (TyFunc(store, map, []))
+          mapStore, overEntries (TyFunc(map, store, []))
+          setOfStore, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.storeOf element, Sets.ofType element, []); Symbol = None; ProvidedBy = None }
+          setStore, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Sets.ofType element, Sets.storeOf element, []); Symbol = None; ProvidedBy = None }
           arrayOfList, { Quantified = set [ elementVar.Id ]; Type = TyFunc(listOf element, Arrays.ofType element, []); Symbol = None; ProvidedBy = None }
           arrayToList, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Arrays.ofType element, listOf element, []); Symbol = None; ProvidedBy = None }
           arrayLength, { Quantified = set [ elementVar.Id ]; Type = TyFunc(Arrays.ofType element, intTy, []); Symbol = None; ProvidedBy = None }
