@@ -21,6 +21,7 @@ open ParserTestHelpers
 [<InlineData("pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }\n")>]
 [<InlineData("def f: int -> int\ndef g: [HostRuntime] I32 -> I32  -- a foreign function\n")>]
 [<InlineData("def (a, b) = (1, 2)\nexport def (low, high) = (1, 2)\n")>]
+[<InlineData("module m =\n  def pair = (1, 2)\n  export def (a, b) = pair\n\nimport m\n")>]
 [<InlineData("def r =\n  def a = 1\n  a + 1  -- two\n\nprintln(r)\n")>]
 [<InlineData("module shapes =\n  export type Shape = #circle | #square\n  def area = { s -> 0 }\n\n  module inner =\n    def x = 1\n\ndef y = 2\n")>]
 [<InlineData("::host nanyx.console\n\nprintln(\"hi\")\n")>]
