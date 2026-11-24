@@ -60,6 +60,7 @@
     <Compile Include="Features\Contexts\StructuralInstanceTests.fs" />
     <Compile Include="Features\Contexts\FunctionTypeContextTests.fs" />
     <Compile Include="Features\Contexts\ContextVariableTests.fs" />
+    <Compile Include="Features\Contexts\ContextVariableCallTimeTests.fs" />
     <Compile Include="Features\Contexts\PointFreeContextTests.fs" />
     <Compile Include="Features\Contexts\LambdaContextTests.fs" />
     <Compile Include="Features\Contexts\LambdaSuppliedContextTests.fs" />
