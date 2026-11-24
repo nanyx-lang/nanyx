@@ -16,9 +16,9 @@ let ``list spread desugars to concatenation`` () =
     | Result.Error err -> failwith $"Parse failed: {err}"
 
 [<Fact>]
-let ``a list of only a spread is the spread itself, and no spread is a plain list`` () =
+let ``a list of only a spread is the spread joined to an empty list, and no spread is a plain list`` () =
     match parseModule "def x = [...xs]\ndef y = [1, 2]\ndef z = []" with
-    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (IdentifierExpr "xs"))))
+    | Result.Ok [ Kind (Def (ValueDef (_, "x", _, Kind (BinaryOp ("++", None, Kind (ListExpr []), Kind (IdentifierExpr "xs"))))))
                   Kind (Def (ValueDef (_, "y", _, Kind (ListExpr [ _; _ ]))))
                   Kind (Def (ValueDef (_, "z", _, Kind (ListExpr [])))) ] -> ()
     | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
