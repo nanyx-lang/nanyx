@@ -535,7 +535,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 match ty with
                 | IrList elementTy -> items |> List.map (fun _ -> elementTy)
                 | _ -> []
-            this.Atoms scope items (fun atoms -> CoreIrLowerMembers.coerceAll this.MemberTools scope atoms elementTys (fun atoms -> k (Expr.make (MakeList atoms) ty)))
+            this.AtomsAt scope items elementTys (fun atoms -> CoreIrLowerMembers.coerceAll this.MemberTools scope atoms elementTys (fun atoms -> k (Expr.make (MakeList atoms) ty)))
         | RecordExpr fields -> this.Record scope (recordExprFields fields |> sortFields) (tyOf expr) k
         | MemberAccess(Kind (IdentifierExpr qualifier), fieldName, _) when
             not (scope.Vars.ContainsKey qualifier) && definitions.ContainsKey $"{qualifier}.{fieldName}" ->
@@ -1027,7 +1027,19 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// Lowers `exprs` in order to atoms, binding each value that is not one to a temporary. An operand that stores to a
     /// local on the way to its value (see `storesBeforeValue`) is lowered whole, its stores with it, into one
     /// temporary: it is computed where it is used, so nothing computed before it waits on the stack across its stores.
-    member this.Atoms (scope: Scope) (exprs: Expression list) (k: Atom list -> Expr) : Expr =
+    member this.Atoms (scope: Scope) (exprs: Expression list) (k: Atom list -> Expr) : Expr = this.AtomsAt scope exprs [] k
+
+    /// `Atoms`, each operand wanted at the type in `tys` in its place, or at its own where `tys` is empty. An operand that
+    /// never gives a value, such as a call to `crash`, whose type is `undefined`, the empty union, is a call of the type
+    /// it is wanted at, whose result the emitter converts (see `CoreIrEmit`): an `i64` in a list of `int`s, say. As a
+    /// value of its own type, an `i32`, it would be stored where an `i64` is, wherever code follows the call.
+    member this.AtomsAt (scope: Scope) (exprs: Expression list) (tys: IrType list) (k: Atom list -> Expr) : Expr =
+        let wanted =
+            if tys.Length = exprs.Length then List.map Some tys else List.replicate exprs.Length None
+        let atType (wanted: IrType option) (value: Expr) =
+            match wanted, value.Kind with
+            | Some ty, (Call _ | Crash _) when value.Type = IrTags [] -> { value with Type = ty }
+            | _ -> value
         // A call through a function value in scope holds its arguments in locals where its type holds boxes, and a tuple
         // passed whole to one whose input is a tuple where the tuple is not a name, as it reads each element from it
         // (see `CallValue`).
@@ -1045,16 +1057,16 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | _ -> false
                 value |> Option.exists (fun var -> CoreIrLowerBoxes.holdsBox var.Type || tupleNotNamed var)
             | _ -> false
-        let rec go (acc: Atom list) (remaining: Expression list) =
+        let rec go (acc: Atom list) (remaining: (Expression * IrType option) list) =
             match remaining with
             | [] -> k (List.rev acc)
-            | expr :: rest when storesBeforeValue callStores storesFound expr -> bindTemp (this.Tail scope expr) (fun atom -> go (atom :: acc) rest)
-            | expr :: rest ->
+            | (expr, _) :: rest when storesBeforeValue callStores storesFound expr -> bindTemp (this.Tail scope expr) (fun atom -> go (atom :: acc) rest)
+            | (expr, ty) :: rest ->
                 this.Complex scope expr (fun value ->
                     match value.Kind with
                     | Atom atom -> go (atom :: acc) rest
-                    | _ -> bindTemp value (fun atom -> go (atom :: acc) rest))
-        go [] exprs
+                    | _ -> bindTemp (atType ty value) (fun atom -> go (atom :: acc) rest))
+        go [] (List.zip exprs wanted)
 
     /// `Atoms`, but binding each value that is not an atom to a local, so that code that stores can come between them
     /// and where they are used.
