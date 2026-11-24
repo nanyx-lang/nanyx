@@ -3,9 +3,9 @@
 /// task, directly or in a lambda written in it, doesn't return until every task it started has finished, and nothing
 /// that holds a task can leave it. At a script's top level, the scope is the program.
 ///
-/// The scope is `nanyx/async`'s `scope`, which supplies the scoped context `TaskScope` that starting a task requires, as
+/// The scope is `nanyx/async`'s `Async.concurrent`, which supplies the scoped context `TaskScope` that starting a task requires, as
 /// `memory` supplies `Memory`. So the body of each such def, and of a script's entry point, is the block of a call of
-/// `scope`, and the rules that keep what requires a scoped context in its scope (`ScopedCalls`) keep its tasks in it:
+/// `Async.concurrent`, and the rules that keep what requires a scoped context in its scope (`ScopedCalls`) keep its tasks in it:
 /// a `Task`, or a lambda that starts one, given back from the def is NYX0233.
 module internal NyxCompiler.TaskScopes
 
@@ -14,7 +14,7 @@ open Parser.Program
 /// The module that declares tasks.
 let private asyncModule = StandardLibrary.importPrefix + ModuleOrigin.asyncName
 
-/// The scoped context a task belongs to, which `scope` supplies.
+/// The scoped context a task belongs to, which `Async.concurrent` supplies.
 let scopeContext = "TaskScope"
 
 /// The name a task is started by: `start! e` is `start({ e })` (a `#delay` keyword, see `WorkflowDesugaring`), the
@@ -39,7 +39,7 @@ let rec private definesStart (items: TopLevelItem list) : bool =
         | ModuleBlock(_, inner) -> definesStart inner
         | _ -> false)
 
-/// `body` as the block of a call of `scope`, at `body`'s span.
+/// `body` as the block of a call of `Async.concurrent`, at `body`'s span.
 let private scoped (body: Expression) : Expression =
     let block = Expression.at body.Span (Lambda([], body, false))
     Expression.at body.Span (FunctionCall(TaskScopeSyntax.scopeCall, None, [ block ]))

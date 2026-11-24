@@ -4,15 +4,18 @@
   It stands in for the console host, `nanyx.console`, so a program the console host runs compiles
   under it unchanged, as long as it needs only what this host provides: [`Console`], whose output
   goes to the page and whose input is what you type in it, [`Random`], which draws from a generator
-  the page seeds, and [`Clock`], the browser's time. It provides no `Env`, `FileSystem`, `Http` or
-  `Async`, so a program that needs one is an error naming this host.
+  the page seeds, [`Clock`], the browser's time, and `Async`, so that a program can start tasks and
+  sleep. It provides no `Env`, `FileSystem` or `Http`, so a program that needs one is an error
+  naming this host.
 
   Its imports are its own, from `nanyx:playground`, not WASI, and the page that runs the program
   implements them.
 export module playground.host
 
 import (
+  nanyx/async as (Async)
   nanyx/clock as (Clock)
+  nanyx/host.async as (cancelled, waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/random as (Random)
@@ -68,18 +71,37 @@ def readToEndAfter: [HostRuntime] list(string) -> string = { lines ->
     | _ -> string.concat(list.map(list.reverse(lines), { line -> line ++ "\n" }))
 }
 
---| Reads the page's clock until it reads `deadline`. It is `Clock`'s `sleep` here, which no code can
-  call yet: this host provides no `Async`, which `sleep` requires.
+--| Reads the page's clock until it reads `deadline`.
 def spinUntil: [HostRuntime] int -> () = { deadline ->
   if pageTicks() >= deadline then () else spinUntil(deadline)
 }
 
+--| The scheduler's wait on the page, when every task is waiting: a page has nothing to wait on but
+  the time, so it reads the clock until `timeout` milliseconds have passed, and with no timeout,
+  which only a wait on something else gives, it returns at once.
+def pageWait: [HostRuntime] I32 -> () = { timeout ->
+  if timeout < 0 then () else spinUntil(pageTicks() + I32.toInt(timeout))
+}
+
+--| Waits until the page's clock reads `deadline`, while the program's other tasks run: until then,
+  it waits on the page for no longer than is left. In a cancelled task it returns at once.
+def sleepUntil: [Async, HostRuntime] int -> () = { deadline ->
+  def left = deadline - pageTicks()
+
+  if left <= 0 or cancelled() then () else
+    match int.toI32(left)
+      | #some(timeout) -> waitOnHost(pageWait, timeout)
+      | #outOfRange -> waitOnHost(pageWait, 2_000_000_000)
+
+    sleepUntil(deadline)
+}
+
 --| Runs `entry`, the program's entry point, with a `Console` that writes to the page, a `Random`
-  that draws from the page's generator, which the page seeds, and a `Clock` that reads the
-  browser's time. Reading waits for a line typed in the page, and gives `#endOfInput` once
+  that draws from the page's generator, which the page seeds, a `Clock` that reads the browser's
+  time, and `Async`, so that it may start tasks and sleep. Reading waits for a line typed in the page, and gives `#endOfInput` once
   you end the input, or at once when the page can't pass input to the program (see the runner's
   `playground.js`). What `entry` returns is ignored.
-export def run: [HostRuntime] ([Clock, Console, Random] () -> a) -> () = { entry ->
+export def run: [HostRuntime, Async] ([Async, Clock, Console, Random] () -> a) -> () = { entry ->
   use Console(
     write = { text -> writeWith(pageWrite, text) }
     writeError = { text -> writeWith(pageWriteError, text) }
@@ -93,7 +115,7 @@ export def run: [HostRuntime] ([Clock, Console, Random] () -> a) -> () = { entry
   use Clock(
     now = { _ -> pageNow() }
     ticks = { _ -> pageTicks() }
-    sleep = { ms -> spinUntil(pageTicks() + ms) }
+    sleep = { ms -> sleepUntil(pageTicks() + ms) }
   )
 
   ignore(entry())

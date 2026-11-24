@@ -41,14 +41,24 @@ module private Purity =
             | ContextMemberCall _ -> false
             | _ -> typeIsPure && not (nodes |> List.exists (callRequiresContext model)))
 
+/// The tasks of `nanyx/async` (see `TaskScopes`), as the linter's rules see them.
+module internal LintedTasks =
+    /// What a task of type `ty` gives back, if `ty` is `nanyx/async`'s `Task(a)`.
+    let resultOf (ty: Ty) : Ty option =
+        match Unifier.unalias ty with
+        // A type in a scope has the scope among its arguments (see `ScopedTypes`).
+        | TyNominal({ Home = StandardLibraryModule home; Name = name }, args, _, _) when home = ModuleOrigin.asyncName && name = "Task" ->
+            args |> List.tryFind (function FunctionContexts.ScopedContext _ -> false | _ -> true)
+        | _ -> None
+
 /// The official linter's `unusedResults` rule: a statement of a block, other than its last, whose value is thrown away
 /// though it is not `()`: `readLine()` on a line of its own. Left alone: a statement whose type is `()`, a type variable
 /// (it may be `()`) or `undefined` (it never gives a value, which `unreachableCode` is about); a workflow keyword's
 /// statement, whose value the workflow takes; and a block's last statement, which is the block's value. A `for` loop
 /// is `()` and throws away what its body gives, so a value its body ends with is reported as a statement's is: in each
 /// arm of an `if` or a `match` the body ends with. Not reported: a call of the built-in `dbg`, written on a line of its
-/// own to print a value, and a pure statement (see `Purity`), which `uselessExpressions` reports. Its fix passes the
-/// value to `ignore`.
+/// own to print a value, a pure statement (see `Purity`), which `uselessExpressions` reports, and a task, which
+/// `unawaitedTask` is about. Its fix passes the value to `ignore`.
 module UnusedResults =
     let rule =
         { Id = "unusedResults"
@@ -141,7 +151,9 @@ module UnusedResults =
 
     let lint (model: SemanticModel) : Report list =
         discarded model
-        |> List.filter (fun (_, value, _, _) -> not (Purity.isPure model value))
+        // A task thrown away is waited for all the same, by the def that started it, so it may have been started for
+        // what it does: `unawaitedTask` is about it.
+        |> List.filter (fun (_, value, ty, _) -> (LintedTasks.resultOf ty).IsNone && not (Purity.isPure model value))
         |> List.map (fun (_, value, ty, what) ->
             let written = model.Source.Substring(value.Span.Start, value.Span.End - value.Span.Start)
             { Rule = rule.Id

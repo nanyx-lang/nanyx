@@ -47,3 +47,13 @@ def renamed: (x: int, y: int) -> int = { (x = a, y = b) -> a * 10 + b }
 def pair: (int, int) -> int = { a, b -> a + b }
 """
     Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
+let ``A lambda in a list of named-field function types names its fields`` () =
+    let source =
+        normalized """def applyAll: list(((x: int, y: int) -> int)) -> list(int) = { fs -> [] }
+
+def r = applyAll([{ x, y -> x + y }, { a, b -> a + b }])
+"""
+    let diagnostics = namingNoField source
+    Assert.Equal<string list>([ "a"; "b" ], diagnostics |> List.map (spanOf >> textAt source))

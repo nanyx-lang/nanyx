@@ -1,8 +1,10 @@
 --| What every module of a program the playground host runs sees without importing it: the page's
   output, `Console`, with `print`, `println`, `eprint` and `eprintln`; `Random`, the source of
-  random numbers; and `Clock`, the time.
+  random numbers; `Clock`, the time; and `Async`, which the calls that wait require, with `start`
+  and `await`, attached to it, which start a task and wait for it.
 export module playground.prelude
 
 export nanyx.console.core/console (Console, IoError, print, println, eprint, eprintln)
+export nanyx/async (Async)
 export nanyx/random (Random)
 export nanyx/clock (Clock)

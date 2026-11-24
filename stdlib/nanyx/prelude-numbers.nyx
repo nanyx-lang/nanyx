@@ -63,7 +63,7 @@ export context Sub(a) = (`-`: (a, a) -> a, negate: a -> a)
   of it, so `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and
   `float`. A function that requires `Num(a)` can call one that requires `Add(a)` or `Sub(a)`: a
   `Num` has every member they have. On an integer type `/` truncates and `%` takes the sign of `x`;
-  on `float` they are IEEE 754's. `isInteger` says which `a` is: `true` for an integer type, so
+  on `float` they are IEEE 754's. `math.mod` is the modulo with the sign of `y`. `isInteger` says which `a` is: `true` for an integer type, so
   `x ** -1` stops the program on one.
 export context Num(a) = (
   zero: a
@@ -109,7 +109,8 @@ export def int.`/`: int, int -> int = { x, y ->
   x / y
 }
 
---| The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
+--| The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1. For the modulo with the
+  sign of `y`, which wraps an index into a range, see `math.mod`.
 export def int.`%`: int, int -> int = { x, y ->
   x % y
 }
@@ -240,9 +241,15 @@ export def pow: [Num(a)] a, int -> a = { base, exponent ->
   base ** exponent
 }
 
---| `2 ** n` times `x`, for an `n` that is a whole number of any size.
+--| `2 ** n` times `x`, for an `n` that is a whole number of any size. A power of two past the range
+  of a float is taken in steps of 2 ** 600, so for an `x` near 1, or a whole `x` below 2 ** 53, only
+  the last step rounds: `scaleByTwos(1.0, -1074)` is the smallest float above zero.
 def scaleByTwos: float, int -> float = { x, n ->
-  if n >= 0 then x * 2.0 ** n else x / 2.0 ** -n
+  if n > 1000
+    then scaleByTwos(x * 2.0 ** 600, n - 600)
+    else if n < -1000
+      then scaleByTwos(x / 2.0 ** 600, n + 600)
+      else if n >= 0 then x * 2.0 ** n else x / 2.0 ** -n
 }
 
 --| The sum of the series for `e ** r`, from the term `term` (which is `r ** k / k!`) on, with `sum`
@@ -314,11 +321,16 @@ export def float.pow: float, float -> float = { x, y ->
 
 -- A decimal is read as a whole number `m`, its digits with the point taken out, and a power of ten
 -- `e` that puts the point back: "12.5e3" is 125 times 10 ** 2. `m` is held as a float, exactly
--- while it is below 2 ** 53.
+-- while it is below 2 ** 53, and holds the first 18 or so digits. When it is exact and `e` is
+-- between -22 and 22, both `m` and 10 ** `e` are exact, so the one multiplication or division
+-- rounds to the nearest float, as Clinger's fast path does. Any other decimal is read exactly:
+-- `m * 10 ** e` is only a first guess, and the guess is moved a float at a time until the decimal
+-- is between the halfway points on either side of it, each comparison made exactly, in whole
+-- numbers of any size, as Clinger's AlgorithmR does.
 
 --| `m` times 10 ** `e`, for a whole `m` of zero or more. When `m` is below 2 ** 53 and `e` is
   between -22 and 22 both are exact, so the one multiplication or division rounds to the nearest
-  float. Otherwise the power of ten is rounded too.
+  float. Otherwise the power of ten is rounded too, by a few units in the last place.
 def scaleByTens: float, int -> float = { m, e ->
   if m == 0.0
     then 0.0
@@ -329,58 +341,72 @@ def scaleByTens: float, int -> float = { m, e ->
 
 --| The decimal `s` writes from byte `i` on, with `m` and `e` the number read so far, `digits` how
   many digits that is, and `afterPoint` whether they included a `.`. Digits past the first 18 or so
-  only move the point, as `m` holds no more.
+  only move the point, as `m` holds no more. The decimal's digits start at byte `start`.
 def readDecimal
-  : string, int, float, int, int, bool -> #some(float) | #invalidFloat
-  = { s, i, m, e, digits, afterPoint ->
+  : string, int, int, float, int, int, bool -> #some(float) | #invalidFloat
+  = { s, start, i, m, e, digits, afterPoint ->
     if i >= __nanyx_string_length(s)
-      then (if digits == 0 then #invalidFloat else #some(scaleByTens(m, e)))
-      else readDecimalByte(s, i, m, e, digits, afterPoint, __nanyx_string_byte_at(s, i))
+      then (if digits == 0 then #invalidFloat else #some(decimalToFloat(s, start, m, e, 0)))
+      else readDecimalByte(s, start, i, m, e, digits, afterPoint, __nanyx_string_byte_at(s, i))
   }
 
 --| [`readDecimal`] at the byte `b`, which is byte `i` of `s`.
 def readDecimalByte
-  : string, int, float, int, int, bool, int -> #some(float) | #invalidFloat
-  = { s, i, m, e, digits, afterPoint, b ->
+  : string, int, int, float, int, int, bool, int -> #some(float) | #invalidFloat
+  = { s, start, i, m, e, digits, afterPoint, b ->
     if digitValue(b) >= 0
       then (if m < 1.0e17
         then readDecimal(
           s
+          start
           i + 1
           m * 10.0 + int.toFloat(digitValue(b))
           (if afterPoint then e - 1 else e)
           digits + 1
           afterPoint
         )
-        else readDecimal(s, i + 1, m, (if afterPoint then e else e + 1), digits + 1, afterPoint))
+        else readDecimal(
+          s
+          start
+          i + 1
+          m
+          (if afterPoint then e else e + 1)
+          digits + 1
+          afterPoint
+        ))
       else if b == 46 and not afterPoint
-        then readDecimal(s, i + 1, m, e, digits, true)
+        then readDecimal(s, start, i + 1, m, e, digits, true)
         else if (b == 101 or b == 69) and digits > 0
-          then readExponent(s, i + 1, m, e)
+          then readExponent(s, start, i + 1, m, e)
           else #invalidFloat
   }
 
 --| The exponent that starts at byte `i` of `s`, after its `e`, with its optional sign, applied to
   `m` and `e`.
-def readExponent: string, int, float, int -> #some(float) | #invalidFloat = { s, i, m, e ->
-  def sign = __nanyx_string_byte_at(s, i)
+def readExponent
+  : string, int, int, float, int -> #some(float) | #invalidFloat
+  = { s, start, i, m, e ->
+    def sign = __nanyx_string_byte_at(s, i)
 
-  if sign == 45
-    then readExponentDigits(s, i + 1, m, e, -1, 0, 0)
-    else readExponentDigits(s, (if sign == 43 then i + 1 else i), m, e, 1, 0, 0)
-}
+    if sign == 45
+      then readExponentDigits(s, start, i + 1, m, e, -1, 0, 0)
+      else readExponentDigits(s, start, (if sign == 43 then i + 1 else i), m, e, 1, 0, 0)
+  }
 
 --| The digits of an exponent from byte `i` of `s` on, with `n` and `digits` the value and count read
   so far. An exponent past 100000 is held there: it makes infinity or zero all the same.
 def readExponentDigits
-  : string, int, float, int, int, int, int -> #some(float) | #invalidFloat
-  = { s, i, m, e, sign, n, digits ->
+  : string, int, int, float, int, int, int, int -> #some(float) | #invalidFloat
+  = { s, start, i, m, e, sign, n, digits ->
     if i >= __nanyx_string_length(s)
-      then (if digits == 0 then #invalidFloat else #some(scaleByTens(m, e + sign * n)))
+      then (if digits == 0
+        then #invalidFloat
+        else #some(decimalToFloat(s, start, m, e + sign * n, sign * n)))
       else if digitValue(__nanyx_string_byte_at(s, i)) < 0
         then #invalidFloat
         else readExponentDigits(
           s
+          start
           i + 1
           m
           e
@@ -390,15 +416,304 @@ def readExponentDigits
         )
   }
 
+--| The float nearest the decimal whose digits start at byte `start` of `s`, which is `m` times
+  10 ** `e` as [`readDecimal`] read it, and whose exponent, after an `e`, is `exponent`.
+def decimalToFloat: string, int, float, int, int -> float = { s, start, m, e, exponent ->
+  if m < 9007199254740992.0 and e >= -22 and e <= 22
+    then scaleByTens(m, e)
+    else gatherDigits(s, start, [], 0, 0, 0, false, exponent, scaleByTens(m, e))
+}
+
+--| Every digit of the decimal from byte `i` of `s` on, up to its exponent or its end, as a whole
+  number of any size (see [`limbsMulAdd`]): `whole` holds the digits gathered so far but the last
+  `chunkDigits`, which are `chunk`. `significant` is how many digits there have been since the first
+  that is not 0, and `e10` the power of ten that puts the point back, which starts as the exponent.
+  It goes on to [`readExactly`] with `guess`, a float near the decimal.
+def gatherDigits
+  : string, int, list(int), int, int, int, bool, int, float -> float
+  = { s, i, whole, chunk, chunkDigits, significant, afterPoint, e10, guess ->
+    def b = __nanyx_string_byte_at(s, i)
+    def d = digitValue(b)
+
+    if d >= 0
+      then gatherDigits(
+        s
+        i + 1
+        (if chunkDigits == 8 then limbsMulAdd(whole, 1000000000, chunk * 10 + d) else whole)
+        (if chunkDigits == 8 then 0 else chunk * 10 + d)
+        (if chunkDigits == 8 then 0 else chunkDigits + 1)
+        (if significant == 0 and d == 0 then 0 else significant + 1)
+        afterPoint
+        (if afterPoint then e10 - 1 else e10)
+        guess
+      )
+      else if b == 46
+        then gatherDigits(s, i + 1, whole, chunk, chunkDigits, significant, true, e10, guess)
+        else readExactly(limbsMulAdd(whole, 10 ** chunkDigits, chunk), significant, e10, guess)
+  }
+
+--| The float nearest `digits` times 10 ** `e10`, where `digits` has `significant` digits, starting
+  from `guess`. A decimal of at least 10 ** 309 is infinity, and one below 10 ** -324, less than half
+  the smallest float above zero, is 0, without the work of reading them exactly.
+def readExactly: list(int), int, int, float -> float = { digits, significant, e10, guess ->
+  if significant == 0
+    then 0.0
+    else if significant + e10 >= 310
+      then 1.0 / 0.0
+      else if significant + e10 <= -324
+        then 0.0
+        else settleFromGuess(
+          (if e10 >= 0 then limbsMulPowerOfFive(digits, e10) else digits)
+          (if e10 >= 0 then [1] else limbsMulPowerOfFive([1], -e10))
+          e10
+          guess
+        )
+}
+
+--| The float nearest the decimal [`compareWithHalfway`] reads from `scaled`, `fives` and `e10`,
+  starting from `guess`: the largest float when `guess` is infinity.
+def settleFromGuess: list(int), list(int), int, float -> float = { scaled, fives, e10, guess ->
+  if guess == 1.0 / 0.0
+    then settle(scaled, fives, e10, 9007199254740991, 971)
+    else if guess == 0.0
+      then settle(scaled, fives, e10, 0, -1074)
+      else settleFromFloat(scaled, fives, e10, guess, binaryExponent(guess) - 52)
+}
+
+--| [`settleFromGuess`] for a `guess` above zero that is `mantissa * 2 ** k` for a whole `mantissa`
+  below 2 ** 53, or for a smaller `k` if `guess` is too small to have one that is at least -1074.
+def settleFromFloat
+  : list(int), list(int), int, float, int -> float
+  = { scaled, fives, e10, guess, k ->
+    if k < -1074
+      then settleFromFloat(scaled, fives, e10, guess, -1074)
+      else settle(scaled, fives, e10, __nanyx_float_to_int(scaleByTwos(guess, -k)), k)
+  }
+
+--| The `k` for which `x / 2 ** k` is at least 1 and below 2, for a finite `x` above zero.
+def binaryExponent: float -> int = { x ->
+  if x < 1.0e-300
+    then binaryExponentFrom(x * 2.0 ** 600, 512, -600)
+    else binaryExponentFrom(x, 512, 0)
+}
+
+--| [`binaryExponent`] of `x * 2 ** k`, moving `x` towards [1, 2) by `2 ** step`, then by each power
+  of two below it.
+def binaryExponentFrom: float, int, int -> int = { x, step, k ->
+  if step == 0
+    then k
+    else if x >= 2.0 ** step
+      then binaryExponentFrom(x / 2.0 ** step, step / 2, k + step)
+      else if x * 2.0 ** step < 2.0
+        then binaryExponentFrom(x * 2.0 ** step, step / 2, k - step)
+        else binaryExponentFrom(x, step / 2, k)
+}
+
+-- A candidate float is `mantissa * 2 ** k`, with `mantissa` a whole number below 2 ** 53 and `k`
+-- from -1074 to 971. The float after it is `(mantissa + 1) * 2 ** k`, so the halfway point between
+-- the two is `(2 * mantissa + 1) * 2 ** (k - 1)`.
+
+--| `mantissa * 2 ** k` as a float, which is exact; infinity past the largest float.
+def floatOfMantissa: int, int -> float = { mantissa, k ->
+  scaleByTwos(int.toFloat(mantissa), k)
+}
+
+--| Whether the decimal is above (1), at (0) or below (-1) the halfway point between `mantissa * 2 ** k`
+  and the float after it. The decimal is `scaled * 2 ** e10 / fives`, as [`readExactly`] gives
+  them: its digits times `5 ** e10` and 1 for an `e10` of zero or more, and its digits and
+  `5 ** -e10` for a negative one. Both sides are made whole numbers before they are compared.
+def compareWithHalfway
+  : list(int), list(int), int, int, int -> int
+  = { scaled, fives, e10, mantissa, k ->
+    def halfway = limbsMulInt(fives, 2 * mantissa + 1)
+    def shift = e10 - k + 1
+
+    if shift >= 0
+      then limbsCompare(limbsShiftLeft(scaled, shift), halfway)
+      else limbsCompare(scaled, limbsShiftLeft(halfway, -shift))
+  }
+
+--| The float nearest the decimal, starting from the candidate `mantissa * 2 ** k`.
+def settle: list(int), list(int), int, int, int -> float = { scaled, fives, e10, mantissa, k ->
+  def order = compareWithHalfway(scaled, fives, e10, mantissa, k)
+
+  if order > 0
+    then stepUp(scaled, fives, e10, mantissa, k)
+    else if order == 0
+      then nearestEven(mantissa, k)
+      else if mantissa == 0 then 0.0 else stepDown(scaled, fives, e10, mantissa, k)
+}
+
+--| [`settleAbove`] the float after `mantissa * 2 ** k`, for a decimal above the halfway point
+  between the two.
+def stepUp: list(int), list(int), int, int, int -> float = { scaled, fives, e10, mantissa, k ->
+  if mantissa + 1 == 9007199254740992
+    then settleAbove(scaled, fives, e10, 4503599627370496, k + 1)
+    else settleAbove(scaled, fives, e10, mantissa + 1, k)
+}
+
+--| The float nearest a decimal that is above the halfway point between `mantissa * 2 ** k` and the
+  float before it: infinity past the largest float.
+def settleAbove: list(int), list(int), int, int, int -> float = { scaled, fives, e10, mantissa, k ->
+  if k > 971
+    then 1.0 / 0.0
+    else settledAbove(
+      scaled
+      fives
+      e10
+      mantissa
+      k
+      compareWithHalfway(scaled, fives, e10, mantissa, k)
+    )
+}
+
+--| [`settleAbove`], with `order` the decimal's [`compareWithHalfway`] of `mantissa * 2 ** k`.
+def settledAbove
+  : list(int), list(int), int, int, int, int -> float
+  = { scaled, fives, e10, mantissa, k, order ->
+    if order > 0
+      then stepUp(scaled, fives, e10, mantissa, k)
+      else if order == 0 then nearestEven(mantissa, k) else floatOfMantissa(mantissa, k)
+  }
+
+--| [`settleBelow`] the float before `mantissa * 2 ** k`, for a decimal below the halfway point
+  between the two.
+def stepDown: list(int), list(int), int, int, int -> float = { scaled, fives, e10, mantissa, k ->
+  if mantissa == 4503599627370496 and k > -1074
+    then settleBelow(scaled, fives, e10, 9007199254740991, k - 1)
+    else settleBelow(scaled, fives, e10, mantissa - 1, k)
+}
+
+--| The float nearest a decimal that is below the halfway point between the float after
+  `mantissa * 2 ** k` and the one after that.
+def settleBelow: list(int), list(int), int, int, int -> float = { scaled, fives, e10, mantissa, k ->
+  def order = compareWithHalfway(scaled, fives, e10, mantissa, k)
+
+  if order > 0
+    then floatOfMantissa(mantissa + 1, k)
+    else if order == 0
+      then nearestEven(mantissa, k)
+      else if mantissa == 0 then 0.0 else stepDown(scaled, fives, e10, mantissa, k)
+}
+
+--| Of `mantissa * 2 ** k` and the float after it, the one whose mantissa is even, for a decimal
+  halfway between them, as IEEE 754 rounds a tie.
+def nearestEven: int, int -> float = { mantissa, k ->
+  if mantissa % 2 == 0 then floatOfMantissa(mantissa, k) else floatOfMantissa(mantissa + 1, k)
+}
+
+-- Whole numbers of any size, as reading a float exactly needs: a list of 32-bit limbs, the lowest
+-- first, so `[1, 2]` is `1 + 2 * 2 ** 32`. A list may end in limbs that are 0. Each step keeps its
+-- products below 2 ** 63, so no `int` overflows.
+
+--| `xs` times `k` plus `add`, for a `k` and an `add` from 0 to below 2 ** 31.
+def limbsMulAdd: list(int), int, int -> list(int) = { xs, k, add ->
+  limbsMulAddOnto(xs, k, add, [])
+}
+
+--| [`limbsMulAdd`] of the limbs `xs`, with `carry` to add, after the limbs `acc`, which are in
+  reverse.
+def limbsMulAddOnto: list(int), int, int, list(int) -> list(int) = {
+  | [], _, carry, acc -> reverseOnto((if carry == 0 then acc else [carry, ...acc]), [])
+  | [x, ...rest], k, carry, acc ->
+    limbsMulAddLimb(rest, k, x * k + carry, acc)
+}
+
+--| [`limbsMulAddOnto`], with `t` the limb `x * k + carry` and its carry.
+def limbsMulAddLimb: list(int), int, int, list(int) -> list(int) = { rest, k, t, acc ->
+  limbsMulAddOnto(rest, k, int.shiftRightUnsigned(t, 32), [int.bitAnd(t, 4294967295), ...acc])
+}
+
+--| `xs` times `5 ** n`, for an `n` of zero or more.
+def limbsMulPowerOfFive: list(int), int -> list(int) = { xs, n ->
+  if n >= 13
+    then limbsMulPowerOfFive(limbsMulAdd(xs, 1220703125, 0), n - 13)
+    else limbsMulAdd(xs, 5 ** n, 0)
+}
+
+--| `xs` times `v`, for a `v` from 0 to below 2 ** 62: `v` is split into two parts of 31 bits.
+def limbsMulInt: list(int), int -> list(int) = { xs, v ->
+  limbsAdd(
+    limbsShiftLeft(limbsMulAdd(xs, int.shiftRightUnsigned(v, 31), 0), 31)
+    limbsMulAdd(xs, int.bitAnd(v, 2147483647), 0)
+  )
+}
+
+--| `xs` times `2 ** n`, for an `n` of zero or more.
+def limbsShiftLeft: list(int), int -> list(int) = { xs, n ->
+  prependZeros(shiftBitsOnto(xs, n % 32, 0, []), n / 32)
+}
+
+--| `xs` with `count` limbs that are 0 in front.
+def prependZeros: list(int), int -> list(int) = { xs, count ->
+  if count == 0 then xs else prependZeros([0, ...xs], count - 1)
+}
+
+--| The limbs `xs` times `2 ** bits`, for `bits` below 32, with `carry` to add, after the limbs `acc`,
+  which are in reverse.
+def shiftBitsOnto: list(int), int, int, list(int) -> list(int) = {
+  | [], _, carry, acc -> reverseOnto((if carry == 0 then acc else [carry, ...acc]), [])
+  | [x, ...rest], bits, carry, acc ->
+    shiftBitsLimb(rest, bits, carry, int.shiftLeft(x, bits), acc)
+}
+
+--| [`shiftBitsOnto`], with `t` the limb `x * 2 ** bits`.
+def shiftBitsLimb: list(int), int, int, int, list(int) -> list(int) = { rest, bits, carry, t, acc ->
+  shiftBitsOnto(
+    rest
+    bits
+    int.shiftRightUnsigned(t, 32)
+    [int.bitOr(int.bitAnd(t, 4294967295), carry), ...acc]
+  )
+}
+
+--| `xs` plus `ys`.
+def limbsAdd: list(int), list(int) -> list(int) = { xs, ys ->
+  limbsAddOnto(xs, ys, 0, [])
+}
+
+--| [`limbsAdd`] of the limbs `xs` and `ys`, with `carry` to add, after the limbs `acc`, which are in
+  reverse.
+def limbsAddOnto: list(int), list(int), int, list(int) -> list(int) = {
+  | [], [], carry, acc -> reverseOnto((if carry == 0 then acc else [carry, ...acc]), [])
+  | [], ys, carry, acc -> limbsAddOnto(ys, [], carry, acc)
+  | [x, ...xs], [], carry, acc -> limbsAddSum(xs, [], x + carry, acc)
+  | [x, ...xs], [y, ...ys], carry, acc -> limbsAddSum(xs, ys, x + y + carry, acc)
+}
+
+--| [`limbsAddOnto`], with `t` the sum of a limb of each and the carry.
+def limbsAddSum: list(int), list(int), int, list(int) -> list(int) = { xs, ys, t, acc ->
+  limbsAddOnto(xs, ys, int.shiftRightUnsigned(t, 32), [int.bitAnd(t, 4294967295), ...acc])
+}
+
+--| 1 when `xs` is more than `ys`, 0 when they are equal and -1 when it is less.
+def limbsCompare: list(int), list(int) -> int = { xs, ys ->
+  limbsCompareFrom(xs, ys, 0)
+}
+
+--| [`limbsCompare`] of `xs` and `ys`, the limbs above those already compared, with `order` what the
+  limbs below gave: a higher limb that differs decides.
+def limbsCompareFrom: list(int), list(int), int -> int = {
+  | [], [], order -> order
+  | [x, ...xs], [], order -> limbsCompareFrom(xs, [], if x > 0 then 1 else order)
+  | [], [y, ...ys], order -> limbsCompareFrom([], ys, if y > 0 then -1 else order)
+  | [x, ...xs], [y, ...ys], order ->
+    limbsCompareFrom(xs, ys, if x > y then 1 else if x < y then -1 else order)
+}
+
 --| The float `s` writes in decimal, or `#invalidFloat` for anything else (an empty string, a sign
   alone, spaces, other characters, `"1.2.3"`). It reads an optional leading `-` or `+`, digits with
   an optional `.` among them (`"3"`, `"0.25"`, `".5"` and `"5."` are all read), and an optional
   exponent, `e` or `E` then an integer: `"1.0e-7"`. `NaN`, `Infinity` and `-Infinity` are read as
-  [`float.toString`] writes them. A number too large for a float is infinity.
+  [`float.toString`] writes them.
 
-  The result is the nearest float to the decimal when it has at most 15 significant digits and an
-  exponent, once the point is moved to the end, between -22 and 22, which covers most text written
-  by hand. Otherwise it is not correctly rounded and may be a unit in the last place out.
+  The result is the float nearest the decimal, however many digits it has, and of two equally
+  near, the one whose last bit is 0, as IEEE 754 rounds. So every float `float.toString` writes reads
+  back as itself, and `float.fromString("0.1")` is the float the literal `0.1` is. A number at least
+  halfway from the largest float to 2 ** 1024 is infinity, and one at most half the smallest float
+  above zero is 0. A decimal with at most 15 digits and a small exponent, as most text written by hand is, is
+  read with one multiplication or division; any other is read with exact arithmetic on whole numbers
+  of any size, which takes longer.
 export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
@@ -414,5 +729,5 @@ export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
 def readFloatMagnitude: string, int -> #some(float) | #invalidFloat = { s, start ->
   if s == "Infinity" or s == "+Infinity" or s == "-Infinity"
     then #some(1.0 / 0.0)
-    else readDecimal(s, start, 0.0, 0, 0, false)
+    else readDecimal(s, start, start, 0.0, 0, 0, false)
 }

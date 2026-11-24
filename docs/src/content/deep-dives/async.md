@@ -17,8 +17,8 @@ boundaries are not built yet; they are on
   re-exports it and its `run` requires it and passes it to the entry. Inference adds it to every function that calls
   one that waits, as it adds `Console`. How the compiler makes a memberless context ambient is on
   [Hosts](./hosts#how-its-built).
-- **A host that can't suspend doesn't provide it.** The playground host doesn't, so a program that needs `Async` is an
-  error naming the host (`NYX0205`), as for any context a host doesn't provide.
+- **A host that can't suspend doesn't provide it,** so a program that needs `Async` is an error naming the host
+  (`NYX0205`), as for any context a host doesn't provide.
 - **A wait holds only its task.** On the console and HTTP hosts, a request or a sleep stops the task that waits while
   it is in flight, and the instance's other tasks run (below): on the runtime's `nanyx:async` wait in a core module,
   and on one waitable set the instance shares in a component ([Components](./components#waiting-while-other-tasks-run)).
@@ -156,7 +156,7 @@ Nothing starts it: like `Console`, the host provides it.
 
 - **The library.** `nanyx/async` declares them on six intrinsics (`Intrinsics.taskStart` and the others, in
   `Builtins.fs`), and `nanyx/host.async` a host's waits on a seventh, `Intrinsics.hostWait` (below). `TaskScope` is a scoped context, as `Memory` is, and `Task(a)` is a type in its scope,
-  `[TaskScope] protected (handle: I32)`. `scope` supplies `TaskScope` to its block, as `memory` supplies `Memory`: it
+  `[TaskScope] protected (handle: I32)`. `Async.concurrent` supplies `TaskScope` to its block, as `memory` supplies `Memory`: it
   opens a scope, runs the block, and waits for the scope's tasks before it gives back the block's result. `start`
   requires `TaskScope` and starts a task whose function runs `work` and keeps what it gives back as a function of
   nothing, `{ value }`, so that the scheduler can drop it whatever its type, and each `await` gets a reference of its own
@@ -169,7 +169,7 @@ Nothing starts it: like `Console`, the host provides it.
   builder, and a def attached to no context can't be a keyword, `NYX0019`). The hosts' preludes export `Async` alone.
 - **Each def a scope.** `TaskScopes.wrap`, before inference, makes the body of each module-level def that names
   `start` where nothing in it binds the name (a parameter or a local def named `start` is not the one that starts a
-  task), and a script's entry point if it does, the block of a call of `scope`; a module that defines a `start` of its
+  task), and a script's entry point if it does, the block of a call of `Async.concurrent`; a module that defines a `start` of its
   own has no scopes (`TaskScopeSyntax.scopeCall`, with
   `nanyx/async` imported under an alias no code can write). So the rules that keep what requires a scoped context in
   its call (`ScopedCalls`) keep a def's tasks in it: a `Task` given back is `NYX0233`, with a message about tasks
@@ -198,13 +198,15 @@ Nothing starts it: like `Console`, the host provides it.
   until the monotonic clock has passed its deadline. Passing the wait, rather than marking it for the compiler to
   find, keeps it a function like any other: nothing that only the scheduler calls has to survive linking, and a host
   can write its wait in Nanyx.
+  The playground host writes its own: its wait, `pageWait`, spins on the page's clock for the timeout, since a page
+  has nothing that finishes on its own, and its `sleep` waits on it, so a program's tasks take turns while one sleeps.
 - **Cancellation.** A task has a cancelled flag (`Intrinsics.taskCancel` sets it on the task and on every task in each
   of its scopes, and theirs in turn; a task a cancelled task starts is cancelled from the start). Nothing stops a task:
   a host's code that waits looks at it (`nanyx/host.async`'s `cancelled`) and gives back `#cancelled`, or, for a sleep,
   returns. A task waiting on the host that is cancelled meanwhile carries on once at once, without the host's wait: the
   frame of its wait keeps whether the task was cancelled when it stopped, and its resume entry stops again only while
   that is unchanged and the host hasn't waited, so it waits again for real if its code waits again. `race` is
-  `nanyx/async`'s: in a `scope` of its own, it starts each contestant, waits until one has given back its value
+  `nanyx/async`'s: in a scope of its own (`Async.concurrent`), it starts each contestant, waits until one has given back its value
   (`Intrinsics.scopeWaitAny`, a split point), cancels the others, and awaits the winner; the scope waits for the losers.
   The contestants may need different contexts: a list's elements that are functions join as a function that may need
   them all (`BranchJoin.joinFunctions`).
@@ -214,6 +216,10 @@ Nothing starts it: like `Console`, the host provides it.
 
 - **A task nobody awaits is waited for,** as in Kotlin, not cancelled, as in Swift: a `start!` whose result is never
   used is probably started for what it does, and its effect was wanted.
+  One whose result isn't `()` is more likely a forgotten `await`, so the default linter warns about it
+  (`UnawaitedTasks`, in `LinterTaskRules.fs`, as `unawaitedTask`), and `unusedResults` leaves every task to it.
+- **`concurrent` is a function,** `Async.concurrent`, the same one that makes each def a scope, so a scope smaller than
+  a def needs nothing of its own in the compiler.
 - **`await` is a function, not a keyword.** A keyword exists to capture the rest of a block; waiting on a task is an
   ordinary call that suspends, like `http.get`, so it's written like one.
 - **A task never stands in for its value.** `a` is a `Task(Response)` until it's awaited. Having it awaited when it's
