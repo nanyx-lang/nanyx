@@ -89,6 +89,23 @@ let freeName (taken: string -> bool) (baseName: string) =
         index <- index + 1
     candidate
 
+/// Names made unique among `taken`, each the first of `baseName`, `baseName_1`, `baseName_2` and so on that `taken` does
+/// not hold, which it then holds. It remembers how far it got with each base name, so that the k-th name made from one
+/// costs a lookup or two, not k: a block of thousands of stores made a local `__stored` at each (#2408).
+type NameSupply(taken: System.Collections.Generic.HashSet<string>) =
+    let next = System.Collections.Generic.Dictionary<string, int>()
+
+    /// A name made from `baseName` that nothing has yet.
+    member _.Fresh(baseName: string) =
+        let mutable index = match next.TryGetValue baseName with | true, index -> index | _ -> 0
+        let nameAt index = if index = 0 then baseName else $"{baseName}_{index}"
+        while taken.Contains(nameAt index) do
+            index <- index + 1
+        next.[baseName] <- index + 1
+        let name = nameAt index
+        taken.Add name |> ignore
+        name
+
 /// The name of the parameter a function that requires a context takes one of its members in, by the member's key.
 /// A lambda lifted out of the function captures the member under the same name.
 let contextMemberParameter (key: ContextMemberKey) = $"__ctx_{sanitizeIdentifier (ContextMemberKey.text key)}"

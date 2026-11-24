@@ -142,9 +142,7 @@ let private calledOnce (exported: Set<string>) (functions: Map<string, Function>
 type private Inliner
     (functions: Dictionary<string, Function>, cyclic: Set<string>, once: Set<string>, placed: HashSet<string>, prepare: string -> unit, exported: Set<string>, f: Function) =
     let mutable nextId =
-        let mutable highest = f.Params |> List.fold (fun acc p -> max acc p.Id) 0
-        mapVars (fun v -> highest <- max highest v.Id; v) id f.Body |> ignore
-        highest
+        maxVarId (f.Params |> List.fold (fun acc p -> max acc p.Id) 0) f.Body
     let mutable instances = 0
 
     let newId () =
@@ -195,7 +193,7 @@ type private Inliner
     /// One time over `body`: each call that is to be inlined is.
     member this.Round (body: Expr) : Expr * bool =
         // Simplifying makes variables of its own, which new ones must not share an id with.
-        mapVars (fun v -> nextId <- max nextId v.Id; v) id body |> ignore
+        nextId <- maxVarId nextId body
         // How often each function is called here, and the functions this body makes a closure over.
         let calls = Dictionary<string, int>()
         let closures = HashSet<string>()

@@ -319,9 +319,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     // Whether the code after a branch is being tried in each branch, inside which it is not tried again.
     let mutable trying = false
     let mutable nextId =
-        let mutable highest = f.Params |> List.fold (fun acc p -> max acc p.Id) 0
-        mapVars (fun v -> highest <- max highest v.Id; v) id f.Body |> ignore
-        highest
+        maxVarId (f.Params |> List.fold (fun acc p -> max acc p.Id) 0) f.Body
     do
         let bind (v: Var) =
             bound.[(v.Kind, v.Name)] <- (match bound.TryGetValue((v.Kind, v.Name)) with | true, n -> n + 1 | _ -> 1)
