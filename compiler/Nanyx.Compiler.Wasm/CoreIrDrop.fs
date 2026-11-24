@@ -32,6 +32,13 @@ let rec isHeapType (ty: IrType) =
     | IrError
     | IrWord -> false
 
+/// Whether a value of `ty` is a tag of a union with no payloads, which is its own code: never a cell, so its code is read
+/// with no call of `Helpers.tagCode`.
+let tagIsCode (ty: IrType) =
+    match IrType.unfold ty with
+    | IrTags _ -> not (isHeapType ty)
+    | _ -> false
+
 /// The name of the drop function of a type on the heap.
 let dropName (ty: IrType) = "__nanyx_drop_" + sanitizeIdentifier (IrType.mangle ty)
 

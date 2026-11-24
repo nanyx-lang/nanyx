@@ -248,11 +248,13 @@
     local.get $r
   )
 
-  (func $getOrDefault__int (param $opt i32) (param $default_i64 i64) (result i64) (local $__match_tmp_0 i32) (local $__payload_value_i64 i64)
+  (func $getOrDefault__int (param $opt i32) (param $default_i64 i64) (result i64) (local $__match_tmp_0 i32) (local $__payload_value_i64 i64) (local $__code_0 i32)
     local.get $opt
     local.set $__match_tmp_0
     local.get $__match_tmp_0
-      call $__nanyx_tag_code
+    call $__nanyx_tag_code
+    local.set $__code_0
+    local.get $__code_0
       i32.const 5
       i32.eq
     (if (result i64)
@@ -263,8 +265,7 @@
     local.get $__payload_value_i64
       )
       (else
-        local.get $__match_tmp_0
-      call $__nanyx_tag_code
+        local.get $__code_0
       i32.const 3
       i32.eq
     (if (result i64)
