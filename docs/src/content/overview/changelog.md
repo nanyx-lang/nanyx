@@ -71,6 +71,7 @@ run of faster type checking. Four changes break code: they are marked below.
 - Calling a record field whose function type has named parameters no longer traps.
 - An array of tuples can be written, and a `crash` in a list of numbers no longer makes invalid WebAssembly.
 - A deferred error in a `memory` block's lambda is reported instead of trapping.
+- An option nested in an option finds its `Default`, so `valueOrDefault` works on one.
 - `float.fromString` reads every decimal as the float nearest it, so every float `float.toString` writes reads back
   as itself, and `math.exp` is right near the ends of the float range.
 
