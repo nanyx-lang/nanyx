@@ -224,13 +224,23 @@ def parsePattern
       flags = (fold = false, multiline = false, dotAll = false)
     )
 
-    match readFrom(start, [], [], [], 0)
+    match readFrom(start, [], [], [], 0, 1)
       | #parsed(node, r) ->
-        if peek(r) == 41
-          then #failed(r.pos, "There is no '(' for this ')' to close")
-          else #parsed(node, r.groups, r.names)
+        if
+          | peek(r) == 41 -> #failed(r.pos, "There is no '(' for this ')' to close")
+          | sizeOf(node) > mostInstructions -> #failed(
+            0
+            "The pattern compiles to {sizeOf(
+              node
+            )} instructions, more than the {mostInstructions} a pattern may"
+          )
+          | else -> #parsed(node, r.groups, r.names)
       | #failed(at, message) -> #failed(at, message)
   }
+
+--| The most instructions a pattern may compile to, so that matching takes time in proportion to the
+  text, with a factor no pattern can make large.
+def mostInstructions: int = 100000
 
 --| The most groups that can be open at once, as RE2 allows. Reading a group takes no stack, but
   compiling and freeing the tree go down it a group at a time.
@@ -238,12 +248,13 @@ def mostNesting: int = 1000
 
 --| A group being read: the reader at its `(`, what makes its body into its node, and, in the group
   around it, the alternatives before the one it is in and the items before it in that one, each
-  last first.
+  last first, and the largest count of repeats nested in each other among them (see `readFrom`).
 type OpenGroup = (
   open: Reader
   make: Node -> Node
   alternatives: list(Node)
   items: list(Node)
+  widest: int
 )
 
 --| What reading the `(` where a reader is gives: the reader inside a group and what makes its
@@ -254,11 +265,12 @@ type Opened = #opened(Reader, (Node -> Node)) | #parsed(Node, Reader) | #failed(
 --| The alternatives from where `r` is to the end of the pattern or a `)` that no group read from
   here opens: those read so far in the innermost group open, `alternatives`, and the items of the
   one being read, `items`, each last first, and the groups `open` around them, innermost first,
-  `depth` of them. A group is read by going into it and on, not by a call, so a pattern nested
-  however deep is read in the same stack.
+  `depth` of them. `widest` is the largest count of repeats nested in each other among what was
+  read in the innermost group: the product of their counts (see `quantified`). A group is read by
+  going into it and on, not by a call, so a pattern nested however deep is read in the same stack.
 def readFrom
-  : Reader, list(Node), list(Node), list(OpenGroup), int -> Parsed
-  = { r, alternatives, items, open, depth ->
+  : Reader, list(Node), list(Node), list(OpenGroup), int, int -> Parsed
+  = { r, alternatives, items, open, depth, widest ->
     def c = peek(r)
 
     if
@@ -268,6 +280,7 @@ def readFrom
         []
         open
         depth
+        widest
       )
       | c == -1 or c == 41 ->
         match open
@@ -275,7 +288,7 @@ def readFrom
           | [group, ...outer] ->
             if c == -1
               then #failed(group.open.pos, "There is no ')' to close this '('")
-              else closeGroup(group, bodyOf(alternatives, items), r, outer, depth - 1)
+              else closeGroup(group, bodyOf(alternatives, items), widest, r, outer, depth - 1)
       | c == 40 ->
         match openGroup(r)
           | #opened(inside, make) ->
@@ -286,20 +299,28 @@ def readFrom
                 []
                 []
                 [
-                  OpenGroup(open = r, make = make, alternatives = alternatives, items = items)
+                  OpenGroup(
+                    open = r
+                    make = make
+                    alternatives = alternatives
+                    items = items
+                    widest = widest
+                  )
                   ...open
                 ]
                 depth + 1
+                1
               )
           | #parsed(node, after) -> readItem(
-            quantified(node, after)
+            quantified(node, 1, after)
             alternatives
             items
             open
             depth
+            widest
           )
           | #failed(at, message) -> #failed(at, message)
-      | else -> readItem(parseRepeat(r), alternatives, items, open, depth)
+      | else -> readItem(parseRepeat(r), alternatives, items, open, depth, widest)
   }
 
 --| The node of a group's body, or the whole pattern's: the alternatives `alternatives` and the
@@ -311,52 +332,78 @@ def bodyOf: list(Node), list(Node) -> Node = { alternatives, items ->
 --| Reading on from the item `read` gave, after `items`, if it gave one (see `readFrom`). An empty
   item, such as flags, is left out.
 def readItem
-  : Parsed, list(Node), list(Node), list(OpenGroup), int -> Parsed
-  = { read, alternatives, items, open, depth ->
+  : Repeated, list(Node), list(Node), list(OpenGroup), int, int -> Parsed
+  = { read, alternatives, items, open, depth, widest ->
     match read
-      | #parsed(#empty, after) -> readFrom(after, alternatives, items, open, depth)
-      | #parsed(node, after) -> readFrom(after, alternatives, [node, ...items], open, depth)
+      | #repeated(#empty, _, after) -> readFrom(after, alternatives, items, open, depth, widest)
+      | #repeated(node, counted, after) -> readFrom(
+        after
+        alternatives
+        [node, ...items]
+        open
+        depth
+        if counted > widest then counted else widest
+      )
       | #failed(at, message) -> #failed(at, message)
   }
 
---| Reading on from the `)` where `r` is, which closes `group`, whose body is `node`, in the groups
-  `outer`, `depth` of them (see `readFrom`). The flags the group set end with it.
+--| Reading on from the `)` where `r` is, which closes `group`, whose body is `node` and counts
+  to `widest` (see `readFrom`), in the groups `outer`, `depth` of them. The flags the group set end
+  with it.
 def closeGroup
-  : OpenGroup, Node, Reader, list(OpenGroup), int -> Parsed
-  = { group, node, r, outer, depth ->
+  : OpenGroup, Node, int, Reader, list(OpenGroup), int -> Parsed
+  = { group, node, widest, r, outer, depth ->
     def closed = skip(r, 1)
 
     readItem(
-      quantified(group.make(node), closed with flags = group.open.flags)
+      quantified(group.make(node), widest, closed with flags = group.open.flags)
       group.alternatives
       group.items
       outer
       depth
+      group.widest
     )
   }
 
 --| One atom, other than a group, and the quantifier after it if there is one.
-def parseRepeat: Reader -> Parsed = { r ->
+def parseRepeat: Reader -> Repeated = { r ->
   match parseAtom(r)
-    | #parsed(node, after) -> quantified(node, after)
+    | #parsed(node, after) -> quantified(node, 1, after)
     | #failed(at, message) -> #failed(at, message)
 }
+
+--| What reading an item and its quantifier gives: the item, the count of the repeats nested in each
+  other in it (see `quantified`) and the reader after it, or where the pattern goes wrong and why.
+type Repeated = #repeated(Node, int, Reader) | #failed(int, string)
 
 --| What a quantifier reads: the least and the most number of times (`-1` for no most) and the
   reader after it, no quantifier, or where it goes wrong and why.
 type Quantifier = #quantifier(int, int, Reader) | #none | #failed(int, string)
 
---| `node`, repeated as the quantifier where `r` is says, if there is one.
-def quantified: Node, Reader -> Parsed = { node, r ->
+--| `node`, whose repeats nested in each other count to `inner`, repeated as the quantifier where `r`
+  is says, if there is one, with what its repeats count to then. A quantifier counts to its most,
+  or to its least where it has no most, and to 1 at least: `*`, `+` and `?` count to 1, and are
+  loops that make the program no larger however they nest. Repeats nested in each other count to
+  the product of their counts, which can be at most `mostRepeats`, as in RE2: each copies what it
+  repeats as many times as it counts.
+def quantified: Node, int, Reader -> Repeated = { node, inner, r ->
   match quantifierAt(r)
     | #quantifier(least, most, after) ->
       def lazy = peek(after) == 63
       def end = if lazy then skip(after, 1) else after
+      def count = if most < 0 then least else most
+      def counted = inner * if count > 1 then count else 1
 
       match quantifierAt(end)
         | #quantifier(_, _, _) -> #failed(end.pos, "A quantifier can't follow another quantifier")
-        | _ -> #parsed(#repeat(node, least, most, not lazy), end)
-    | #none -> #parsed(node, r)
+        | _ ->
+          if counted > mostRepeats
+            then #failed(
+              r.pos
+              "Repeats nested in each other can count to at most {mostRepeats} between them, and these count to {counted}"
+            )
+            else #repeated(#repeat(node, least, most, not lazy), counted, end)
+    | #none -> #repeated(node, inner, r)
     | #failed(at, message) -> #failed(at, message)
 }
 

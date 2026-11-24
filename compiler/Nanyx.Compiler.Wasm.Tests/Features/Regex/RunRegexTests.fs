@@ -466,3 +466,69 @@ bad(nested(1000, "(", "a", "") ++ string.repeat(")", 999))
           "1001: Groups can be nested at most 1000 deep"
           "2000: There is no '(' for this ')' to close"
           "1: There is no ')' to close this '('" ]
+
+[<Fact>]
+let ``Run - nested + and * are loops, so their program grows by one copy at each level and they compile and match`` () =
+    // A `+` is its copy and a split back, and a `*` a split, its copy and a jump: a program no larger however they
+    // nest (#2593). The size a pattern compiles to shows past the cap, whose error says it.
+    runRegex
+        """def nested = { n, open, inner, close -> string.repeat(open, n) ++ inner ++ string.repeat(close, n) }
+
+def body = string.repeat("a", 100000)
+
+for [25, 50] | n ->
+  bad(nested(n, "(?:", body, ")+"))
+  bad(nested(n, "(?:", body, ")*"))
+for [nested(25, "(?:", "a", ")+"), nested(70, "(?:", "a+", ")*"), nested(1000, "(?:a|", "b", ")+")] | pattern ->
+  println("xaab" \Regex.find(re(pattern)) \mapSome { m -> "{m.start}-{m.end}" })
+show('a+?', "aaa")
+show('(a+)+b', "aaab")
+show('x(a|ab)+y', "xababay")
+"""
+    |> expectLines
+        [ "1: The pattern compiles to 100025 instructions, more than the 100000 a pattern may"
+          "1: The pattern compiles to 100050 instructions, more than the 100000 a pattern may"
+          "1: The pattern compiles to 100050 instructions, more than the 100000 a pattern may"
+          "1: The pattern compiles to 100100 instructions, more than the 100000 a pattern may"
+          "#some(1-3)"
+          "#some(0-0)"
+          "#some(1-4)"
+          "a 0-1"
+          "aaab 0-4"
+          "xababay 0-7" ]
+
+[<Fact>]
+let ``Run - repeats nested in each other count to at most 1000 between them, and one past it is an error at its quantifier`` () =
+    runRegex
+        """println(string.repeat("a", 1000) \Regex.isMatch(re('^(?:a{10}){100}$')))
+println(string.repeat("a", 999) \Regex.isMatch(re('^(?:a{10}){100}$')))
+bad('(?:a{10}){101}')
+bad('x(?:(?:a{2}){2}){251}')
+bad('(?:a{2,}){501}')
+bad('(?:a{2,5}){201}')
+println(re('(?:(?:a{2}){2}){250}') \Regex.toString)
+println(re('(?:a*){1000}') \Regex.toString)
+"""
+    |> expectLines
+        [ "true"
+          "false"
+          "10: Repeats nested in each other can count to at most 1000 between them, and these count to 1010"
+          "17: Repeats nested in each other can count to at most 1000 between them, and these count to 1004"
+          "10: Repeats nested in each other can count to at most 1000 between them, and these count to 1002"
+          "11: Repeats nested in each other can count to at most 1000 between them, and these count to 1005"
+          "(?:(?:a{2}){2}){250}"
+          "(?:a*){1000}" ]
+
+[<Fact>]
+let ``Run - a pattern compiles to at most 100000 instructions, and one past is an error`` () =
+    runRegex
+        """println(re(string.repeat("a", 100000)) \Regex.toString \string.length)
+bad(string.repeat("a", 100001))
+println(re("(?:" ++ string.repeat("a", 100) ++ '){1000}') \Regex.toString \string.length)
+bad("(?:" ++ string.repeat("a", 101) ++ '){1000}')
+"""
+    |> expectLines
+        [ "100000"
+          "1: The pattern compiles to 100001 instructions, more than the 100000 a pattern may"
+          "110"
+          "1: The pattern compiles to 101000 instructions, more than the 100000 a pattern may" ]
