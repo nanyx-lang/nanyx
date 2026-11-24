@@ -81,10 +81,10 @@ sequence's steps do.
 ## `MArray.build`
 
 ```nanyx fragment
-def MArray.build: [Memory, c, d] ([c] () -> [d] seq(a)) -> MArray(a)
+def MArray.build: [Memory, c] ([c, Emit(a)] () -> ()) -> MArray(a)
 ```
 
-A new array of what `block` yields. The same as `seq(block) \MArray.fromSeq`.
+A new array of what `block` emits, through `Emit`. The same as `list.build(block) \MArray.fromList`.
 
 ## `MArray.fromArray`
 

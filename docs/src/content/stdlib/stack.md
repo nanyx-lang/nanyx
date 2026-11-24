@@ -76,10 +76,11 @@ contexts the sequence's steps do.
 ## `Stack.build`
 
 ```nanyx fragment
-def Stack.build: [c, d] ([c] () -> [d] seq(a)) -> Stack(a)
+def Stack.build: [c] ([c, Emit(a)] () -> ()) -> Stack(a)
 ```
 
-A stack of what `block` yields, the first on top. The same as `seq(block) \Stack.fromSeq`.
+A stack of what `block` emits, through `Emit`, the first on top. The same as
+`list.build(block) \Stack.fromList`.
 
 ## `Stack.push`
 

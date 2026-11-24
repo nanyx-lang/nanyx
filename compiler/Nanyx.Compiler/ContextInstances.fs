@@ -379,6 +379,23 @@ let private otherInstanceInScope (env: TypeEnv) (state: InferState) (ctxName: Id
     |> Option.filter (fun _ -> (instanceInScope env state ctxName argTys).IsNone)
     |> Option.map (fun (_, instanceArgs) -> TyApply(ctxName, instanceArgs))
 
+/// `state` where a call that requires `ctxName` at `argTys` settles the nearest instance of that context in scope in
+/// `env`, when its arguments, as far as the constraints so far tell, still hold variables that `argTys` fit: a lambda
+/// checked against `[c, Emit(b)] () -> ()`, where `b` is a builder's own and still open, has the instance `Emit(b)` in
+/// scope, and a call inside it to a function that requires `Emit(int)` makes `b` an `int`, as calling the member `emit`
+/// with an `int` would (#2566). `None` when the nearest instance of the context is settled already, or the call doesn't
+/// fit it: a nearer one is never passed over for one further out. A variable a def's annotation writes is rigid, so
+/// settling one here is the error that check reports.
+let private settleInstanceInScope (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : InferState option =
+    nearestInstance env state (fun name instanceArgs -> if name = ctxName then Some instanceArgs else None)
+    |> Option.bind (fun (_, instanceArgs) ->
+        let pairs = if instanceArgs.Length = argTys.Length then List.zip instanceArgs argTys else []
+        if not pairs.IsEmpty
+           && instanceArgs |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not)
+           && Solving.unify ((pairs |> List.map (fun (instanceArg, argTy) -> instanceArg, argTy, Equal, span)) @ Solving.agreeing state.Constraints) |> Result.isOk
+        then Some (pairs |> List.fold (fun current (instanceArg, argTy) -> addConstraintAt span instanceArg argTy current) state)
+        else None)
+
 /// The error for a call of `name`, at `span`, that requires `ctxName` at a type nothing settles, where the instance of
 /// it in scope is `other`, for another type.
 let private unsettledBesideOther (name: Identifier) (ctxName: Identifier) (other: Ty) (span: SourceSpan) : Diagnostic =
@@ -593,6 +610,13 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     // Until the def around the call is inferred, any variable of the type may turn out to stand for one
                     // its callers choose, so a union open to more tags is left to the compiler's own.
                     let rigid = argTys |> List.map TypeEnv.freeTyVars |> Set.unionMany
+                    // The instance in scope whose open arguments the call settles, found with what it settles.
+                    let settledInScope (current: InferState) =
+                        settleInstanceInScope env current ctxName argTys calleeSpan
+                        |> Option.bind (fun next ->
+                            instanceInScope env next ctxName argTys
+                            |> Option.map (fun inScope ->
+                                found @ [ Some (InstanceInScope inScope) ], withAssociatedOfInstance env next calleeSpan ctxName argTys argTysAsRead))
                     let wellKnown =
                         if reference && not settled then None
                         else
@@ -682,10 +706,13 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     | None, None when TypeValues.passesBuiltIn env ctxName argTys ->
                         Ok (found @ [ Some (InstanceSynthesized TypeValues.builtInMembers) ], current)
                     | None, None when canSynthesize ctxName argTys ->
-                        synthesizeInstance env current name ctxName argTys calleeSpan
-                        |> Result.map (fun (instance, next) -> found @ [ Some instance ], next)
+                        match synthesizeInstance env current name ctxName argTys calleeSpan, settledInScope current with
+                        | Ok (instance, next), _ -> Ok (found @ [ Some instance ], next)
+                        | Error _, Some settled -> Ok settled
+                        | Error errors, None -> Error errors
                     | None, None when InterpolationHoles.isHole name ->
                         InterpolationHoles.resolveLater env current call ctxName argTys calleeSpan found contexts.Length
+                    | None, None when (settledInScope current).IsSome -> Ok (settledInScope current).Value
                     | None, None ->
                         // An instance of the context at other arguments puts its members in scope by their names, but
                         // it is not one for a type the call leaves open: that is found once the type is known.

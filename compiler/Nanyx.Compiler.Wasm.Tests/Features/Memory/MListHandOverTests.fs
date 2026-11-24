@@ -44,7 +44,7 @@ def copied: int -> int = { n ->
 }
 
 def selected: int -> int = { n ->
-  sum(list.init(n, { i -> i }) \list.select { x -> if x % 2 == 0 then yield x })
+  sum(list.init(n, { i -> i }) \list.select { x -> if x % 2 == 0 then emit(x) })
 }
 
 def initialised: int -> int = { n -> sum(list.init(n, { i -> i })) }
@@ -76,13 +76,10 @@ let ``MList - toList followed by more adds gives two lists, the first unchanged`
 let ``list.select builds its list without reversing it`` () =
     use program = instantiateWasm program []
     let initAllocations, _ = allocationsOf program "initialised" 100
-    // The empty sequence every `seq.empty()` shares is made by the first call that needs it, and kept.
-    program.Call("selected", 1) |> ignore
     let liveBefore = program.LiveBlocks
     let selectAllocations, total = allocationsOf program "selected" 100
     Assert.Equal(2450, total)
-    // A cell for each value yielded, the sequence the lambda gives for each element (#1699), and the cells, closure and
-    // mutable cells of the block: no copy of the list. An element that yields nothing gives the shared empty sequence,
-    // and one that yields gives the sequence of that value alone (#2425).
-    Assert.InRange(selectAllocations - initAllocations, 247, 257)
+    // A cell for each value emitted (#2566), and the closures and mutable cells of the block: no copy of the list,
+    // and nothing else per value.
+    Assert.InRange(selectAllocations - initAllocations, 50, 60)
     Assert.Equal(liveBefore, program.LiveBlocks)
