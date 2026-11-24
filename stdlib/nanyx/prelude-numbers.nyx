@@ -63,7 +63,7 @@ export context Sub(a) = (`-`: (a, a) -> a, negate: a -> a)
   of it, so `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and
   `float`. A function that requires `Num(a)` can call one that requires `Add(a)` or `Sub(a)`: a
   `Num` has every member they have. On an integer type `/` truncates and `%` takes the sign of `x`;
-  on `float` they are IEEE 754's. `isInteger` says which `a` is: `true` for an integer type, so
+  on `float` they are IEEE 754's. `math.mod` is the modulo with the sign of `y`. `isInteger` says which `a` is: `true` for an integer type, so
   `x ** -1` stops the program on one.
 export context Num(a) = (
   zero: a
@@ -109,7 +109,8 @@ export def int.`/`: int, int -> int = { x, y ->
   x / y
 }
 
---| The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
+--| The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1. For the modulo with the
+  sign of `y`, which wraps an index into a range, see `math.mod`.
 export def int.`%`: int, int -> int = { x, y ->
   x % y
 }
