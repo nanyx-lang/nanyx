@@ -336,6 +336,9 @@ type InferState =
             /// The instance of a parameterised context each `use` loads, by the node of the value it loads (see
             /// `TypedModule.UseContexts`).
             UseContexts: Map<NodeId, TypeExpr>;
+            /// The type of the instance each `use` in `UseContexts` loads, as it was when the `use` was checked. What
+            /// the rest of the module settles in it is written into `UseContexts` once the module is inferred (#2550).
+            UseContextTypes: Map<NodeId, Ty>;
             /// The expressions that failed to check, each by its node with its diagnostics, the latest first. Each is
             /// typed as anything, and checking carries on around it.
             FailedExprs: (NodeId * Diagnostic list) list;
@@ -494,6 +497,7 @@ let emptyState =
             AssociatedVariables = [];
             ContextProviders = Map.empty;
             UseContexts = Map.empty;
+            UseContextTypes = Map.empty;
             FailedExprs = [];
             UnhandledMatches = [];
             UnknownTypeUses = [];
