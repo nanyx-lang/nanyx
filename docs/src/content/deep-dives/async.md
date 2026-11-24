@@ -169,6 +169,10 @@ Nothing starts it: like `Console`, the host provides it.
   nothing but itself, so `Attributes.applyAttributes` allows `@customKeywordType(#delay)` on a def attached to a context
   the module declares, and `Attributes.keywordKinds` reads it there by the def's bare name (any other kind needs a
   builder, and a def attached to no context can't be a keyword, `NYX0019`). The hosts' preludes export `Async` alone.
+  `start! e` is `start({ e })`, so a local, a parameter or a pattern's variable named `start` hides `Async.start`, as
+  any nearer name does. The desugaring keeps each `#delay` keyword's call by its span (`InferState.DelayCalls`), and
+  `HiddenKeywords` reports a mismatch at such a call whose keyword names a local at the keyword, naming the local and
+  the def it hides (`NYX0201`).
 - **Each def a scope.** `TaskScopes.wrap`, before inference, makes the body of each module-level def that names
   `start` where nothing in it binds the name (a parameter or a local def named `start` is not the one that starts a
   task), and a script's entry point if it does, the block of a call of `Async.concurrent`; a module that defines a `start` of its
