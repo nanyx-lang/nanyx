@@ -8,7 +8,7 @@ open Nanyx.Compiler.Tests.TestSupport
 // fields package types the checker never learns (see `TypeMatches`, `TypeDescriptions`).
 
 let private describe =
-    """def describe: a, type a -> string = { value, t ->
+    """def describe: a, Type(a) -> string = { value, t ->
   match t
     | #int -> "int {value + 1}"
     | #string -> "string " ++ value
@@ -30,7 +30,7 @@ let ``Each arm of a Type match narrows the type, and a field's packaged type che
 let ``An arm gives the match's expected type with the type narrowed in it`` () =
     compileClean (
         normalized
-            """def parse: string, type a -> #some(a) | #none = { text, t ->
+            """def parse: string, Type(a) -> #some(a) | #none = { text, t ->
   match t
     | #int ->
         match int.fromString(text)
@@ -48,7 +48,7 @@ let ``A value of the narrowed type is only the type its arm says`` () =
     let code, at =
         singleError (
             normalized
-                """def wrong: a, type a -> string = { value, t ->
+                """def wrong: a, Type(a) -> string = { value, t ->
   match t
     | #int -> value
     | else -> ""
@@ -63,7 +63,7 @@ let ``A Type match that leaves out a tag is non-exhaustive`` () =
     let code, message, at =
         onlyDiagnostic (
             normalized
-                """def kind: type a -> string = { t ->
+                """def kind: Type(a) -> string = { t ->
   match t
     | #int -> "int"
     | #string -> "string"
@@ -79,7 +79,7 @@ let ``A pattern that isn't a description's tag is reported`` () =
     let code, message, at =
         onlyDiagnostic (
             normalized
-                """def kind: type a -> string = { t ->
+                """def kind: Type(a) -> string = { t ->
   match t
     | #integer -> "int"
     | else -> "other"
@@ -95,7 +95,7 @@ let ``A tag's payload is matched by a name`` () =
     let code, at =
         singleError (
             normalized
-                """def kind: type a -> string = { t ->
+                """def kind: Type(a) -> string = { t ->
   match t
     | #list(#int) -> "ints"
     | else -> "other"
@@ -110,7 +110,7 @@ let ``A field's value can't leave the lambda that opened it`` () =
     let code, message, at =
         onlyDiagnostic (
             normalized
-                """def values: a, type a -> int = { value, t ->
+                """def values: a, Type(a) -> int = { value, t ->
   match t
     | #record(r) ->
         def got = r.fields \list.map { f -> f.get(value) }
@@ -128,7 +128,7 @@ let ``An element's type can't leave its arm`` () =
     let code, at =
         singleError (
             normalized
-                """def elementType: type a -> int = { t ->
+                """def elementType: Type(a) -> int = { t ->
   def found =
     match t
       | #list(elem) -> [elem]
