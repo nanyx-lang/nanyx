@@ -57,3 +57,9 @@ def r = applyAll([{ x, y -> x + y }, { a, b -> a + b }])
 """
     let diagnostics = namingNoField source
     Assert.Equal<string list>([ "a"; "b" ], diagnostics |> List.map (spanOf >> textAt source))
+
+[<Fact>]
+let ``A lambda's record pattern may name one field alone and rename another`` () =
+    let types = definedTypes "def f: (x: int, y: int) -> int = { (x, y = b) -> x * 10 + b }\n\ndef g = { p: (x: int, y: string) -> match p\n  | (y = s, x) -> \"{s}{x}\"\n}\n"
+    Assert.Equal("(x: int, y: int) -> int", Unifier.tyToString types.["f"])
+    Assert.Equal("(x: int, y: string) -> string", Unifier.tyToString types.["g"])

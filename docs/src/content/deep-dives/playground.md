@@ -86,7 +86,9 @@ Ctrl+D, checks that runs keep the output before them, that a compile error links
 code without running it, that a bad link opens hello world, that a reload keeps the code, that a tour link opens its
 example in an isolated page, and runs every example in the menu, checking that none fails; and the docs' examples
 (below), running every example on the pages outside the tour, as its "Open in the playground" link opens it, ending its
-input if it reads any, and checking that none fails. The Compiler workflow's
+input if it reads any, and checking that none fails. Those two run their examples on four playground pages at once,
+each with a compiler of its own, a quarter of them each
+([#2554](https://github.com/nanyx-lang/nanyx/issues/2554)). The Compiler workflow's
 `Browser test` job builds the site with the compiler it published and runs it.
 
 # The docs' examples
@@ -102,7 +104,7 @@ since the docs' pages are swapped in by the client router.
 A block opens in the playground when it is runnable (`isRunnable`: fenced ` ```nanyx ` with nothing after it and no
 `-- error` comment), is one file, and needs no host but the playground's. `needsAnotherHost` decides that from the
 block's source when the site is built: a block needs another host when it names one with `::host`; when it depends on a
-package from the index, `::dependency nanyx.json 0.2.0`, which the playground can't download; when it imports, or
+package from the index, `::dependency nanyx.json 0.4.0`, which the playground can't download; when it imports, or
 depends on, a module only the console host can run, such as `nanyx.fs`'s or `nanyx.console.core/env`; or when it uses,
 outside a comment, a name only the console host's prelude brings in and doesn't declare it itself, such as `args`,
 `exit`, `FileSystem` or `Http` and the members of those contexts. Which names and modules those are is read from the two

@@ -102,8 +102,14 @@ let ``A match takes about as long whichever arm its commonest tag is in`` () =
         let clock = System.Diagnostics.Stopwatch.StartNew()
         program.Call(name, 40) |> ignore
         clock.Elapsed.TotalMilliseconds
-    // The faster of three runs of each, so that a pause of the machine's doesn't decide it.
-    let last = List.init 3 (fun _ -> time "runLast") |> List.min
-    let first = List.init 3 (fun _ -> time "runFirst") |> List.min
     // With a call per arm, the commonest tag in the last arm took over three times as long.
-    Assert.True(last / first < 2.0, $"the commonest tag in the last arm took {last:F1} ms, in the first {first:F1} ms")
+    let holds (last: float) (first: float) = last / first < 2.0
+    let last, first = time "runLast", time "runFirst"
+    // When the first runs miss, each is run again in turn, and each one's quickest run counts, so that load on the
+    // machine, which slows one run and not the other, can't make the test fail (#2388).
+    let last, first =
+        if holds last first then last, first
+        else
+            let again = List.init 5 (fun _ -> time "runLast", time "runFirst")
+            min last (again |> List.map fst |> List.min), min first (again |> List.map snd |> List.min)
+    Assert.True(holds last first, $"the commonest tag in the last arm took {last:F1} ms, in the first {first:F1} ms")

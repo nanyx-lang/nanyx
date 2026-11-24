@@ -32,7 +32,9 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   structure that holds one, is always compared by an `==` the compiler derives from its parts (`MapShape` and
   `SetShape` in `StructuralInstances.fs`, as for a list whose elements have their own `==`). The derived `==` calls
   the prelude's `__mapEqualsBy` or `__setEqualsBy` with a function that compares two values or elements. It takes time
-  in proportion to the product of the sizes, as a lookup does.
+  in proportion to the product of the sizes, as a lookup does. A type variable nothing solves in the structure, as
+  the element of an empty list's type, holds no value, so it is compared as `unit`, which the backend makes it
+  (`ContextInstances.derivedComparison`, [#2522](https://github.com/nanyx-lang/nanyx/issues/2522)).
 - **A call that needs `Eq` of a type with variables in it**, such as `list.distinct` on a `list(set(a))` inside a
   function that requires `[Eq(a)]`, is passed the derived `==` as a closure over the `Eq(a)` the function was given
   ([#630](https://github.com/nanyx-lang/nanyx/issues/630)).

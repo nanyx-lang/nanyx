@@ -1,4 +1,4 @@
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 module contactInformation
 

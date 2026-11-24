@@ -13,8 +13,8 @@ progress.
 
 - **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
   package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console`,
-  `packages/nanyx.console.core`, `packages/nanyx.fs`, `packages/nanyx.http.core`, `packages/nanyx.http`,
-  and `packages/nanyx.regex`. Every build of the compiler copies the directory beside it (a `None` item in
+  `packages/nanyx.console.core`, `packages/nanyx.fs`, `packages/nanyx.http.core`, `packages/nanyx.http`, and the
+  others in `packages/`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
   executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
@@ -38,20 +38,11 @@ progress.
 - **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
   no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it
   has no entry point.
-- **Regular expressions are Nanyx code.** `nanyx.regex` is written over the standard library, with no intrinsic of its
-  own: `regex.syntax.nyx` reads a pattern into a tree, applying its flags as it goes, and `regex.vm.nyx` compiles the
-  tree into a Thompson NFA and runs it as a Pike VM, whose threads are kept in priority order and marked in an
-  `MArray` per code point, so matching is linear in the text for every pattern. Checking literal patterns at compile
-  time is planned on [Regular expressions](../work-in-progress/regex).
-
-# Why regular expressions are built this way
-
-- **A shipped package, not the standard library,** which stays what every program needs.
-- **Written in Nanyx, not provided by a host.** Matching is pure computation, so it needs no capability. Taking the
-  host's engine (.NET's in the console host, JavaScript's in a browser), through a runtime import as `Http` does, would
-  be fast and complete, but each host would match differently, and pure code would need a capability. The engine is
-  also a real workload for `MArray`, functional but in place and sequences, written with the features users have.
-- **Linear time, as RE2, Go and Rust have,** so that no pattern can hang a server (ReDoS). A backtracking engine would
-  have backreferences and lookaround, but takes exponential time on some patterns.
-- **No typed captures.** A pattern's named groups could become a record type, `(year: string, month: string)`, but that
-  needs the compiler to evaluate the pattern while type checking, which Nanyx deliberately doesn't do.
+- **Only what must be shipped.** The compiler ships a package only when a program can't build or run without it: a
+  host, its interface packages and the host library they are written on. A package that is pure Nanyx over the
+  standard library, which nothing in the compiler, a host or the runtime depends on, is an ordinary package from the
+  [package index](./package-index), released on its own rather than with every compiler release. `nanyx.json` is one,
+  from [nanyx-lang/json](https://github.com/nanyx-lang/json), and so is `nanyx.regex`, from
+  [nanyx-lang/regex](https://github.com/nanyx-lang/regex), whose README says how its engine is built and why. It was
+  shipped up to 0.39 ([#2631](https://github.com/nanyx-lang/nanyx/issues/2631)); the compiler's tests that use it as
+  a large real program run a copy of its sources kept as test data, `Features/Regex/nanyx.regex` in the Wasm tests.

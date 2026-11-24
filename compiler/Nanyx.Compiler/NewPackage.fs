@@ -4,12 +4,20 @@ open System.IO
 
 /// `nanyx new`: the first files of a package, a manifest and an `@entry` that prints a greeting.
 module NewPackage =
-    /// The manifest of a new package called `name`: its sources are under `src`, the official linter is on with every
-    /// rule at its default, and the console host runs it. Both are the release `toolVersion` of the compiler making it.
+    /// The `nanyx` a package's manifest writes for the compiler release `toolVersion`, the oldest it builds with:
+    /// `"0.39"` for 0.39.2, the release's major and minor version.
+    let nanyxOf (toolVersion: string) =
+        match SemanticVersion.tryParse toolVersion with
+        | Some version -> $"{version.Major}.{version.Minor}"
+        | None -> toolVersion
+
+    /// The manifest of a new package called `name`: its sources are under `src`, it builds with the release
+    /// `toolVersion` of the compiler making it or a later one, the official linter is on with every rule at its default,
+    /// and the console host runs it. Both are that release too.
     let manifest (name: string) (toolVersion: string) =
         let shipped package = Manifest.entryText toolVersion "" package Shipped
         $"""(
-  package = (name = {Manifest.quotedString name}, version = "0.1.0", sources = ["src/**/*.nyx"])
+  package = (name = {Manifest.quotedString name}, version = "0.1.0", sources = ["src/**/*.nyx"], nanyx = "{nanyxOf toolVersion}")
   linters = [{shipped "nanyx.lint"}]
   host = {shipped Hosts.consolePackage}
 )
