@@ -64,3 +64,7 @@ def f = memory {
 }
 """
     Assert.Equal(text source, format (text source))
+[<Fact>]
+let ``A cell declared at the top level, an error, is written as it is`` () =
+    unchanged "mut count = 0\n"
+    unchanged "mut total: int = 0\n"
