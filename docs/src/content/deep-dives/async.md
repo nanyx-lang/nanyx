@@ -54,13 +54,20 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   costs one `global.get` and a branch. A tail call that can stop stays a tail call: the callee's frame takes the
   caller's place.
 - **Carrying on.** A state machine's resume entry, `<name>__resume`, passes its frame in `__nanyx_resuming` and calls the
-  function, whose first code takes the frame back: it restores the variables, frees the frame, and goes through its own
+  function, whose first code takes the frame back: it restores the variables, keeps the frame, and goes through its own
   code to the split point it stopped at, skipping what ran already. Each link of a chain before the one that holds the
   state runs only when the function is not resuming or the state is in it; an `if`, a `match` or a loop resuming in a
   branch takes that branch, without testing its condition or binding its pattern again; and counting before a body
   that holds the state is skipped. At the split point, it calls the resume entry of the callee's frame instead of the
-  callee. So resuming a task resumes each function it stopped in, outermost first, as Rust polls a future: the code is
-  structured as before, with no jump table, and a crash's stack still shows each function.
+  callee; a call of a state machine named in the code calls the callee itself, as its resume entry would, when the
+  frame is the callee's own and not one it stopped in by a tail call. So resuming a task resumes each function it
+  stopped in, outermost first, as Rust polls a future: the code is structured as before, with no jump table, and a
+  crash's stack still shows each function. When the call it resumed stops again, the function stops in the frame it
+  kept, which holds what that state keeps already, and only the callee's frame in it is new; when the call finishes,
+  or the function stops somewhere else, the kept frame is freed. So a wait many calls deep allocates a frame only in
+  the functions that stop somewhere new, not in each one it is in, but it still returns through each of them and
+  calls back into each, which a wait at the top doesn't
+  ([#2561](https://github.com/nanyx-lang/nanyx/issues/2561)).
 - **Temporaries.** A value the emitter would compute where it is used, on the stack (see `CoreIrEmit`), can't be there
   when the function stops: a temporary whose value holds a split point, and those waiting to be used while it is
   computed, are kept in locals instead (`SplitPlan.StoredTemps`). Each is computed where it would have been used: after
