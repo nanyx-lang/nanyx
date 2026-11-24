@@ -33,8 +33,12 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
 - **The store** is, for now, the list of a map's entries, each key once, or of a set's elements, in the order of the
   keys' hashes. Two hashes are ordered by their lowest five bits, then the five above those, and so on, as a walk of a
   trie that reads a hash five bits at a time from its low end meets them; keys with the same hash are ordered by the
-  compiler's own order of their structure (`hashOrder` and `keyOrder` in `prelude-maps.nyx`). So two maps with the
-  same keys hold them in the same order however they were built. The order is not one a program can rely on, and the
+  compiler's own order of their structure (`hashOrder` and `keyOrder` in `prelude-maps.nyx`), which the backend has
+  for every type a key can be (`CoreIrOrdering.fs`): tags by their numbers and then their payloads, and a recursive
+  type as what it is made of, though neither has an `Ord`, so `<` on them is still an error. A tag's number, and so
+  its hash too, is the program's own: the order is the same throughout a run, but not from one program to another,
+  and nothing may rely on it beyond a run. So two maps with the same keys hold them in the same order however they
+  were built. The order is not one a program can rely on, and the
   docs call it unspecified.
 - **The compiler reads a map only through the prelude.** It reads a map's entries or a set's elements through the
   prelude's `map.toList` and `set.toList` (`Maps.toList` and `Sets.toList`), which linking always keeps: a `for` loop
