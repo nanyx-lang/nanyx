@@ -5,8 +5,9 @@
   last four take a value of any type that has an order, a `string` among them. [`sqrt`], [`exp`],
   [`ln`], [`log10`], [`log2`], [`floor`], [`ceil`], [`round`] and [`truncate`] take a `float`, and so
   do the trigonometric functions, [`sin`], [`cos`], [`tan`], [`asin`], [`acos`], [`atan`] and
-  [`atan2`], whose angles are in radians. [`pi`], [`e`],
-  [`infinity`] and [`nan`] are constants, and [`isNaN`], [`isInfinite`] and [`isFinite`] tell the
+  [`atan2`], whose angles are in radians, the hyperbolic functions, [`sinh`], [`cosh`], [`tanh`],
+  [`asinh`], [`acosh`] and [`atanh`], and [`hypot`] and [`cbrt`]. [`pi`], [`e`], [`infinity`] and
+  [`nan`] are constants, and [`isNaN`], [`isInfinite`] and [`isFinite`] tell the
   special floats from the others.
 
   Import it with `import nanyx/math as math` to call `math.abs(x)` as the docs do, or unqualified to
@@ -310,6 +311,223 @@ def atan2Of: float, float, float -> float = { y, x, magnitude ->
   def angle = if left then pi - (magnitude - 1.2246467991473532e-16) else magnitude
 
   if below then -angle else angle
+}
+
+-- The hyperbolic functions and their inverses are written over `exp`, `ln` and `sqrt` much as musl's
+-- are, with a series near zero, where the plain formula would lose digits. A series is added up by Horner's
+-- rule, the smallest terms first, and what is small next to the first term is added to it last, so
+-- that the result is rounded once.
+
+--| The terms from the `k`th on, counting from 1, of the series `1 + x ** 2 / 3! + x ** 4 / 5! + ...`
+  for `sinh(x) / x`, over the `k`th, for an `x` of at most 1 with `xx` its square. Twelve terms are
+  enough.
+def sinhSeries: float, int -> float = { xx, k ->
+  if k > 12 then 1.0 else 1.0 + xx / int.toFloat(2 * k * (2 * k + 1)) * sinhSeries(xx, k + 1)
+}
+
+--| The terms from the `k`th on, counting from 1, of the series `1 + x ** 2 / 2! + x ** 4 / 4! + ...`
+  for `cosh(x)`, over the `k`th, for an `x` of at most 1 with `xx` its square. Twelve terms are enough.
+def coshSeries: float, int -> float = { xx, k ->
+  if k > 12 then 1.0 else 1.0 + xx / int.toFloat((2 * k - 1) * (2 * k)) * coshSeries(xx, k + 1)
+}
+
+--| The terms from the `k`th on, counting from 0, of the series `1 + t ** 2 / 3 + t ** 4 / 5 + ...` for
+  `atanh(t) / t`, over `t ** 2k`, for a `t` below 1/3 with `tt` its square. Thirty terms are enough.
+def atanhSeries: float, int -> float = { tt, k ->
+  if k > 30
+    then 1.0 / int.toFloat(2 * k + 1)
+    else 1.0 / int.toFloat(2 * k + 1) + tt * atanhSeries(tt, k + 1)
+}
+
+--| The terms from the `n`th on, counting from 0, of the series `1 - x ** 2 / 6 + 3 * x ** 4 / 40 - ...`
+  for `asinh(x) / x`, over `x ** 2n`, for an `x` below 1/2 with `xx` its square, given `b`, the `n`th
+  term's binomial coefficient, `(-1/4) ** n * (2n)! / n! ** 2`. Forty terms are enough.
+def asinhSeries: float, float, int -> float = { xx, b, n ->
+  if n > 40
+    then 0.0
+    else b / int.toFloat(2 * n + 1) +
+      xx * asinhSeries(xx, b * int.toFloat(-(2 * n + 1)) / int.toFloat(2 * n + 2), n + 1)
+}
+
+--| `atanh(t)`, for a `t` below 1/3.
+def atanhOfSmall: float -> float = { t ->
+  def tt = t * t
+  t + t * (tt * atanhSeries(tt, 1))
+}
+
+--| `ln(1 + u)`, for a `u` not below zero, without losing the digits of a small `u`.
+def log1p: float -> float = { u ->
+  if u < 1.0 then log1pOfSmall(u, 2.0 + u) else logOfOnePlus(u, 1.0 + u)
+}
+
+--| `ln(1 + u)`, for a `u` below 1, given `s`, `2 + u` rounded: `2 * atanh(u / (2 + u))`, with what
+  `s` lost to rounding put back.
+def log1pOfSmall: float, float -> float = { u, s ->
+  def t = u / s
+  def lost = u - (s - 2.0)
+  2.0 * atanhOfSmall(t) - 2.0 * t * lost / s / (1.0 - t * t)
+}
+
+--| `ln(1 + u)`, given `w`, `1 + u` rounded, with what `w` lost to rounding put back.
+def logOfOnePlus: float, float -> float = { u, w ->
+  ln(w) + (u - (w - 1.0)) / w
+}
+
+--| `exp(a) / 2`, for an `a` at which `exp(a)` may be too large for a `float` though half of it is not.
+def halfExp: float -> float = { a ->
+  if a > 709.0 then exp(a / 2.0) * 0.5 * exp(a / 2.0) else 0.5 * exp(a)
+}
+
+--| The hyperbolic sine of `x`, `(e ** x - e ** -x) / 2`: `sinh(0.0)` is `0.0` and `sinh(1.0e-10)` is
+  `1.0e-10`.
+export def sinh: float -> float = { x ->
+  if isNaN(x) or x == 0.0 then x else if x < 0.0 then -sinhOfMagnitude(-x) else sinhOfMagnitude(x)
+}
+
+--| `sinh(a)`, for an `a` not below zero.
+def sinhOfMagnitude: float -> float = { a ->
+  if a <= 1.0
+    then a + sinhLessX(a)
+    else if a > 22.0 then halfExp(a) else 0.5 * (exp(a) - 1.0 / exp(a))
+}
+
+--| `sinh(a) - a`, for an `a` of at most 1.
+def sinhLessX: float -> float = { a ->
+  def xx = a * a
+  a * (xx / 6.0 * sinhSeries(xx, 2))
+}
+
+--| The hyperbolic cosine of `x`, `(e ** x + e ** -x) / 2`: `cosh(0.0)` is `1.0`.
+export def cosh: float -> float = { x ->
+  if isNaN(x) then x else coshOfMagnitude(abs(x))
+}
+
+--| `cosh(a)`, for an `a` not below zero.
+def coshOfMagnitude: float -> float = { a ->
+  if a <= 1.0
+    then 1.0 + coshLessOne(a)
+    else if a > 22.0 then halfExp(a) else 0.5 * (exp(a) + 1.0 / exp(a))
+}
+
+--| `cosh(a) - 1`, for an `a` of at most 1.
+def coshLessOne: float -> float = { a ->
+  def xx = a * a
+  xx / 2.0 * coshSeries(xx, 2)
+}
+
+--| The hyperbolic tangent of `x`, `sinh(x) / cosh(x)`: `tanh(0.0)` is `0.0`, and it is `1.0` or `-1.0`
+  for an `x` far enough from zero, `tanh(1000.0)` among them.
+export def tanh: float -> float = { x ->
+  if isNaN(x) or x == 0.0 then x else if x < 0.0 then -tanhOfMagnitude(-x) else tanhOfMagnitude(x)
+}
+
+--| `tanh(a)`, for an `a` not below zero. Past 22 it is 1.0 to the nearest `float`, and past 1 it is
+  `1 - 2 / (e ** 2a + 1)`. Up to 1 it is `(a + s) / (1 + c)`, with `s` the rest of `sinh(a)` after
+  `a` and `c` the rest of `cosh(a)` after 1, worked out as `a + (s - a * c) / (1 + c)`.
+def tanhOfMagnitude: float -> float = { a ->
+  if a > 22.0
+    then 1.0
+    else if a > 1.0
+      then 1.0 - 2.0 / (exp(2.0 * a) + 1.0)
+      else a + (sinhLessX(a) - a * coshLessOne(a)) / (1.0 + coshLessOne(a))
+}
+
+--| The inverse hyperbolic sine of `x`, the number whose `sinh` is `x`: `asinh(0.0)` is `0.0`.
+export def asinh: float -> float = { x ->
+  if isNaN(x) or x == 0.0 then x else if x < 0.0 then -asinhOfMagnitude(-x) else asinhOfMagnitude(x)
+}
+
+--| `asinh(a)`, for an `a` not below zero.
+def asinhOfMagnitude: float -> float = { a ->
+  if a > 268435456.0
+    then ln(a) + 0.6931471805599453
+    else if a > 2.0
+      then ln(2.0 * a + 1.0 / (sqrt(a * a + 1.0) + a))
+      else if a < 0.5
+        then a + a * (a * a * asinhSeries(a * a, -0.5, 1))
+        else log1p(a + a * a / (1.0 + sqrt(1.0 + a * a)))
+}
+
+--| The inverse hyperbolic cosine of `x`, the number not below zero whose `cosh` is `x`: `acosh(1.0)` is
+  `0.0`. NaN below 1.0.
+export def acosh: float -> float = { x ->
+  if isNaN(x) or x < 1.0
+    then nan
+    else if x > 268435456.0
+      then ln(x) + 0.6931471805599453
+      else if x > 2.0 then ln(2.0 * x - 1.0 / (x + sqrt(x * x - 1.0))) else acoshNearOne(x - 1.0)
+}
+
+--| `acosh(1 + t)`, for a `t` from 0 to 1.
+def acoshNearOne: float -> float = { t ->
+  log1p(t + sqrt(2.0 * t + t * t))
+}
+
+--| The inverse hyperbolic tangent of `x`, the number whose `tanh` is `x`: `atanh(0.0)` is `0.0`. NaN
+  outside -1.0 to 1.0, infinity at 1.0 and minus infinity at -1.0.
+export def atanh: float -> float = { x ->
+  if isNaN(x) or x > 1.0 or x < -1.0
+    then nan
+    else if x < 0.0 then -atanhOfMagnitude(-x) else atanhOfMagnitude(x)
+}
+
+--| `atanh(a)`, for an `a` from 0 to 1.
+def atanhOfMagnitude: float -> float = { a ->
+  if a == 1.0
+    then infinity
+    else if a < 0.3333333333333333 then atanhOfSmall(a) else 0.5 * log1p(2.0 * a / (1.0 - a))
+}
+
+--| `sqrt(x * x + y * y)`, the length of the hypotenuse of a right triangle whose other sides are `x`
+  and `y`, without the squares overflowing or underflowing on the way: `hypot(3.0, 4.0)` is `5.0`, and
+  `hypot(1.0e200, 1.0e200)` is finite. It is infinity if either is infinite, even when the other is NaN.
+export def hypot: float, float -> float = { x, y ->
+  if isInfinite(x) or isInfinite(y)
+    then infinity
+    else if isNaN(x) or isNaN(y) then nan else hypotOfMagnitudes(abs(x), abs(y))
+}
+
+--| `hypot(a, b)`, for an `a` and `b` not below zero: when the larger is far from 1, both are scaled by
+  a power of two, which is exact, so that their squares neither overflow nor vanish.
+def hypotOfMagnitudes: float, float -> float = { a, b ->
+  def larger = max(a, b)
+
+  if larger > 2.0 ** 500
+    then hypotScaled(a, b, 2.0 ** 600)
+    else if larger < 2.0 ** -500 then hypotScaled(a, b, 2.0 ** -600) else sqrt(a * a + b * b)
+}
+
+--| `hypot(a, b)`, worked out on `a` and `b` divided by `scale`, a power of two.
+def hypotScaled: float, float, float -> float = { a, b, scale ->
+  def x = a / scale
+  def y = b / scale
+  scale * sqrt(x * x + y * y)
+}
+
+--| The real cube root of `x`, the number whose cube is `x`: `cbrt(27.0)` is `3.0` and `cbrt(-8.0)` is
+  `-2.0`. Unlike `float.pow(x, 1.0 / 3.0)`, it is defined for a negative `x`.
+export def cbrt: float -> float = { x ->
+  if isNaN(x) or isInfinite(x) or x == 0.0
+    then x
+    else if x < 0.0 then -cbrtOfMagnitude(-x) else cbrtOfMagnitude(x)
+}
+
+--| `cbrt(a)`, for an `a` above zero: `exp(ln(a) / 3)`, cut to 26 bits so that its square is exact, then
+  one step of Halley's method, as musl takes.
+def cbrtOfMagnitude: float -> float = { a ->
+  cbrtStep(a, toTwentySixBits(exp(ln(a) / 3.0)))
+}
+
+--| `y` rounded to its 26 leading bits, by Veltkamp's split.
+def toTwentySixBits: float -> float = { y ->
+  def c = y * 134217729.0
+  c - (c - y)
+}
+
+--| The cube root of `a`, from `t`, an estimate of it whose square is exact.
+def cbrtStep: float, float -> float = { a, t ->
+  def r = a / (t * t)
+  t + t * ((r - t) / (t + t + r))
 }
 
 -- The functions below give an `int`. A float that is NaN, infinite or out of the range of `int` stops the

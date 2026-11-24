@@ -1,7 +1,6 @@
 module TranspilerWasmTests.Features.StdLib.RunMathTrigonometry
 
 open System
-open System.Globalization
 open Xunit
 open TranspilerWasmTestHelpers
 
@@ -9,26 +8,9 @@ open TranspilerWasmTestHelpers
 // `Math` to within 1e-15 relative error.
 
 /// The calls `calls`, each a call in Nanyx and the value .NET gives for it, run in one program: each value it prints must
-/// be within 1e-15 of .NET's, relative to it, or exactly it when that is NaN or zero.
-let private assertClose (calls: (string * float) list) =
-    let source =
-        "import nanyx/math as math\n\n" + (calls |> List.map (fun (call, _) -> $"println({call})") |> String.concat "\n") + "\n"
-    let outcome = runSource source
-    Assert.True((outcome.ExitCode = 0), outcome.StandardError)
-    let printed = outcome.StandardOutput.ReplaceLineEndings("\n").TrimEnd().Split('\n')
-    Assert.Equal(calls.Length, printed.Length)
-    for (call, expected), line in List.zip calls (List.ofArray printed) do
-        let actual =
-            match line with
-            | "NaN" -> nan
-            | "Infinity" -> infinity
-            | "-Infinity" -> -infinity
-            | _ -> Double.Parse(line, CultureInfo.InvariantCulture)
-        let close =
-            if Double.IsNaN expected then Double.IsNaN actual
-            elif expected = 0.0 || Double.IsInfinity expected then actual = expected
-            else abs (actual - expected) <= 1e-15 * abs expected
-        Assert.True(close, $"{call} is {line}, but .NET gives {expected:R}")
+/// be within 1e-15 of .NET's, relative to it, or exactly it when that is NaN, zero or infinite.
+let private assertClose =
+    assertPrintsFloats (fun expected actual -> abs (actual - expected) <= 1e-15 * abs expected)
 
 [<Fact>]
 let ``Run - nanyx/math sin, cos and tan of known angles`` () =
