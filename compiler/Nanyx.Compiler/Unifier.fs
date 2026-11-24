@@ -1008,6 +1008,16 @@ module Unifier =
                             loop subst ((List.map2 (fun lTy rTy -> (lTy, rTy, Assignable, origin)) lArgs rArgs) @ rest)
                         | TyScope lScope, TyScope rScope -> loop subst ((lScope, rScope, Assignable, origin) :: rest)
                         // A function that requires fewer contexts fits where one that requires more is expected.
+                        // One that requires none, where the only variable among the contexts expected is a rest made
+                        // up to keep room for more, leaves the rest as it is: fitted, it would stand for another made up
+                        // for the same room, and a rest made up before that takes more makes the whole list solved
+                        // again, so a def of many such calls was checked in quadratic time (#2551).
+                        | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) when
+                            List.isEmpty (FunctionContexts.withCellMemory lArg lContexts)
+                            && (match FunctionContexts.withCellMemory rArg rContexts |> List.filter (function TyVar _ -> true | _ -> false) with
+                                | [ TyVar rest ] -> isMadeUpRest rest
+                                | _ -> false) ->
+                            loop subst ((rArg, lArg, Assignable, origin) :: (lRet, rRet, Assignable, origin) :: rest)
                         | TyFunc(lArg, lRet, lContexts), TyFunc(rArg, rRet, rContexts) ->
                             match FunctionContexts.fit freshRest origin (FunctionContexts.withCellMemory lArg lContexts) (FunctionContexts.withCellMemory rArg rContexts) with
                             // The contexts are solved before the result, which may carry them too: fitted first, a

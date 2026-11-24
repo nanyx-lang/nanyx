@@ -75,6 +75,7 @@
     <Compile Include="Features\Contexts\RunDefaultContextTests.fs" />
     <Compile Include="Features\Contexts\RunBlockContextTests.fs" />
     <Compile Include="Features\Contexts\RunAttachedContextDefTests.fs" />
+    <Compile Include="Features\Contexts\DirectMemberCallTests.fs" />
     <Compile Include="Features\Contexts\LambdaKnownMemberTests.fs" />
     <Compile Include="Features\Async\WaitingSpecialisationTests.fs" />
     <Compile Include="Features\Async\RunStateMachineTests.fs" />
@@ -92,6 +93,7 @@
     <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
     <Compile Include="Features\Docs\RunDocExampleTests.fs" />
+    <Compile Include="Features\Docs\RunDocExampleSectionTests.fs" />
     <Compile Include="Features\Docs\StandardLibraryReferenceTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />
     <Compile Include="Features\Errors\RunErrorTests.fs" />
@@ -259,6 +261,7 @@
     <Compile Include="Features\StdLib\RunSetMapQueryTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />
+    <Compile Include="Features\Strings\StringBuildTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />
     <Compile Include="Features\Tags\RunExpectedPayloadTests.fs" />
     <Compile Include="Features\Tags\RunRecursiveAliasTests.fs" />

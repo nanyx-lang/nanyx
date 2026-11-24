@@ -15,7 +15,7 @@ open Parser.Program
 let private asyncModule = StandardLibrary.importPrefix + ModuleOrigin.asyncName
 
 /// The scoped context a task belongs to, which `Async.concurrent` supplies.
-let scopeContext = "TaskScope"
+let scopeContext = TaskScopeSyntax.context
 
 /// The name a task is started by: `start! e` is `start({ e })` (a `#delay` keyword, see `WorkflowDesugaring`), the
 /// bare name of `Async.start`, which is in scope wherever `Async` is (see `AttachedContextDefs`).

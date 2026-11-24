@@ -31,16 +31,16 @@ boundaries are not built yet; they are on
   type requires (`CoreIrLowerTypes.toIrTypeIn`). A function generic in contexts is specialised on what its context
   variables stand for, so it is compiled apart for a function that can wait and for one that can't: `list.map` over
   `http.get` and `list.map` over a pure lambda are two functions, and only the first is a state machine (below).
-  A lambda's type requires what the functions it calls require, a function that writes no type included, once it has
-  been inferred (`Contexts.contextsRequiredByCall`), so `{ x -> waitThen(x) }` waits whether or not `waitThen` writes
-  `[Async]`. A caller knows that a function value can stop only from its type, so the backend refuses a function value
-  whose type can't wait but that reaches what requires `Async` (a call of a function value that waits, or starting or
-  awaiting a task, a host's wait or `race`), as a broken invariant (`CoreIrSplitPoints.checkFunctionValues`), rather
-  than leave its caller to carry on past a call that stopped. The end of a scope doesn't count: it makes a function a
-  state machine, but one whose type can't wait starts no tasks, so its scopes have nothing to wait for. One such case
-  is left: a lambda that calls a
-  function that waits and that is in a cycle with the def the lambda is in, which isn't inferred yet there
-  ([#2590](https://github.com/nanyx-lang/nanyx/issues/2590)).
+  A lambda's type requires what the functions it calls require, a function that writes no type included
+  (`Contexts.contextsRequiredByCall`), so `{ x -> waitThen(x) }` waits whether or not `waitThen` writes `[Async]`. A
+  def in a cycle with the one the lambda is in isn't inferred yet there: the lambda requires a context variable for it,
+  which takes the def's contexts once the module is inferred, or is an error (`NYX0227`) where the lambda was given for
+  a function that can't require them (`InferState.PendingCallContexts`). A caller knows that a function value can stop
+  only from its type, so the backend refuses a function value whose type can't wait but that reaches what requires
+  `Async` (a call of a function value that waits, or starting or awaiting a task, a host's wait or `race`), as a broken
+  invariant (`CoreIrSplitPoints.checkFunctionValues`), rather than leave its caller to carry on past a call that
+  stopped. The end of a scope doesn't count: it makes a function a state machine, but one whose type can't wait starts
+  no tasks, so its scopes have nothing to wait for.
 
 # How tasks are compiled
 
@@ -75,7 +75,10 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   when the function stops: a temporary whose value holds a split point, and those waiting to be used while it is
   computed, are kept in locals instead (`SplitPlan.StoredTemps`). Each is computed where it would have been used: after
   the counting between its definition and its use, which the lowering puts before it, as in `f(x, x.length)`, where the
-  count `x` takes for the first argument comes before `x.length` gives up the reference the code held.
+  count `x` takes for the first argument comes before `x.length` gives up the reference the code held. A debug build's
+  probe that comes among them waits with them, so that the counting after it still comes first: in
+  `loop(f, n - 1, f(acc))`, the count the tail call takes of `f` comes before the call of `f`, which drops the reference
+  it read `f` with, though the return probe stands between the two.
 - **Running one to the end.** Code that calls a state machine without being one, the start function, the getter of a
   cached value and a component's export, runs it to the end (`TaskLowering.blockOn`): while it stops, the scheduler
   runs the other tasks until its turn comes again (below), and then resumes it.
@@ -179,6 +182,10 @@ Nothing starts it: like `Console`, the host provides it.
   nothing but itself, so `Attributes.applyAttributes` allows `@customKeywordType(#delay)` on a def attached to a context
   the module declares, and `Attributes.keywordKinds` reads it there by the def's bare name (any other kind needs a
   builder, and a def attached to no context can't be a keyword, `NYX0019`). The hosts' preludes export `Async` alone.
+  `start! e` is `start({ e })`, so a local, a parameter or a pattern's variable named `start` hides `Async.start`, as
+  any nearer name does. The desugaring keeps each `#delay` keyword's call by its span (`InferState.DelayCalls`), and
+  `HiddenKeywords` reports a mismatch at such a call whose keyword names a local at the keyword, naming the local and
+  the def it hides (`NYX0201`).
 - **Each def a scope.** `TaskScopes.wrap`, before inference, makes the body of each module-level def that names
   `start` where nothing in it binds the name (a parameter or a local def named `start` is not the one that starts a
   task), and a script's entry point if it does, the block of a call of `Async.concurrent`; in a module that defines a

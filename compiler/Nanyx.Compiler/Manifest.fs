@@ -69,6 +69,10 @@ type Manifest =
       /// The GitHub repository whose releases are the package's versions, `repository = "acme/web"`, which
       /// `nanyx publish` creates them in; none if the manifest doesn't say.
       Repository: GitHubRepository option
+      /// The oldest compiler the package builds with, `nanyx = "0.39"`, which the package index records and the
+      /// resolver reads; none if the manifest doesn't say. A compiler older than it refuses the manifest
+      /// (`NeedsNewerCompiler`).
+      Nanyx: VersionRequirement option
       /// Where its `package` is written, which an error about the package as a whole is reported at.
       PackageSpan: SourceSpan
       /// The packages it depends on, in the order `dependencies` lists them.
@@ -95,7 +99,8 @@ module Manifest =
     /// The fields a manifest may have. `formatter` is the formatter's, which checks what is in it.
     let private fields = [ "package"; "dependencies"; "linters"; "host"; "formatter" ]
 
-    let private packageFields = [ "name"; "version"; "sources"; "repository"; HostPackages.field; HostLibraries.field ]
+    let private packageFields = [ "name"; "version"; "sources"; "repository"; "nanyx"; HostPackages.field; HostLibraries.field ]
+
 
     /// The fields of an entry of `linters`.
     let private entryFields = [ "package"; "version"; "settings" ]
@@ -596,6 +601,26 @@ module Manifest =
             let span = { File = path; Start = starts.[index] + column; End = starts.[index] + line.TrimEnd().Length; StartLine = index; StartColumn = column }
             Diagnostics.at DiagnosticCodes.TomlManifest span "The manifest is a Nanyx record, `( package = (...) ... )`, not TOML")
 
+    /// The oldest compiler `field`, a package's `nanyx`, says the package builds with, if it says one this compiler can
+    /// read: an error at the field where it isn't a version requirement, or names a compiler newer than this one.
+    let private readNanyx (problems: Problems) (field: DataField) : VersionRequirement option =
+        match field.Value.Data with
+        | DataString written ->
+            match VersionRequirement.tryParse written, SemanticVersion.tryParse Toolchain.version with
+            | Some requirement, Some running when requirement.Minimum > running ->
+                problems.Add
+                    DiagnosticCodes.NeedsNewerCompiler
+                    field.Value.Location
+                    $"The package builds with nanyx {written} or later, and this is nanyx {Toolchain.version}: install a newer compiler to build it"
+                None
+            | Some requirement, _ -> Some requirement
+            | None, _ ->
+                problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"""The package's `nanyx` "{written}" must be {VersionRequirement.rule}"""
+                None
+        | _ ->
+            problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"The package's `nanyx` must be a string, {VersionRequirement.rule}, not {DataValue.describe field.Value}"
+            None
+
     /// The manifest at `path`, whose text is `text`, or every problem with it, each at the field it is about. One in
     /// the old TOML form has the one error that says so. A GitHub reference that is not pinned to a commit has a fix
     /// that pins it to the commit `pin` finds, if it finds one.
@@ -622,7 +647,7 @@ module Manifest =
                     if manifest.Data.IsDataRecord then
                         problems.AddAbout DiagnosticCodes.MissingManifestField manifest.Location "package" "The manifest has no `package`, which needs at least a name and a version"
                     None
-            let name, version, sources, repository =
+            let name, version, sources, repository, nanyx =
                 match package with
                 | Some (fields, span) ->
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
@@ -636,8 +661,9 @@ module Manifest =
                     let repository =
                         problems.Text "package" fields "repository" repositoryPattern "a GitHub repository, `owner/name`, as `acme/web`"
                         |> Option.map (fun text -> let found = repositoryPattern.Match text in { Owner = found.Groups["owner"].Value; Name = found.Groups["name"].Value })
-                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), repository
-                | None -> None, None, None, None
+                    let nanyx = DataValue.field "nanyx" fields |> Option.bind (readNanyx problems)
+                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), repository, nanyx
+                | None -> None, None, None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
             let host = field "host" |> Option.bind (fun field -> readHost problems (Path.GetDirectoryName path) field.Value)
             match problems.All with
@@ -649,6 +675,7 @@ module Manifest =
                       Version = defaultArg version ""
                       Sources = defaultArg sources [ "**/*.nyx" ]
                       Repository = repository
+                      Nanyx = nanyx
                       PackageSpan = package |> Option.map snd |> Option.defaultValue manifest.Location
                       Dependencies = dependencies |> Option.map fst |> Option.defaultValue []
                       Files = dependencies |> Option.map snd |> Option.defaultValue []

@@ -256,6 +256,19 @@ def string.concat: list(string) -> string
 
 The `pieces` concatenated end to end.
 
+## `string.build`
+
+```nanyx fragment
+def string.build: [c] ([c, Emit(string)] () -> ()) -> string
+```
+
+The string of the pieces `block` emits, through `Emit`, in the order it emits them:
+`string.build { for rows | row -> emit(row.name); emit(",") }`. `block` runs once, now, under a
+handler that copies each piece into one buffer, of 64 bytes at first, and into one twice its size
+when it is full, and then into a string of the length written. So it takes time in proportion to
+the length of the result, and allocates a number of blocks that grows with the log of that length,
+where joining the pieces one at a time with `++` copies the string so far for each of them.
+
 ## `string.replace`
 
 ```nanyx fragment

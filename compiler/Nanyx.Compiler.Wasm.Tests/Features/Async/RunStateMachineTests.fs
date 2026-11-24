@@ -209,3 +209,18 @@ def loopWith: [c] ([c] int -> int), int, int -> int = { f, n, acc ->
 println(list.map([1, 2, 3], { x -> waitThen(x) }))
 println(list.fold([1, 2, 3], 0, { acc, x -> acc + waitThen(x) }))
 println(loopWith({ x -> waitThen(x) }, 5, 0))""")
+
+[<Fact>]
+let ``A lambda that calls a def that waits, in a cycle with the def the lambda is in, waits too`` () =
+    // `b` is not inferred yet where `a`'s lambda calls it: the lambda takes what `b` requires once it is (#2590).
+    assertRuns
+        "3\n"
+        (waiting
+         + """
+def a = { (n: int) ->
+  if n == 0 then 0 else list.map([n], { x -> b(x) }) \list.sum
+}
+
+def b = { (x: int) -> call({ a(x - 1) + 1 }) }
+
+println(a(3))""")

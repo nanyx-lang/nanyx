@@ -306,6 +306,9 @@ type private ChainShape(links: Expr list, last: Expr) =
         let unchanged = keptFrom.[start] - (changing |> Seq.sumBy (fun place -> if place = n then keptFrom.[n] else kept.[place]))
         branches * unchanged <= fromPlace.[start] + limit
 
+/// The most temporaries a record made of temporaries can have for them to be made locals (see `RecordOfTemps`).
+let private recordTemps = 32
+
 /// One pass of the simplifier over the body of `f`, given the functions it may call.
 type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     // How often each kind and name of variable is bound in the function: those of a variable that is the only one with
@@ -467,6 +470,40 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
     member _.Changed = changed
 
     /// A chain, with what each of its bindings tells known in what follows it.
+    /// When `link` and the links after it in `remaining` bind temporaries one after another that are, in that order,
+    /// the temporaries a record bound next to a variable is made of, and the record is only read a field at a time:
+    /// how many of `remaining` that takes, and the links again, from `link` to the record's, with the temporaries made
+    /// locals. A record used whole is left as it is, since what is read from it can't be known.
+    member private _.RecordOfTemps (link: Expr) (remaining: Expr list) : (int * Expr list) option =
+        // At most `recordTemps` temporaries are looked through, so that a long chain of temporaries, as `1 + 1 + ...`
+        // makes, isn't looked through from each of them (#2351).
+        let rec collect (bound: Expr list) (rest: Expr list) =
+            match rest with
+            | _ when bound.Length > recordTemps -> None
+            | ({ Kind = Let(var, { Kind = MakeRecord fields }, _) } as record) :: _ when var.Kind <> Temp && not (usedWhole.Contains var.Id) ->
+                let temps = bound |> List.rev |> List.map (fun link -> match link.Kind with Let(temp, _, _) -> temp.Id | _ -> -1)
+                let read = fields |> List.choose (function _, AVar v when v.Kind = Temp -> Some v.Id | _ -> None)
+                if read = temps then Some(List.rev bound, record) else None
+            | ({ Kind = Let(temp, _, _) } as next) :: rest when temp.Kind = Temp -> collect (next :: bound) rest
+            | _ -> None
+        match collect [ link ] remaining with
+        | Some(temps, record) ->
+            let locals =
+                temps
+                |> List.map (fun link -> match link.Kind with Let(temp, _, _) -> temp.Id, { temp with Kind = Local } | _ -> internalError "a link that binds no temporary")
+                |> Map.ofList
+            let local (atom: Atom) = match atom with AVar v when locals.ContainsKey v.Id -> AVar locals.[v.Id] | other -> other
+            let relinked =
+                temps
+                |> List.map (fun link -> match link.Kind with Let(temp, value, next) -> { link with Kind = Let(locals.[temp.Id], value, next) } | _ -> link)
+            let recordLink =
+                match record.Kind with
+                | Let(var, ({ Kind = MakeRecord fields } as value), next) ->
+                    { record with Kind = Let(var, { value with Kind = MakeRecord(fields |> List.map (fun (name, atom) -> name, local atom)) }, next) }
+                | _ -> record
+            Some(temps.Length, relinked @ [ recordLink ])
+        | None -> None
+
     member this.Sequence (facts: Map<int, Fact>) (e: Expr) : Expr =
         let links, chainEnd = Chain.split e
         let rebuilt = ResizeArray<Expr -> Expr>()
@@ -510,6 +547,15 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
                 changed <- true
                 let local = { temp with Kind = Local }
                 remaining <- { link with Kind = Let(local, value, link) } :: { next with Kind = Let(var, { tag with Kind = MakeTag(name, AVar local) }, next) } :: rest
+                left <- left + 1
+            // The temporaries a record is made of, bound one after another just before it in the order it reads them,
+            // with the record given to a variable, are locals, so that a field read from the record is the value it
+            // was made with: a context instance's member, a closure, is then called directly (#2578). They are
+            // computed in the same order either way.
+            | Let(temp, _, _), _ when temp.Kind = Temp && (this.RecordOfTemps link remaining).IsSome ->
+                changed <- true
+                let count, rebound = (this.RecordOfTemps link remaining).Value
+                remaining <- rebound @ List.skip count remaining
                 left <- left + 1
             // A variable given the value of another of its type is that other: what follows reads it instead. Not a
             // parameter on the heap, which its function may only borrow: the variable is what takes it over, so that a

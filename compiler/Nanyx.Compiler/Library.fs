@@ -345,8 +345,8 @@ module Compiler =
                 | errors -> Error (Parsed, syntaxDiagnostics @ errors))
             |> Result.bind (fun (ast, docComments, (items, declared, moduleBlocks), syntaxDiagnostics) ->
                 match WorkflowDesugaring.desugarWithDiagnostics (importedKeywordKinds (importsOf moduleBlocks items)) items with
-                | _, (_ :: _ as errors), _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
-                | desugaredAst, [], memberPlaces, lowered ->
+                | _, (_ :: _ as errors), _, _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
+                | desugaredAst, [], memberPlaces, lowered, delayCalls ->
                     Attributes.applyAttributes host desugaredAst
                     |> Result.map (fun (desugared, entries, components) ->
                         // A module's statements run as an entry point of their own (see `Scripts`).
@@ -365,11 +365,11 @@ module Compiler =
                         let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered
                         // The keywords it declares, read before `applyAttributes` takes a def's attribute away.
                         let ownKeywordKinds = Attributes.keywordKinds items
-                        (ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, syntaxDiagnostics @ nameErrors, ownKeywordKinds)
+                        (ast, docComments), declared, moduleBlocks, desugared, (memberPlaces, delayCalls), lowered, entries, components, script, syntaxDiagnostics @ nameErrors, ownKeywordKinds)
                     |> Result.mapError (fun diagnostics -> Desugared, syntaxDiagnostics @ diagnostics))
         match resolved with
         | Result.Error failure -> Error failure
-        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, memberPlaces, lowered, entries, components, script, nameErrors, ownKeywordKinds) ->
+        | Result.Ok ((ast, docComments), declared, moduleBlocks, desugared, (memberPlaces, delayCalls), lowered, entries, components, script, nameErrors, ownKeywordKinds) ->
             let imports = importsOf moduleBlocks desugared
             let initial =
                 { Env =
@@ -382,6 +382,7 @@ module Compiler =
                         Declared = declared
                         ModuleBlocks = moduleBlocks
                         WorkflowMemberPlaces = memberPlaces
+                        DelayCalls = delayCalls
                         Home = origin
                         ScriptEntry = script |> Option.map snd
                         StandardLibraryExports = CheckedLibrary.standardLibraryExportPaths }
@@ -526,10 +527,18 @@ module Compiler =
                     |> List.distinct
                 let mismatchErrors =
                     mismatches
+                    // A mismatch of a call's arguments is reported at the one that doesn't fit (see `ArgumentSpans`).
+                    |> List.map (fun (text, span, kind) ->
+                        match state.ArgumentSpans |> Map.tryFind span with
+                        | Some reported -> text, reported.Value, kind
+                        | None -> text, span, kind)
                     |> List.sortBy (fun (_, span, _) -> span.Start)
                     |> List.map (fun (text, span, kind) ->
                         let message = text (Unifier.tyToStringIn state.TypeDefs)
                         match entries |> List.tryFind (fun entry -> entry.Argument = span), provided |> List.tryFind (fun export -> export.Argument = span) with
+                        // A keyword's call that calls a local in the keyword's def's place says so (see `HiddenKeywords`).
+                        | _ when state.HiddenKeywords.ContainsKey span ->
+                            HiddenKeywords.diagnostic (Unifier.apply subst >> Unifier.tyToStringIn state.TypeDefs) state.HiddenKeywords.[span]
                         | Some entry, _ -> entryMismatch entry
                         | None, Some export -> exportMismatch export
                         | None, None ->

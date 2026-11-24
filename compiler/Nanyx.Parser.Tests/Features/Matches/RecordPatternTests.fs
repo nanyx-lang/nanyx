@@ -20,6 +20,15 @@ let ``a record pattern by member name may end in ... to leave the other fields o
     | other -> failwith $"Unexpected arms: %A{other}"
 
 [<Fact>]
+let ``a record pattern by member name may name a field alone beside one it renames`` () =
+    // #2499: `x` alone is `x = x`; brackets of names alone stay a tuple pattern.
+    match armsOf "def f = { | (x, y = b) -> 1 | (y = b, x, ...) -> 2 | (x, y) -> 3 }" with
+    | [ [ Kind (RecordMemberPattern ([ "x", Kind (IdentifierPattern "x"); "y", Kind (IdentifierPattern "b") ], false)) ]
+        [ Kind (RecordMemberPattern ([ "y", Kind (IdentifierPattern "b"); "x", Kind (IdentifierPattern "x") ], true)) ]
+        [ Kind (TuplePattern ([ Kind (IdentifierPattern "x"); Kind (IdentifierPattern "y") ], false)) ] ] -> ()
+    | other -> failwith $"Unexpected arms: %A{other}"
+
+[<Fact>]
 let ``... in a record pattern comes after its members`` () =
     match parseModule "def f = { | (..., a = 1) -> 1 }" with
     | Result.Error _ -> ()

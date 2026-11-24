@@ -67,7 +67,7 @@ The manifest describes the package and the source files and dependencies that ma
 )
 ```
 
-A manifest holds only data: records, lists, tuples, strings, numbers, `true` and `false`, tags such as `#error`, and `--` comments. A name, a call, an operator or any other code in it is an error, so a manifest can always be read without running anything. Its fields are `package`, `dependencies`, `linters`, `host` and `formatter`; any other is an error. `package` must have a `name`, lower case with words separated by dots, and a `version`, a semantic version. A package to publish also gives its `repository`, the GitHub repository whose releases are its versions, as `repository = "acme/web"`. A host declares itself one in its `package`'s `host`, and a package that hosts are written on says `hostLibrary = true` ([Writing a host](../advanced/hosts#writing-a-host), [Host libraries](../advanced/hosts#host-libraries)).
+A manifest holds only data: records, lists, tuples, strings, numbers, `true` and `false`, tags such as `#error`, and `--` comments. A name, a call, an operator or any other code in it is an error, so a manifest can always be read without running anything. Its fields are `package`, `dependencies`, `linters`, `host` and `formatter`; any other is an error. `package` must have a `name`, lower case with words separated by dots, and a `version`, a semantic version. A package to publish also gives its `repository`, the GitHub repository whose releases are its versions, as `repository = "acme/web"`, and its `nanyx`, the oldest compiler it builds with, as `nanyx = "0.39"`, which `nanyx new` writes for the compiler that makes the package. The package index records it, so a compiler older than that never chooses the version, and one that is given the package anyway refuses it, at the field (`NYX0052`). A host declares itself one in its `package`'s `host`, and a package that hosts are written on says `hostLibrary = true` ([Writing a host](../advanced/hosts#writing-a-host), [Host libraries](../advanced/hosts#host-libraries)).
 
 A manifest written in TOML, starting `[package]` or `name = "..."`, is an error that says so (`NYX0034`). While a package's manifest has errors, checking or running any of its files reports them, at the manifest, rather than checking the file on its own.
 
@@ -301,7 +301,7 @@ inferred type can change by accident, so writing the types of what a module expo
 
 ## Publishing
 
-`nanyx publish` publishes the version a package's manifest gives. It checks that the package builds and is formatted,
+`nanyx publish` publishes the version a package's manifest gives. It checks that the manifest names the oldest compiler the package builds with, `nanyx`, and that the package builds and is formatted,
 and that its version is a big enough bump from the newest version published below it, by the rules above. Then it
 packs the package and creates the release `v1.2.0`, with the `.nyxpkg` as its asset, on the package's `repository`.
 The [package index](https://packages.nanyx.dev/) records each new release within the hour. For a package's

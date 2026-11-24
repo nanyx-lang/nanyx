@@ -206,3 +206,14 @@ println(s() \seq.toList)"""
     let code, _, at = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, code)
     Assert.Equal("start! i * 10", at)
+
+[<Fact>]
+let ``A smaller scope may await a task of the def's scope`` () =
+    let source =
+        withTasks
+            """def outer = { _ ->
+  def t = start! 20
+  def inner = concurrent({ await(t) + await(start! 1) })
+  inner + 1
+}"""
+    Assert.Empty((Compiler.compile source).Diagnostics)

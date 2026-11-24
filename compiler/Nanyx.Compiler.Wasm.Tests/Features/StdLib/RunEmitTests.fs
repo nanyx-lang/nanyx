@@ -84,3 +84,49 @@ def leak: () -> MList(int) = {
         "main.nyx:6:33"
         "The result of this 'memory' call requires its 'Memory' through 'items'"
         outcome.StandardOutput
+
+[<Fact>]
+let ``Run - a builder inside a use of Emit at another type, or of its own, finds its own handler`` () =
+    """type Tree = #leaf(int) | #node(Tree, Tree)
+
+def walk: [Emit(int)] Tree -> () = {
+  | #leaf(n) -> emit(n)
+  | #node(left, right) ->
+    walk(left)
+    walk(right)
+}
+
+def tree = #node(#leaf(1), #node(#leaf(2), #leaf(3)))
+
+def outerCall: [Console] () -> list(int) = {
+  use Emit(string)(emit = { s -> println("outer {s}") }) in list.build { walk(tree) }
+}
+
+def outerDirect: [Console] () -> list(int) = {
+  use Emit(string)(emit = { s -> println("outer {s}") }) in [5, 6] \list.select { x -> emit(x) }
+}
+
+def sameType: [Console] () -> list(int) = {
+  use Emit(int)(emit = { n -> println("outer {n}") }) in list.build { walk(tree) }
+}
+
+def innerUse = list.build {
+  emit(0)
+  use Emit(string)(emit = { s -> () }) in emit("dropped")
+}
+
+def nested = list.build {
+  emit([1] \list.select { x -> emit(x * 10) } \list.length)
+  for list.build { walk(tree) } | n -> emit(n)
+}
+
+@entry
+def main = {
+  println(outerCall())
+  println(outerDirect())
+  println(sameType())
+  println(innerUse)
+  println(nested)
+}
+"""
+    |> ran "[1, 2, 3]\n[5, 6]\n[1, 2, 3]\n[0]\n[1, 1, 2, 3]\n"
