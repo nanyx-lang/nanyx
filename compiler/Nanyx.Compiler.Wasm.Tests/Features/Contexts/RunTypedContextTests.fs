@@ -10,7 +10,7 @@ let private show =
 
 def int.show: int -> string = { n -> "int {n}" }
 
-def showAt: [Show(a)] a, type a -> string = { value, t -> show(value) }
+def showAt: [Show(a)] a, Type(a) -> string = { value, t -> show(value) }
 
 def encode: [Typed(a), Show(a)] a -> string = { value -> showAt(value, typeOf) }
 """
@@ -74,7 +74,7 @@ import people as p
 
 context Show(a) = (show: a -> string)
 
-def showAt: [Show(a)] a, type a -> string = { value, t -> show(value) }
+def showAt: [Show(a)] a, Type(a) -> string = { value, t -> show(value) }
 
 def encode: [Typed(a), Show(a)] a -> string = { value -> showAt(value, typeOf) }
 

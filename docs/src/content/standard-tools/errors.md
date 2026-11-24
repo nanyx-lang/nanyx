@@ -2251,15 +2251,16 @@ To fix it, make the members agree on the associated type.
 
 # NYX0270: Type parameter declared wrongly
 
-A function's named [type parameter](../tour/functions#type-arguments), `into: type`, has the name of a built-in type,
-a default, or `mut`. The name is a type variable of the signature, so it can't be `list` or `string`, and the caller
-always passes the type.
+A function's named [type parameter](../tour/functions#type-arguments) whose type names its own name, `into: Type(into)`,
+has the name of a built-in type, a default, or `mut`. The name is a type variable of the signature, so it can't be
+`list` or `string`, and the caller always passes the type.
 
 ```nanyx
-def count: (string, list: type) -> int = { text, list -> text.length }  -- error NYX0270: 'list' is a built-in type, so it can't be the name of a type parameter
+def count: (string, list: Type(list)) -> int = { text, list -> text.length }  -- error NYX0270: 'list' is a built-in type, so it can't be the name of a type parameter
 ```
 
-To fix it, give the type parameter another name, such as `into`, and leave out its default.
+To fix it, give the type parameter another name, such as `into`, or write its type with a type variable,
+`list: Type(a)`, and leave out its default.
 
 # NYX0271: Type argument left out
 
@@ -2271,7 +2272,7 @@ context Decode(a) = (decode: string -> a)
 
 def int.decode: string -> int = { text -> text.length }
 
-def deserialise: [Decode(a)] type a, string -> a = { t, text -> decode(text) }
+def deserialise: [Decode(a)] Type(a), string -> a = { t, text -> decode(text) }
 
 def n: int = deserialise("abc")  -- error NYX0271: 'deserialise' takes a type argument, which this call leaves out: a type argument is never left out, so pass `type int`
 ```
@@ -2296,7 +2297,7 @@ A `match` on a `Type` value has an arm whose pattern isn't one of the tags of a 
 `#list(elem)` or `#record(r)`, or matches a tag's payload with something other than a name or `_`.
 
 ```nanyx
-def kind: type a -> string = { t ->
+def kind: Type(a) -> string = { t ->
   match t
     | #integer -> "a number"  -- error NYX0273: '#integer' is not a tag of a type's description: a match on a `Type` is matched by the tags of the type's description, such as `#int`, `#list(elem)` or `#record(r)`, or `else`
     | else -> "something else"
@@ -2313,7 +2314,7 @@ leaves the code that opened it: a lambda over a record's fields gives back a fie
 gives back `elem`. Outside, it could be given where another field's type is expected.
 
 ```nanyx
-def values: a, type a -> int = { value, t ->
+def values: a, Type(a) -> int = { value, t ->
   match t
     | #record(r) ->
         def got = r.fields \list.map { f -> f.get(value) }  -- error NYX0274: This gives a value of 'b', whose type is the type of a field, a case or an element that is only known here: use it here, as in `walk(f.get(value), f.type)`, rather than giving it back
@@ -2442,6 +2443,31 @@ mut count = 0  -- error NYX0281: A cell can't be declared at the top level, wher
 
 To fix it, declare the cell inside a `memory { ... }` block, in the body of a def, and give back what it ends up
 holding: `def count = memory { mut n = 0 ... n }`.
+
+# NYX0282: Type parameter written the old way
+
+A warning, not an error: the program compiles. A function's parameter that takes a
+[type argument](../tour/functions#type-arguments) is written the old way, `type a` for a positional one or `into: type`
+for a named one. A parameter that takes a type is now written with its type, `Type(a)`, as any other parameter is, so
+`name: type` only ever declares a context's [associated type](../advanced/contexts#associated-types). The old forms
+will be errors in a later release.
+
+```nanyx
+context Decode(a) = (decode: string -> a)
+
+def int.decode: string -> int = { text ->
+  text.length
+}
+
+def deserialise: [Decode(a)] type a, string -> a = { t, text ->
+  decode(text)
+} -- warning NYX0282: A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`. `type a` will be an error in a later release
+
+println(deserialise(type int, "abc"))
+```
+
+To fix it, write `Type(a)` for `type a`, and `into: Type(into)` for `into: type`, as the editor's quick fix does. Calls
+don't change: they still pass `type int`.
 
 # NYX0283: Value of a type only a later use fixes
 

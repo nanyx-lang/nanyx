@@ -205,14 +205,15 @@ and TypeExprKind =
     /// `typeof x`: the type of the value `x`, a name or a path of fields such as `config.server`.
     | TypeOf of Expression
     /// `type`, written as a context member's type: the member is an associated type, as `elem` is in
-    /// `context Iter(c) = (elem: type, ...)`.
+    /// `context Iter(c) = (elem: type, ...)`. As a function's named parameter, `into: type`, it is the old form of
+    /// `into: Type(into)`, which still compiles, with a warning.
     | TypeKeyword
     /// `elem = string`, an argument of a context that fixes its associated type `elem`: `Iter(c, elem = string)`.
     | TypeNamedArgument of Identifier * TypeExpr
     /// `Iter(c).elem`: the associated type `elem` of the context `Iter(c)` a signature requires.
     | TypeAssociated of TypeExpr * Identifier
-    /// `type a`, a function's positional parameter that takes a type argument: its value is of type `Type(a)`, and the
-    /// type variable `a` is the type passed, as in `(type a, string) -> a`. A named one is written `into: type`.
+    /// `type a`, the old form of a function's positional parameter that takes a type argument, now written `Type(a)`:
+    /// its value is of type `Type(a)`, and the type variable `a` is the type passed. It still compiles, with a warning.
     | TypeArgument of TypeExpr
 
 and TypeRecordField =

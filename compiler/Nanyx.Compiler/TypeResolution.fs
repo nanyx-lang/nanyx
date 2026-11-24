@@ -431,7 +431,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         | None -> freshVar state
     // `AssociatedTypes` writes these away before inference, and reports the ones it leaves.
     | TypeNamedArgument(_, value) -> typeExprToTy state value
-    // `type a`, a parameter that takes a type argument: a value of type `Type(a)`.
+    // `type a`, the old form of a parameter of type `Type(a)`.
     | TypeArgument operand ->
         let standsFor, next = typeExprToTy state operand
         TypeValues.ofType standsFor, next

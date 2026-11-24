@@ -1,6 +1,6 @@
 ---
-title: "Nim demo"
-description: "Proposal: a playable game of Nim in the browser, to show contexts as swappable effects"
+title: "Proposal: Nim demo"
+description: "A playable game of Nim in the browser, to show contexts as swappable effects"
 order: 3
 ---
 

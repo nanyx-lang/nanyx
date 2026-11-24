@@ -1,7 +1,7 @@
 namespace NyxCompiler
 
 /// The built-in `Type(a)` type: a value that stands for the type `a`, passed as a type argument. `type Point` is one, of
-/// type `Type(Point)`, and a parameter declared `into: type` or `type a` takes one (see `TypeArguments`). A `Type` value
+/// type `Type(Point)`, and a parameter declared `Type(a)` takes one (see `TypeArguments`). A `Type` value
 /// is known at compile time, so it has nothing to hold at run time: the backend lays it out as unit.
 module TypeValues =
     /// The type's name, as a type writes it, `Type(Point)`.
