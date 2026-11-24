@@ -121,8 +121,9 @@ export def sqrt: float -> float = { x ->
   __nanyx_float_sqrt(x)
 }
 
---| `e ** x`: `exp(0.0)` is `1.0` and `exp(1.0)` is `e`. It is infinity above about 709.8 and `0.0` below
-  about -745.2.
+--| `e ** x`: `exp(0.0)` is `1.0` and `exp(1.0)` is `e`. It is within a unit in the last place of the
+  exact result. It is infinity above 709.782712893384, the logarithm of the largest float, and
+  `0.0` below -745.1332191019411, where `e ** x` is less than half the smallest float above zero.
 export def exp: float -> float = { x ->
   __floatExp(x)
 }
