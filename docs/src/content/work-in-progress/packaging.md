@@ -27,10 +27,8 @@ tracked under the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packa
 6. **Editor support** ([#866](https://github.com/nanyx-lang/nanyx/issues/866)). The language server resolves imports
    exactly as the CLI does, from the manifest, lockfile and cache. When the manifest changes, the extension offers to
    run `nanyx pull`. Go-to-definition into a dependency opens the cached source read-only.
-7. **The manifest's and the archive's remaining parts.** The manifest's `package` gains `nanyx = "0.14"`, the oldest
-   compiler the package builds with, which the index already reads and the resolver already honours
-   ([#2263](https://github.com/nanyx-lang/nanyx/issues/2263)), and `license` and `description`; the `.nyxpkg` gains the
-   package's readme and licence ([#2264](https://github.com/nanyx-lang/nanyx/issues/2264)).
+7. **The manifest's and the archive's remaining parts.** The manifest's `package` gains `license` and `description`;
+   the `.nyxpkg` gains the package's readme and licence ([#2264](https://github.com/nanyx-lang/nanyx/issues/2264)).
 8. **The CLI's remaining parts.** `nanyx update`, which upgrades a locked version on purpose
    ([#2265](https://github.com/nanyx-lang/nanyx/issues/2265)); `nanyx build --offline`, which stops a build that would
    update the lockfile from reaching the index ([#2266](https://github.com/nanyx-lang/nanyx/issues/2266)); `nanyx pull`
