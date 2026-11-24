@@ -35,3 +35,23 @@ def main = {
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("2\n", outcome.StandardOutput)
     Assert.Equal("crash: odd: 3\n", withoutStack outcome.StandardError)
+
+/// A `crash` where a value of another type is wanted, its own an `i32`: in a list of `int`s or of `float`s, first or
+/// after another element, as an argument, a record's field, and an `if` branch whose other branch is a `float`.
+let crashesWhereAValueIsWanted: obj[] seq =
+    [ "def xs = [1, crash(\"no\")]\nprintln(xs)\n"
+      "println([crash(\"no\"), 1])\n"
+      "println([1.5, crash(\"no\")])\n"
+      "def half: float -> float = { x -> x / 2.0 }\nprintln(half(crash(\"no\")))\n"
+      "def r = (a = 1.5, b = crash(\"no\"))\nprintln(r.a)\n"
+      "def g: bool -> float = { b -> if b then 1.5 else crash(\"no\") }\nprintln(g(false))\n" ]
+    |> Seq.collect (fun source -> [ [| box source; box true |]; [| box source; box false |] ])
+
+[<Theory>]
+[<MemberData(nameof crashesWhereAValueIsWanted)>]
+let ``Run - a crash where a value of another type is wanted crashes with its message`` (source: string) (inlineCalls: bool) =
+    let outcome = runSourceWithOptions true inlineCalls "" source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("", outcome.StandardOutput)
+    Assert.Equal("crash: no\n", withoutStack outcome.StandardError)
+    Assert.Contains("  crash (prelude.nyx:", outcome.StandardError)
