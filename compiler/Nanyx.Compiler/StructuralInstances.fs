@@ -71,7 +71,9 @@ module internal StructuralInstances =
         /// A record's named fields, in the order they are written out in: by name.
         | RecordShape of (string * Ty) list
         | ListShape of Ty
-        /// A map's key and value types. `Eq` and `ToString` are derived for a map, or a set; `Hash` is not.
+        /// A map's key and value types. `Eq`, `Hash` and `ToString` are derived for a map, or a set, whose keys or
+        /// values have their own: otherwise its store is compared and hashed by the compiler's own, which a store, one
+        /// trie for one set of keys, makes right (see `Maps.storeOf`).
         | MapShape of Ty * Ty
         | SetShape of Ty
         /// An array's element type. `Eq` and `ToString` are derived for an array, as for a set; `Hash` is not.
@@ -152,9 +154,8 @@ module internal StructuralInstances =
         | Lists.ListType element -> Some (ListShape element)
         | _ -> None
 
-    /// What `ty` is built from, as far as comparing two values of it goes: a map, a set and an array are structures too,
-    /// which the compiler's own comparison cannot compare: it would compare the order a map's entries were added in, and
-    /// it does not read an array.
+    /// What `ty` is built from, as far as comparing or hashing two values of it goes: a map, a set and an array are
+    /// structures too, of their keys and values, or elements.
     /// A union with a rest left in it, as `closedFor` leaves one for `Eq`, is one too.
     let private comparedShapeOf (ty: Ty) : Shape option =
         match Unifier.unalias ty with
@@ -174,9 +175,10 @@ module internal StructuralInstances =
         | Arrays.ArrayType element -> Some (ArrayShape element)
         | _ -> shapeOf ty
 
-    /// The shape an instance of `ctxName` is derived from.
+    /// The shape an instance of `ctxName` is derived from: `Hash` as `Eq`, so that values a derived `==` finds equal have
+    /// the same hash.
     let private shapeFor (ctxName: Identifier) =
-        if ctxName = EqualityOperators.context then comparedShapeOf
+        if ctxName = EqualityOperators.context || ctxName = WellKnownContexts.hashing.Context then comparedShapeOf
         elif ctxName = InterpolationHoles.context then writtenShapeOf
         else shapeOf
 
@@ -207,18 +209,19 @@ module internal StructuralInstances =
     let private functionPart (ty: Ty) : Ty option =
         ty |> tryPickPart writtenShapeOf (fun part -> match Unifier.unalias part with TyFunc _ -> Some part | _ -> None)
 
-    /// Whether `ty` is a map, a set or an array, which only a derived `==` compares.
+    /// Whether `ty` is an array, which only a derived `==` compares: the compiler's own reads an array only inside a
+    /// map's store. A map and a set are compared by the compiler's own unless their keys or values have their own.
     let private isCollection (ty: Ty) =
         match comparedShapeOf ty with
-        | Some (MapShape _ | SetShape _ | ArrayShape _) -> true
+        | Some (ArrayShape _) -> true
         | _ -> false
 
-    /// Whether `ty` is a map, a set or an array, or holds one at any depth, so that only a derived `==` compares it.
+    /// Whether `ty` is an array, or holds one at any depth, so that only a derived `==` compares it.
     let holdsCollection (ty: Ty) : bool =
         (ty |> tryPickPart comparedShapeOf (fun part -> if isCollection part then Some () else None)).IsSome
 
     /// Whether comparing two values of the structure `ty` compares a part, at any depth, that `hasOwn` says has an
-    /// `==` the compiler's own comparison would not read, or that is a map or a set, or is one itself. `rigid` is as
+    /// `==` the compiler's own comparison would not read, or that is an array, or is one itself. `rigid` is as
     /// `closedKeeping` has it: a union with a rest in it compares the parts of the tags it names.
     let comparesParts (rigid: Set<int>) (hasOwn: Ty -> bool) (ty: Ty) : bool =
         let needsDerived (part: Ty) = hasOwn part || isCollection part
@@ -360,9 +363,10 @@ module internal StructuralInstances =
                 | _ -> EqualityOperators.listFunction
             expr (FunctionCall(helper, None, [ value; other; compare ]))
 
-    /// The prelude functions that hash a value through its `Hash`, make two hashes one, and hash a list through its
-    /// elements' hashes.
+    /// The prelude functions that hash a value through its `Hash`, make two hashes one, and hash a list, a map and a set
+    /// through their parts' hashes.
     let private hashOfFunction, hashCombine, listHash = "__hashOf", "__hashCombine", "__listHashBy"
+    let private mapHash, setHash = "__mapHashBy", "__setHashBy"
 
     /// The hash of `value`, a value of the type `shape` is, as a derived `hash` works it out: each part hashed with
     /// `__hashOf`, which finds the part's own `Hash`, and the hashes folded with `__hashCombine`, after the tag's name for a
@@ -395,10 +399,15 @@ module internal StructuralInstances =
         | ListShape _ ->
             let hashPart = expr (Lambda([ partName 0, None ], hashOf (name (partName 0)), false))
             expr (FunctionCall(listHash, None, [ seed; value; hashPart ]))
+        // A map's or a set's entries in no order: equal maps have the same hash however their keys were added.
+        | MapShape _ ->
+            let hashPart () = expr (Lambda([ partName 0, None ], hashOf (name (partName 0)), false))
+            expr (FunctionCall(mapHash, None, [ value; hashPart (); hashPart () ]))
+        | SetShape _ ->
+            let hashPart = expr (Lambda([ partName 0, None ], hashOf (name (partName 0)), false))
+            expr (FunctionCall(setHash, None, [ value; hashPart ]))
         | OpenTagShape _
-        | MapShape _
-        | SetShape _
-        | ArrayShape _ -> invalidOp "Hash is never derived for a map, a set, an array or an open union (see shapeFor)"
+        | ArrayShape _ -> invalidOp "Hash is never derived for an array or an open union (see WellKnownContexts.hashing)"
 
     /// The definition the compiler writes for the instance of `ctxName` of the type written `written`, which
     /// requires `ctxName` of each of `varNames`: its name is `name`, and it is reported at `span`.

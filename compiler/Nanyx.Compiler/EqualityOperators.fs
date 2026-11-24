@@ -39,15 +39,15 @@ module internal EqualityOperators =
     let arrayFunction = "__arrayEqualsBy"
 
     /// The error for a call to `calleeName` that requires `Eq` of the type `ty`, which has type variables in it and
-    /// holds a map or a set: only the `==` derived for it compares a map, and none can be derived for it there.
+    /// holds an array: only the `==` derived for it compares an array, and none can be derived for it there.
     let collectionAtGenericCall (calleeName: Identifier) (ty: Ty) =
-        $"'{calleeName}' compares values of type '{display ty}', which holds a map or a set and so is compared by an == the compiler derives from its parts, but none can be derived for it here"
+        $"'{calleeName}' compares values of type '{display ty}', which holds an array and so is compared by an == the compiler derives from its parts, but none can be derived for it here"
 
-    /// The error for a call to `calleeName`, which compares values of the type `ty`, which holds a map or a set, but is
-    /// passed nothing to compare them with (see `WellKnownContexts.checkLocalCall`): it compares with the compiler's
-    /// own `==`, which cannot compare a map.
+    /// The error for a call to `calleeName`, which compares values of the type `ty`, which holds an array, but is passed
+    /// nothing to compare them with (see `WellKnownContexts.checkLocalCall`): it compares with the compiler's own `==`,
+    /// which cannot compare an array.
     let collectionPassedNothing (calleeName: Identifier) (ty: Ty) =
-        $"'{calleeName}' compares values of type '{display ty}' with the compiler's own ==, which cannot compare a map or a set yet: a local function, or a function that compares a union's rest, is passed no other"
+        $"'{calleeName}' compares values of type '{display ty}' with the compiler's own ==, which cannot compare an array yet: a local function, or a function that compares a union's rest, is passed no other"
 
     /// Whether `op` is `==` or `!=`.
     let isOperator (op: string) = equality.Operators |> List.contains op

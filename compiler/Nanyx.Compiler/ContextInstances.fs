@@ -301,9 +301,9 @@ let internal derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyV
 
 /// The instance of `Eq` or `Hash` (`wellKnown`, found as `instance`) the call `call` to `calleeName`, at `span` in
 /// `env`, finds for the structure `ty` in place of the compiler's own, when `ty` compares or hashes a part with an `==`
-/// or `hash` of its own, or, for `Eq`, holds a map or a set: the derived definition, as the context's member. A
+/// or `hash` of its own, or, for `Eq`, holds an array: the derived definition, as the context's member. A
 /// variable of `ty` is read with the instance `instanceOf` finds for it, and `rigid` holds the variables of the
-/// function around the call (see `StructuralInstances.instance`). A type with variables in it that holds a map or a set
+/// function around the call (see `StructuralInstances.instance`). A type with variables in it that holds an array
 /// and has no derived `==` is an error, since the compiler's own cannot compare it, and so is one whose parts' own
 /// `hash` cannot be read, a union open to the caller's tags, since the compiler's own would not read them.
 let private derivedEquality

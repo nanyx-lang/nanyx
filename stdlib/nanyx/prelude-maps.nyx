@@ -309,7 +309,9 @@ def convertedEntries: [c] list((k, v)), ([c] k -> j), ([c] v -> w), list((j, w))
 
 --| The leaf of `h` with `convertKey` of `key` and `convertValue` of `value`. The functions the
   compiler calls a map through make no lambda, which would be numbered ahead of the program's own,
-  so no arm of theirs holds statements, which would make one.
+  so no arm of theirs holds statements, which would make one. The calls are made before the leaf, as
+  `def`s, because the backend can't yet inline them into its arguments (#2662): with that fixed, this
+  and [`convertedEntry`] can go.
 def convertedLeaf
   : [c] int, k, v, ([c] k -> j), ([c] v -> w) -> __mapStore(j, w)
   = { h, key, value, convertKey, convertValue ->
@@ -644,6 +646,19 @@ export def __mapEqualsBy
       )
   }
 
+--| The hash of the map `m` from its keys' and values' hashes, as `hashKey` and `hashValue` give them,
+  in no order, so that maps [`__mapEqualsBy`] finds equal have the same hash. The `hash` the
+  compiler derives for a map whose keys or values have their own calls it.
+export def __mapHashBy
+  : [c] map(k, v), ([c] k -> int), ([c] v -> int) -> int
+  = { m, hashKey, hashValue ->
+    map.fold(
+      m
+      map.length(m)
+      { acc, key, value -> int.bitXor(acc, __hashCombine(hashKey(key), hashValue(value))) }
+    )
+  }
+
 --| What the derived `toString` of a map calls: `m` as its literal is written, its entries in
   square brackets in the order of [`map.toList`], each key and value written by `showKey` and
   `showValue` with ` => ` between them: `[tea => 3, cake => 1]`. The empty map is `[=>]`.
@@ -849,6 +864,12 @@ export def __setEqualsBy: [c] set(a), set(a), ([c] a, a -> bool) -> bool = { s, 
   if set.length(s) != list.length(theirs)
     then false
     else list.all(set.toList(s), { x -> list.any(theirs, { y -> same(x, y) }) })
+}
+
+--| The hash of the set `s` from its elements' hashes, as `hashElement` gives them, in no order, as
+  [`__mapHashBy`] hashes a map.
+export def __setHashBy: [c] set(a), ([c] a -> int) -> int = { s, hashElement ->
+  set.fold(s, set.length(s), { acc, x -> int.bitXor(acc, hashElement(x)) })
 }
 
 --| What the derived `toString` of a set calls: the elements of `s` as a list of them is written,
