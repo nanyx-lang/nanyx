@@ -9,7 +9,7 @@ open Transpiler.Wasm.CoreIr
 
 /// The helpers whose parameters and results of type int are `i64`s. The others take and give `i32`s, which the
 /// emitter converts an int to and from.
-let takesInts = set [ Helpers.intToFloat; Helpers.floatToInt ]
+let takesInts = set [ Helpers.intToFloat; Helpers.floatToInt; Helpers.floatFromBits; PowersOfFive.helper ]
 
 /// The intrinsics that add, subtract and multiply integers wrapping around, each with its instruction's operation.
 let wrappingOperations =
