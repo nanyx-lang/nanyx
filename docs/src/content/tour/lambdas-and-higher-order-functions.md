@@ -50,6 +50,20 @@ def names = people \map { .name }
 def increment = numbers \map { + 1 }
 ```
 
+A lambda that starts with `\` pipes its argument into what follows, so `{ \math.abs }` is `{ x -> x \math.abs }`, and a chain of pipes can follow:
+
+```nanyx
+import nanyx/math as math
+
+def sizes = [-1, 2] \map { \math.abs }
+def firsts = [[1, 2], [3, 4]] \map { \take(1) \reverse }
+
+println(sizes)
+println(firsts)
+```
+
+This prints `[1, 2]` and `[[1], [3]]`.
+
 A lambda written with no parameters, `{ ... }`, ignores its argument where a function of one parameter is expected, so it can stand for a function that doesn't need its input:
 
 ```nanyx
