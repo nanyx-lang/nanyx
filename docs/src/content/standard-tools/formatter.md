@@ -283,7 +283,7 @@ def scale: int, int -> int -- times k, plus x
 
 # Comments before a lambda's `}`
 
-A comment before the `}` of a lambda whose body starts on the `{`'s line stays inside the lambda. The body goes on a line of its own, with the comment after it, and the `}` on the next line. A `match` body keeps its arms on lines of their own, with the comment after the last, and a shorthand lambda such as `{ .length }` keeps its line.
+A comment before the `}` of a lambda whose body starts on the `{`'s line stays inside the lambda. The body goes on a line of its own, with the comment after it, and the `}` on the next line. A `match` body keeps its arms on lines of their own, with the comment after the last, and a shorthand lambda such as `{ .length }` or `{ \reverse }` keeps its line.
 
 ```nanyx unformatted
 -- before
