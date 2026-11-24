@@ -23,6 +23,9 @@ type PatternPrinter(source: string, sourceText: SourceText, literal: SourceSpan 
         | UnitPattern -> text "()"
         | ElsePattern -> text "else"
         | TuplePattern(ps, hasRest) -> cat [ text "("; tupleItems ps hasRest; text ")" ]
+        // Brackets that leave fields out, or name them, are the constructor's: `Email(local, ...)`, `Email(address = a)`.
+        | RecordPattern(n, [ Kind (TuplePattern(ps, true)) ]) -> cat [ text n; text "("; tupleItems ps true; text ")" ]
+        | RecordPattern(n, [ Kind (RecordMemberPattern _) as fields ]) -> cat [ text n; pattern fields ]
         | RecordPattern(n, ps) -> cat [ text n; text "("; commaJoin (List.map pattern ps); text ")" ]
         | RecordMemberPattern(fields, hasRest) ->
             let restDoc = if hasRest then [ text "..." ] else []

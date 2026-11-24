@@ -167,6 +167,7 @@
     <Compile Include="Features\Matches\MissingArmFixTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />
+    <Compile Include="Features\Matches\ConstructorPatternTests.fs" />
     <Compile Include="Features\Matches\NestedTagPatternTests.fs" />
     <Compile Include="Features\Matches\ScrutineeRestTests.fs" />
     <Compile Include="Features\Matches\NestedCatchAllTests.fs" />
