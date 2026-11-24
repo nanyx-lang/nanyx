@@ -31,6 +31,16 @@ boundaries are not built yet; they are on
   type requires (`CoreIrLowerTypes.toIrTypeIn`). A function generic in contexts is specialised on what its context
   variables stand for, so it is compiled apart for a function that can wait and for one that can't: `list.map` over
   `http.get` and `list.map` over a pure lambda are two functions, and only the first is a state machine (below).
+  A lambda's type requires what the functions it calls require, a function that writes no type included, once it has
+  been inferred (`Contexts.contextsRequiredByCall`), so `{ x -> waitThen(x) }` waits whether or not `waitThen` writes
+  `[Async]`. A caller knows that a function value can stop only from its type, so the backend refuses a function value
+  whose type can't wait but that reaches what requires `Async` (a call of a function value that waits, or starting or
+  awaiting a task, a host's wait or `race`), as a broken invariant (`CoreIrSplitPoints.checkFunctionValues`), rather
+  than leave its caller to carry on past a call that stopped. The end of a scope doesn't count: it makes a function a
+  state machine, but one whose type can't wait starts no tasks, so its scopes have nothing to wait for. One such case
+  is left: a lambda that calls a
+  function that waits and that is in a cycle with the def the lambda is in, which isn't inferred yet there
+  ([#2590](https://github.com/nanyx-lang/nanyx/issues/2590)).
 
 # How tasks are compiled
 
@@ -65,7 +75,10 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   when the function stops: a temporary whose value holds a split point, and those waiting to be used while it is
   computed, are kept in locals instead (`SplitPlan.StoredTemps`). Each is computed where it would have been used: after
   the counting between its definition and its use, which the lowering puts before it, as in `f(x, x.length)`, where the
-  count `x` takes for the first argument comes before `x.length` gives up the reference the code held.
+  count `x` takes for the first argument comes before `x.length` gives up the reference the code held. A debug build's
+  probe that comes among them waits with them, so that the counting after it still comes first: in
+  `loop(f, n - 1, f(acc))`, the count the tail call takes of `f` comes before the call of `f`, which drops the reference
+  it read `f` with, though the return probe stands between the two.
 - **Running one to the end.** Code that calls a state machine without being one, the start function, the getter of a
   cached value and a component's export, runs it to the end (`TaskLowering.blockOn`): while it stops, the scheduler
   runs the other tasks until its turn comes again (below), and then resumes it.
@@ -169,17 +182,29 @@ Nothing starts it: like `Console`, the host provides it.
   nothing but itself, so `Attributes.applyAttributes` allows `@customKeywordType(#delay)` on a def attached to a context
   the module declares, and `Attributes.keywordKinds` reads it there by the def's bare name (any other kind needs a
   builder, and a def attached to no context can't be a keyword, `NYX0019`). The hosts' preludes export `Async` alone.
+  `start! e` is `start({ e })`, so a local, a parameter or a pattern's variable named `start` hides `Async.start`, as
+  any nearer name does. The desugaring keeps each `#delay` keyword's call by its span (`InferState.DelayCalls`), and
+  `HiddenKeywords` reports a mismatch at such a call whose keyword names a local at the keyword, naming the local and
+  the def it hides (`NYX0201`).
 - **Each def a scope.** `TaskScopes.wrap`, before inference, makes the body of each module-level def that names
   `start` where nothing in it binds the name (a parameter or a local def named `start` is not the one that starts a
-  task), and a script's entry point if it does, the block of a call of `Async.concurrent`; a module that defines a `start` of its
-  own has no scopes (`TaskScopeSyntax.scopeCall`, with
+  task), and a script's entry point if it does, the block of a call of `Async.concurrent`; in a module that defines a
+  `start` of its own, only `Async.start` makes one (`TaskScopeSyntax.scopeCall`, with
   `nanyx/async` imported under an alias no code can write). So the rules that keep what requires a scoped context in
   its call (`ScopedCalls`) keep a def's tasks in it: a `Task` given back is `NYX0233`, with a message about tasks
   rather than the call. A lambda requires its contexts where it is called, so nothing ties a lambda that starts a task
   to the def it is written in; `TaskCaptures.escapeErrors` reports a def that is a scope whose result holds one. Local
-  defs and lambdas are not scopes: their tasks belong to the def they are written in.
-- **Tasks share only values.** `TaskCaptures.captureErrors` reports a call of `start` whose function requires a
-  `memory` block's `Memory`, as one that uses a cell or a reference does (`NYX0279`).
+  defs and lambdas are not scopes: their tasks belong to the def they are written in. A module-level def that writes no
+  type, isn't a scope, and is inferred to require `TaskScope` starts a task through another name (`def go =
+  Async.start`); `TaskCaptures.unscopedErrors` reports it (`NYX0211`) at its first call whose callee requires
+  `TaskScope`, and a script that calls it is then not told its entry point doesn't fit the host's `run`.
+- **Tasks share only values.** A function that uses a cell or a reference requires its `memory` block's `Memory`, and
+  a task's function must not (`NYX0279`). The check is on types, not names (`TaskWork`): where inference names
+  `Async.start` or `Async.race`, the context variables of the functions its type takes are _work variables_; a def
+  generalised over what a work variable came to stand for has work variables of its own, so `def spawn = { f -> start(f) }`
+  and `def go = start` start tasks as far as the check is concerned, at each place they are named. Once the module is
+  inferred, `TaskCaptures.captureErrors` reports each place where a work variable stands for contexts with a `Memory`,
+  at the call's argument.
 - **The scheduler** (`WasmScheduler`) runs an instance's tasks on its one stack, as state machines. A task is a block
   of the function it runs, the frame it stopped in, its scope and its own innermost scope, the function that gives its
   result, and the regions of the `memory` blocks it is in, which the scheduler swaps in when it runs it. The queue is

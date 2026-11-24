@@ -8,6 +8,66 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.39.0
+
+*24 November 2026*
+
+A release about building collections and type arguments. The collection builders take a function that pushes each
+value with `emit`, through a new `Emit` context, so `list.select` and the others allocate a cell per value and no more.
+A parameter that takes a type is written `Type(a)`. It also fixes a run of contexts given by `use`, and makes writing
+floats as text much faster. One change breaks code: it is marked below.
+
+**Language**
+
+- A parameter that takes a type is written with its type, `Type(a)`, as in `def parse: [Decode(a)] (string, into:
+  Type(a)) -> a`; a named one written `into: Type(into)` makes `into` a type variable of the signature. Calls don't
+  change. The old forms, `type a` and `into: type`, still compile, with warning
+  [NYX0282](../standard-tools/errors#nyx0282) and a quick fix ([Functions](../tour/functions#type-arguments)).
+- A def whose value calls a function needing a context of a type only a later use would fix is
+  [NYX0283](../standard-tools/errors#nyx0283) at the def, which says to write its type or pass a type argument.
+  Before, it was NYX0205 at the call, or a crash in the backend inside a function
+  ([Type inference](../tour/type-inference-and-annotations#target-typing)).
+- `???` has type `undefined`, and `undefined` agrees with any type expected of it, so `[crash("no")]` is a `list(int)`
+  where one is expected, and using a value of type `undefined` reports no further errors
+  ([Types](../tour/types#top-and-bottom-types)).
+- A lambda that a `use` gives a context's member is inferred where the `use` is, so the contexts it needs besides the
+  member's own are required by the def around it, and `use Emit(emit = ...)` without its type compiles where the def
+  settles it ([Contexts](../advanced/contexts)).
+- A destructuring def, `def (a, b) = pair`, can be written in a `module` block, and exported from it.
+
+**Standard library**
+
+- The prelude has `Emit(a) = (emit: a -> ())`. `list.build`, `list.select` and the `build` and `select` of `array`,
+  `MArray`, `MList`, `set`, `map`, `Slice`, `Queue` and `Stack` take a function that requires `Emit` and calls
+  `emit(x)` for each value, and add each value as it is emitted. `list.select` over 300,000 elements makes 750,000
+  allocations, from 3,150,000. **This breaks code** that gives one of them a block that `yield`s: write `emit` for
+  `yield` ([Building a collection](../advanced/sequences-and-queries#building-a-collection)).
+
+**Tools**
+
+- The official linter's `resultOnlyTypeVariable` rule warns about a function whose result has a type variable that a
+  context it requires names, but that no parameter fixes
+  ([Official linter](../standard-tools/official-linter#type-variable-only-in-the-result)).
+- A runtime function's exception is reported with its type and stack.
+
+**Performance**
+
+- Writing a float as text takes about a tenth of the time it did, and a whole-number float is written from its integer.
+- A `match` on a tag union reads the tag once, and not at all for a union with no payloads.
+- A `memory` block whose cells are all locals allocates no region.
+- `MArray.at` and `MArray.set` no longer count the array twice.
+- A function of thousands of locals compiles in linear time in a debug build, where 8,000 ran out of memory, and a
+  long chain of statements in one block is lowered in linear time.
+
+**Fixes**
+
+- A range nested in a range's bound runs, where it was NYX0301.
+- A list literal of one spread is a literal: `[...s]` of a set is a list of its elements, `[...r]` of a record is
+  NYX0258, and the formatter keeps `[...xs]` as written.
+- A function that waits no longer frees a value an argument still needs, which `--check-memory` caught in
+  `nanyx.regex`.
+- A value that failed to check, or a `???`, no longer gives a second error, NYX0202, at the def.
+
 # 0.38.0
 
 *24 November 2026*

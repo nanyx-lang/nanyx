@@ -529,10 +529,14 @@ type private FunctionEmitter(context: EmitContext) =
                 flush ()
                 addPart (guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
                 walk body
-            // A probe stores nothing a temporary waits on, so it can stand among them.
+            // A probe stores nothing a temporary waits on, so it can stand among them. Behind a stored value it waits
+            // with it, so that the counting after it still comes before the value is computed, as it does where there
+            // is no probe: a return probe stands between the call that gives a stored argument and a tail call that
+            // takes a reference to a variable that call last reads (#2591).
             | Do({ Kind = Probe(kind, locals) } as probe, rest) ->
                 let reads, places = chainReads.Value
-                addPart (guard expr (this.Probe probe kind locals (reads.AliveAfter places.[expr])))
+                let code = guard expr (this.Probe probe kind locals (reads.AliveAfter places.[expr]))
+                if storedParts.Count > 0 then storedParts.Add code else addPart code
                 walk rest
             | Do(value, rest) ->
                 claim value

@@ -267,6 +267,24 @@ def main = {
 }
 ```
 
+The type can be left out where the rest of the def settles it, `use C(members)`: the instance is the one the block's
+calls need, or the one the members are called at. A handler that pushes each value into a list it builds loads the
+instance at the builder's own element type, whichever type that is where the builder is called:
+
+```nanyx
+context Pushed(a) = (push: a -> ())
+
+def gather: [c] ([c, Pushed(b)] () -> ()) -> list(b) = { block ->
+  memory {
+    mut found = []
+    use Pushed(push = { x -> found := [x, ...found] }) in block()
+    list.reverse(found)
+  }
+}
+
+println(gather { push(1) }) -- [1]
+```
+
 A handler can give its lambda an instance of a parameterised context too. The lambda is given it at the types its parameter's type writes, so a context with several instances for one type, such as a monoid, is chosen by the handler a block is passed to:
 
 ```nanyx

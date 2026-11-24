@@ -198,7 +198,7 @@ let rec internal inferCall
     | Ok state ->
         // What the callee requires is used where the call runs, by the lambda around it if any (see `LambdaContexts`).
         let state =
-            let written = contextRequirementsOf env state name |> Option.defaultValue []
+            let written = contextsRequiredByCall env state name
             let ofMember = LambdaContexts.contextOfMember env state name |> Option.map (fun ctx -> TyApply(ctx, [])) |> Option.toList
             state |> LambdaContexts.recordWritten env written |> LambdaContexts.recordUnsupplied env ofMember
         // A callee a module block keeps from here is checked on as if it were reached (see `FailedCalls`).
@@ -210,7 +210,7 @@ let rec internal inferCall
         | Some (_, Some lookup) -> inferLookup inferExpr env state expr lookup (Expression.from expr (IdentifierExpr name)) spanOpt args
         | Some (scheme, None) ->
             let mutable current = state
-            let funcTy, nextState = instantiate (recordReference expr scheme current) scheme
+            let funcTy, nextState = instantiate (recordReference expr scheme current |> HiddenKeywords.note env expr name scheme) scheme
             let written = contextRequirementsOf env state name |> Option.defaultValue []
             let env, funcTy, nextState = ScopedCalls.enter env nextState expr name scheme funcTy written
             current <- { nextState with CalleeTypes = nextState.CalleeTypes |> Map.add expr.Id funcTy }

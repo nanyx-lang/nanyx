@@ -72,6 +72,10 @@ Nothing that holds a task can leave its def: giving back a `Task`, or a lambda t
 scope is the def, not the nearest lambda: a task started in a local def or a lambda belongs to the def it is written
 in. A function that awaits a task it is given borrows its caller's scope.
 
+A def is a scope when its body names `start` (or `Async.start`), so a def that starts a task only through another
+name, as `go(...)` after `def go = Async.start` does, is not one, and starting the task there is an error
+([NYX0211](../standard-tools/errors#nyx0211)): name `start` in the def itself.
+
 # A smaller scope
 
 `concurrent` runs a block as a scope of its own, and gives back what the block gives back once every task started in it
@@ -99,7 +103,8 @@ It is a function, so its block is passed in parentheses: `concurrent { ... }` wo
 # Tasks share only values
 
 A task can't use what belongs to a `memory` block: starting one with a function that uses a cell or a reference
-(`MRef`, `MList`) is an error ([NYX0279](../standard-tools/errors#nyx0279)). Values are immutable, so a task can never
+(`MRef`, `MList`) is an error ([NYX0279](../standard-tools/errors#nyx0279)), whether `start` starts it, `race` does, or a
+function that passes on what it is given to either. Values are immutable, so a task can never
 change what another holds; give a task what a cell holds, and change the cell with what the task gives back.
 
 # How tasks take turns

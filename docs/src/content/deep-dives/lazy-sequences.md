@@ -178,7 +178,7 @@ export def list.build: [c] ([c, Emit(a)] () -> ()) -> list(a) = { block ->
     mut first = []
     mut last = []
 
-    use Emit(a)(
+    use Emit(
       emit = { y ->
         def cell = [y]
 

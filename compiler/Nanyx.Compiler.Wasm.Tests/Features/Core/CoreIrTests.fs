@@ -456,3 +456,25 @@ let ``A broken invariant in the emitter is an internal error, said once, that as
             "The compiler broke one of its own rules (a temporary in the core IR is never used): report it at https://github.com/nanyx-lang/nanyx/issues",
             diagnostic.Message)
     | failures -> Assert.Fail $"Expected one failure in f, got %A{failures}"
+
+[<Fact>]
+let ``A function value that can stop where its type says it can't is an internal error, not wrong code`` () =
+    // `b` is not inferred yet where `a`'s lambda calls it, so the lambda's type doesn't require what `b` does: it can't
+    // wait, though it calls a function that does (#2558, #2590).
+    let source =
+        """def a = { (n: int) ->
+  if n == 0 then 0 else list.map([n], { x -> b(x) }) \list.sum
+}
+
+def b = { (x: int) ->
+  sleep(1)
+  a(x - 1) + 1
+}
+
+println(a(3))
+"""
+    match tryTranspileTypedModuleToWat (typedModule source) with
+    | Ok _ -> Assert.Fail "Expected the backend to refuse the function value"
+    | Error diagnostic ->
+        Assert.Equal(DiagnosticCodes.BackendInternalError.Code, diagnostic.Code)
+        Assert.Matches("the function value `__lambda_\\d+` can stop where it waits, but its type `\\(int -> int\\)` says it can't", diagnostic.Message)

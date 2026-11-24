@@ -33,6 +33,7 @@
     <Compile Include="Arrays.fs" />
     <Compile Include="Boxes.fs" />
     <Compile Include="TypeValues.fs" />
+    <Compile Include="TaskWork.fs" />
     <Compile Include="InferState.fs" />
     <Compile Include="FieldCalls.fs" />
     <Compile Include="ContextFixes.fs" />
@@ -95,6 +96,7 @@
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
     <Compile Include="AttachedContextDefs.fs" />
+    <Compile Include="HiddenKeywords.fs" />
     <Compile Include="ScopedTypes.fs" />
     <Compile Include="ContextInstances.fs" />
     <Compile Include="ContextNames.fs" />

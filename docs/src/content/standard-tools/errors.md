@@ -1232,6 +1232,22 @@ def r =
 
 A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any tag.
 
+A keyword call such as `start! e` is a call of the def named by the keyword, `start({ e })`, so a local, a parameter or a
+pattern's variable of that name is called instead. When it doesn't take a block, the error is reported at the keyword
+and names it:
+
+```nanyx
+import nanyx/async as (Async)
+
+def work = { _ ->
+  def start = 5
+  def t = start! 1  -- error NYX0201: 'start!' calls the local 'start' defined at line 4, of type 'int', not 'Async.start': ...
+  start
+}
+```
+
+To fix it, rename the local, or call the keyword's def by its whole name, `Async.start({ 1 })`.
+
 # NYX0202: Annotation too general
 
 A definition's annotation promises more than its body gives: it says a type variable could be any type, but the body
@@ -1406,6 +1422,10 @@ def greet: string -> () = { name -> println("Hello, {name}") }  -- error NYX0211
 
 To fix it, add the context to the definition's type, as in `[Console] string -> ()`, or load an instance with `use`
 ([Contexts](../advanced/contexts)).
+
+A module-level def that starts a task without naming `start` gets this error too, at the call that starts it: only a
+def whose body names `start` is the scope of its tasks ([Async](../advanced/async#each-def-is-a-scope)). Start the task
+with `start` in the def itself.
 
 # NYX0212: Nominal type constructed outside its module
 
@@ -2402,8 +2422,10 @@ function in.
 
 # NYX0279: Task that holds what belongs to a memory block
 
-A task is started with a function that uses a `memory` block's cells or references (`MRef`, `MList`). Tasks share only
-immutable values, so that another task can never change what one holds while it waits
+A task is started with a function that uses a `memory` block's cells or references (`MRef`, `MList`), by `start`, by
+`race`, or by anything that starts a task with the function it is given, such as a local `def spawn = { f -> start(f) }`
+or `start` under another name. Tasks share only immutable values, so that another task can never change what one holds
+while it waits, and a task can't run on once the block has freed what it holds
 ([Async](../advanced/async#tasks-share-only-values)).
 
 ```nanyx
