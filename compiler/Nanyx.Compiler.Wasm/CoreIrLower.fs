@@ -1248,7 +1248,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         { NewVar = newVar
           UniqueName = uniqueName
           TypeOf = tyOf
-          NominalTypes = input.NominalTypes
           Tail = this.Tail
           Branch = this.Branch
           Complex = this.Complex }
