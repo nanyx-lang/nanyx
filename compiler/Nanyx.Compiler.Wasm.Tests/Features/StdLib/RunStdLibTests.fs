@@ -357,6 +357,74 @@ check(5.0)
 1.0e21 reads back
 5.0 reads back""")
 
+[<Fact>]
+let ``Run - Float.fromString reads the floats at the ends of the range exactly`` () =
+    let source =
+        normalized """def show = { text -> println("{text} -> {float.fromString(text)}") }
+
+show("1.7976931348623157e308")
+show("1.0e308")
+show("2.5e-300")
+show("2.2250738585072014e-308")
+show("5.0e-324")
+show("2.4703282292062328e-324")
+show("2.4703282292062327e-324")
+show("1.7976931348623158e308")
+show("1.7976931348623159e308")
+show("9007199254740993")
+show("9007199254740993.0000000000000000000000000001")
+show("123456789012345678901234567890")
+
+println(float.fromString("1.7976931348623157e308") == #some(1.7976931348623157e308))
+"""
+    runSource source
+    |> assertRan (
+        withFinalNewline """1.7976931348623157e308 -> #some(1.7976931348623157e308)
+1.0e308 -> #some(1.0e308)
+2.5e-300 -> #some(2.5e-300)
+2.2250738585072014e-308 -> #some(2.2250738585072014e-308)
+5.0e-324 -> #some(5.0e-324)
+2.4703282292062328e-324 -> #some(5.0e-324)
+2.4703282292062327e-324 -> #some(0.0)
+1.7976931348623158e308 -> #some(1.7976931348623157e308)
+1.7976931348623159e308 -> #some(Infinity)
+9007199254740993 -> #some(9007199254740992.0)
+9007199254740993.0000000000000000000000000001 -> #some(9007199254740994.0)
+123456789012345678901234567890 -> #some(1.2345678901234568e29)
+true""")
+
+/// `x` as a Nanyx float literal, with all the digits it takes to be read back as `x`: `1.0e-300`, not .NET's `1E-300`.
+let private floatLiteral (x: float) =
+    let text = x.ToString("R", Globalization.CultureInfo.InvariantCulture).Replace("E+", "e").Replace("E", "e")
+    let mantissa, exponent =
+        match text.IndexOf 'e' with
+        | -1 -> text, ""
+        | at -> text.Substring(0, at), text.Substring at
+    (if mantissa.Contains '.' then mantissa else mantissa + ".0") + exponent
+
+[<Fact>]
+let ``Run - Float.fromString reads back the largest, the smallest and thousands of random floats`` () =
+    let random = Random 2521
+    let bytes = Array.zeroCreate<byte> 8
+    let randomFloats =
+        Seq.initInfinite (fun _ ->
+            random.NextBytes bytes
+            BitConverter.ToDouble(bytes, 0))
+        |> Seq.filter Double.IsFinite
+        |> Seq.truncate 3000
+        |> Seq.toList
+    let floats = [ Double.MaxValue; 2.2250738585072014e-308; 5.0e-324; -5.0e-324 ] @ randomFloats
+    let source =
+        "def floats = [\n"
+        + (floats |> List.map (fun x -> "  " + floatLiteral x) |> String.concat ",\n")
+        + normalized """
+]
+
+def misread = floats \list.filter({ x -> float.fromString(float.toString(x)) != #some(x) })
+println("{list.length(misread)} of {list.length(floats)} misread, the first ten {misread \list.take(10)}")
+"""
+    runSource source |> assertRan "0 of 3004 misread, the first ten []\n"
+
 /// `readAll`, generic in the prelude's `FromString`, and a function of each result type that sums or counts what was read.
 let private readAllSource =
     normalized """def readAll: [FromString(a)] list(string) -> list(#some(a) | failure) = { xs -> xs \list.map(fromString) }
