@@ -9,8 +9,8 @@ instance a `use` loads, runs the code after the call at once (a pushing, or tail
 to run later. It is the "effect handlers in general" question on
 [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#open-questions). Two cases are in hand:
 
-- **Pushing: `Emit(a)`.** Decided on 2026-11-24 and being built
-  ([#2566](https://github.com/nanyx-lang/nanyx/issues/2566)): the builders push through a new prelude context.
+- **Pushing: `Emit(a)`.** Built ([#2566](https://github.com/nanyx-lang/nanyx/issues/2566)): the builders push
+  through a prelude context, described in [Lazy sequences](../deep-dives/lazy-sequences#pushing-with-emit).
 - **Capturing: `yield` on async's state machines.** Proposed, and tested by a spike (below):
   [#2426](https://github.com/nanyx-lang/nanyx/issues/2426), with what is left of
   [#2427](https://github.com/nanyx-lang/nanyx/issues/2427).
@@ -21,9 +21,9 @@ Today `yield` has one meaning. Any lambda with a `yield` in it is rewritten, bef
 sequence: `yield x` with the rest `k` is `seq.cons(x, { k })` ([Lazy sequences](../deep-dives/lazy-sequences#yield)).
 That has three costs:
 
-- **Builders pay for laziness they never use.** `list.build`, `list.select`, `Array.build` and the others pull the
-  whole sequence at once, but each value yielded still costs a sequence step and a closure: `list.select` makes about
-  seven blocks for each value it yields, where building the list by hand makes one.
+- **Builders paid for laziness they never used.** `list.build`, `list.select`, `Array.build` and the others pulled
+  the whole sequence at once, but each value yielded still cost a sequence step and a closure: `list.select` made
+  about seven blocks for each value it yielded, where building the list by hand makes one. `Emit` fixed that.
 - **`yield` must be written in the lambda itself.** A recursive tree walk can't yield from the functions it calls,
   since the rewrite only sees one lambda.
 - **It is a special case.** The `#yield` keyword kind writes calls to the prelude's `seq.cons`, `__seqLast`,
@@ -36,21 +36,18 @@ type of `xs`.
 
 # Pushing: `Emit(a)`
 
-Decided, and being built in [#2566](https://github.com/nanyx-lang/nanyx/issues/2566). A pushing operation is a
-context of its own, so nothing has to choose between meanings:
+Built in [#2566](https://github.com/nanyx-lang/nanyx/issues/2566): the prelude's `Emit(a) = (emit: a -> ())`, and the
+builders that take a function requiring it and run it under a handler that appends. How it works is on
+[Lazy sequences](../deep-dives/lazy-sequences#pushing-with-emit). What is left:
 
-```nanyx fragment
-export context Emit(a) = (emit: a -> ())
-```
-
-- **A body calls `emit(x)`,** a plain context call. It returns, and the code after it carries on: loops stay loops,
-  and nothing is allocated for the rest of the block. This is Koka's tail-resumptive (`fun`) operation.
-- **The builders push.** `list.select`, `list.build`, `Array.build`, `MList.build` and the set and map builders take
-  `[c, Emit(b)] a -> ()` and run it under a handler that appends: `use Emit(emit = { y -> result += y })`.
-- **`Emit` is loadable,** so a user writes their own handler, a visitor or a tree walk that pushes into a callback,
-  and `emit` works through higher-order calls like any context requirement.
 - **No keyword yet.** `emit! x` would need a keyword kind for a plain call, which is undecided.
-- **`seq { }` stays lazy,** its block typed `[Yield(a)] () -> ()`, and `yield` in it is rewritten as today.
+- **The builders write their instance's type,** `use Emit(a)(emit = ...)`, until
+  [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) lets a `use` find its members once its type is settled.
+- **A builder inside a `use` of `Emit` at another type** binds the builder's `emit` to the outer handler in the
+  backend ([#2570](https://github.com/nanyx-lang/nanyx/issues/2570)).
+- **`seq { }` stays lazy,** and its block keeps the type `[c] () -> [d] seq(a)` the `#yield` rewrite gives it. It
+  becomes `[Yield(a)] () -> ()` when `seq` is a capturing handler of `Yield`
+  ([#2426](https://github.com/nanyx-lang/nanyx/issues/2426)).
 
 # Capturing: `yield` as an effect operation
 
@@ -89,7 +86,9 @@ values each:
 | a pushing `select` | 450,009 | 33.6 MB |
 
 That is one block, the list cell, per value yielded: what building the list by hand makes. A handler that holds the
-builder's `MList` can't leave its `memory` block: returning it is `NYX0233`, as for any cell.
+builder's `MList` can't leave its `memory` block: returning it is `NYX0233`, as for any cell. As built in #2566, over
+300,000 elements emitting 1.5 values each, `list.select` and `list.build` make 450,005 blocks beyond the input, as
+many as building the list with an `MList` by hand.
 
 ## Capturing
 
@@ -118,7 +117,8 @@ stops again as soon as it is resumed could keep its block.
 | Step | Issue | Stage |
 |---|---|---|
 | A `use` whose instance's type is settled after it finds its members | [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) | Working set |
-| `Emit(a)`, and the builders pushing through it | [#2566](https://github.com/nanyx-lang/nanyx/issues/2566) | Working set |
+| `Emit(a)`, and the builders pushing through it | [#2566](https://github.com/nanyx-lang/nanyx/issues/2566) | done |
+| A builder inside a `use` of `Emit` at another type finds its own handler | [#2570](https://github.com/nanyx-lang/nanyx/issues/2570) | Ready |
 | A frame can be dropped and copied: a drop function and a copy function for each state, beside its resume entry, from the types the emitter knows where it saves the variables | | proposed |
 | Members that may capture: split points for them, a delimiter at each `use`, and each stop marked with the handler it is for, so that one passes through a delimiter that isn't its own | | proposed |
 | `seq` as a capturing handler, and the `#yield` rewrite deleted | [#2426](https://github.com/nanyx-lang/nanyx/issues/2426), [#2427](https://github.com/nanyx-lang/nanyx/issues/2427) | Planning |
@@ -150,5 +150,6 @@ run time by the reference count, with nothing to prove.
   context, as `list.map` over `http.get` does today.
 - **Continuations called more than once beyond sequences.** Copying frames would let a handler call `k` twice
   (backtracking, a search). Is that allowed, or only resuming a copy for a persistent sequence?
-- **The functions that stop at the first value.** `list.selectOne` and `seq.selectOne` stop at the first `yield`, so
-  a pushing handler can't serve them: they need a handler that never resumes, or stay lazy.
+- **The functions that stop at the first value.** `list.selectOne`, `Slice.selectOne` and `seq.selectOne` stop at the
+  first `yield`, so a pushing handler can't serve them. They still take a lambda that yields, a sequence; whether a
+  handler that never resumes should serve them instead is open.
