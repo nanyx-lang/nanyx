@@ -78,26 +78,33 @@ The smart constructor can return whatever is appropriate: an [option-like type](
 
 Nominal types are not assignable to each other, even if their structures are identical. A protected type is, however, assignable to its underlying shape for compatibility with existing code.
 
-So, given the definition of `Email` above, `Email` is assignable to `string` but `string` is not assignable to `Email`. In practice this means an `Email` can be used anywhere a `string` is expected, including with every attached definition on `string`:
+So, given the definition of `Email` above, `Email` is assignable to `string` but `string` is not assignable to `Email`. In practice this means an `Email` can be passed wherever a `string` is declared: to a function that takes a `string`, such as `string.length`, or to a `def` whose type is `string`. An attached definition on `string` isn't one of `Email`'s, though, so `email \contains(...)` is an error (NYX0102); call it as `string.contains(email, ...)`, or name the value as a `string` first:
 
-```nanyx fragment
-def email: Email = ...
+```nanyx
+type Email = protected string
 
-email.length                        -- 15
-email \contains("example")          -- true
-email \substring(start = 0, length = 3)  -- "ada"
-email \split(on = "@")              -- ["ada", "example.com"]
+def email = Email("ada@example.com")
+
+def text: string = email
+
+println(string.length(email)) -- 15
+println(text \contains("example")) -- true
+println(text \split(on = "@")) -- [ada, example.com]
 ```
 
 Note that these all produce plain `string`s (or `int`s, `bool`s and so on), not `Email`s. Taking a substring of an email address does not give you another email address, and the type system agrees.
 
 The same applies to record shapes. A protected record is still a record, so its fields can be read with ordinary dot access from any module, even though only the home module can construct one:
 
-```nanyx fragment
-def user: User = ...
+```nanyx
+type Email = protected string
 
-user.name          -- "Ada"
-user.email.length  -- 15
+type User = protected (name: string, email: Email)
+
+def user = User(name = "Ada", email = Email("ada@example.com"))
+
+println(user.name) -- Ada
+println(string.length(user.email)) -- 15
 ```
 
 This is often the sweet spot for domain types: construction is controlled, but reading is free, and callers need no accessor functions just to look at the data.
@@ -206,11 +213,11 @@ No `==`, order or hash is derived from a private type's representation, in its h
 
 ```nanyx fragment
 export def UserId.`==`: UserId, UserId -> bool = { a, b ->
-  a.value == b.value
+  a \value == b \value
 }
 
 export def UserId.hash: UserId -> int = { id ->
-  id.value
+  id \value
 }
 ```
 

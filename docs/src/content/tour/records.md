@@ -82,12 +82,6 @@ type Person = (name: string)
 def john: Named = Person(name = "John")
 ```
 
-You can also compose record requirements with intersections:
-
-```nanyx fragment
-type Person = Named & (age: int)
-```
-
 # Closed and open records
 
 A record type is _closed_: it has exactly the fields it lists, no more and no fewer. A record with an extra field is a different type, so it can't be passed where the smaller record is expected:

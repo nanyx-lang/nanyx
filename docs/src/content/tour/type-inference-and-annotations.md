@@ -195,8 +195,8 @@ def obj = parse("{}")
 def person: Person = obj
 ```
 
-You can also use assertions to guide inference:
+You can also guide inference by writing the type on the `def`:
 
 ```nanyx fragment
-def obj = parse("..."): Person
+def obj: Person = parse("...")
 ```
