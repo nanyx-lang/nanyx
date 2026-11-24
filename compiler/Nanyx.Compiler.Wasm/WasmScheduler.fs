@@ -15,6 +15,10 @@
 /// nothing can happen until the host has done something, so if a task waits on the host, the scheduler makes the host's
 /// wait: the function the last task to wait on it gave, for the shortest timeout any gave. Then each task that waited on
 /// the host carries on, and looks again at what it waits for.
+///
+/// A task can be cancelled, which cancels every task it started (`Names.taskCancel`). Nothing stops it: the code that
+/// waits on the host asks whether its task is, and gives back `#cancelled`. A task waiting on the host carries on once,
+/// at once, when it is cancelled meanwhile, so that it can.
 module internal Transpiler.Wasm.WasmScheduler
 
 open Transpiler.Wasm.WasmRuntime
@@ -28,6 +32,10 @@ module Names =
     let scopeEnter = NyxCompiler.Intrinsics.scopeEnter
     let scopeExit = NyxCompiler.Intrinsics.scopeExit
     let hostWait = NyxCompiler.Intrinsics.hostWait
+    let taskCancel = NyxCompiler.Intrinsics.taskCancel
+    let taskCancelled = NyxCompiler.Intrinsics.taskCancelled
+    let taskDone = NyxCompiler.Intrinsics.taskDone
+    let scopeWaitAny = NyxCompiler.Intrinsics.scopeWaitAny
     /// The task running, and the main task, the program's own code.
     let running = "__nanyx_task"
     let main = "__nanyx_task_main"
@@ -44,6 +52,9 @@ module Names =
     let waitResume = "__nanyx_task_wait_resume"
     let scopeExitResume = "__nanyx_scope_exit_resume"
     let hostWaitResume = "__nanyx_host_wait_resume"
+    let scopeWaitAnyResume = "__nanyx_scope_wait_any_resume"
+    /// Whether a task of a scope has given back its value.
+    let anyDone = "__nanyx_scope_any_done"
     /// How many tasks the queue holds.
     let queued = "__nanyx_task_queued"
     /// Whether the task just resumed stalled, and how many have stalled in a row.
@@ -71,10 +82,12 @@ module Names =
 
 /// The names `nanyx/async` calls: a module that calls one has the scheduler.
 let intrinsics =
-    set [ Names.taskStart; Names.taskFinish; Names.taskWait; Names.taskResult; Names.scopeEnter; Names.scopeExit; Names.hostWait ]
+    set
+        [ Names.taskStart; Names.taskFinish; Names.taskWait; Names.taskResult; Names.scopeEnter; Names.scopeExit; Names.hostWait
+          Names.taskCancel; Names.taskCancelled; Names.taskDone; Names.scopeWaitAny ]
 
 /// The intrinsics that can stop the task running: split points (see `CoreIrSplitPoints`).
-let waits = set [ Names.taskWait; Names.scopeExit; Names.hostWait ]
+let waits = set [ Names.taskWait; Names.scopeExit; Names.hostWait; Names.scopeWaitAny ]
 
 /// A task's fields, by their offsets.
 let private state = 0
@@ -88,7 +101,9 @@ let resultOffset = 24
 let private ownScope = 28
 let private innermostRegion = 32
 let private outermostRegion = 36
-let private taskSize = 40
+/// 1 once the task is cancelled (see `Names.taskCancel`).
+let private cancelled = 40
+let private taskSize = 44
 
 /// A task's states: made, running (it has started), finishing (its function returned, and the tasks it started may
 /// not have), and finished.
@@ -102,10 +117,17 @@ let private parent = 0
 let private first = 4
 let private scopeSize = 8
 
-/// The helpers' code, given the function table slots of the three waits' resume entries, the indirect type of a
+/// The helpers' code, given the function table slots of the four waits' resume entries, the indirect type of a
 /// function of one `i32` that gives one, as a task's function and a resume entry are, and that of a function of two,
 /// as the host's wait is, which is called with its closure and the timeout.
-let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (hostWaitResumeSlot: int) (oneToOne: string) (twoToOne: string) : string list =
+let helpers
+    (waitResumeSlot: int)
+    (scopeExitResumeSlot: int)
+    (hostWaitResumeSlot: int)
+    (scopeWaitAnyResumeSlot: int)
+    (oneToOne: string)
+    (twoToOne: string)
+    : string list =
     let alloc = Helpers.alloc
     let free = Helpers.free
     let zeroed (local: string) (size: int) =
@@ -218,6 +240,11 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (hostWaitResumeSlot
         "local.get $t"
         "local.get $f"
         $"i32.store offset={work}"
+        // A task a cancelled task starts is cancelled from the start.
+        "local.get $t"
+        "local.get $cur"
+        $"i32.load offset={cancelled}"
+        $"i32.store offset={cancelled}"
         "local.get $t"
         "local.get $s"
         $"i32.store offset={ownScope}"
@@ -420,8 +447,25 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (hostWaitResumeSlot
         "end"
         "end"
         yield! stopWith hostWaitResumeSlot [ $"global.get ${Names.hostRound}" ]
+        // Whether the task was cancelled when it stopped: one that is cancelled meanwhile carries on at once, once.
+        "local.get $frame"
+        $"call ${Names.current}"
+        $"i32.load offset={cancelled}"
+        "i32.store offset=20"
         ")" ]
-      resumeWhile Names.hostWaitResume [ "local.get $frame"; "i32.load offset=16"; $"global.get ${Names.hostRound}"; "i32.eq" ] []
+      resumeWhile
+          Names.hostWaitResume
+          [ "local.get $frame"
+            "i32.load offset=16"
+            $"global.get ${Names.hostRound}"
+            "i32.eq"
+            "local.get $frame"
+            "i32.load offset=20"
+            $"call ${Names.current}"
+            $"i32.load offset={cancelled}"
+            "i32.eq"
+            "i32.and" ]
+          []
       // Makes the host's wait when every task in the queue has stalled since one last didn't, and a task waits on the
       // host.
       [ $"(func ${Names.idle} (local $w i32)"
@@ -466,6 +510,103 @@ let helpers (waitResumeSlot: int) (scopeExitResumeSlot: int) (hostWaitResumeSlot
         "i32.const 0"
         $"global.set ${Names.stalled}"
         ")" ]
+      // Cancels `t` and every task it started, in each of its scopes, and theirs in turn.
+      [ $"(func ${Names.taskCancel} (param $t i32) (local $s i32) (local $u i32)"
+        "local.get $t"
+        "i32.const 1"
+        $"i32.store offset={cancelled}"
+        "local.get $t"
+        $"i32.load offset={ownScope}"
+        "local.set $s"
+        "block $scopes"
+        "loop $eachScope"
+        "local.get $s"
+        "i32.eqz"
+        "br_if $scopes"
+        "local.get $s"
+        $"i32.load offset={first}"
+        "local.set $u"
+        "block $tasks"
+        "loop $eachTask"
+        "local.get $u"
+        "i32.eqz"
+        "br_if $tasks"
+        "local.get $u"
+        $"i32.load offset={cancelled}"
+        "i32.eqz"
+        "if"
+        "local.get $u"
+        $"call ${Names.taskCancel}"
+        "end"
+        "local.get $u"
+        $"i32.load offset={sibling}"
+        "local.set $u"
+        "br $eachTask"
+        "end"
+        "end"
+        "local.get $s"
+        $"i32.load offset={parent}"
+        "local.set $s"
+        "br $eachScope"
+        "end"
+        "end"
+        ")" ]
+      // Whether the task running is cancelled: none is, when there is none yet, which this doesn't make.
+      [ $"(func ${Names.taskCancelled} (result i32) (local $t i32)"
+        $"global.get ${Names.running}"
+        "local.tee $t"
+        "if (result i32)"
+        "local.get $t"
+        $"i32.load offset={cancelled}"
+        "else"
+        "i32.const 0"
+        "end"
+        ")" ]
+      // Whether the task of handle `t` has given back its value: its function has returned.
+      [ $"(func ${Names.taskDone} (param $t i32) (result i32)"
+        "local.get $t"
+        $"i32.load offset={state}"
+        $"i32.const {finishing}"
+        "i32.ge_u"
+        ")" ]
+      // Whether a task of the scope `s` has given back its value.
+      [ $"(func ${Names.anyDone} (param $s i32) (result i32) (local $t i32)"
+        "local.get $s"
+        $"i32.load offset={first}"
+        "local.set $t"
+        "block $done"
+        "loop $each"
+        "local.get $t"
+        "i32.eqz"
+        "br_if $done"
+        "local.get $t"
+        $"call ${Names.taskDone}"
+        "if"
+        "i32.const 1"
+        "return"
+        "end"
+        "local.get $t"
+        $"i32.load offset={sibling}"
+        "local.set $t"
+        "br $each"
+        "end"
+        "end"
+        "i32.const 0"
+        ")" ]
+      // Waits until a task of the running task's innermost scope has given back its value.
+      [ $"(func ${Names.scopeWaitAny} (local $frame i32)"
+        $"call ${Names.current}"
+        $"i32.load offset={ownScope}"
+        $"call ${Names.anyDone}"
+        "if"
+        "return"
+        "end"
+        yield! stopWith scopeWaitAnyResumeSlot [ "i32.const 0" ]
+        ")" ]
+      resumeWhile
+          Names.scopeWaitAnyResume
+          [ $"call ${Names.current}"; $"i32.load offset={ownScope}"; $"call ${Names.anyDone}"; "i32.eqz" ]
+          []
       // Makes `t` the task running, keeping the regions of the one that was.
       [ $"(func ${Names.switchTo} (param $t i32) (local $was i32)"
         $"global.get ${Names.running}"

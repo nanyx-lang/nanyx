@@ -86,6 +86,7 @@ def describe: FsError -> string = {
   | #isDirectory -> "it is a directory"
   | #notDirectory -> "a part of its path is not a directory"
   | #alreadyExists -> "something is already there"
+  | #cancelled -> "its task was cancelled"
   | #other(why) -> why
 }
 

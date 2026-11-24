@@ -5,6 +5,7 @@ export module http
 
 import (
   nanyx/async as (Async)
+  nanyx/host.async as (cancelled)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/text
@@ -346,17 +347,24 @@ def writeConsumed: [HostRuntime] I32 -> () = { writer ->
 }
 
 --| Sends `request` through `wasi:http/client`, and gives its response, or why there is none. The
-  program's other tasks run while it is in flight.
+  program's other tasks run while it is in flight. In a cancelled task it gives `#cancelled`: at once
+  if the task was cancelled before, and else once the request is answered.
 export def sendThroughWasi
   : [Async, HostRuntime] Request -> #some(Response) | HttpError
   = { request ->
-    match urlParts(request.url)
-      | #invalidUrl -> #invalidUrl
-      | #some(scheme, authority, pathWithQuery) ->
-        match fieldsOf(withContentLength(request))
-          | #some(fields) -> sendWith(request, fields, scheme, authority, pathWithQuery)
-          | e -> e
+    if cancelled() then #cancelled else
+      sendTo(request)
   }
+
+--| Sends `request` as [`sendThroughWasi`] does, in a task not cancelled yet.
+def sendTo: [Async, HostRuntime] Request -> #some(Response) | HttpError = { request ->
+  match urlParts(request.url)
+    | #invalidUrl -> #invalidUrl
+    | #some(scheme, authority, pathWithQuery) ->
+      match fieldsOf(withContentLength(request))
+        | #some(fields) -> sendWith(request, fields, scheme, authority, pathWithQuery)
+        | e -> e
+}
 
 --| Sends `request`, its headers in `fields`, to the URL of `scheme`, `authority` and
   `pathWithQuery`.
@@ -403,5 +411,7 @@ def sendWith
       else httpErrorAt(answer + 8)
 
     free(result)
-    answered
+    -- A request can't be abandoned in flight: one whose task was cancelled meanwhile is answered, and the answer
+    -- dropped.
+    if cancelled() then #cancelled else answered
   }
