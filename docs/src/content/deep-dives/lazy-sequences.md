@@ -204,7 +204,10 @@ an `emit` stays a loop, and a value costs what the handler makes for it, here on
 `Emit` is the pushing counterpart of `Yield`. Where `yield` makes the lambda it is in a sequence, and the code after it
 waits to be pulled, `emit` hands the value over and runs on. `seq { ... }` and the `selectOne` functions, which stop
 at the first value, keep taking a sequence. Nothing else about `Emit` is special: a function that requires it can be
-passed around and called through other functions, and a user's own `use Emit(int)(emit = ...) in ...` handles it.
+passed around and called through other functions, and a user's own `use Emit(int)(emit = ...) in ...` handles it. A
+lambda that yields given where a builder's function is expected would be a mismatch between a sequence's record and
+`()`; the checker reports it at the lambda's first `yield` instead, saying to write `emit(x)` (`EmitLambdas`, called
+from `InferCalls` before the lambda is inferred against its parameter, #2571).
 
 # What a step costs
 

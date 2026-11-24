@@ -270,6 +270,9 @@ let rec internal inferCall
                 // One whose contexts only the call's result carries is not run by the call (see
                 // `Contexts.asCarriedArgument`).
                 let inferLambda state lambda lambdaArgs lambdaBody expectedInput paramTy =
+                    match EmitLambdas.yieldGivenToEmitter state lambdaBody paramTy with
+                    | Some yieldsInstead -> Error [ yieldsInstead ]
+                    | None ->
                     let lambdaEnv, state = extendEnvForLambdaArgument env state lambda (Some paramTy)
                     let instances = instancesSuppliedToLambda state lambda (Some paramTy)
                     let ownContexts =

@@ -260,6 +260,7 @@
     <Compile Include="Features\Workflows\HiddenKeywordTests.fs" />
     <Compile Include="Features\Workflows\SequenceTests.fs" />
     <Compile Include="Features\Workflows\SequenceForTests.fs" />
+    <Compile Include="Features\Workflows\YieldGivenToEmitterTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
