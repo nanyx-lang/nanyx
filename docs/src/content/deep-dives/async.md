@@ -31,16 +31,16 @@ boundaries are not built yet; they are on
   type requires (`CoreIrLowerTypes.toIrTypeIn`). A function generic in contexts is specialised on what its context
   variables stand for, so it is compiled apart for a function that can wait and for one that can't: `list.map` over
   `http.get` and `list.map` over a pure lambda are two functions, and only the first is a state machine (below).
-  A lambda's type requires what the functions it calls require, a function that writes no type included, once it has
-  been inferred (`Contexts.contextsRequiredByCall`), so `{ x -> waitThen(x) }` waits whether or not `waitThen` writes
-  `[Async]`. A caller knows that a function value can stop only from its type, so the backend refuses a function value
-  whose type can't wait but that reaches what requires `Async` (a call of a function value that waits, or starting or
-  awaiting a task, a host's wait or `race`), as a broken invariant (`CoreIrSplitPoints.checkFunctionValues`), rather
-  than leave its caller to carry on past a call that stopped. The end of a scope doesn't count: it makes a function a
-  state machine, but one whose type can't wait starts no tasks, so its scopes have nothing to wait for. One such case
-  is left: a lambda that calls a
-  function that waits and that is in a cycle with the def the lambda is in, which isn't inferred yet there
-  ([#2590](https://github.com/nanyx-lang/nanyx/issues/2590)).
+  A lambda's type requires what the functions it calls require, a function that writes no type included
+  (`Contexts.contextsRequiredByCall`), so `{ x -> waitThen(x) }` waits whether or not `waitThen` writes `[Async]`. A
+  def in a cycle with the one the lambda is in isn't inferred yet there: the lambda requires a context variable for it,
+  which takes the def's contexts once the module is inferred, or is an error (`NYX0227`) where the lambda was given for
+  a function that can't require them (`InferState.PendingCallContexts`). A caller knows that a function value can stop
+  only from its type, so the backend refuses a function value whose type can't wait but that reaches what requires
+  `Async` (a call of a function value that waits, or starting or awaiting a task, a host's wait or `race`), as a broken
+  invariant (`CoreIrSplitPoints.checkFunctionValues`), rather than leave its caller to carry on past a call that
+  stopped. The end of a scope doesn't count: it makes a function a state machine, but one whose type can't wait starts
+  no tasks, so its scopes have nothing to wait for.
 
 # How tasks are compiled
 
