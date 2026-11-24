@@ -47,6 +47,15 @@ let ``Matching a private type's fields outside its module is an error`` () =
         errorOf "match s\n  | (key = k) -> println(k)")
 
 [<Fact>]
+let ``Taking a private type apart by its constructor outside its module is an error`` () =
+    // #2504: as a match's pattern, a lambda's parameter and a def's.
+    let byConstructor = "A private type can only be taken apart in the module that defines it: use a function that module exports instead"
+    let code = DiagnosticCodes.NominalConstructedOutsideItsModule.Code
+    Assert.Equal((code, byConstructor, "Secret(k)"), errorOf "import secure\nmatch s\n  | Secret(k) -> println(k.key)")
+    Assert.Equal((code, byConstructor, "Secret(k)"), errorOf "import secure\ndef reveal = { Secret(k) -> k.key }\nprintln(reveal(s))")
+    Assert.Equal((code, byConstructor, "Secret(key = k)"), errorOf "import secure\ndef Secret(key = k) = s\nprintln(k)")
+
+[<Fact>]
 let ``Spreading a private type's fields outside its module is an error`` () =
     Assert.Equal((DiagnosticCodes.NominalConstructedOutsideItsModule.Code, takenApart, "s"), errorOf "def t = (...s)\nprintln(t)")
 

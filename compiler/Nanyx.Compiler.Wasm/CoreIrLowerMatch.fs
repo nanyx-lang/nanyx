@@ -21,8 +21,6 @@ type MatchTools =
       UniqueName: string -> string
       /// The type of an expression, at the function's type arguments.
       TypeOf: Expression -> IrType
-      /// The names of the nominal types, whose values are their shapes' values.
-      NominalTypes: Set<string>
       /// Lowers an expression in tail position.
       Tail: Scope -> Expression -> Expr
       /// Lowers an arm's body in tail position, adapted to the `match`'s type.
@@ -106,10 +104,10 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
                     match fields |> List.tryFindIndex (fst >> (=) name) with
                     | Some slot -> slot, lowerPattern false scrutinee (snd fields.[slot]) member'
                     | None -> cannot $"a record pattern on the field '{name}', which the value does not have"))
-            // `Money(p)`: a nominal value is its shape's value, which the inner pattern matches. Its name gets a
-            // local even at the top of an arm.
-            | RecordPattern(typeName, [ inner ]) when tools.NominalTypes.Contains typeName ->
-                lowerPattern false scrutinee valueTy inner
+            // `Money(p)`: a nominal value is its shape's value, which the patterns in its brackets match (see
+            // `Pattern.constructorPayload`), as they match the value of a type that names a shape. A name gets a local
+            // even at the top of an arm.
+            | RecordPattern(_, patterns) -> lowerPattern false scrutinee valueTy (Parser.Program.Pattern.constructorPayload pattern patterns)
             // Every part matches the value matched here, so a name at the top of the arm is still the scrutinee.
             | AndPattern parts -> PAll(parts |> List.map (lowerPattern isTop scrutinee valueTy))
             | _ -> cannot "this kind of pattern"

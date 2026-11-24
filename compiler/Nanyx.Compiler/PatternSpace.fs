@@ -152,7 +152,8 @@ module PatternSpace =
         | TagPattern(name, payload) -> Tag(name, payload |> Option.map (spaceOf certain) |> Option.defaultValue Any)
         | TuplePattern(elements, _) -> elements |> List.mapi (fun index element -> string index, spaceOf certain element) |> Map.ofList |> Fields
         | RecordMemberPattern(members, _) -> members |> List.map (fun (name, member') -> name, spaceOf certain member') |> Map.ofList |> Fields
-        | RecordPattern(name, elements) -> Named(name, elements |> List.map (spaceOf certain))
+        // `Point(x, y)` and `Point(x = 0, ...)` match what the type is made from, as one pattern of it.
+        | RecordPattern(name, elements) -> Named(name, [ spaceOf certain (Pattern.constructorPayload pattern elements) ])
         | ListPattern(elements, rest) ->
             let tail = rest |> Option.map (spaceOf certain) |> Option.defaultValue Nil
             List.foldBack (fun element after -> Cons(spaceOf certain element, after)) elements tail

@@ -76,15 +76,24 @@ let rec private tuplePattern (c: Cursor) =
     | [ single ] when not hasRest -> single
     | multiple -> Pattern.at (c.SpanFrom start) (TuplePattern(multiple, hasRest))
 
-/// `Name(p1, p2, ...)`: a record's fields by position, or what a nominal type wraps.
+/// `Name(p1, p2)`: a nominal value taken apart, its representation matched by the patterns in its brackets, which
+/// read as a tag's payload's do: `Name(a, ...)` and `Name(field = p)` are one pattern, a tuple pattern that leaves
+/// the other fields out and a record member pattern (see `RecordPattern`).
 and private recordPatternByPosition (c: Cursor) =
     let start = c.Start
     noDollar c
     let typeName, _ = identifierWithSpan c
     if not c.Adjacent then raise NoMatch
-    c.Expect LeftParen |> ignore
-    let patterns = commaSeparated c (fun () -> pattern c)
-    c.Expect RightParen |> ignore
+    let byPosition () =
+        let open' = c.Expect LeftParen
+        let patterns = commaSeparated c (fun () -> pattern c)
+        let hasRest = rest c
+        c.Expect RightParen |> ignore
+        if hasRest then [ Pattern.at (c.SpanFrom open'.Start) (TuplePattern(patterns, true)) ] else patterns
+    let patterns =
+        match c.Attempt(fun () -> recordMemberPattern c) with
+        | Some byName -> [ byName ]
+        | None -> byPosition ()
     Pattern.at (c.SpanFrom start) (RecordPattern(typeName, patterns))
 
 /// `(name = p, ...)`: a record's fields by name, ending in `...` to leave the others out.

@@ -113,9 +113,6 @@ type LowerInput =
       /// (`type Pair = (int, int)`). A value of one is its shape's value, so its constructor is a no-op, and so is the
       /// pattern that takes a nominal one apart.
       ShapeWrappers: Set<string>
-      /// The names of the nominal types in scope, the module's and those it imports: `Money(p)` with one of them takes a
-      /// nominal value apart.
-      NominalTypes: Set<string>
       /// The functions lambda lifting made, by name.
       Lifted: Map<string, LiftedFunction>
       /// The module's top-level expressions, which its start function evaluates in order when the module is loaded.

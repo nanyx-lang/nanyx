@@ -254,7 +254,10 @@ and PatternKind =
     /// `(p1, p2)`, a tuple's elements by position, or a record's fields, a name alone matching the field it names (see
     /// `Pattern.tupleElementField`). Where `hasRest`, it ends in `...` to leave the other fields out: `(a, ...)`.
     | TuplePattern of items: Pattern list * hasRest: bool
-    | RecordPattern of Identifier * Pattern list  // Type name and patterns by position
+    /// `Email(s)`, a nominal value taken apart by its type's name and the patterns in brackets, which match its
+    /// representation (see `Pattern.constructorFields`). Brackets that end in `...` or name fields are one pattern, as
+    /// a tag's payload's are: `P(a, ...)` holds a tuple pattern with `hasRest`, and `P(a = x)` a record member pattern.
+    | RecordPattern of Identifier * Pattern list
     /// Patterns by member name, `(name = n, age = a)`. A record type is closed, so the pattern names every field
     /// unless `hasRest`, when it ends in `...` to leave the others out: `(name = "Alice", ...)`.
     | RecordMemberPattern of members: (Identifier * Pattern) list * hasRest: bool
@@ -1201,6 +1204,15 @@ module Pattern =
         match element.Kind with
         | IdentifierPattern name when fields.Contains name -> name
         | _ -> string index
+
+    /// What a constructor pattern, `T(p1, p2)` at `constructor`, matches the representation of `T` against. One
+    /// pattern matches the whole of it, `Box(r)`; brackets that end in `...` or name fields are one pattern too, which
+    /// reads a record's fields, `Box(v, ...)` and `Box(v = x)` (see `RecordPattern`). Several patterns are a tuple
+    /// pattern of them, which reads a record's fields as one does (see `tupleElementField`): `Pair(a, b)`.
+    let constructorPayload (constructor: Pattern) (patterns: Pattern list) : Pattern =
+        match patterns with
+        | [ single ] -> single
+        | _ -> at constructor.Span (TuplePattern(patterns, false))
 
     /// The expressions written in the patterns of match arms, as `expressions` gives them.
     let armExpressions (arms: (Pattern list * Expression) list) : Expression list =
