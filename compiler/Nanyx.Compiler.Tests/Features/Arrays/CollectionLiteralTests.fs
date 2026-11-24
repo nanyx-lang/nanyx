@@ -100,6 +100,18 @@ def a = Array[...p, 3]
     Assert.Equal(source.IndexOf "...p" + 3, diagnostic.Span.Value.Start)
 
 [<Fact>]
+let ``A list literal that is only a spread of a record is an error at the record`` () =
+    let source =
+        """
+def r = (a = 1)
+def xs = [...r]
+"""
+    let source = normalized source
+    let diagnostic = Assert.Single (Compiler.compile source).Diagnostics
+    Assert.Equal(DiagnosticCodes.InvalidCollectionSpread.Code, diagnostic.Code)
+    Assert.Equal(source.IndexOf "...r" + 3, diagnostic.Span.Value.Start)
+
+[<Fact>]
 let ``A spread of a type with no toSeq names the spread and the missing definition`` () =
     let source =
         """

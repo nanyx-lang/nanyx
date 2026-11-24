@@ -88,6 +88,22 @@ writeStdout("{missing()}")
     | other -> failwith $"Expected a failure to instantiate, got %A{other}"
 
 [<Fact>]
+let ``A runtime function that throws stops the program with the exception's type and .NET stack`` () =
+    let source =
+        host
+            """
+@extern("nanyx:http", "start")
+def start: [HostRuntime] (I32, I32) -> I32
+
+writeStdout("{start(-8, 16)}")
+"""
+    match runHost [ "test" ] (hostWatWith WasmOptions.Default source) with
+    | Error(Trapped(message, _)) ->
+        Assert.Contains("ArgumentOutOfRangeException", message)
+        Assert.Contains("HttpImport", message)
+    | other -> failwith $"Expected the runtime's exception, got %A{other}"
+
+[<Fact>]
 let ``An extern of a function the runtime imports, with another type, is an error that says the runtime's`` () =
     let source =
         normalized

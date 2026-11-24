@@ -35,6 +35,9 @@ bad conversion on NaN); and an int out of a sized type's range, from `__nanyx_<t
 function on the stack that the source names, as running out of stack does, where inlining left one.
 `WasmRunner.describeFault` words the message, for the CLI and the HTTP host. Any other trap is reported as Wasmtime
 gives it, with its backtrace.
+A function of the runtime's that throws, such as one of `nanyx:http`'s (`HttpImport.fs`), stops the program too, and is a
+bug in the runtime: it is reported with the .NET exception whole, its type, message and stack, which Wasmtime's
+message alone would leave out.
 
 # Profiling
 
