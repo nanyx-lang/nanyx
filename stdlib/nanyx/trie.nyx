@@ -357,7 +357,7 @@ export def StringTrie.longestPrefixOf
   : StringTrie(v), string -> #some(string, v) | #none
   = { StringTrie(trie), key ->
     match Trie.longestPrefixOf(trie, string.chars(key))
-      | #some(prefix, value) -> #some(string.concat(prefix), value)
+      | #some(prefix, value) -> #some(string.fromChars(prefix), value)
       | #none -> #none
   }
 
