@@ -441,3 +441,28 @@ let ``Run - #Matches given a pattern that is wrong crashes with what Regex.parse
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
     Assert.StartsWith("crash: The regex '(\\d+' is wrong at column 1: There is no ')' to close this '('\n", outcome.StandardError)
+
+[<Fact>]
+let ``Run - groups nest 1000 deep, and a group past that is an error at its '(', however deep the pattern goes`` () =
+    // A pattern taken from input can't run the program out of stack (#2584): reading a group takes no stack, and
+    // compiling and matching the deepest pattern allowed fit in it.
+    runRegex
+        """def nested = { n, open, inner, close -> string.repeat(open, n) ++ inner ++ string.repeat(close, n) }
+
+for [nested(1000, "(", "a", ")"), nested(1000, "(?:", "a*", ")*"), nested(1000, "(a|", "b", ")")] | pattern ->
+  println("xaab" \Regex.find(re(pattern)) \mapSome { m -> "{m.start}-{m.end}" })
+bad(nested(1001, "(", "a", ")"))
+bad("a|(?i:b" ++ nested(1000, "(", "c", ")") ++ ")")
+bad(nested(20000, "(", "a", ")"))
+bad(nested(999, "(", "a", ")") ++ ")")
+bad(nested(1000, "(", "a", "") ++ string.repeat(")", 999))
+"""
+    |> expectLines
+        [ "#some(1-2)"
+          "#some(0-0)"
+          "#some(1-2)"
+          "1001: Groups can be nested at most 1000 deep"
+          "1007: Groups can be nested at most 1000 deep"
+          "1001: Groups can be nested at most 1000 deep"
+          "2000: There is no '(' for this ')' to close"
+          "1: There is no ')' to close this '('" ]
