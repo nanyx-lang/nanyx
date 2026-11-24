@@ -74,7 +74,7 @@ println(xs)
 [<InlineData("println(crash(\"no\").name)")>]
 [<InlineData("def x = crash(\"no\")\n  println(x(1))")>]
 [<InlineData("println(crash(\"no\") \\g)")>]
-let ``Run - a use of a crash crashes with its message`` (use: string) =
+let ``Run - a use of a crash crashes with its message`` (statement: string) =
     let source =
         normalized $"""type P = (name: string)
 
@@ -83,7 +83,7 @@ def g: P -> int = {{ p -> 1 }}
 @entry
 def main = {{
   println("start")
-  {use}
+  {statement}
 }}
 """
     let outcome = runSource source

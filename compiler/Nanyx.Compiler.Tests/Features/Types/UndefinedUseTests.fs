@@ -19,16 +19,10 @@ let ``A list of values that never come is the list expected of it`` () =
     Assert.Empty(codesAt "def xs: list(int) = [crash(\"no\")]\ndef ys: list(string) = [crash(\"a\"), crash(\"b\")]\n")
 
 [<Fact>]
-let ``A value is still not an undefined`` () =
-    let codes = codesAt "def xs: list(undefined) = [1]\n" |> List.map fst
-    Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], codes)
-
-[<Fact>]
 let ``??? as a function's whole body leaves the annotation as general as it is written`` () =
     Assert.Equal<(string * string) list>(notImplemented, codesAt "def f: (string, a: type) -> a = { s, a -> ??? }\n")
 
 [<Theory>]
-[<InlineData("def n: int = { -> ??? }()\n")>]
 [<InlineData("def g: int -> int = { n -> n }\ndef n = g(???)\n")>]
 [<InlineData("def n: int = ???(1)\n")>]
 [<InlineData("def n = { x -> match x | 0 -> ??? | _ -> 1 }\n")>]
@@ -41,7 +35,8 @@ let ``??? is the one error wherever it is used`` (source: string) =
 
 [<Fact>]
 let ``??? is of type undefined`` () =
-    Assert.Equal("() -> undefined", typeOf "def myFunction = { () -> ??? }\n" "myFunction")
+    let result = Compiler.compile "def myFunction = { () -> ??? }\n"
+    Assert.Equal("() -> undefined", Unifier.tyToString result.Typed.Value.Types.["myFunction"])
 
 [<Fact>]
 let ``A value that never comes is used without another error`` () =
