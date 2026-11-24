@@ -572,14 +572,19 @@ module Compiler =
                             | Some (TyFunc(_, result, _)) -> Some result
                             | _ -> None)
                         desugared
+                    @ TaskCaptures.unscopedErrors
+                        (fun name -> types |> Map.tryFind name |> Option.map (Unifier.apply subst))
+                        (fun call -> state.CalleeTypes |> Map.tryFind call |> Option.map (Unifier.apply subst))
+                        desugared
                 let runtimeErrors =
                     Hosts.runtimeErrors isHost origin (entries @ provided @ (script |> Option.map fst |> Option.toList)) (provided |> List.map (_.Name >> Hosts.providedExportName) |> Set.ofList) state.Symbols contextTypes state.ContextProviders calleeContexts desugared
-                // A script whose statements need `HostRuntime` is told so where they need it, and one whose statements use
-                // what escaped a scoped call is told of the escape (NYX0233): that its entry point, which has no span,
-                // then doesn't fit the host's `run` says nothing more.
+                // A script whose statements need `HostRuntime` is told so where they need it, one whose statements use
+                // what escaped a scoped call is told of the escape (NYX0233), and one that calls a def that starts a task
+                // it can't keep is told where (see `TaskCaptures`): that its entry point, which has no span, then doesn't
+                // fit the host's `run` says nothing more.
                 let mismatchErrors =
                     match script with
-                    | Some _ when not runtimeErrors.IsEmpty || not state.EscapedContexts.IsEmpty ->
+                    | Some _ when not runtimeErrors.IsEmpty || not state.EscapedContexts.IsEmpty || not taskErrors.IsEmpty ->
                         mismatchErrors |> List.filter (fun diagnostic -> not (diagnostic.Code = DiagnosticCodes.ContextsNotAllowed.Code && diagnostic.Span.IsNone))
                     | _ -> mismatchErrors
                 // What the file gives from its own blocks by re-exporting them, and what those blocks re-export of other

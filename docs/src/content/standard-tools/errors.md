@@ -1415,6 +1415,10 @@ def greet: string -> () = { name -> println("Hello, {name}") }  -- error NYX0211
 To fix it, add the context to the definition's type, as in `[Console] string -> ()`, or load an instance with `use`
 ([Contexts](../advanced/contexts)).
 
+A module-level def that starts a task without naming `start` gets this error too, at the call that starts it: only a
+def whose body names `start` is the scope of its tasks ([Async](../advanced/async#each-def-is-a-scope)). Start the task
+with `start` in the def itself.
+
 # NYX0212: Nominal type constructed outside its module
 
 A nominal type, one declared `protected` or `private`, is constructed, updated with `with`, or a private one taken

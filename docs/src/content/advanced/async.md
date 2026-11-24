@@ -72,6 +72,10 @@ Nothing that holds a task can leave its def: giving back a `Task`, or a lambda t
 scope is the def, not the nearest lambda: a task started in a local def or a lambda belongs to the def it is written
 in. A function that awaits a task it is given borrows its caller's scope.
 
+A def is a scope when its body names `start` (or `Async.start`), so a def that starts a task only through another
+name, as `go(...)` after `def go = Async.start` does, is not one, and starting the task there is an error
+([NYX0211](../standard-tools/errors#nyx0211)): name `start` in the def itself.
+
 # A smaller scope
 
 `concurrent` runs a block as a scope of its own, and gives back what the block gives back once every task started in it
