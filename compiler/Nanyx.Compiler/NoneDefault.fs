@@ -14,6 +14,8 @@ module internal NoneDefault =
     let private isOption (ty: Ty) =
         match Unifier.unalias ty with
         | TyUnion items ->
+            // A rest `unify` made up widening the union is room for more tags, not a tag of it.
+            let items = items |> List.filter (function TyVar var -> not (Unifier.isMadeUpRest var) | _ -> true)
             let tags =
                 items
                 |> List.choose (fun item ->
