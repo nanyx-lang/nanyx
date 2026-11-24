@@ -526,6 +526,11 @@ module Compiler =
                     |> List.distinct
                 let mismatchErrors =
                     mismatches
+                    // A mismatch of a call's arguments is reported at the one that doesn't fit (see `ArgumentSpans`).
+                    |> List.map (fun (text, span, kind) ->
+                        match state.ArgumentSpans |> Map.tryFind span with
+                        | Some reported -> text, reported.Value, kind
+                        | None -> text, span, kind)
                     |> List.sortBy (fun (_, span, _) -> span.Start)
                     |> List.map (fun (text, span, kind) ->
                         let message = text (Unifier.tyToStringIn state.TypeDefs)

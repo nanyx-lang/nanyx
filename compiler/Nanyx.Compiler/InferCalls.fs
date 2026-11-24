@@ -308,16 +308,19 @@ let rec internal inferCall
                         match inferred with
                         | Ok ((ty, next), tupleItems) ->
                             // A tuple of the callee's parameters is reported at the argument in it that does not fit
-                            // (see `LambdaArguments.reportedSpan`).
-                            let span =
+                            // (see `LambdaArguments.reportedSpan`), which is worked out once a mismatch at the tuple is
+                            // reported: each call working it out looked at every literal of the def before it (#2552).
+                            let next =
                                 match paramTy, tupleItems with
-                                | Some paramTy, Some (typedItems, itemTys) -> LambdaArguments.reportedSpan next arg.Span typedItems itemTys ty.Type paramTy
-                                | _ -> arg.Span
+                                | Some paramTy, Some (typedItems, itemTys) ->
+                                    let reported = lazy (LambdaArguments.reportedSpan next arg.Span typedItems itemTys ty.Type paramTy)
+                                    { next with ArgumentSpans = next.ArgumentSpans |> Map.add arg.Span reported }
+                                | _ -> next
                             current <-
                                 match paramTy with
-                                | Some paramTy -> addAssignableConstraintAt span ty.Type paramTy next
+                                | Some paramTy -> addAssignableConstraintAt arg.Span ty.Type paramTy next
                                 | None -> next
-                            Ok (ty, span)
+                            Ok (ty, arg.Span)
                         | Error err -> Error err)
                 let errors = argResults |> List.choose (function Error err -> Some err | _ -> None) |> List.concat
                 if errors.IsEmpty then

@@ -373,6 +373,9 @@ type InferState =
             /// The local defs that are cells, made with `mut`, each with the scope of the `memory` block it belongs to (see
             /// `MemoryCells`).
             Cells: Map<SymbolId, Ty>;
+            /// Where a mismatch of a call's arguments, written as one tuple, is reported instead of at the tuple, by the
+            /// tuple's span: worked out only if one is (see `LambdaArguments.reportedSpan`).
+            ArgumentSpans: Map<SourceSpan, Lazy<SourceSpan>>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
             /// starts, the scopes the signatures around the call write, and the names bound around the call whose types
             /// are not yet known in full (see `ScopedCalls`).
@@ -505,6 +508,7 @@ let emptyState =
             DerivedDefs = [];
             DerivedCalls = Map.empty;
             Cells = Map.empty;
+            ArgumentSpans = Map.empty;
             SupplyingCalls = Map.empty;
             EscapedContexts = Set.empty;
             OpenScopes = [];
