@@ -101,11 +101,17 @@ An arm that gives the wrong number of patterns is an error.
 
 A parameter can also be a pattern, which takes the argument apart as it is passed in:
 
-```nanyx fragment
-def sums = pairs \map { (a, b) -> a + b }
+```nanyx
+type Email = protected string
 
+def sums = [(1, 2), (3, 4)] \map { (a, b) -> a + b }
 def address: Email -> string = { Email(s) -> s }
+
+println(sums)
+println(address(Email("ada@example.com")))
 ```
+
+`Email(s)` takes apart a value of a [named type](./pattern-matching#named-types), binding `s` to the string it holds.
 
 As with a [destructuring binding](./pattern-matching#destructuring-bindings), a pattern written as a parameter must be _total_: it must match every value the lambda can be given. To handle several cases, use the `| pattern -> ...` form above instead.
 
