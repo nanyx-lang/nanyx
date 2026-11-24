@@ -77,6 +77,7 @@
     <Compile Include="Features\Contexts\RunAttachedContextDefTests.fs" />
     <Compile Include="Features\Contexts\DirectMemberCallTests.fs" />
     <Compile Include="Features\Contexts\BorrowedMemberTests.fs" />
+    <Compile Include="Features\Contexts\LambdaKnownMemberTests.fs" />
     <Compile Include="Features\Async\WaitingSpecialisationTests.fs" />
     <Compile Include="Features\Async\RunStateMachineTests.fs" />
     <Compile Include="Features\Async\RunTaskTests.fs" />
