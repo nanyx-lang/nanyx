@@ -67,10 +67,9 @@ This needs no language feature and makes every later step better, so it comes fi
 
 # 2. Async in direct style
 
-Direct style is decided and its first part is built: a function that can wait requires `Async`, there is no `await`
-keyword, and a host that can suspend provides `Async` ([Async](../deep-dives/async)). What follows is the rest: the
-rules that keep hidden suspension safe once there are tasks, starting and awaiting tasks, cancellation, and how tasks
-run.
+Direct style is decided and built: a function that can wait requires `Async`, there is no `await`
+keyword, and a host that can suspend provides `Async` ([Async](../deep-dives/async)). What follows is why it
+is safe, what is built of tasks, and what is still open.
 
 The test host, when there is one ([Testing](./testing)), provides `Async` too, and can provide a deterministic one,
 with simulated time and a fixed task order, so a test of `timeout` or `race` runs instantly and the same way every
@@ -108,19 +107,9 @@ def both: [Async, Http] () -> (Response, Response) = {
 def pages = { urls -> urls \map { url -> start! http.get(url) } \map(await) }   -- every one, at once, in order
 ```
 
-`start!`, `await`, each def as the scope of its tasks, `race` and cancellation are built: how to use them is on
-[Async](../advanced/async), and how they are built on [Async](../deep-dives/async#tasks-and-scopes) in Deep dives.
-What is still to come was decided with the maintainer on 2026-11-17:
-
-- **A default-linter rule flags a task never awaited whose result isn't `()`,** which is more likely a forgotten
-  `await` than a task started for what it does.
-- **`concurrent` stays as an option,** an ordinary library function for a scope smaller than the def, such as
-  finishing each batch before starting the next:
-
-  ```nanyx fragment
-  for batches | batch ->
-    concurrent { batch \map { job -> start! run(job) } \map(await) }
-  ```
+`start!`, `await`, each def as the scope of its tasks, `concurrent` for a smaller one, `race`, cancellation and the
+linter's `unawaitedTask` are built: how to use them is on [Async](../advanced/async), and how they are built on
+[Async](../deep-dives/async#tasks-and-scopes) in Deep dives.
 
 Why structured, not free `spawn`: a task can't leak, a def's type says everything it needs, and the scope is where a
 task's crash and cancellation go. A free-running task is a process (below), which is explicit about it.
@@ -139,58 +128,24 @@ Cancellation arrives as a value at the next point where a task waits, as decided
 
 ## How it runs
 
-The language doesn't change between these; the hosts and the backend do. Today a request or a sleep on the console and
-HTTP hosts' core roots lets the instance's other tasks run while it waits, and any other wait blocks its instance's
-thread and holds only that instance ([Async](../deep-dives/async#how-its-built)).
+The language doesn't change between these; the hosts and the backend do. Tasks run inside one instance, compiled to
+state machines by the backend, with a scheduler that runs an instance's tasks on one stack and waits on the host when
+they all wait (decided 2026-11-20 and built for [#1890](https://github.com/nanyx-lang/nanyx/issues/1890); see
+[How tasks are compiled](../deep-dives/async#how-tasks-are-compiled)). A request or a sleep lets the instance's other
+tasks run while it waits, on the console, HTTP and playground hosts; a file's function blocks its instance's thread
+([Async](../deep-dives/async#how-its-built)).
 
 - **Instances on fibers, maybe** ([#1901](https://github.com/nanyx-lang/nanyx/issues/1901)). Running an instance on
   Wasmtime's own fiber stack, so that a wait suspends it and frees the thread, would scale further, but the .NET
   embedding has no async API: it would mean calling Wasmtime's C API directly and running .NET host functions on
   Wasmtime's stacks, which .NET doesn't support. A possible later optimisation. Tasks can also be built on instances
   by running each as a process (below), at the cost of copying.
-- **Next: tasks inside one instance, as compiler state machines** (decided 2026-11-20,
-  [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)). The backend compiles each `Async` function to a state
-  machine, as C# and Rust compile async functions: it splits the function at each point where it can wait and keeps
-  the locals that live across them in a frame on the heap, and a scheduler in the runtime runs an instance's tasks on
-  one stack. It needs nothing from the runtime, so the same module runs under Wasmtime on every OS and in a browser.
-  A function that can't wait is compiled as any other, and pays nothing. The lowering is built, with a scheduler that
-  runs an instance's tasks and waits on the host when they all wait
-  ([How tasks are compiled](../deep-dives/async#how-tasks-are-compiled)). Decided on 2026-11-23, with the plan of PRs
-  on #1890:
-  - A function generic in contexts is compiled twice where it is used both ways, with `Async` and without, so that
-    only the first is a state machine.
-  - The host's code that waits passes the scheduler the host's wait, through `nanyx/host.async`'s `waitOnHost`, and
-    the scheduler makes it when every task is waiting; `Async` gets no members at run time. This replaces the
-    decision, earlier the same day, that the host would mark its wait with an attribute the compiler finds, as it finds
-    `run`: linking keeps only what something reaches, and nothing but the scheduler would reach the wait, so it would
-    need a path of its own through the compiler. A wait that is passed is an ordinary function, which a host can write
-    in Nanyx.
-  - `sleep` is a member of `Clock`, `[Async] int -> ()` in milliseconds, beside `now` and `ticks`, so that a test's
-    `use Clock(...)` decides how long a sleep takes, as it decides the time. A function of `nanyx/clock` over `ticks`
-    would break nothing, but would never return under a test's clock that doesn't move. Every `use Clock(...)` now
-    gives a `sleep`.
-  - The console and HTTP hosts' core roots wait on the runtime: `nanyx:http` starts a request and is polled for its
-    answer, and `nanyx:async`'s `wait` blocks until one is answered or a timeout passes. Their component roots wait on
-    one waitable set the instance shares, which their requests and sleeps join, rather than one of each call's own.
-    Files stay blocking under WASI preview 1, which has no way to start a read and come back for it, and the
-    component roots read and write them in the same way.
-  - The scopes are module-level defs and a script's top level. Local defs and lambdas start tasks in the scope of the
-    def they're in. Each task tracks its innermost scope as it runs.
-  - A `Task` or a lambda that uses `start!` escaping its def is `NYX0233`, with a message about tasks; starting a task
-    that captures an `MRef`, an `MList` or a cell is an error with a code of its own.
-  - The playground host provides `Async` (`start!`, `await`, `sleep`), so a browser can run tasks.
-  - `start` and `await` are defs attached to `Async`, `Async.start` and `Async.await`, not members of it, which has no
-    members at all. A def attached to a context is in scope by its bare name wherever the context is, so `start!` is
-    wherever `Async` is. `start` is a `#delay` keyword, which a def attached to a context may be: a keyword belongs to a
-    context ([#2493](https://github.com/nanyx-lang/nanyx/issues/2493)). This replaces the first form, built in #2489, of
-    `start` and `await` as plain top-level defs that the hosts' preludes exported beside `Async`, with `#delay` allowed
-    on any top-level def.
-  - A top-level value whose building waits is built once: a task that reads it while it is built waits for it.
 - **Stack switching, later** ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). WebAssembly's
   stack-switching proposal gives a module many stacks and lets it switch between them, so a task is a stack and
   starting one costs about as much as a closure. The proposal is still experimental: Wasmtime's implementation covers
   only some platforms and panics on Windows, and no browser ships it (Chrome's JSPI is narrower). Once it is standard
   and widely supported, it becomes a second way to compile tasks, behind the same language.
+
 A host that can't suspend at all (a plain WASI command with no async support) doesn't provide `Async`, and a program
 that needs it doesn't type-check there. That's the capability model doing its job.
 
@@ -369,7 +324,6 @@ The rest of async is filed in stages. The crash-boundary steps are proposals, no
 
 | Step | Issue | Stage |
 |---|---|---|
-| Async 2: `start!`, `await` and `race`, each def a scope, tasks as compiler state machines | [#1890](https://github.com/nanyx-lang/nanyx/issues/1890) | Ready |
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
 | Tasks on stack switching, once it's standard and widely supported | [#2164](https://github.com/nanyx-lang/nanyx/issues/2164) | Planning |
 | Crash reports: `Crash` with message, span and stack, used by the console, HTTP and test hosts | | proposed |

@@ -63,7 +63,7 @@ scoped context TaskScope = protected ()
 
 The scope a task belongs to: the def that started it, as a `memory` block is the scope of its cells. Starting a
 task requires it, and every module-level def whose body starts a task, and a script's top level, supplies it
-through [`scope`](#scope). It is scoped, so nothing that holds a task can leave the def that started it.
+through [`Async.concurrent`](#asyncconcurrent). It is scoped, so nothing that holds a task can leave the def that started it.
 
 ## `Task`
 
@@ -75,15 +75,18 @@ A task: something running at the same time as the code that started it, in the s
 a value of type `a` when it finishes. [`Async.start`](#asyncstart) starts one and [`Async.await`](#asyncawait) waits for it. It belongs to the scope it
 was started in, so it can't leave that def.
 
-## `scope`
+## `Async.concurrent`
 
 ```nanyx fragment
-def scope: [c] ([TaskScope, c] () -> a) -> a
+def Async.concurrent: [c] ([TaskScope, c] () -> a) -> a
 ```
 
-Runs `block` as a scope for the tasks it starts, and gives back its result once every one of them has finished,
-awaited or not. The compiler makes the body of each module-level def that starts a task such a block, so a def
-is the scope of its tasks, and nothing that holds one can leave it.
+Runs `block` as a scope of its own for the tasks it starts, and gives back its result once every
+one of them has finished, awaited or not. The body of each module-level def that starts a task is
+such a block, so a def is the scope of its tasks; a smaller one finishes, say, each batch before
+the next starts: `for batches | batch -> concurrent({ batch \list.map { job -> start! run(job) } \list.map(await) })`.
+Nothing that holds one of its tasks can leave it. It is a function, so its block is passed in
+parentheses: `concurrent { ... }` would be a workflow's block.
 
 ## `Async.start`
 
