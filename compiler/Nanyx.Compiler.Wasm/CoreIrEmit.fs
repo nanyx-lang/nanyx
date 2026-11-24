@@ -1272,6 +1272,28 @@ type private FunctionEmitter(context: EmitContext) =
 
     /// Tests each arm's patterns in turn: a chain of `if`s ending in `unreachable`.
     member this.Arms (tail: bool) (resultTy: IrType) (scrutinees: Var list) (arms: Arm list) : string =
+        // The code of each scrutinee of a union with payloads that two or more arms test a tag of, read once into a
+        // local before the first arm, by the code that reads the scrutinee (#2309).
+        let codeLocals = Dictionary<string, string>()
+        let rec testsTag (pattern: Pattern) =
+            match pattern with
+            | PTag _ -> true
+            | PAll parts -> parts |> List.exists testsTag
+            | _ -> false
+        let readCodes =
+            [ for index, scrutinee in List.indexed scrutinees do
+                  let testing = arms |> List.filter (fun arm -> testsTag arm.Patterns.[index]) |> List.length
+                  if testing >= 2 && not (CoreIrDrop.tagIsCode scrutinee.Type) then
+                      let local = freshLocal "__code" "i32"
+                      codeLocals.[$"local.get ${localName scrutinee}"] <- local
+                      $"local.get ${localName scrutinee}\n    call ${helper Helpers.tagCode}\n    local.set ${local}" ]
+        // The code of the tag the value `valueCode` leaves, of type `ty`, is: a value of a union with no payloads is its
+        // own code.
+        let tagCodeOf (valueCode: string) (ty: IrType) =
+            match codeLocals.TryGetValue valueCode with
+            | true, local -> $"local.get ${local}"
+            | _ when CoreIrDrop.tagIsCode ty -> valueCode
+            | _ -> $"{valueCode}\n      call ${helper Helpers.tagCode}"
         // The payload of the tag `name` of a value of `ty`, with its type.
         let tagPayloadCode (ty: IrType) (name: string) valueCode =
             let payloadTy =
@@ -1325,7 +1347,7 @@ type private FunctionEmitter(context: EmitContext) =
                 $"{valueCode}\n      i32.const {flag}\n      i32.eq"
             | PTag(name, payload) ->
                 let discriminant =
-                    $"{valueCode}\n      call ${helper Helpers.tagCode}\n      i32.const {tagCode (context.TagId name)}\n      i32.eq"
+                    $"{tagCodeOf valueCode ty}\n      i32.const {tagCode (context.TagId name)}\n      i32.eq"
                 match payload with
                 | None -> discriminant
                 | Some inner ->
@@ -1399,7 +1421,7 @@ type private FunctionEmitter(context: EmitContext) =
                 let armCode = join "\n    " [ bindCode; this.SequenceAs tail resultTy arm.Body ]
                 let result = CoreIrLayout.valueType resultTy
                 $"{allConditions}\n    (if (result {result})\n      (then\n        {armCode}\n      )\n      (else\n        {pieces.Add(emit rest)}\n      )\n    )"
-        emit arms
+        join "\n    " [ yield! readCodes; emit arms ]
 
 /// `code` without each place marker that says what the one before it said (see `placeMarker`).
 let private withoutRepeatedMarkers (code: string) =
