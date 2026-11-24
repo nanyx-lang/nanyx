@@ -368,15 +368,19 @@ module SyntaxTree =
             | Match(values, arms) -> (values |> List.collect (free bound)) @ inArms arms
             | Except(value, arms) -> free bound value @ inArms arms
             | IsSyntax.BindingIf asMatch -> free bound { expr with Kind = asMatch }
+            // Each statement's names are kept apart and joined once at the end: adding each to all those before made
+            // a block of n statements take n² time (#2408).
             | Block statements ->
                 statements
-                |> List.fold (fun (bound: Set<Identifier>, names) statement ->
+                |> List.fold (fun (bound: Set<Identifier>, found) statement ->
                     match statement.Kind with
                     | DefStatement(_, name, _, value) ->
                         let inValue = match value.Kind with RecSyntax.Call _ -> bound.Add name | _ -> bound
-                        bound.Add name, names @ free inValue value
-                    | _ -> bound, names @ (ofStatement statement |> List.collect (free bound))) (bound, [])
+                        bound.Add name, free inValue value :: found
+                    | _ -> bound, (ofStatement statement |> List.collect (free bound)) :: found) (bound, [])
                 |> snd
+                |> List.rev
+                |> List.concat
             | MemberAccess(inner, _, _) ->
                 // `a.b.c` may name a definition `a.b.c` of a module block, unless `a` is bound here.
                 let rec dotted (current: Expression) =

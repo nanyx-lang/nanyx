@@ -46,11 +46,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         nextId <- nextId + 1
         { Id = nextId; Name = name; Kind = kind; Type = ty }
 
+    let names = NameSupply(usedNames)
+
     /// A parameter's or local's name: as written, made unique within the function.
-    let uniqueName (name: string) =
-        let candidate = freeName usedNames.Contains (sanitizeIdentifier name)
-        usedNames.Add candidate |> ignore
-        candidate
+    let uniqueName (name: string) = names.Fresh(sanitizeIdentifier name)
 
     /// A new local of type `ty`, its name `name` made unique: each call makes another.
     let newLocal (name: string) (ty: IrType) = newVar (uniqueName name) Local ty

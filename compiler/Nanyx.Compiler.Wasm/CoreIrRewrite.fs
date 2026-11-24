@@ -162,6 +162,30 @@ let rec mapVarsAndPlaces (var: Var -> Var) (depth: int -> int) (place: Place opt
 /// `e` with each variable, bound or read, replaced as `var` says, and each loop's depth as `depth` says.
 let mapVars (var: Var -> Var) (depth: int -> int) (e: Expr) : Expr = mapVarsAndPlaces var depth id e
 
+/// The highest id of a variable `e` binds or reads, or `floor` if none is higher, without rebuilding `e` as finding it
+/// with `mapVars` did: the inliner and the simplifier ask before each of their passes, and on a function of thousands of
+/// statements the copies were most of what they allocated (#2408).
+let maxVarId (floor: int) (e: Expr) : int =
+    let mutable highest = floor
+    let see (var: Var) = if var.Id > highest then highest <- var.Id
+    for e in allExprs e do
+        for atom in directAtoms e do
+            match atom with
+            | AVar var -> see var
+            | _ -> ()
+        directVars e |> List.iter see
+        match e.Kind with
+        | Let(var, _, _) -> see var
+        | Match(_, arms) ->
+            for arm in arms do
+                for pattern in arm.Patterns do
+                    Pattern.binds pattern |> List.iter see
+                    Pattern.guards pattern |> List.iter (fst >> see)
+        | ForEach loop -> ForLoop.locals loop |> List.iter see
+        | Probe(_, locals) -> locals |> List.iter (fun local -> see local.Var)
+        | _ -> ()
+    highest
+
 /// `e` with `f` applied to each expression directly inside it that is not what follows a link of a chain.
 let mapNested (f: Expr -> Expr) (e: Expr) : Expr =
     let kind =
