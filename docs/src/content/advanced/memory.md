@@ -216,7 +216,7 @@ Nothing else can carry a mutable object out. `Async` has no way to defer work pa
 
 # No global mutable state
 
-Because `memory` is scoped, global mutable state is effectively impossible. Top-level `mut` values fail to compile, because a top-level definition cannot be inside a `memory` block.
+Because `memory` is scoped, global mutable state is effectively impossible. Top-level `mut` values fail to compile (NYX0281), because a top-level definition cannot be inside a `memory` block.
 
 # How cells are compiled
 
