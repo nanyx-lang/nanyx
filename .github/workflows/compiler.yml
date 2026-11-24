@@ -147,11 +147,28 @@ jobs:
 
       # A Nanyx component and Rust components call each other: a Rust command calls the Nanyx component's exports,
       # which call a Rust component's, composed with wac and run under Wasmtime (see ComponentInterop/run.sh).
+      # wac's own build of its release, checked against its SHA-256, rather than compiled from source with
+      # `cargo install`, which took over two minutes (#2405).
       - name: Install wac and Rust's wasm32-wasip2 target
         if: matrix.os == 'ubuntu-latest'
         run: |
           rustup target add wasm32-wasip2
-          cargo install wac-cli --version 0.12.0 --locked
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/wac" \
+            https://github.com/bytecodealliance/wac/releases/download/v0.12.0/wac-cli-x86_64-unknown-linux-musl
+          echo "7cd490edbd452221ef89e6750fc43eacc9b71b1242095eb577cb9a3bf0d3beda  $RUNNER_TEMP/wac" | sha256sum --check --strict
+          install -m 755 "$RUNNER_TEMP/wac" "$HOME/.cargo/bin/wac"
+          wac --version
+
+      # The Rust crates the interop test builds, and what Cargo downloads for them, kept between runs.
+      - name: Cache the interop crates' dependencies and builds
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            compiler/ComponentInterop/units/target
+            compiler/ComponentInterop/app/target
+          key: interop-${{ runner.os }}-${{ hashFiles('compiler/ComponentInterop/*/Cargo.lock') }}
 
       - name: Call between a Nanyx component and Rust components under Wasmtime
         if: matrix.os == 'ubuntu-latest'
