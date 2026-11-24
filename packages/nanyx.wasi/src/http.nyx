@@ -1,14 +1,19 @@
---| `wasi:http/client`, as `Http` sends requests through it, for the hosts' component roots.
+--| `wasi:http/client`, as `Http` sends requests through it, for the hosts' component roots. A request
+  waits for its response, and reads its body, through `waits`, so the program's other tasks run while
+  it is in flight.
 export module http
 
 import (
+  nanyx/async as (Async)
+  nanyx/host.async as (cancelled)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/text
-  abi as (Output, aligned8, awaitCall, freeOptionalString, listFrom, readableEnd, settled, takeString, writableEnd, writeAll)
+  abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, settled, takeString, writableEnd, writeAll)
   nanyx.http.core/client as (HttpError)
   nanyx.http.core/request as (Method, Request)
   nanyx.http.core/response as (Response)
+  waits as (awaitCallAsync, settledAsync)
 )
 
 --| How many bytes of a body are read at a time.
@@ -288,6 +293,17 @@ export def bodyFrom
     body
   }
 
+--| The blocks of the response body stream `reader`, read into the `chunkSize`-sized buffer at
+  `buffer`, after `blocks` (the latest first), until it ends, while the program's other tasks run.
+def responseBlocksFrom
+  : [Async, HostRuntime] I32, I32, list(string) -> list(string)
+  = { reader, buffer, blocks ->
+    def status = settledAsync(reader, responseStreamRead(reader, buffer, chunkSize))
+    def count = status / 16
+    def kept = if count > 0 then [stringAt(buffer, count), ...blocks] else blocks
+    if status % 16 != 0 then kept else responseBlocksFrom(reader, buffer, kept)
+  }
+
 --| The headers in `fields`, which it drops.
 export def headersOf: [HostRuntime] I32 -> list((string, string)) = { fields ->
   def headers = listFrom(
@@ -301,7 +317,7 @@ export def headersOf: [HostRuntime] I32 -> list((string, string)) = { fields ->
 }
 
 --| The `response` the host gave: its status, its headers and its body, which it reads to the end.
-def responseOf: [HostRuntime] I32 -> Response = { response ->
+def responseOf: [Async, HostRuntime] I32 -> Response = { response ->
   def status = I32.toInt(statusCode(response))
   def headers = headersOf(responseHeaders(response))
   def consumed = consumedFutureNew()
@@ -310,7 +326,9 @@ def responseOf: [HostRuntime] I32 -> Response = { response ->
   def reader = readI32(ends)
   def trailers = readI32(ends + 4)
   free(ends)
-  def body = bodyFrom(responseStreamRead, reader)
+  def buffer = allocate(chunkSize)
+  def body = string.concat(list.reverse(responseBlocksFrom(reader, buffer, [])))
+  free(buffer)
   responseStreamDropReadable(reader)
   trailersFutureDropReadable(trailers)
   writeConsumed(writableEnd(consumed))
@@ -328,8 +346,18 @@ def writeConsumed: [HostRuntime] I32 -> () = { writer ->
   free(block)
 }
 
---| Sends `request` through `wasi:http/client`, and gives its response, or why there is none.
-export def sendThroughWasi: [HostRuntime] Request -> #some(Response) | HttpError = { request ->
+--| Sends `request` through `wasi:http/client`, and gives its response, or why there is none. The
+  program's other tasks run while it is in flight. In a cancelled task it gives `#cancelled`: at once
+  if the task was cancelled before, and else once the request is answered.
+export def sendThroughWasi
+  : [Async, HostRuntime] Request -> #some(Response) | HttpError
+  = { request ->
+    if cancelled() then #cancelled else
+      sendTo(request)
+  }
+
+--| Sends `request` as [`sendThroughWasi`] does, in a task not cancelled yet.
+def sendTo: [Async, HostRuntime] Request -> #some(Response) | HttpError = { request ->
   match urlParts(request.url)
     | #invalidUrl -> #invalidUrl
     | #some(scheme, authority, pathWithQuery) ->
@@ -341,7 +369,7 @@ export def sendThroughWasi: [HostRuntime] Request -> #some(Response) | HttpError
 --| Sends `request`, its headers in `fields`, to the URL of `scheme`, `authority` and
   `pathWithQuery`.
 def sendWith
-  : [HostRuntime] Request, I32, I32, string, string -> #some(Response) | HttpError
+  : [Async, HostRuntime] Request, I32, I32, string, string -> #some(Response) | HttpError
   = { request, fields, scheme, authority, pathWithQuery ->
     def hasBody = not string.isEmpty(request.body)
     def body = if hasBody then bodyStreamNew() else 0
@@ -375,7 +403,7 @@ def sendWith
     if hasBody then writeBody(writableEnd(body), request.body) else ()
 
     writeNoTrailers(writableEnd(trailers))
-    awaitCall(status)
+    awaitCallAsync(status)
     sentFutureDropReadable(sent)
 
     def answered = if readByte(answer) == 0
@@ -383,5 +411,7 @@ def sendWith
       else httpErrorAt(answer + 8)
 
     free(result)
-    answered
+    -- A request can't be abandoned in flight: one whose task was cancelled meanwhile is answered, and the answer
+    -- dropped.
+    if cancelled() then #cancelled else answered
   }

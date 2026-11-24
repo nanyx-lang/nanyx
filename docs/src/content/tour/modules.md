@@ -115,7 +115,7 @@ The standard library is available under the `nanyx` package and is available in 
 ```nanyx fragment
 module main
 
-import nanyx/collections
+import nanyx/queue
 ...
 ```
 
@@ -256,7 +256,7 @@ You can declare module blocks inside a file. The block name is appended to the o
 -- myModule.nanyx
 module myModule
 
--- The full name of this module is `myModule.functions`
+-- Another file reaches this module through `myModule`: after `import myModule`, it calls `myModule.functions.f`
 module functions =
   export def f = { x -> x * 2 }
   export def g = { x -> x ** 2 }
@@ -265,22 +265,22 @@ module functions =
     def helper1 = { ... }
     def helper2 = { ... }
 
-    -- If any of the definitions in this module were exported, the full name would be `myModule.functions.helpers`
+    -- Had these been exported, another file would call them as `myModule.functions.helpers.helper1`
 ```
 
 A nested module encapsulates just like a file-level one: what it does not `export` can only be named inside the block, even by code elsewhere in the same file. Above, `functions.f` can be used anywhere in the file, but `helpers.helper1` only within `helpers`.
 
-If the file has no file-level module declaration, the nested module names are not prefixed:
+A script, which has no file-level module declaration, names its blocks by their own names alone, and only the script itself can use them (a file in a package must declare its module, NYX0017):
 
 ```nanyx fragment
 -- looseCode.nanyx
 
--- The full name of this module is simply `functions`
+-- Named `functions.f` in this file
 module functions =
   export def f = { x -> x * 2 }
   export def g = { x -> x ** 2 }
 
--- And the full name of this module is `utils`
+-- Nothing here is exported, so only `utils` itself can name these
 module utils =
   def helper1 = { ... }
   def helper2 = { ... }
@@ -455,6 +455,8 @@ One module is never imported by name: the **prelude**, `nanyx/prelude`, is impor
 ```nanyx fragment
 module userManagement
 
+import nanyx/random as random
+
 export type User = (
   id: UserId
   name: string
@@ -485,7 +487,7 @@ def validateEmail: Email -> #some(Email) | ValidationError = { email ->
 
 def generateId: [Random] () -> UserId = {
   -- Implementation detail, not exported
-  randomInt()
+  UserId(random.bits())
 }
 ```
 

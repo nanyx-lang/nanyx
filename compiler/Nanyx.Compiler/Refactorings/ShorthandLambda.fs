@@ -30,7 +30,7 @@ let private converted (source: string) (taken: Set<string>) (lambda: Expression)
         let x = unique taken "x" "x"
         let y = unique (taken.Add x) "y" "y"
         Some (Ok ($"{{ {x}, {y} -> {x} {op} {y} }}", [ x ]))
-    // `{ * 2 }`, `{ .name }`
+    // `{ * 2 }`, `{ .name }`, `{ \f }`
     | Lambda([ (argument, None) ], body, false) when argument = implicitArgument ->
         let inside = source.Substring(lambda.Span.Start + 1, lambda.Span.End - 1 - (lambda.Span.Start + 1)).Trim()
         let x = unique taken "x" "x"

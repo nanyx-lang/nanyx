@@ -170,10 +170,10 @@ thread and holds only that instance ([Async](../deep-dives/async#how-its-built))
     would break nothing, but would never return under a test's clock that doesn't move. Every `use Clock(...)` now
     gives a `sleep`.
   - The console and HTTP hosts' core roots wait on the runtime: `nanyx:http` starts a request and is polled for its
-    answer, and `nanyx:async`'s `wait` blocks until one is answered or a timeout passes. Next, the hosts' component
-    roots wait on one waitable set, which their requests and sleeps join, rather than one of each call's own; until
-    then they hold the instance. Files stay blocking under WASI preview 1, which has no way to start a read and come
-    back for it.
+    answer, and `nanyx:async`'s `wait` blocks until one is answered or a timeout passes. Their component roots wait on
+    one waitable set the instance shares, which their requests and sleeps join, rather than one of each call's own.
+    Files stay blocking under WASI preview 1, which has no way to start a read and come back for it, and the
+    component roots read and write them in the same way.
   - The scopes are module-level defs and a script's top level. Local defs and lambdas start tasks in the scope of the
     def they're in. Each task tracks its innermost scope as it runs.
   - A `Task` or a lambda that uses `start!` escaping its def is `NYX0233`, with a message about tasks; starting a task

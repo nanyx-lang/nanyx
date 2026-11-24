@@ -266,8 +266,8 @@ export def map.unionWith
 
 -- Sets ------------------------------------------------------------------------------------------
 --
--- A `set(a)` holds each of its elements once. It is made with `set.fromList([1, 2, 2, 3])`, or
--- from `set.empty` with `set.insert`. Its elements need an `Eq` and a `Hash`, as a map's keys do.
+-- A `set(a)` holds each of its elements once. It is made with a literal, `set[1, 2, 3]`, with
+-- `set.fromList([1, 2, 2, 3])`, or from `set.empty` with `set.insert`. Its elements need an `Eq` and a `Hash`, as a map's keys do.
 -- Attached to `set`, so they are called as `set.contains(s, x)`, or as `s \contains(x)` when `s` is
 -- known to be a set. Sets are immutable: every function gives back a new set.
 --

@@ -92,8 +92,9 @@ def pages: [Async, Http] list(string) -> list(string) = { urls ->
 ```
 
 A file's functions still hold the thread until they are done: the console host reads and writes files with WASI
-preview 1, which has no way to start a read and come back for it. So does every wait of a program built as a
-[component](./hosts#built-as-a-component), for now.
+preview 1, which has no way to start a read and come back for it, and a program built as a
+[component](./hosts#built-as-a-component) reads and writes them in the same way, though its requests and sleeps let
+the other tasks run.
 
 A crash in a task ends the program, the other tasks too, as any crash does.
 
@@ -136,5 +137,5 @@ match http.get(url)
 
 Cancelling a task cancels every task it started, and every task those started, so a cancelled task finishes promptly,
 and `await` never reports cancellation: the task being awaited was started by the one awaiting it, and is cancelled
-with it. Today `race` is what cancels a task. A program built as a component finishes a request its task was cancelled
-in before it gives back `#cancelled`.
+with it. Today `race` is what cancels a task. A program built as a component finishes a request, or a sleep, that was
+already under way when its task was cancelled, before it gives back `#cancelled`, or returns.

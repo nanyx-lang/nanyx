@@ -2,7 +2,7 @@
 [<AutoOpen>]
 module Parser.Program.ImplicitNames
 
-/// The parameters of a shorthand lambda: the operand its body leaves out (`{ * 2 }`, `{ .name }`), or the two
+/// The parameters of a shorthand lambda: the operand its body leaves out (`{ * 2 }`, `{ .name }`, `{ \f }`), or the two
 /// operands of an operator written alone (`{ + }`). Like `???`, they are names no code can write, so a shorthand
 /// lambda never captures a name the code around it declares.
 let implicitArgument = "<arg>"

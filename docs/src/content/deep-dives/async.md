@@ -19,11 +19,11 @@ boundaries are not built yet; they are on
   [Hosts](./hosts#how-its-built).
 - **A host that can't suspend doesn't provide it.** The playground host doesn't, so a program that needs `Async` is an
   error naming the host (`NYX0205`), as for any context a host doesn't provide.
-- **A wait holds only its task.** On the console and HTTP hosts' core roots, a request or a sleep stops the task that
-  waits while it is in flight, and the instance's other tasks run (below). A wait that is a blocking host call holds
-  the instance's thread until it is done: a file's, since WASI preview 1 has no file functions that don't block, and
-  every wait of the hosts' component roots, until they wait on one waitable set
-  ([Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#how-it-runs)). Each instance
+- **A wait holds only its task.** On the console and HTTP hosts, a request or a sleep stops the task that waits while
+  it is in flight, and the instance's other tasks run (below): on the runtime's `nanyx:async` wait in a core module,
+  and on one waitable set the instance shares in a component ([Components](./components#waiting-while-other-tasks-run)).
+  A wait that is a blocking host call holds the instance's thread until it is done: a file's, since WASI preview 1 has
+  no file functions that don't block, and the component roots read and write files in the same way. Each instance
   runs on a thread of its own: the console host has one; the HTTP host runs each request's instance on a thread of its
   own (`WasmServer.serve`), so a handler holds only its own, and the host answers other requests meanwhile.
 - **The backend knows which functions can wait.** `Async` has no members, so nothing a function is passed says it

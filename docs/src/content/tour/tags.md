@@ -99,12 +99,14 @@ def mapSome: (#some(a) | r), (a -> b) -> #some(b) | r = {
 
 This preserves non-success cases while still transforming success values:
 
-```nanyx fragment
-def x: (#some(string) | #notFound) = ...
-def y: (#some(int) | #divideByZero) = ...
+```nanyx
+import nanyx/math as math
 
-x \mapSome { .length }
-y \mapSome { \Math.abs }
+def x: #some(string) | #notFound = #some("hello")
+def y: #some(int) | #divideByZero = #some(-3)
+
+println(x \mapSome { .length })
+println(y \mapSome { \math.abs })
 ```
 
 The variable `r` is the union's *rest*: the tags it has besides those it names. A union has at most one rest, so `#some(b) | r | s` is an error (NYX0259): two rests would stand for the same other tags.

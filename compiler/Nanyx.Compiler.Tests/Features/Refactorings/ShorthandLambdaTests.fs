@@ -61,6 +61,12 @@ let ``A member access shorthand gets a parameter`` () =
         converted "def names = [(name = \"a\")] \\map { $$.name }\n")
 
 [<Fact>]
+let ``A pipe shorthand gets a parameter`` () =
+    Assert.Equal(
+        "def lasts = [[1, 2]] \\map { x -> x \\reverse \\take(1) }\n",
+        converted "def lasts = [[1, 2]] \\map { $$\\reverse \\take(1) }\n")
+
+[<Fact>]
 let ``A minus in a shorthand is the infix one`` () =
     Assert.Equal("def less = [1, 2] \\map { x -> x - 1 }\n", converted "def less = [1, 2] \\map { $$- 1 }\n")
 

@@ -73,14 +73,18 @@ The built-in arithmetic and comparison operators on `int`, `float` and the other
 
 # Attached functions as typeclass defaults
 
-Attached definitions can satisfy contexts or typeclass-style constraints. For example, defining `+` and `0` on a type can allow a `Sum` context to be synthesized.
+Attached definitions can satisfy contexts. The prelude's `Add` context has two members, `zero` and `` `+` ``, so a type with a `zero` and a `+` attached has an `Add` instance synthesized for it, and `list.sum` works on a list of it without a `use` (see [Context synthesis](./contexts#context-synthesis)):
 
 ```nanyx
 type Point = (x: int, y: int)
 
+def Point.zero = Point(x = 0, y = 0)
+
 def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
 
-def Point.`0` = Point(x = 0, y = 0)
+println([Point(x = 1, y = 2), Point(x = 3, y = 4)] \list.sum)
+
+-- (x = 4, y = 6)
 ```
 
 # Attaching to a built-in type

@@ -126,9 +126,13 @@ def adults = users \filter { .age > 18 }
 -- The body goes on after the first operation
 def evens = numbers \filter { % 2 == 0 }
 -- Equivalent to: numbers \filter { x -> x % 2 == 0 }
+
+-- Pipes
+def sizes = numbers \map { \math.abs }
+-- Equivalent to: numbers \map { x -> x \math.abs }
 ```
 
-A body that starts with an operator (`+`, `-`, `**`, `*`, `/`, `%`, `++`, `<`, `<=`, `>`, `>=`, `==` or `!=`) or with a `.` and a field name has left out its first operand, and that operand is the lambda's argument. The rest of the body follows as it would after any operand, with the usual precedence: `{ * 2 + 1 }` is `{ x -> x * 2 + 1 }`. Only the first operand can be left out. An operator alone, `{ + }`, takes two arguments, one for each side.
+A body that starts with an operator (`+`, `-`, `**`, `*`, `/`, `%`, `++`, `<`, `<=`, `>`, `>=`, `==` or `!=`) or with a `.` and a field name, or with a pipe, `\f`, has left out its first operand, and that operand is the lambda's argument. The rest of the body follows as it would after any operand, with the usual precedence: `{ * 2 + 1 }` is `{ x -> x * 2 + 1 }`. Only the first operand can be left out. An operator alone, `{ + }`, takes two arguments, one for each side.
 
 A leading `-` is always subtraction from the argument, so `{ - 1 }` is `{ x -> x - 1 }`. A lambda that takes no argument and returns a negative number writes the arrow: `{ -> -1 }`.
 
@@ -166,12 +170,18 @@ def double = { (x: int): int -> x * 2 }
 
 Without brackets, a parameter's annotation ends at the `->`, so `{ q: Point -> q }` takes a `Point` and returns it. A parameter of a function type has brackets around the type, `{ g: (int -> int) -> g(1) }`, or around the whole parameter, `{ (g: int -> int) -> g(1) }`.
 
-Named fields can be destructured to a different local name with `field = localName`:
+A lambda for a function whose parameters are named takes them by name: `{ x, y -> ... }` for `(x: float, y: float) -> float`, in either order, and a parameter that is not one of the names is an error ([NYX0280](../standard-tools/errors#nyx0280)). To give a field another name in the body, take the input with a record pattern, in brackets, `(field = localName)`:
 
-```nanyx skip=#443
-def magnitude: (x: int, y: int) -> float = { x = innerX, y = innerY ->
-  Math.sqrt(innerX * innerX + innerY * innerY)
+```nanyx
+import nanyx/math as math
+
+def magnitude: (x: float, y: float) -> float = { (x = innerX, y = innerY) ->
+  math.sqrt(innerX * innerX + innerY * innerY)
 }
+
+println(magnitude(x = 3.0, y = 4.0))
+
+-- 5.0
 ```
 
 ## Type arguments
@@ -480,13 +490,17 @@ def result = add(5)(10) -- 15
 
 With records, you can simulate partial application:
 
-```nanyx fragment
-def process: (config: Config, data: Data) -> Report = { config, data ->
-  -- processing logic
+```nanyx
+def process: (config: string, data: int) -> string = { config, data ->
+  "{config}: {data}"
 }
 
 -- Create a partially applied version
-def processWithConfig = { data -> process(myConfig, data) }
+def processWithConfig = { data -> process(config = "verbose", data = data) }
+
+println(processWithConfig(3))
+
+-- verbose: 3
 ```
 
 # Type Annotations for clarity

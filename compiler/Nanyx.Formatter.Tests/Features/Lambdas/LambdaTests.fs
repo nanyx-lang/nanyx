@@ -71,11 +71,16 @@ let ``Shorthand lambdas are printed as written`` () =
     unchanged "def i = xs \\map { * 2 + 1 \\abs }\n"
     unchanged "def j = xs \\foldBack(0) { - }\n"
     unchanged "def k = { -> -1 }\n"
+    unchanged "def l = xs \\map { \\math.abs }\n"
+    unchanged "def m = xs \\map { \\take(1) \\reverse }\n"
+    // A chain written on lines stays on them, as it does after a parameter.
+    unchanged (lines [ "def n = { \\take(1)"; "    \\reverse"; "}" ])
 
 [<Fact>]
 let ``A shorthand lambda's spacing is tidied`` () =
     Assert.Equal("def a = xs \\map { * 2 }\n", format "def a = xs \\map {   *   2   }")
     Assert.Equal("def b = { .name }\n", format "def b = {.name}")
+    Assert.Equal("def c = { \\take(1) \\reverse }\n", format "def c = {\\take(1)   \\reverse}")
 
 [<Fact>]
 let ``A lambda argument stays in brackets or after them, as written`` () =
@@ -154,6 +159,8 @@ let ``A comment before the closing brace of a lambda whose body starts on the br
     unchanged (lines [ "def a = {"; "  -- c"; "}" ])
     unchanged (lines [ "def a = { .length -- c"; "}" ])
     unchanged (lines [ "def a = { + -- c"; "}" ])
+    unchanged (lines [ "def a = { \\math.abs -- c"; "}" ])
+    unchanged (lines [ "def a = { \\take(1) \\reverse -- c"; "}" ])
     // As an argument too, where the comment is not taken for the end of the argument before the lambda on its line.
     Assert.Equal(
         lines [ "def a = list.map("; "  [1, 2]"; "  { x ->"; "    x * 2 -- double"; "  }"; ")" ],

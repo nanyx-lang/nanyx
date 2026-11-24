@@ -259,8 +259,8 @@ type Cursor(file: string, source: string, laid: Laid array) =
         |> Seq.rev
         |> List.ofSeq
 
-    /// Where the argument a shorthand lambda's body leaves out is made up, until its first operand takes it: the operator
-    /// or `.` written in its place.
+    /// Where the argument a shorthand lambda's body leaves out is made up, until its first operand takes it: the operator,
+    /// `.` or `\` written in its place.
     member _.ImplicitArgumentNext
         with get () = implicitArgumentNext
         and set value = implicitArgumentNext <- value
