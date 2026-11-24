@@ -4,8 +4,11 @@
 /// A finite float is written as the shortest decimal that reads back as the same `f64` (and an `F32` as the same
 /// `f32`, `__nanyx_f32_to_string`), found by Burger and
 /// Dybvig's free-format algorithm ("Printing Floating-Point Numbers Quickly and Accurately", 1996) on exact
-/// integers. Those integers are as large as 2^1080, so they are kept as fixed-size big integers in a scratch block
-/// the helper allocates and frees again.
+/// integers. Those integers are as large as 2^1080, so they are kept as big integers in a scratch block, a static one
+/// the module sets aside below its heap (`scratchBytes`), as wide as the float needs (#2310): a float near 1 takes a few
+/// limbs, and only the largest and smallest take all 40. The helpers are never re-entered, so one block serves them all.
+/// Each digit is estimated from the top limbs, and taken away in one pass. A whole number below 2^53 (2^24 for an `F32`)
+/// is written from its integer, with no big integers: every integer there is a float, so its digits are the shortest.
 module internal Transpiler.Wasm.FloatText
 
 let bigSet = "__nanyx_big_set"
@@ -14,27 +17,38 @@ let bigMulPow10 = "__nanyx_big_mul_pow10"
 let bigAdd = "__nanyx_big_add"
 let bigSub = "__nanyx_big_sub"
 let bigCompare = "__nanyx_big_compare"
+let bigSubMul = "__nanyx_big_sub_mul"
 
-/// The bytes of one big integer: 40 little-endian 32-bit limbs, 1,280 bits, which holds every value the
-/// algorithm makes (the largest is ten times its scale, which is below 2^1077).
+/// The most bytes a big integer takes: 40 little-endian 32-bit limbs, 1,280 bits, which holds every value the
+/// algorithm makes (the largest is ten times its scale, which is below 2^1077). Each has that much room in the scratch
+/// block, and uses the bytes its first word says, worked out for each float (see `setUp`).
 let private bigBytes = 160
 
-/// The scratch block: five big integers (r, s, m+, m- and a temporary), then the digits as ASCII.
-let private digitsOffset = 5 * bigBytes
+/// Where each big integer is in the scratch block, after the word that says how many bytes they use: r, s, m+, m- and a
+/// temporary, in that order.
+let private bigOffset (index: int) = 8 + index * bigBytes
 
-let private scratchBytes = digitsOffset + 24
+/// Where the digits are in the scratch block, as ASCII: after the five big integers.
+let private digitsOffset = bigOffset 5
 
-/// The runtime helpers the float helpers call, which are defined with the rest of the runtime.
+/// How many bytes the scratch block takes, which a module that writes a float sets aside just below its heap (see
+/// `CodeGen`). A multiple of 8, so that the heap after it stays aligned.
+let scratchBytes = digitsOffset + 24
+
+/// The runtime helpers the float helpers call, which are defined with the rest of the runtime, and where the scratch
+/// block is.
 type Calls =
     { NewObject: string
-      Alloc: string
-      Free: string
-      CopyBytes: string }
+      CopyBytes: string
+      Scratch: int }
 
 let private indent (pad: string) (items: string list) = items |> List.map (fun line -> pad + line)
 
-// Loops `body` over each limb with `$i` the limb's byte offset, from the lowest limb up.
-let private eachLimb (label: string) (body: string list) =
+// Leaves how many bytes each big integer uses, which the first word of the scratch block at `scratch` says.
+let private usedBytes (scratch: int) = [ $"i32.const {scratch}"; "i32.load" ]
+
+// Loops `body` over each limb a big integer uses, with `$i` the limb's byte offset, from the lowest limb up.
+let private eachLimb (scratch: int) (label: string) (body: string list) =
     [ "  i32.const 0"
       "  local.set $i"
       $"  loop ${label}"
@@ -43,7 +57,7 @@ let private eachLimb (label: string) (body: string list) =
       "    i32.const 4"
       "    i32.add"
       "    local.tee $i"
-      $"    i32.const {bigBytes}"
+      yield! indent "    " (usedBytes scratch)
       "    i32.lt_u"
       $"    br_if ${label}"
       "  end" ]
@@ -52,12 +66,12 @@ let private eachLimb (label: string) (body: string list) =
 let private limb (name: string) = [ $"local.get ${name}"; "local.get $i"; "i32.add" ]
 
 // `p = v << shift`: `p v shift ->`. `v` fits in 64 bits, so the result spans at most three limbs.
-let private setHelper =
+let private setHelper (scratch: int) =
     [ $"(func ${bigSet} (param $p i32) (param $v i64) (param $shift i32)"
       "  (local $i i32)"
       "  (local $q i32)"
       "  (local $b i64)"
-      yield! eachLimb "$zero" [ yield! limb "p"; "i32.const 0"; "i32.store" ]
+      yield! eachLimb scratch "$zero" [ yield! limb "p"; "i32.const 0"; "i32.store" ]
       "  ;; $q is the address of the limb the shift starts in, $b the bits it moves within it"
       "  local.get $p"
       "  local.get $shift"
@@ -100,12 +114,13 @@ let private setHelper =
       ")" ]
 
 // `p = p * k`, for `k` below 2^31: `p k ->`.
-let private mulSmallHelper =
+let private mulSmallHelper (scratch: int) =
     [ $"(func ${bigMulSmall} (param $p i32) (param $k i64)"
       "  (local $i i32)"
       "  (local $t i64)"
       yield!
           eachLimb
+              scratch
               "$limb"
               [ yield! limb "p"
                 yield! limb "p"
@@ -157,12 +172,13 @@ let private mulPow10Helper =
       ")" ]
 
 // `a = a + b`: `a b ->`. The carry is the top half of `$t`.
-let private addHelper =
+let private addHelper (scratch: int) =
     [ $"(func ${bigAdd} (param $a i32) (param $b i32)"
       "  (local $i i32)"
       "  (local $t i64)"
       yield!
           eachLimb
+              scratch
               "$limb"
               [ yield! limb "a"
                 yield! limb "a"
@@ -179,12 +195,13 @@ let private addHelper =
       ")" ]
 
 // `a = a - b`, for `a >= b`: `a b ->`. The borrow is the sign bit of `$t`.
-let private subHelper =
+let private subHelper (scratch: int) =
     [ $"(func ${bigSub} (param $a i32) (param $b i32)"
       "  (local $i i32)"
       "  (local $t i64)"
       yield!
           eachLimb
+              scratch
               "$limb"
               [ yield! limb "a"
                 yield! limb "a"
@@ -200,13 +217,50 @@ let private subHelper =
                 "i64.store32" ]
       ")" ]
 
-// -1, 0 or 1 as `a` is less than, equal to or greater than `b`: `a b -> order`.
-let private compareHelper =
+// `a = a - b * k`, for `k` below 2^31 and `a >= b * k`: `a b k ->`. `$p` holds the product of the limb and its carry,
+// and the borrow is the sign bit of `$t`.
+let private subMulHelper (scratch: int) =
+    [ $"(func ${bigSubMul} (param $a i32) (param $b i32) (param $k i64)"
+      "  (local $i i32)"
+      "  (local $p i64)"
+      "  (local $t i64)"
+      yield!
+          eachLimb
+              scratch
+              "$limb"
+              [ yield! limb "b"
+                "i64.load32_u"
+                "local.get $k"
+                "i64.mul"
+                "local.get $p"
+                "i64.const 32"
+                "i64.shr_u"
+                "i64.add"
+                "local.set $p"
+                yield! limb "a"
+                yield! limb "a"
+                "i64.load32_u"
+                "local.get $p"
+                "i64.const 0xffffffff"
+                "i64.and"
+                "i64.sub"
+                "local.get $t"
+                "i64.const 63"
+                "i64.shr_u"
+                "i64.sub"
+                "local.tee $t"
+                "i64.store32" ]
+      ")" ]
+
+// -1, 0 or 1 as `a` is less than, equal to or greater than `b`: `a b -> order`. It starts from the highest limb in use.
+let private compareHelper (scratch: int) =
     [ $"(func ${bigCompare} (param $a i32) (param $b i32) (result i32)"
       "  (local $i i32)"
       "  (local $x i32)"
       "  (local $y i32)"
-      $"  i32.const {bigBytes - 4}"
+      yield! indent "  " (usedBytes scratch)
+      "  i32.const 4"
+      "  i32.sub"
       "  local.set $i"
       "  loop $limb"
       yield! indent "    " (limb "a")
@@ -270,7 +324,7 @@ let private putWord (store: string) (value: string) (width: int) =
 let private reachesHigh (calls: Calls) =
     [ "local.get $t"
       "local.get $r"
-      $"i32.const {bigBytes}"
+      "local.get $bytes"
       $"call ${calls.CopyBytes}"
       "local.get $t"
       "local.get $mp"
@@ -307,6 +361,8 @@ type private Format =
       Negative: string list
       /// The bits of every magnitude: all but the sign.
       Magnitude: string
+      /// The code that gives the magnitude in `$bits` as an `f64`.
+      AsF64: string list
       /// The bits of an infinity. A magnitude above them is NaN.
       Infinity: string
       /// How many bits the mantissa has, below the exponent.
@@ -321,6 +377,7 @@ let private f64 =
       Bits = [ "local.get $value"; "i64.reinterpret_f64" ]
       Negative = [ "local.get $bits"; "i64.const 0"; "i64.lt_s" ]
       Magnitude = "0x7fffffffffffffff"
+      AsF64 = [ "local.get $bits"; "f64.reinterpret_i64" ]
       Infinity = "0x7ff0000000000000"
       MantissaBits = 52
       ExponentOffset = 1075 }
@@ -331,14 +388,91 @@ let private f32 =
       Bits = [ "local.get $value"; "i32.reinterpret_f32"; "i64.extend_i32_u" ]
       Negative = [ "local.get $bits"; "i64.const 0x80000000"; "i64.and"; "i64.eqz"; "i32.eqz" ]
       Magnitude = "0x7fffffff"
+      AsF64 = [ "local.get $bits"; "i32.wrap_i64"; "f32.reinterpret_i32"; "f64.promote_f32" ]
       Infinity = "0x7f800000"
       MantissaBits = 23
       ExponentOffset = 150 }
 
+// Sets how many bytes the big integers use, in the first word of the scratch block at `scratch` and in `$bytes`, from
+// the float's `$e`, `$es` and `$k` (see `setUp`). r starts below 2^(64 + es + 2), and s at 2^(es - e + 2); scaling
+// by 10^|k| multiplies one of them by less than 2^((|k| + 1) * log2(10) + 1), raising k multiplies s by 10, and nothing
+// the digits make is more than 20 times s. So they need 16 bits more than the larger of the two, which covers both,
+// and a limb more, for the third limb `__nanyx_big_set` writes, and never more than `bigBytes`.
+let private sizeFor (scratch: int) =
+    [ ";; $grow is the bits that scaling by 10^|k| and 10 may add"
+      "i32.const 0"
+      "local.get $k"
+      "i32.sub"
+      "local.get $k"
+      "local.get $k"
+      "i32.const 0"
+      "i32.lt_s"
+      "select"
+      "i32.const 1"
+      "i32.add"
+      "f64.convert_i32_s"
+      "f64.const 3.321928094887362"
+      "f64.mul"
+      "i32.trunc_f64_s"
+      "i32.const 1"
+      "i32.add"
+      "local.set $grow"
+      ";; the bits of r, and of s, once scaled"
+      "local.get $es"
+      "i32.const 66"
+      "i32.add"
+      "local.get $grow"
+      "i32.const 0"
+      "local.get $k"
+      "i32.const 0"
+      "i32.lt_s"
+      "select"
+      "i32.add"
+      "local.set $rbits"
+      "local.get $es"
+      "local.get $e"
+      "i32.sub"
+      "i32.const 2"
+      "i32.add"
+      "local.get $grow"
+      "i32.const 0"
+      "local.get $k"
+      "i32.const 0"
+      "i32.ge_s"
+      "select"
+      "i32.add"
+      "local.set $sbits"
+      ";; bytes = min(bigBytes, 4 * ceil((max(rbits, sbits) + 16) / 32) + 4)"
+      "local.get $rbits"
+      "local.get $sbits"
+      "local.get $rbits"
+      "local.get $sbits"
+      "i32.gt_s"
+      "select"
+      "i32.const 47"
+      "i32.add"
+      "i32.const 5"
+      "i32.shr_u"
+      "i32.const 2"
+      "i32.shl"
+      "i32.const 4"
+      "i32.add"
+      "local.tee $bytes"
+      $"i32.const {bigBytes}"
+      "local.get $bytes"
+      $"i32.const {bigBytes}"
+      "i32.lt_u"
+      "select"
+      "local.set $bytes"
+      $"i32.const {scratch}"
+      "local.get $bytes"
+      "i32.store" ]
+
 // Sets r, s, m+ and m- for the positive finite value `$bits` of `format`, so that it is r / s and the values either
 // side of it are (r - m-) / s and (r + m+) / s, all times 2, and sets `$even` and `$k`, an estimate of where the
-// decimal point goes that is never too high.
-let private setUp (format: Format) =
+// decimal point goes that is never too high, and how many bytes the big integers use, in the scratch block at
+// `scratch`.
+let private setUp (format: Format) (scratch: int) =
     [ "local.get $bits"
       $"i64.const {format.MantissaBits}"
       "i64.shr_u"
@@ -385,6 +519,23 @@ let private setUp (format: Format) =
       "i32.gt_s"
       "select"
       "local.set $es"
+      ";; k = ceil((e + bits in f - 1) * log10(2) - 1e-10)"
+      "local.get $e"
+      "i32.const 63"
+      "i32.add"
+      "local.get $f"
+      "i64.clz"
+      "i32.wrap_i64"
+      "i32.sub"
+      "f64.convert_i32_s"
+      "f64.const 0.30102999566398114"
+      "f64.mul"
+      "f64.const 1e-10"
+      "f64.sub"
+      "f64.ceil"
+      "i32.trunc_f64_s"
+      "local.set $k"
+      yield! sizeFor scratch
       ";; r = f << (es + 1 + u)"
       "local.get $r"
       "local.get $f"
@@ -416,23 +567,7 @@ let private setUp (format: Format) =
       "local.get $mm"
       "i64.const 1"
       "local.get $es"
-      $"call ${bigSet}"
-      ";; k = ceil((e + bits in f - 1) * log10(2) - 1e-10)"
-      "local.get $e"
-      "i32.const 63"
-      "i32.add"
-      "local.get $f"
-      "i64.clz"
-      "i32.wrap_i64"
-      "i32.sub"
-      "f64.convert_i32_s"
-      "f64.const 0.30102999566398114"
-      "f64.mul"
-      "f64.const 1e-10"
-      "f64.sub"
-      "f64.ceil"
-      "i32.trunc_f64_s"
-      "local.set $k" ]
+      $"call ${bigSet}" ]
 
 // Scales r, m+ and m- or s by 10^k, then raises k while it is too low, so that the float's decimal digits are
 // those of r / s with the point k places from the left.
@@ -466,13 +601,93 @@ let private scale (calls: Calls) =
 
 // Writes digits until the decimal so far is in range, the last one rounded to the nearer end when both are.
 let private generateDigits (calls: Calls) =
-    [ "loop $next_digit"
+    [ ";; $top is the offset of the highest limb s uses, and $sf the value of that limb and the one below it, which s"
+      ";; keeps from here on"
+      "local.get $bytes"
+      "i32.const 4"
+      "i32.sub"
+      "local.set $top"
+      "block $found"
+      "  loop $highest"
+      "    local.get $s"
+      "    local.get $top"
+      "    i32.add"
+      "    i32.load"
+      "    local.get $top"
+      "    i32.eqz"
+      "    i32.or"
+      "    br_if $found"
+      "    local.get $top"
+      "    i32.const 4"
+      "    i32.sub"
+      "    local.set $top"
+      "    br $highest"
+      "  end"
+      "end"
+      "local.get $s"
+      "local.get $top"
+      "i32.add"
+      "i64.load32_u"
+      "f64.convert_i64_u"
+      "f64.const 4294967296"
+      "f64.mul"
+      "local.get $s"
+      "local.get $top"
+      "i32.add"
+      "i32.const 4"
+      "i32.sub"
+      "i64.load32_u"
+      "f64.convert_i64_u"
+      "f64.const 0"
+      "local.get $top"
+      "select"
+      "f64.add"
+      "local.set $sf"
+      "loop $next_digit"
       yield!
           [ "r"; "mp"; "mm" ]
           |> List.collect (fun name -> [ $"  local.get ${name}"; "  i64.const 10"; $"  call ${bigMulSmall}" ])
-      "  ;; $d is r / s, and r is left as the remainder"
-      "  i32.const 0"
-      "  local.set $d"
+      "  ;; $d is r / s, and r is left as the remainder: first a digit from the top limbs of each, made a little smaller"
+      "  ;; so that it is never too high, taken away in one pass, and then s taken away while it still fits"
+      "  local.get $r"
+      "  local.get $top"
+      "  i32.add"
+      "  i64.load32_u offset=4"
+      "  f64.convert_i64_u"
+      "  f64.const 4294967296"
+      "  f64.mul"
+      "  local.get $r"
+      "  local.get $top"
+      "  i32.add"
+      "  i64.load32_u"
+      "  f64.convert_i64_u"
+      "  f64.add"
+      "  f64.const 4294967296"
+      "  f64.mul"
+      "  local.get $r"
+      "  local.get $top"
+      "  i32.add"
+      "  i32.const 4"
+      "  i32.sub"
+      "  i64.load32_u"
+      "  f64.convert_i64_u"
+      "  f64.const 0"
+      "  local.get $top"
+      "  select"
+      "  f64.add"
+      "  local.get $sf"
+      "  f64.div"
+      "  f64.const 0.999999999"
+      "  f64.mul"
+      "  i32.trunc_f64_u"
+      "  local.tee $d"
+      "  if"
+      "    local.get $r"
+      "    local.get $s"
+      "    local.get $d"
+      "    i64.extend_i32_u"
+      $"    call ${bigSubMul}"
+      "  end"
       "  block $divided"
       "    loop $divide"
       "      local.get $r"
@@ -517,7 +732,7 @@ let private generateDigits (calls: Calls) =
       "  if (result i32)"
       "    local.get $t"
       "    local.get $r"
-      $"    i32.const {bigBytes}"
+      "    local.get $bytes"
       $"    call ${calls.CopyBytes}"
       "    local.get $t"
       "    local.get $r"
@@ -650,15 +865,80 @@ let private layOut (calls: Calls) =
       "  end"
       "end" ]
 
+// Writes a whole number below 2^(mantissa bits + 1), such as 123456.0, and branches to `$written`: every integer
+// there is a float, so its digits are the shortest that read back, and they need no big integers. A float's magnitude
+// is in `$bits`.
+let private wholeNumber (format: Format) (calls: Calls) =
+    [ yield! format.AsF64
+      $"f64.const {1L <<< (format.MantissaBits + 1)}"
+      "f64.lt"
+      yield! format.AsF64
+      yield! format.AsF64
+      "f64.trunc"
+      "f64.eq"
+      "i32.and"
+      "if"
+      yield! indent "  " format.AsF64
+      "  i64.trunc_f64_u"
+      "  local.set $f"
+      "  ;; $k is how many digits it has"
+      "  i32.const 0"
+      "  local.set $k"
+      "  loop $count"
+      "    local.get $k"
+      "    i32.const 1"
+      "    i32.add"
+      "    local.set $k"
+      "    local.get $f"
+      "    i64.const 10"
+      "    i64.div_u"
+      "    local.tee $f"
+      "    i64.eqz"
+      "    i32.eqz"
+      "    br_if $count"
+      "  end"
+      yield! indent "  " format.AsF64
+      "  i64.trunc_f64_u"
+      "  local.set $f"
+      "  local.get $k"
+      "  local.set $n"
+      "  loop $fill"
+      "    local.get $n"
+      "    i32.const 1"
+      "    i32.sub"
+      "    local.set $n"
+      "    local.get $digits"
+      "    local.get $n"
+      "    i32.add"
+      "    local.get $f"
+      "    i64.const 10"
+      "    i64.rem_u"
+      "    i32.wrap_i64"
+      "    i32.const 48"
+      "    i32.add"
+      "    i32.store8"
+      "    local.get $f"
+      "    i64.const 10"
+      "    i64.div_u"
+      "    local.set $f"
+      "    local.get $n"
+      "    br_if $fill"
+      "  end"
+      "  local.get $k"
+      "  local.set $n"
+      yield! indent "  " (layOut calls)
+      "  br $written"
+      "end" ]
+
 // Formats a float as the shortest decimal that reads back as the same float, always with a point: 6.28, 4.0,
 // -1.5, 0.30000000000000004, 1.0e-7, 1.0e21. NaN, the infinities and the zeros are NaN, Infinity, -Infinity, 0.0
 // and -0.0.
 let private floatToStringHelper (format: Format) (floatToString: string) (calls: Calls) =
     [ $"(func ${floatToString} (param $value {format.Parameter}) (result i32)"
       yield!
-          [ "bits i64"; "f i64"; "biased i32"; "e i32"; "es i32"; "u i32"; "even i32"; "k i32"; "scratch i32"
-            "r i32"; "s i32"; "mp i32"; "mm i32"; "t i32"; "digits i32"; "n i32"; "d i32"; "low i32"; "high i32"
-            "exp i32"; "base i32"; "cursor i32" ]
+          [ "bits i64"; "f i64"; "biased i32"; "e i32"; "es i32"; "u i32"; "even i32"; "k i32"; "grow i32"
+            "rbits i32"; "sbits i32"; "bytes i32"; "r i32"; "s i32"; "mp i32"; "mm i32"; "t i32"; "digits i32"
+            "n i32"; "d i32"; "low i32"; "high i32"; "exp i32"; "base i32"; "cursor i32"; "top i32"; "sf f64" ]
           |> List.map (fun local -> $"  (local ${local})")
       yield! indent "  " format.Bits
       "  local.set $bits"
@@ -705,24 +985,16 @@ let private floatToStringHelper (format: Format) (floatToString: string) (calls:
       yield! indent "      " (putWord "i32.store" "i32.const 0x302e30" 3)
       "      br $written"
       "    end"
-      $"    i32.const {scratchBytes}"
-      $"    call ${calls.Alloc}"
-      "    local.tee $scratch"
-      "    local.set $r"
       yield!
-          [ "s", 1; "mp", 2; "mm", 3; "t", 4 ]
-          |> List.collect (fun (name, index) ->
-              [ "    local.get $scratch"; $"    i32.const {index * bigBytes}"; "    i32.add"; $"    local.set ${name}" ])
-      "    local.get $scratch"
-      $"    i32.const {digitsOffset}"
-      "    i32.add"
+          [ "r", 0; "s", 1; "mp", 2; "mm", 3; "t", 4 ]
+          |> List.collect (fun (name, index) -> [ $"    i32.const {calls.Scratch + bigOffset index}"; $"    local.set ${name}" ])
+      $"    i32.const {calls.Scratch + digitsOffset}"
       "    local.set $digits"
-      yield! indent "    " (setUp format)
+      yield! indent "    " (wholeNumber format calls)
+      yield! indent "    " (setUp format calls.Scratch)
       yield! indent "    " (scale calls)
       yield! indent "    " (generateDigits calls)
       yield! indent "    " (layOut calls)
-      "    local.get $scratch"
-      $"    call ${calls.Free}"
       "  end"
       "  local.get $base"
       "  local.get $cursor"
@@ -744,9 +1016,10 @@ let private floatToStringHelper (format: Format) (floatToString: string) (calls:
 let helpers (floatToString: string) (f32ToString: string) (calls: Calls) =
     [ floatToString, floatToStringHelper f64 floatToString calls
       f32ToString, floatToStringHelper f32 f32ToString calls
-      bigSet, setHelper
-      bigMulSmall, mulSmallHelper
+      bigSet, setHelper calls.Scratch
+      bigMulSmall, mulSmallHelper calls.Scratch
       bigMulPow10, mulPow10Helper
-      bigAdd, addHelper
-      bigSub, subHelper
-      bigCompare, compareHelper ]
+      bigAdd, addHelper calls.Scratch
+      bigSub, subHelper calls.Scratch
+      bigCompare, compareHelper calls.Scratch
+      bigSubMul, subMulHelper calls.Scratch ]
