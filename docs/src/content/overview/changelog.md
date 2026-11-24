@@ -49,6 +49,7 @@ run of faster type checking. Four changes break code: they are marked below.
   give it a `sleep` too ([clock](../stdlib/clock)).
 - `string.fromUtf8` copies its bytes once, and `replace`, `repeat`, `padStart`, `padEnd` and `reverse` make one
   allocation each.
+- `nanyx/math` has the hyperbolic functions, `hypot` and `cbrt` ([math](../stdlib/math)).
 
 **Tools**
 
