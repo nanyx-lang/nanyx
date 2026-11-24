@@ -71,6 +71,11 @@ println(faked())
     runSource (source.ReplaceLineEndings "\n") |> assertRan "nap 1\ndone\n"
 
 
+[<Fact>]
+let ``Run - a script's use statement runs its member with the Console of the top level`` () =
+    let source = "context Greeter = (greet: string -> ())\n\nuse Greeter(greet = { name -> println(name) }) in greet(\"world\")\n"
+    runSource source |> assertRan "world\n"
+
 let private choose =
     """
 context Choose = (choose: () -> bool)

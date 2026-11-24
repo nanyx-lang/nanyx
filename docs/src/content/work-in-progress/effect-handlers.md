@@ -1,6 +1,6 @@
 ---
-title: "Effect handlers"
-description: "Contexts whose members a handler runs at once or captures: Emit's pushing builders, yield on async's state machines, and what a spike measured"
+title: "Proposal: Effect handlers"
+description: "Contexts whose members a handler runs at once or captures: Emit's pushing builders, capturing members marked @resumes(#once | #many), and what a spike measured"
 order: 7
 ---
 
@@ -11,9 +11,23 @@ to run later. It is the "effect handlers in general" question on
 
 - **Pushing: `Emit(a)`.** Decided on 2026-11-24 and being built
   ([#2566](https://github.com/nanyx-lang/nanyx/issues/2566)): the builders push through a new prelude context.
-- **Capturing: `yield` on async's state machines.** Proposed, and tested by a spike (below):
-  [#2426](https://github.com/nanyx-lang/nanyx/issues/2426), with what is left of
-  [#2427](https://github.com/nanyx-lang/nanyx/issues/2427).
+- **Capturing: members marked `@resumes`.** Designed with the maintainer on 2026-11-24, not started
+  ([below](#capturing-members-that-take-the-rest-of-the-block)): a member may capture the rest of the block, resumed
+  once or many times, on async's state machines. `yield` is the first such member
+  ([#2426](https://github.com/nanyx-lang/nanyx/issues/2426), with what is left of
+  [#2427](https://github.com/nanyx-lang/nanyx/issues/2427)).
+
+Contexts are already handlers of the first kind: a member is passed to the functions that require it, as Koka passes
+its handlers ("evidence passing"), and it runs on top of the caller's stack and returns. What capturing adds is the
+continuation, `k`: the rest of the handled code, from just after the call up to the `use` that loaded the handler.
+What a handler can do with `k` is a ladder, each rung needing more of the compiler:
+
+| What the handler does with `k` | For | Needs |
+|---|---|---|
+| Calls it once, as its last act | `Console`, `Log`, `Emit`, any member today | nothing: it is a plain call |
+| Never calls it | early exit, `list.selectOne` | leaving the handled code, and dropping what it held |
+| Calls it once, later | lazy sequences, tasks, coroutines | the rest of the code kept somewhere else than the stack |
+| Calls it more than once | sequences pulled twice, backtracking, every answer to a search | that, copied |
 
 # Why
 
@@ -52,24 +66,156 @@ export context Emit(a) = (emit: a -> ())
 - **No keyword yet.** `emit! x` would need a keyword kind for a plain call, which is undecided.
 - **`seq { }` stays lazy,** its block typed `[Yield(a)] () -> ()`, and `yield` in it is rewritten as today.
 
-# Capturing: `yield` as an effect operation
+# Capturing: members that take the rest of the block
 
-Proposed. `Yield(a)` keeps the capturing meaning (Koka's `ctl`): its operation passes the rest of the block to the
-handler as a continuation, `k`, to call later, once or never. A lazy sequence is a handler that gives back
-`#next(y, rest)`, where pulling `rest` calls `k`. Instead of the rewrite:
+Designed with the maintainer on 2026-11-24. Nothing of it is built. `yield` is its first user; the language's other
+capturing operations, `Async`'s waits, are hard-wired today and become its second.
 
-- **The rest of the block is captured the way async waits.** A function that requires a context whose members may
-  capture is compiled to a state machine, as a function that requires `Async` is ([Async](../deep-dives/async#how-tasks-are-compiled)).
-  A call of such a member is a split point. When the handler in force captures, the call stops, and the frames saved
-  on the way out, up to the `use` that loaded the handler, are `k`. The `use` is the delimiter. When the handler pushes,
-  the call returns, at the cost of the check after it, as an async call that doesn't stop costs today.
-- **`seq` becomes a library function,** a capturing handler like any user's. The `#yield` keyword kind and the
-  rewrite's hard-wired calls go, and `yield` reaches its handler from any depth, through the functions a block calls.
-- **`Async` becomes the first such context.** The scheduler is the outermost handler, and the host's waits are its
-  operations.
+## Declaring one
 
-Nothing chooses a meaning before inference: whether a function is a state machine is read from its type after
-inference, as `IrFunction`'s `waits` is today.
+A member that captures says so with an attribute, and says how many times its continuation may be resumed:
+
+```nanyx fragment
+export context Yield(a) = (
+  @resumes(#many)
+  yield: a -> ()
+)
+
+context Coroutine = (
+  @resumes(#once)
+  pause: () -> ()
+)
+```
+
+- **No attribute:** a plain member, as every member is today. It runs and returns, and costs a call.
+- **`@resumes(#once)`:** the handler is given `k`, and may resume it once or not at all. Resuming it a second time is a
+  crash, with its stack.
+- **`@resumes(#many)`:** `k` may be resumed any number of times, within the rule [below](#many-and-scoped-contexts).
+
+It is per member, not per context, so a context can mix them: a `Choose` with a capturing `choose` and a plain one.
+The attribute is a union case, as `@customKeywordType` is, so it needs no grammar, and could become a keyword before the
+member later.
+
+## Calling one
+
+Code that calls a capturing member is written as it is today: `walk: [Yield(int)] Tree -> ()` calls `yield(x)` as it
+would call any member, and inference adds `Yield(int)` to its type as it adds `Console`. There is no `await` and no new
+function type. A function that requires a context with a capturing member is compiled to a state machine, as one that
+requires `Async` is ([Async](../deep-dives/async#how-tasks-are-compiled)), and a call of the member is a split point.
+Whether a function is a state machine is read from its type after inference, as `IrFunction`'s `waits` is.
+Context-generic code is unchanged: `list.map` over a function that yields is `list.map` specialised with
+`c = Yield(int)`, as `list.map` over `http.get` is today.
+
+## Handling one
+
+At a `use`, a capturing member's implementation takes the member's parameters and then `k`. `seq` becomes a library
+function:
+
+```nanyx fragment
+export def seq: ([Yield(a), c] () -> ()) -> [c] seq(a) = { body ->
+  seq.fromStep {
+    use Yield(a)(yield = { x, k -> #next(x, seq.fromStep(k)) }) in
+      body()
+      #done
+  }
+}
+```
+
+- **`k` is a function, of an ordinary function type.** It takes what the member gives back, `()` here, and gives what
+  the whole `use ... in` gives, its answer type, here a sequence's step. It requires the contexts the rest of the
+  handled code needs besides the one handled, `[c]` here, so a sequence's steps need them where it is pulled, as
+  `[c] seq(a)` says today.
+- **No return clause.** Koka's handlers have one, to turn the body's value into the handler's; in Nanyx that is the last
+  line of the `in` block, `#done` above.
+- **Deep.** When `k` runs the rest of the block and that calls `yield` again, the same `use` handles it, as its scope
+  says.
+- **Not resuming** is not calling `k`: `list.selectOne` is a handler that keeps the first value and drops `k`. Dropping
+  `k` gives up what its frames hold, as dropping any value does.
+- **The handler an operation reaches** is the innermost `use` of its context, as for any member. A stop goes up
+  through the frames of every function between the call and its `use`, and through any `use` of another context
+  (a wait inside a sequence, a sequence inside a task); each stop is marked with the handler it is for.
+
+## Once and many
+
+A continuation resumed more than once runs the rest of the code twice from the same point, so the frames saved at the
+capture must outlive the first run. On the state machines, resuming `k` runs its frames in place when the reference
+count says nothing else holds it, and copies them first when something does. So a sequence pulled once never copies,
+with nothing to prove, and a step pulled twice costs one copy of a few frames. Each state of a state machine compiled
+for a `#many` member gets a copy function beside its drop function; one compiled only for `#once` members needs only
+the drop function.
+
+Why both, and not one:
+
+- **Sequences are pure.** Pulling a step twice gives the same answer, and runs its effects again
+  ([Lazy sequences](../deep-dives/lazy-sequences)). Today's rewrite gets that for free, since the rest of the block is
+  a lambda. Keeping `yield` that way needs `#many`; making it `#once` would mean storing each step when it is first
+  pulled, which changes what a sequence is to suit how it is compiled.
+- **Tasks are one-shot.** Nothing resumes a wait twice. WebAssembly's stack switching gives only one-shot continuations:
+  the proposal's `resume` consumes its continuation, a second `resume` traps, and there is no instruction to copy one
+  ([Explainer](https://github.com/WebAssembly/stack-switching/blob/main/proposals/stack-switching/Explainer.md), read
+  2026-11-24). So `Async`'s waits are `#once`, and moving tasks onto stacks
+  ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)) changes no promise the language makes. A `#many` member
+  stays on the state machines whatever the host.
+- **The type says which.** A reader who sees `[Choose]` in a function's type can find that its code may run more than
+  once.
+
+## `#many` and scoped contexts
+
+What starts once and ends once can't be resumed twice: a `memory` block would end its region twice, and a scope would
+await its tasks twice. Those are the scoped contexts, `Memory` and `TaskScope`. So a `#many` member can't capture
+across one: where the block of a function that supplies a scoped context (`memory`, `Async.concurrent`) would require
+a context with a `#many` member, it is an error at the call, naming the block. It is the check `ScopedCalls` already
+makes, from the other side.
+
+```nanyx fragment
+def bad: [Yield(int)] () -> () = {
+  memory {
+    mut n = 0
+    yield(n)  -- error: yield's continuation may be resumed more than once, so it can't cross this block's end
+    n := 1
+  }
+}
+
+def fine: [Yield(int)] () -> () = {
+  def total = memory {
+    mut n = 0
+    n := 5
+    n
+  }
+  yield(total)
+}
+```
+
+A `#once` member may capture across them; its continuation then keeps the regions of the blocks it is in, as a task
+keeps those of its own today ([Async](../deep-dives/async#tasks-and-scopes)).
+
+## What `yield` becomes
+
+- **A lambda with `yield` in it is not a sequence by itself:** it requires `Yield(a)`, and `seq { }`, a library
+  function, makes it a sequence. Builders that took a lambda that yields take one that emits
+  ([#2566](https://github.com/nanyx-lang/nanyx/issues/2566)).
+- **It works from any depth,** so a recursive walk yields from inside its recursion.
+- **The rewrite's limits go:** a `yield` in a `while` loop, and a `return` in a sequence's block.
+- **The `#yield` keyword kind goes,** with its hard-wired calls to `seq.cons`, `__seqLast` and the rest.
+
+## Diagnostics
+
+- A `#once` continuation resumed twice: a crash at run time, with its stack.
+- A `#many` capture across a scoped context: a compile error at the call.
+- A capturing member given without `k`, or a plain one given a `k`: a compile error at the `use`.
+- `@resumes` on anything but a member of a `context` declaration: a compile error at the attribute.
+
+## Stack switching
+
+What stack switching would change is how a `#once` capture is compiled, not what it means: a task, or a coroutine,
+runs on a stack of its own, and a capture is a switch. Every function is then compiled once, with no check after its
+calls and no state-machine copy of each function generic in contexts, and a deep recursion that waits costs one
+switch, not a frame saved for each level. It won't serve `#many`, and a stack for each small sequence costs more than
+its few frames, so the state machines stay, and a backend chooses per host behind `TaskLowering`. As of 2026-11-24
+the proposal is at phase 3; Wasmtime's implementation is experimental, on x86-64 only, and off by default in its C
+API, which the runtime's .NET package builds on; and no browser ships it without a flag. Running .NET host functions
+on a stack Wasmtime switched to may hit the problem that stopped
+[#1901](https://github.com/nanyx-lang/nanyx/issues/1901). That stays [#2164](https://github.com/nanyx-lang/nanyx/issues/2164).
 
 # What the spike showed
 
@@ -119,36 +265,33 @@ stops again as soon as it is resumed could keep its block.
 |---|---|---|
 | A `use` whose instance's type is settled after it finds its members | [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) | Working set |
 | `Emit(a)`, and the builders pushing through it | [#2566](https://github.com/nanyx-lang/nanyx/issues/2566) | Working set |
-| A frame can be dropped and copied: a drop function and a copy function for each state, beside its resume entry, from the types the emitter knows where it saves the variables | | proposed |
-| Members that may capture: split points for them, a delimiter at each `use`, and each stop marked with the handler it is for, so that one passes through a delimiter that isn't its own | | proposed |
-| `seq` as a capturing handler, and the `#yield` rewrite deleted | [#2426](https://github.com/nanyx-lang/nanyx/issues/2426), [#2427](https://github.com/nanyx-lang/nanyx/issues/2427) | Planning |
+| A frame can be dropped: a drop function for each state, beside its resume entry, from the types the emitter knows where it saves the variables | | proposed |
+| `@resumes(#once \| #many)`: split points for capturing members, a delimiter at each `use`, `k` given to the handler, each stop marked with the handler it is for, and the scoped-context rule | | proposed |
+| A frame can be copied, for `#many`: a copy function for each state, and a resume that copies only when the frames are shared | | proposed |
+| `seq` as a handler of `Yield`, and the `#yield` rewrite deleted | [#2426](https://github.com/nanyx-lang/nanyx/issues/2426), [#2427](https://github.com/nanyx-lang/nanyx/issues/2427) | Planning |
 | A frame that stops again as soon as it is resumed keeps its block | | proposed |
-| Both on stack switching, behind `TaskLowering` | [#2164](https://github.com/nanyx-lang/nanyx/issues/2164) | Planning |
+| `#once` captures, tasks first, on stack switching, behind `TaskLowering` | [#2164](https://github.com/nanyx-lang/nanyx/issues/2164) | Planning |
 
-The drop and copy functions are the main new work. Without the first, a sequence abandoned partway leaks the frames
-of every call it stopped in: the spike's tree walk, cut by `seq.take(4)`, left 15 blocks. Without the second, a step
-pulled twice resumes a frame that is used up. A frame held once, as a sequence pulled once holds its steps, is resumed
-in place without a copy, so [#2426](https://github.com/nanyx-lang/nanyx/issues/2426)'s "pulled once" case is found at
-run time by the reference count, with nothing to prove.
+The drop functions come first: without them a sequence abandoned partway leaks the frames of every call it stopped in
+(the spike's tree walk, cut by `seq.take(4)`, left 15 blocks), and a handler that never resumes can't be written.
 
 # Open questions
 
 - **A keyword for a plain call.** Whether `emit! x` becomes a keyword, with a keyword kind for a member that is called
-  and returns.
-- **How a member says it may capture.** A member that may capture makes every function that calls it a state machine,
-  so the context's declaration has to say so: by the existing keyword-kind attribute, a new one, or the member's type.
-  Then, how a capturing handler is written, `{ y, k -> ... }`, and how `k`'s type is written.
-- **The contexts a generator's block needs.** Today a sequence's steps need their contexts where it is pulled
-  (`[c] seq(a)`). In the spike, the block's contexts were needed where `generate` was called, since the backend
-  couldn't adapt the block inside the step. The real version should carry them in the sequence's type, as `seq.map`
-  does.
+  and returns. The same kind would keep `yield x` written without brackets once it is a member.
+- **`defer` and `#many`.** `defer` is a `#bindF` keyword, not a scoped context, so the rule above doesn't reach it, but
+  a continuation resumed twice would run its cleanup twice.
+- **Mutable cells and `#many`.** A cell kept in a WebAssembly local is copied with its frame, and a captured cell's box
+  is shared, so two resumptions would see them differently. Today a cell can't outlive its `memory` block, which the
+  rule above keeps a `#many` capture inside; check there is no other way to hold one across a capture.
+- **Which handler a lambda's operations reach.** A lambda requires its contexts where it is called. If a higher-order
+  function loaded its own handler of a context and called a lambda that requires it, the lambda's operations must
+  reach the caller's handler, not the function's (Koka's "accidental handling"). Check how specialisation decides it.
 - **Named functions as handlers' callers.** A def that requires `Emit(int)`, passed as a value where
   `[Emit(int), c] a -> ()` is expected, is `NYX0205` at the call: a function named as a value requires its contexts
   where it is named. A visitor written as a named def would need `{ x -> visit(x) }`. Should a parameter whose type
   supplies a context accept it?
 - **Code size.** Every function generic in contexts gets a state-machine copy where it is specialised for a capturing
   context, as `list.map` over `http.get` does today.
-- **Continuations called more than once beyond sequences.** Copying frames would let a handler call `k` twice
-  (backtracking, a search). Is that allowed, or only resuming a copy for a persistent sequence?
-- **The functions that stop at the first value.** `list.selectOne` and `seq.selectOne` stop at the first `yield`, so
-  a pushing handler can't serve them: they need a handler that never resumes, or stay lazy.
+- **Users' own capturing handlers of `Async`.** Whether a library may write a scheduler. `#once` allows it; nothing
+  needs it yet.
