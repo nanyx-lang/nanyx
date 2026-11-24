@@ -138,7 +138,9 @@ println(magnitude3(x = 3.0, y = 4.0))
 A pattern may name some fields alone and rename others:
 
 ```nanyx
-def digits: (x: int, y: int) -> int = { (x, y = b) -> x * 10 + b }
+def digits: (x: int, y: int) -> int = { (x, y = b) ->
+  x * 10 + b
+}
 
 println(digits(x = 4, y = 2))
 
