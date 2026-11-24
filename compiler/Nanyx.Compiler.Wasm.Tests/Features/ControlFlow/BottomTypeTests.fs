@@ -55,3 +55,38 @@ let ``Run - a crash where a value of another type is wanted crashes with its mes
     Assert.Equal("", outcome.StandardOutput)
     Assert.Equal("crash: no\n", withoutStack outcome.StandardError)
     Assert.Contains("  crash (prelude.nyx:", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a list of crashes where a list of ints is expected crashes`` () =
+    let source =
+        normalized """def xs: list(int) = [crash("no")]
+
+println("start")
+println(xs)
+"""
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("start\n", outcome.StandardOutput)
+    Assert.Equal("crash: no\n", withoutStack outcome.StandardError)
+
+[<Theory>]
+[<InlineData("println(crash(\"no\") + 1)")>]
+[<InlineData("println(crash(\"no\").name)")>]
+[<InlineData("def x = crash(\"no\")\n  println(x(1))")>]
+[<InlineData("println(crash(\"no\") \\g)")>]
+let ``Run - a use of a crash crashes with its message`` (statement: string) =
+    let source =
+        normalized $"""type P = (name: string)
+
+def g: P -> int = {{ p -> 1 }}
+
+@entry
+def main = {{
+  println("start")
+  {statement}
+}}
+"""
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("start\n", outcome.StandardOutput)
+    Assert.Equal("crash: no\n", withoutStack outcome.StandardError)

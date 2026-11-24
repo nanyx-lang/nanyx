@@ -341,6 +341,32 @@ module internal ContextInference =
                 | None -> registered
             | None -> None, current)
 
+    /// The error, at `span`, for the def `name` that writes no type and whose value, of type `defTy`, is not a
+    /// function, if one of `calls` in its value requires a parameterised context of a type its value leaves open:
+    /// `def obj = parse("x")` with `parse: [Decode(a)] string -> a`. A value can't require a context, and its type is
+    /// not settled by how it is used later, so `def person: Person = obj` doesn't find the instance: the type is passed
+    /// as a type argument or written on the def.
+    let unfixedValueType (state: InferState) (name: Identifier) (span: SourceSpan) (defTy: Ty) (calls: PendingContextInstance list) : Diagnostic list =
+        let defTy = resolveSoFar state defTy
+        match Unifier.unalias defTy with
+        | TyFunc _ -> []
+        | _ ->
+            let open' = TypeEnv.freeTyVars defTy
+            calls
+            |> List.tryFind (fun p ->
+                not p.ChecksOnly
+                && (WellKnownContexts.tryFind p.Context).IsNone
+                && not (WellKnownContexts.isOperatorPending p)
+                && not (InterpolationHoles.isHole p.Callee)
+                && p.ArgTys |> List.exists (resolveSoFar state >> TypeEnv.freeTyVars >> Set.intersect open' >> Set.isEmpty >> not))
+            |> Option.map (fun p ->
+                let message =
+                    $"'{p.Callee}' requires '{p.Context}' of a type nothing in the definition of '{name}' fixes, and a later "
+                    + $"use of a value doesn't fix its type: write the type, as in 'def {name}: T = ...', or pass it as a type "
+                    + $"argument to a function that takes one, as in '{p.Callee}(type T, ...)'"
+                Diagnostics.at DiagnosticCodes.ValueContextTypeOpen span message)
+            |> Option.toList
+
     /// `state` with the local def `name`, declared as `symbol`, which writes no type and was just generalised as
     /// `scheme`, requiring the parameterised contexts the calls in its value need of its own type variables, as if its
     /// type were written: `def f = { x -> describe(x) }` requires `Show` of its parameter's type, and a call to it finds

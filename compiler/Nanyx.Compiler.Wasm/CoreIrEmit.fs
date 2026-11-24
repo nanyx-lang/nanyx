@@ -471,6 +471,28 @@ type private FunctionEmitter(context: EmitContext) =
                 | Let(_, value, _) | Do(value, _) -> unlessResuming (rangeOf value) code
                 | _ -> unlessResuming None code
 
+        // A temporary a state machine keeps in a local (see `SplitPlan.StoredTemps`) is computed where a temporary that
+        // waits would be, at its use: after the counting that comes between, and before the next code that runs. The
+        // lowering counts before it computes a temporary that waits, as in `f(x, x.length)`, where `x.length` gives up
+        // the reference to `x` that the count before the call took (#2490). So the stored temporaries wait in
+        // `storedParts`, after the counting links that follow them and the counting a later stored value starts with.
+        let storedParts = ResizeArray<string>()
+        let addPart (code: string) =
+            parts.AddRange storedParts
+            storedParts.Clear()
+            parts.Add code
+        // Counting peeled off a stored value runs once, before the function first stops: never again as it resumes.
+        let counting (link: Expr) (code: string) = if guarded.Contains link then unlessResuming None code else code
+        let rec peelCounting (link: Expr) (value: Expr) =
+            match value.Kind with
+            | Dup(vars, inner) when storedParts.Count > 0 ->
+                parts.Add(counting link (this.DupVars vars))
+                peelCounting link inner
+            | Drop(vars, inner) when storedParts.Count > 0 ->
+                parts.Add(counting link (dropVars localOf vars))
+                peelCounting link inner
+            | _ -> value
+
         let rec walk (expr: Expr) =
             match expr.Kind with
             | Let(var, value, body) when var.Kind = Temp && not (plan |> Option.exists (fun plan -> plan.StoredTemps.Contains var.Id)) ->
@@ -478,21 +500,26 @@ type private FunctionEmitter(context: EmitContext) =
                 deferred.[var.Id] <- value
                 waiting.Add var
                 walk body
+            | Let(var, value, body) when var.Kind = Temp ->
+                claim value
+                flush ()
+                storedTemps.[var.Id] <- freshLocal "__kept" (CoreIrLayout.valueType var.Type)
+                let value = peelCounting expr value
+                storedParts.Add(guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
+                walk body
             | Let(var, value, body) ->
                 claim value
                 flush ()
-                // A temporary a state machine keeps in a local is stored as a local is (see `SplitPlan.StoredTemps`).
-                if var.Kind = Temp then storedTemps.[var.Id] <- freshLocal "__kept" (CoreIrLayout.valueType var.Type)
-                parts.Add(guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
+                addPart (guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
                 walk body
             // A probe stores nothing a temporary waits on, so it can stand among them.
             | Do({ Kind = Probe(kind, locals) } as probe, rest) ->
-                parts.Add(guard expr (this.Probe probe kind locals (aliveAt rest)))
+                addPart (guard expr (this.Probe probe kind locals (aliveAt rest)))
                 walk rest
             | Do(value, rest) ->
                 claim value
                 flush ()
-                parts.Add(guard expr (join "\n    " [ this.Value false deferred onStack value; dropValue value.Type ]))
+                addPart (guard expr (join "\n    " [ this.Value false deferred onStack value; dropValue value.Type ]))
                 walk rest
             // Counting leaves the stack as it is, so it can happen while temporaries wait to be used.
             | Dup(vars, body) ->
@@ -510,7 +537,7 @@ type private FunctionEmitter(context: EmitContext) =
             | _ ->
                 claim expr
                 if waiting.Count > 0 then internalError "a temporary in the core IR is never used"
-                parts.Add(this.Value tail deferred onStack expr)
+                addPart (this.Value tail deferred onStack expr)
         walk expr
         if deferred.Count > 0 || onStack.Count > 0 then internalError "a temporary in the core IR is used out of order"
         pieces.Add(join "\n    " parts)
@@ -1030,16 +1057,25 @@ type private FunctionEmitter(context: EmitContext) =
     /// The code of the array intrinsic `name` (one of `arrayIntrinsics`) on `args`, whose code `atoms` gives, for a value
     /// of type `ty` (see `CoreIrArrays`).
     member _.ArrayIntrinsic (atoms: Atom list -> string) (ty: IrType) (name: string) (args: Atom list) : string =
+        // A mutable array is given as its box, whose array is read with no reference of its own: the box lives until the
+        // intrinsic is done (see `CoreIrRegions.mutableArray`).
+        let arrayTy (array: Atom) = CoreIrRegions.arrayIn (atomType array)
+        let arrayAt (array: Atom) =
+            match atomType array with
+            | CoreIrRegions.RegionBox held ->
+                let fields = match CoreIrRegions.boxType held with IrRecord fields -> fields | _ -> []
+                join "\n    " [ atoms [ array ]; load held (CoreIrLayout.fieldOffset fields CoreIrRegions.boxValueSlot) ]
+            | _ -> atoms [ array ]
         match args with
         // An array's length is the first word of its block, and its element at an index, which the standard library has
         // checked is in range, is after it, with a reference of its own taken (see `CoreIrArrays`).
         | [ array ] when name = Intrinsics.arrayLength ->
-            join "\n    " [ atoms [ array ]; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
+            join "\n    " [ arrayAt array; touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"; "i64.extend_i32_u" ]
         // A mutable array's element at an index, which the standard library has checked is in range, is given up and
         // the value, which the array takes over, is stored in its place, as `SetField` does. A new array's element is
         // written the same way, with nothing to give up, since it was never written.
         | [ array; index; value ] when name = Intrinsics.marraySet || name = Intrinsics.arrayWrite ->
-            let element = arrayElement (atomType array)
+            let element = arrayElement (arrayTy array)
             let offset = CoreIrLayout.arrayElementOffset element 0
             let slot = freshLocal "__slot" "i32"
             let held = freshLocal "__set" (CoreIrLayout.valueType element)
@@ -1047,7 +1083,8 @@ type private FunctionEmitter(context: EmitContext) =
                 if name = Intrinsics.marraySet && CoreIrDrop.isHeapType element then $"local.get ${slot}\n    {load element offset}\n    {dropValue element}"
                 else ""
             join "\n    " [
-                atoms [ array; index ]
+                arrayAt array
+                atoms [ index ]
                 "i32.wrap_i64"
                 $"i32.const {CoreIrLayout.size element}"
                 "i32.mul"
@@ -1081,9 +1118,10 @@ type private FunctionEmitter(context: EmitContext) =
                 touching $"i32.store offset={CoreIrLayout.arrayLengthOffset}"
                 $"local.get ${array}" ]
         | [ array; index ] when name = Intrinsics.arrayGet ->
-            let element = arrayElement (atomType array)
+            let element = arrayElement (arrayTy array)
             join "\n    " [
-                atoms [ array; index ]
+                arrayAt array
+                atoms [ index ]
                 "i32.wrap_i64"
                 $"i32.const {CoreIrLayout.size element}"
                 "i32.mul"
@@ -1093,7 +1131,7 @@ type private FunctionEmitter(context: EmitContext) =
         | [ list ] when name = Intrinsics.arrayOfList ->
             join "\n    " [ atoms [ list ]; $"call ${CoreIrArrays.ofListName (arrayElement ty)}" ]
         | [ array ] when name = Intrinsics.arrayToList ->
-            join "\n    " [ atoms [ array ]; $"call ${CoreIrArrays.toListName (arrayElement (atomType array))}" ]
+            join "\n    " [ arrayAt array; $"call ${CoreIrArrays.toListName (arrayElement (arrayTy array))}" ]
         | _ -> internalError $"the array intrinsic '{name}' with {args.Length} arguments"
 
     /// The code that copies a spread array's elements, in `source`, into a new one, in `target`, from the index `at`: a loop
