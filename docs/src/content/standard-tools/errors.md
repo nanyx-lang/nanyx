@@ -2402,8 +2402,10 @@ function in.
 
 # NYX0279: Task that holds what belongs to a memory block
 
-A task is started with a function that uses a `memory` block's cells or references (`MRef`, `MList`). Tasks share only
-immutable values, so that another task can never change what one holds while it waits
+A task is started with a function that uses a `memory` block's cells or references (`MRef`, `MList`), by `start`, by
+`race`, or by anything that starts a task with the function it is given, such as a local `def spawn = { f -> start(f) }`
+or `start` under another name. Tasks share only immutable values, so that another task can never change what one holds
+while it waits, and a task can't run on once the block has freed what it holds
 ([Async](../advanced/async#tasks-share-only-values)).
 
 ```nanyx

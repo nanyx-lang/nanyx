@@ -33,6 +33,7 @@
     <Compile Include="Arrays.fs" />
     <Compile Include="Boxes.fs" />
     <Compile Include="TypeValues.fs" />
+    <Compile Include="TaskWork.fs" />
     <Compile Include="InferState.fs" />
     <Compile Include="FieldCalls.fs" />
     <Compile Include="ContextFixes.fs" />

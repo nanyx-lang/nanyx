@@ -373,6 +373,8 @@ type InferState =
             /// The local defs that are cells, made with `mut`, each with the scope of the `memory` block it belongs to (see
             /// `MemoryCells`).
             Cells: Map<SymbolId, Ty>;
+            /// The work variables (see `TaskWork`), each with where the def that starts tasks it is of was named.
+            TaskWork: Map<int, SourceSpan>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
             /// starts, the scopes the signatures around the call write, and the names bound around the call whose types
             /// are not yet known in full (see `ScopedCalls`).
@@ -505,6 +507,7 @@ let emptyState =
             DerivedDefs = [];
             DerivedCalls = Map.empty;
             Cells = Map.empty;
+            TaskWork = Map.empty;
             SupplyingCalls = Map.empty;
             EscapedContexts = Set.empty;
             OpenScopes = [];
@@ -767,7 +770,22 @@ let internal instantiate (state: InferState) (scheme: TypeScheme) : Ty * InferSt
                 let tyVar, next = freshVar current
                 current <- next
                 subst |> Map.add id tyVar) Map.empty
-        Unifier.apply substitutions scheme.Type, current
+        let ty = Unifier.apply substitutions scheme.Type
+        // Where a def that starts tasks is named, what its type is instantiated with is a task's work (see `TaskWork`).
+        let seeded =
+            match scheme.Symbol |> Option.bind current.Symbols.TryFind with
+            | Some symbol when TaskWork.startsTasks symbol -> TaskWork.variables ty
+            | _ -> []
+        let carried =
+            scheme.Quantified
+            |> Seq.filter current.TaskWork.ContainsKey
+            |> Seq.collect (fun id -> TypeEnv.freeTyVars substitutions[id])
+            |> List.ofSeq
+        let current =
+            match seeded @ carried with
+            | [] -> current
+            | work -> { current with TaskWork = work |> List.fold (fun marked id -> marked |> Map.add id current.Origin) current.TaskWork }
+        ty, current
 
 let internal mkTypedExpr expr ty body statements matchArms : TypedExpr =
     { Expr = expr; Type = ty; Body = body; Statements = statements; MatchArms = matchArms; Arguments = None }

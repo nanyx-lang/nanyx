@@ -90,12 +90,20 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
                 if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
                 else Some (TyVar var, Unifier.apply closing solved))
     let held = Boxes.heldVariables closedTy
-    { Quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
+    let quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
+    // A variable of the def's type that a task's work stands for is a work variable of the def (see `TaskWork`).
+    let taskWork =
+        state.TaskWork
+        |> Map.fold (fun marked id at ->
+            TypeEnv.freeTyVars (Unifier.apply subst (TyVar(TyVar.ordinary id None)))
+            |> Set.intersect quantified
+            |> Set.fold (fun marked var -> if Map.containsKey var marked then marked else marked |> Map.add var at) marked) state.TaskWork
+    { Quantified = quantified
       Type = closedTy
       Symbol = None
       ProvidedBy = None },
     (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
-    |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
+    |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) { state with TaskWork = taskWork }
 
 /// The types of a lambda's parameters when its input is expected to be `expectedInput`. Several parameters take a
 /// record's fields, by name or by position. Against an input known not to be a record they are a tuple of fresh
