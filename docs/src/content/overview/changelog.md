@@ -8,6 +8,70 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.38.0
+
+*24 November 2026*
+
+A release about concurrency. Programs can start tasks with `start!`, wait for them with `await`, race them and cancel
+them, and a request or a `sleep` lets the program's other tasks run, on the console and HTTP hosts and in the
+playground. It also brings constructor patterns, a pipe shorthand for lambdas, short-circuiting `and` and `or`, and a
+run of faster type checking. Four changes break code: they are marked below.
+
+**Language**
+
+- Tasks: `start! e` runs `e` at the same time as the code that started it and gives back a `Task`, and `await(t)` waits
+  for its result. A def that starts tasks waits for all of them before it returns, and `concurrent({ ... })` makes a
+  smaller scope. A task can't leave the def that started it (NYX0233), or hold a `memory` block's cells or references
+  (NYX0279) ([Async](../advanced/async#tasks)).
+- `race` runs functions as tasks, gives back the first result and cancels the rest. In a cancelled task a request or a
+  file's function gives `#cancelled`, and a `sleep` returns at once. **This breaks code** that matches every case of
+  `HttpError` or `FsError`: add a `#cancelled` arm ([Async](../advanced/async#racing)).
+- `start`, `await`, `race` and `concurrent` belong to `Async`: a def attached to a context is in scope by its bare name
+  wherever the context is. **This breaks code** that imports them, as `import nanyx/async as (start, await)`, which is
+  now NYX0104 ([Attached definitions](../advanced/attached-definitions)).
+- Functions that need different contexts can share a list or an `if`'s branches, so `race([{ #some(http.get(url)) },
+  { sleep(5_000); #timedOut }])` type-checks ([Contexts](../advanced/contexts)).
+- A constructor pattern takes a nominal value apart: `Email(s)` binds the whole value, and several patterns, `...` or
+  named fields read its fields, as `Email(address = s)` ([Pattern matching](../tour/pattern-matching#named-types)).
+- A lambda that starts with a pipe, `{ \math.abs }`, is `{ x -> x \math.abs }`
+  ([Lambdas](../tour/lambdas-and-higher-order-functions)).
+- `and` and `or` evaluate their right operand only when the left doesn't decide, so `x != 0 and 10 / x > 1` no longer
+  divides by zero ([Operators](../tour/operators)).
+- A lambda checked against a function type whose input has named fields takes them by name. **This breaks code** that
+  wrote `{ a, b -> ... }` for `(x: int, y: int) -> int`: it is now NYX0280; rename a field with a record pattern,
+  `{ (x = a, y = b) -> ... }` ([Functions](../tour/functions)).
+- A lambda given for a record field, or given back by a function, can use the contexts of the function type it is
+  checked against ([Contexts](../advanced/contexts)).
+
+**Standard library**
+
+- `Clock` has a `sleep` member, in milliseconds. **This breaks code** that writes `use Clock(now = ..., ticks = ...)`:
+  give it a `sleep` too ([clock](../stdlib/clock)).
+- `string.fromUtf8` copies its bytes once, and `replace`, `repeat`, `padStart`, `padEnd` and `reverse` make one
+  allocation each.
+
+**Tools**
+
+- The official linter's `unawaitedTask` rule warns about a task that is started and never awaited
+  ([Official linter](../standard-tools/official-linter#task-that-is-never-awaited)).
+- The playground provides `Async`, so a program's tasks take turns while one sleeps.
+- A mismatch among a call's arguments is reported once, at the argument that fixed the type, and a record field
+  mismatch names each record's own fields.
+
+**Performance**
+
+- Checking a function that uses an operator thousands of times on an unannotated parameter takes linear time: 8,000
+  uses of `+` take 4.8 s, from 46.8 s.
+- A range nested in its own bound is inferred once per level: 18 deep checks in under 2 s, from 113 s.
+- A small function on the right of `and` or `or` is inlined.
+
+**Fixes**
+
+- A list of records built up in a fold no longer reads freed strings after a record spread.
+- Calling a record field whose function type has named parameters no longer traps.
+- An array of tuples can be written, and a `crash` in a list of numbers no longer makes invalid WebAssembly.
+- A deferred error in a `memory` block's lambda is reported instead of trapping.
+
 # 0.37.0
 
 *23 November 2026*
