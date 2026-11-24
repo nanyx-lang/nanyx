@@ -1,6 +1,7 @@
 // The headless test of the playground page (#2153) and the tour's runnable examples (#2248): it serves the built site as Vercel does, with the playground
 // cross-origin isolated (`vercel.json`), opens `/playground` in headless Chromium, and checks that the page loads the
-// compiler, runs hello world, gives a program its input, keeps each run's output, and opens share links and the
+// compiler, runs hello world, gives a program its input, keeps each run's output, runs tasks that take turns where one
+// sleeps, and opens share links and the
 // tour's links without running them; and that every example in its menu, the tour's runnable ones, and every example
 // that an "Open in the playground" link on another page opens, runs under the playground host; and that a tour page loads the compiler only on an example's first Run, runs an example where it is,
 // edits and runs it again, and opens it in the playground as edited; and that an example that only declares things gets
@@ -74,6 +75,22 @@ const echo = `def echo: [Console] () -> () = { _ ->
 }
 
 echo()
+`;
+
+/** A program whose two tasks take turns where one sleeps, which the playground host provides `Async` for. */
+const tasks = `def later: [Async, Clock, Console] string -> () = { text ->
+  sleep(100)
+  println(text)
+}
+
+def both = { _ ->
+  def first = start! later("the sleeper wakes")
+  def second = start! println("another task runs meanwhile")
+  await(first)
+  await(second)
+}
+
+both()
 `;
 
 const browser = await chromium.launch();
@@ -188,6 +205,12 @@ const tests = [
     await run();
     const link = page.locator(".pg-run").last().locator(".pg-diagnostic a").first();
     assert.match(await link.getAttribute("href"), /^\/docs\/standard-tools\/errors#nyx\d{4}$/);
+  }],
+  ["tasks take turns where one sleeps", async () => {
+    await setEditor(tasks);
+    await runToTheEnd();
+    const printed = (await page.locator(".pg-run").last().innerText()).replace(/^Run \d+.*\n/, "").trim();
+    assert.equal(printed, "another task runs meanwhile\nthe sleeper wakes");
   }],
   ["Share copies a link that opens the code without running it", async () => {
     await setEditor(echo);

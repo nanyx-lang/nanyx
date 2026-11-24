@@ -240,6 +240,8 @@ type InferState =
             ExprTypes: Map<NodeId, Ty>;
             /// The function type each lambda a lambda gives back is checked against, by the inner lambda's node: the
             /// outer one's expected result, `b -> c` for `{ a -> { b -> ... } }` checked against `a -> b -> c` (#1749).
+            /// Also that of each lambda in a list literal checked against a list of functions (see
+            /// `ExpectedLiterals.intoLambdas`).
             ExpectedLambdaTypes: Map<NodeId, Ty>;
             /// The type a typed def is declared at, by the node of the last statement of the block that is its value:
             /// a square-bracket literal there builds that type, as one written on the def's line does (#1776).

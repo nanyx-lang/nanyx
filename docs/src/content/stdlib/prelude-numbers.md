@@ -97,7 +97,7 @@ function whose type requires it, any other integer literal beside a value of typ
 of it, so `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and
 `float`. A function that requires `Num(a)` can call one that requires `Add(a)` or `Sub(a)`: a
 `Num` has every member they have. On an integer type `/` truncates and `%` takes the sign of `x`;
-on `float` they are IEEE 754's. `isInteger` says which `a` is: `true` for an integer type, so
+on `float` they are IEEE 754's. `math.mod` is the modulo with the sign of `y`. `isInteger` says which `a` is: `true` for an integer type, so
 `x ** -1` stops the program on one.
 
 ## `int.zero`
@@ -154,7 +154,8 @@ def int.`/`: int, int -> int
 def int.`%`: int, int -> int
 ```
 
-The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1.
+The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1. For the modulo with the
+sign of `y`, which wraps an index into a range, see `math.mod`.
 
 ## `int.fromInt`
 
@@ -333,10 +334,14 @@ The float `s` writes in decimal, or `#invalidFloat` for anything else (an empty 
 alone, spaces, other characters, `"1.2.3"`). It reads an optional leading `-` or `+`, digits with
 an optional `.` among them (`"3"`, `"0.25"`, `".5"` and `"5."` are all read), and an optional
 exponent, `e` or `E` then an integer: `"1.0e-7"`. `NaN`, `Infinity` and `-Infinity` are read as
-[`float.toString`](prelude-contexts#floattostring) writes them. A number too large for a float is infinity.
+[`float.toString`](prelude-contexts#floattostring) writes them.
 
-The result is the nearest float to the decimal when it has at most 15 significant digits and an
-exponent, once the point is moved to the end, between -22 and 22, which covers most text written
-by hand. Otherwise it is not correctly rounded and may be a unit in the last place out.
+The result is the float nearest the decimal, however many digits it has, and of two equally
+near, the one whose last bit is 0, as IEEE 754 rounds. So every float `float.toString` writes reads
+back as itself, and `float.fromString("0.1")` is the float the literal `0.1` is. A number at least
+halfway from the largest float to 2 ** 1024 is infinity, and one at most half the smallest float
+above zero is 0. A decimal with at most 15 digits and a small exponent, as most text written by hand is, is
+read with one multiplication or division; any other is read with exact arithmetic on whole numbers
+of any size, which takes longer.
 
 <!-- End of the generated reference. -->
