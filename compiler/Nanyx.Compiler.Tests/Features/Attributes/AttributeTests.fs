@@ -111,36 +111,62 @@ let ``A #delay or #bindF member whose type doesn't take a function of no paramet
     Assert.StartsWith($"'{name}' is a `#{kind}` keyword", diagnostic.Message)
     Assert.Equal(16, diagnostic.Span.Value.Start)
 
+/// A context with a def attached to it, which `attribute` marks, of type `defType`.
+let private attachedKeyword (attribute: string) (defType: string) =
+    $"""context Greeter = protected ()
+
+{attribute}
+def Greeter.later: {defType} = {{ work -> "later: {{work()}}" }}
+"""
+
 [<Fact>]
-let ``A top-level def can be a #delay keyword`` () =
+let ``A def attached to a context can be a #delay keyword, by its bare name where the context is`` () =
     let source =
-        """def twice: (() -> int) -> int = { work -> work() + work() }
-
-@customKeywordType(#delay)
-def run: (() -> int) -> int = { work -> twice(work) }
-
-def result = run! 21
+        attachedKeyword "@customKeywordType(#delay)" "[Greeter] (() -> string) -> string"
+        + """
+def greeted = { _ ->
+  use Greeter()
+  later! "x"
+}
 """
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``A def attached to a context is not in scope by its bare name where the context isn't`` () =
+    let source = attachedKeyword "@customKeywordType(#delay)" "[Greeter] (() -> string) -> string" + "
+def greeted = later! \"x\"\n"
+    let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
+    Assert.Equal("'later' is not in scope", diagnostic.Message.Split('\n').[0])
+
+[<Theory>]
+[<InlineData("delay")>]
+[<InlineData("bind")>]
+[<InlineData("yield")>]
+let ``A def attached to nothing can't be a keyword`` (kind: string) =
+    let source = $"@customKeywordType(#{kind})\ndef run: (() -> int) -> int = {{ work -> work() }}\n"
+    let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
+    Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
+    Assert.StartsWith("A keyword belongs to a context", diagnostic.Message)
 
 [<Theory>]
 [<InlineData("bind")>]
 [<InlineData("bindF")>]
 [<InlineData("yield")>]
-let ``A top-level def can't be a keyword of any other kind`` (kind: string) =
-    let source = $"@customKeywordType(#{kind})\ndef run: (() -> int) -> int = {{ work -> work() }}\n"
+let ``A def attached to a context can't be a keyword of any other kind`` (kind: string) =
+    let source = attachedKeyword $"@customKeywordType(#{kind})" "[Greeter] (() -> string) -> string"
     let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.UnknownKeywordKind.Code, diagnostic.Code)
-    Assert.StartsWith("A definition can only be a `#delay` keyword", diagnostic.Message)
+    Assert.StartsWith("A def attached to a context can only be a `#delay` keyword", diagnostic.Message)
 
 [<Fact>]
 let ``A #delay def whose type doesn't take a function of no parameters is an error at the attribute`` () =
-    let source = "@customKeywordType(#delay)\ndef run: int -> int = { n -> n }\n"
+    let source = attachedKeyword "@customKeywordType(#delay)" "[Greeter] string -> string"
     let diagnostic = (Compiler.compile source).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.KeywordMemberType.Code, diagnostic.Code)
-    Assert.StartsWith("'run' is a `#delay` keyword", diagnostic.Message)
-    Assert.Equal(0, diagnostic.Span.Value.Start)
+    Assert.StartsWith("'Greeter.later' is a `#delay` keyword", diagnostic.Message)
+    Assert.Equal(source.IndexOf "@customKeywordType", diagnostic.Span.Value.Start)
 
 [<Fact>]
 let ``A keyword type without a kind is an error`` () =

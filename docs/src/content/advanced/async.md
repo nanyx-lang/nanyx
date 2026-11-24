@@ -40,8 +40,9 @@ println(squares([1, 2, 3]))
 -- [1, 4, 9]
 ```
 
-`start!` and `await` are in the host's prelude, beside `Async`: `start` is a function of `nanyx/async` that is a
-[`#delay` keyword](./workflows#keyword-kinds), so `start! e` is `start({ e })`.
+`start` and `await` are [attached to `Async`](./attached-definitions#attached-to-a-context), so they are in scope
+wherever `Async` is. `start` is a [`#delay` keyword](./workflows#keyword-kinds), so `start! e` is `start({ e })`. A
+name of your own wins over them: a local def or a parameter named `start` is yours.
 
 # Each def is a scope
 
@@ -91,8 +92,9 @@ def pages: [Async, Http] list(string) -> list(string) = { urls ->
 ```
 
 A file's functions still hold the thread until they are done: the console host reads and writes files with WASI
-preview 1, which has no way to start a read and come back for it. So does every wait of a program built as a
-[component](./hosts#built-as-a-component), for now. Cancellation and `race` are what comes next
+preview 1, which has no way to start a read and come back for it, and a program built as a
+[component](./hosts#built-as-a-component) reads and writes them in the same way, though its requests and sleeps let
+the other tasks run. Cancellation and `race` are what comes next
 ([Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#plan)).
 
 A crash in a task ends the program, the other tasks too, as any crash does.

@@ -303,8 +303,9 @@ module ([Modules](../tour/modules)).
 
 # NYX0019: Unknown keyword kind
 
-A workflow keyword's `@customKeywordType` names a kind the compiler does not know, or names none, or names a kind other
-than `#delay` before a top-level def. The kinds are listed in [Workflows](../advanced/workflows#keyword-kinds).
+A workflow keyword's `@customKeywordType` names a kind the compiler does not know, or names none, or marks a def that is
+attached to no context, or names a kind other than `#delay` before a def attached to one. The kinds are listed in
+[Workflows](../advanced/workflows#keyword-kinds).
 
 ```nanyx
 context Lazy = (
@@ -313,16 +314,18 @@ context Lazy = (
 )
 ```
 
-A `#delay` keyword rewrites nothing but itself, so a top-level def can be one, as `nanyx/async`'s `start` is. Any
-other kind needs a workflow's builder, so only a member of the builder's context can be one:
+A keyword belongs to a context, where it is in scope wherever the context is. A `#delay` keyword rewrites nothing but
+itself, so a def attached to a context can be one, as `nanyx/async`'s `Async.start` is; a def attached to none can't:
 
 ```nanyx
-@customKeywordType(#bind)  -- error NYX0019: A definition can only be a `#delay` keyword, which rewrites nothing but itself: ...
+@customKeywordType(#delay)  -- error NYX0019: A keyword belongs to a context: ...
 def step: (() -> int) -> int = { work -> work() }
 ```
 
-To fix it, write a kind from the list, as `@customKeywordType(#bind)`, and on a def, `#delay`, or make the keyword a
-member of its builder's context.
+Any other kind needs a workflow's builder, so only a member of the builder's context can be one.
+
+To fix it, write a kind from the list, as `@customKeywordType(#bind)`; attach a `#delay` def to the context it belongs
+to, as `def Async.start`; or make the keyword a member of its builder's context.
 
 # NYX0020: Code in a manifest
 
@@ -1010,7 +1013,27 @@ module louder
 export def string.shout: string -> string = { s -> s ++ "!!" }
 ```
 
-To fix it, import all but one of the modules with `as`.
+A bare name that two contexts in scope attach a definition by is ambiguous too
+([Attached to a context](../advanced/attached-definitions#attached-to-a-context)):
+
+```nanyx
+context Greeter = protected ()
+
+def Greeter.hello: [Greeter] string -> string = { s -> "hello {s}" }
+
+context Waver = protected ()
+
+def Waver.hello: [Waver] string -> string = { s -> "wave {s}" }
+
+def both = { _ ->
+  use Greeter()
+  use Waver()
+  hello("x")  -- error NYX0106: 'hello' could be 'Greeter.hello' and 'Waver.hello', ...
+}
+```
+
+To fix it, import all but one of the modules with `as`, or, for a context's definition, write its whole name, as
+`Greeter.hello`.
 
 # NYX0107: Unknown attached type
 
@@ -2394,6 +2417,19 @@ def counts = { _ ->
 
 To fix it, give the task what the cell holds, and change the cell with what the task gives back:
 `def t = start! now + 1`, after `def now = total`, then `total := await(t)`.
+
+# NYX0280: Lambda parameter that names no field
+
+A lambda is given where a function whose input has named fields is expected, as in `(x: int, y: int) -> int`, and one
+of its parameters is not one of the fields' names. Such a lambda takes the fields by name, in any order, so
+`{ x, y -> ... }` and `{ y, x -> ... }` both work, but `{ a, b -> ... }` takes nothing.
+
+```nanyx
+def sum: (x: int, y: int) -> int = { a, b -> a + b }  -- error NYX0280: The parameter 'a' is not a field of the function's input, ...
+```
+
+To fix it, name the parameters after the fields, as in `{ x, y -> x + y }`, or rename the fields with a record pattern,
+in brackets: `{ (x = a, y = b) -> a + b }`.
 
 # NYX0301: Not supported by the WebAssembly backend
 

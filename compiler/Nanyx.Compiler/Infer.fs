@@ -256,7 +256,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 |> Result.map (fun next ->
                     let symbol = scheme.Symbol |> Option.bind next.Symbols.TryFind
                     mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name |> LambdaContexts.recordNamed symbol ty)
-        | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"'{name}' is not in scope" env.Names.Keys name ]
+        | None ->
+            // A def attached to a context available here, by its bare name.
+            match AttachedContextDefs.qualifiedFor env state name expr.Span with
+            | Some (Ok qualified) -> inferExpr env (AttachedContextDefs.record expr.Id qualified state) { expr with Kind = IdentifierExpr qualified }
+            | Some (Error errors) -> Error errors
+            | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"'{name}' is not in scope" env.Names.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->
@@ -668,7 +673,15 @@ and inferLambdaWithExpected (env: TypeEnv) (state: InferState) (lambda: Expressi
             args
             |> List.choose snd
             |> List.fold (fun result typeExpr -> result |> Result.bind (fun current -> inferTypeOfValues env current typeExpr)) (Ok state)
-    annotated |> Result.bind (fun state -> inferLambdaAfterTypeOfs env state lambda args body expectedInputOpt expectedReturnOpt)
+    // A parameter that takes no field of a named record it is given is an error at the parameter (see
+    // `LambdaParameterFields`).
+    let fields =
+        match expectedInputOpt |> Option.map (LambdaParameterFields.check state lambda args) with
+        | Some (_ :: _ as errors) -> Error errors
+        | _ -> Ok ()
+    annotated
+    |> Result.bind (fun state -> fields |> Result.map (fun () -> state))
+    |> Result.bind (fun state -> inferLambdaAfterTypeOfs env state lambda args body expectedInputOpt expectedReturnOpt)
 
 and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: Expression) (args: (Identifier * TypeExpr option) list) (body: Expression) (expectedInputOpt: Ty option) (expectedReturnOpt: Ty option) : Result<TypedExpr * InferState, Diagnostic list> =
     let mutable current = state

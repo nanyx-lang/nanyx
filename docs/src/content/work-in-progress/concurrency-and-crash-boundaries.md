@@ -192,18 +192,21 @@ thread and holds only that instance ([Async](../deep-dives/async#how-its-built))
     would break nothing, but would never return under a test's clock that doesn't move. Every `use Clock(...)` now
     gives a `sleep`.
   - The console and HTTP hosts' core roots wait on the runtime: `nanyx:http` starts a request and is polled for its
-    answer, and `nanyx:async`'s `wait` blocks until one is answered or a timeout passes. Next, the hosts' component
-    roots wait on one waitable set, which their requests and sleeps join, rather than one of each call's own; until
-    then they hold the instance. Files stay blocking under WASI preview 1, which has no way to start a read and come
-    back for it.
+    answer, and `nanyx:async`'s `wait` blocks until one is answered or a timeout passes. Their component roots wait on
+    one waitable set the instance shares, which their requests and sleeps join, rather than one of each call's own.
+    Files stay blocking under WASI preview 1, which has no way to start a read and come back for it, and the
+    component roots read and write them in the same way.
   - The scopes are module-level defs and a script's top level. Local defs and lambdas start tasks in the scope of the
     def they're in. Each task tracks its innermost scope as it runs.
   - A `Task` or a lambda that uses `start!` escaping its def is `NYX0233`, with a message about tasks; starting a task
     that captures an `MRef`, an `MList` or a cell is an error with a code of its own.
   - The playground host provides `Async` (`start!`, `await`, `sleep`), so a browser can run tasks.
-  - `start` and `await` are functions of `nanyx/async`, not members of `Async`, which has no members at all: `start` is a
-    `#delay` keyword that is a def, which the language allows for `#delay` only, and the hosts' preludes export both
-    beside `Async`, so `start!` is wherever `Async` is.
+  - `start` and `await` are defs attached to `Async`, `Async.start` and `Async.await`, not members of it, which has no
+    members at all. A def attached to a context is in scope by its bare name wherever the context is, so `start!` is
+    wherever `Async` is. `start` is a `#delay` keyword, which a def attached to a context may be: a keyword belongs to a
+    context ([#2493](https://github.com/nanyx-lang/nanyx/issues/2493)). This replaces the first form, built in #2489, of
+    `start` and `await` as plain top-level defs that the hosts' preludes exported beside `Async`, with `#delay` allowed
+    on any top-level def.
   - A top-level value whose building waits is built once: a task that reads it while it is built waits for it.
 - **Stack switching, later** ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)). WebAssembly's
   stack-switching proposal gives a module many stacks and lets it switch between them, so a task is a stack and

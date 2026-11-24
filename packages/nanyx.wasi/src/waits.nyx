@@ -1,0 +1,97 @@
+--| Waiting on the component model's waitables while the program's other tasks run: a task joins
+  what it waits for, a subtask or a stream's or a future's end, to one waitable set the instance
+  shares, and waits on the host (`nanyx/host.async`) until the event for it has come. When every task
+  is waiting, the scheduler makes the host's wait, [`componentWait`], which waits on that set, and
+  keeps each event's code for the task that waits on it.
+
+  The set and the events not yet taken are kept in the host's block (`hostState`): the set at 40,
+  and at 44 the first of a list of the events, each a block of the next, the waitable and the code.
+  The hosts' component roots keep nothing there.
+export module waits
+
+import (
+  nanyx/async as (Async)
+  nanyx/host.async as (waitOnHost)
+  nanyx/host.memory
+  nanyx/host.runtime
+  abi as (blocked, returned, subtaskDrop, waitableJoin, waitableSetNew, waitableSetWait)
+)
+
+--| Where the host's block keeps `at`'s field: the shared set at 40, the list of events at 44.
+def field: [HostRuntime] I32 -> I32 = { at ->
+  I32.wrappingAdd(hostState(), at)
+}
+
+--| The waitable set the instance shares, made the first time it is needed.
+def sharedSet: [HostRuntime] () -> I32 = { _ ->
+  def kept = readI32(field(40))
+
+  if kept != 0 then kept else
+    def made = waitableSetNew()
+    writeI32(field(40), made)
+    made
+}
+
+--| The scheduler's wait on the component roots: waits on the shared set until one of its waitables
+  has an event, and keeps the event's code for the task that waits on that waitable. Its timeout
+  is never needed: a sleep is a subtask in the set, as a request is.
+export def componentWait: [HostRuntime] I32 -> () = { _ ->
+  def event = allocate(8)
+  ignore(waitableSetWait(sharedSet(), event))
+  def cell = allocate(12)
+  writeI32(cell, readI32(field(44)))
+  writeI32(cell + 4, readI32(event))
+  writeI32(cell + 8, readI32(event + 4))
+  writeI32(field(44), cell)
+  free(event)
+}
+
+--| The code of the event kept for `waitable`, which it takes out of the list after `at`, the address
+  of the link to the next cell, or `#none` when none is kept.
+def takeAfter: [HostRuntime] I32, I32 -> #some(I32) | #none = { at, waitable ->
+  def cell = readI32(at)
+
+  if cell == 0 then #none else
+    if readI32(cell + 4) == waitable then
+      writeI32(at, readI32(cell))
+      def code = readI32(cell + 8)
+      free(cell)
+      #some(code)
+    else
+      takeAfter(cell, waitable)
+}
+
+--| Waits for an event for `waitable`, joined to the shared set meanwhile, while the program's other
+  tasks run, and gives the code it came with.
+export def awaitEvent: [Async, HostRuntime] I32 -> I32 = { waitable ->
+  waitableJoin(waitable, sharedSet())
+  def code = eventOf(waitable)
+  waitableJoin(waitable, 0)
+  code
+}
+
+--| The code of the next event for `waitable`, once the shared set's wait has kept one.
+def eventOf: [Async, HostRuntime] I32 -> I32 = { waitable ->
+  match takeAfter(field(44), waitable)
+    | #some(code) -> code
+    | #none ->
+      waitOnHost(componentWait, -1)
+      eventOf(waitable)
+}
+
+--| What a stream's read or write, or a future's, that may block gave, once it hasn't: `status`
+  itself, or what the event for `handle` came with, while the program's other tasks run.
+export def settledAsync: [Async, HostRuntime] I32, I32 -> I32 = { handle, status ->
+  if status == blocked then awaitEvent(handle) else status
+}
+
+--| Waits until the async call that gave `status` has returned, while the program's other tasks
+  run: at once if it has, and else until the subtask the status names has, which it then drops.
+export def awaitCallAsync: [Async, HostRuntime] I32 -> () = { status ->
+  if status % 16 < returned then awaitReturn(status / 16) else ()
+}
+
+--| Waits until the subtask `subtask` has returned, and drops it.
+def awaitReturn: [Async, HostRuntime] I32 -> () = { subtask ->
+  if awaitEvent(subtask) >= returned then subtaskDrop(subtask) else awaitReturn(subtask)
+}

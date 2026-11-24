@@ -15,7 +15,7 @@ A package names its host in its manifest's `host` field. A host the compiler shi
 ```nanyx fragment
 (
   package = (name = "acme.tool", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.console", version = "0.28.0")
+  host = (package = "nanyx.console", version = "0.37.0")
 )
 ```
 
@@ -70,7 +70,7 @@ match args()
 ```nanyx fragment
 (
   package = (name = "acme.report", version = "0.1.0")
-  dependencies = [(package = "nanyx.console.core", version = "0.28.0")]
+  dependencies = [(package = "nanyx.console.core", version = "0.37.0")]
 )
 ```
 
@@ -118,7 +118,7 @@ def main: Request -> Response = { request ->
 }
 ```
 
-A package names it as its host with the port to serve on, `host = (package = "nanyx.http", version = "0.28.0",
+A package names it as its host with the port to serve on, `host = (package = "nanyx.http", version = "0.37.0",
 settings = (port = 8080))`, and `nanyx run` serves it there, on 3000 when no port is given. A host declares the
 settings it takes, each with its default, so a setting it doesn't take is an error at the setting. See the
 [HTTP server cookbook](../cookbook/http-server).
@@ -326,6 +326,9 @@ def answerOf: [Async, HostRuntime] I32, I32 -> I32 = { handle, kind ->
     answerOf(handle, kind)
 }
 ```
+
+The hosts' component roots wait the same way, on one waitable set the instance shares
+([Components](../deep-dives/components#waiting-while-other-tasks-run)).
 
 The second argument is how long the task can wait before it must look again, in milliseconds, or -1 for as long as it
 takes: a sleep passes what is left of it. The scheduler calls the host's wait with the shortest any task passed. A host

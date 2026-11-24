@@ -342,6 +342,22 @@ let ``a shorthand lambda is a pipe's trailing lambda`` () =
     | other -> failwith $"Unexpected pipe: %A{other}"
 
 [<Fact>]
+let ``a lambda that starts with a pipe pipes its argument`` () =
+    // `{ \\math.abs }` is `{ x -> x \\math.abs }`, the argument made up at the `\\`.
+    let source = "def f = { \\math.abs }"
+    match (onlyValue source).Kind with
+    | Lambda ([ (parameter, None) ], Kind (Pipe (argument, "math.abs", _, [])), false) when parameter = implicitArgument && argument.Kind = implicit ->
+        source.Substring(argument.Span.Start, argument.Span.End - argument.Span.Start) |> should equal "\\"
+    | other -> failwith $"Unexpected lambda: %A{other}"
+    match (onlyValue "def f = { \\take(1) \\reverse }").Kind with
+    | Lambda ([ _ ], Kind (Pipe (Kind (Pipe (Kind argument, "take", _, [ _ ])), "reverse", _, [])), _) when argument = implicit -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+    // A step on a line of its own continues the chain.
+    match (onlyValue "def f = { \\take(1)\n  \\reverse\n}").Kind with
+    | Lambda ([ _ ], Kind (Pipe (Kind (Pipe (Kind argument, "take", _, [ _ ])), "reverse", _, [])), _) when argument = implicit -> ()
+    | other -> failwith $"Unexpected lambda: %A{other}"
+
+[<Fact>]
 let ``a pattern parameter is taken apart by a match at the top of the body`` () =
     let source = "def f = { Email(s) -> s }"
     match (onlyValue source).Kind with

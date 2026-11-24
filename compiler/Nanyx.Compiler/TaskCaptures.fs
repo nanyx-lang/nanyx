@@ -21,7 +21,8 @@ let captureErrors (symbols: Map<SymbolId, Symbol>) (references: Map<NodeId, Symb
         references
         |> Map.tryFind call.Id
         |> Option.bind (fun symbol -> symbols |> Map.tryFind symbol)
-        |> Option.exists (fun symbol -> symbol.Name = TaskScopes.startName && symbol.Declaration.File = asyncFile)
+        |> Option.exists (fun symbol ->
+            (symbol.Name = TaskScopes.startDef || symbol.Name = TaskScopes.startName) && symbol.Declaration.File = asyncFile)
     let holdsMemory (ty: Ty) =
         match Unifier.unalias ty with
         | TyFunc(_, _, contexts) ->
@@ -66,7 +67,10 @@ let escapeErrors (resultOf: string -> Ty option) (module': Module) : Diagnostic 
         | Some result when mentionsScope TaskScopes.scopeContext result ->
             let at =
                 SyntaxTree.expressionsWithin value
-                |> List.tryFind (fun within -> match within.Kind with FunctionCall(callee, _, _) -> callee = TaskScopes.startName | _ -> false)
+                |> List.tryFind (fun within ->
+                    match within.Kind with
+                    | FunctionCall(callee, _, _) -> callee = TaskScopes.startName || callee = TaskScopes.startDef
+                    | _ -> false)
                 |> Option.map _.Span
                 |> Option.defaultValue value.Span
             Some (

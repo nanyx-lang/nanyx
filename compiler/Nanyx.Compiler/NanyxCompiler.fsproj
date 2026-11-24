@@ -71,6 +71,7 @@
     <Compile Include="NamedArguments.fs" />
     <Compile Include="FailedCalls.fs" />
     <Compile Include="LambdaArguments.fs" />
+    <Compile Include="LambdaParameterFields.fs" />
     <Compile Include="UseDischarge.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
@@ -92,6 +93,7 @@
     <Compile Include="ExpectedLiterals.fs" />
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
+    <Compile Include="AttachedContextDefs.fs" />
     <Compile Include="ScopedTypes.fs" />
     <Compile Include="ContextInstances.fs" />
     <Compile Include="ContextNames.fs" />

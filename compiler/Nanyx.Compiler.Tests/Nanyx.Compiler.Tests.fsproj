@@ -78,6 +78,7 @@
     <Compile Include="Features\Contexts\ExpectedTypeInstanceTests.fs" />
     <Compile Include="Features\Contexts\DefaultContextTests.fs" />
     <Compile Include="Features\Contexts\OwnInstanceTests.fs" />
+    <Compile Include="Features\Contexts\AttachedContextDefTests.fs" />
     <Compile Include="Features\CustomPatterns\CustomPatternTests.fs" />
     <Compile Include="Features\Definitions\DefinitionOrderTests.fs" />
     <Compile Include="Features\Definitions\DuplicateDefinitionTests.fs" />
@@ -125,6 +126,7 @@
     <Compile Include="Features\Inference\CallArgumentMismatchTests.fs" />
     <Compile Include="Features\Lambdas\ArmsAfterParametersTests.fs" />
     <Compile Include="Features\Lambdas\IgnoredParameterTests.fs" />
+    <Compile Include="Features\Lambdas\ParameterFieldTests.fs" />
     <Compile Include="Features\Lambdas\ResultAnnotationTests.fs" />
     <Compile Include="Features\Lambdas\ReturnedLambdaTests.fs" />
     <Compile Include="Features\Linters\LinterTests.fs" />

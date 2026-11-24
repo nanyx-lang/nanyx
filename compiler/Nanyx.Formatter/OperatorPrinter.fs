@@ -133,15 +133,21 @@ type OperatorPrinter(indentSize: int, source: string, sourceText: SourceText, pl
                 | None -> e, steps
             | _ -> e, steps
         let root, steps = collect e []
+        // A shorthand lambda's implicit argument, `{ \f }`, is printed as nothing: its first step stands in its place.
+        let firstStep, steps, afterRoot =
+            match root.Kind, steps with
+            | IdentifierExpr n, (_, _, isMatch, doc) :: rest when n = implicitArgument -> Some doc, rest, isMatch
+            | _ -> None, steps, false
         // A pipe binds tighter than every binary operator, so one piped is bracketed: `(a + b) \f`. A range without an end
         // has nothing after its `..` for a pipe to take, so it is not: `1.. \take(3)`.
         let rootDoc =
-            match root.Kind with
-            | BinaryOp _
-            | RangeSyntax.Call(_, Some _) -> parens (expr full root)
+            match firstStep, root.Kind with
+            | Some doc, _ -> doc
+            | None, BinaryOp _
+            | None, RangeSyntax.Call(_, Some _) -> parens (expr full root)
             | _ -> expr { position with Tail = false; Prec = 0 } root
         let isMatch = steps |> List.map (fun (_, _, isMatch, _) -> isMatch)
-        let afterMatch = false :: List.truncate (steps.Length - 1) isMatch
+        let afterMatch = List.truncate steps.Length (afterRoot :: isMatch)
         // Whether the step at `at` starts a line of its own after the value it pipes.
         let startsLine (value: Expression) at = at >= 0 && sourceText.Valid value.Span && value.Span.End > 0 && sourceText.LineOf at > sourceText.LineOf (value.Span.End - 1)
         let writtenOnLines =

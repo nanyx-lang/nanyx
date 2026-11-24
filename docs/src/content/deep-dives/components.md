@@ -152,9 +152,8 @@ requests has no `wasi:http` import. It is Nanyx, on
   program's allocator, and the root frees each once it has copied it out.
 - **The clocks and random numbers** are `wasi:clocks/system-clock`'s `now`, an `instant` of seconds and nanoseconds
   written to memory, `monotonic-clock`'s `now`, nanoseconds as a `u64`, and `wasi:random`'s `get-random-u64`. A sleep
-  is `monotonic-clock`'s async `wait-for`, lowered with `[async-lower]` and waited on as a request is
-  (`nanyx.wasi/abi`'s `awaitCall`), so it holds the instance until it is over: the component roots' waits don't yet let
-  the program's other tasks run.
+  is `monotonic-clock`'s async `wait-for`, lowered with `[async-lower]`, whose subtask is waited on as a request's is
+  ([below](#waiting-while-other-tasks-run)), so the program's other tasks run while it sleeps.
 - **Exiting** is `wasi:cli/exit`'s `exit-with-code`, which takes 0 to 255; any other code exits with 1.
 - **Files** are `wasi:filesystem`'s, in `console.host.wasi.files.nyx`, a `@partial` fragment of the root. The preopens
   come from `get-directories` once, and are kept in the host's block; a path is found in one as the core root finds it
@@ -183,8 +182,18 @@ requests has no `wasi:http` import. It is Nanyx, on
   - An `error-code` becomes an `HttpError`: a timeout `#timeout`, a DNS or connection failure `#connectionFailed`, an
     invalid URI `#invalidUrl`, and anything else `#other`.
 
-A wait blocks: each async-lowered call that returns BLOCKED is waited on at once, in a waitable set of its own, as
-the runtime's own writes are.
+### Waiting while other tasks run
+
+A request waits for its response, and reads its body, while the program's other [tasks](./async#tasks-and-scopes) run,
+and so does a sleep. `nanyx.wasi/waits` joins the subtask or the stream's end it waits on to one waitable set the
+instance shares, and waits on the host (`nanyx/host.async`'s `waitOnHost`) until the event for it has come. When every
+task is waiting, the scheduler makes the host's wait, `componentWait`, which waits on that set (`[waitable-set-wait]`)
+and keeps the event's code, in a list in the host's block, for the task that waits on that waitable; that task takes it
+when it looks again. The set's handle is at offset 40 of the host's block and the list's first cell at 44, which the
+component roots leave free. Every other wait blocks: each async-lowered call that returns BLOCKED, a write to stdout or
+a file, a request's body write, a file's read, is waited on at once, in a waitable set of its own, as the runtime's
+own writes are. `examples/sleepers` is a package whose two tasks wake in the order they do only if a sleep lets the
+other run, and CI runs it as a component under Wasmtime beside `nanyx run`.
 
 ## The HTTP host's component root
 

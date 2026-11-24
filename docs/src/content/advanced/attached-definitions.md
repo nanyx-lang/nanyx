@@ -73,14 +73,18 @@ The built-in arithmetic and comparison operators on `int`, `float` and the other
 
 # Attached functions as typeclass defaults
 
-Attached definitions can satisfy contexts or typeclass-style constraints. For example, defining `+` and `0` on a type can allow a `Sum` context to be synthesized.
+Attached definitions can satisfy contexts. The prelude's `Add` context has two members, `zero` and `` `+` ``, so a type with a `zero` and a `+` attached has an `Add` instance synthesized for it, and `list.sum` works on a list of it without a `use` (see [Context synthesis](./contexts#context-synthesis)):
 
 ```nanyx
 type Point = (x: int, y: int)
 
+def Point.zero = Point(x = 0, y = 0)
+
 def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
 
-def Point.`0` = Point(x = 0, y = 0)
+println([Point(x = 1, y = 2), Point(x = 3, y = 4)] \list.sum)
+
+-- (x = 4, y = 6)
 ```
 
 # Attaching to a built-in type
@@ -115,6 +119,39 @@ def string.shout: string -> string = { s -> s ++ "!" }  -- fine: strings have no
 So `"abc" \length` is always the length of the string, whichever module it is written in.
 
 A type's own definitions, those attached in the module that defines it, or in the standard library for a built-in type, are in scope wherever its values are, whether or not their module is imported. A module that gets a `Point` from another module's function pipes it to `Point.norm` without importing `Point`'s module, and `"abc" \length` needs no `import nanyx/text`. A module you do import is reached as the import says: after `import nanyx/text as t`, `string.trim` is `t.string.trim`. Where two types the module can see have the same name, it imports the one it means, as their definitions' names would not say which. The built-in types' comparisons are the compiler's own, so `` def int.`<` `` is the error `NYX0219`.
+
+# Attached to a context
+
+A [context](./contexts) can have definitions attached to it too. A context has no values to pipe, so a definition
+attached to it is reached by its bare name instead, wherever the context is: in a function that requires it, under a
+`use` of it, and anywhere for a context the host provides, as the context's members are. It requires the context
+itself, as any function that uses it does:
+
+```nanyx
+context Greeter = protected ()
+
+def Greeter.hello: [Greeter] string -> string = { name ->
+  "hello, {name}"
+}
+
+def greetAll: [Greeter] list(string) -> list(string) = { names ->
+  names \list.map(hello)
+}
+
+def greeted = { _ ->
+  use Greeter()
+  greetAll(["Ada", "Alan"])
+}
+
+println(greeted())
+-- [hello, Ada, hello, Alan]
+```
+
+Where the context isn't, as at the top level here, `hello` is not in scope (`NYX0102`). In a function that doesn't write
+its type, `hello` means `Greeter.hello`, and requires `Greeter` as a call of that would. A name of your own wins: a
+definition, a parameter or an import named `hello` is the one `hello` means. Where two contexts attach a definition of
+the same name, the bare name is ambiguous (`NYX0106`), unless only one of the two is available; write the whole name. Such a definition is how a context gets a [workflow keyword](./workflows#keyword-kinds) that
+needs no builder, as `Async` gets `start!` from `Async.start`.
 
 # When to use attached definitions
 
