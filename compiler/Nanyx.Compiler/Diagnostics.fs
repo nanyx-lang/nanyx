@@ -219,6 +219,7 @@ module DiagnosticCodes =
     let ParameterNamesNoField = code 280 "Lambda parameter that names no field" Severity.Error
     let TopLevelCell = code 281 "Cell declared at the top level" Severity.Error
     let OldFormTypeParameter = code 282 "Type parameter written the old way" Severity.Warning
+    let ValueContextTypeOpen = code 283 "Value of a type only a later use fixes" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -250,7 +251,7 @@ module DiagnosticCodes =
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
-          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter
+          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as
