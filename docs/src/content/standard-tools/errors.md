@@ -1232,6 +1232,14 @@ def r =
 
 A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any tag.
 
+A lambda with `yield` in it is a lazy sequence, and a builder such as `list.select` or `list.build` takes a function
+that calls `emit` for each value instead ([Building a collection](../advanced/sequences-and-queries#building-a-collection)).
+Giving it a lambda that yields is reported at the first `yield`:
+
+```nanyx
+def positives = [1, -2, 3] \list.select { x -> if x > 0 then yield x }  -- error NYX0201: This `yield` makes the lambda a lazy sequence, but it is given where a function that calls `emit` is expected, as a builder such as `list.select` or `list.build` takes: write `emit(x)` for `yield x`
+```
+
 A keyword call such as `start! e` is a call of the def named by the keyword, `start({ e })`, so a local, a parameter or a
 pattern's variable of that name is called instead. When it doesn't take a block, the error is reported at the keyword
 and names it:
