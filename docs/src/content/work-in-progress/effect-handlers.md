@@ -1,16 +1,19 @@
 ---
 title: "Effect handlers"
-description: "yield as a call to a context member whose handler decides what it costs: pushing builders, generators on async's state machines, and what a spike measured"
+description: "Contexts whose members a handler runs at once or captures: Emit's pushing builders, yield on async's state machines, and what a spike measured"
 order: 7
 ---
 
-This page proposes making `yield`, and later any context member, an effect operation in the sense of Koka: a call to a
-member of a context, whose handler, the instance a `use` loads, decides whether the code after the call runs at once
-or is captured to run later. It is the "effect handlers in general" question on
-[Concurrency and crash boundaries](./concurrency-and-crash-boundaries#open-questions), with `yield` as the first case.
-The direction was agreed on 2026-11-24, and a spike has tested it (below). Nothing on this page is built. The issues are
-[#2427](https://github.com/nanyx-lang/nanyx/issues/2427) (`yield` and the builders) and
-[#2426](https://github.com/nanyx-lang/nanyx/issues/2426) (sequences on async's state machines).
+This page is about effect operations in the sense of Koka: calls to a member of a context whose handler, the
+instance a `use` loads, runs the code after the call at once (a pushing, or tail-resumptive, operation) or captures it
+to run later. It is the "effect handlers in general" question on
+[Concurrency and crash boundaries](./concurrency-and-crash-boundaries#open-questions). Two cases are in hand:
+
+- **Pushing: `Emit(a)`.** Decided on 2026-11-24 and being built
+  ([#2566](https://github.com/nanyx-lang/nanyx/issues/2566)): the builders push through a new prelude context.
+- **Capturing: `yield` on async's state machines.** Proposed, and tested by a spike (below):
+  [#2426](https://github.com/nanyx-lang/nanyx/issues/2426), with what is left of
+  [#2427](https://github.com/nanyx-lang/nanyx/issues/2427).
 
 # Why
 
@@ -27,37 +30,46 @@ That has three costs:
   `seq.flatMap`, `seq.append` and `seq.delay` (`WorkflowDesugaring`), so a user's own `#yield` keyword can only ever
   make a `seq`. Nanyx should let a library define what a keyword does, without parts that only the standard types get.
 
-Choosing between a pushing and a lazy `yield` by what the lambda is passed to doesn't work either: the rewrite runs
-before inference, so the choice would need desugaring driven by types, and `xs \select { ... }` finds its `select` by
-the type of `xs`.
+Giving one `yield` two meanings, chosen by what the lambda is passed to, doesn't work: the rewrite runs before
+inference, so the choice would need desugaring driven by types, and `xs \select { ... }` finds its `select` by the
+type of `xs`.
 
-# The design
+# Pushing: `Emit(a)`
 
-`yield x` is always a call: a call to the `yield` member of the `Yield(a)` context in scope. What it costs is decided
-by the handler, the instance a `use` loads, not by the call or by a rewrite:
+Decided, and being built in [#2566](https://github.com/nanyx-lang/nanyx/issues/2566). A pushing operation is a
+context of its own, so nothing has to choose between meanings:
 
 ```nanyx fragment
-export context Yield(a) = (yield: a -> ())
+export context Emit(a) = (emit: a -> ())
 ```
 
-- **A pushing handler takes only the value.** `use Yield(yield = { y -> result += y })` returns, and the code after
-  the `yield` carries on. It is an ordinary call, loops stay loops, and nothing is allocated for the rest of the block.
-  This is Koka's tail-resumptive (`fun`) operation, and it is decided by the handler's shape, not left to an optimiser.
-- **A capturing handler takes the value and the rest of the block.** `use Yield(yield = { y, k -> ... })` is given
-  `k`, the continuation, to call later, once or never. A lazy sequence is a capturing handler that gives back
-  `#next(y, rest)`, where pulling `rest` calls `k`. This is Koka's `ctl` operation.
+- **A body calls `emit(x)`,** a plain context call. It returns, and the code after it carries on: loops stay loops,
+  and nothing is allocated for the rest of the block. This is Koka's tail-resumptive (`fun`) operation.
+- **The builders push.** `list.select`, `list.build`, `Array.build`, `MList.build` and the set and map builders take
+  `[c, Emit(b)] a -> ()` and run it under a handler that appends: `use Emit(emit = { y -> result += y })`.
+- **`Emit` is loadable,** so a user writes their own handler, a visitor or a tree walk that pushes into a callback,
+  and `emit` works through higher-order calls like any context requirement.
+- **No keyword yet.** `emit! x` would need a keyword kind for a plain call, which is undecided.
+- **`seq { }` stays lazy,** its block typed `[Yield(a)] () -> ()`, and `yield` in it is rewritten as today.
+
+# Capturing: `yield` as an effect operation
+
+Proposed. `Yield(a)` keeps the capturing meaning (Koka's `ctl`): its operation passes the rest of the block to the
+handler as a continuation, `k`, to call later, once or never. A lazy sequence is a handler that gives back
+`#next(y, rest)`, where pulling `rest` calls `k`. Instead of the rewrite:
+
 - **The rest of the block is captured the way async waits.** A function that requires a context whose members may
   capture is compiled to a state machine, as a function that requires `Async` is ([Async](../deep-dives/async#how-tasks-are-compiled)).
   A call of such a member is a split point. When the handler in force captures, the call stops, and the frames saved
   on the way out, up to the `use` that loaded the handler, are `k`. The `use` is the delimiter. When the handler pushes,
   the call returns, at the cost of the check after it, as an async call that doesn't stop costs today.
 - **`seq` becomes a library function,** a capturing handler like any user's. The `#yield` keyword kind and the
-  rewrite's hard-wired calls go.
+  rewrite's hard-wired calls go, and `yield` reaches its handler from any depth, through the functions a block calls.
 - **`Async` becomes the first such context.** The scheduler is the outermost handler, and the host's waits are its
   operations.
 
-Nothing chooses a meaning before inference: every `yield` is the same call, and whether a function is a state machine
-is read from its type after inference, as `IrFunction`'s `waits` is today.
+Nothing chooses a meaning before inference: whether a function is a state machine is read from its type after
+inference, as `IrFunction`'s `waits` is today.
 
 # What the spike showed
 
@@ -66,8 +78,8 @@ tested both halves.
 
 ## Pushing
 
-`list.select` written with a context of its own, `context Emit(a) = (emit: a -> ())`, and a builder that loads it,
-compiles on main today, once its `use` writes the instance's type, `use Emit(b)(emit = { y -> MList.add(result, y) })`
+`list.select` written with a context of its own, `context Emit(a) = (emit: a -> ())` as #2566 adds, and a builder
+that loads it, compiles on main today, once its `use` writes the instance's type, `use Emit(b)(emit = { y -> MList.add(result, y) })`
 ([#2550](https://github.com/nanyx-lang/nanyx/issues/2550) is the bug without it). Over 300,000 elements yielding 1.5
 values each:
 
@@ -106,10 +118,10 @@ stops again as soon as it is resumed could keep its block.
 | Step | Issue | Stage |
 |---|---|---|
 | A `use` whose instance's type is settled after it finds its members | [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) | Working set |
-| `Yield(a)` a plain context, `yield x` a call of its member, and the builders pushing | [#2427](https://github.com/nanyx-lang/nanyx/issues/2427) | Planning: see open questions |
+| `Emit(a)`, and the builders pushing through it | [#2566](https://github.com/nanyx-lang/nanyx/issues/2566) | Working set |
 | A frame can be dropped and copied: a drop function and a copy function for each state, beside its resume entry, from the types the emitter knows where it saves the variables | | proposed |
 | Members that may capture: split points for them, a delimiter at each `use`, and each stop marked with the handler it is for, so that one passes through a delimiter that isn't its own | | proposed |
-| `seq` as a capturing handler, and the `#yield` rewrite deleted | [#2426](https://github.com/nanyx-lang/nanyx/issues/2426) | Planning |
+| `seq` as a capturing handler, and the `#yield` rewrite deleted | [#2426](https://github.com/nanyx-lang/nanyx/issues/2426), [#2427](https://github.com/nanyx-lang/nanyx/issues/2427) | Planning |
 | A frame that stops again as soon as it is resumed keeps its block | | proposed |
 | Both on stack switching, behind `TaskLowering` | [#2164](https://github.com/nanyx-lang/nanyx/issues/2164) | Planning |
 
@@ -121,24 +133,22 @@ run time by the reference count, with nothing to prove.
 
 # Open questions
 
+- **A keyword for a plain call.** Whether `emit! x` becomes a keyword, with a keyword kind for a member that is called
+  and returns.
 - **How a member says it may capture.** A member that may capture makes every function that calls it a state machine,
   so the context's declaration has to say so: by the existing keyword-kind attribute, a new one, or the member's type.
   Then, how a capturing handler is written, `{ y, k -> ... }`, and how `k`'s type is written.
-- **Stage 1 before the capturing half.** Until `seq` is a handler, a pushing `yield` and today's lazy one have to live
-  side by side, and something must say which a lambda gets without a special case for `seq`. One answer is to build the
-  capturing half first.
 - **The contexts a generator's block needs.** Today a sequence's steps need their contexts where it is pulled
   (`[c] seq(a)`). In the spike, the block's contexts were needed where `generate` was called, since the backend
   couldn't adapt the block inside the step. The real version should carry them in the sequence's type, as `seq.map`
   does.
-- **Named functions as handlers' callers.** A def that requires `Yield(int)`, passed as a value where
-  `[Yield(int), c] a -> ()` is expected, is `NYX0205` at the call: a function named as a value requires its contexts
+- **Named functions as handlers' callers.** A def that requires `Emit(int)`, passed as a value where
+  `[Emit(int), c] a -> ()` is expected, is `NYX0205` at the call: a function named as a value requires its contexts
   where it is named. A visitor written as a named def would need `{ x -> visit(x) }`. Should a parameter whose type
   supplies a context accept it?
 - **Code size.** Every function generic in contexts gets a state-machine copy where it is specialised for a capturing
   context, as `list.map` over `http.get` does today.
 - **Continuations called more than once beyond sequences.** Copying frames would let a handler call `k` twice
   (backtracking, a search). Is that allowed, or only resuming a copy for a persistent sequence?
-- **The builders' API.** Which take a pushing lambda (`list.select`, the `build`s); what becomes of `seq.select`,
-  whose lambda would capture, and of `list.selectOne` and `seq.selectOne`, which stop at the first `yield` and so need a
-  handler that never resumes.
+- **The functions that stop at the first value.** `list.selectOne` and `seq.selectOne` stop at the first `yield`, so
+  a pushing handler can't serve them: they need a handler that never resumes, or stay lazy.

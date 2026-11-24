@@ -21,7 +21,7 @@ section. This page keeps what is still open.
 2. **A range of characters** waits on a character type ([#2196](https://github.com/nanyx-lang/nanyx/issues/2196)).
 3. **`seq.cache`,** not written yet, would give the sequences that want it stored tails, so that walking one twice
    does its work once.
-4. **`yield` as a call to a context member,** so that builders push and `seq { }` is a library handler: on
+4. **Builders that push through `Emit`,** and `seq { }` as a library handler on async's state machines: on
    [Effect handlers](./effect-handlers).
 5. **Later:** fusing chains of `map` and `filter` in the compiler, so that a chain doesn't allocate a closure and a
    `#next` per element at each step.
