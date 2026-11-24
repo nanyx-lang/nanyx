@@ -488,6 +488,12 @@ depth, 1 for the outermost. The innermost region is in a global, so the regions 
 word, and the outermost is in another global. The list is circular, with the region as its sentinel, so an object is
 linked and unlinked without asking whether it is first or last.
 
+**A block with nothing to free has no region.** Once inlining is done, a function that makes no box, calls no function
+value, and calls only functions that can't make one either has its `__nanyx_region_enter`s and `__nanyx_region_exit`s
+taken out (`CoreIrUnusedRegions`), so a block whose cells are all locals, as a loop is written, allocates nothing when it
+runs ([#2418](https://github.com/nanyx-lang/nanyx/issues/2418)). A block that keeps its region inside such a function has
+the region around the function's caller as its outer one, which is where its result is promoted to.
+
 **Boxes.** A mutable object is a box laid out as a record of five fields (`CoreIrRegions.boxType`): the table slot of the
 function that drops what it holds (`__nanyx_region_drop_…`, one for each type of box, called through the table as an
 environment's drop function is), the next object on its region's list, the region it is on, the previous object, then
