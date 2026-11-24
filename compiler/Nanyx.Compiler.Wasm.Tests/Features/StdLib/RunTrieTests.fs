@@ -135,3 +135,21 @@ println("{StringTrie.keys(t)} {StringTrie.keys(without)} {StringTrie.longestPref
 println("{StringTrie.isEmpty(empty)} {StringTrie.toString(empty)}")
 """
     |> assertRan "[a, ab, abc] [a, abc] #some(a, 1)\ntrue StringTrie[=>]\n"
+
+[<Fact>]
+let ``Run - tries with the same entries are ==, whatever order their keys were added in`` () =
+    // A trie is a node with a map below it, which its own `==` compares by its entries, as a map is (#2522).
+    runSource
+        """
+import nanyx/trie
+
+println(Trie[[1] => "a", [2] => "b"] == Trie[[2] => "b", [1] => "a"])
+println(Trie[[1, 2] => "a", [1, 3] => "b", [1] => "c"] == Trie[[1] => "c", [1, 3] => "b", [1, 2] => "a"])
+println(Trie[[1] => "a", [2] => "b"] == Trie[[1] => "a", [2] => "c"])
+println(Trie[[1] => "a", [2] => "b"] == Trie[[1] => "a", [3] => "b"])
+println(Trie[[1] => "a", [2] => "b"] \Trie.remove([2]) == Trie[[1] => "a"])
+println(StringTrie["a" => 1, "b" => 2, "ab" => 3] == StringTrie["ab" => 3, "b" => 2, "a" => 1])
+println(StringTrie["a" => 1, "b" => 2] == StringTrie["a" => 1, "b" => 3])
+println([StringTrie["a" => 1, "b" => 2]] == [StringTrie["b" => 2, "a" => 1]])
+"""
+    |> assertRan "true\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\ntrue\n"

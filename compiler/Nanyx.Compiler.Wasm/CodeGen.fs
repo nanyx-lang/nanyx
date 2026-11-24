@@ -883,7 +883,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // The block the host keeps its state in goes after them, 8-byte aligned, in a module whose host uses it.
     let dataEnd = stringDataEnd stringLiteralData + facts.StaticClosures.Length * staticClosureBytes
     let hostStateAddress = (dataEnd + 7) &&& ~~~7
-    let heapBase = heapBaseAfter (if facts.UsesHostState then hostStateAddress + hostStateSize else dataEnd)
+    let staticEnd = if facts.UsesHostState then hostStateAddress + hostStateSize else dataEnd
+    // The scratch block that writing a float uses goes just below the heap, where the helpers find it (see `FloatText`).
+    let heapBase = heapBaseAfter (if facts.UsesFloatText then staticEnd + FloatText.scratchBytes else staticEnd)
     let memoryDirective = $"  (memory {initialMemoryPages (heapStartOffset heapBase)})"
 
     // The owning entry of each function a closure is over that something can call, which has the table slot after the
@@ -910,6 +912,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         definitionFunctions @ Option.toList startFunction
         |> List.map (fun func -> if cachedNames.Contains func.Name then { func with Name = CoreIrCachedValues.buildName func.Name } else func)
         |> CoreIrSplitPoints.stateMachines CoreIrLowerInput.startFunctionName
+    CoreIrSplitPoints.checkFunctionValues CoreIrLowerInput.startFunctionName (definitionFunctions @ Option.toList startFunction)
 
     let context: CoreIrEmit.EmitContext =
         { TagId =

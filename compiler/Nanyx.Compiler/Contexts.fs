@@ -694,6 +694,30 @@ let internal inferredAmbientContexts (env: TypeEnv) (state: InferState) (name: I
         Some contexts[name]
     | _ -> None
 
+/// The contexts a call of the function `name`, as `env` binds it, requires where it runs, as its type writes them: those
+/// its type writes, and, for an unannotated top-level function already inferred, the ambient contexts it was inferred to
+/// require (see `inferredAmbientContexts`). A lambda that calls it uses them as it uses those of a function that writes
+/// its type, so it is typed alike either way, and a lambda that calls a function that waits has a type that waits.
+let internal contextsRequiredByCall (env: TypeEnv) (state: InferState) (name: Identifier) : TypeExpr list =
+    let written = contextRequirementsOf env state name |> Option.defaultValue []
+    let inferred =
+        inferredAmbientContexts env state (canonicalName env state name)
+        |> Option.map (Set.toList >> List.map (TypeName >> TypeExpr.synthetic))
+        |> Option.defaultValue []
+    written @ inferred
+
+/// The context variable a lambda uses for its call of `name` where `name` is an unannotated top-level def not inferred
+/// yet, as it is in a cycle with the def the lambda is in, and `state` with it noted, to bind once the module is
+/// inferred (`InferState.PendingCallContexts`), where a conflict is reported at the call's `span`. `None` for any other call, and outside a lambda, where the def around
+/// the call requires the callee's contexts already (see `DeferredContextUse`).
+let internal pendingCallContexts (env: TypeEnv) (state: InferState) (name: Identifier) (span: SourceSpan) : (Ty * InferState) option =
+    let canonical = canonicalName env state name
+    match state.UnannotatedDefs |> Map.tryFind canonical, TypeEnv.tryFind name env with
+    | Some symbol, Some scheme when scheme.Symbol = Some symbol && LambdaContexts.withinLambda state && (inferredAmbientContexts env state canonical).IsNone ->
+        let var, next = freshVar state
+        Some (var, { next with PendingCallContexts = (canonical, var, span) :: next.PendingCallContexts })
+    | _ -> None
+
 /// Checks the context use of naming `name` at `span`: a member of the ambient instance needs its context, and a use
 /// of an unannotated top-level def, or of a script's value, is kept to check once its contexts are known. Where the use
 /// is the call `call`, what provides the context of a member it calls is recorded, as is, once known, what provides

@@ -135,6 +135,18 @@ println(magnitude3(x = 3.0, y = 4.0))
 -- 5.0
 ```
 
+A pattern may name some fields alone and rename others:
+
+```nanyx
+def digits: (x: int, y: int) -> int = { (x, y = b) ->
+  x * 10 + b
+}
+
+println(digits(x = 4, y = 2))
+
+-- 42
+```
+
 A parameter that is none of the fields' names, as in `{ a, b -> ... }` for `(x: float, y: float) -> float`, is an error ([NYX0280](../standard-tools/errors#nyx0280)).
 
 # Partial annotations

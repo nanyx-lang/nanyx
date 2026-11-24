@@ -84,3 +84,43 @@ def main = {
 main()
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "true false\ntrue false\n"
+
+// A `use` that leaves a parameterised context's type arguments out loads the instance the rest of the def settles: the
+// type its member is called at, or the one a function it runs requires (#2550).
+
+[<Fact>]
+let ``Run - use C(members) loads the instance at the type the block it runs requires`` () =
+    let source =
+        """context Pushed(a) = (push: a -> ())
+
+def once: [Console, c] ([Pushed(int), c] () -> ()) -> () = { block ->
+  use Pushed(push = { y -> println(y + 0) }) in block()
+}
+
+once {
+  push(1)
+  push(2)
+}
+"""
+    runSource (normalized source) |> assertRan "1\n2\n"
+
+[<Fact>]
+let ``Run - use C(members) in a generic builder loads the instance at the builder's own type`` () =
+    let source =
+        """context Pushed(a) = (push: a -> ())
+
+def gather: [c] ([c, Pushed(b)] () -> ()) -> list(b) = { block ->
+  memory {
+    mut found = []
+    use Pushed(push = { x -> found := [x, ...found] }) in block()
+    list.reverse(found)
+  }
+}
+
+println(gather {
+  push(1)
+  push(2)
+})
+println(gather { push("a") })
+"""
+    runSource (normalized source) |> assertRan "[1, 2]\n[a]\n"

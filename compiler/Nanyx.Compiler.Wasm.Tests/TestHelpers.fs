@@ -124,7 +124,7 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (github: NyxC
         File.Delete inputFile
 
 /// The packages from the index that the tests' programs and the docs' examples use, though the compiler doesn't ship
-/// them, so that no test needs the network: `nanyx.json` 0.1.0 and 0.2.0, the `.nyxpkg`s their releases on
+/// them, so that no test needs the network: `nanyx.json` 0.1.0, 0.2.0 and 0.4.0, the `.nyxpkg`s their releases on
 /// nanyx-lang/json carry (`Packages/nanyx.json-<version>.nyxpkg`, downloaded from the releases, whose SHA-256s the index
 /// records). They are listed in an index on disk, in a directory of its own, and downloaded into the store's cache once,
 /// before any test reads them, so that tests run in parallel never unpack one at the same time.
@@ -139,7 +139,7 @@ let private packagesForTests =
          Directory.CreateDirectory(Path.Combine(store.Index, "index", "nanyx")) |> ignore
          File.WriteAllText(Path.Combine(store.Index, "config.json"), """{ "format": 1, "index": "index/" }""")
          let versions =
-             [ "0.1.0"; "0.2.0" ]
+             [ "0.1.0"; "0.2.0"; "0.4.0" ]
              |> List.map (fun version ->
                  let file = $"nanyx.json-{version}.nyxpkg"
                  let bytes = File.ReadAllBytes(Path.Combine(__SOURCE_DIRECTORY__, "Packages", file))
@@ -488,6 +488,30 @@ let runSourceWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput:
     try runScriptWithOptions checkMemory inlineCalls standardInput inputPath
     finally Directory.Delete(directory, true)
 
+/// `source` compiled once, as `nanyx run` compiles a script, and run as it would run it, with inlining and without it:
+/// what each run gives, inlined first. Compiling is most of what a run takes, so this takes about half what running it
+/// both ways with `runSourceWithOptions` does (#2553).
+let runSourceBothWays (source: string) : RunOutcome * RunOutcome =
+    let directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}")).FullName
+    let inputPath = Path.Combine(directory, "main.nyx")
+    File.WriteAllText(inputPath, source.ReplaceLineEndings "\n")
+    try
+        let mutable compiled = None
+        let compiling =
+            inProcess (Directory.GetCurrentDirectory()) "" [] (fun shell ->
+                if CliCommands.TryPullScript(shell, inputPath) then
+                    compiled <- Some(CliCommands.CompileScript(shell, inputPath, false))
+                    0
+                else 1)
+        match compiled with
+        | Some result ->
+            let run (inlineCalls: bool) =
+                inProcess (Directory.GetCurrentDirectory()) "" [] (fun shell ->
+                    CliCommands.RunCompiledScript(shell, inputPath, result, MemoryCheck.Off, false, null, inlineCalls))
+            run true, run false
+        | None -> compiling, compiling
+    finally Directory.Delete(directory, true)
+
 let runSourceWith (checkMemory: bool) (standardInput: string) (source: string) : RunOutcome =
     runSourceWithOptions checkMemory true standardInput source
 
@@ -596,6 +620,25 @@ let allocationsOf (program: WasmProgram) (name: string) (argument: int) =
     let before = program.Allocations
     let result = program.Call(name, argument)
     program.Allocations - before, result
+
+/// Asserts that `name(n)` in `program` takes time that grows with `n`, not with its square: less than ten times what
+/// `name(n / 4)` takes. A linear function takes about 4 times as long, and a quadratic one 16. When the first runs miss,
+/// each size runs again in turn, and each one's quickest run counts, so that load on the machine, which slows one run
+/// and not the other, can't make the test fail (#2388).
+let callsInLinearTime (program: WasmProgram) (name: string) (n: int) =
+    let time (size: int) =
+        let clock = System.Diagnostics.Stopwatch.StartNew()
+        program.Call(name, size) |> ignore
+        clock.Elapsed.TotalMilliseconds
+    program.Call(name, n / 4) |> ignore
+    let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
+    let atQuarter, atN = time (n / 4), time n
+    let atQuarter, atN =
+        if isLinear atQuarter atN then atQuarter, atN
+        else
+            let again = List.init 3 (fun _ -> time (n / 4), time n)
+            min atQuarter (again |> List.map fst |> List.min), min atN (again |> List.map snd |> List.min)
+    Assert.True(isLinear atQuarter atN, $"{name}({n:N0}) took {atN:F1} ms, {atN / atQuarter:F1} times the {atQuarter:F1} ms of {name}({n / 4:N0})")
 
 /// `wat`, a module compiled with `checkedOptions`, instantiated and run (see `WasmProgram`), with the drop functions of `dropped`
 /// exported.

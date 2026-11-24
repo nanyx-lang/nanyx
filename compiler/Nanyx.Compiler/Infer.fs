@@ -90,12 +90,20 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
                 if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
                 else Some (TyVar var, Unifier.apply closing solved))
     let held = Boxes.heldVariables closedTy
-    { Quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
+    let quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
+    // A variable of the def's type that a task's work stands for is a work variable of the def (see `TaskWork`).
+    let taskWork =
+        state.TaskWork
+        |> Map.fold (fun marked id at ->
+            TypeEnv.freeTyVars (Unifier.apply subst (TyVar(TyVar.ordinary id None)))
+            |> Set.intersect quantified
+            |> Set.fold (fun marked var -> if Map.containsKey var marked then marked else marked |> Map.add var at) marked) state.TaskWork
+    { Quantified = quantified
       Type = closedTy
       Symbol = None
       ProvidedBy = None },
     (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
-    |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
+    |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) { state with TaskWork = taskWork }
 
 /// The types of a lambda's parameters when its input is expected to be `expectedInput`. Several parameters take a
 /// record's fields, by name or by position. Against an input known not to be a record they are a tuple of fresh
@@ -346,6 +354,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | [] ->
                 let elementTy, nextState = freshVar current
                 mkTypedExpr expr (listType elementTy) None None None, nextState
+            // Checked against a `list(a)` whose `a` is known, each element is given where an `a` is expected, as an
+            // argument is: two lambdas that give back different tags of the union `a`'s result is fit it, though they
+            // don't join. Where `a` is still a variable, as `list.length`'s is, the elements say what it is, joined.
+            | typedItems when expectedElement |> Option.exists (fun element -> match resolveSoFar current element with TyVar _ -> false | _ -> true) ->
+                let element = expectedElement.Value
+                mkTypedExpr expr (listType element) None None None,
+                typedItems |> List.fold (fun constrained item -> addAssignableConstraintAt item.Expr.Span item.Type element constrained) current
             | typedItems ->
                 // The elements are joined as an `if`'s branches are, so `[#red, #green]` is a `list(#red | #green)`.
                 let elementTy, constrained = joinBranchTypes Set.empty current (typedItems |> List.map _.Type)

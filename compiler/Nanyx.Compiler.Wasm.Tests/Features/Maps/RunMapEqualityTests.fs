@@ -107,3 +107,20 @@ def main = {
     source.ReplaceLineEndings "\n"
     |> runSourceWith true ""
     |> assertRan "same\ndifferent\nsame\n"
+
+[<Fact>]
+let ``Run - a map or a set beside a type nothing settles, as in a recursive type, is compared by its entries`` () =
+    // The defs write no types, so an empty map or list in them leaves a variable nothing solves, which holds no value:
+    // the map beside it is still compared by its entries, not by the order they were added in (#2522).
+    comparing
+        [ """type Node = #node(int, map(int, Node))"""
+          """type Rec = #rec(map(int, string), list(Rec))"""
+          """type Sets = #sets(set(int), list(Sets))"""
+          """def leaf = #node(0, map.empty)""" ]
+        [ """#node(1, map.empty \map.insert(1, leaf) \map.insert(2, leaf)) == #node(1, map.empty \map.insert(2, leaf) \map.insert(1, leaf))"""
+          """#node(1, map.empty \map.insert(1, leaf)) == #node(1, map.empty \map.insert(2, leaf))"""
+          """#rec(map.empty \map.insert(1, "a") \map.insert(2, "b"), []) == #rec(map.empty \map.insert(2, "b") \map.insert(1, "a"), [])"""
+          """#sets(set.empty \set.insert(1) \set.insert(2), []) == #sets(set.empty \set.insert(2) \set.insert(1), [])"""
+          """(map.empty \map.insert(1, "a") \map.insert(2, "b"), []) == (map.empty \map.insert(2, "b") \map.insert(1, "a"), [])""" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nT\nT\n"

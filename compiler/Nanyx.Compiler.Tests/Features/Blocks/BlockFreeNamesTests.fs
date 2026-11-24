@@ -26,8 +26,4 @@ let ``A block's free names are the names it uses and does not bind, in the order
 // lifting spent 5 of the 5.4 seconds it took on a memory block of 16,000 stores there (#2408).
 [<Fact>]
 let ``A block's free names are found in time that grows with its length`` () =
-    takesLinearTime 16_000 (fun count ->
-        let run = runOf (storing count)
-        let clock = System.Diagnostics.Stopwatch.StartNew()
-        SyntaxTree.freeNames run |> ignore
-        clock.Elapsed.TotalMilliseconds)
+    takesLinearTime 16_000 (storing >> runOf) (SyntaxTree.freeNames >> ignore)

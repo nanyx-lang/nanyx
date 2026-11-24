@@ -212,7 +212,14 @@ How it is built:
   the function the member wraps (`CallValue`), with its arguments arranged as the wrapper would arrange them
   (`directArguments`). A call that passes the local on to a function that requires the context finds it known, so the
   callee is specialised on it too.
-- Anywhere else the local is read, it is a value: a lambda captures it, or it is passed to `list.map`. Only then is
+- A lambda that captures the local is specialised on the member in turn, as a function a call passes it on to is
+  (`CoreIrLowerKnown.knownCaptures`): the lambda is lowered once for the members it captures that the function knows,
+  binds each to its value rather than reading it from its environment, and so calls it directly. Those it captures
+  after its other captures are not captured at all, so a lambda that captured only known members, such as `list.sum`'s
+  `{ total, x -> total + x }` at `int`, is a static closure, made once, and adds with `int.+` itself
+  ([#2311](https://github.com/nanyx-lang/nanyx/issues/2311)). A local function generic in variables of its own keeps
+  its captures, since it finds them by keys of its own.
+- Anywhere else the local is read, it is a value: it is passed to `list.map`, say. Only then is
   the local given the member's value, a closure over the wrapper or the top-level value, at the top of the function
   (`WithKnownValues`, which looks for the locals the body names with `usedOf`). A member that is a generic top-level
   value, such as `list.default: list(a)`, is that value at the member's type where the callee takes it

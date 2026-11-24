@@ -50,8 +50,9 @@ module WorkflowDesugaring =
     /// follow, see `Unreachable`); each made-up read of a member of a builder's context, by its node, with the place to
     /// report it at if the context has no such member and the builder's name: a keyword's call, at the keyword, where a
     /// block falls off its end without `return`, for its `zero`, and a loop whose body uses a keyword, for its `for`;
-    /// and the expressions of the desugared module made up for each node of `module'`, in the order they were made: a
-    /// workflow bind's are the call to its builder's member and the continuation passed to it.
+    /// the expressions of the desugared module made up for each node of `module'`, in the order they were made: a
+    /// workflow bind's are the call to its builder's member and the continuation passed to it; and each `#delay`
+    /// keyword's call, by its span, with where the keyword is written, `k!`, and the keyword (see `HiddenKeywords`).
     ///
     /// A keyword's kind is the one `@customKeywordType` gives the member of its name in `module'`'s context declarations,
     /// else in `imported`'s (the keywords of the modules it imports, see `Attributes.keywordKinds`), else `#bind`. A
@@ -59,7 +60,7 @@ module WorkflowDesugaring =
     /// `#bindF` keyword is a `#bind` keyword whose value is passed as `{ e }`. The language's `yield` is a `#yield`
     /// keyword: a lambda, a builder's block included, with one in it is the lazy sequence of the values it yields, and
     /// calls no member (see `Seqs.consFunction`).
-    let desugarWithDiagnostics (imported: Map<Identifier, KeywordKind>) (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan * Identifier> * Map<NodeId, NodeId list> =
+    let desugarWithDiagnostics (imported: Map<Identifier, KeywordKind>) (module': Module) : Module * Diagnostic list * Map<NodeId, SourceSpan * Identifier> * Map<NodeId, NodeId list> * Map<SourceSpan, SourceSpan * Identifier> =
         let isReturnKeyword keyword = keyword = WorkflowSyntax.returnKeyword
         let kinds = imported |> Attributes.withKeywordKinds (Attributes.keywordKinds module')
         let kindOf keyword =
@@ -75,6 +76,7 @@ module WorkflowDesugaring =
             | _ -> None
         let diagnostics = ResizeArray<Diagnostic>()
         let mutable memberPlaces: Map<NodeId, SourceSpan * Identifier> = Map.empty
+        let mutable delayCalls: Map<SourceSpan, SourceSpan * Identifier> = Map.empty
 
         // The expressions made up for each node of `module'`, newest first, and the node of `module'` each one was
         // made for. One made for a made-up node was made for the node that one was.
@@ -463,6 +465,7 @@ module WorkflowDesugaring =
             | UseIn(value, body) -> UseIn(desugarExpr value, desugarExpr body)
             // A `#delay` keyword's call, which takes no rest of the block, so it can be anywhere.
             | WorkflowBindExpr(keyword, value) when kindOf keyword = KeywordKind.Delay ->
+                delayCalls <- delayCalls |> Map.add expr.Span ({ expr.Span with End = expr.Span.Start + keyword.Length + 1 }, keyword)
                 FunctionCall(keyword, None, [ desugarThunk value ])
             // A keyword the rest of its builder's block cannot follow is an error; the value stands in for it, as
             // nothing is checked once desugaring fails.
@@ -728,9 +731,9 @@ module WorkflowDesugaring =
             lowered
             |> Map.map (fun _ made -> made |> List.filter kept.Contains |> List.rev)
             |> Map.filter (fun _ made -> not made.IsEmpty)
-        desugared, List.ofSeq diagnostics, memberPlaces, lowered
+        desugared, List.ofSeq diagnostics, memberPlaces, lowered, delayCalls
 
     /// `module'` desugared, with no keywords imported (see `desugarWithDiagnostics`).
     let desugar (module': Module) : Module =
-        let desugared, _, _, _ = desugarWithDiagnostics Map.empty module'
+        let desugared, _, _, _, _ = desugarWithDiagnostics Map.empty module'
         desugared

@@ -123,7 +123,12 @@ let private recordInferredScoped (defName: Identifier) (contexts: Ty list) (stat
 /// body of an unannotated top-level def, a scoped context is the def's (see `recordInferredScoped`).
 let record (contexts: Ty list) (state: InferState) : InferState =
     match state.LambdaContexts, state.ContextScope with
-    | used :: outer, _ when not contexts.IsEmpty -> { state with LambdaContexts = (List.rev contexts @ used) :: outer }
+    // A context the lambda uses already is not recorded again: `leave` gives each once, and a lambda that makes many
+    // calls requiring the same contexts, as `start!`s do, would hold them once for each call (#2551).
+    | used :: outer, _ when not contexts.IsEmpty ->
+        match contexts |> List.distinct |> List.filter (fun context -> not (List.contains context used)) with
+        | [] -> state
+        | added -> { state with LambdaContexts = (List.rev added @ used) :: outer }
     | [], DefScope(defName, true) -> recordInferredScoped defName contexts state
     | _ -> state
 
@@ -163,9 +168,41 @@ let private suppliedWithin (env: TypeEnv) (state: InferState) (ctx: Ty) : bool =
         |> Option.exists (fun binding -> usedWithin (Some binding.Provider))
     | _ -> false
 
-/// `record` for the contexts among `contexts` that no `use` inside the innermost lambda supplies in `env`.
+/// `state` where the nearest instance of the parameterised context `ctx` in `env` is a `use`'s inside the innermost
+/// lambda whose type arguments are still open and fit `ctx`'s: `use Emit(emit = { y -> found += y }) in block()`, in a
+/// builder that calls a `block` of type `[c, Emit(b)] () -> ()`, loads the `Emit(b)` the call requires, as writing
+/// `use Emit(b)(...)` would (#2550). `None` when there is no such `use`.
+let private settleUseWithin (env: TypeEnv) (state: InferState) (ctx: Ty) : InferState option =
+    let depth = state.LambdaContexts.Length
+    match resolveSoFar state ctx with
+    | TyApply(ctxName, (_ :: _ as argTys)) ->
+        env.Instances
+        |> List.tryFind (fun binding -> match resolveSoFar state binding.Context with TyApply(name, _) -> name = ctxName | _ -> false)
+        |> Option.bind (fun binding ->
+            match binding.Provider, resolveSoFar state binding.Context with
+            | FromUse value, TyApply(_, instanceArgs) when
+                state.UseDepths |> Map.tryFind value |> Option.exists (fun loaded -> loaded >= depth)
+                && instanceArgs.Length = argTys.Length
+                && instanceArgs |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not) ->
+                let pairs = List.zip instanceArgs argTys
+                match Solving.unify ((pairs |> List.map (fun (instanceArg, argTy) -> instanceArg, argTy, Equal, SourceSpan.none)) @ Solving.agreeing state.Constraints) with
+                | Ok _ -> Some (pairs |> List.fold (fun current (instanceArg, argTy) -> addConstraint instanceArg argTy current) state)
+                | Error _ -> None
+            | _ -> None)
+    | _ -> None
+
+/// `record` for the contexts among `contexts` that no `use` inside the innermost lambda supplies in `env`, settling the
+/// open instance of one that loads a context's instance at types still open (see `settleUseWithin`).
 let recordUnsupplied (env: TypeEnv) (contexts: Ty list) (state: InferState) : InferState =
-    record (contexts |> List.filter (suppliedWithin env state >> not)) state
+    let unsupplied, state =
+        contexts
+        |> List.fold (fun (unsupplied, current) ctx ->
+            if suppliedWithin env current ctx then unsupplied, current
+            else
+                match settleUseWithin env current ctx with
+                | Some settled -> unsupplied, settled
+                | None -> unsupplied @ [ ctx ], current) ([], state)
+    record unsupplied state
 
 /// `state` as the value of an unannotated local def starts to be inferred, `selfTy` being the variable the def is bound
 /// at meanwhile. The first lambda inferred within the value is the def's own: `{ ... }` in `rec loop = { ... }`.

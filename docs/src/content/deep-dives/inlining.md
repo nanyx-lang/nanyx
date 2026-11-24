@@ -134,9 +134,13 @@ tests and the tags the arms before it tested and failed. From that:
   can trap), and a closure, tag or record that only it held goes with it.
 
 A value is only read again somewhere new from a constant, or from a variable that nothing assigns, that has its local
-to itself (no other variable of its kind has its name), and that is not a temporary. Two rules make temporaries into
-what can be read: a temporary given at once to a variable is that variable's value, and a temporary a tag is made of,
-given at once to a variable, becomes a local. A temporary whose value is a chain keeps the chain whole, since it is
+to itself (no other variable of its kind has its name), and that is not a temporary. Three rules make temporaries into
+what can be read: a temporary given at once to a variable is that variable's value; a temporary a tag is made of,
+given at once to a variable, becomes a local; and the temporaries a record is made of, bound one after another just
+before it in the order it reads them, become locals when the record is given to a variable and only read a field at a
+time. The last is what lets a `use`'s instance, a record of its members' closures, give back the closure a member was
+made with, so that a call of the member, once its block is inlined, is a direct call that the inliner inlines in turn,
+and neither the closure nor the record is made ([#2578](https://github.com/nanyx-lang/nanyx/issues/2578)). A temporary whose value is a chain keeps the chain whole, since it is
 evaluated where it is used. A loop's own locals are not read anywhere new either: its body reads them through bindings
 of its own.
 
