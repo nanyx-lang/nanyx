@@ -22,7 +22,7 @@ let toListName (element: IrType) = Intrinsics.arrayToList + "_" + sanitizeIdenti
 let collect (functions: Function list) : IrType list =
     let operands (intrinsic: string) = CoreIrEquality.collectFor intrinsic (fun _ -> true) (fun _ -> []) functions
     [ for ty in operands Intrinsics.arrayOfList @ operands Intrinsics.arrayToList do
-        match ty with
+        match CoreIrRegions.arrayIn ty with
         | IrList element
         | IrArray element -> yield element
         | other -> internalError $"an array made from, or turned into, '{IrType.show other}'" ]
