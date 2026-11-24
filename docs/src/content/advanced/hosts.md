@@ -327,6 +327,9 @@ def answerOf: [Async, HostRuntime] I32, I32 -> I32 = { handle, kind ->
 }
 ```
 
+The hosts' component roots wait the same way, on one waitable set the instance shares
+([Components](../deep-dives/components#waiting-while-other-tasks-run)).
+
 The second argument is how long the task can wait before it must look again, in milliseconds, or -1 for as long as it
 takes: a sleep passes what is left of it. The scheduler calls the host's wait with the shortest any task passed. A host
 whose waits block, as WASI preview 1's file functions do, needs none of this: the call holds the instance until it is

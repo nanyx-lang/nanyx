@@ -1,0 +1,7 @@
+-- A package whose tasks take turns while they sleep: `nanyx run` and the component `nanyx build` writes, run under
+-- Wasmtime, print the same lines in the same order, which they do only if a sleep lets the other tasks run.
+(
+  package = (name = "sleepers", version = "0.1.0", sources = ["src/**/*.nyx"])
+  host = (package = "nanyx.console", version = "0.37.0")
+  formatter = (lineWidth = 100)
+)

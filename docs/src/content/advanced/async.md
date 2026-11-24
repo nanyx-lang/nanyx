@@ -92,8 +92,9 @@ def pages: [Async, Http] list(string) -> list(string) = { urls ->
 ```
 
 A file's functions still hold the thread until they are done: the console host reads and writes files with WASI
-preview 1, which has no way to start a read and come back for it. So does every wait of a program built as a
-[component](./hosts#built-as-a-component), for now. Cancellation and `race` are what comes next
+preview 1, which has no way to start a read and come back for it, and a program built as a
+[component](./hosts#built-as-a-component) reads and writes them in the same way, though its requests and sleeps let
+the other tasks run. Cancellation and `race` are what comes next
 ([Concurrency and crash boundaries](../work-in-progress/concurrency-and-crash-boundaries#plan)).
 
 A crash in a task ends the program, the other tasks too, as any crash does.
