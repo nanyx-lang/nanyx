@@ -213,10 +213,7 @@ let ``A smaller scope may await a task of the def's scope`` () =
         withTasks
             """def outer = { _ ->
   def t = start! 20
-  def inner = concurrent({
-    def u = start! 1
-    await(t) + await(u)
-  })
+  def inner = concurrent({ await(t) + await(start! 1) })
   inner + 1
 }"""
     Assert.Empty((Compiler.compile source).Diagnostics)
