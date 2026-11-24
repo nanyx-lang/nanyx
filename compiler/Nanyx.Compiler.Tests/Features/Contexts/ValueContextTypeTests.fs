@@ -5,7 +5,7 @@ open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
 // A value that is not a function can't require a context, and a later use doesn't fix its type: a def of one whose
-// call needs a context of a type nothing in the def fixes is NYX0282 at the def (#2506).
+// call needs a context of a type nothing in the def fixes is NYX0283 at the def (#2506).
 
 let private decode =
     normalized """type Person = (name: string)

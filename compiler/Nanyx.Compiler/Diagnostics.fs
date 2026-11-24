@@ -217,7 +217,7 @@ module DiagnosticCodes =
     let TaskHoldsMemory = code 279 "Task that holds what belongs to a memory block" Severity.Error
     let ParameterNamesNoField = code 280 "Lambda parameter that names no field" Severity.Error
     let TopLevelCell = code 281 "Cell declared at the top level" Severity.Error
-    let ValueContextTypeOpen = code 282 "Value of a type only a later use fixes" Severity.Error
+    let ValueContextTypeOpen = code 283 "Value of a type only a later use fixes" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
