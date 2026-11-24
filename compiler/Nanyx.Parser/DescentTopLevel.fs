@@ -298,7 +298,7 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
     let isDef = c.IsKeyword "def" || (c.IsKeyword "export" && nextText = "def")
     // A destructuring def is tried before any other item: `export def (a, b)` is no
     // re-export of a module called `def`.
-    let destructured = if isDef && not inBlock then c.Attempt(fun () -> destructuringDefinition c start) else None
+    let destructured = if isDef then c.Attempt(fun () -> destructuringDefinition c start) else None
     match destructured with
     | Some statements ->
         statements
