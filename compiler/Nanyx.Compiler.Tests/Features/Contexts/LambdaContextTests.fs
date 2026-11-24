@@ -237,3 +237,28 @@ def before: [Log] () -> ([Log] () -> ()) = {
     let source = source.ReplaceLineEndings "\n"
     Assert.Equal(Some "def nested: () -> () -> ()", hoverType source "nested")
     Assert.Equal(Some "def blocky: () -> () -> ()", hoverType source "blocky")
+/// `a`'s lambda calls `b`, which writes its type and is in a cycle with `a`, so `a` is inferred first (#2610).
+let private cycleWithWritten (apply: string) =
+    $"""
+def {apply}
+
+def a = {{ (n: int) ->
+  if n == 0 then 0 else apply({{ x -> b(x) }}, n)
+}}
+
+def b: [Console] int -> int = {{ x ->
+  println("b")
+  a(x - 1) + 1
+}}
+"""
+
+[<Fact>]
+let ``A lambda that calls a def that writes its type, in a cycle with its own, requires the contexts it writes`` () =
+    let source = cycleWithWritten "apply: [c] ([c] int -> int), int -> int = { f, x -> f(x) }"
+    Assert.Equal(Some "[Console] int -> int", hoverType source "{ x -> b")
+
+[<Fact>]
+let ``A lambda that calls a def that writes its type, in a cycle with its own, cannot be given where a pure function is expected`` () =
+    let code, text = singleError (cycleWithWritten "apply: (int -> int), int -> int = { f, x -> f(x) }")
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+    Assert.Equal("{ x -> b(x) }", text)
