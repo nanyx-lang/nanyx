@@ -251,3 +251,49 @@ let ``Run - a script's memory block with hundreds of stores runs`` () =
     // At 250 stores this once failed in the backend with a temporary used out of order (#2409).
     for count in [ 250; 2000 ] do
         runSource (storing count) |> assertRan $"{count}\n"
+
+/// Blocks whose cells are all locals and that call nothing that can make a box, as a loop is written.
+let private localCells =
+    normalized """def digits: int -> int = { n ->
+  memory {
+    mut rest = n
+    mut count = 0
+
+    while rest > 0 ->
+      rest := rest / 10
+      count := count + 1
+
+    count
+  }
+}
+
+def sumRange: int -> int = { n ->
+  memory {
+    mut total = 0
+    mut i = 1
+
+    while i <= n ->
+      total := total + i
+      i := i + 1
+
+    total
+  }
+}
+"""
+
+// A block that nothing can put an object on has no region, so it allocates nothing when it runs, and a module of such
+// blocks has no region helpers (#2418). Each one allocated and freed a region at every run.
+[<Fact>]
+let ``A block whose cells are all locals allocates nothing when it runs`` () =
+    use program = instantiateWasm localCells []
+    let before = program.Allocations
+    for n in 1..100 do
+        Assert.Equal(string n |> String.length, program.Call("digits", n))
+        Assert.Equal(n * (n + 1) / 2, program.Call("sumRange", n))
+    Assert.Equal(before, program.Allocations)
+
+[<Fact>]
+let ``A program whose blocks hold only local cells has no regions`` () =
+    let wat = transpileWat (localCells + "\nprintln(digits(2024) + sumRange(10))\n")
+    Assert.DoesNotContain("__nanyx_region_enter", wat)
+    Assert.DoesNotContain("__nanyx_region_exit", wat)
