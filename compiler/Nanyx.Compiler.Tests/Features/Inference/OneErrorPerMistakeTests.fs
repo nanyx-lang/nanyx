@@ -14,7 +14,7 @@ let private codesAt (source: string) =
 
 [<Fact>]
 let ``An unknown name given where an annotation's variable is expected is the one error`` () =
-    let source = "def f: (string, a: type) -> a = { s, a ->\n  def x: a = arts\n  x\n}\n"
+    let source = "def f: (string, a: Type(a)) -> a = { s, a ->\n  def x: a = arts\n  x\n}\n"
     Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownIdentifier.Code, "arts" ], codesAt source)
     Assert.Equal<(string * string) list>([ DiagnosticCodes.UnknownIdentifier.Code, "missing" ], codesAt "def id: a -> a = { x -> missing }\n")
 
