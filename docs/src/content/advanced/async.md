@@ -100,6 +100,19 @@ batches()
 It is a function, so its block is passed in parentheses: `concurrent { ... }` would be a
 [workflow's block](./workflows). Like `start`, it is attached to `Async`.
 
+A smaller scope may await a task of the def's scope, which outlives it:
+
+```nanyx
+def outer = { _ ->
+  def t = start! 20
+  def inner = concurrent({ await(t) + await(start! 1) })
+  inner + 1
+}
+
+println(outer(()))
+-- 22
+```
+
 # Tasks share only values
 
 A task can't use what belongs to a `memory` block: starting one with a function that uses a cell or a reference

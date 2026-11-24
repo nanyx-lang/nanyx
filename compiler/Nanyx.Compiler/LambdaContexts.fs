@@ -123,7 +123,12 @@ let private recordInferredScoped (defName: Identifier) (contexts: Ty list) (stat
 /// body of an unannotated top-level def, a scoped context is the def's (see `recordInferredScoped`).
 let record (contexts: Ty list) (state: InferState) : InferState =
     match state.LambdaContexts, state.ContextScope with
-    | used :: outer, _ when not contexts.IsEmpty -> { state with LambdaContexts = (List.rev contexts @ used) :: outer }
+    // A context the lambda uses already is not recorded again: `leave` gives each once, and a lambda that makes many
+    // calls requiring the same contexts, as `start!`s do, would hold them once for each call (#2551).
+    | used :: outer, _ when not contexts.IsEmpty ->
+        match contexts |> List.distinct |> List.filter (fun context -> not (List.contains context used)) with
+        | [] -> state
+        | added -> { state with LambdaContexts = (List.rev added @ used) :: outer }
     | [], DefScope(defName, true) -> recordInferredScoped defName contexts state
     | _ -> state
 
