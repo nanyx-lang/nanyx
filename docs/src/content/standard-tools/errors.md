@@ -1240,6 +1240,22 @@ Giving it a lambda that yields is reported at the first `yield`:
 def positives = [1, -2, 3] \list.select { x -> if x > 0 then yield x }  -- error NYX0201: This `yield` makes the lambda a lazy sequence, but it is given where a function that calls `emit` is expected, as a builder such as `list.select` or `list.build` takes: write `emit(x)` for `yield x`
 ```
 
+A keyword call such as `start! e` is a call of the def named by the keyword, `start({ e })`, so a local, a parameter or a
+pattern's variable of that name is called instead. When it doesn't take a block, the error is reported at the keyword
+and names it:
+
+```nanyx
+import nanyx/async as (Async)
+
+def work = { _ ->
+  def start = 5
+  def t = start! 1  -- error NYX0201: 'start!' calls the local 'start' defined at line 4, of type 'int', not 'Async.start': ...
+  start
+}
+```
+
+To fix it, rename the local, or call the keyword's def by its whole name, `Async.start({ 1 })`.
+
 # NYX0202: Annotation too general
 
 A definition's annotation promises more than its body gives: it says a type variable could be any type, but the body

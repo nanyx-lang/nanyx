@@ -137,6 +137,16 @@ type TypeVarKey =
     /// `TyVarKind.SignatureScope`).
     | ScopeOf of context: string
 
+/// A `#delay` keyword's call, `k! e`, whose keyword names a local def, a parameter or a pattern's variable rather than
+/// the keyword's def (see `HiddenKeywords`): the keyword, where it is written, the local, its type, and the def the
+/// keyword would call, if one is in scope.
+type HiddenKeyword =
+    { Keyword: Identifier
+      At: SourceSpan
+      Local: Symbol
+      LocalType: Ty
+      KeywordDef: Identifier option }
+
 type InferState =
         { NextId: int;
             Constraints: ConstraintSet;
@@ -355,6 +365,12 @@ type InferState =
             /// keyword, `zero` at the end of a block that falls off without `return`, and `for` at a loop whose body
             /// uses a keyword (see `WorkflowMembers`).
             WorkflowMemberPlaces: Map<NodeId, SourceSpan * Identifier>;
+            /// Each `#delay` keyword's call, `k! e` made `k({ e })`, by its span, with where the keyword is written and
+            /// the keyword (see `WorkflowDesugaring`). Passes after desugaring make the call's node again, in its place.
+            DelayCalls: Map<SourceSpan, SourceSpan * Identifier>;
+            /// The `#delay` keyword calls whose keyword names a local rather than the keyword's def, by the call's span
+            /// (see `HiddenKeywords`).
+            HiddenKeywords: Map<SourceSpan, HiddenKeyword>;
             /// The rest variables `joinBranchTypes` made up for a branch of a type not known yet. A union with one
             /// of them, joined again, has the rest extended with the other branches' tags rather than shared.
             JoinRests: Set<int>;
@@ -504,6 +520,8 @@ let emptyState =
             UnhandledMatches = [];
             UnknownTypeUses = [];
             WorkflowMemberPlaces = Map.empty;
+            DelayCalls = Map.empty;
+            HiddenKeywords = Map.empty;
             JoinRests = Set.empty;
             RestArguments = Map.empty;
             OpenMatches = [];
