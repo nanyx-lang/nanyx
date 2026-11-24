@@ -700,6 +700,73 @@ module UnannotatedExports =
                         Edits = [ { Span = TextEdit.spanBetween model.Source symbol.Declaration afterName afterName; NewText = $": {written}" } ] } ] }))
         |> List.sortBy (fun report -> report.Span.Start)
 
+/// The official linter's `resultOnlyTypeVariable` rule: a top-level def of a function whose type has a variable that a
+/// context it requires names and its result has, but that no parameter fixes, as `[Decode(a)] string -> a` has. A
+/// parameter fixes a variable its type has, and so does a context that names one a parameter fixes, as
+/// `[Iterable(c, elem = a)] c -> a` fixes `a` through `c`. Nothing at a call says which type such a variable is but a
+/// type written on its result, so the rule suggests a type argument, which says it at the call. A def that requires
+/// `Typed` is left alone: it is given the type at the call already.
+module ResultOnlyTypeVariables =
+    let rule =
+        { Id = "resultOnlyTypeVariable"
+          Title = "Type variable only in the result"
+          DefaultSeverity = Severity.Warning
+          Unnecessary = false
+          Description =
+            "A function whose result has a type variable that a context it requires names but no parameter fixes: nothing at a call says which type it is but a type written on the result. Take it as a type argument." }
+
+    /// The name of the context `context` is, as the model has it.
+    let private contextName (context: Ty) =
+        match context with
+        | TyApply(name, _)
+        | TyAlias(name, _, _) -> Some name
+        | TyNominal(nominal, _, _, _) -> Some nominal.Name
+        | _ -> None
+
+    /// The variables of `ty` that no parameter of it fixes, which a context of `contexts` names and its result has.
+    let private unfixed (ty: Ty) (contexts: Ty list) : int list =
+        match Unifier.unalias ty with
+        | TyFunc(input, output, _) when not (contexts |> List.exists (contextName >> (=) (Some TypeValues.typedContext))) ->
+            let named = contexts |> List.map TypeEnv.freeTyVars
+            // The variables a parameter fixes, and those a context naming one of them fixes with it.
+            let rec closed (fixedVars: Set<int>) =
+                let more = named |> List.filter (Set.intersect fixedVars >> Set.isEmpty >> not) |> List.fold Set.union fixedVars
+                if more = fixedVars then fixedVars else closed more
+            let fixedVars = closed (TypeEnv.freeTyVars input)
+            let result = TypeEnv.freeTyVars output
+            named |> Set.unionMany |> Set.filter (fun var -> result.Contains var && not (fixedVars.Contains var)) |> Set.toList
+        | _ -> []
+
+    let lint (model: SemanticModel) : Report list =
+        model.Symbols
+        |> Map.values
+        |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
+        |> Seq.choose (fun symbol ->
+            match model.SymbolTypes |> Map.tryFind symbol.Id, model.ContextTypes |> Map.tryFind symbol.Id with
+            | Some ty, Some contexts ->
+                match unfixed ty contexts with
+                | [] -> None
+                | vars ->
+                    // Each variable as the def's type is written, by hover and `unannotatedExports`' fix.
+                    let varTys = ContextInference.varsInOrder ty |> List.filter (fun var -> vars |> List.contains var.Id) |> List.map TyVar
+                    let written =
+                        Unifier.tysToDisplayStringsIn model.TypeDefs Source (ty :: contexts @ varTys)
+                        |> List.skip (1 + contexts.Length)
+                    let first = List.head written
+                    let quoted = Diagnostics.listed (written |> List.map (fun name -> "'" + name + "'"))
+                    Some
+                        { Rule = rule.Id
+                          Subject = Some symbol.Name
+                          Span = symbol.Declaration
+                          Message =
+                            $"Only its result has {quoted}, which a context it requires names, so nothing at a call says which type it is but a type written on the result: "
+                            + $"take it as a type argument, `type {first}`, or a named one, `{first}: type`, which a call passes as `type T`"
+                          Related = []
+                          Fixes = [] }
+            | _ -> None)
+        |> List.ofSeq
+        |> List.sortBy (fun report -> report.Span.Start)
+
 /// The official linter's `shadowedPreludeNames` rule: a top-level def, a local def, a lambda's argument or a variable a
 /// pattern binds whose name is one the prelude brings into scope, which it hides wherever it is in scope itself. Only
 /// the prelude's unqualified definitions are in scope by name: one attached to a type (`list.map`) is reached through
@@ -1096,13 +1163,13 @@ module Linters =
           Rules =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
-              UnannotatedExports.rule; UnusedResults.rule; UselessExpressions.rule; UnawaitedTasks.rule; ShadowedPreludeNames.rule; Semicolons.rule
+              UnannotatedExports.rule; ResultOnlyTypeVariables.rule; UnusedResults.rule; UselessExpressions.rule; UnawaitedTasks.rule; ShadowedPreludeNames.rule; Semicolons.rule
               UnconstructibleTypes.rule; UnusedContexts.rule; RepeatedPulls.rule; Allows.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
-                @ StrayDocComments.lint model @ UnannotatedExports.lint model
+                @ StrayDocComments.lint model @ UnannotatedExports.lint model @ ResultOnlyTypeVariables.lint model
                 @ UnusedResults.lint model @ UselessExpressions.lint model @ UnawaitedTasks.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model
                 @ UnconstructibleTypes.lint model @ UnusedContexts.lint model @ RepeatedPulls.lint model }
 

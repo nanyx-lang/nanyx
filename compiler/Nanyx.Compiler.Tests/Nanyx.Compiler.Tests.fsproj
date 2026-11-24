@@ -142,6 +142,7 @@
     <Compile Include="Features\Linters\UseInBracesTests.fs" />
     <Compile Include="Features\Linters\StrayDocCommentsTests.fs" />
     <Compile Include="Features\Linters\UnannotatedExportsTests.fs" />
+    <Compile Include="Features\Linters\ResultOnlyTypeVariableTests.fs" />
     <Compile Include="Features\Linters\UnusedResultsTests.fs" />
     <Compile Include="Features\Linters\UnawaitedTaskTests.fs" />
     <Compile Include="Features\Linters\UselessExpressionsTests.fs" />

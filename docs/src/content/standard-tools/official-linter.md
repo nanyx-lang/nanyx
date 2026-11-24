@@ -17,6 +17,7 @@ The rules that report code which is unused or can never run also tell the editor
 | Rule | Default | Reports |
 |------|---------|---------|
 | [`unannotatedExports`](#exported-annotations) | warning | an exported def that does not write its type |
+| [`resultOnlyTypeVariable`](#type-variable-only-in-the-result) | warning | a function whose result has a type variable that only a context names, which no parameter fixes |
 | [`unusedBindings`](#unused-local-value) | warning, faint | a local, a lambda's argument or a pattern variable that is never used |
 | [`unusedImports`](#unused-import) | warning, faint | an import nothing uses |
 | [`unusedPrivateDefinitions`](#unused-private-definition) | warning, faint | a definition the module does not export and does not use |
@@ -55,6 +56,19 @@ export def add = { a, b -> a + b }
 ```
 
 The rule (`unannotatedExports`) reports an exported top-level def that does not write its type, including one a `module name =` block exports. Other modules use it by its type, so the type belongs where a reader finds it rather than left to inference. Its fix writes the type the def was inferred to have after its name, as hover shows it, with the contexts it requires separated by `,`: `export def add: [Add(a)] a, a -> a = { a, b -> a + b }`. A destructuring def, `export def (low, high) = ...`, has no one name to write a type after, and is not reported.
+
+## Type variable only in the result
+
+```nanyx
+context Decode(a) = (decode: string -> a)
+
+-- Linter warning: Type variable only in the result 'parse': take it as a type argument, `type a`, ...
+def parse: [Decode(a)] string -> a = { json ->
+  decode(json)
+}
+```
+
+The rule (`resultOnlyTypeVariable`) reports a top-level function whose result has a type variable that a context it requires names, but that no parameter fixes. Nothing at a call then says which type the variable is but a type written on the result, `def p: Person = parse(s)`, and a value whose type only a later use would fix is an error. A [type argument](../tour/functions#type-arguments) says it at the call: `def parse: [Decode(a)] type a, string -> a`, called as `parse(type Person, s)`, or a named one, `into: type`. A parameter fixes a variable its type has, and so does a context that also names one a parameter fixes, as `[Iterable(c, elem = a)] c -> a` fixes `a` through `c`. A def that requires `Typed` is not reported. It has no fix, since taking a type argument changes every call.
 
 ## Unused local value
 
