@@ -300,6 +300,9 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         Assert.Empty(diagnostics.Diagnostics!);
     }
 
+    /// <summary>What a check of a standard library file is given besides <see cref="LanguageServerTestBase.Timeout"/>, at least.</summary>
+    private static readonly TimeSpan MinimumStandardLibraryCheck = TimeSpan.FromSeconds(60);
+
     [Theory]
     [InlineData("text.nyx")]
     [InlineData("prelude.nyx")]
@@ -311,11 +314,13 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         var uri = DocumentUri.FromFileSystemPath(path);
         var text = NyxCompiler.StandardLibrary.tryLoadFile("nanyx/" + fileName).Value;
 
-        // Checking one of the prelude's files checks the whole prelude, which takes seconds: the server is given three
-        // times what it takes here, as loaded as the machine is now.
+        // Checking one of the prelude's files checks the whole prelude, which takes seconds. This only guards against the
+        // server never publishing, so it is given 90 s at least, or three times what the check takes here if that is
+        // more. Load on the machine changes between the check here and the server's: in CI, a check of under 2 s here
+        // was followed by one in the server that took more than 30.
         var checking = System.Diagnostics.Stopwatch.StartNew();
         NyxCompiler.Compiler.compileStandardLibraryFile(NyxCompiler.Linters.none, path, text);
-        AllowFor(3 * checking.Elapsed);
+        AllowFor(TimeSpan.FromTicks(Math.Max(MinimumStandardLibraryCheck.Ticks, (3 * checking.Elapsed).Ticks)));
 
         Open(uri, text);
 
