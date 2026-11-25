@@ -9,19 +9,20 @@ export module request
 export type Method = #get | #post | #put | #delete | #patch | #head | #options
 
 --| An HTTP request: what it asks (`method`) of which resource (`url`), with its headers, each a name
-  and a value, in the order they are sent, and its body, as text. `timeout` is how many milliseconds to wait for the answer before giving up.
+  and a value, in the order they are sent, and its body, as text. `timeout` is how long to wait for
+  the answer before giving up: `5s`.
 export type Request = (
   method: Method
   url: string
   headers: list((string, string))
   body: string
-  timeout: int
+  timeout: Time(int)
 )
 
 --| A request asking `method` of `url`, with no headers and an empty body, that waits 30 seconds for
   its answer.
 export def Request.of: Method, string -> Request = { method, url ->
-  Request(method = method, url = url, headers = [], body = "", timeout = 30000)
+  Request(method = method, url = url, headers = [], body = "", timeout = 30s)
 }
 
 --| The path `request`'s URL names, without its query or fragment: `/hello/ada` for

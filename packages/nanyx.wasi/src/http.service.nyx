@@ -157,7 +157,7 @@ export def incoming: [HostRuntime] () -> #some(Request) | #unknownMethod = { _ -
       def url = urlOf(request)
       def headers = headersOf(requestHeaders(request))
       def body = bodyOf(request)
-      #some(Request(method = known, url = url, headers = headers, body = body, timeout = 30000))
+      #some(Request(method = known, url = url, headers = headers, body = body, timeout = 30s))
 }
 
 --| Returns a `response` from `handle` with `status`, the headers in `fields` and `text`, its

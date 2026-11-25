@@ -13,10 +13,10 @@ runtime's own imports, `nanyx:http` and `nanyx:serve`, pass them. The console ho
 How the `nanyx` runtime's own HTTP imports, `nanyx:http` and `nanyx:serve`, write requests and
 responses, for the hosts written on them. A program doesn't need it.
 
-A request is written as lines, each ended by `\n`: its method, its URL, its timeout in
-milliseconds, how many headers it has, and each header's name and value on lines of their own; its
-body follows, as it is. A response is written the same way: its status, how many headers it has,
-each header's name and value, then its body.
+A request is written as lines, each ended by `\n`: its method, its URL, its timeout in whole
+milliseconds, rounded up, how many headers it has, and each header's name and value on lines of
+their own; its body follows, as it is. A response is written the same way: its status, how many
+headers it has, each header's name and value, then its body.
 
 ## `methodName`
 
