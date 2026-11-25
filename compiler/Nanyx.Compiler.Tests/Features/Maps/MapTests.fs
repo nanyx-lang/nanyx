@@ -124,3 +124,13 @@ let ``An element type with no equality is an error`` () =
     let code, message, _ = onlyDiagnostic "def s = set.fromList([{ (x: int) -> x }])\n"
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'set.fromList' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
+[<Fact>]
+let ``A hover shows a map and a set by their own types, not the stores they are held as`` () =
+    let source =
+        normalized """def m = ["a" => 1]
+def s: set(int) = [1, 2]
+def entries = map.toList(m)
+"""
+    Assert.Equal(Some "def m: map(string, int)", hoverType source "m =")
+    Assert.Equal(Some "def s: set(int)", hoverType source "s:")
+    Assert.Equal(Some "def entries: list((string, int))", hoverType source "entries")

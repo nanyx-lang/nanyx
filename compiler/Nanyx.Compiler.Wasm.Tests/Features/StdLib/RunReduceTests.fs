@@ -55,7 +55,7 @@ let ``Run - set, map and seq reduce from the first element`` () =
   println((1..0) \seq.reduce { * })
   println(list.toSeq(["a", "b"]) \seq.reduce { ++ })"""
     runSource source
-    |> assertRan "#some(120)\n#some(ab)\n#none\n#some(20)\n#none\n#some(ab)\n#some(120)\n#none\n#some(ab)\n"
+    |> assertRan "#some(120)\n#some(ba)\n#none\n#some(20)\n#none\n#some(ab)\n#some(120)\n#none\n#some(ab)\n"
 
 [<Fact>]
 let ``Run - array, slice, stack and queue reduce from the first element`` () =

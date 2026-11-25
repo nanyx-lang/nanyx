@@ -43,9 +43,12 @@ match json.decode(type Drawing, plan)
   | #some(read) -> println("{read.title} by {read.author}")
   | failure -> println(json.describe(failure))
 
--- {"title":"Sketch","shapes":["point",{"circle":1.5},{"rect":{"width":2,"height":1}}]}
+-- {"title":"Sketch","shapes":["point",{"circle":1.5},{"rect":{"height":1,"width":2}}]}
 -- Plan by #some(Ada)
 ```
+
+A record is written as an object, and for now its fields come out in an unspecified order, as an object's keys do (see
+[json](json)), not the order the type writes them in.
 
 A failure is a tag of its own, which `json.describe` writes: `#invalidJson` for text that isn't JSON, `#doesNotFit` for
 a value that doesn't fit the type, and `#cannotEncode` for a part of a value that JSON can't hold, each with where:

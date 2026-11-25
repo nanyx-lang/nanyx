@@ -124,10 +124,11 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (github: NyxC
         File.Delete inputFile
 
 /// The packages from the index that the tests' programs and the docs' examples use, though the compiler doesn't ship
-/// them, so that no test needs the network: `nanyx.json` 0.1.0, 0.2.0 and 0.4.0, the `.nyxpkg`s their releases on
-/// nanyx-lang/json carry (`Packages/nanyx.json-<version>.nyxpkg`, downloaded from the releases, whose SHA-256s the index
-/// records). They are listed in an index on disk, in a directory of its own, and downloaded into the store's cache once,
-/// before any test reads them, so that tests run in parallel never unpack one at the same time.
+/// them, so that no test needs the network: `nanyx.json` 0.1.0, 0.2.0 and 0.4.0, and `nanyx.regex` 0.1.0, the `.nyxpkg`s their
+/// releases on nanyx-lang/json and nanyx-lang/regex carry (`Packages/<package>-<version>.nyxpkg`, downloaded from the
+/// releases, whose SHA-256s the index records). They are listed in an index on disk, in a directory of its own, and
+/// downloaded into the store's cache once, before any test reads them, so that tests run in parallel never unpack one at
+/// the same time.
 let private packagesForTests =
     lazy
         (let directory = Path.Combine(Path.GetTempPath(), $"nanyx-test-index-{Guid.NewGuid():N}")
@@ -138,26 +139,27 @@ let private packagesForTests =
          Directory.CreateDirectory(Path.Combine(store.Index, "artifacts")) |> ignore
          Directory.CreateDirectory(Path.Combine(store.Index, "index", "nanyx")) |> ignore
          File.WriteAllText(Path.Combine(store.Index, "config.json"), """{ "format": 1, "index": "index/" }""")
-         let versions =
-             [ "0.1.0"; "0.2.0"; "0.4.0" ]
-             |> List.map (fun version ->
-                 let file = $"nanyx.json-{version}.nyxpkg"
-                 let bytes = File.ReadAllBytes(Path.Combine(__SOURCE_DIRECTORY__, "Packages", file))
-                 File.WriteAllBytes(Path.Combine(store.Index, "artifacts", file), bytes)
-                 version, PackageArchive.sha256 bytes)
-         let entries =
-             versions
-             |> List.map (fun (version, sha256) ->
-                 $$"""{ "version": "{{version}}", "url": "../../artifacts/nanyx.json-{{version}}.nyxpkg", "sha256": "{{sha256}}", "dependencies": {}, "unlisted": false, "available": true }""")
-         File.WriteAllText(
-             Path.Combine(store.Index, "index", "nanyx", "nanyx.json.json"),
-             $$"""{ "name": "nanyx.json", "versions": [{{String.concat ", " entries}}] }"""
-         )
-         for version, sha256 in versions do
-             let locked = { Name = "nanyx.json"; Version = (SemanticVersion.tryParse version).Value; Sha256 = sha256; Dependencies = [] }
-             match PackageIndex.download store locked with
-             | Result.Ok _ -> ()
-             | Result.Error message -> failwith message
+         for name, versions in [ "nanyx.json", [ "0.1.0"; "0.2.0"; "0.4.0" ]; "nanyx.regex", [ "0.1.0" ] ] do
+             let versions =
+                 versions
+                 |> List.map (fun version ->
+                     let file = $"{name}-{version}.nyxpkg"
+                     let bytes = File.ReadAllBytes(Path.Combine(__SOURCE_DIRECTORY__, "Packages", file))
+                     File.WriteAllBytes(Path.Combine(store.Index, "artifacts", file), bytes)
+                     version, PackageArchive.sha256 bytes)
+             let entries =
+                 versions
+                 |> List.map (fun (version, sha256) ->
+                     $$"""{ "version": "{{version}}", "url": "../../artifacts/{{name}}-{{version}}.nyxpkg", "sha256": "{{sha256}}", "dependencies": {}, "unlisted": false, "available": true }""")
+             File.WriteAllText(
+                 Path.Combine(store.Index, "index", "nanyx", $"{name}.json"),
+                 $$"""{ "name": "{{name}}", "versions": [{{String.concat ", " entries}}] }"""
+             )
+             for version, sha256 in versions do
+                 let locked = { Name = name; Version = (SemanticVersion.tryParse version).Value; Sha256 = sha256; Dependencies = [] }
+                 match PackageIndex.download store locked with
+                 | Result.Ok _ -> ()
+                 | Result.Error message -> failwith message
          store)
 
 /// The package store the tests build and run with: an index on disk and a cache of their own, with the packages from
@@ -590,6 +592,15 @@ let withoutDbgLocations (outcome: RunOutcome) =
 /// spaces): for a test of the message.
 let withoutStack (stderr: string) =
     stderr.ReplaceLineEndings("\n").Split('\n') |> Array.filter (fun line -> not (line.StartsWith "  ")) |> String.concat "\n"
+
+/// `x` as a Nanyx float literal, with all the digits it takes to be read back as `x`: `1.0e-300`, not .NET's `1E-300`.
+let floatLiteral (x: float) =
+    let text = x.ToString("R", Globalization.CultureInfo.InvariantCulture).Replace("E+", "e").Replace("E", "e")
+    let mantissa, exponent =
+        match text.IndexOf 'e' with
+        | -1 -> text, ""
+        | at -> text.Substring(0, at), text.Substring at
+    (if mantissa.Contains '.' then mantissa else mantissa + ".0") + exponent
 
 /// The options the in-process tests compile with: memory checks on, so that the counters are there to read.
 let checkedOptions = { WasmOptions.Default with CheckMemory = true }
