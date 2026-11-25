@@ -242,7 +242,8 @@ export def string.hash: string -> int = { s ->
   `toString`, `def Point.toString = { p -> "({p.x}, {p.y})" }`, and a block can load another with
   `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload,
   and derives one for a tag with a payload, a tuple, a record, a list, a map and a set from the
-  `ToString` of each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`, `[a => 1]`.
+  `ToString` of each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`, `[a => 1]`. A
+  measured value is written in the largest unit it is a whole number of: `1500ms`, `2min`.
 export context ToString(a) = (toString: a -> string)
 
 --| What the compiler makes a hole in a string call: `"{x}"` is `"{__interpolate(x)}"`, so a hole
@@ -255,6 +256,31 @@ export def __interpolate: [ToString(a)] a -> string = { value ->
   that requires `ToString(a)` is passed when it is called with one. It writes the tag's name.
 export def __toString: a -> string = { value ->
   "{value}"
+}
+
+--| What the derived `toString` of a measured value stored as an `int` calls: `n` of its
+  dimension's base units, written in the first of the units `names` that it is a whole number of,
+  each as many base units as the scale beside it in `scales`, the largest first, so `1500ms` is
+  written `1500ms` and `120s` is `2min`. Zero, and a value no unit fits, is written as a number of
+  base units, between `before` and `after`.
+export def __measuredIntToString: int, list(string), list(int), string, string -> string = {
+  | n, [name, ...names], [scale, ...scales], before, after ->
+    if n != 0 and n % scale == 0
+      then "{n // scale}{name}"
+      else __measuredIntToString(n, names, scales, before, after)
+  | n, _, _, before, after -> "{before}{n}{after}"
+}
+
+--| What the derived `toString` of a measured value stored as a `float` calls: as
+  [`__measuredIntToString`], `x` written in the first of the units `names` that it is a whole
+  number of, as a whole number, so `1.5s` is written `1500ms`. A number of base units is written
+  as a `float` is.
+export def __measuredFloatToString: float, list(string), list(float), string, string -> string = {
+  | x, [name, ...names], [scale, ...scales], before, after ->
+    if x != 0.0 and x / scale % 1.0 == 0.0 and x / scale > -1.0e15 and x / scale < 1.0e15
+      then "{float.toInt(x / scale, #truncate)}{name}"
+      else __measuredFloatToString(x, names, scales, before, after)
+  | x, _, _, before, after -> "{before}{x}{after}"
 }
 
 --| What the derived `toString` of a list calls: `xs` in square brackets, each element written by

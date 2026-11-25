@@ -112,6 +112,9 @@ module Intrinsics =
     let setOfStore = prefix + "set_of_store"
     /// The store a set holds, as it was made of.
     let setStore = prefix + "set_store"
+    /// The number a measured value is stored as, its number of its dimension's base units, as it is (see
+    /// `Units.storageIntrinsic`).
+    let measuredStorage = Units.storageIntrinsic
     /// An array holding a list's elements, in order, each laid out flat in one block (see `Arrays`).
     let arrayOfList = prefix + "array_of_list"
     /// The elements an array holds, as a list, in order.
@@ -202,7 +205,7 @@ module Intrinsics =
     let hostState = prefix + "host_state"
 
     /// The intrinsics that give back their argument as a value of another type, which the backend holds the same way.
-    let reinterpretations : Set<string> = set [ mapOfStore; mapStore; setOfStore; setStore ]
+    let reinterpretations : Set<string> = set [ mapOfStore; mapStore; setOfStore; setStore; measuredStorage ]
 
     /// The intrinsics of tasks, which `nanyx/async` is written on (see `TaskLowering` in the backend and
     /// `docs/src/content/deep-dives/async.md`). A task is known by its cell, a counted object of the type `() -> a`,
