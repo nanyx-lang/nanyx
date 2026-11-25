@@ -83,7 +83,7 @@ type BranchPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
     /// the `then` branch). `if x is pattern then a else b` is parsed as a match of `x` against the pattern and `_`.
     let ifArm (e: Expression) : (IfHead * Expression * Expression option) option =
         let elseOf (thenBranch: Expression) (elseBranch: Expression) =
-            if elseBranch.Kind = UnitExpr && elseBranch.Span = thenBranch.Span then None else Some elseBranch
+            if IfSyntax.isLeftOut thenBranch elseBranch then None else Some elseBranch
         match e.Kind with
         | IfExpr(condition, thenBranch, elseBranch) -> Some(Condition condition, thenBranch, elseOf thenBranch elseBranch)
         | Match([ value ], [ [ p ], thenBranch; [ wildcard ], elseBranch ]) when

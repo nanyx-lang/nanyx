@@ -125,7 +125,7 @@ let private ifToMatch (source: string) (indent: string) (step: string) (expr: Ex
         let text = SourceSpan.textIn source branch.Span
         if text.Contains '\n' then reindented source branch.Span.Start (indent + step + step) text else text
     // A left-out `else` is written `()`.
-    let otherwiseText = if otherwise.Kind = UnitExpr && otherwise.Span = (List.last conditions |> snd).Span then "()" else body otherwise
+    let otherwiseText = if IfSyntax.isLeftOut (List.last conditions |> snd) otherwise then "()" else body otherwise
     let compared = conditions |> List.map (fst >> comparison source)
     match compared with
     | Some (value, _) :: _ when compared |> List.forall Option.isSome ->
