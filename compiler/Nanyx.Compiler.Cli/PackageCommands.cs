@@ -260,7 +260,7 @@ internal static partial class CliCommands
     }
 
     /// <summary>
-    /// Add a dependency to the manifest of the package the current directory is in: one found in a directory with --path, or one from the package index, at the versions --version accepts, or else at its newest. A package the compiler ships, such as nanyx.console.core, is named at the compiler's version. A package from the index is locked in nanyx.lock and downloaded, as nanyx pull does; if no versions satisfy every dependency with it, the manifest is left as it was.
+    /// Add a dependency to the manifest of the package the current directory is in: one found in a directory with --path, or one from the package index, at the versions --version accepts, or else at its newest. A package the compiler ships, such as nanyx.cli, is named at the compiler's version. A package from the index is locked in nanyx.lock and downloaded, as nanyx pull does; if no versions satisfy every dependency with it, the manifest is left as it was.
     /// </summary>
     /// <param name="package">The package to depend on, as in acme.util.</param>
     /// <param name="version">The versions of the package to accept: 1.2 or 1.2.0 accepts that version and those compatible with it. The default is the newest version in the index.</param>

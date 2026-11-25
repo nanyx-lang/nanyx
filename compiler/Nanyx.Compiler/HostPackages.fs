@@ -5,7 +5,7 @@ open System.IO
 open Parser.Program.DataValues
 
 /// Packages that are hosts. A host package says so in its own manifest, in its `package`'s `host` field:
-/// `host = (root = "console.host", prelude = "console.prelude")` names its root module, which exports `run`, and the
+/// `host = (root = "cli.host", prelude = "cli.prelude")` names its root module, which exports `run`, and the
 /// module whose exports every module of a program it runs sees without importing them, if it has one, and
 /// `settings = (port = 3000)`, if it takes any, the settings a program may give it, with their defaults.
 /// `Manifest.check` checks the field; this reads it. A program names its host in its own manifest's `host` (see
@@ -20,7 +20,7 @@ module HostPackages =
     let preludeField = "prelude"
 
     /// The field of a host's declaration that names its component root and the world it is written against:
-    /// `component = (root = "console.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")`
+    /// `component = (root = "cli.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")`
     /// (see `HostComponent`).
     let componentField = "component"
 
@@ -75,11 +75,13 @@ module HostPackages =
         shipped.GetOrAdd(name, fun name ->
             let directory = ShippedPackages.directoryOf name
             let path = Path.Combine(directory, name + ".nyxp")
+            // A host named by its old name is told its new one (see `RenamedPackages`).
+            let renamedOr (message: string) = RenamedPackages.asHost name |> Option.defaultValue message
             if not (File.Exists path) then
-                Error $"The compiler ships no package '{name}'"
+                Error (renamedOr $"The compiler ships no package '{name}'")
             else
                 match DataValue.read path (File.ReadAllText path) with
-                | Ok manifest -> ofManifest name directory manifest |> Option.map Ok |> Option.defaultValue (Error (notAHost name))
+                | Ok manifest -> ofManifest name directory manifest |> Option.map Ok |> Option.defaultValue (Error (renamedOr (notAHost name)))
                 | Error _ -> Error $"The manifest of '{name}', which the compiler ships, can't be read")
 
     /// The console host the compiler ships, which a script runs under.

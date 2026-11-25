@@ -6,10 +6,10 @@ open System.IO
 open Parser.Program.DataValues
 
 /// The packages the compiler ships, so that a program needs nothing installed: source directories beside the compiler,
-/// each named for its package (`packages/nanyx.console`), with its manifest and its source files under `src`, at the
+/// each named for its package (`packages/nanyx.cli.host`), with its manifest and its source files under `src`, at the
 /// compiler's version (see `Toolchain.version`), which a manifest names it at exactly. They come from packages/ at the
 /// repository root, which every build of the compiler copies beside it, and the published `nanyx` has beside it in its
-/// archive. The console host is one (see `Hosts`), and its interface package, `nanyx.console.core`, another.
+/// archive. The console host is one (see `Hosts`), and its interface package, `nanyx.cli`, another.
 module ShippedPackages =
     /// Where they are: beside the compiler.
     let directory = Path.Combine(AppContext.BaseDirectory, "packages")
@@ -65,7 +65,7 @@ module ShippedPackages =
                 None)
 
     /// The file at `path` as messages name it, if it is in a package the compiler ships: after the package's name, with
-    /// forward slashes, as `nanyx.console/src/console.host.nyx`, wherever the compiler is installed.
+    /// forward slashes, as `nanyx.cli.host/src/cli.host.nyx`, wherever the compiler is installed.
     let tryDisplay (path: string) : string option =
         if String.IsNullOrEmpty path || not (Path.IsPathRooted path) then
             None

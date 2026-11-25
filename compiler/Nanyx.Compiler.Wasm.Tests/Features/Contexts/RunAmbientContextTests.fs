@@ -17,7 +17,7 @@ def main = { greet("Ada") }
 """
 
 /// What running an application whose module `greeter` is `greeter` printed. It lists the console's interface package,
-/// `nanyx.console.core`, in its dependencies, so that a module can import it.
+/// `nanyx.cli`, in its dependencies, so that a module can import it.
 let private run (greeter: string) =
     let files = [ "greeter.nyx", greeter; "main.nyx", main ] |> List.map (fun (path, text) -> path, text.ReplaceLineEndings "\n")
     fst (nanyxOnPackageWithConsoleCore files [ "run"; "{package}" ])
@@ -36,7 +36,7 @@ let ``Run - a context carried in from an aliased import is the runtime's`` () =
     run """
 module greeter
 
-import nanyx.console.core/console as c
+import nanyx.cli/console as c
 
 export def greet: [c.Console] string -> () = { name -> c.println("hello {name}") }
 """

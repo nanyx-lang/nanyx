@@ -14,8 +14,8 @@
 --           ^^^^^^^^^ entity.name.package.directive.nanyx
 --                     ^^^^^^^ string.unquoted.path.directive.nanyx
 
-::host nanyx.console 0.28.0
---                   ^^^^^^ constant.numeric.version.directive.nanyx
+::host nanyx.cli.host 0.28.0
+--                    ^^^^^^ constant.numeric.version.directive.nanyx
 
 ::format lineWidth 100
 --       ^^^^^^^^^ variable.other.directive.nanyx

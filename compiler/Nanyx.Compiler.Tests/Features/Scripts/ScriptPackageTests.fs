@@ -54,9 +54,9 @@ println(mark)"""
 
 [<Fact>]
 let ``A script depends on a package the compiler ships by its name`` () =
-    let source = withFinalNewline $"""::dependency nanyx.console.core
+    let source = withFinalNewline $"""::dependency nanyx.cli
 
-import nanyx.console.core/env as (Env)
+import nanyx.cli/env as (Env)
 
 def count: [Env] () -> int = {{ () -> args() \length }}
 
@@ -77,9 +77,9 @@ println(shout(twice("hi")))"""
     Assert.Empty(compileScriptWith files source)
 
 [<Theory>]
-[<InlineData("::host nanyx.console")>]
-[<InlineData("::host nanyx.console {version}")>]
-[<InlineData("::host nanyx.console {shipped}")>]
+[<InlineData("::host nanyx.cli.host")>]
+[<InlineData("::host nanyx.cli.host {version}")>]
+[<InlineData("::host nanyx.cli.host {shipped}")>]
 let ``A script runs under the host its ::host names, by name, version or path`` (directive: string) =
     let directive =
         directive
@@ -91,21 +91,21 @@ println("hi")"""
     Assert.Empty(compileScriptWith [] source)
 
 [<Theory>]
-[<InlineData("::host nanyx.console 0.0.1", "NYX0029", "The compiler ships 'nanyx.console' {version}, not 0.0.1")>]
+[<InlineData("::host nanyx.cli.host 0.0.1", "NYX0029", "The compiler ships 'nanyx.cli.host' {version}, not 0.0.1")>]
 [<InlineData("::host nanyx.nope {version}", "NYX0023", "The compiler ships no package 'nanyx.nope': give the path of a host the compiler doesn't ship")>]
 [<InlineData("::host nanyx.nope", "NYX0009", "The compiler ships no package 'nanyx.nope': give the directory it is in, as in `../nope`")>]
 [<InlineData("::host acme.util ../util", "NYX0023", "'acme.util' is not a host")>]
 [<InlineData("::host acme.other ../util", "NYX0023", "The package in")>]
-[<InlineData("::host nanyx.console ../nowhere", "NYX0023", "The host 'nanyx.console' can't be read")>]
+[<InlineData("::host nanyx.cli.host ../nowhere", "NYX0023", "The host 'nanyx.cli.host' can't be read")>]
 [<InlineData("::host", "NYX0009", "`::host` takes a host and where it is found")>]
-[<InlineData("::host nanyx.console ../console extra", "NYX0009", "`::host` takes a host and where it is found")>]
-[<InlineData("::host nanyx.console latest", "NYX0009", "'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory")>]
+[<InlineData("::host nanyx.cli.host ../console extra", "NYX0009", "`::host` takes a host and where it is found")>]
+[<InlineData("::host nanyx.cli.host latest", "NYX0009", "'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory")>]
 [<InlineData("::dependency acme.util 1.2.0", "NYX0041", "'acme.util' 1.2.0 isn't in the package cache")>]
 [<InlineData("::dependency acme.util 1.2", "NYX0009", "A script names the exact version of 'acme.util' it uses, as in `1.2.0`, not the versions it accepts, '1.2'")>]
 [<InlineData("::dependency acme.util ../nowhere", "NYX0023", "The dependency 'acme.util' can't be read")>]
 [<InlineData("::dependency acme.other ../util", "NYX0023", "is named 'acme.util', not 'acme.other'")>]
 [<InlineData("::dependency acme.util", "NYX0009", "`::dependency acme.util` needs the version of 'acme.util' to use, as in `::dependency acme.util 1.2.0`, or the directory it is in, as in `../util`")>]
-[<InlineData("::dependency nanyx.console.core 0.0.1", "NYX0029", "The compiler ships 'nanyx.console.core' {version}, not 0.0.1")>]
+[<InlineData("::dependency nanyx.cli 0.0.1", "NYX0029", "The compiler ships 'nanyx.cli' {version}, not 0.0.1")>]
 [<InlineData("::dependency", "NYX0009", "`::dependency` takes a package and where it is found")>]
 let ``A wrong ::host or ::dependency is the manifest's error, at the directive`` (directive: string, code: string, message: string) =
     let directive = directive.Replace("{version}", Toolchain.version)
@@ -119,8 +119,8 @@ println("hi")"""
 
 [<Fact>]
 let ``A script runs under one host`` () =
-    let source = withFinalNewline $"""::host nanyx.console
-::host nanyx.console
+    let source = withFinalNewline $"""::host nanyx.cli.host
+::host nanyx.cli.host
 
 println("hi")"""
     let diagnostic = Assert.Single(compileScriptWith [] source)

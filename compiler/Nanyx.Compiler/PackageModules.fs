@@ -211,6 +211,7 @@ module PackageModules =
             | Some dependency, _ -> resolvePublicModule dependency item name moduleName
             | None, Some _ ->
                 Error (Diagnostics.at DiagnosticCodes.IndirectDependency item.Span $"The package '{other}' is not a dependency of '{modules.Package}', only of a package it depends on, and a package can import only the packages it depends on itself: add '{other}' to its dependencies" |> Diagnostics.about other)
+            | None, None when (RenamedPackages.inImport name).IsSome -> notFound (RenamedPackages.inImport name).Value
             | None, None ->
                 let dependencies =
                     match modules.Dependencies with

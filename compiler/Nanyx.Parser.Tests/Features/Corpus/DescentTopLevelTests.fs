@@ -24,7 +24,7 @@ open ParserTestHelpers
 [<InlineData("module m =\n  def pair = (1, 2)\n  export def (a, b) = pair\n\nimport m\n")>]
 [<InlineData("def r =\n  def a = 1\n  a + 1  -- two\n\nprintln(r)\n")>]
 [<InlineData("module shapes =\n  export type Shape = #circle | #square\n  def area = { s -> 0 }\n\n  module inner =\n    def x = 1\n\ndef y = 2\n")>]
-[<InlineData("::host nanyx.console\n\nprintln(\"hi\")\n")>]
+[<InlineData("::host nanyx.cli.host\n\nprintln(\"hi\")\n")>]
 [<InlineData("use Log(log = { m -> () }) in greet()\n")>]
 let ``A file is read`` (source: string) =
     readsWhole source

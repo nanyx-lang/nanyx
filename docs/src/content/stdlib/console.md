@@ -4,9 +4,9 @@ description: Reading from and writing to the terminal
 order: 11
 ---
 
-`Console` is in the console host's interface package, `nanyx.console.core`, and the console host's prelude brings it, with
+`Console` is in the console host's interface package, `nanyx.cli`, and the console host's prelude brings it, with
 `print`, `println`, `eprint` and `eprintln`, into every module of a program, so it needs no import. A library
-lists `nanyx.console.core` in its dependencies and imports `nanyx.console.core/console`. The program's `@entry` function runs in `Console`, so `print` and the rest are available in `main` without any setup; any other function that calls them must declare `[Console]` in its type.
+lists `nanyx.cli` in its dependencies and imports `nanyx.cli/console`. The program's `@entry` function runs in `Console`, so `print` and the rest are available in `main` without any setup; any other function that calls them must declare `[Console]` in its type.
 
 ```nanyx
 match readLine()
@@ -64,8 +64,8 @@ How a program talks to the terminal.
 which come from whichever `Console` instance its caller supplies. The members are primitives that
 take text as it is: [`print`](#print), [`println`](#println), [`eprint`](#eprint) and [`eprintln`](#eprintln) are written on top of them,
 so an instance supplies `write` and `writeError` and gets all four. The console host's prelude
-brings them into every module of a program; a library depends on `nanyx.console.core` and imports
-`nanyx.console.core/console`.
+brings them into every module of a program; a library depends on `nanyx.cli` and imports
+`nanyx.cli/console`.
 
 ## `IoError`
 
@@ -89,7 +89,7 @@ context Console = (
 
 The terminal: standard output, standard error and standard input. Code that needs it declares
 `[Console]`, and its caller supplies an instance; the host supplies one to the program's entry point
-(the console host's, `nanyx.console`, reads and writes the standard streams). `print`, `println`, `eprint` and `eprintln` write through it.
+(the console host's, `nanyx.cli.host`, reads and writes the standard streams). `print`, `println`, `eprint` and `eprintln` write through it.
 
 - `write`: Writes `text` to standard output, as it is.
 - `writeError`: Writes `text` to standard error, as it is.

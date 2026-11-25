@@ -112,9 +112,9 @@ let ``A block comment runs to the line with the same dashes, and code inside it 
 
 [<Fact>]
 let ``Directives and a #! line at the top are trivia, and :: in code is a token`` () =
-    let source = "#!/usr/bin/env nanyx\n::host nanyx.console\n\ndef f: (x :: int) = 1"
+    let source = "#!/usr/bin/env nanyx\n::host nanyx.cli.host\n\ndef f: (x :: int) = 1"
     Assert.Equal<(TriviaKind * string) list>(
-        [ Directive, "#!/usr/bin/env nanyx"; LineBreak, "\n"; Directive, "::host nanyx.console"; LineBreak, "\n"; LineBreak, "\n" ],
+        [ Directive, "#!/usr/bin/env nanyx"; LineBreak, "\n"; Directive, "::host nanyx.cli.host"; LineBreak, "\n"; LineBreak, "\n" ],
         trivia source |> List.truncate 5)
     Assert.Contains((DoubleColon, "::"), tokens source)
 

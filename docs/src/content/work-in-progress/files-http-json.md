@@ -8,8 +8,8 @@ The file system, the HTTP client and the HTTP host are built, as shipped package
 to the package index from [nanyx-lang/json](https://github.com/nanyx-lang/json). What a program uses is in the
 user docs: [filesystem](../stdlib/filesystem), [file](../stdlib/file), [dir](../stdlib/dir) and [path](../stdlib/path)
 for `nanyx.fs`; [client](../stdlib/client), [http](../stdlib/http), [request](../stdlib/request) and
-[response](../stdlib/response) for `nanyx.http.core`; [The HTTP host](../advanced/hosts#the-http-host) and the
-[HTTP server cookbook](../cookbook/http-server) for `nanyx.http`; and [json](../stdlib/json),
+[response](../stdlib/response) for `nanyx.http`; [The HTTP host](../advanced/hosts#the-http-host) and the
+[HTTP server cookbook](../cookbook/http-server) for `nanyx.http.host`; and [json](../stdlib/json),
 [decoders](../stdlib/json-typed) and [encoders](../stdlib/encode) for `nanyx.json`. How the hosts implement them is on
 [Hosts](../deep-dives/hosts#how-its-built) and [Foreign functions](../deep-dives/foreign-functions#whats-built). This
 page keeps what is still open.
@@ -25,7 +25,7 @@ page keeps what is still open.
 - **Binary bodies.** A body is a `string`. The library now converts between bytes and text, with
   [`string.toUtf8` and `string.fromUtf8`](../stdlib/text), so a body could be an `Array(U8)` and a program could read
   it as text when it is UTF-8; `Request` and `Response` don't take one yet.
-- **A `.json` helper.** `Response.json` would make `nanyx.http.core` depend on `nanyx.json`, and the HTTP host would
+- **A `.json` helper.** `Response.json` would make `nanyx.http` depend on `nanyx.json`, and the HTTP host would
   want a constructor of that name as much as a client wants a reader. Whether to add it is open.
 - **What the HTTP host still needs**, route patterns, `Log` and `Env`, streamed bodies, serving beyond `localhost`
   and serving as a `wasi:http` component, is on [Serving HTTP](./hosts#serving-http).
@@ -44,5 +44,5 @@ page keeps what is still open.
 
 # Open questions
 
-- **Package names.** `nanyx.fs`, `nanyx.http.core`, `nanyx.http` and `nanyx.json` are working names, as the console
+- **Package names.** `nanyx.fs`, `nanyx.http`, `nanyx.http.host` and `nanyx.json` are working names, as the console
   packages' are ([Hosts](./hosts#open-questions)).

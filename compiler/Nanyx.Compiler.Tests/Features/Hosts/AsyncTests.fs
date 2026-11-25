@@ -6,14 +6,14 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-/// `source` compiled as `src/main.nyx` of an application under the console host that depends on `nanyx.http.core`
+/// `source` compiled as `src/main.nyx` of an application under the console host that depends on `nanyx.http`
 /// and `nanyx.fs`.
 let private compiledFile (source: string) =
     let manifest =
         $"""(
   package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"])
   dependencies = [
-    (package = "nanyx.http.core", version = "{Toolchain.version}")
+    (package = "nanyx.http", version = "{Toolchain.version}")
     (package = "nanyx.fs", version = "{Toolchain.version}")
   ]
   {consoleHostEntry}
@@ -34,7 +34,7 @@ let private withHttp (source: string) =
     withFinalNewline (
         """module main
 
-import nanyx.http.core/http as http
+import nanyx.http/http as http
 
 """
         + normalized source

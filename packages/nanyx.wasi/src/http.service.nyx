@@ -13,8 +13,8 @@ import (
   nanyx/text
   abi as (aligned8, freeOptionalString, readableEnd, settled, takeString, writableEnd)
   http as (bodyFrom, fieldsOf, headersOf)
-  nanyx.http.core/request as (Method, Request)
-  nanyx.http.core/response as (Response)
+  nanyx.http/request as (Method, Request)
+  nanyx.http/response as (Response)
 )
 
 -- A request is a `wasi:http/types` `request`: its method, scheme, authority and path with its

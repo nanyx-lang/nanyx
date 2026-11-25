@@ -7,6 +7,6 @@
   linters = [
     (package = "nanyx.lint", version = "0.39.0", settings = (rules = (unusedBindings = #error)))
   ]
-  host = (package = "nanyx.console", version = "0.39.0")
+  host = (package = "nanyx.cli.host", version = "0.39.0")
   formatter = (lineWidth = 100)
 )

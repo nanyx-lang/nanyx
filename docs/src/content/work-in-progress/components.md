@@ -18,7 +18,7 @@ whose stages are filed as issues.
 
 **Today a built `.wasm` runs only under `nanyx run`.** It is a core module. The console host does its I/O through WASI
 preview 1 (`wasi_snapshot_preview1`: `fd_write`, `path_open`, `clock_time_get` and the rest, in
-`packages/nanyx.console/src/console.host.nyx` and `console.host.files.nyx`). It adds two of the runtime's own imports
+`packages/nanyx.cli.host/src/cli.host.nyx` and `cli.host.files.nyx`). It adds two of the runtime's own imports
 where preview 1 has nothing:
 
 - `nanyx:http`'s `send` and `receive`, which `Nanyx.Runtime.HttpImport` implements on .NET's `HttpClient`;
@@ -202,9 +202,9 @@ interleaving and a fresh instance per test or request. No embedding runs WASI 0.
 
 ```nanyx fragment
 host = (
-  root = "console.host"
-  prelude = "console.prelude"
-  component = (root = "console.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")
+  root = "cli.host"
+  prelude = "cli.prelude"
+  component = (root = "cli.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")
 )
 ```
 
@@ -264,7 +264,7 @@ Each import of the console and HTTP hosts maps onto a WASI 0.3 interface, or ont
   `wasmtime run -S http` is.
 - **The WIT is `@0.3.0`.** Every 0.3 host accepts it, since later 0.3.x versions are compatible, and nothing a host needs
   changed after it.
-- **The playground keeps its own host.** Browsers don't run components, so `nanyx.playground` is unaffected
+- **The playground keeps its own host.** Browsers don't run components, so `nanyx.playground.host` is unaffected
   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)).
 
 ## The backend
@@ -352,10 +352,10 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 | Stage | What it builds | What users can do then |
 |---|---|---|
 | 0. The componentizer ([#2236](https://github.com/nanyx-lang/nanyx/issues/2236)), done | A small Rust crate on wit-component, built to `wasm32-wasip1` by Cargo when the runtime builds, and embedded in `Nanyx.Compiler.Runtime`. A `cabi_realloc` export. The entry exported under a world's name. The runtime's own imports on `wasi:cli` | Nothing visible yet |
-| 1a. Console components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `nanyx.console`'s component root on `wasi:cli`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the example packages under `wasmtime run` | Build a command-line program that needs no `FileSystem` or `Http` once, and run it with `wasmtime run` or any WASI 0.3 runtime |
+| 1a. Console components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `nanyx.cli.host`'s component root on `wasi:cli`, `wasi:clocks` and `wasi:random`, lifted synchronously. `nanyx build` writes a component, `--core` a module. CI runs the example packages under `wasmtime run` | Build a command-line program that needs no `FileSystem` or `Http` once, and run it with `wasmtime run` or any WASI 0.3 runtime |
 | 1b. Files in components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `FileSystem` on `wasi:filesystem`, in the console host's component root | The same, for programs that read and write files |
 | 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)), done | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
-| 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)), done | `nanyx.http`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request at a time per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
+| 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)), done | `nanyx.http.host`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request at a time per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
 | 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
 | 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241), [#2326](https://github.com/nanyx-lang/nanyx/issues/2326)), done | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types, with `out/wit`; library components; exports that require the host's contexts; a test in CI with Rust components under `wasmtime run` | Write plugins and libraries that other languages' components call, and call theirs |
 | 6. One root per host ([#2242](https://github.com/nanyx-lang/nanyx/issues/2242)) | Run 0.3 components in `nanyx run`, once an embedding supports it (upstream or our own), and delete the core roots | One implementation of each host |

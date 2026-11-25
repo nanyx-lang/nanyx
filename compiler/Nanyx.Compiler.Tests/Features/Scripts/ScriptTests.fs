@@ -118,7 +118,7 @@ let ``A ::lint with no ::linter above it is an error whose fix turns on the offi
 [<InlineData("::linters.default.unusedBindings = \"error\"", "::linter nanyx.lint\n::lint unusedBindings #error")>]
 [<InlineData("::formatter.lineWidth = 80", "::format lineWidth 80")>]
 [<InlineData("::host.acme.server = { path = \"../server\" }", "::host acme.server ../server")>]
-[<InlineData("::host.nanyx.console = \"0.28.0\"", "::host nanyx.console 0.28.0")>]
+[<InlineData("::host.nanyx.cli.host = \"0.28.0\"", "::host nanyx.cli.host 0.28.0")>]
 [<InlineData("::dependencies.acme.util = { path = \"util\" }", "::dependency acme.util ./util")>]
 [<InlineData("::dependencies.acme.json = \"1.2.0\"", "::dependency acme.json 1.2.0")>]
 let ``A directive in the old form is an error whose fix writes it as it is written now`` (old: string, now: string) =

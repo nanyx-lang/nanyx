@@ -116,7 +116,7 @@ def main = {
 let ``Run - println imported under an alias writes through the runtime's Console`` () =
     let source = """module main
 
-import nanyx.console.core/console as c
+import nanyx.cli/console as c
 
 @entry
 def main = {
@@ -131,7 +131,7 @@ def main = {
 let ``Run - a def that declares the Console of an aliased import writes through the runtime's Console`` () =
     let source = """module main
 
-import nanyx.console.core/console as c
+import nanyx.cli/console as c
 
 def g: [c.Console] () -> () = { c.println("5") }
 

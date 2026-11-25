@@ -7,9 +7,9 @@ order: 12.5
 A function that can wait, on an HTTP request or a file, requires `Async`, and is otherwise an ordinary function:
 
 ```nanyx fragment
-::dependency nanyx.http.core
+::dependency nanyx.http
 
-import nanyx.http.core/http as http
+import nanyx.http/http as http
 
 def fetchName: [Async, Http] string -> string = { url ->
   def response = http.get(url) \orCrash("no name")

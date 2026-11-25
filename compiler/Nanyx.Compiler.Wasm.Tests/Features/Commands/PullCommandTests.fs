@@ -29,9 +29,9 @@ let ``A path dependency is checked and listed with its version and directory`` (
 [<Fact>]
 let ``A package the compiler ships is listed as shipped with it`` () =
     use directory = new TempDirectory()
-    let app = appWith directory $"""(package = "nanyx.console.core", version = "{Toolchain.version}")"""
+    let app = appWith directory $"""(package = "nanyx.cli", version = "{Toolchain.version}")"""
     let outcome = nanyxIn directory.Path [ "pull"; "app" ]
-    Assert.Equal($"nanyx.console.core {Toolchain.version} (shipped with the compiler)\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+    Assert.Equal($"nanyx.cli {Toolchain.version} (shipped with the compiler)\n", outcome.StandardOutput.ReplaceLineEndings "\n")
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]

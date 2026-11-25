@@ -186,6 +186,7 @@
     <Compile Include="Features\Matches\IsExpressionTests.fs" />
     <Compile Include="Features\Ordering\OrderingTests.fs" />
     <Compile Include="Features\Packages\GitHubReferenceTests.fs" />
+    <Compile Include="Features\Packages\HostNameTests.fs" />
     <Compile Include="Features\Packages\KeptModuleTests.fs" />
     <Compile Include="Features\Packages\LockfileAndCacheTests.fs" />
     <Compile Include="Features\Packages\ManifestTests.fs" />

@@ -8,7 +8,7 @@ open System.Threading
 open System.Threading.Tasks
 open Wasmtime
 
-/// Serving a program whose host answers HTTP requests, as the HTTP host (`nanyx.http`) does, for local development.
+/// Serving a program whose host answers HTTP requests, as the HTTP host (`nanyx.http.host`) does, for local development.
 /// Such a host imports the runtime's own `nanyx:serve`: each request is answered by a fresh instance of the program,
 /// whose start function runs the host's `run`, which takes the request through `nanyx:serve` and gives back the
 /// response. Nothing is shared between requests, so they are answered at the same time, each in its own store. An
@@ -16,7 +16,7 @@ open Wasmtime
 /// on. The functions of `nanyx:serve`:
 ///
 /// - `requestLength() -> i32`, the length in bytes of the request the instance answers, written as
-///   `nanyx.http.core/wire` reads it;
+///   `nanyx.http/wire` reads it;
 /// - `request(destination: i32)`, which copies it to `destination`;
 /// - `respond(response: i32, length: i32)`, which gives the response written in the `length` bytes at `response`.
 module WasmServer =

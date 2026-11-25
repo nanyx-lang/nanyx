@@ -6,9 +6,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // A library function that requires a context the program's host doesn't provide is an error at its call (#1811).
 
-/// A host, `acme.quiet`, in `quiet/`, that provides no contexts.
+/// A host, `acme.quiet.host`, in `quiet/`, that provides no contexts.
 let private quietHost =
-    [ "quiet/acme.quiet.nyxp", withFinalNewline """(package = (name = "acme.quiet", version = "0.1.0", host = (root = "quiet.host")))"""
+    [ "quiet/acme.quiet.host.nyxp", withFinalNewline """(package = (name = "acme.quiet.host", version = "0.1.0", host = (root = "quiet.host")))"""
       "quiet/quiet.host.nyx",
       withFinalNewline """export module quiet.host
 
@@ -23,9 +23,9 @@ let private library (dependency: string) (body: string) =
       "lib/lib.nyx", withFinalNewline body ]
 
 let private consoleLibrary =
-    library "nanyx.console.core" """export module lib
+    library "nanyx.cli" """export module lib
 
-import nanyx.console.core/console
+import nanyx.cli/console
 
 export def greet: [Console] () -> () = { -> println("hi") }"""
 
@@ -54,7 +54,7 @@ let private callers =
 [<Fact>]
 let ``A library's function requiring a context the host doesn't provide is an error at its call`` () =
     for caller, line in callers do
-        let source = withFinalNewline $"""::host acme.quiet ./quiet
+        let source = withFinalNewline $"""::host acme.quiet.host ./quiet
 ::dependency acme.lib ./lib
 
 import acme.lib/lib
@@ -63,13 +63,13 @@ import acme.lib/lib
         match compileScriptWith consoleLibrary source with
         | [ diagnostic ] ->
             Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-            Assert.Equal("'greet' requires the context 'Console', which the host 'acme.quiet/quiet.host' does not provide", diagnostic.Message)
+            Assert.Equal("'greet' requires the context 'Console', which the host 'acme.quiet.host/quiet.host' does not provide", diagnostic.Message)
             Assert.Equal(line, diagnostic.Span.Value.StartLine)
         | diagnostics -> Assert.Fail $"Expected one diagnostic for `{caller}`, got %A{diagnostics}"
 
 [<Fact>]
 let ``A library's function requiring FileSystem is an error at its call under a host that doesn't provide it`` () =
-    let source = withFinalNewline """::host acme.quiet ./quiet
+    let source = withFinalNewline """::host acme.quiet.host ./quiet
 ::dependency acme.lib ./lib
 
 import acme.lib/lib
@@ -78,6 +78,6 @@ greet()"""
     match compileScriptWith fileSystemLibrary source with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-        Assert.Equal("'greet' requires the contexts 'Async' and 'FileSystem', which the host 'acme.quiet/quiet.host' does not provide", diagnostic.Message)
+        Assert.Equal("'greet' requires the contexts 'Async' and 'FileSystem', which the host 'acme.quiet.host/quiet.host' does not provide", diagnostic.Message)
         Assert.Equal(5, diagnostic.Span.Value.StartLine)
     | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"

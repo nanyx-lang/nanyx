@@ -1,4 +1,4 @@
-/// The console host (`nanyx.console/console.host`) provides `Env`: the program's arguments, its environment variables and its exit code (#1246, see
+/// The console host (`nanyx.cli.host/cli.host`) provides `Env`: the program's arguments, its environment variables and its exit code (#1246, see
 /// docs/src/content/deep-dives/hosts.md).
 module TranspilerWasmTests.Features.Hosts.Env
 

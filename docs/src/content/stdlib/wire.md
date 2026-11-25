@@ -4,7 +4,7 @@ description: How the runtime's HTTP imports write requests and responses
 order: 15.9
 ---
 
-`nanyx.http.core/wire` is for hosts, not programs: it writes and reads requests and responses as the `nanyx`
+`nanyx.http/wire` is for hosts, not programs: it writes and reads requests and responses as the `nanyx`
 runtime's own imports, `nanyx:http` and `nanyx:serve`, pass them. The console host and the HTTP host use it.
 # Reference
 

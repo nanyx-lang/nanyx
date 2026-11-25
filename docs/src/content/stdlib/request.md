@@ -4,7 +4,7 @@ description: HTTP requests
 order: 15.7
 ---
 
-A `Request` is a record, in the HTTP interface package `nanyx.http.core` (see [client](./client)); the console host's
+A `Request` is a record, in the HTTP interface package `nanyx.http` (see [client](./client)); the console host's
 prelude brings it, and `Method`, into every module of a program. Make one with `Request.of`, and change the rest
 with `with`:
 
@@ -19,7 +19,7 @@ HTTP requests.
 
 A [`Request`](#request) is a record: its [`Method`](#method), its URL, its headers, its body and how long to wait
 for an answer. [`Request.of`](#requestof) makes one with no headers and no body, and `with` changes the rest:
-`Request.of(#post, url) with body = text`. Send one with `http.send`, from `nanyx.http.core/http`.
+`Request.of(#post, url) with body = text`. Send one with `http.send`, from `nanyx.http/http`.
 
 ## `Method`
 

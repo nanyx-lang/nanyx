@@ -82,7 +82,9 @@ import "./helpers" as helpers  -- error NYX0003: There is no file at this path, 
 def total = 1
 ```
 
-To fix it, correct the path or the module's name, or create the file.
+To fix it, correct the path or the module's name, or create the file. An import of a shipped package's module by the
+package's old name, from before the shipped packages were renamed ([`NYX0054`](#nyx0054)), says what to import now:
+`import nanyx.console.core/env` is `nanyx.cli/env`.
 
 # NYX0004: Import cycle
 
@@ -526,7 +528,7 @@ To fix it, make every package that depends on it give the same directory.
 
 # NYX0029: Version not shipped
 
-A manifest names a linter or host the compiler ships, such as `nanyx.lint` or `nanyx.console`, at a version other than
+A manifest names a linter or host the compiler ships, such as `nanyx.lint` or `nanyx.cli.host`, at a version other than
 the one it ships. The compiler ships each of them at its own version, and a manifest names them at it exactly.
 
 ```nanyx
@@ -566,7 +568,7 @@ def main = { () }
 (package = (name = "app", version = "0.1.0", sources = ["*.nyx"]))
 ```
 
-To fix it, name the host the program runs under in the manifest, `host = (package = "nanyx.console", version = "...")`
+To fix it, name the host the program runs under in the manifest, `host = (package = "nanyx.cli.host", version = "...")`
 at the compiler's version, which `nanyx new` writes, or remove the `@entry` if the package is a library.
 
 # NYX0032: Contexts joined with `&` or `+`
@@ -622,14 +624,14 @@ To fix it, write the manifest as a record:
 ```nanyx fragment
 (
   package = (name = "shop", version = "0.1.0")
-  host = (package = "nanyx.console", version = "...")
+  host = (package = "nanyx.cli.host", version = "...")
 )
 ```
 
 # NYX0035: Directive written in the old form
 
-A script's directive is a name and words: `::host nanyx.console`. A directive written as a manifest's dotted key with a
-TOML value, `::host.nanyx.console = "0.28.0"`, is an error.
+A script's directive is a name and words: `::host nanyx.cli.host`. A directive written as a manifest's dotted key with a
+TOML value, `::host.nanyx.cli.host = "0.28.0"`, is an error.
 
 ```nanyx
 ::formatter.lineWidth = 80  -- error NYX0035: Directives are lines of words now, not a manifest's key and a TOML value: write `::format lineWidth 80`
@@ -807,7 +809,7 @@ or an application whose files declare no `@entry`. No example can show it, since
 checking the package.
 
 To fix it, run an application, or add an `@entry` to one of its files and name the host it runs under in its manifest,
-as `host = (package = "nanyx.console", version = "...")`.
+as `host = (package = "nanyx.cli.host", version = "...")`.
 
 # NYX0046: Keyword member whose type doesn't fit its kind
 
@@ -917,6 +919,42 @@ The message names both versions:
 ```
 
 To fix it, install a newer compiler. If the package does build with this one, lower its `nanyx`.
+
+# NYX0053: Host package not named for a host
+
+A host's name ends in `.host`, and only a host's does: the library a host runs programs against takes the short name,
+`nanyx.cli`, and the host is `nanyx.cli.host` ([Hosts](../advanced/hosts)). A package whose manifest declares a `host`
+under another name is an error at its name, as is a package named `.host` that declares none:
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "acme.server", version = "0.1.0", host = (root = "server.host"))  -- error NYX0053: The package 'acme.server' declares a `host`, so its name must end in `.host`
+)
+```
+
+To fix it, rename the package: a host to `acme.server.host`, or a library to a name without `.host`. If a package
+named `.host` is a host, declare its `host`.
+
+# NYX0054: Shipped package named by its old name
+
+The packages the compiler ships were renamed when every host came to be named `<name>.host`: `nanyx.console.core` is
+`nanyx.cli`, the console host `nanyx.console` is `nanyx.cli.host`, `nanyx.http.core` is `nanyx.http`, the HTTP host
+`nanyx.http` is `nanyx.http.host`, and `nanyx.playground` is `nanyx.playground.host`. A manifest's `host` or
+`dependencies`, a script's `::host` or `::dependency`, or `--host` that names one by its old name is an error that gives
+the new one. `nanyx.http` is the library's name now, so it is an error only where a host is named:
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [(package = "nanyx.console.core", version = "0.39.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
+)
+```
+
+To fix it, write the new name, and change the imports of its modules to match: `nanyx.console.core/console` is
+`nanyx.cli/console`, and `nanyx.http.core/request` is `nanyx.http/request`. An import that still names the old package
+is [`NYX0003`](#nyx0003), whose message gives the import by the new name.
 
 # NYX0101: Unknown identifier
 
@@ -1767,13 +1805,13 @@ def same: [Foo(_)] a -> a = { x -> x }  -- error NYX0236: The body of 'same' doe
 
 The definition marked `@entry` does not have the type its [host](../advanced/hosts) runs. The host is a
 function that takes the entry point, so the entry point must fit the type of its parameter. A command-line program runs
-under the console host, `nanyx.console/console.host`, whose entry point takes nothing and may require `Console`.
+under the console host, `nanyx.cli.host/cli.host`, whose entry point takes nothing and may require `Console`.
 
 ```nanyx
 module main
 
 @entry
-def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.console/console.host' ...
+def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.cli.host/cli.host' ...
 ```
 
 The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, and names each

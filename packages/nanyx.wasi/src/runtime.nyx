@@ -8,10 +8,10 @@ import (
   nanyx/host.async as (cancelled, waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
-  nanyx.http.core/client as (HttpError)
-  nanyx.http.core/request as (Request)
-  nanyx.http.core/response as (Response)
-  nanyx.http.core/wire as (readResponse, writeRequest)
+  nanyx.http/client as (HttpError)
+  nanyx.http/request as (Request)
+  nanyx.http/response as (Response)
+  nanyx.http/wire as (readResponse, writeRequest)
   preview1 as (millisecondsOn)
 )
 
@@ -30,7 +30,7 @@ def httpReceive: [HostRuntime] I32 -> ()
 @extern("nanyx:async", "wait")
 def runtimeWait: [HostRuntime] I32 -> ()
 
--- A request is passed to `nanyx:http` written as `nanyx.http.core/wire` writes it, and its response comes
+-- A request is passed to `nanyx:http` written as `nanyx.http/wire` writes it, and its response comes
 -- back written the same way. `start` starts it and gives a handle to it, and `poll` gives -1 while it is
 -- in flight, and once it is answered, the answer's length, writing what kind of answer it had, a response
 -- or why there is none, at the address it is given.

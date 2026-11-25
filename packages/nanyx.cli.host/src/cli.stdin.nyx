@@ -1,0 +1,80 @@
+--| Standard input as the console host's roots read it: a buffer at a time, into the host's block,
+  from which `Console`'s `readLine` and `readToEnd` take lines and the rest of the input.
+
+  Each root reads a buffer with its own `fill`, on WASI preview 1 or on `wasi:cli/stdin`, and the
+  rest is the same: at 4 and 8 in the host's block (see `hostState`), where what is left of the
+  input it has read starts and ends in its buffer, and from 64 to the end of the block, the buffer.
+module cli.stdin
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx/text
+  nanyx.cli/console as (IoError)
+)
+
+--| The address `offset` bytes into the host's block.
+export def stateAt: [HostRuntime] I32 -> I32 = { offset ->
+  I32.wrappingAdd(hostState(), offset)
+}
+
+--| Where the buffer starts in the host's block.
+export def bufferOffset: I32 = 64
+
+--| How many bytes of standard input are read at a time: the rest of the host's block.
+export def bufferSize: I32 = 4032
+
+--| Where the line from `index` ends in the buffer at `held`: after its first line break before
+  `end`, or at `end`.
+def lineEnd: [HostRuntime] I32, I32, I32 -> I32 = { held, index, end ->
+  if index >= end
+    then end
+    else if readByte(I32.wrappingAdd(held, index)) == 10
+      then index + 1
+      else lineEnd(held, index + 1, end)
+}
+
+--| The standard input left in the buffer, read into it with `fill` when none is, up to and
+  including its first line break when `toLineBreak`; the empty string when the input has ended.
+  `fill` reads into the buffer, setting where what it read starts and ends, and gives how many
+  bytes are left in it: 0 when the input has ended, or cannot be read.
+def readStdin: [HostRuntime] ([HostRuntime] () -> I32), bool -> string = { fill, toLineBreak ->
+  def left = fill()
+  def start = readI32(stateAt(4))
+
+  def stop = if toLineBreak
+    then lineEnd(stateAt(bufferOffset), start, start + left)
+    else start + left
+
+  writeI32(stateAt(4), stop)
+  stringAt(stateAt(I32.wrappingAdd(bufferOffset, start)), stop - start)
+}
+
+--| `parts`, the latest first, joined in the order they were read.
+def joined: list(string) -> string = { parts ->
+  string.concat(list.reverse(parts))
+}
+
+--| The rest of the current line of standard input, after `parts`, the pieces of it read so far (the
+  latest first), each of them not empty.
+export def readLineAfter
+  : [HostRuntime] ([HostRuntime] () -> I32), list(string) -> #some(string) | IoError
+  = { fill, parts ->
+    def part = readStdin(fill, true)
+
+    if string.isEmpty(part)
+      then (if list.isEmpty(parts) then #endOfInput else #some(joined(parts)))
+      else if string.endsWith(part, "\n")
+        then #some(
+          string.removeSuffix(joined([string.take(part, string.length(part) - 1), ...parts]), "\r")
+        )
+        else readLineAfter(fill, [part, ...parts])
+  }
+
+--| Everything left on standard input, after `blocks`, the blocks read so far (the latest first).
+export def readToEndAfter
+  : [HostRuntime] ([HostRuntime] () -> I32), list(string) -> string
+  = { fill, blocks ->
+    def block = readStdin(fill, false)
+    if string.isEmpty(block) then joined(blocks) else readToEndAfter(fill, [block, ...blocks])
+  }
