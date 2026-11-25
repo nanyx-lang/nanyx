@@ -35,7 +35,7 @@ The emitter writes a probe as a check of whether the runtime is probing: the sta
 copies it into a local when it starts, which can stay in a register. When it is set, the probe calls `nanyx:debug` `probe` with its
 number; if that gives 1, it writes each of its locals that is still alive there through its printer, and passes the
 local's name and text to `nanyx:debug` `local`. A local is still alive where the rest of the code reads it and doesn't
-bind it again (`CoreIrEmit.ChainReads`, worked out once for each chain): one never read again may have been given up
+bind it again (`CoreIrEmitReads.ChainReads`, worked out once for each chain): one never read again may have been given up
 already. A probe that a printer
 takes its argument over from first gives it a reference of its own.
 

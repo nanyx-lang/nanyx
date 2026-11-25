@@ -76,6 +76,7 @@
     <Compile Include="CoreIrEmitLocals.fs" />
     <Compile Include="CoreIrEmitStoreWalk.fs" />
     <Compile Include="CoreIrEmitImports.fs" />
+    <Compile Include="CoreIrEmitReads.fs" />
     <Compile Include="CoreIrEmit.fs" />
     <Compile Include="CoreIrCachedValues.fs" />
     <Compile Include="ComponentValues.fs" />
