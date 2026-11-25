@@ -213,6 +213,16 @@ module internal ModuleLinking =
         let own = exportedTypeNames imported.Own
         imported.BlockReExports |> List.fold (fun acc (name, target) -> if own.Contains target then acc.Add name else acc) own
 
+    /// The units of measure `imported` exports, by name: those it declares with `export unit` (see `Units`).
+    let internal exportedUnits (imported: CheckedModule) : Map<string, UnitInfo> =
+        let names =
+            imported.Syntax
+            |> List.choose (function
+                | Kind (UnitDecl(true, name, _, _)) -> Some name
+                | _ -> None)
+            |> Set.ofList
+        imported.Typed.Units |> Map.filter (fun name _ -> names.Contains name)
+
     /// What the file `module'` gives its importers by re-exporting its own `module name =` blocks at its top level, as
     /// `export shapes`: each re-export, with the names it gives that stand for a definition or type of the file. What a
     /// block re-exports from another file's module is a re-export of that module (see `Library`).
@@ -355,7 +365,8 @@ module internal ModuleLinking =
 
     /// The error for each name `item` selects that `imported` does not export, with the exports closest to it.
     let internal unexportedSelections (item: ImportItem) (imported: CheckedModule) : Diagnostic list =
-        let exports = imported.ReExports |> List.fold (fun names reExport -> Set.union names (Set.ofSeq (reExportSources reExport).Keys)) (Set.union (exportedValues imported) (exportedTypes imported))
+        let own = Set.unionMany [ exportedValues imported; exportedTypes imported; Set.ofSeq (exportedUnits imported).Keys ]
+        let exports = imported.ReExports |> List.fold (fun names reExport -> Set.union names (Set.ofSeq (reExportSources reExport).Keys)) own
         let shown =
             match item.Source with
             | ModuleImport name -> name

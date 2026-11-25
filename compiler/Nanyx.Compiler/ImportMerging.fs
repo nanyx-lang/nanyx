@@ -287,6 +287,12 @@ module internal ImportMerging =
                         acc |> Map.add id (item.Span :: (acc |> Map.tryFind id |> Option.defaultValue []))) state.ImportSites
                 ContextRequirements = contextRequirements
                 ContextSignatures = contextSignatures
+                // A unit is written unqualified, as in `500ms`, under an alias too: an import brings in the units its module
+                // exports, or those it selects (see `Units`).
+                Units =
+                    ModuleLinking.exportedUnits imported
+                    |> Map.filter (fun name _ -> isSelected name)
+                    |> Map.fold (fun acc name info -> acc |> Map.add name info) state.Units
                 ImportedBlockNames =
                     imported.BlockReExports
                     |> List.filter (fun (name, _) -> isSelected name)

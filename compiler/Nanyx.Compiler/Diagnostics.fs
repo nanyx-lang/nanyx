@@ -226,6 +226,12 @@ module DiagnosticCodes =
     let NotOneChar = code 284 "Char literal that is not one character" Severity.Error
     /// Units of measure are read but not checked yet: their declarations and literals are reported until they are.
     let UnitsNotChecked = code 285 "Units of measure not checked yet" Severity.Error
+    let DimensionWithoutBaseUnit = code 286 "Dimension without a base unit" Severity.Error
+    let MisplacedBaseUnit = code 287 "Base unit that can't be one" Severity.Error
+    let UnitCycle = code 288 "Units defined in a circle" Severity.Error
+    let UnitOfAnotherDimension = code 289 "Unit defined in another dimension's units" Severity.Error
+    let DimensionStorageNotNumber = code 290 "Dimension stored in a type that isn't a number" Severity.Error
+    let UnknownUnit = code 291 "Unknown unit" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -258,6 +264,7 @@ module DiagnosticCodes =
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar; UnitsNotChecked
+          DimensionWithoutBaseUnit; MisplacedBaseUnit; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

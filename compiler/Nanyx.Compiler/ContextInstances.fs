@@ -263,6 +263,14 @@ let private derivableType (env: TypeEnv) (ctxName: Identifier) (argTys: Ty list)
 let internal partInstanceIn (env: TypeEnv) (state: InferState) (ctxName: Identifier) (ty: Ty) : (TypeExpr * ContextProvider) option =
     instanceInScope env state ctxName [ ty ]
 
+/// Whether `ty` has an instance of `ctxName`: one in scope in `env`, or one made of a definition attached to it for each
+/// of the context's members, as `int.+` is for `Num`'s `+`.
+let internal hasInstance (env: TypeEnv) (state: InferState) (ctxName: Identifier) (ty: Ty) : bool =
+    (instanceInScope env state ctxName [ ty ]).IsSome
+    || (match contextMemberTypes state ctxName [ ty ] with
+        | Some members -> members |> List.forall (fun (memberName, _) -> (tryResolveAttachedFunction env ty memberName).IsSome)
+        | None -> false)
+
 /// Whether comparing, or hashing, values of the structure `ty` reads a part with a `memberName` (`==` or `hash`) of
 /// its own (see `StructuralInstances.comparesParts`): one attached to the part's type, if not a built-in one, an instance of it in scope that
 /// `partInstance` finds, or the instance of a type variable that `hasInstance` says is in scope.
