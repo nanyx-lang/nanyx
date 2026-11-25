@@ -447,12 +447,20 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
 
     /// <summary>
     /// <c>name: type</c>, laid out to fit <paramref name="width"/> characters as the formatter lays out a def's
-    /// signature, if the client gave a width and the formatter can read it; else on one line.
+    /// signature, if the client gave a width and the formatter can read it; else on one line. A signature that fits on
+    /// one line already is given back as it is, which is all the formatter could make of it: most of a request's names
+    /// do, and laying each out took ten times the rest of the request (#2406).
     /// </summary>
-    private static string LaidOut(int? width, string name, string type) =>
-        width is { } columns && Nanyx.Formatter.SignatureLayout.layOut(columns, name, type)?.Value is { } laidOut
-            ? laidOut
-            : $"{name}: {type}";
+    private static string LaidOut(int? width, string name, string type)
+    {
+        var oneLine = $"{name}: {type}";
+        if (width is not { } columns || (oneLine.Length <= columns && !type.Contains('\n')))
+        {
+            return oneLine;
+        }
+
+        return Nanyx.Formatter.SignatureLayout.layOut(columns, name, type)?.Value ?? oneLine;
+    }
 
     /// <summary>
     /// The location of a span of the last typed text: in this document's text, if it has not been edited since, or in

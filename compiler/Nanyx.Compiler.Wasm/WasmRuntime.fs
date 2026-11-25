@@ -136,6 +136,7 @@ module Helpers =
     let floatTrunc = NyxCompiler.Intrinsics.floatTrunc
     let floatToInt = NyxCompiler.Intrinsics.floatToInt
     let intToFloat = NyxCompiler.Intrinsics.intToFloat
+    let floatFromBits = NyxCompiler.Intrinsics.floatFromBits
     let free = Names.free
     let newCell = "__nanyx_new_cell"
     let newObject = "__nanyx_new_object"
@@ -884,6 +885,15 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
                     "  local.get $value"
                     $"  {instruction}"
                     ")" ])
+      // The float whose bits are an int's.
+      Helpers.floatFromBits,
+      lines
+          [ $"(func ${Helpers.floatFromBits} (param $bits i64) (result f64)"
+            "  local.get $bits"
+            "  f64.reinterpret_i64"
+            ")" ]
+      // A word of the table of powers of five that reading a float uses (see `PowersOfFive`).
+      PowersOfFive.helper, lines PowersOfFive.helperCode
       // A float as an int: `i64.trunc_f64_s` traps on NaN, an infinity or a value out of the range of `int`.
       Helpers.floatToInt,
       lines
@@ -1268,7 +1278,9 @@ let helperDependencies =
       Helpers.stringFromBytes, [ Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringNew, [ Helpers.stringAlloc ]
       Helpers.stringWrite, [ Helpers.copyBytes ]
-      Helpers.stringIndexBetween, [ Helpers.stringLength ] ]
+      Helpers.stringIndexBetween, [ Helpers.stringLength ]
+      PowersOfFive.helper, []
+      Helpers.floatFromBits, [] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
     @ WasmRegions.dependencies
 
@@ -1288,6 +1300,7 @@ let private helpersWithoutMemory =
           yield Helpers.floatTrunc
           yield Helpers.floatToInt
           yield Helpers.intToFloat
+          yield Helpers.floatFromBits
           yield Helpers.floatRem
           yield Helpers.escapeByte
           yield Helpers.intAdd

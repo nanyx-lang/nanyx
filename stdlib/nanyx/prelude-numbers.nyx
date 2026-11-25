@@ -319,14 +319,17 @@ export def float.pow: float, float -> float = { x, y ->
 
 -- Reading floats --------------------------------------------------------------------------------
 
--- A decimal is read as a whole number `m`, its digits with the point taken out, and a power of ten
--- `e` that puts the point back: "12.5e3" is 125 times 10 ** 2. `m` is held as a float, exactly
--- while it is below 2 ** 53, and holds the first 18 or so digits. When it is exact and `e` is
--- between -22 and 22, both `m` and 10 ** `e` are exact, so the one multiplication or division
--- rounds to the nearest float, as Clinger's fast path does. Any other decimal is read exactly:
--- `m * 10 ** e` is only a first guess, and the guess is moved a float at a time until the decimal
--- is between the halfway points on either side of it, each comparison made exactly, in whole
--- numbers of any size, as Clinger's AlgorithmR does.
+-- A decimal is read as a whole number `w`, its first 19 significant digits with the point taken out,
+-- and a power of ten `e` that puts the point back: "12.5e3" is 125 times 10 ** 2. 19 digits are
+-- below 2 ** 64, so `w` holds them as the bits of an `int`, read as if it had no sign. When `w` is
+-- every digit and below 2 ** 53, and `e` is between -22 and 22, both `w` and 10 ** `e` are exact
+-- floats, so the one multiplication or division rounds to the nearest float, as Clinger's fast path
+-- does. Any other decimal of at most 19 digits is read with the Eisel–Lemire algorithm (see
+-- [`eiselLemire`]), which gives the nearest float with a few multiplications of whole numbers. A
+-- decimal of more digits is between `w` and `w + 1` times 10 ** `e`, and when those two give the same
+-- float, so does it. When they don't, it is read exactly: the float is moved a step at a time from
+-- that guess until the decimal is between the halfway points on either side of it, each comparison
+-- made exactly, in whole numbers of any size, as Clinger's AlgorithmR does.
 
 --| `m` times 10 ** `e`, for a whole `m` of zero or more. When `m` is below 2 ** 53 and `e` is
   between -22 and 22 both are exact, so the one multiplication or division rounds to the nearest
@@ -339,89 +342,259 @@ def scaleByTens: float, int -> float = { m, e ->
       else if e < -300 then m / 10.0 ** 300 / 10.0 ** (-300 - e) else m / 10.0 ** -e
 }
 
---| The decimal `s` writes from byte `i` on, with `m` and `e` the number read so far, `digits` how
-  many digits that is, and `afterPoint` whether they included a `.`. Digits past the first 18 or so
-  only move the point, as `m` holds no more. The decimal's digits start at byte `start`.
+--| The decimal `s` writes from byte `i` on, read so far as `w` times 10 ** `e`. `w` holds the first
+  19 significant digits, `held` of them so far, and `dropped` is whether a digit after those was not
+  0. `digits` is how many digits there have been, and `afterPoint` whether they included a `.`. The
+  decimal's digits start at byte `start`.
 def readDecimal
-  : string, int, int, float, int, int, bool -> #some(float) | #invalidFloat
-  = { s, start, i, m, e, digits, afterPoint ->
+  : string, int, int, int, int, int, int, bool, bool -> #some(float) | #invalidFloat
+  = { s, start, i, w, e, digits, held, dropped, afterPoint ->
     if i >= __nanyx_string_length(s)
-      then (if digits == 0 then #invalidFloat else #some(decimalToFloat(s, start, m, e, 0)))
-      else readDecimalByte(s, start, i, m, e, digits, afterPoint, __nanyx_string_byte_at(s, i))
+      then (if digits == 0
+        then #invalidFloat
+        else #some(decimalToFloat(s, start, w, e, dropped, 0)))
+      else readDecimalByte(
+        s
+        start
+        i
+        w
+        e
+        digits
+        held
+        dropped
+        afterPoint
+        __nanyx_string_byte_at(s, i)
+      )
   }
 
 --| [`readDecimal`] at the byte `b`, which is byte `i` of `s`.
 def readDecimalByte
-  : string, int, int, float, int, int, bool, int -> #some(float) | #invalidFloat
-  = { s, start, i, m, e, digits, afterPoint, b ->
-    if digitValue(b) >= 0
-      then (if m < 1.0e17
+  : string, int, int, int, int, int, int, bool, bool, int -> #some(float) | #invalidFloat
+  = { s, start, i, w, e, digits, held, dropped, afterPoint, b ->
+    def d = digitValue(b)
+
+    if d >= 0
+      then (if held < 19
         then readDecimal(
           s
           start
           i + 1
-          m * 10.0 + int.toFloat(digitValue(b))
+          int.wrappingAdd(int.wrappingMul(w, 10), d)
           (if afterPoint then e - 1 else e)
           digits + 1
+          (if held == 0 and d == 0 then 0 else held + 1)
+          dropped
           afterPoint
         )
         else readDecimal(
           s
           start
           i + 1
-          m
+          w
           (if afterPoint then e else e + 1)
           digits + 1
+          held
+          dropped or d != 0
           afterPoint
         ))
       else if b == 46 and not afterPoint
-        then readDecimal(s, start, i + 1, m, e, digits, true)
+        then readDecimal(s, start, i + 1, w, e, digits, held, dropped, true)
         else if (b == 101 or b == 69) and digits > 0
-          then readExponent(s, start, i + 1, m, e)
+          then readExponent(s, start, i + 1, w, e, dropped)
           else #invalidFloat
   }
 
 --| The exponent that starts at byte `i` of `s`, after its `e`, with its optional sign, applied to
-  `m` and `e`.
+  `w` and `e`.
 def readExponent
-  : string, int, int, float, int -> #some(float) | #invalidFloat
-  = { s, start, i, m, e ->
+  : string, int, int, int, int, bool -> #some(float) | #invalidFloat
+  = { s, start, i, w, e, dropped ->
     def sign = __nanyx_string_byte_at(s, i)
 
     if sign == 45
-      then readExponentDigits(s, start, i + 1, m, e, -1, 0, 0)
-      else readExponentDigits(s, start, (if sign == 43 then i + 1 else i), m, e, 1, 0, 0)
+      then readExponentDigits(s, start, i + 1, w, e, dropped, -1, 0, 0)
+      else readExponentDigits(s, start, (if sign == 43 then i + 1 else i), w, e, dropped, 1, 0, 0)
   }
 
 --| The digits of an exponent from byte `i` of `s` on, with `n` and `digits` the value and count read
   so far. An exponent past 100000 is held there: it makes infinity or zero all the same.
 def readExponentDigits
-  : string, int, int, float, int, int, int, int -> #some(float) | #invalidFloat
-  = { s, start, i, m, e, sign, n, digits ->
+  : string, int, int, int, int, bool, int, int, int -> #some(float) | #invalidFloat
+  = { s, start, i, w, e, dropped, sign, n, digits ->
     if i >= __nanyx_string_length(s)
       then (if digits == 0
         then #invalidFloat
-        else #some(decimalToFloat(s, start, m, e + sign * n, sign * n)))
+        else #some(decimalToFloat(s, start, w, e + sign * n, dropped, sign * n)))
       else if digitValue(__nanyx_string_byte_at(s, i)) < 0
         then #invalidFloat
         else readExponentDigits(
           s
           start
           i + 1
-          m
+          w
           e
+          dropped
           sign
           (if n > 100000 then n else n * 10 + digitValue(__nanyx_string_byte_at(s, i)))
           digits + 1
         )
   }
 
---| The float nearest the decimal whose digits start at byte `start` of `s`, which is `m` times
-  10 ** `e` as [`readDecimal`] read it, and whose exponent, after an `e`, is `exponent`.
-def decimalToFloat: string, int, float, int, int -> float = { s, start, m, e, exponent ->
-  if m < 9007199254740992.0 and e >= -22 and e <= 22
-    then scaleByTens(m, e)
-    else gatherDigits(s, start, [], 0, 0, 0, false, exponent, scaleByTens(m, e))
+--| The float nearest the decimal whose digits start at byte `start` of `s`, which is `w` times
+  10 ** `e` as [`readDecimal`] read it, or more by less than 10 ** `e` when `dropped`, and whose
+  exponent, after an `e`, is `exponent`.
+def decimalToFloat
+  : string, int, int, int, bool, int -> float
+  = { s, start, w, e, dropped, exponent ->
+    if w == 0
+      then 0.0
+      else if dropped
+        then readTruncated(s, start, w, e, exponent, eiselLemire(w, e))
+        else if w > 0 and w < 9007199254740992 and e >= -22 and e <= 22
+          then scaleByTens(int.toFloat(w), e)
+          else eiselLemire(w, e)
+  }
+
+--| [`decimalToFloat`] of a decimal with more digits than `w` holds, which is between `w` and `w + 1`
+  times 10 ** `e`, with `guess` the float nearest `w` times 10 ** `e`.
+def readTruncated: string, int, int, int, int, float -> float = { s, start, w, e, exponent, guess ->
+  if eiselLemire(int.wrappingAdd(w, 1), e) == guess
+    then guess
+    else gatherDigits(s, start, [], 0, 0, 0, false, exponent, guess)
+}
+
+-- The Eisel–Lemire algorithm (Lemire, "Number Parsing at a Gigabyte per Second", 2021), as Go, Rust
+-- and C++'s `from_chars` read a decimal: `w`, shifted so that its top bit is set, times the top 128
+-- bits of `5 ** q`, gives the float's 53 bits, and the bit after them, with enough of the rest to
+-- round them, for any `w` of at most 19 digits (Mushtak and Lemire, "Fast Number Parsing Without
+-- Fallback", 2023). The 128 bits of each power of five from -342 to 308 are in a table the compiler
+-- puts in a module that reads floats, two words of 64 bits each, which `__nanyx_power_of_five`
+-- reads. Every whole number here is 64 bits read as if it had no sign, so it is made with the
+-- wrapping operations and compared with [`lessUnsigned`].
+
+--| The float nearest `w` times 10 ** `q`, for a `w` that is not 0, read as if it had no sign. A
+  decimal below 10 ** -342 is less than half the smallest float above zero, and one of at least
+  10 ** 309 is past the largest float.
+def eiselLemire: int, int -> float = { w, q ->
+  if q < -342 then 0.0 else if q > 308 then 1.0 / 0.0 else eiselLemireShifted(w, q, leadingZeros(w))
+}
+
+--| [`eiselLemire`] of `w`, which has `zeros` bits that are 0 above its top bit.
+def eiselLemireShifted: int, int, int -> float = { w, q, zeros ->
+  def x = int.shiftLeft(w, zeros)
+  def index = 2 * (q + 342)
+  def power = __nanyx_power_of_five(index)
+  def high = mulHigh(x, power)
+
+  if int.bitAnd(high, 511) == 511
+    then eiselLemireRefined(
+      q
+      zeros
+      high
+      int.wrappingMul(x, power)
+      mulHigh(x, __nanyx_power_of_five(index + 1))
+    )
+    else roundProduct(q, zeros, high, int.wrappingMul(x, power))
+}
+
+--| [`roundProduct`] of the product `high` and `low` with `more`, the top 64 bits of the shifted `w`
+  times the power's low word, added: when the 9 bits below the 55 it rounds are all 1, they could
+  carry into them.
+def eiselLemireRefined: int, int, int, int, int -> float = { q, zeros, high, low, more ->
+  def sum = int.wrappingAdd(low, more)
+
+  roundProduct(q, zeros, (if lessUnsigned(sum, more) then int.wrappingAdd(high, 1) else high), sum)
+}
+
+--| The float the 128-bit product `high` and `low` of [`eiselLemireShifted`] gives: its top 54 or 55
+  bits are the float's 53, the bit to round them by, and one more when the top bit is 0. `power2` is
+  the float's biased exponent, 1 for the smallest normal float.
+def roundProduct: int, int, int, int -> float = { q, zeros, high, low ->
+  def upper = int.shiftRightUnsigned(high, 63)
+  def shift = upper + 9
+  def mantissa = int.shiftRightUnsigned(high, shift)
+  def power2 = int.shiftRight(217706 * q, 16) + 63 + upper - zeros + 1023
+
+  if power2 <= 0
+    then roundSubnormal(mantissa, 1 - power2)
+    else roundNormal(
+      (if exactlyHalfway(q, mantissa, shift, high, low) then mantissa - 1 else mantissa)
+      power2
+    )
+}
+
+--| Whether the decimal is exactly halfway between two floats, when `mantissa`, the top bits of the
+  product `high` and `low` that [`roundProduct`] took by `shift`, ends in the bits 01: no bit below
+  is 1, which only a power of ten from -4 to 23 can give. Its last bit, then, is cleared, so that
+  [`roundNormal`] rounds it down to even.
+def exactlyHalfway: int, int, int, int, int -> bool = { q, mantissa, shift, high, low ->
+  if low == 0 or low == 1
+    then q >= -4 and q <= 23 and int.bitAnd(mantissa, 3) == 1 and
+      int.shiftLeft(mantissa, shift) == high
+    else false
+}
+
+--| The float of `mantissa`, the 53 bits of a normal float and the bit to round them by, rounded,
+  whose biased exponent is `power2`: infinity past the largest float. Rounding up to 2 ** 53 makes
+  the float's 53 bits 1 followed by 0s and adds one to its exponent, and an addition gives just that,
+  as the top bit is not stored.
+def roundNormal: int, int -> float = { mantissa, power2 ->
+  def rounded = int.shiftRightUnsigned(mantissa + int.bitAnd(mantissa, 1), 1)
+
+  if power2 + int.shiftRightUnsigned(rounded, 53) >= 2047
+    then 1.0 / 0.0
+    else __nanyx_float_from_bits(int.shiftLeft(power2 - 1, 52) + rounded)
+}
+
+--| The subnormal float, or the smallest normal one, nearest `mantissa`, shifted right by `shift`
+  bits but 1, which is then rounded.
+def roundSubnormal: int, int -> float = { mantissa, shift ->
+  if shift >= 64 then 0.0 else roundSubnormalShifted(int.shiftRightUnsigned(mantissa, shift))
+}
+
+--| [`roundSubnormal`] of `shifted`, which has the bit to round by as its last.
+def roundSubnormalShifted: int -> float = { shifted ->
+  __nanyx_float_from_bits(int.shiftRightUnsigned(shifted + int.bitAnd(shifted, 1), 1))
+}
+
+--| How many bits that are 0 are above the top bit of `w`, which is not 0, read as if it had no sign.
+def leadingZeros: int -> int = { w ->
+  leadingZerosFrom(w, 0, 32)
+}
+
+--| [`leadingZeros`] of `w` shifted left by `count` bits, looking at its top `step` bits, then at
+  half as many.
+def leadingZerosFrom: int, int, int -> int = { w, count, step ->
+  if step == 0
+    then count
+    else if int.shiftRightUnsigned(w, 64 - step) == 0
+      then leadingZerosFrom(int.shiftLeft(w, step), count + step, step / 2)
+      else leadingZerosFrom(w, count, step / 2)
+}
+
+--| Whether `x` is less than `y`, both read as if they had no sign.
+def lessUnsigned: int, int -> bool = { x, y ->
+  int.bitXor(x, -9223372036854775807 - 1) < int.bitXor(y, -9223372036854775807 - 1)
+}
+
+--| The top 64 bits of the 128-bit product of `x` and `y`, both read as if they had no sign, from the
+  products of their 32-bit halves.
+def mulHigh: int, int -> int = { x, y ->
+  def xLow = int.bitAnd(x, 4294967295)
+  def xHigh = int.shiftRightUnsigned(x, 32)
+  def yLow = int.bitAnd(y, 4294967295)
+  def yHigh = int.shiftRightUnsigned(y, 32)
+  def lowHigh = int.wrappingMul(xLow, yHigh)
+  def highLow = int.wrappingMul(xHigh, yLow)
+  def lowLow = int.wrappingMul(xLow, yLow)
+
+  def middle = int.shiftRightUnsigned(lowLow, 32) + int.bitAnd(lowHigh, 4294967295) +
+    int.bitAnd(highLow, 4294967295)
+
+  int.wrappingAdd(
+    int.wrappingAdd(int.wrappingMul(xHigh, yHigh), int.shiftRightUnsigned(lowHigh, 32))
+    int.shiftRightUnsigned(highLow, 32) + int.shiftRightUnsigned(middle, 32)
+  )
 }
 
 --| Every digit of the decimal from byte `i` of `s` on, up to its exponent or its end, as a whole
@@ -711,9 +884,9 @@ def limbsCompareFrom: list(int), list(int), int -> int = {
   near, the one whose last bit is 0, as IEEE 754 rounds. So every float `float.toString` writes reads
   back as itself, and `float.fromString("0.1")` is the float the literal `0.1` is. A number at least
   halfway from the largest float to 2 ** 1024 is infinity, and one at most half the smallest float
-  above zero is 0. A decimal with at most 15 digits and a small exponent, as most text written by hand is, is
-  read with one multiplication or division; any other is read with exact arithmetic on whole numbers
-  of any size, which takes longer.
+  above zero is 0. A decimal of at most 19 significant digits is read with a few multiplications of
+  64-bit whole numbers; one of more digits that is very near halfway between two floats is read with
+  exact arithmetic on whole numbers of any size, which takes longer.
 export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
   def first = __nanyx_string_byte_at(s, 0)
   def start = if first == 45 or first == 43 then 1 else 0
@@ -729,5 +902,5 @@ export def float.fromString: string -> #some(float) | #invalidFloat = { s ->
 def readFloatMagnitude: string, int -> #some(float) | #invalidFloat = { s, start ->
   if s == "Infinity" or s == "+Infinity" or s == "-Infinity"
     then #some(1.0 / 0.0)
-    else readDecimal(s, start, start, 0.0, 0, 0, false)
+    else readDecimal(s, start, start, 0, 0, 0, 0, false, false)
 }
