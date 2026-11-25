@@ -41,8 +41,11 @@ were. A module with no start has every function gone over, and keeps every funct
 a library component keeps what its exports reach (`CoreIrReach.reachedFrom`).
 
 It takes the functions so that each comes after those it calls, and goes over each one up to sixteen times, each time
-simplifying (`CoreIrSimplify.simplify`) and then inlining what the time before exposed, and simplifies it once more at
-the end. Once nothing more is inlined anywhere, each function's locals that are read once, at once, are made
+simplifying (`CoreIrSimplify.simplify`, up to eight passes, until a pass changes nothing) and then inlining what the
+time before exposed. It stops as soon as the body is settled, a simplifying pass changed nothing and nothing was
+inlined after it: a pass reads only how many parameters the functions it calls take and what they give, which
+inlining into them never changes, so another time over would change nothing. A body that is not settled by then is
+simplified once more at the end ([#2579](https://github.com/nanyx-lang/nanyx/issues/2579)). Once nothing more is inlined anywhere, each function's locals that are read once, at once, are made
 temporaries (`CoreIrSimplify.withTemporaries`).
 
 ## Inlining
