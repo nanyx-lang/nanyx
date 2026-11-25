@@ -312,9 +312,15 @@ and private moduleItem (c: Cursor) (start: int) (inBlock: bool) : TopLevelItem l
             while going do
                 let index = c.Index
                 skipLayout c
+                // An attribute's item may be on its line, as in `@baseUnit unit ns: Time`.
+                let afterAttribute =
+                    match blockItems[blockItems.Count - 1].Kind with
+                    | Attribute _ -> c.Index = index && c.Token.IsSome && not (c.Is EndOfFile) && c.OnSameLine
+                    | _ -> false
                 let atItem =
-                    c.Token.IsSome && not (c.Is EndOfFile) && not c.OnSameLine
-                    && columnAt c.Source c.Start = (column, true)
+                    afterAttribute
+                    || c.Token.IsSome && not (c.Is EndOfFile) && not c.OnSameLine
+                       && columnAt c.Source c.Start = (column, true)
                 if atItem then blockItems.AddRange(items c true)
                 else
                     c.Index <- index
@@ -355,10 +361,7 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
     match c.Attempt(fun () -> if c.IsKeyword "export" then reExport () else raise NoMatch) with
     | Some kind -> single kind
     | None ->
-    if unitDeclarationAhead c then
-        if inBlock then c.Report start "Dimensions and units are declared at the top level of a file, not in a module block"
-        unitDeclaration c start
-    else
+    if unitDeclarationAhead c then unitDeclaration c start else
     // A `use` at the top level is a mistake, but `use ... in`, an expression.
     if c.IsKeyword "use" then
         match c.Attempt(fun () -> DescentControl.statementValue c) with

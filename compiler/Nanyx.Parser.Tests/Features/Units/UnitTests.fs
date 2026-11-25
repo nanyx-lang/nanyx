@@ -143,7 +143,19 @@ let ``export dimension with a bracket after it re-exports a module named dimensi
     | other -> failwith $"Unexpected parse result: %A{other}"
 
 [<Fact>]
-let ``A module block holds no dimension or unit declaration`` () =
+let ``A module block declares dimensions and units as the top level does`` () =
+    match parseModule "module m =\n  export dimension Time\n  @baseUnit unit ns: Time\n  unit us: Time = 1_000ns\n" with
+    // The block's items are lifted to the top level, after a declaration of its module.
+    | Result.Ok [ Kind (ModuleDecl(false, "m"))
+                  Kind (DimensionDecl(true, "Time", None))
+                  Kind (Attribute("baseUnit", None))
+                  Kind (UnitDecl(false, "ns", "Time", None))
+                  Kind (UnitDecl(false, "us", "Time", Some _)) ] -> ()
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
+let ``A number with a unit is not a pattern yet, but a guard compares with one`` () =
     Assert.Equal(
-        ("Dimensions and units are declared at the top level of a file, not in a module block", "unit ms: Time = 1_000us"),
-        parseErrorOf "module m =\n  def x = 1\n  unit ms: Time = 1_000us\n")
+        ("A number with a unit is not a pattern yet: compare the value in a guard instead, as in `| == 0ms ->`", "0ms -> true"),
+        parseErrorOf "def f = { t ->\n  match t\n    | 0ms -> true\n    | _ -> false\n}")
+    readsWhole "def f = { t ->\n  match t\n    | == 0ms -> true\n    | _ -> false\n}"

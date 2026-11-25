@@ -41,6 +41,10 @@ let ``@baseUnit stays on the line of the unit it marks`` () =
     formatsTo "@baseUnit unit ns: Time" "@baseUnit\nunit ns: Time"
 
 [<Fact>]
+let ``A module block's declarations stay in the block, @baseUnit on its unit's line`` () =
+    unchanged (lines [ "module m ="; "  export dimension Time"; ""; "  @baseUnit unit ns: Time"; "  unit us: Time = 1_000ns" ])
+
+[<Fact>]
 let ``A declaration keeps its doc comment and the comment after it`` () =
     unchanged (lines [ "--| How long something takes."; "dimension Time -- a duration"; ""; "--| A second."; "unit s: Time = 1_000ms" ])
 

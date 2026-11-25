@@ -66,11 +66,11 @@ unit KiB: Bytes = 1_024B
   the end. The multiple need not be whole, and the base need not be the smallest unit: `mm` is `0.001m`. A chain of
   definitions that comes back to where it started is an error, as is a unit defined in another dimension's units.
 - `dimension` and `unit` are not reserved words. They begin a declaration only at the start of a top-level line, with a
-  name after them on it, so code that uses them as names keeps working. They are declared at the top level of a file,
-  not in a module block or a def's body.
+  name after them on it, so code that uses them as names keeps working. They are declared at the top level of a file or
+  of a module block, not in a def's body.
 - Units are names of their own kind, apart from values and types: `500ms` means the unit `ms` even where a value named
-  `ms` is in scope. A module exports and imports units as it does types: `export dimension Time` and
-  `export unit ms: Time = 1_000us`.
+  `ms` is in scope. A module exports and imports dimensions and units as it does types, with `export` before the
+  declaration: `export dimension Time` and `export unit ms: Time = 1_000us`.
 
 The base unit is declared, not worked out from the smallest unit in scope, so a unit declared in another module, such as
 `unit ps: Time = 0.001ns`, can't change how a dimension is stored. A unit finer than the base is a fraction of it, which
@@ -220,6 +220,9 @@ Not part of the first step, and not settled.
    irrational scale, as in `unit deg: Angle = (pi / 180)rad`, is open too.
 3. **Currencies.** A currency is not a fixed multiple of another, so `usd` and `eur` are not units of one `Money`
    dimension: each currency is a dimension, or the currency is a value.
+4. **Units in patterns.** A number with a unit is not a pattern yet: `| 0ms ->` is a syntax error, and a guard,
+   `| == 0ms ->`, compares with one. Open: whether a pattern matches a measured value exactly, which for a `float`
+   storage is as fragile as matching a `float`, and whether a range of them, `0ms..1s`, is a pattern.
 
 # Prior art
 

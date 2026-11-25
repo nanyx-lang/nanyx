@@ -25,10 +25,10 @@ let ``A unit literal is NYX0285 at the literal`` () =
     Assert.Equal<(string * string) list>([ code, "-0.5s" ], reported "def y = -0.5s")
 
 [<Fact>]
-let ``A unit literal in a pattern is NYX0285 at the pattern`` () =
+let ``A unit literal in a guard is NYX0285 at the literal`` () =
     Assert.Equal<(string * string) list>(
         [ code, "0ms" ],
-        reported "def f: int -> bool = { t ->\n  match t\n    | 0ms -> true\n    | _ -> false\n}")
+        reported "def f: int -> bool = { t ->\n  match t\n    | == 0ms -> true\n    | _ -> false\n}")
 
 [<Fact>]
 let ``dimension and unit are names a program can still use`` () =
