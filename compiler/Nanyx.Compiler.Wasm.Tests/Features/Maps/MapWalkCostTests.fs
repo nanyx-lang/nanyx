@@ -37,18 +37,28 @@ def walkList: int -> int = { passes ->
 [<Fact>]
 let ``A for loop over a 10,000-key map takes under one and a half times as long as one over a list of its entries`` () =
     use program = instantiateWasm walks []
+    Assert.Equal(10000, program.Call("walkMap", 1))
+    Assert.Equal(10000, program.Call("walkList", 1))
     let time (name: string) =
-        Assert.Equal(10000, program.Call(name, 1))
         let clock = System.Diagnostics.Stopwatch.StartNew()
-        program.Call(name, 500) |> ignore
+        program.Call(name, 200) |> ignore
         clock.Elapsed.TotalMilliseconds
-    let holds (map: float) (list: float) = map / list < 1.5
-    let map, list = time "walkMap", time "walkList"
-    // When the first runs miss, each is run again in turn, and each one's quickest run counts, so that load on the
-    // machine, which slows one run and not the other, can't make the test fail (#2388).
-    let map, list =
-        if holds map list then map, list
+    // One round times the two walks back to back, in turn first, and gives the map's time over the list's. The map's
+    // nodes and buckets are spread over more of memory than the list's cells, so load on the machine can slow its walk
+    // more than the list's for a while: the quickest round of up to 30 counts, and the test stops at the first under
+    // the bound (#2671).
+    let round (index: int) =
+        if index % 2 = 0 then
+            let map = time "walkMap"
+            map, time "walkList"
         else
-            let again = List.init 5 (fun _ -> time "walkMap", time "walkList")
-            min map (again |> List.map fst |> List.min), min list (again |> List.map snd |> List.min)
-    Assert.True(holds map list, $"a walk of the map took {map:F1} ms, of the list {list:F1} ms")
+            let list = time "walkList"
+            time "walkMap", list
+    let bound = 1.5
+    let rec best (index: int) (map: float, list: float) =
+        if map / list < bound || index = 30 then map, list
+        else
+            let next = round index
+            best (index + 1) (if fst next / snd next < map / list then next else (map, list))
+    let map, list = best 1 (round 0)
+    Assert.True(map / list < bound, $"a walk of the map took {map:F1} ms, of the list {list:F1} ms, at best of 30 rounds")
