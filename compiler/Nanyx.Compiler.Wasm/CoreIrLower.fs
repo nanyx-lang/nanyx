@@ -117,42 +117,6 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
 
     let wrappedOf = wrappedOf input
 
-
-    /// The members of the contexts in `contexts`, in the order a function value takes them.
-    let membersOf = contextMembersOf input.ContextLayouts
-
-    /// The context variables of the definition `name`'s type (`[c]` in `[c] ([c] a -> b), a -> b`), by id.
-    let contextVariables (name: string) =
-        input.DefinitionTypes |> Map.tryFind name |> Option.map (FunctionContexts.variablesIn >> Map.keys >> List.ofSeq) |> Option.defaultValue []
-
-    /// The context variables of the definition `name`'s type that only the function it returns requires (`[c]` in
-    /// `([c] a -> b), ([c] b -> d) -> [c] a -> d`): that function takes their members when it is called, so a call to
-    /// the definition does not pass them, though it is specialised on them. So do those the value it returns carries,
-    /// `[c, d] Stream(b)` (see `FunctionContexts.carried`).
-    let returnedVariables (name: string) =
-        let ofContexts (contexts: Ty list) = contexts |> List.choose (function TyVar v -> Some v.Id | _ -> None) |> Set.ofList
-        let returned (result: Ty) =
-            match Unifier.unalias result with
-            | FunctionContexts.CarryingNominal(_, _, contexts) -> contexts
-            | TyNominal _ -> []
-            | result -> requiredContexts result
-        match input.DefinitionTypes |> Map.tryFind name |> Option.map Unifier.unalias with
-        | Some (TyFunc(_, result, own)) -> Set.difference (ofContexts (returned result)) (ofContexts own)
-        | _ -> Set.empty
-
-    /// The members of the contexts the context variables of the definition `name` stand for where `bindings` binds them,
-    /// which the definition takes after those of the contexts it declares, as each call passes them.
-    let variableMembers (name: string) (bindings: Map<int, Ty>) =
-        let declared =
-            input.ContextParameters |> Map.tryFind name |> Option.map (fst >> List.map _.Key) |> Option.defaultValue [] |> Set.ofList
-        let returned = returnedVariables name
-        contextVariables name
-        |> List.filter (returned.Contains >> not)
-        |> List.collect (fun id -> bindings |> Map.tryFind id |> Option.map List.singleton |> Option.defaultValue [])
-        |> membersOf
-        |> List.filter (fst >> declared.Contains >> not)
-
-
     let tyOf (expr: Expression) : IrType =
         match input.ExprTypes |> Map.tryFind expr.Id with
         | Some ty -> toIrType (substitute subst ty)
@@ -179,90 +143,15 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | Some (Lambda(parameters, _, _)) -> parameters |> List.map fst
         | _ -> []
 
-    /// What the type variables and context variables of the definition `name` are where its type is `instanceTy`.
-    let bindingsAt (name: string) (instanceTy: Ty) =
-        match input.DefinitionTypes |> Map.tryFind name with
-        | Some scheme -> bindScheme Map.empty scheme (substitute subst instanceTy)
-        | None -> Map.empty
-
-    /// The type variables the types of the definition `name`'s nodes name, and the types of the members of the contexts
-    /// it requires, by name.
-    let namedVariables =
-        let cache = System.Collections.Generic.Dictionary<string, Map<string, int list>>()
-        fun (name: string) ->
-            match cache.TryGetValue name with
-            | true, found -> found
-            | _ ->
-                let rec named (ty: Ty) =
-                    match ty with
-                    | TyVar { Id = id; Name = Some varName } -> [ varName, id ]
-                    | _ -> Ty.children ty |> List.collect named
-                let memberTys =
-                    input.ContextParameters |> Map.tryFind name |> Option.map fst |> Option.defaultValue [] |> List.choose _.Type
-                let found =
-                    SyntaxTree.expressionsWithin definitions.[name]
-                    |> List.choose (fun expr -> input.ExprTypes |> Map.tryFind expr.Id)
-                    |> List.append memberTys
-                    |> List.collect named
-                    |> List.distinct
-                    |> List.groupBy fst
-                    |> List.map (fun (varName, ids) -> varName, List.map snd ids)
-                    |> Map.ofList
-                cache[name] <- found
-                found
-
-    /// `bindings`, the type variables of `name` where `call` calls it, with each associated type of a context it requires
-    /// as the call has it (see `LowerInput.AssociatedArguments`): its type need not write them, as `elem` in
-    /// `[Iter(c)] c -> int`, though its body has values of them.
-    let withAssociatedArguments (call: NodeId option) (name: string) (bindings: Map<int, Ty>) =
-        match call |> Option.bind (fun call -> input.AssociatedArguments |> Map.tryFind call) with
-        | Some named when definitions.ContainsKey name ->
-            let variables = namedVariables name
-            named
-            |> Map.fold (fun acc varName ty ->
-                variables
-                |> Map.tryFind varName
-                |> Option.defaultValue []
-                |> List.fold (fun acc id -> if acc |> Map.containsKey id then acc else acc |> Map.add id (substitute subst ty)) acc) bindings
-        | _ -> bindings
-
-    /// The name to call `name` by at the instance type `instanceTy`, given the members known where it is called: its
-    /// own, or a specialisation's. A definition with context variables is specialised on the members of the contexts
-    /// they stand for, unless they stand for none. A definition that declares contexts is lowered in its own form only
-    /// where a call asks for it (see `CoreIrLowerModule.lowerModule`).
+    // Which function each call calls, at the function's type arguments as they are where it is asked.
+    let callees = CoreIrLowerCallee.Callees(input, definitions, request)
+    let membersOf = callees.MembersOf
+    let contextVariables = callees.ContextVariables
+    let variableMembers = callees.VariableMembers
+    let bindingsAt (name: string) (instanceTy: Ty) = callees.BindingsAt subst name instanceTy
+    let withAssociatedArguments (call: NodeId option) (name: string) (bindings: Map<int, Ty>) = callees.WithAssociatedArguments subst call name bindings
     let calleeKnowing (call: NodeId option) (name: string) (instanceTy: Ty) (knownMembers: (ContextMemberKey * KnownMember) list) =
-        let scheme =
-            match input.DefinitionTypes |> Map.tryFind name with
-            | Some scheme -> scheme
-            | None -> cannot $"a call to '{name}', whose type is not known"
-        let typeVars = freeVars scheme |> List.distinct |> List.sort
-        let contextVars = contextVariables name
-        let own () =
-            if input.ContextParameters.ContainsKey name then request (SpecKey.plain name []) Map.empty AsDefined
-            else sanitizeIdentifier name
-        if typeVars.IsEmpty && contextVars.IsEmpty && knownMembers.IsEmpty then own ()
-        else
-            let bindings = bindingsAt name instanceTy |> withAssociatedArguments call name
-            let typeArguments =
-                typeVars
-                |> List.map (fun id ->
-                    match bindings |> Map.tryFind id with
-                    | Some ty -> toIrType ty
-                    // A type argument the call does not fix is a type variable nothing constrains (see `toIrType`).
-                    | None -> IrUnit)
-            // What each context variable stands for, as the function type that requires it: its members, and whether it
-            // can wait.
-            let contextArguments =
-                contextVars
-                |> List.map (fun id -> toIrType (TyFunc(TyPrimitive "unit", TyPrimitive "unit", bindings |> Map.tryFind id |> Option.toList)))
-            let typeArguments =
-                if contextArguments |> List.forall ((=) (IrFunction(IrUnit, IrUnit, [], false))) then typeArguments
-                else typeArguments @ contextArguments
-            let described =
-                let variables = SpecKey.describedVariables scheme
-                typeVars |> List.filter variables.Contains |> List.map (fun id -> bindings |> Map.tryFind id |> Option.defaultValue (TyPrimitive "unit"))
-            if typeArguments.IsEmpty && knownMembers.IsEmpty then own ()
-            else request { Definition = name; TypeArguments = typeArguments; Known = knownMembers; Described = described } bindings AsDefined
+        callees.Knowing subst call name instanceTy knownMembers
 
     let callee (name: string) (instanceTy: Ty) = calleeKnowing None name instanceTy []
 
