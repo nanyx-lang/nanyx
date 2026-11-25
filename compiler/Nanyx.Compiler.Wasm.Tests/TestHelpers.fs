@@ -622,11 +622,16 @@ type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmt
         match func.Invoke value with
         | :? int64 as result -> int result
         | result -> result :?> int
+    /// Calls the function `name`, which takes an `i32` and returns nothing, with `argument`.
+    member _.Run(name: string, argument: int) = instance.GetAction<int>(name).Invoke argument
     member _.Drop(ty: Transpiler.Wasm.CoreIr.IrType, value: int) =
         instance.GetAction<int>(Transpiler.Wasm.CoreIrDrop.dropName ty).Invoke value
     member _.HeapPointer = counter CheckedExports.heapPointer
     member _.Allocations = counter CheckedExports.allocations
     member _.LiveBlocks = counter CheckedExports.liveBlocks
+    /// The value of the global `name`, which the module exports, as an `i32`.
+    member _.Global(name: string) = counter name
+    member _.SetGlobal(name: string, value: int) = instance.GetGlobal(name).SetValue(value)
     /// The most bytes there have been in blocks in use at once.
     member _.PeakLiveBytes = counter CheckedExports.peakLiveBytes
     /// The size of the memory in bytes, which never shrinks: how far the heap has ever reached, to the page.
