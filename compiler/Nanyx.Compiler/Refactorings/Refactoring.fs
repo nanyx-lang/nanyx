@@ -176,7 +176,7 @@ module internal RefactoringText =
             match typed.CalleeTypes |> Map.tryFind part.Id with
             | Some (TyFunc(_, _, contexts)) when not contexts.IsEmpty -> true
             | _ ->
-                typed.References
+                WrittenReferences.ofModule typed
                 |> Map.tryFind part.Id
                 |> Option.bind typed.Symbols.TryFind
                 |> Option.exists (fun symbol -> symbol.Kind = ContextMember))

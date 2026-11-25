@@ -34,7 +34,7 @@ let internal symbolAndNameAt (file: string) (result: CompileResult) (offset: int
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         let referencedAt (id: NodeId) (span: SourceSpan option) =
-            match typed.References |> Map.tryFind id, span with
+            match WrittenReferences.ofModule typed |> Map.tryFind id, span with
             | Some id, Some span when contains offset span ->
                 typed.Symbols
                 |> Map.tryFind id
@@ -148,7 +148,7 @@ let internal referenceSites (result: CompileResult) : (SourceSpan * SymbolId) li
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         let referenced (id: NodeId) (span: SourceSpan option) =
-            match typed.References |> Map.tryFind id, span with
+            match WrittenReferences.ofModule typed |> Map.tryFind id, span with
             | Some symbol, Some span -> Some (span, symbol)
             | _ -> None
         let expressionSites = Hover.allExpressions syntax |> List.choose (fun expr -> referenced expr.Id (nameSpan expr))
@@ -173,7 +173,7 @@ let referencesTo (result: CompileResult) (symbol: Symbol) : SourceSpan list =
             if symbol.Kind <> ImportedModule then []
             else
                 Hover.allExpressions syntax
-                |> List.filter (fun expr -> typed.References |> Map.tryFind expr.Id <> Some symbol.Id && typed.ImportReferences |> Map.tryFind expr.Id = Some symbol.Id)
+                |> List.filter (fun expr -> WrittenReferences.ofModule typed |> Map.tryFind expr.Id <> Some symbol.Id && typed.ImportReferences |> Map.tryFind expr.Id = Some symbol.Id)
                 // The name is written under the import's alias, which is its first segment.
                 |> List.map (fun expr -> { expr.Span with End = min expr.Span.End (expr.Span.Start + symbol.Name.Length) })
         (referenceSites result |> List.filter (fun (_, id) -> id = symbol.Id) |> List.map fst) @ aliasSpans

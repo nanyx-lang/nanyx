@@ -118,7 +118,7 @@ let at
                 match selected with
                 | SelectedExpression expr -> within expr, [], []
                 | SelectedStatements(run, after) -> run |> List.collect SyntaxTree.ofStatement |> List.collect within, run, after
-            let symbolOf (part: Expression) = typed.References |> Map.tryFind part.Id |> Option.bind typed.Symbols.TryFind
+            let symbolOf (part: Expression) = WrittenReferences.symbolOf typed part.Id
             let isLocal (symbol: Symbol) =
                 symbol.Declaration.File = file
                 && not (SourceSpan.isNone symbol.Declaration)
