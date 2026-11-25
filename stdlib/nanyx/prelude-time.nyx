@@ -4,27 +4,27 @@
 
 -- Time ------------------------------------------------------------------------------------------
 
--- How long something takes: a duration, stored in nanoseconds in any number type, so `500ms` is
--- a `Time(int)` of 500,000,000 and `0.5s` a `Time(float)`. A point in time is not one.
+--| How long something takes: a duration, stored in nanoseconds in any number type, so `500ms` is
+  a `Time(int)` of 500,000,000 and `0.5s` a `Time(float)`. A point in time is not one.
 export dimension Time
 
--- A nanosecond, `Time`'s base unit: every other unit of it is a whole number of them.
+--| A nanosecond, `Time`'s base unit: every other unit of it is a whole number of them.
 @baseUnit export unit ns: Time
 
--- A microsecond, 1,000 nanoseconds.
+--| A microsecond, 1,000 nanoseconds.
 export unit us: Time = 1_000ns
 
--- A millisecond, 1,000 microseconds.
+--| A millisecond, 1,000 microseconds.
 export unit ms: Time = 1_000us
 
--- A second, 1,000 milliseconds.
+--| A second, 1,000 milliseconds.
 export unit s: Time = 1_000ms
 
--- A minute, 60 seconds.
+--| A minute, 60 seconds.
 export unit min: Time = 60s
 
--- An hour, 60 minutes.
+--| An hour, 60 minutes.
 export unit hr: Time = 60min
 
--- A day, 24 hours. Months and years are not units of `Time`, as their lengths vary.
+--| A day, 24 hours. Months and years are not units of `Time`, as their lengths vary.
 export unit d: Time = 24hr

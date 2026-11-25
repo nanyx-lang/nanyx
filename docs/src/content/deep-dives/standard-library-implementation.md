@@ -126,7 +126,10 @@ examples, is written by hand.
 The reference lists what the file exports, in the order it declares it: each type, context and def, attached ones
 included, under a heading of its name, with its signature as hover writes it and its doc comment; a context's members
 with theirs; and, on the page of the file named for the module, the module's doc comment first. A custom pattern is
-headed by its tags, `#Matches`, and written as declared, `pattern string -> string -> #Matches(Match) | _`. Names the library
+headed by its tags, `#Matches`, and written as declared, `pattern string -> string -> #Matches(Match) | _`. A dimension
+and a unit are listed too, written as declared but for `export`, `@baseUnit unit ns: Time` or `unit ms: Time = 1_000us`;
+they have no symbols (`TypedModule.Units`), so they are read from the file's syntax (`StandardLibraryDocs.unitEntries`)
+and their doc comments by where their names are declared (`Documentation.Reader.ForDeclaration`). Names the library
 reserves, those that start with `__`, are left out. It is read from the compile of each module the compiler embeds, as an import of it reads it, so no module is checked
 again (`Compiler.compileStandardLibraryModuleReporting`),
 and of each public module of the packages it ships beside it (`ShippedPackages`), not from a parse of its own (`StandardLibraryDocs` in `Nanyx.Compiler/StandardLibraryDocs.fs`), and a link in a doc

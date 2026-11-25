@@ -128,12 +128,16 @@ type Reader(file: string, own: FileDocComments, result: CompileResult, offset: i
             result.Typed
             |> Option.bind (fun typed -> typed.ImportedFiles |> Map.tryFind symbol.Id)
             |> Option.bind (fun imported -> this.ForModule imported.File)
-        | _ ->
-            docsOf declaration.File
-            |> Option.bind (fun docs ->
-                docs.Comments
-                |> List.tryFind (fun comment ->
-                    match comment.Target with
-                    | DocumentsDeclaration span -> span.Start = declaration.Start && span.End = declaration.End
-                    | _ -> false)
-                |> Option.map (fun comment -> render comment docs))
+        | _ -> this.ForDeclaration declaration
+
+    /// The doc comment of the name declared at `declaration`, as Markdown with its links written out: a name with no
+    /// symbol of its own, such as a unit, is found by it too. `None` when it has none.
+    member _.ForDeclaration(declaration: SourceSpan) : string option =
+        docsOf declaration.File
+        |> Option.bind (fun docs ->
+            docs.Comments
+            |> List.tryFind (fun comment ->
+                match comment.Target with
+                | DocumentsDeclaration span -> span.Start = declaration.Start && span.End = declaration.End
+                | _ -> false)
+            |> Option.map (fun comment -> render comment docs))

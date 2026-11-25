@@ -180,7 +180,7 @@ def f = {
 }
 ```
 
-The rule (`strayDocComments`) reports a [doc comment](../getting-started/basics#doc-comments) that isn't followed by something it can document: a definition, a type or context, a member of a context, a field, a tag, or the module itself at the top of the file. Its fix makes it an ordinary `--` comment.
+The rule (`strayDocComments`) reports a [doc comment](../getting-started/basics#doc-comments) that isn't followed by something it can document: a definition, a type or context, a member of a context, a field, a tag, a dimension or a unit, or the module itself at the top of the file. Its fix makes it an ordinary `--` comment.
 
 ## Unreachable code path
 

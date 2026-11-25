@@ -38,6 +38,23 @@ type internal Export =
       Doc: string option
       Members: (string * string option) list }
 
+/// An entry of a page's reference: an export (see `Export`), or a dimension or a unit, which has no symbol of its own
+/// (see `unitEntries`). `Declaration` is where its name is declared, which a link to it leads to.
+type private Entry =
+    { Name: string
+      Declaration: SourceSpan
+      Written: string
+      Doc: string option
+      Members: (string * string option) list }
+
+/// `export` as an entry of a page's reference.
+let private entryOf (export: Export) : Entry =
+    { Name = export.Symbol.Name
+      Declaration = export.Symbol.Declaration
+      Written = export.Written
+      Doc = export.Doc
+      Members = export.Members }
+
 /// A name written as source writes it: an operator in backticks, after the type it is attached to if it is, as
 /// `` `==` `` or `` int.`+` ``, and the prelude's sequence type by its alias, `seq.map` (see `Seqs`).
 let private writtenName (name: string) =
@@ -64,10 +81,10 @@ let private headingName (name: string) =
 
 /// The ids of the headings of `exports`, in order: a heading's slug, with `-1`, `-2`, ... after it when an earlier one
 /// has the same, as the site numbers them. A pattern's is its heading's, as `#Even | #Odd` is `even--odd`.
-let private anchors (exports: Export list) : (Export * string) list =
+let private anchors (exports: Entry list) : (Entry * string) list =
     exports
     |> List.mapFold (fun (seen: Map<string, int>) export ->
-        let name = export.Symbol.Name
+        let name = export.Name
         let id = slug (if (PatternSyntax.shapeOf name).IsSome then headingName name else name)
         match seen |> Map.tryFind id with
         | Some count -> (export, $"{id}-{count}"), seen |> Map.add id (count + 1)
@@ -146,18 +163,68 @@ and internal exportsIn (files: string list) (typed: TypedModule) (docOf: Symbol 
     |> Seq.map (fun (file, exports) -> file, exports |> Seq.map snd |> List.ofSeq)
     |> Map.ofSeq
 
+/// The source of `file`: a file on disk, or the standard library's file of that resource name.
+let private sourceOf (file: string) : string option =
+    if Path.IsPathRooted file then (if File.Exists file then Some (File.ReadAllText file) else None)
+    else StandardLibrary.tryLoadFile file
+
+/// The dimensions and units `file` exports at its top level, in the order it declares them, each written as its
+/// declaration is, but for `export`, with its doc comment as `docOf` writes the one of the name declared at a span.
+/// They have no symbols (see `TypedModule.Units`), so they are read from the file's syntax.
+let private unitEntries (file: string) (docOf: SourceSpan -> string option) : Entry list =
+    match sourceOf file |> Option.map (fun source -> source.ReplaceLineEndings "\n", parseModuleFileWithDocs file source) with
+    | Some (source, Ok ((items, _, _), docs)) ->
+        let textOf (span: SourceSpan) = source.Substring(span.Start, span.End - span.Start)
+        let declaredIn (item: TopLevelItem) (name: string) =
+            docs.Value.TopLevel
+            |> List.tryFind (fun (declared, span) -> declared = name && item.Span.Start <= span.Start && span.End <= item.Span.End)
+            |> Option.map snd
+        let entry (written: string) (item: TopLevelItem) (name: string) =
+            declaredIn item name
+            |> Option.map (fun declaration -> { Name = name; Declaration = declaration; Written = written; Doc = docOf declaration; Members = [] })
+        items
+        |> List.mapi (fun index item -> (if index = 0 then None else Some items[index - 1]), item)
+        |> List.choose (fun (before, item) ->
+            match item.Kind with
+            | DimensionDecl(true, name, storage) ->
+                let storage = storage |> Option.map (fun storage -> $"({textOf storage.Span})") |> Option.defaultValue ""
+                entry $"{UnitSyntax.dimensionKeyword} {name}{storage}" item name
+            | UnitDecl(true, name, dimension, multiple) ->
+                let baseUnit =
+                    match before with
+                    | Some attribute when UnitSyntax.isBaseUnitDeclaration attribute item -> $"@{UnitSyntax.baseUnitAttribute} "
+                    | _ -> ""
+                let multiple = multiple |> Option.map (fun multiple -> $" = {textOf multiple.Span}") |> Option.defaultValue ""
+                entry $"{baseUnit}{UnitSyntax.unitKeyword} {name}: {dimension}{multiple}" item name
+            | _ -> None)
+    | _ -> []
+
+/// The entries of each of `files`, those of a module compiled as `typed`, by file, in the order the file declares
+/// them: its exports (see `exportsIn`) and its dimensions and units (see `unitEntries`), with their doc comments as
+/// `reader` writes them.
+let private entriesIn (files: string list) (typed: TypedModule) (reader: Documentation.Reader option) : Map<string, Entry list> =
+    let exports = exportsIn files typed (fun symbol -> reader |> Option.bind (fun reader -> reader.ForSymbol symbol))
+    let docOf (declaration: SourceSpan) = reader |> Option.bind (fun reader -> reader.ForDeclaration declaration)
+    files
+    |> List.choose (fun file ->
+        let entries =
+            (exports |> Map.tryFind file |> Option.defaultValue [] |> List.map entryOf) @ unitEntries file docOf
+            |> List.sortBy _.Declaration.Start
+        if entries.IsEmpty then None else Some (file, entries))
+    |> Map.ofList
+
 /// `text` with each line but the first indented by `indent` spaces, as a list item's continuation.
 let private indented (indent: int) (text: string) =
     text.Split('\n') |> Array.mapi (fun i line -> if i = 0 || line = "" then line else String(' ', indent) + line) |> String.concat "\n"
 
 /// The reference of one page: the module's doc comment, `moduleDoc`, if this is the file named for the module, then
 /// each export with its heading (`anchors`).
-let private render (moduleDoc: string option) (exports: (Export * string) list) =
-    let entry (export: Export, _) =
+let private render (moduleDoc: string option) (exports: (Entry * string) list) =
+    let entry (export: Entry, _) =
         let members =
             export.Members
             |> List.choose (fun (name, doc) -> doc |> Option.map (fun doc -> $"- {code (writtenName name)}: {indented 2 doc}"))
-        [ $"## {code (headingName export.Symbol.Name)}"
+        [ $"## {code (headingName export.Name)}"
           $"```nanyx fragment\n{export.Written}\n```"
           yield! Option.toList export.Doc
           if not members.IsEmpty then String.concat "\n" members ]
@@ -285,10 +352,10 @@ let private referencesOf (compiled: Documented list) : Map<string, string * (str
     let targets =
         compiled
         |> List.collect (fun documented ->
-            exportsIn documented.Files documented.Result.Typed.Value (fun _ -> None)
+            entriesIn documented.Files documented.Result.Typed.Value None
             |> Map.toList
             |> List.collect (fun (file, exports) ->
-                anchors exports |> List.map (fun (export, id) -> export.Symbol.Declaration, (pageOf file, id))))
+                anchors exports |> List.map (fun (export, id) -> export.Declaration, (pageOf file, id))))
         |> Map.ofList
     compiled
     |> List.collect (fun documented ->
@@ -304,7 +371,7 @@ let private referencesOf (compiled: Documented list) : Map<string, string * (str
             let result = documented.Result
             let reader = Documentation.Reader(documented.ModuleFile, result.DocComments.Value, result, 0, linkTo)
             let exports =
-                exportsIn documented.Files result.Typed.Value reader.ForSymbol
+                entriesIn documented.Files result.Typed.Value (Some reader)
                 |> Map.tryFind file
                 |> Option.map anchors
                 |> Option.defaultValue []

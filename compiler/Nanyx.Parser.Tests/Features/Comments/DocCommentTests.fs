@@ -170,6 +170,34 @@ let ``A doc comment skips the attributes before what it documents`` () =
     Assert.Equal<_ list>([ "The entry point.", "main" ], documented "--| The entry point.\n@entry\ndef main = 1\n")
 
 [<Fact>]
+let ``A doc comment documents a dimension and a unit, after export or an attribute on its line`` () =
+    let source =
+        """--| A duration.
+export dimension Time
+
+--| The base unit.
+@baseUnit export unit ns: Time
+
+--| A thousand of them.
+unit us: Time = 1_000ns
+
+--| Stored in ints.
+dimension Bytes(int)
+
+--| Marked on a line of its own.
+@baseUnit
+unit b: Bytes
+"""
+    Assert.Equal<_ list>(
+        [ "A duration.", "Time"
+          "The base unit.", "ns"
+          "A thousand of them.", "us"
+          "Stored in ints.", "Bytes"
+          "Marked on a line of its own.", "b" ],
+        documented source
+    )
+
+[<Fact>]
 let ``A doc comment before what it cannot document documents nothing`` () =
     let source =
         """def f = {
