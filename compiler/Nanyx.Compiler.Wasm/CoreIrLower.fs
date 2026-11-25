@@ -158,6 +158,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | Some ty -> toIrType (substitute subst ty)
         | None -> cannot "an expression without a type"
 
+    /// The type of `expr` as the type checker has it, at the function's type arguments, unaliased.
+    let sourceTypeOf (expr: Expression) : Ty option =
+        input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst >> Unifier.unalias)
+
     /// The type of `rhs`, a closure over the lifted lambda `target`, when it is a local function generic in type
     /// variables of its own.
     let genericLocalType (target: string) (rhs: Expression) =
@@ -362,11 +366,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let depth = scope.ForDepth
             let lowerBody vars = this.Tail { scope with Vars = vars; ForDepth = depth + 1 } body
             if CoreIrLowerLoops.pullsSequence tyOf iterables then
+                let storeAsList = CoreIrLowerLoops.storeAsList sourceTypeOf callee toIrType
                 let local name ty = newVar (uniqueName name) Local ty
                 let members wanted k = CoreIrLowerMembers.memberAtoms this.MemberTools scope None wanted k
                 // The iterables are held in locals, which the loop's own locals are set from.
-                CoreIrLowerLoops.forEachPulling local tyOf (this.AtomsInLocals scope) members lowerBody scope.Vars depth iterables parameters k
-            else CoreIrLowerLoops.forEach newVar tyOf (this.Atoms scope) lowerBody scope.Vars depth iterables parameters k
+                CoreIrLowerLoops.forEachPulling local tyOf storeAsList (this.AtomsInLocals scope) members lowerBody scope.Vars depth iterables parameters k
+            else CoreIrLowerLoops.forEach newVar tyOf (CoreIrLowerLoops.walksStore sourceTypeOf) (this.Atoms scope) lowerBody scope.Vars depth iterables parameters k
         | WhileSyntax.Call(condition, body) ->
             let inner = { scope with ForDepth = scope.ForDepth + 1 }
             k (CoreIrLowerLoops.whileLoop scope.ForDepth (this.Tail inner condition) (this.Tail inner body))

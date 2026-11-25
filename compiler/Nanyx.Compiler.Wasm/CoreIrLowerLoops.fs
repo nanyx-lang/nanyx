@@ -1,18 +1,47 @@
 /// Lowers loops (see the loops page of the docs) to the core IR's loop nodes.
 module internal Transpiler.Wasm.CoreIrLowerLoops
 
+open NyxCompiler
 open Parser.Program
 open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 
+/// Whether `expr`, which a `for` loop walks, is a map or a set, whose store the loop walks (see `StoreWalk`), and
+/// whether a set. `sourceTypeOf` gives an expression's type as the type checker has it.
+let walksStore (sourceTypeOf: Expression -> Ty option) (expr: Expression) : bool option =
+    match sourceTypeOf expr with
+    | Some (Maps.MapType _) -> Some false
+    | Some (Sets.SetType _) -> Some true
+    | _ -> None
+
+/// A map or a set walked in step with a sequence is walked as the list its `toList` gives: for such an iterable, the
+/// call of `toList` on its store. `callee` names the function to call at a type, and `toIrType` lowers a type.
+let storeAsList
+    (sourceTypeOf: Expression -> Ty option)
+    (callee: string -> Ty -> string)
+    (toIrType: Ty -> IrType)
+    (iterable: Expression)
+    : (Atom -> Expr) option =
+    match sourceTypeOf iterable with
+    | Some (Maps.MapType(key, value) as ty) ->
+        Some (ty, Maps.toList, TyRecord(Map.ofList [ "0", key; "1", value ], FieldOrder.none))
+    | Some (Sets.SetType element as ty) -> Some (ty, Sets.toList, element)
+    | _ -> None
+    |> Option.map (fun (ty, toList, elementTy) ->
+        let listTy = Lists.ofType elementTy
+        let name = callee toList (TyFunc(ty, listTy, []))
+        fun (store: Atom) -> Expr.make (Call(name, [ store ])) (toIrType listTy))
+
 /// `for xs, ys | arms`: the body runs for each step, with each iterable's element in a local the body names by its
-/// parameter. A range counts from its start (to its end, if it has one); a list walks its cells. `depth` is how many
+/// parameter. A range counts from its start (to its end, if it has one); a list walks its cells; a map's or a set's
+/// store walks its trie (see `StoreWalk`), which `walksStore` says an iterable is, and whether a set's. `depth` is how many
 /// loops enclose this one, which names its locals; `atoms` lowers the iterables' operands, and `lowerBody` the body,
 /// given `vars` with each parameter bound to its element's local.
 let forEach
     (newVar: string -> VarKind -> IrType -> Var)
     (tyOf: Expression -> IrType)
+    (walksStore: Expression -> bool option)
     (atoms: Expression list -> (Atom list -> Expr) -> Expr)
     (lowerBody: Map<string, Var> -> Expr)
     (vars: Map<string, Var>)
@@ -22,15 +51,41 @@ let forEach
     (k: Expr -> Expr) =
     // The first stream's locals keep the names a loop over one iterable has always had.
     let suffix index = if index = 0 then "" else $"_{index}"
+    let mutable stores = 0
+    // The locals that walk a store, named as the stream's own are.
+    let storeWalk (storeTy: IrType) (keys: bool) : StoreWalk =
+        stores <- stores + 1
+        let local (name: string) ty = newVar $"__for_store_{name}_{depth}_{stores}" ForLoop ty
+        { StoreType = storeTy
+          Keys = keys
+          Root = local "root" IrWord
+          Pending = local "pending" IrWord
+          Children = local "children" IrWord
+          Index = local "index" IrWord
+          Depth = local "depth" IrWord
+          Path = local "path" IrInt }
+    // What a store's walk gives: a map's entry, or a set's element.
+    let storeElement (storeTy: IrType) (keys: bool) =
+        let entry =
+            match IrType.unfold storeTy with
+            | IrTags tags ->
+                match tags |> List.tryFind (fst >> (=) "bucket") |> Option.bind snd with
+                | Some (IrRecord [ _; _, IrList entry ]) -> entry
+                | _ -> internalError $"a store of '{IrType.show storeTy}'"
+            | other -> internalError $"a store of '{IrType.show other}'"
+        match entry with
+        | IrRecord((_, key) :: _) when keys -> key
+        | _ -> entry
     // Each iterable's operands, and how to make its source and element type from their atoms.
     let source (iterable: Expression) : Expression list * (Atom list -> ForSource * IrType) =
         match iterable.Kind with
         | RangeSyntax.Call(first, Some last) -> [ first; last ], fun atoms -> OverRange(atoms.[0], atoms.[1]), IrInt
         | RangeSyntax.Call(first, None) -> [ first ], fun atoms -> OverRangeFrom atoms.Head, IrInt
         | _ ->
-            match tyOf iterable with
-            | IrList elementTy -> [ iterable ], fun atoms -> OverList atoms.Head, elementTy
-            | other -> cannot $"a `for` loop over a value of type '{IrType.show other}'"
+            match tyOf iterable, walksStore iterable with
+            | storeTy, Some keys -> [ iterable ], fun atoms -> OverStore(atoms.Head, storeWalk storeTy keys), storeElement storeTy keys
+            | IrList elementTy, None -> [ iterable ], fun atoms -> OverList atoms.Head, elementTy
+            | other, None -> cannot $"a `for` loop over a value of type '{IrType.show other}'"
     let walkers =
         iterables |> List.mapi (fun index _ ->
             newVar $"__for_cursor_{depth}{suffix index}" ForLoop IrWord, newVar $"__for_end_{depth}{suffix index}" ForLoop IrInt)
@@ -76,6 +131,7 @@ let pullsSequence (tyOf: Expression -> IrType) (iterables: Expression list) =
 let forEachPulling
     (local: string -> IrType -> Var)
     (tyOf: Expression -> IrType)
+    (storeAsList: Expression -> (Atom -> Expr) option)
     (atoms: Expression list -> (Atom list -> Expr) -> Expr)
     (members: (ContextMemberKey * IrType) list -> (Atom list -> Expr) -> Expr)
     (lowerBody: Map<string, Var> -> Expr)
@@ -108,9 +164,12 @@ let forEachPulling
                         Expr.letIn past (Expr.make (Prim(Binary ">", [ AVar counter; AVar finish ])) IrBool) (Expr.make (If(AVar past, stop, body)) IrUnit)
                 walking, step
         | _ ->
-            let ty = tyOf iterable
+            // A map or a set walked in step with a sequence is walked as the list its `toList` gives.
+            let asList = storeAsList iterable
+            let ty = match asList with Some toList -> (toList AUnit).Type | None -> tyOf iterable
             [ iterable ], fun atoms ->
                 let rest = local "__for_rest" ty
+                let start = match asList with Some toList -> toList atoms.Head | None -> Expr.make (Atom atoms.Head) ty
                 match ty, pulledBy ty with
                 | IrList elementTy, _ ->
                     let step (next: Var -> Expr) =
@@ -118,7 +177,7 @@ let forEachPulling
                         let tail = local "__for_tail" ty
                         let taken = { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = Expr.doThen (next head) (Expr.make (Assign(rest, AVar tail)) IrUnit) }
                         Expr.make (Match([ rest ], [ taken; { Patterns = [ PWildcard ]; Body = stop } ])) IrUnit
-                    [ rest, Expr.make (Atom atoms.Head) ty ], step
+                    [ rest, start ], step
                 | _, Some (IrFunction(_, result, wanted, _) as nextTy, elementTy, restTy) ->
                     let step (next: Var -> Expr) =
                         let pull = local "__for_pull" nextTy
