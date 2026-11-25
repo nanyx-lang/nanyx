@@ -53,12 +53,8 @@ const tailCallModule = new Uint8Array([
 
 let loading: Promise<Playground> | null = null;
 
-/**
- * The playground host's runner, from the package `name` in the compiler's bundle. A release before the packages were
- * renamed (#2711) has the host as `nanyx.playground`, and later ones as `nanyx.playground.host`, so `load` tries the
- * new name first. The old name can go once `playgroundRelease` names a release with the new one.
- */
-const importRunner = (name: string) => import(/* @vite-ignore */ compilerBase + `packages/${name}/runner/playground.js`);
+/** The playground host's runner, from the package `nanyx.playground.host` in the compiler's bundle. */
+const importRunner = () => import(/* @vite-ignore */ compilerBase + "packages/nanyx.playground.host/runner/playground.js");
 
 async function load(warmUp: string | undefined): Promise<Playground> {
   if (!WebAssembly.validate(tailCallModule)) {
@@ -73,7 +69,7 @@ async function load(warmUp: string | undefined): Promise<Playground> {
   const { release } = (await response.json()) as { release: string | null };
   const [{ loadCompiler }, runner] = await Promise.all([
     import(/* @vite-ignore */ compilerBase + "compiler.js"),
-    importRunner("nanyx.playground.host").catch(() => importRunner("nanyx.playground")),
+    importRunner(),
   ]);
   const compiler: Compiler = await loadCompiler();
   // The first compile is the compiler's warm-up, most of the wait: done now, the first Run is quick.
