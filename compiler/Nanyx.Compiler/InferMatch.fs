@@ -80,6 +80,7 @@ let internal inferMatch
             | LiteralPattern(StringLit text) when CharLiterals.isChar state' scrutineeTy ->
                 CharLiterals.typeOf pattern.Span text
                 |> Result.map (fun ty -> env', addConstraint scrutineeTy ty state', mkTypedPattern pattern scrutineeTy)
+            | LiteralPattern(UnitLit _) -> Error [ Units.literalNotChecked pattern.Span ]
             | LiteralPattern literal ->
                 let ty, recorded = NumericLiterals.typeOf state' pattern.Span None literal
                 let constrained = addConstraint scrutineeTy ty recorded

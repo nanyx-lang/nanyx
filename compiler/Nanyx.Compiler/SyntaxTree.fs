@@ -126,13 +126,16 @@ module SyntaxTree =
     let rec ofItem (item: TopLevelItem) : Expression list =
         match item.Kind with
         | Def (ValueDef(_, _, _, value))
-        | Expr value -> [ value ]
+        | Expr value
+        | UnitDecl(_, _, _, Some value) -> [ value ]
         | ModuleBlock(_, items) -> items |> List.collect ofItem
         | Def (TypeDef _)
         | ModuleDecl _
         | Import _
         | ReExport _
-        | Attribute _ -> []
+        | Attribute _
+        | DimensionDecl _
+        | UnitDecl(_, _, _, None) -> []
 
     /// What a type written in a module is written as.
     type WrittenAs =
@@ -199,7 +202,9 @@ module SyntaxTree =
         | ModuleDecl _
         | Import _
         | ReExport _
-        | Attribute _ -> []
+        | Attribute _
+        | DimensionDecl _
+        | UnitDecl _ -> []
 
     /// Every type written in `module'`, item by item, in module blocks too, each with what it is written as: an item's
     /// own, then those written in the expressions of its value, in the order `expressionsWithin` gives them.

@@ -111,7 +111,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | FunctionCall(name, _, [ operand ]) when name = NegateSyntax.builtIn ->
             let joinsTheMinus =
                 match operand.Kind with
-                | LiteralExpr(IntLit _ | FloatLit _) -> true
+                | LiteralExpr(IntLit _ | FloatLit _ | UnitLit _) -> true
                 | FunctionCall(inner, _, [ _ ]) -> inner = NegateSyntax.builtIn
                 | _ -> false
             cat [ text "-"; (if joinsTheMinus then parens (exprBare full operand) else expr operandPosition operand) ]
@@ -211,6 +211,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | IntLit i -> text (string i)
             | FloatLit f -> text (f.ToString("R", CultureInfo.InvariantCulture))
             | BoolLit b -> text (if b then "true" else "false")
+            | UnitLit(number, unitName) -> text (WrittenNumber.text number + unitName)
 
     /// Operator and pipe chains in the module, with their operands printed as the rest of the module's are.
     and operators () : OperatorPrinter = OperatorPrinter(options.IndentSize, source, sourceText, placement, parts (), calls ())
@@ -641,12 +642,14 @@ let format (options: Options) (parsed: SourceModule) : string =
                 let _, runEnd, _, _ = List.last run
                 runStart, runEnd, runFirst, fun () -> importDoc runStart runEnd imports)
         // An attribute line belongs to the item after it, so nothing comes between them. `@partial` is written on the
-        // line of the module declaration it marks.
+        // line of the module declaration it marks, and `@baseUnit` on the line of the unit.
         |> List.foldBack
             (fun (childStart, childEnd, first: TopLevelItem, build) children ->
                 match children with
                 | (_, nextEnd, next: TopLevelItem, build') :: rest when isAttribute first ->
-                    let between = if TopLevelItem.isPartialDeclaration first next then text " " else hard
+                    let between =
+                        if TopLevelItem.isPartialDeclaration first next || UnitSyntax.isBaseUnitDeclaration first next then text " "
+                        else hard
                     (childStart, nextEnd, next, fun () -> cat [ build (); between; build' () ]) :: rest
                 | _ -> (childStart, childEnd, first, build) :: children)
             <| []
@@ -669,6 +672,14 @@ let format (options: Options) (parsed: SourceModule) : string =
             | None -> cat [ text "export "; imports.ImportSource item.Source ]
         | Expr value -> expr statementPosition value
         | Attribute(n, argument) -> attributeDoc n argument i.Span
+        | DimensionDecl(isExport, n, storage) ->
+            let export = if isExport then "export " else ""
+            cat [ text $"{export}{UnitSyntax.dimensionKeyword} {Names.written n}"
+                  (match storage with Some t -> cat [ text "("; typeExpr t; text ")" ] | None -> Doc.empty) ]
+        | UnitDecl(isExport, n, dimension, multiple) ->
+            let export = if isExport then "export " else ""
+            cat [ text $"{export}{UnitSyntax.unitKeyword} {Names.written n}: {Names.written dimension}"
+                  (match multiple with Some value -> cat [ text " = "; expr full value ] | None -> Doc.empty) ]
 
     let code = Doc.render options.LineWidth (topLevel true headerEnd source.Length parsed.Items)
     if headerEnd = 0 then

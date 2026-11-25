@@ -464,6 +464,8 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | ModuleBlock _ -> ()
         // Attributes are resolved by the compiler front end before inference (see Attributes.applyAttributes).
         | Attribute _ -> ()
+        | DimensionDecl _
+        | UnitDecl _ -> errors <- errors @ [ Units.declarationNotChecked item.Span ]
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
             errors <- errors @ DefAnnotations.typeDefErrors state name modifiers parameters body

@@ -33,7 +33,8 @@ type TokenKind =
     | Keyword
     /// A name in backticks, with them: `` `+` ``, `` `adds points` ``.
     | BacktickedName
-    /// An integer or a float, without a sign: `42`, `1_000`, `0x1F`, `2.5e-3`.
+    /// An integer or a float, without a sign, and the unit written straight after it if it has one: `42`, `1_000`, `0x1F`,
+    /// `2.5e-3`, `500ms`, `1.5e3ms` (see `numberEnd`).
     | Number
     /// A string with no holes, with its quotes: `"a\n"`, `'raw'`.
     | StringLiteral
@@ -101,6 +102,43 @@ let private symbols =
 let private isIdentifierStart (c: char) = Char.IsLetter c || c = '_'
 let private isIdentifierChar (c: char) = Char.IsLetter c || Char.IsAsciiDigit c || c = '_'
 let private isFence (line: string) = line.Length >= 3 && line |> Seq.forall ((=) '-')
+
+/// Whether the number at `start` of `text` is hexadecimal, octal or binary: `0x1F`, `0o17`, `0b101`.
+let private isRadixNumber (text: string) (start: int) =
+    let at (i: int) = if i < text.Length then text[i] else '\000'
+    at start = '0' && "xXoObB".IndexOf(at (start + 1)) >= 0 && (Uri.IsHexDigit(at (start + 2)) || at (start + 2) = '_')
+
+/// The end of the number that starts at `start` of `text`, without a unit after it: its digits and `_`s, a fraction and
+/// an exponent, or a hexadecimal, octal or binary number's digits.
+let numberEnd (text: string) (start: int) : int =
+    let at (i: int) = if i < text.Length then text[i] else '\000'
+    let mutable j = start + 1
+    let digits () =
+        while Char.IsAsciiDigit(at j) || at j = '_' do
+            j <- j + 1
+    if isRadixNumber text start then
+        j <- start + 2
+        while Uri.IsHexDigit(at j) || at j = '_' do
+            j <- j + 1
+    else
+        digits ()
+        if at j = '.' && Char.IsAsciiDigit(at (j + 1)) then
+            j <- j + 1
+            digits ()
+        if (at j = 'e' || at j = 'E')
+           && (Char.IsAsciiDigit(at (j + 1)) || ((at (j + 1) = '+' || at (j + 1) = '-') && Char.IsAsciiDigit(at (j + 2)))) then
+            j <- j + 2
+            digits ()
+    j
+
+/// The end of the unit written straight after a number that ends at `numberEnd` of `text`, `ms` in `500ms`: a name
+/// that starts with a letter, or `numberEnd` itself when there is none.
+let private unitEnd (text: string) (numberEnd: int) : int =
+    let mutable j = numberEnd
+    if j < text.Length && Char.IsLetter text[j] then
+        while j < text.Length && isIdentifierChar text[j] do
+            j <- j + 1
+    j
 
 /// A piece of the text in order: a token, or a piece of trivia.
 type private Piece =
@@ -229,24 +267,12 @@ let private scan (filePath: string) (source: string) : Piece list * ParseError l
                 j <- j + 1
             token (if Keywords.reserved.Contains(source.Substring(i, j - i)) then Keyword else Name) j
         elif Char.IsAsciiDigit c then
-            let mutable j = i + 1
-            let digits () =
-                while Char.IsAsciiDigit(at j) || at j = '_' do
-                    j <- j + 1
-            if c = '0' && "xXoObB".IndexOf(at j) >= 0 && (Uri.IsHexDigit(at (j + 1)) || at (j + 1) = '_') then
-                j <- j + 1
-                while Uri.IsHexDigit(at j) || at j = '_' do
-                    j <- j + 1
+            let numberEnd = numberEnd source i
+            if Char.IsLetter(at numberEnd) && isRadixNumber source i then
+                error numberEnd (unitEnd source numberEnd) "A hexadecimal, octal or binary number takes no unit: put a space before a name after it"
+                token Number numberEnd
             else
-                digits ()
-                if at j = '.' && Char.IsAsciiDigit(at (j + 1)) then
-                    j <- j + 1
-                    digits ()
-                if (at j = 'e' || at j = 'E')
-                   && (Char.IsAsciiDigit(at (j + 1)) || ((at (j + 1) = '+' || at (j + 1) = '-') && Char.IsAsciiDigit(at (j + 2)))) then
-                    j <- j + 2
-                    digits ()
-            token Number j
+                token Number (unitEnd source numberEnd)
         elif c = '"' then
             doubleQuoted (i + 1) true
         elif c = '\'' then

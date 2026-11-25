@@ -309,6 +309,8 @@ let rec private expressionsOfItem (item: TopLevelItem) =
     | Import _
     | ReExport _
     | Attribute _ -> []
+    | DimensionDecl (_, _, storage) -> storage |> Option.toList |> List.collect expressionsOfType
+    | UnitDecl (_, _, _, multiple) -> multiple |> Option.toList |> List.collect expressions
     | ModuleBlock (_, items) -> items |> List.collect expressionsOfItem
     | Def (ValueDef (_, _, typeOpt, value)) -> (typeOpt |> Option.toList |> List.collect expressionsOfType) @ expressions value
     | Def (TypeDef (_, _, parameters, typeExpr)) ->
@@ -374,12 +376,14 @@ let rec private typesOfItem (item: TopLevelItem) =
     match item.Kind with
     | Def (ValueDef (_, _, typeOpt, _)) -> Option.toList typeOpt
     | Def (TypeDef (_, _, parameters, body)) -> parameterTypes parameters @ [ body ]
+    | DimensionDecl (_, _, storage) -> Option.toList storage
     | ModuleBlock (_, items) -> items |> List.collect typesOfItem
     | ModuleDecl _
     | Import _
     | ReExport _
     | Expr _
-    | Attribute _ -> []
+    | Attribute _
+    | UnitDecl _ -> []
 
 /// `typeExpr` and every type expression nested in it.
 let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
