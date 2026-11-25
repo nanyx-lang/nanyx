@@ -269,10 +269,9 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyRecord(fields, _) -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
     | TyNominal _ as nominal -> toIrType (RecursiveNominals.underlying nominal)
     | TyApply("list", [ element ]) -> IrList(toIrType element)
-    // A map is the list of its entries, each a tuple of its key and its value (see `Maps`).
-    | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ], FieldOrder.none) ]))
-    // A set is the list of its elements (see `Sets`).
-    | Sets.SetType element -> IrList(toIrType element)
+    // A map and a set are laid out as their stores (see `Maps.storeOf` and `Sets.storeOf`).
+    | Maps.MapType(key, value) -> toIrType (Maps.storeOf key value)
+    | Sets.SetType element -> toIrType (Sets.storeOf element)
     | Arrays.ArrayType element -> IrArray(toIrType element)
     // A mutable array is laid out as an array is (see `MutableArrays`).
     | MutableArrays.MutableArrayType element -> CoreIrRegions.boxType (IrArray(toIrType element))

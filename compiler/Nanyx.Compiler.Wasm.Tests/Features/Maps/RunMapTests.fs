@@ -66,7 +66,7 @@ let ``Run - insert adds a key, or replaces its value, and leaves the map it was 
           "println(keys(replaced))"
           """println("{map.length(replaced)}")""" ]
     |> runSource
-    |> assertRan "3\n10\nnot found\nabc\n3\n"
+    |> assertRan "3\n10\nnot found\nbac\n3\n"
 
 [<Fact>]
 let ``Run - remove takes a key out, and containsKey says whether a map has one`` () =
@@ -130,7 +130,7 @@ let ``Run - list.groupBy takes a key of any type with an Eq and a Hash`` () =
           """def byBoth = people \groupBy { p -> (p.city, p.age) }"""
           """println("{map.length(byBoth)} {names(byBoth(("Leeds", 30)) \someOr([]))}")""" ]
     |> runSource
-    |> assertRan "Leeds York \nAnn,Cy,\n3 Cy,\n"
+    |> assertRan "York Leeds \nAnn,Cy,\n3 Cy,\n"
 
 [<Fact>]
 let ``Run - List.groupBy groups elements by a key, in order`` () =
@@ -142,17 +142,17 @@ let ``Run - List.groupBy groups elements by a key, in order`` () =
           "println(show(map.toList(groups) \\list.map({ group -> group.0 })))"
           """println("{map.length(list.groupBy([], { (x: int) -> x }))}")""" ]
     |> runSource
-    |> assertRan "135\n24\n10\n0\n"
+    |> assertRan "135\n24\n01\n0\n"
 
 [<Fact>]
-let ``Run - a for loop walks a map's entries, in the order their keys were added`` () =
+let ``Run - a for loop walks a map's entries, in the order of map.toList`` () =
     program
         []
         [ """def dict = ["one" => "uno", "two" => "dos"] \insert("one", "un")"""
           """for dict | key, value -> println("{key} => {value}")"""
           """for dict, 1.. | entry, i -> println("{i}: {entry.1}")""" ]
     |> runSource
-    |> assertRan "one => un\ntwo => dos\n1: un\n2: dos\n"
+    |> assertRan "two => dos\none => un\n1: dos\n2: un\n"
 
 [<Fact>]
 let ``Run - a nominal type with its own == and hash can be a key, compared by its own ==`` () =
@@ -205,7 +205,7 @@ let ``Run - fold walks a map's keys and values in order`` () =
           """println("{m \map.fold(0, { total, key, value -> total + value })}")"""
           """println(m \map.fold("", { acc, key, value -> acc ++ key ++ "{value}" }))""" ]
     |> runSource
-    |> assertRan "3\na1b2\n"
+    |> assertRan "3\nb2a1\n"
 
 [<Fact>]
 let ``Run - map changes a map's values and keeps its keys`` () =
@@ -217,7 +217,7 @@ let ``Run - map changes a map's values and keeps its keys`` () =
           """def named = m \map.map { n -> "#{n}" }"""
           """println(map.get(named, "a") \someOr("none"))""" ]
     |> runSource
-    |> assertRan "20\nab\n#10\n"
+    |> assertRan "20\nba\n#10\n"
 
 [<Fact>]
 let ``Run - filter keeps the entries that pass the test`` () =
@@ -254,7 +254,7 @@ let ``Run - union keeps the first map's keys and takes the second's values`` () 
           """show(map.union(map.empty, defaults))"""
           """show(["b" => 2, "a" => 1] \map.union(["c" => 3, "a" => 10]))""" ]
     |> runSource
-    |> assertRan "a1b2c3d4\na1b20c3\na1b2\na1b2\nb2a10c3\n"
+    |> assertRan "b2a1c3d4\nb20a1c3\nb2a1\nb2a1\nb2a10c3\n"
 
 [<Fact>]
 let ``Run - unionWith combines the values of a key both maps have`` () =
@@ -267,7 +267,7 @@ let ``Run - unionWith combines the values of a key both maps have`` () =
           """show(counts \map.unionWith(map.empty, { a, b -> a + b }))"""
           """show(map.unionWith(map.empty, counts, { a, b -> a + b }))""" ]
     |> runSource
-    |> assertRan "tea2cake1pie4\ntea2cake6pie4\ntea-5cake1\ntea2cake1\ntea2cake1\n"
+    |> assertRan "tea2pie4cake1\ntea2pie4cake6\ntea-5cake1\ntea2cake1\ntea2cake1\n"
 [<Fact>]
 let ``Run - a map is written as its literal is, each key and value by its own toString`` () =
     program
