@@ -14,7 +14,7 @@ export module http.host
 
 import (
   nanyx/async as (Async)
-  nanyx/clock as (Clock)
+  nanyx/clock as (Clock, wholeMilliseconds)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/random as (Random)
@@ -65,7 +65,7 @@ export def run
     use Clock(
       now = { _ -> millisecondsOn(0) }
       ticks = { _ -> millisecondsOn(1) }
-      sleep = { ms -> sleepOnRuntime(ms) }
+      sleep = { time -> sleepOnRuntime(wholeMilliseconds(time)) }
     )
 
     match incoming()

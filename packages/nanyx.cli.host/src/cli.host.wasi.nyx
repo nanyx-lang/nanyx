@@ -18,7 +18,7 @@
 
 import (
   nanyx/async as (Async)
-  nanyx/clock as (Clock)
+  nanyx/clock as (Clock, wholeMilliseconds)
   nanyx/host.async as (cancelled)
   nanyx/host.memory
   nanyx/host.runtime
@@ -172,7 +172,7 @@ export def provide
     use Clock(
       now = { _ -> clocks.timeOfDay() }
       ticks = { _ -> clocks.ticks() }
-      sleep = { ms -> clocks.sleepFor(ms) }
+      sleep = { time -> clocks.sleepFor(wholeMilliseconds(time)) }
     )
 
     f()

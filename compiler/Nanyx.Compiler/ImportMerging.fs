@@ -221,13 +221,17 @@ module internal ImportMerging =
             |> Map.fold (fun acc name signature -> acc |> Map.add (ModuleLinking.importedName qualifier name) signature) state.ContextSignatures
         let typeDefs = ModuleLinking.mergeTypeDefs typeDefs exportedTypeDefs
         // A unit is written unqualified, as in `500ms`, under an alias too: an import brings in the units its module
-        // exports, or those it selects. Two units of one name are ambiguous where the name is written (see `Units`).
+        // exports, or those it selects. Two units of one name are ambiguous where the name is written (see `Units`), but
+        // for the prelude's, which another import's replaces.
         let units, ambiguousUnits =
             ModuleLinking.exportedUnits imported
             |> Map.filter (fun name _ -> isSelected name)
+            // A module re-exports no unit it imports.
+            |> Map.map (fun _ info -> { info with IsExport = false })
             |> Map.fold (fun (units, ambiguous) name info ->
                 match units |> Map.tryFind name with
-                | Some existing when existing <> info ->
+                // An import's unit replaces the prelude's of its name, as an import's value does.
+                | Some existing when existing <> info && existing.Home <> StandardLibraryModule StandardLibrary.preludeModuleName ->
                     let each = ambiguous |> Map.tryFind name |> Option.defaultValue [ existing ]
                     units, ambiguous |> Map.add name (List.distinct (each @ [ info ]))
                 | _ -> units |> Map.add name info, ambiguous) (state.Units, state.AmbiguousUnits)

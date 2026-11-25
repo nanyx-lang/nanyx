@@ -60,6 +60,11 @@ a literal can't be written with a qualifier, or only those it selects. Two impor
 name make it ambiguous (`InferState.AmbiguousUnits`), which is reported as `NYX0105` only where the name is written
 (`Units.unitNamed`), unless the module declares a unit of that name itself.
 
+The prelude declares `Time` and its units (`stdlib/nanyx/prelude-time.nyx`), so every module imports them. A module's
+exported units are those of its `Units` that it declares with `export unit`, in any of its files if it is split across
+files: an import marks the units it brings in as not exported (`ImportMerging`), so a module re-exports none. An
+import's unit replaces the prelude's of its name rather than making it ambiguous.
+
 # Numbers with units
 
 `Infer` types `500ms` as a measured value of `ms`'s dimension, `TyMeasure([Time, 1], s)`, whose storage `s` is recorded as

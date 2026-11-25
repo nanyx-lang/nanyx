@@ -20,7 +20,13 @@ export context Clock = (
   --| Milliseconds since a start the host chooses, which never go backwards: the time between two
     calls is how long passed between them. Only differences between its values mean anything.
   ticks: () -> int
-  --| Waits until at least `ms` milliseconds have passed on [`ticks`], while the program's other
-    tasks run. A wait of 0 or less returns at once.
-  sleep: [Async] int -> ()
+  --| Waits until at least `time` has passed on [`ticks`], while the program's other tasks run:
+    `sleep(500ms)`. A wait of no time, or less, returns at once.
+  sleep: [Async] Time(int) -> ()
 )
+
+--| The whole milliseconds a host's `sleep` of `time` waits: `time` rounded up, so a sleep waits
+  at least as long as it is asked, `500us` a millisecond.
+export def wholeMilliseconds: Time(int) -> int = { time ->
+  (time + 1ms - 1ns) // 1ms
+}

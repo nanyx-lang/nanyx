@@ -213,15 +213,11 @@ module internal ModuleLinking =
         let own = exportedTypeNames imported.Own
         imported.BlockReExports |> List.fold (fun acc (name, target) -> if own.Contains target then acc.Add name else acc) own
 
-    /// The units of measure `imported` exports, by name: those it declares with `export unit` (see `Units`).
+    /// The units of measure `imported` exports, by name: those it declares with `export unit` (see `Units`), in any of
+    /// its files, if it is split across files. A unit it imports is not one of them: it is not exported where it is
+    /// imported (see `ImportMerging`).
     let internal exportedUnits (imported: CheckedModule) : Map<string, UnitInfo> =
-        let names =
-            imported.Syntax
-            |> List.choose (function
-                | Kind (UnitDecl(true, name, _, _)) -> Some name
-                | _ -> None)
-            |> Set.ofList
-        imported.Typed.Units |> Map.filter (fun name _ -> names.Contains name)
+        imported.Typed.Units |> Map.filter (fun _ info -> info.IsExport)
 
     /// What the file `module'` gives its importers by re-exporting its own `module name =` blocks at its top level, as
     /// `export shapes`: each re-export, with the names it gives that stand for a definition or type of the file. What a

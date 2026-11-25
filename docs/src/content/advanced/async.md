@@ -167,7 +167,7 @@ the others, and waits for them to return before it does:
 
 ```nanyx
 def fastest = { _ ->
-  race([{ sleep(50); "the quick one" }, { sleep(60_000); "the slow one" }])
+  race([{ sleep(50ms); "the quick one" }, { sleep(1min); "the slow one" }])
 }
 
 println(fastest())
@@ -180,7 +180,7 @@ The functions may each need different contexts: the list is of functions that ma
 A timeout is a race against a sleep:
 
 ```nanyx fragment
-def limited = { url: string -> race([{ #some(http.get(url)) }, { sleep(5_000); #timedOut }]) }
+def limited = { url: string -> race([{ #some(http.get(url)) }, { sleep(5s); #timedOut }]) }
 ```
 
 # Cancelling

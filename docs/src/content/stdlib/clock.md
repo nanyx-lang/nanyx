@@ -19,12 +19,13 @@ println(took >= 0)
 -- true
 ```
 
-`sleep(ms)` waits until at least `ms` milliseconds have passed. It requires `Async` too, and the program's other
+`sleep(100ms)` waits until at least 100 milliseconds have passed: it takes a `Time(int)`, a number with a unit of time
+(`ns`, `us`, `ms`, `s`, `min`, `hr` or `d`), never a plain number. It requires `Async` too, and the program's other
 [tasks](../advanced/async) run meanwhile:
 
 ```nanyx
 def later: [Async, Clock, Console] string -> () = { text ->
-  sleep(100)
+  sleep(100ms)
   println(text)
 }
 
@@ -47,7 +48,7 @@ A `use` of `Clock` gives a function whatever time a test needs, and a sleep that
 import nanyx/clock as (Clock)
 
 def stamp: [Async, Clock] string -> string = { text ->
-  sleep(60_000)
+  sleep(1min)
   "{now()}: {text}"
 }
 
@@ -80,7 +81,7 @@ that names `Clock` imports it with `import nanyx/clock as (Clock)`.
 context Clock = (
   now: () -> int
   ticks: () -> int
-  sleep: [Async] int -> ()
+  sleep: [Async] Time(int) -> ()
 )
 ```
 
@@ -91,7 +92,16 @@ The time. A host supplies one; a `use` of `Clock(...)` makes any other.
   to time something.
 - `ticks`: Milliseconds since a start the host chooses, which never go backwards: the time between two
   calls is how long passed between them. Only differences between its values mean anything.
-- `sleep`: Waits until at least `ms` milliseconds have passed on `ticks`, while the program's other
-  tasks run. A wait of 0 or less returns at once.
+- `sleep`: Waits until at least `time` has passed on `ticks`, while the program's other tasks run:
+  `sleep(500ms)`. A wait of no time, or less, returns at once.
+
+## `wholeMilliseconds`
+
+```nanyx fragment
+def wholeMilliseconds: Time(int) -> int
+```
+
+The whole milliseconds a host's `sleep` of `time` waits: `time` rounded up, so a sleep waits
+at least as long as it is asked, `500us` a millisecond.
 
 <!-- End of the generated reference. -->

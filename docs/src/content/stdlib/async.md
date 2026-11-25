@@ -118,7 +118,7 @@ Runs each of `contestants` as a task, and gives back what the first to finish ga
 the others, which it cancels, have returned. A cancelled task carries on until it next waits:
 then each call that waits gives back `#cancelled`, as `http.get` does, and a `sleep` returns at
 once, so it returns soon, through its own error handling. A timeout is a race against a sleep:
-`race([{ #some(http.get(url)) }, { sleep(5_000); #timedOut }])`. It crashes when `contestants`
+`race([{ #some(http.get(url)) }, { sleep(5s); #timedOut }])`. It crashes when `contestants`
 is empty, which has no first.
 
 <!-- End of the generated reference. -->
