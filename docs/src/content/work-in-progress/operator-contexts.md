@@ -10,7 +10,7 @@ the fewest members that has that member. The language docs describe this, and `A
 [Operators find their context](../advanced/contexts#operators-find-their-context), [Add(a)](../advanced/contexts#adda),
 [Sub(a)](../advanced/contexts#suba), [Num(a)](../advanced/contexts#numa), [Append(a)](../advanced/contexts#appenda) and
 [Operators](../tour/operators#arithmetic-and-comparison). This page keeps what is still open. How operators on measured
-values are to be typed is on [Units and dimensions](./units-and-dimensions#arithmetic-on-measured-values).
+values are to be typed is on [Units and dimensions](./units-and-dimensions#arithmetic).
 
 # Not done yet
 
