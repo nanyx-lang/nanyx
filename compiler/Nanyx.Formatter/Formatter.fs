@@ -434,7 +434,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         | Block _ when isWrittenBlock value -> cat [ head; underHead (nest (cat [ hard; block value ])) ]
         | Lambda(parameters, body, _) when typeOpt.IsSome && not (isTrivial (snd ((lambdas ()).WrittenLambda value parameters body))) ->
             cat [ head; underHead (cat [ text " "; lambdaDoc value parameters body true ]) ]
-        | _ -> cat [ head; underHead (cat [ text " "; expr full value ]) ]
+        | _ -> cat [ head; underHead (cat [ text " "; defValueDoc value ]) ]
 
     /// A custom pattern's declaration (see `PatternSyntax`): `pattern`, its type, and its body after the `=`.
     and patternDoc (isExport: bool) (signatureType: TypeExpr) (value: Expression) : Doc =
@@ -454,6 +454,16 @@ let format (options: Options) (parsed: SourceModule) : string =
         | _ ->
             let patternText = sourceText.WrittenPattern span |> Option.defaultWith (fun () -> rebuiltPattern bindings)
             defDocNamed isExport "def" (text patternText) None value
+
+    /// A def's value that is a tuple, which needs no brackets after the `=`, `def point = 3, 4`: none where it fits on
+    /// the line and none of its items is an `if`, a `match` or a block, which would take in the items after it, else
+    /// in brackets, as a tuple is broken over lines anywhere else (#2653).
+    and defValueDoc (value: Expression) : Doc =
+        match value.Kind with
+        | TupleExpr items when items |> List.forall (fun item -> match item.Kind with IfExpr _ | Match _ | Except _ | Block _ -> false | _ -> true) ->
+            let unbracketed = Doc.join (text ", ") (items |> List.map (expr { full with Tail = false }))
+            Doc.group (IfBreak(expr full value, unbracketed))
+        | _ -> expr full value
 
     and pattern (p: Pattern) : Doc = PatternPrinter(source, sourceText, literalDoc, expr full).Pattern p
 

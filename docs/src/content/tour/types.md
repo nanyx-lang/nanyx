@@ -136,7 +136,7 @@ Tuples are anonymous records with numbered fields:
 
 ```nanyx
 -- Tuple type
-def point: int, int = (10, 20)
+def point: int, int = 10, 20
 
 -- Named tuple (equivalent to record)
 def coords: (x: int, y: int) = (x = 10, y = 20)
