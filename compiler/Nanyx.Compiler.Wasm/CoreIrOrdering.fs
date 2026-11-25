@@ -6,13 +6,17 @@
 /// it is `<` on floats, not this, that follows IEEE 754. Records and tags have no order. A record only reaches here
 /// inside a tuple, or a list the operator's type did not show was one where it is written, that a function requiring
 /// `Ord(a)` orders by its structure rather than through the instance (see the equality design page's `What is
-/// implemented`): it is then ordered field by field, in the order the fields are stored. Tags never reach here. An
-/// ordering function only reads
-/// its operands: it borrows them, as every runtime helper does.
+/// implemented`): it is then ordered field by field, in the order the fields are stored. Tags reach here only through
+/// the prelude's `__compare`, which orders the keys of a map whose hashes are the same (`keyOrder` in
+/// `prelude-maps.nyx`): they are ordered by their numbers, then by their payloads, and a recursive type as what it is
+/// made of. A tag's number is the program's own, so that order is the same throughout a run but not from one program to
+/// another: nothing may rely on it beyond a run. An ordering function only reads its operands: it borrows them, as
+/// every runtime helper does.
 module Transpiler.Wasm.CoreIrOrdering
 
 open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
+open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
 
 /// The name of the ordering function of `ty`.
@@ -21,13 +25,14 @@ let compareName (ty: IrType) = "__nanyx_compare_" + sanitizeIdentifier (IrType.m
 /// The parts of a value of `ty` that are ordered, in the order they are compared, each with where it is stored: a
 /// tuple's positions in order (its fields are stored by name, so `10` is before `2`), a list's element.
 let private orderedParts (ty: IrType) : (int * IrType) list =
-    match ty with
+    match IrType.unfold ty with
     | IrRecord fields ->
         fields
         |> List.mapi (fun slot (name, fieldTy) -> slot, name, fieldTy)
         |> List.sortBy (fun (slot, name, _) -> match System.Int32.TryParse name with | true, position -> position, slot | _ -> System.Int32.MaxValue, slot)
         |> List.map (fun (slot, _, fieldTy) -> slot, fieldTy)
     | IrList element -> [ 0, element ]
+    | IrTags tags -> tags |> List.choose snd |> List.map (fun payloadTy -> 0, payloadTy)
     | _ -> []
 
 /// The types whose ordering functions the functions of a module call, in the order they are first needed: each type
@@ -43,10 +48,11 @@ let private orReturnOrder = [ "local.tee $order"; "if"; "  local.get $order"; " 
 
 let private indent (lines: string list) = lines |> List.map (fun line -> "  " + line)
 
-/// The locals the ordering function of `ty` needs, and its body, which orders `$a` and `$b`.
-let private compareBody (ty: IrType) : string list * string list =
+/// The locals the ordering function of `ty` needs, and its body, which orders `$a` and `$b`. `tagId` gives the number
+/// of each tag the module numbers.
+let private compareBody (tagId: string -> int option) (ty: IrType) : string list * string list =
     let both instruction = [ "local.get $a"; "local.get $b"; instruction ]
-    match ty with
+    match IrType.unfold ty with
     | IrInt -> [], sign (both "i64.gt_s") (both "i64.lt_s")
     | IrSized integer ->
         let valueType = CoreIrLayout.valueType ty
@@ -146,12 +152,41 @@ let private compareBody (ty: IrType) : string list * string list =
           "end"
           // One list ran out: it comes first, unless both did.
           yield! sign [ "local.get $a"; "i32.const 0"; "i32.ne" ] [ "local.get $b"; "i32.const 0"; "i32.ne" ] ]
-    | IrTags _
+    | IrTags tags ->
+        // A tag without a payload is its code, which is odd; one with a payload is a pointer to a cell that holds its
+        // code and then its payload. Two tags are ordered by their codes, which follow the program's numbers of them,
+        // and two of the same tag by their payloads.
+        let code var = [ $"local.get ${var}"; "i32.const 1"; "i32.and"; "if (result i32)"; $"  local.get ${var}"; "else"; $"  local.get ${var}"; "  i32.load"; "end"; $"local.set $code{var}" ]
+        let comparePayload payloadTy =
+            let payload var = [ $"local.get ${var}"; CoreIrLayout.load payloadTy CoreIrLayout.payloadOffset ]
+            payload "a" @ payload "b" @ [ $"call ${compareName payloadTy}"; "return" ]
+        let payloads = tags |> List.choose (fun (name, payloadTy) -> payloadTy |> Option.map (fun payloadTy -> name, payloadTy))
+        let comparePayloads =
+            payloads
+            |> List.choose (fun (name, payloadTy) -> tagId name |> Option.map (fun id -> id, payloadTy))
+            |> List.collect (fun (id, payloadTy) ->
+                [ "local.get $codea"; $"i32.const {tagCode id}"; "i32.eq"; "if"; yield! indent (comparePayload payloadTy); "end" ])
+        [ "(local $codea i32)"; "(local $codeb i32)"; "(local $order i32)" ],
+        [ yield! code "a"
+          yield! code "b"
+          yield! sign [ "local.get $codea"; "local.get $codeb"; "i32.gt_s" ] [ "local.get $codea"; "local.get $codeb"; "i32.lt_s" ]
+          yield! orReturnOrder
+          // The same tag: one without a payload is equal to itself.
+          "local.get $a"
+          "i32.const 1"
+          "i32.and"
+          "if"
+          "  i32.const 0"
+          "  return"
+          "end"
+          yield! comparePayloads
+          "i32.const 0" ]
     | IrFunction _
     | IrBox
     | IrError
     | IrRecursive _
     | IrSelf
+    // An array has no hash, so it is never a key, and nothing orders one by its structure.
     | IrArray _
     | IrWord -> internalError $"an ordering function for '{IrType.show ty}', which has no order"
 
@@ -159,11 +194,12 @@ let private compareBody (ty: IrType) : string list * string list =
 let helpersUsed (types: IrType list) : string list =
     [ if types |> List.contains IrString then Helpers.stringLength ]
 
-/// The ordering functions of `types`, as WebAssembly text.
-let render (types: IrType list) : string list =
+/// The ordering functions of `types`, as WebAssembly text. `tagId` gives the number of each tag the module numbers; a
+/// tag it does not is never made, so no value of it is ordered.
+let render (tagId: string -> int option) (types: IrType list) : string list =
     types
     |> List.map (fun ty ->
-        let locals, body = compareBody ty
+        let locals, body = compareBody tagId ty
         let valueType = CoreIrLayout.valueType ty
         [ $"(func ${compareName ty} (param $a {valueType}) (param $b {valueType}) (result i32)"
           $"  ;; {IrType.show ty}"

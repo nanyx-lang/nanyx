@@ -28,7 +28,7 @@ match json.parse(text)
   | #some(value) -> println(json.print(value))
   | #invalidJson(e) -> println("Not JSON: {e.message}")
 
--- {"name":"Ada","born":1815,"languages":["English","French"]}
+-- {"name":"Ada","languages":["English","French"],"born":1815}
 ```
 
 A `Json` value is a tag union, so it is built and taken apart as any other is: an object is a `map(string, Json)`, and
@@ -46,9 +46,9 @@ println(json.print(point))
 -- {"x":1.5,"y":-2}
 ```
 
-An object keeps its keys in the order they were written, since a map keeps the order its keys were first added, so a
-document read and written again keeps its keys where they were. Two objects with the same members in another order
-are still `==`.
+For now an object's keys come out in an unspecified order: an object is a map, and a map gives its keys in the order
+of their hashes, so `print` writes them in that order, not the order they were written in or read. Two objects with
+the same members in another order are still `==`.
 
 When the text isn't JSON, `parse` gives `#invalidJson`, which says where, by byte and by line and column, and what it
 found there. `json.describe` writes it as a message:

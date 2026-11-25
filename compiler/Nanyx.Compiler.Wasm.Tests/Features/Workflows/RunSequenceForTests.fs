@@ -53,7 +53,7 @@ def main = {
   println(seq { for m | key, value -> yield "{key}={value}" } \list.fromSeq)
 }
 """
-    |> ran "[a=1, b=2]\n"
+    |> ran "[b=2, a=1]\n"
 
 [<Fact>]
 let ``Run - a for loop in a seq block walks a list lazily`` () =

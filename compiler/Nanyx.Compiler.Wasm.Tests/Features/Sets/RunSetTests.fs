@@ -17,7 +17,7 @@ let private program (definitions: string list) (lines: string list) =
     |> String.concat "\n"
 
 [<Fact>]
-let ``Run - a set holds each element once, in the order they were first added`` () =
+let ``Run - a set holds each element once, in one order however it was built`` () =
     program
         []
         [ "def s = set.fromList([3, 1, 3, 2, 1])"
@@ -27,7 +27,7 @@ let ``Run - a set holds each element once, in the order they were first added`` 
           "println(ints(set.remove(s, 1)))"
           """println("{set.length(set.empty \insert(5))}")""" ]
     |> runSource
-    |> assertRan "312\n3\n3124\n32\n1\n"
+    |> assertRan "123\n3\n1234\n23\n1\n"
 
 [<Fact>]
 let ``Run - contains says whether a set holds an element`` () =
@@ -72,7 +72,7 @@ let ``Run - a for loop walks a set's elements`` () =
         []
         [ """for set.fromList([2, 1, 2]) | n -> println("{n}")""" ]
     |> runSource
-    |> assertRan "2\n1\n"
+    |> assertRan "1\n2\n"
 
 [<Fact>]
 let ``Run - isEmpty says whether a set has no elements`` () =
@@ -93,7 +93,7 @@ let ``Run - fold walks a set's elements in order`` () =
           """println("{s \set.fold(0, { total, n -> total + n })}")"""
           """println(s \set.fold("", { acc, n -> acc ++ "{n}" }))""" ]
     |> runSource
-    |> assertRan "6\n312\n"
+    |> assertRan "6\n123\n"
 
 [<Fact>]
 let ``Run - map gives the set of what a function makes of each element`` () =
@@ -104,7 +104,7 @@ let ``Run - map gives the set of what a function makes of each element`` () =
           """println(ints(s \set.map { % 2 }))"""
           """println(ints(s \set.map { * 10 }))""" ]
     |> runSource
-    |> assertRan "2\n10\n102030\n"
+    |> assertRan "2\n01\n102030\n"
 
 [<Fact>]
 let ``Run - filter keeps the elements that pass the test`` () =
@@ -136,4 +136,4 @@ let ``Run - a set is written as a list of its elements is`` () =
           """println((name = "s", s = set.fromList([#a, #b])))"""
           """println([set.fromList([1]), noElements])""" ]
     |> runSource
-    |> assertRan "[3, 1]\n[tea, cake]\n(name = s, s = [#a, #b])\n[[1], []]\n"
+    |> assertRan "[1, 3]\n[tea, cake]\n(name = s, s = [#a, #b])\n[[1], []]\n"

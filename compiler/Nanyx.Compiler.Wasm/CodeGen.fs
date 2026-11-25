@@ -753,7 +753,7 @@ let private supportFunctions
 
     // An ordering function for each type the ordering intrinsic or an operator orders, and for each of its parts.
     let orderingTypes = CoreIrOrdering.collect functions
-    let renderedOrderings = CoreIrOrdering.render orderingTypes |> String.concat "\n\n"
+    let renderedOrderings = CoreIrOrdering.render (fun name -> tagIdMap |> Map.tryFind name) orderingTypes |> String.concat "\n\n"
     for helper in CoreIrOrdering.helpersUsed orderingTypes do
         usedHelpers.Add helper |> ignore
 
