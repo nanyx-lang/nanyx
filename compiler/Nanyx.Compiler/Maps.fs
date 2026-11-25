@@ -21,7 +21,8 @@ module Maps =
     /// its array, in the order of the values. `#empty` is only ever a whole map. The shape is defined here, and every
     /// algorithm that builds or reads it is in the prelude, in `stdlib/nanyx/prelude-maps.nyx`, which turns a map into
     /// its store and back through two intrinsics (see `Intrinsics`): whoever changes one changes the other. The backend
-    /// lays a map out as its store, and reads one only through the prelude (see `toList`).
+    /// lays a map out as its store, and reads one only through the prelude (see `toList`), but for a `for` loop, which
+    /// walks the store itself (`StoreWalk` in the backend's `CoreIr.fs`).
     let storeOf (key: Ty) (value: Ty) =
         let tuple (items: Ty list) = TyRecord(items |> List.mapi (fun index ty -> string index, ty) |> Map.ofList, FieldOrder.none)
         let intTy = TyPrimitive "int"

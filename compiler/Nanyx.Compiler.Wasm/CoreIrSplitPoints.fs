@@ -188,7 +188,7 @@ let private readsIn (body: Expr) : Dictionary<Expr, Set<int>> =
 
 /// The variables a for loop's streams walk with.
 let private streamVars (loop: ForLoop) : Var list =
-    loop.Streams |> List.collect (fun stream -> [ stream.Cursor; stream.End; stream.Element ])
+    ForLoop.locals loop
 
 /// `scope` with the token `released` binds, if it binds one.
 let private withToken (released: Released) (scope: Map<int, Var>) : Map<int, Var> =
