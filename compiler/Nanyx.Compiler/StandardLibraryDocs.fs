@@ -221,9 +221,29 @@ let pinOf (text: string) : Result<(string * SemanticVersion) option, string> =
         | [| name; version |] when (SemanticVersion.tryParse version).IsSome -> Ok(Some(name, (SemanticVersion.tryParse version).Value))
         | _ -> Error $"pins its package as '{written}', but a pin is a package and its exact version, `package: nanyx.json 0.1.0`"
 
+/// The errors of `documented`, the public modules of the published package in `packageDirectory`, each on one line at
+/// its place in the package, if any of them doesn't compile.
+let private compileErrors (packageDirectory: string) (documented: Documented list) : string option =
+    let line (diagnostic: Diagnostic) =
+        let place =
+            match diagnostic.Span with
+            | Some span when span.File <> "" ->
+                $"{Path.GetRelativePath(packageDirectory, span.File).Replace('\\', '/')}:{span.StartLine + 1}:{span.StartColumn + 1}: "
+            | _ -> ""
+        $"{place}error {diagnostic.Code}: {Diagnostics.oneLine diagnostic}"
+    let errors =
+        documented
+        |> List.collect _.Result.Diagnostics
+        |> List.filter (fun diagnostic -> diagnostic.Severity = Severity.Error || diagnostic.Severity = Severity.Critical)
+        |> List.map line
+        |> List.distinct
+    if errors.IsEmpty && documented |> List.forall _.Result.Typed.IsSome then None
+    else Some(if errors.IsEmpty then "it doesn't compile" else String.concat "; " errors)
+
 /// The public modules of each published package that `pins` names at a version (see `pinOf`), read from the package
 /// cache of `store`, and downloaded into it from its index first if it isn't there, as a script's `::dependency` is
-/// (see `Script.pull`); or, for a pin, why it can't be. `directory` is where the pages are.
+/// (see `Script.pull`); or, for a pin, why it can't be: it can't be downloaded or read, or a public module of it
+/// doesn't compile. `directory` is where the pages are.
 let private published (store: PackageStore) (directory: string) (pins: (string * SemanticVersion) list) =
     pins
     |> List.map (fun (name, version) ->
@@ -241,7 +261,14 @@ let private published (store: PackageStore) (directory: string) (pins: (string *
                 match directives.Build |> Option.bind (fun build -> build.Dependencies |> List.tryFind (fun dependency -> dependency.Package = name)) with
                 | Some modules -> Ok modules
                 | None -> Error(directives.Diagnostics |> List.map _.Message |> String.concat "; "))
-        pin, modules |> Result.map (publicModules (Some pin)))
+        let documented =
+            modules
+            |> Result.map (publicModules (Some pin))
+            |> Result.bind (fun documented ->
+                match compileErrors (PackageStore.directoryOf store name version) documented with
+                | Some errors -> Error errors
+                | None -> Ok documented)
+        pin, documented)
 
 /// The reference of each page, by page, with the published package and version it is from, if it is from one: one for
 /// each file of `compiled` that exports a name. A link in a doc comment, `` [`name`] ``, leads to the name's entry, on
