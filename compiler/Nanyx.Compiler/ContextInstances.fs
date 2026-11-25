@@ -287,6 +287,15 @@ let internal comparesOwnParts
 /// the one derived for it (see `StructuralInstances.comparison`, which `rigid` and `instanceOf` are for). Inside the
 /// attached `==` itself the comparison stays the compiler's own, which is how it compares the values underneath.
 let internal derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyVar -> ContextInstance option) (call: NodeId) (span: SourceSpan) (ty: Ty) (state: InferState) : InferState option =
+    // A variable nothing solves, as the element of an empty list's type, holds no value: it is compared as `unit`, which
+    // is what the backend makes it, so that a map or a set beside it is still compared by its entries rather than by the
+    // compiler's own comparison, which compares a map's entries in the order they were added (#2522). A variable of the
+    // function around, `rigid`, is its caller's to choose, and one with an instance is compared through it.
+    let rec settled (ty: Ty) =
+        match ty with
+        | TyVar var when not (rigid.Contains var.Id) && (instanceOf var).IsNone -> TyPrimitive "unit"
+        | _ -> Ty.map settled ty
+    let ty = settled ty
     let calling (callee: Identifier, next: InferState) =
         { next with
             CalleeTypes = next.CalleeTypes |> Map.add call (TyFunc(inputTypeFromArgs [ ty; ty ], TyPrimitive "bool", []))
@@ -301,9 +310,9 @@ let internal derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyV
 
 /// The instance of `Eq` or `Hash` (`wellKnown`, found as `instance`) the call `call` to `calleeName`, at `span` in
 /// `env`, finds for the structure `ty` in place of the compiler's own, when `ty` compares or hashes a part with an `==`
-/// or `hash` of its own, or, for `Eq`, holds a map or a set: the derived definition, as the context's member. A
+/// or `hash` of its own, or, for `Eq`, holds an array: the derived definition, as the context's member. A
 /// variable of `ty` is read with the instance `instanceOf` finds for it, and `rigid` holds the variables of the
-/// function around the call (see `StructuralInstances.instance`). A type with variables in it that holds a map or a set
+/// function around the call (see `StructuralInstances.instance`). A type with variables in it that holds an array
 /// and has no derived `==` is an error, since the compiler's own cannot compare it, and so is one whose parts' own
 /// `hash` cannot be read, a union open to the caller's tags, since the compiler's own would not read them.
 let private derivedEquality

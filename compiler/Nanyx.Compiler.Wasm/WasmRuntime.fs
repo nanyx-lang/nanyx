@@ -136,6 +136,7 @@ module Helpers =
     let floatTrunc = NyxCompiler.Intrinsics.floatTrunc
     let floatToInt = NyxCompiler.Intrinsics.floatToInt
     let intToFloat = NyxCompiler.Intrinsics.intToFloat
+    let floatFromBits = NyxCompiler.Intrinsics.floatFromBits
     let free = Names.free
     let newCell = "__nanyx_new_cell"
     let newObject = "__nanyx_new_object"
@@ -146,6 +147,8 @@ module Helpers =
     let tagBoxAt = "__nanyx_tag_box_at"
     /// A string in double quotes, escaped as a string literal is written: what `dbg` prints a string as.
     let stringQuote = "__nanyx_string_quote"
+    /// The string of one `char`, its code point's UTF-8 encoding: what `dbg` prints a char as, quoted.
+    let charToString = "__nanyx_char_to_string"
     /// The letter after the `\` that escapes a byte in a string literal, or 0 for a byte written as it is.
     let escapeByte = "__nanyx_escape_byte"
     /// How many bytes an int takes written in decimal, read signed or not (see `Interpolation`).
@@ -586,6 +589,88 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  i32.store8"
             "  local.get $out"
             ")" ]
+      // A char's UTF-8 encoding: a byte below 128, or a lead byte that says how many there are, then six bits a byte.
+      Helpers.charToString,
+      lines
+          [ $"(func ${Helpers.charToString} (param $c i32) (result i32)"
+            "  (local $n i32)"
+            "  (local $out i32)"
+            "  (local $i i32)"
+            "  i32.const 1"
+            "  local.get $c"
+            "  i32.const 128"
+            "  i32.ge_u"
+            "  i32.add"
+            "  local.get $c"
+            "  i32.const 2048"
+            "  i32.ge_u"
+            "  i32.add"
+            "  local.get $c"
+            "  i32.const 65536"
+            "  i32.ge_u"
+            "  i32.add"
+            "  local.tee $n"
+            $"  call ${Helpers.stringAlloc}"
+            "  local.set $out"
+            "  local.get $n"
+            "  i32.const 1"
+            "  i32.eq"
+            "  if"
+            "    local.get $out"
+            "    local.get $c"
+            "    i32.store8"
+            "    local.get $out"
+            "    return"
+            "  end"
+            "  local.get $out"
+            "  i32.const 3840"
+            "  local.get $n"
+            "  i32.shr_u"
+            "  i32.const 255"
+            "  i32.and"
+            "  local.get $c"
+            "  local.get $n"
+            "  i32.const 1"
+            "  i32.sub"
+            "  i32.const 6"
+            "  i32.mul"
+            "  i32.shr_u"
+            "  i32.or"
+            "  i32.store8"
+            "  i32.const 1"
+            "  local.set $i"
+            "  block $done"
+            "    loop $next"
+            "      local.get $i"
+            "      local.get $n"
+            "      i32.ge_u"
+            "      br_if $done"
+            "      local.get $out"
+            "      local.get $i"
+            "      i32.add"
+            "      local.get $c"
+            "      local.get $n"
+            "      i32.const 1"
+            "      i32.sub"
+            "      local.get $i"
+            "      i32.sub"
+            "      i32.const 6"
+            "      i32.mul"
+            "      i32.shr_u"
+            "      i32.const 63"
+            "      i32.and"
+            "      i32.const 128"
+            "      i32.or"
+            "      i32.store8"
+            "      local.get $i"
+            "      i32.const 1"
+            "      i32.add"
+            "      local.set $i"
+            "      br $next"
+            "    end"
+            "  end"
+            "  local.get $out"
+            ")" ]
       // A new string holding a copy of `$len` bytes at `$address`, for a host (see `nanyx/host.memory`).
       Helpers.stringFromMemory,
       lines
@@ -884,6 +969,15 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
                     "  local.get $value"
                     $"  {instruction}"
                     ")" ])
+      // The float whose bits are an int's.
+      Helpers.floatFromBits,
+      lines
+          [ $"(func ${Helpers.floatFromBits} (param $bits i64) (result f64)"
+            "  local.get $bits"
+            "  f64.reinterpret_i64"
+            ")" ]
+      // A word of the table of powers of five that reading a float uses (see `PowersOfFive`).
+      PowersOfFive.helper, lines PowersOfFive.helperCode
       // A float as an int: `i64.trunc_f64_s` traps on NaN, an infinity or a value out of the range of `int`.
       Helpers.floatToInt,
       lines
@@ -1224,6 +1318,7 @@ let helperDependencies =
       Helpers.stringByteAt, [ Helpers.stringLength ]
       Helpers.stringSlice, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringFromByte, [ Helpers.stringAlloc ]
+      Helpers.charToString, [ Helpers.stringAlloc ]
       Helpers.stringFromMemory, [ Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringConcat, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringEquals, [ Helpers.stringLength ]
@@ -1268,7 +1363,9 @@ let helperDependencies =
       Helpers.stringFromBytes, [ Helpers.stringAlloc; Helpers.copyBytes ]
       Helpers.stringNew, [ Helpers.stringAlloc ]
       Helpers.stringWrite, [ Helpers.copyBytes ]
-      Helpers.stringIndexBetween, [ Helpers.stringLength ] ]
+      Helpers.stringIndexBetween, [ Helpers.stringLength ]
+      PowersOfFive.helper, []
+      Helpers.floatFromBits, [] ]
     @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
     @ WasmRegions.dependencies
 
@@ -1288,6 +1385,7 @@ let private helpersWithoutMemory =
           yield Helpers.floatTrunc
           yield Helpers.floatToInt
           yield Helpers.intToFloat
+          yield Helpers.floatFromBits
           yield Helpers.floatRem
           yield Helpers.escapeByte
           yield Helpers.intAdd

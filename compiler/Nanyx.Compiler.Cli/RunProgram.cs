@@ -24,7 +24,7 @@ internal static partial class CliCommands
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
         var errors = shell.Error;
         // A profiled run is of the code without probes, as a release build runs it.
-        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, profile is null, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait);
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, profile is null, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait, frameDrops: false);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;
@@ -196,7 +196,7 @@ internal static partial class CliCommands
             case RunError.StackOverflow overflow:
                 var where = FSharpOption<string>.get_IsSome(overflow.functionName) ? $" in '{overflow.functionName.Value}'" : "";
                 errors.WriteLine(
-                    $"Runtime error: the program ran out of stack{where}: a recursive call that isn't in tail position uses stack for every call (see {TailRecursionDocs})");
+                    $"Runtime error: the program ran out of stack{where}: a call that isn't a tail call keeps its caller's stack until it returns, so a function that calls itself that way uses stack for every call (see {TailRecursionDocs})");
                 return 1;
             case RunError.ArithmeticError arithmetic:
                 // The stack names the function, when there is one.

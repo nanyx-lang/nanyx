@@ -60,7 +60,12 @@ type EmitContext =
       /// The functions that are state machines, which can stop at a call and carry on later (see `CoreIrSplitPoints`).
       StateMachines: Set<string>
       /// Whether each call of a function value that can wait stops once first (see `WasmOptions.YieldAtEveryWait`).
-      YieldAtEveryWait: bool }
+      YieldAtEveryWait: bool
+      /// Whether each state machine has a drop entry, which frees a frame of it without resuming it (see
+      /// `WasmOptions.FrameDrops`).
+      FrameDrops: bool
+      /// The variables a function borrows, by id, which hold no reference of their own (see `CoreIrCounting.borrowedIn`).
+      BorrowedIn: Function -> Set<int> }
 
 /// The marker that says the code after it, up to the next one, was made from source at `place`: a line comment,
 /// `;;@ main.nyx:12`, that `WasmBinary` writes into the module's table of places (see `WatSyntax.Placed`). Code inlined
@@ -120,7 +125,10 @@ let private marked (kind: ExprKind) =
 type Emitted =
     { Text: string
       Helpers: Set<string>
-      UsesMemory: bool }
+      UsesMemory: bool
+      /// The table slot of the resume entry and the name of the drop entry of a state machine that has one (see
+      /// `EmitContext.FrameDrops`).
+      FrameDrop: (int * string) option }
 
 let private join (separator: string) (parts: string seq) =
     parts |> Seq.filter (fun part -> part <> "") |> String.concat separator
@@ -341,10 +349,26 @@ type private FunctionEmitter(context: EmitContext) =
         match plan with
         | Some plan ->
             helper Helpers.free |> ignore
-            let saved =
-                plan.Saved |> Map.map (fun _ vars -> vars |> List.map (fun var -> localOf var, CoreIrLayout.valueType var.Type) |> List.distinctBy fst)
+            let saved = plan.Saved |> Map.map (fun _ vars -> vars |> List.distinctBy localOf |> List.map (fun var -> localOf var, CoreIrLayout.valueType var.Type))
             [ TaskLowering.prologue resumeLocal.Value childLocal.Value frameLocal.Value saved ]
         | None -> []
+
+    /// What each state of the state machine keeps that holds something, by its index among the variables the state
+    /// keeps (see `TaskLowering.dropEntry`): each variable on the heap but those in `borrowed`, and each of the reuse
+    /// tokens `tokens`.
+    member _.Held (borrowed: Set<int>) (tokens: Set<int>) : Map<int, (int * TaskLowering.Held) list> =
+        match plan with
+        | Some plan ->
+            helper Helpers.free |> ignore
+            let held (var: Var) =
+                if tokens.Contains var.Id then Some TaskLowering.Token
+                elif CoreIrDrop.isHeapType var.Type && not (borrowed.Contains var.Id) then
+                    Some(TaskLowering.Reference(CoreIrDrop.dropName var.Type))
+                else None
+            plan.Saved
+            |> Map.map (fun _ vars ->
+                vars |> List.distinctBy localOf |> List.indexed |> List.choose (fun (index, var) -> held var |> Option.map (fun value -> index, value)))
+        | None -> Map.empty
 
     member _.UsesMemory = usesMemory
 
@@ -529,10 +553,14 @@ type private FunctionEmitter(context: EmitContext) =
                 flush ()
                 addPart (guard expr (join "\n    " [ this.Value false deferred onStack value; $"local.set ${localOf var}" ]))
                 walk body
-            // A probe stores nothing a temporary waits on, so it can stand among them.
+            // A probe stores nothing a temporary waits on, so it can stand among them. Behind a stored value it waits
+            // with it, so that the counting after it still comes before the value is computed, as it does where there
+            // is no probe: a return probe stands between the call that gives a stored argument and a tail call that
+            // takes a reference to a variable that call last reads (#2591).
             | Do({ Kind = Probe(kind, locals) } as probe, rest) ->
                 let reads, places = chainReads.Value
-                addPart (guard expr (this.Probe probe kind locals (reads.AliveAfter places.[expr])))
+                let code = guard expr (this.Probe probe kind locals (reads.AliveAfter places.[expr]))
+                if storedParts.Count > 0 then storedParts.Add code else addPart code
                 walk rest
             | Do(value, rest) ->
                 claim value
@@ -640,17 +668,18 @@ type private FunctionEmitter(context: EmitContext) =
             let name, result = machine
             let resumeSlot = context.FunctionSlot (TaskLowering.Names.resumeEntry name) 1
             helper Helpers.alloc |> ignore
+            helper Helpers.free |> ignore
             let stop (at: int) =
-                let kept = found.Saved.[at] |> List.map (fun var -> localOf var, CoreIrLayout.valueType var.Type) |> List.distinctBy fst
+                let kept = found.Saved.[at] |> List.distinctBy localOf |> List.map (fun var -> localOf var, CoreIrLayout.valueType var.Type)
                 TaskLowering.stopAfter frameLocal.Value resumeSlot at kept (CoreIrLayout.valueType result)
-            let resumable (at: int) (resultType: string) (resumeType: string) (call: string) =
-                TaskLowering.resumable resumeLocal.Value childLocal.Value at resumeType resultType call
+            let resumable (at: int) (resultType: string) (resumeType: string) (direct: TaskLowering.DirectResume option) (call: string) =
+                TaskLowering.resumable resumeLocal.Value childLocal.Value at resumeType resultType direct call
             // A call of a function value first stops once, when every wait does (see `WasmOptions.YieldAtEveryWait`).
             let yielded, state =
                 if CoreIrSplitPoints.statesOf context.YieldAtEveryWait expr = 2 then
                     let unitResume = (context.IndirectCall(TaskLowering.resumeTypeOf "i32"); TaskLowering.resumeTypeName "i32")
                     // Skipped when resuming at the call, after it.
-                    let yieldCode = join "\n    " [ resumable state "i32" unitResume $"call ${TaskLowering.Names.yieldOnce}"; "drop"; stop state ]
+                    let yieldCode = join "\n    " [ resumable state "i32" unitResume None $"call ${TaskLowering.Names.yieldOnce}"; "drop"; stop state ]
                     [ unlessResuming (Some (state, state)) yieldCode ], state + 1
                 else [], state
             // Nothing follows a tail call: the callee's frame takes the function's place, so it keeps nothing.
@@ -658,7 +687,8 @@ type private FunctionEmitter(context: EmitContext) =
             else
                 let resumed = conversion calleeResult expr.Type
                 let call = this.UnmarkedValue false deferred onStack expr
-                let call = resumable state (CoreIrLayout.valueType expr.Type) (resumeType ()) call
+                let direct = TaskLowering.directResume context.StateMachines context.Signature context.FunctionSlot expr
+                let call = resumable state (CoreIrLayout.valueType expr.Type) (resumeType ()) direct call
                 let call = if resumed = "" then call else internalError "a call that can stop whose value needs converting"
                 join "\n    " [ yield! yielded; call; stop state ]
         | None when not context.StateMachines.IsEmpty && CoreIrSplitPoints.isSplit context.StateMachines expr ->
@@ -1281,6 +1311,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverRange(first, last) -> [ atomCode first; $"local.set ${localName stream.Element}"; atomCode last; $"local.set ${localName stream.End}" ]
             | OverRangeFrom first -> [ atomCode first; $"local.set ${localName stream.Element}" ]
             | OverList list -> [ atomCode list; $"local.set ${localName stream.Cursor}" ]
+            | OverStore(store, walk) -> atomCode store :: CoreIrEmitStoreWalk.start stream walk
         // A range counts in ints; a list's cursor moves to each cell's tail, after its head.
         let next (stream: ForStream) =
             match stream.Source with
@@ -1289,6 +1320,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverList _ ->
                 let cursor = localName stream.Cursor
                 [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; load stream.Element.Type 0; $"local.set ${localName stream.Element}" ]
+            | OverStore(_, walk) -> CoreIrEmitStoreWalk.next touching (tagCode (context.TagId "bucket")) depth done' stream walk
         let advance (stream: ForStream) =
             match stream.Source with
             | OverRange _
@@ -1298,6 +1330,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverList _ ->
                 let cursor = localName stream.Cursor
                 [ $"local.get ${cursor}"; touching $"i32.load offset={CoreIrLayout.tailOffset stream.Element.Type}"; $"local.set ${cursor}" ]
+            | OverStore(_, walk) -> CoreIrEmitStoreWalk.advance touching stream walk
         let bodyCode = this.Sequence false loop.Body
         let bodyDrop = dropValue loop.Body.Type
         // The starting atoms are read in the order `tempsUsedBy` gives them. A state machine resuming in the body has
@@ -1520,7 +1553,16 @@ let emitFunction (context: EmitContext) (func: Function) (exportName: string opt
         match found with
         | Some _ -> [ TaskLowering.resumeEntry func.Name (func.Params |> List.map (_.Type >> CoreIrLayout.valueType)) (CoreIrLayout.valueType func.Result) ]
         | None -> []
-    { Text = String.concat "\n" (text :: resume); Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
+    // A state machine's drop entry frees a frame of it without resuming it.
+    let drop =
+        match found with
+        | Some _ when context.FrameDrops ->
+            Some(TaskLowering.dropEntry func.Name (emitter.Held (context.BorrowedIn func) (CoreIrCounting.reuseTokens func)))
+        | _ -> None
+    { Text = String.concat "\n" (text :: resume @ Option.toList drop)
+      Helpers = emitter.Helpers
+      UsesMemory = emitter.UsesMemory
+      FrameDrop = drop |> Option.map (fun _ -> context.FunctionSlot (TaskLowering.Names.resumeEntry func.Name) 1, TaskLowering.Names.dropEntry func.Name) }
 
 /// The start function, `func` (see `CoreIrLower.StartFunction`): the code `before`, then the top-level expressions, with
 /// what was inlined into them, each value dropped, then the code `after`. It takes nothing and returns nothing, and
@@ -1534,4 +1576,4 @@ let emitStart (context: EmitContext) (func: Function) (before: string list) (aft
         match localDeclarations (declaredLocals func.Body @ emitter.ExtraLocals) with
         | "" -> ""
         | locals -> " " + locals
-    { Text = $"  (func ${func.Name}{header}\n    {bodyCode}\n  )"; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory }
+    { Text = $"  (func ${func.Name}{header}\n    {bodyCode}\n  )"; Helpers = emitter.Helpers; UsesMemory = emitter.UsesMemory; FrameDrop = None }

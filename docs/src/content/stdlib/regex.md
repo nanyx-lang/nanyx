@@ -2,16 +2,19 @@
 title: regex
 description: Regular expressions that take linear time
 order: 15.95
+package: nanyx.regex 0.1.0
 ---
 
-`nanyx.regex` isn't part of the standard library, but the compiler ships it: an application lists it in its manifest's
-`dependencies` (`nanyx install nanyx.regex` adds it), and a script names it in a `::dependency nanyx.regex` line. Import
-`nanyx.regex/regex`, and call its functions through the type they are attached to, `Regex.find`, or pipe a text into
-them, `text \Regex.find(digits)`. It is pure, so it needs no context. The [cookbook](../cookbook/regular-expressions)
-shows it at work.
+`nanyx.regex` isn't part of the standard library: it is a package published to the
+[package index](https://github.com/nanyx-lang/packages) from [nanyx-lang/regex](https://github.com/nanyx-lang/regex),
+whose README says how its engine works. An application lists it in its manifest's `dependencies`,
+`(package = "nanyx.regex", version = "0.1")`, which `nanyx install nanyx.regex` adds, and a script names the version it
+uses in a `::dependency nanyx.regex 0.1.0` line. Import `nanyx.regex/regex`, and call its functions through the type
+they are attached to, `Regex.find`, or pipe a text into them, `text \Regex.find(digits)`. It is pure, so it needs no
+context. The [cookbook](../cookbook/regular-expressions) shows it at work.
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 
@@ -29,7 +32,7 @@ A pattern that is wrong is a `RegexError`, with the column it goes wrong at and 
 can be checked before it is used:
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 
@@ -42,7 +45,7 @@ match Regex.parse('(\d+')
 
 # Reference
 
-<!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.regex 0.1.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 Regular expressions: patterns that find, test, replace and split text.
 
@@ -98,7 +101,11 @@ points from 1, and what is wrong there.
 def Regex.parse: string -> #some(Regex) | #invalidPattern(RegexError)
 ```
 
-The regex of `pattern`, or `#invalidPattern` with where it goes wrong and why.
+The regex of `pattern`, or `#invalidPattern` with where it goes wrong and why. Groups nest
+at most 1000 deep, as in RE2, so a pattern taken from input can't run the program out of stack.
+Repeats nested in each other can count to at most 1000 between them (`(?:a{10}){100}`, but not
+`{101}`), as in RE2, and a pattern compiles to at most 100000 instructions: no pattern can make
+matching slow or take much memory. `*`, `+` and `?` count to 1 however they nest.
 
 ## `Regex.toString`
 

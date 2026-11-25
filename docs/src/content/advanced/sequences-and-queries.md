@@ -70,6 +70,20 @@ println(evens) -- [2, 4, 6, 8, 10]
 println(doubled) -- [1, 10, 2, 20, 3, 30]
 ```
 
+`string.build` builds a string the same way, from the pieces its block emits. Each piece is copied once, so a string
+of many pieces takes time in proportion to its length, where adding them one at a time with `++` copies the string so
+far for each:
+
+```nanyx
+def row = string.build {
+  for [1, 2, 3] | n ->
+    emit(int.toString(n))
+    emit(";")
+}
+
+println(row) -- 1;2;3;
+```
+
 A lambda given to `list.select` emits as many values as it likes for each element, none included. One that gives a
 whole list for each element is `list.flatMap`'s, and one that gives a sequence `seq.flatMap`'s.
 

@@ -47,8 +47,10 @@ type IrType =
     /// (`type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))`): the type is its body, with each `IrSelf` in it the whole
     /// type again. Code that reads what the type is made of reads `IrType.unfold` of it.
     | IrRecursive of IrType
-    /// In the body of an `IrRecursive`, and not inside another one there, the `IrRecursive` itself.
-    | IrSelf
+    /// In the body of an `IrRecursive`, an `IrRecursive` around it: `IrSelf 0` the innermost, `IrSelf 1` the one around
+    /// that, and so on, as a type that holds a map of itself, `type Json = ... | #object(map(string, Json))`, holds
+    /// `Json` inside the map's store, itself recursive (see `Maps.storeOf`).
+    | IrSelf of int
     /// A 32-bit word that is no value of the program's: a function's slot in the table, which a closure block holds
     /// first, a cursor along a list's cells, or the block a reuse token holds.
     | IrWord
@@ -300,7 +302,7 @@ and Released =
       /// The local that gets the object's block to reuse, or 0 when the arm did not hold the only reference.
       Token: Var option }
 
-/// A `for` loop over lists and ranges in step, at a depth (how many loops enclose it) that names its locals. It ends
+/// A `for` loop over lists, ranges and maps' and sets' stores in step, at a depth (how many loops enclose it) that names its locals. It ends
 /// when the first of its streams does.
 and ForLoop =
     { Streams: ForStream list
@@ -326,6 +328,32 @@ and ForSource =
     | OverRange of Atom * Atom
     /// The ints from the atom on, without end: only walked in step with a source that ends.
     | OverRangeFrom of Atom
+    /// The entries of a map's store, or a set's elements, in the order of its trie (see `Maps.storeOf`), walked with the
+    /// locals of the `StoreWalk`.
+    | OverStore of Atom * StoreWalk
+
+/// How a `for` loop walks a map's or a set's store: the stream's `Cursor` is the cell of the bucket it is in, and these
+/// hold the rest. It goes into the store's nodes one level at a time, keeping the child it took at each level in five
+/// bits of `Path` (a trie is no deeper than 13 levels, the last of four bits, so they fit an `int`), and goes back up
+/// by going down again from the root along `Path`: it makes nothing, and counts no reference, as a list's walk counts
+/// none.
+and StoreWalk =
+    { /// The store's type (see `Maps.storeOf`).
+      StoreType: IrType
+      /// Whether the loop is given each entry, a map's, or each entry's key, a set's element.
+      Keys: bool
+      /// The store the loop walks.
+      Root: Var
+      /// A store to go into next, a bucket or a node, or 0.
+      Pending: Var
+      /// The array of the children of the node it is in.
+      Children: Var
+      /// Where it is in `Children`: the child it takes next.
+      Index: Var
+      /// How many nodes it is inside.
+      Depth: Var
+      /// The child it took at each level.
+      Path: Var }
 
 and Arm =
     { Patterns: Pattern list
@@ -380,13 +408,15 @@ exception InternalError of string
 let internalError message : 'a = raise (InternalError message)
 
 module IrType =
-    /// What a recursive type is made of: its body, with each `IrSelf` that stands for it the type itself. Any other
-    /// type as it is.
+    /// What a recursive type is made of: its body, with each `IrSelf` that stands for it the type itself, so that what
+    /// is inside a recursive type in it refers to the type by itself and not by an `IrSelf`. Any other type as it is.
     let unfold (ty: IrType) : IrType =
-        let rec replace inner =
+        let rec replaceAt (depth: int) inner =
+            let replace = replaceAt depth
             match inner with
-            | IrSelf -> ty
-            | IrRecursive _ -> inner
+            | IrSelf index when index = depth -> ty
+            | IrSelf _ -> inner
+            | IrRecursive body -> IrRecursive(replaceAt (depth + 1) body)
             | IrTags tags -> IrTags(tags |> List.map (fun (name, payload) -> name, Option.map replace payload))
             | IrRecord fields -> IrRecord(fields |> List.map (fun (name, fieldTy) -> name, replace fieldTy))
             | IrList element -> IrList(replace element)
@@ -404,7 +434,7 @@ module IrType =
             | IrBox
             | IrWord -> inner
         match ty with
-        | IrRecursive body -> replace body
+        | IrRecursive body -> replaceAt 0 body
         | _ -> ty
 
     /// Whether a value of `ty` is a floating-point number: a float or an `F32`.
@@ -467,7 +497,7 @@ module IrType =
         | IrError -> true
         // A type holds itself only in the payload of a tag.
         | IrRecursive _
-        | IrSelf -> true
+        | IrSelf _ -> true
         | IrRecord fields -> fields |> List.exists (snd >> holdsUnordered)
         | IrList element -> holdsUnordered element
         | IrInt
@@ -508,7 +538,8 @@ module IrType =
             let keys = (if waits then [ "Async" ] else []) @ (members |> List.map (fst >> ContextMemberKey.text)) |> String.concat ", "
             $"([{keys}] {show input} -> {show output})"
         | IrRecursive body -> $"rec self. {show body}"
-        | IrSelf -> "self"
+        | IrSelf 0 -> "self"
+        | IrSelf index -> $"self{index}"
 
     /// The type as part of a WebAssembly name, such as `list_string` in `id__list_string`.
     let rec mangle (ty: IrType) =
@@ -571,11 +602,16 @@ module ForLoop =
             match stream.Source with
             | OverList list -> [ list ]
             | OverRange(first, last) -> [ first; last ]
-            | OverRangeFrom first -> [ first ])
+            | OverRangeFrom first -> [ first ]
+            | OverStore(store, _) -> [ store ])
 
     /// The locals a loop walks its streams in, which its body does not see from outside.
     let locals (loop: ForLoop) =
-        loop.Streams |> List.collect (fun stream -> [ stream.Cursor; stream.End; stream.Element ])
+        loop.Streams |> List.collect (fun stream ->
+            [ stream.Cursor; stream.End; stream.Element ]
+            @ (match stream.Source with
+               | OverStore(_, walk) -> [ walk.Root; walk.Pending; walk.Children; walk.Index; walk.Depth; walk.Path ]
+               | _ -> []))
 
 module Pattern =
     /// The patterns directly inside `pattern`, in the order they are tested: a tag's payload, the fields, the parts of
@@ -860,6 +896,7 @@ module Print =
                 | OverList list -> atom list
                 | OverRange(first, last) -> $"{atom first}..{atom last}"
                 | OverRangeFrom first -> $"{atom first}.."
+                | OverStore(store, _) -> atom store
             let elements = loop.Streams |> List.map _.Element.Name |> String.concat ", "
             let sources = loop.Streams |> List.map source |> String.concat ", "
             $"for {elements} in {sources} do\n{inner}{expr inner loop.Body}"

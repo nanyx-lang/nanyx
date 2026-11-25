@@ -19,7 +19,8 @@ let hashName (ty: IrType) = "__nanyx_hash_" + sanitizeIdentifier (IrType.mangle 
 let private parts (ty: IrType) : IrType list =
     match IrType.unfold ty with
     | IrRecord fields -> fields |> List.map snd
-    | IrList element -> [ element ]
+    | IrList element
+    | IrArray element -> [ element ]
     | IrTags tags -> tags |> List.choose snd
     | _ -> []
 
@@ -132,6 +133,33 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
               |> List.mapi (fun slot (_, fieldTy) -> fold (hashOf fieldTy [ "local.get $a"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ]))
               |> List.concat
           "local.get $h" ]
+    | IrArray element ->
+        // Element by element, as a list is. An array the program writes has no hash (see `WellKnownContexts.hashing`):
+        // this one only hashes those inside the store of a map (see `Maps.storeOf`).
+        [ "(local $h i32)"; "(local $n i32)" ],
+        [ "i32.const 1"
+          "local.set $h"
+          "local.get $a"
+          "i32.load"
+          "local.set $n"
+          "block $done"
+          "  loop $next"
+          "    local.get $n"
+          "    i32.eqz"
+          "    br_if $done"
+          yield! fold (hashOf element [ "local.get $a"; CoreIrLayout.load element (CoreIrLayout.arrayElementOffset element 0) ]) |> indent |> indent
+          "    local.get $a"
+          $"    i32.const {CoreIrLayout.size element}"
+          "    i32.add"
+          "    local.set $a"
+          "    local.get $n"
+          "    i32.const 1"
+          "    i32.sub"
+          "    local.set $n"
+          "    br $next"
+          "  end"
+          "end"
+          "local.get $h" ]
     | IrList element ->
         // Cell by cell, so that a long list takes no stack. The empty list is 0.
         [ "(local $h i32)" ],
@@ -188,9 +216,7 @@ let private hashBody (tagId: string -> int option) (ty: IrType) : string list * 
     | IrBox
     | IrError
     | IrRecursive _
-    | IrSelf
-    // An array has no hash (see `WellKnownContexts.hashing`).
-    | IrArray _
+    | IrSelf _
     | IrWord -> internalError $"a hash function for '{IrType.show ty}', which has no hash"
 
 /// The runtime helpers the hash functions of `types` call.

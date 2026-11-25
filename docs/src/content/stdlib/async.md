@@ -68,7 +68,7 @@ through [`Async.concurrent`](#asyncconcurrent). It is scoped, so nothing that ho
 ## `Task`
 
 ```nanyx fragment
-type Task(a) = [TaskScope] protected (handle: I32)
+type Task(a) = [TaskScope] protected (cell: (() -> a))
 ```
 
 A task: something running at the same time as the code that started it, in the same instance, which gives back

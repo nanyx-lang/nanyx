@@ -114,38 +114,78 @@ watch(page);
 const linesOf = (target) => target.locator(".cm-line").allTextContents().then((lines) => lines.join("\n").replace(/\u00a0/g, " ").trimEnd());
 const editorText = () => linesOf(page);
 const outputText = () => page.locator("[data-log]").innerText();
-const ready = () => page.waitForSelector("html[data-playground=ready]", { timeout: 180_000 });
-const idle = () => page.waitForSelector("[data-run]:not([hidden]):not([disabled])", { timeout: 60_000 });
-const run = async () => {
-  await page.click("[data-run]");
-  await page.waitForFunction(() => document.querySelector("[data-run]")?.hidden || document.querySelector("[data-run]")?.disabled);
-  await idle();
+const readyOn = (target) => target.waitForSelector("html[data-playground=ready]", { timeout: 180_000 });
+const ready = () => readyOn(page);
+const idleOn = (target) => target.waitForSelector("[data-run]:not([hidden]):not([disabled])", { timeout: 60_000 });
+const idle = () => idleOn(page);
+/**
+ * Clicks Run on `target` and waits for the run it starts to begin, by the part of the output pane each run adds, which
+ * stays. Waiting for the button to be hidden instead missed a run quick enough to give it back between two looks, and
+ * a page behind the others, whose animation frames are throttled, looks seldom: so the waits poll on a timer (#2554).
+ */
+const startRunOn = async (target) => {
+  const runs = await target.locator(".pg-run").count();
+  await target.click("[data-run]");
+  await target.waitForFunction((before) => document.querySelectorAll(".pg-run").length > before, runs, { polling: 100 });
 };
-const setEditor = async (code) => {
-  await page.click(".cm-content");
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.insertText(code);
+const runOn = async (target) => {
+  await startRunOn(target);
+  await idleOn(target);
 };
+const run = () => runOn(page);
+const setEditorOn = async (target, code) => {
+  await target.click(".cm-content");
+  await target.keyboard.press("ControlOrMeta+a");
+  await target.keyboard.insertText(code);
+};
+const setEditor = (code) => setEditorOn(page, code);
 /** The code of the tour page's first example that has a Run button: the block before its bar. */
 const firstRunnableCode = () =>
   page.locator("[data-tour-run]:has(.tour-run-button)").first().locator("xpath=preceding-sibling::*[1]").locator("xpath=descendant-or-self::pre").first();
 /** Runs the editor's code, ending its input whenever it waits for some, until it ends. */
-const runToTheEnd = async () => {
-  await page.click("[data-run]");
-  await page.waitForFunction(() => document.querySelector("[data-run]")?.hidden || document.querySelector("[data-run]")?.disabled);
-  const input = page.locator("[data-input-line] input");
+const runToTheEndOn = async (target) => {
+  await startRunOn(target);
+  const input = target.locator("[data-input-line] input");
   for (;;) {
-    await page.waitForFunction(
+    await target.waitForFunction(
       () =>
         !document.querySelector("[data-input-line]")?.hidden ||
         (!document.querySelector("[data-run]")?.hidden && !document.querySelector("[data-run]")?.disabled),
       null,
-      { timeout: 60_000 },
+      { timeout: 60_000, polling: 100 },
     );
     if (!(await input.isVisible())) break;
     await input.press("Control+d");
   }
-  await idle();
+  await idleOn(target);
+};
+const runToTheEnd = () => runToTheEndOn(page);
+
+/** How many playground pages the checks of every example run on at once, each with a compiler of its own (#2554). */
+const pagesAtOnce = 4;
+
+/**
+ * The problems `each` finds, given a playground page and one of `items`, with `items` split over `pagesAtOnce` pages
+ * that each load the playground and go through their share in turn.
+ */
+const onPages = async (items, each) => {
+  const shares = Array.from({ length: pagesAtOnce }, (_, share) => items.filter((_, index) => index % pagesAtOnce === share));
+  const found = await Promise.all(
+    shares.map(async (share) => {
+      const target = await context.newPage();
+      watch(target);
+      await target.goto(`${origin}/playground`);
+      await readyOn(target);
+      const problems = [];
+      for (const item of share) {
+        const problem = await each(target, item);
+        if (problem) problems.push(problem);
+      }
+      await target.close();
+      return problems;
+    }),
+  );
+  return found.flat();
 };
 
 /**
@@ -252,14 +292,12 @@ const tests = [
     await ready();
     const options = await page.locator("[data-examples] option").evaluateAll((all) => all.map((o) => o.value).filter((v) => v));
     assert.ok(options.length > 100, `the menu has ${options.length} examples`);
-    const failed = [];
-    for (const id of options) {
-      await page.selectOption("[data-examples]", id);
-      await run();
-      const last = page.locator(".pg-run").last();
-      const problems = await last.locator(".pg-diagnostic, .pg-stderr, .pg-end").allInnerTexts();
-      if (problems.length > 0) failed.push(`${id}: ${problems.join(" ").trim()}`);
-    }
+    const failed = await onPages(options, async (target, id) => {
+      await target.selectOption("[data-examples]", id);
+      await runOn(target);
+      const problems = await target.locator(".pg-run").last().locator(".pg-diagnostic, .pg-stderr, .pg-end").allInnerTexts();
+      return problems.length > 0 ? `${id}: ${problems.join(" ").trim()}` : undefined;
+    });
     assert.deepEqual(failed, []);
   }],
   ["every runnable example on every other page opens and runs under the playground host", async () => {
@@ -267,14 +305,12 @@ const tests = [
     await ready();
     const examples = otherPagesExamples();
     assert.ok(examples.length > 150, `the pages outside the tour have ${examples.length} runnable examples`);
-    const failed = [];
-    for (const { page: from, code } of examples) {
-      await setEditor(code);
-      await runToTheEnd();
-      const last = page.locator(".pg-run").last();
-      const problems = await last.locator(".pg-diagnostic, .pg-stderr, .pg-end").allInnerTexts();
-      if (problems.length > 0) failed.push(`${from}: ${problems.join(" ").trim()}\n${code}`);
-    }
+    const failed = await onPages(examples, async (target, { page: from, code }) => {
+      await setEditorOn(target, code);
+      await runToTheEndOn(target);
+      const problems = await target.locator(".pg-run").last().locator(".pg-diagnostic, .pg-stderr, .pg-end").allInnerTexts();
+      return problems.length > 0 ? `${from}: ${problems.join(" ").trim()}\n${code}` : undefined;
+    });
     assert.deepEqual(failed, []);
   }],
   ["a tour page doesn't load the compiler until an example's Run is pressed", async () => {

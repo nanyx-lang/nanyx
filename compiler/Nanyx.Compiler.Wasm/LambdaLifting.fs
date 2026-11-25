@@ -289,11 +289,17 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
     /// again from their captured locals. It is reported where `lambda` was written.
     let liftedLambda (lambda: Expression) (args: (string * TypeExpr option) list) (captured: string list) (body: Expression) =
         let passed = passedMembers lambda
+        // A member the lambda is passed is found by its name too, so a `use` around it of the same context at other
+        // type arguments doesn't bind that name over it (#2570).
+        let passedNames = passed |> Seq.choose (function InstanceMember(_, memberName) -> Some memberName | NamedMember _ -> None) |> Set.ofSeq
+        let rebound (key: ContextMemberKey) =
+            not (passed.Contains key)
+            && (match key with NamedMember name -> not (passedNames.Contains name) | InstanceMember _ -> true)
         let useBinding =
             useMembers
             |> List.filter (fun (local, _) -> List.contains local captured)
             |> List.collect (fun (local, keys) ->
-                keys |> List.filter (passed.Contains >> not) |> List.map (fun key -> NamedField(fieldName key, Expression.synthetic (IdentifierExpr local))))
+                keys |> List.filter rebound |> List.map (fun key -> NamedField(fieldName key, Expression.synthetic (IdentifierExpr local))))
             |> function
                 | [] -> []
                 | fields -> [ Statement.synthetic (UseStatement(Expression.synthetic (RecordExpr fields))) ]

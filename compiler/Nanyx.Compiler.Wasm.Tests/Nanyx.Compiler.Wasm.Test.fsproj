@@ -75,10 +75,17 @@
     <Compile Include="Features\Contexts\RunDefaultContextTests.fs" />
     <Compile Include="Features\Contexts\RunBlockContextTests.fs" />
     <Compile Include="Features\Contexts\RunAttachedContextDefTests.fs" />
+    <Compile Include="Features\Contexts\DirectMemberCallTests.fs" />
+    <Compile Include="Features\Contexts\BorrowedMemberTests.fs" />
+    <Compile Include="Features\Contexts\LambdaKnownMemberTests.fs" />
     <Compile Include="Features\Async\WaitingSpecialisationTests.fs" />
     <Compile Include="Features\Async\RunStateMachineTests.fs" />
     <Compile Include="Features\Async\RunTaskTests.fs" />
+    <Compile Include="Features\Async\WaitDepthTests.fs" />
+    <Compile Include="Features\Async\RunScopeTailCallTests.fs" />
+    <Compile Include="Features\Async\TaskMemoryTests.fs" />
     <Compile Include="Features\Async\RunCancellationTests.fs" />
+    <Compile Include="Features\Async\FrameDropTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />
@@ -91,6 +98,7 @@
     <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />
     <Compile Include="Features\Docs\RunDocExampleTests.fs" />
+    <Compile Include="Features\Docs\RunDocExampleSectionTests.fs" />
     <Compile Include="Features\Docs\StandardLibraryReferenceTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />
     <Compile Include="Features\Errors\RunErrorTests.fs" />
@@ -100,6 +108,7 @@
     <Compile Include="Features\Except\RunExceptTests.fs" />
     <Compile Include="Features\Floats\RunFloatTextTests.fs" />
     <Compile Include="Features\Floats\FloatTextCostTests.fs" />
+    <Compile Include="Features\Floats\FloatReadingTests.fs" />
     <Compile Include="Features\Floats\RunFloatSettledLaterTests.fs" />
     <Compile Include="Features\Floats\FloatValueTests.fs" />
     <Compile Include="Features\Functions\RunArmsAfterParametersTests.fs" />
@@ -205,6 +214,7 @@
     <Compile Include="Features\Records\RunRecordSpreadTests.fs" />
     <Compile Include="Features\Records\RunFunctionFieldTests.fs" />
     <Compile Include="Features\Sets\RunSetTests.fs" />
+    <Compile Include="Features\Chars\RunCharTests.fs" />
     <Compile Include="Features\Arrays\RunArrayTests.fs" />
     <Compile Include="Features\Arrays\RunArrayCallTests.fs" />
     <Compile Include="Features\Arrays\ArrayAllocationTests.fs" />
@@ -258,6 +268,7 @@
     <Compile Include="Features\StdLib\RunSetMapQueryTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />
+    <Compile Include="Features\Strings\StringBuildTests.fs" />
     <Compile Include="Features\Tags\RunTagTests.fs" />
     <Compile Include="Features\Tags\RunExpectedPayloadTests.fs" />
     <Compile Include="Features\Tags\RunRecursiveAliasTests.fs" />

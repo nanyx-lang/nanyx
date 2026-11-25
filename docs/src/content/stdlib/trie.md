@@ -177,10 +177,19 @@ def Trie.toString: [ToString(k), ToString(v)] Trie(k, v) -> string
 `trie` as its literal is written, its keys in the order of [`Trie.toList`](#trietolist):
 `Trie[[1] => a, [1, 2] => b]`, and `Trie[=>]` when it is empty.
 
+## `` Trie.`==` ``
+
+```nanyx fragment
+def Trie.`==`: [Eq(k), Eq(v)] Trie(k, v), Trie(k, v) -> bool
+```
+
+Whether `a` and `b` hold the same keys with the same values, whatever order the keys were added
+in.
+
 ## `StringTrie`
 
 ```nanyx fragment
-type StringTrie(v) = protected Trie(string, v)
+type StringTrie(v) = protected Trie(char, v)
 ```
 
 A trie whose keys are strings, each read as its characters, as [`string.chars`](text#stringchars) gives them. Its
@@ -309,5 +318,14 @@ def StringTrie.toString: [ToString(v)] StringTrie(v) -> string
 
 `trie` as its literal is written, its keys sorted: `StringTrie[a => 1, ab => 2]`, and
 `StringTrie[=>]` when it is empty.
+
+## `` StringTrie.`==` ``
+
+```nanyx fragment
+def StringTrie.`==`: [Eq(v)] StringTrie(v), StringTrie(v) -> bool
+```
+
+Whether `a` and `b` hold the same keys with the same values, whatever order the keys were added
+in.
 
 <!-- End of the generated reference. -->

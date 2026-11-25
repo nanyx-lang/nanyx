@@ -19,6 +19,7 @@ let private needsFunction (ty: IrType) =
     match ty with
     | IrRecord _
     | IrList _
+    | IrArray _
     | IrTags _
     | IrRecursive _ -> true
     | IrInt
@@ -31,8 +32,7 @@ let private needsFunction (ty: IrType) =
     | IrFunction _
     | IrBox
     | IrError
-    | IrSelf
-    | IrArray _
+    | IrSelf _
     | IrWord -> false
 
 /// The types of the (first) operands of the calls to the runtime helper `helper` in `functions`, and the parts of those types
@@ -69,7 +69,8 @@ let collectFor (helper: string) (needsFunction: IrType -> bool) (parts: IrType -
 let collect (functions: Function list) : IrType list =
     let parts (ty: IrType) =
         match IrType.unfold ty with
-        | IrList element -> [ element ]
+        | IrList element
+        | IrArray element -> [ element ]
         | IrRecord fields -> fields |> List.map snd
         | IrTags tags -> tags |> List.choose snd
         | _ -> []
@@ -88,14 +89,13 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
     | IrString -> loadA @ loadB @ [ $"call ${Helpers.stringEquals}" ]
     | IrRecord _
     | IrList _
+    | IrArray _
     | IrTags _
     | IrRecursive _ -> loadA @ loadB @ [ $"call ${equalsName ty}" ]
     | IrFunction _
     | IrBox
     | IrError
-    | IrSelf
-    // Two arrays are compared by the `==` derived for them (see `StructuralInstances`).
-    | IrArray _
+    | IrSelf _
     | IrWord -> internalError $"an equality of '{IrType.show ty}', which has none"
 
 /// Returns 0 from the function unless the code before it left 1.
@@ -113,6 +113,37 @@ let private equalsBody (tagId: string -> int option) (ty: IrType) : string list 
                   let field var = [ $"local.get ${var}"; CoreIrLayout.load fieldTy (CoreIrLayout.fieldOffset fields slot) ]
                   compare fieldTy (field "a") (field "b") @ orReturnFalse)
               |> List.concat
+          "i32.const 1" ]
+    | IrArray element ->
+        // Of the same length, and element by element. An array the program writes is compared by the `==` derived for
+        // it (see `StructuralInstances`): this one only compares those inside the store of a map (see `Maps.storeOf`).
+        let size = CoreIrLayout.size element
+        let first var = [ $"local.get ${var}"; CoreIrLayout.load element (CoreIrLayout.arrayElementOffset element 0) ]
+        let next var = [ $"local.get ${var}"; $"i32.const {size}"; "i32.add"; $"local.set ${var}" ]
+        [ "(local $n i32)"
+          "local.get $a"
+          "i32.load"
+          "local.tee $n"
+          "local.get $b"
+          "i32.load"
+          "i32.ne"
+          "if"
+          "  i32.const 0"
+          "  return"
+          "end"
+          "block $done"
+          "  loop $next"
+          "    local.get $n"
+          "    i32.eqz"
+          "    br_if $done"
+          yield! compare element (first "a") (first "b") @ orReturnFalse @ next "a" @ next "b" |> indent |> indent
+          "    local.get $n"
+          "    i32.const 1"
+          "    i32.sub"
+          "    local.set $n"
+          "    br $next"
+          "  end"
+          "end"
           "i32.const 1" ]
     | IrList element ->
         // Cell by cell along both lists, so that a long list takes no stack. The empty list is 0.

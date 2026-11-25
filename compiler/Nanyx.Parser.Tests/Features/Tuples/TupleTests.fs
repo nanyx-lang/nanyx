@@ -107,3 +107,17 @@ let ``Parse tuple feature files`` () =
         | Result.Error err -> failwith $"Parse failed for {filePath}: {err}"
         | _ -> ()
     )
+
+[<Fact>]
+let ``A destructuring def's value is a tuple without its brackets, at the top level and in a block`` () =
+    // #2653: the formatter writes `def x, y = 1, 2`, which must read as it did with the brackets.
+    match parseModule "def x, y = 1, 2" with
+    | Result.Ok [ Kind (Def (ValueDef (_, _, None, Kind (TupleExpr [ Kind (LiteralExpr (IntLit64 1L)); Kind (LiteralExpr (IntLit64 2L)) ]))))
+                  Kind (Def (ValueDef (_, "x", None, _)))
+                  Kind (Def (ValueDef (_, "y", None, _))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"
+    match parseModule "def main = {\n  def a, b = 3, 4\n  a\n}" with
+    | Result.Ok [ Kind (Def (ValueDef (_, "main", None, Kind (Lambda ([], Kind (Block (Kind (DefStatement (_, _, None, Kind (TupleExpr [ _; _ ]))) :: _)), _))))) ] -> ()
+    | Result.Ok other -> failwith $"Unexpected parse: %A{other}"
+    | Result.Error err -> failwith $"Parse failed: {err}"

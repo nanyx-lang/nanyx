@@ -41,7 +41,11 @@ def sizeOf: Node -> int = {
   | #group(_, node) -> sizeOf(node) + 2
   | #repeat(node, least, most, _) ->
     def size = sizeOf(node)
-    if most < 0 then least * size + size + 2 else least * size + (most - least) * (size + 1)
+
+    if
+      | most < 0 and least > 0 -> least * size + 1
+      | most < 0 -> size + 2
+      | else -> least * size + (most - least) * (size + 1)
 }
 
 --| The instruction that matches a character of `ranges`: `#char` when they hold one.
@@ -85,22 +89,32 @@ def emitAlternatives: list(Node), int, int, list(Inst) -> list(Inst) = { nodes, 
 }
 
 --| `inner` repeated from `least` to `most` times (`-1` for no most), greedily or not, starting at
-  `pc`: `least` copies of it, then a loop for no most, or a copy that may be skipped for each time
-  past `least` up to `most`.
+  `pc`. With no most, it is `least` copies of it, the last of them a loop back to its start (`x+`
+  is `x` and a split back), or a loop that may be skipped for none (`x*`): the program grows by
+  one copy however many such repeats nest. With a most, it is `least` copies, then a copy that
+  may be skipped for each time past `least` up to `most`.
 def emitRepeat
   : Node, int, int, bool, int, list(Inst) -> list(Inst)
   = { inner, least, most, greedy, pc, done ->
     def size = sizeOf(inner)
-    def required = emitCopies(inner, least, pc, done)
-    def from = pc + least * size
-    def choose = { body, out -> if greedy then #split(body, out) else #split(out, body) }
 
-    if most < 0 then
-      def end = from + size + 2
-      [#jump(from), ...emit(inner, from + 1, [choose(from + 1, end), ...required])]
-    else
-      def end = from + (most - least) * (size + 1)
-      optionalCopies(inner, most - least, from, end, size, choose, required)
+    def choose: int, int -> Inst = { body, out ->
+      if greedy then #split(body, out) else #split(out, body)
+    }
+
+    if
+      | most < 0 and least > 0 ->
+        def from = pc + (least - 1) * size
+        def loop = emit(inner, from, emitCopies(inner, least - 1, pc, done))
+        [choose(from, from + size + 1), ...loop]
+      | most < 0 ->
+        def end = pc + size + 2
+        [#jump(pc), ...emit(inner, pc + 1, [choose(pc + 1, end), ...done])]
+      | else ->
+        def required = emitCopies(inner, least, pc, done)
+        def from = pc + least * size
+        def end = from + (most - least) * (size + 1)
+        optionalCopies(inner, most - least, from, end, size, choose, required)
   }
 
 --| `count` copies of `node`, one after another, the first at `pc`, in front of `done`.

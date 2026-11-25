@@ -6,6 +6,17 @@ module Sets =
     /// The type's name, as a type writes it, `set(int)`, and as the prelude's set functions are attached to it.
     let typeName = "set"
 
+    /// The type a set of `element`s is held as: the store of a map from each element to unit (see `Maps.storeOf`),
+    /// built and read by the same algorithms in `stdlib/nanyx/prelude-maps.nyx`.
+    let storeOf (element: Ty) = Maps.storeOf element (TyPrimitive "unit")
+
+    /// The function that gives a set's elements as a list: how the compiler reads a set's elements (see `Maps.toList`).
+    let toList = typeName + ".toList"
+
+    /// The prelude's function that gives a set's store with each element converted, as `Maps.convertedStore` does a
+    /// map's.
+    let convertedStore = "__setStoreConverted"
+
     /// Whether `name` names the type.
     let isTypeName (name: string) = name = typeName
 

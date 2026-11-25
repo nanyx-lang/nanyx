@@ -30,8 +30,10 @@
     <Compile Include="Features\Blocks\DoBlockTests.fs" />
     <Compile Include="Features\Blocks\BlockFreeNamesTests.fs" />
     <Compile Include="Features\Calls\NamedArgumentTests.fs" />
+    <Compile Include="Features\Calls\CallCheckTimeTests.fs" />
     <Compile Include="Features\Calls\FunctionFieldCallTests.fs" />
     <Compile Include="Features\Calls\BuiltInCallTests.fs" />
+    <Compile Include="Features\Chars\CharLiteralTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />
@@ -60,6 +62,7 @@
     <Compile Include="Features\Contexts\StructuralInstanceTests.fs" />
     <Compile Include="Features\Contexts\FunctionTypeContextTests.fs" />
     <Compile Include="Features\Contexts\ContextVariableTests.fs" />
+    <Compile Include="Features\Contexts\ContextVariableCallTimeTests.fs" />
     <Compile Include="Features\Contexts\PointFreeContextTests.fs" />
     <Compile Include="Features\Contexts\LambdaContextTests.fs" />
     <Compile Include="Features\Contexts\LambdaSuppliedContextTests.fs" />
@@ -102,6 +105,7 @@
     <Compile Include="Features\Hashing\HashTests.fs" />
     <Compile Include="Features\Hosts\AsyncTests.fs" />
     <Compile Include="Features\Tasks\TaskScopeTests.fs" />
+    <Compile Include="Features\Tasks\TaskCheckTimeTests.fs" />
     <Compile Include="Features\Hosts\ConsoleHostTests.fs" />
     <Compile Include="Features\Hosts\ExternTests.fs" />
     <Compile Include="Features\Hosts\PlaygroundHostTests.fs" />
@@ -132,6 +136,7 @@
     <Compile Include="Features\Lambdas\ParameterFieldTests.fs" />
     <Compile Include="Features\Lambdas\ResultAnnotationTests.fs" />
     <Compile Include="Features\Lambdas\ReturnedLambdaTests.fs" />
+    <Compile Include="Features\Lists\ListLiteralTests.fs" />
     <Compile Include="Features\Linters\LinterTests.fs" />
     <Compile Include="Features\Linters\UnusedBindingsTests.fs" />
     <Compile Include="Features\Linters\NonTailRecursionTests.fs" />
@@ -255,8 +260,10 @@
     <Compile Include="Features\Workflows\WorkflowTests.fs" />
     <Compile Include="Features\Workflows\WorkflowLoopTests.fs" />
     <Compile Include="Features\Workflows\KeywordKindTests.fs" />
+    <Compile Include="Features\Workflows\HiddenKeywordTests.fs" />
     <Compile Include="Features\Workflows\SequenceTests.fs" />
     <Compile Include="Features\Workflows\SequenceForTests.fs" />
+    <Compile Include="Features\Workflows\YieldGivenToEmitterTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

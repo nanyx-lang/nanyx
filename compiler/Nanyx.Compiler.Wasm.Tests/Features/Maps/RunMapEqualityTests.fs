@@ -107,3 +107,68 @@ def main = {
     source.ReplaceLineEndings "\n"
     |> runSourceWith true ""
     |> assertRan "same\ndifferent\nsame\n"
+
+[<Fact>]
+let ``Run - a map or a set beside a type nothing settles, as in a recursive type, is compared by its entries`` () =
+    // The defs write no types, so an empty map or list in them leaves a variable nothing solves, which holds no value:
+    // the map beside it is still compared by its entries, not by the order they were added in (#2522).
+    comparing
+        [ """type Node = #node(int, map(int, Node))"""
+          """type Rec = #rec(map(int, string), list(Rec))"""
+          """type Sets = #sets(set(int), list(Sets))"""
+          """def leaf = #node(0, map.empty)""" ]
+        [ """#node(1, map.empty \map.insert(1, leaf) \map.insert(2, leaf)) == #node(1, map.empty \map.insert(2, leaf) \map.insert(1, leaf))"""
+          """#node(1, map.empty \map.insert(1, leaf)) == #node(1, map.empty \map.insert(2, leaf))"""
+          """#rec(map.empty \map.insert(1, "a") \map.insert(2, "b"), []) == #rec(map.empty \map.insert(2, "b") \map.insert(1, "a"), [])"""
+          """#sets(set.empty \set.insert(1) \set.insert(2), []) == #sets(set.empty \set.insert(2) \set.insert(1), [])"""
+          """(map.empty \map.insert(1, "a") \map.insert(2, "b"), []) == (map.empty \map.insert(2, "b") \map.insert(1, "a"), [])""" ]
+    |> runSource
+    |> assertRan "T\nF\nT\nT\nT\n"
+
+[<Fact>]
+let ``Run - equal maps and sets have the same hash, however they were built, and can be keys`` () =
+    comparing
+        [ """def a = ["x" => 1, "y" => 2, "z" => 3]"""
+          """def b = ["z" => 3, "w" => 9, "x" => 1] \map.remove("w") \map.insert("y", 2)"""
+          """def p: set(int) = [1, 2, 3]"""
+          """def q: set(int) = [3, 2, 1]"""
+          """def byMap = [a => "first"]"""
+          """def bySet = [p => "first"]""" ]
+        [ """__hashOf(a) == __hashOf(b)"""
+          """__hashOf(p) == __hashOf(q)"""
+          """byMap(b) == #some("first")"""
+          """bySet(q) == #some("first")"""
+          """set.fromList([a, b]) \set.length == 1"""
+          """__hashOf(a) == __hashOf(a \map.insert("q", 4))""" ]
+    |> runSource
+    |> assertRan "T\nT\nT\nT\nT\nF\n"
+
+[<Fact>]
+let ``Run - a map whose keys have their own == and hash is compared and hashed through them`` () =
+    comparing
+        [ """type Code = protected int"""
+          """def Code.`==`: Code, Code -> bool = { Code(a), Code(b) -> a % 10 == b % 10 }"""
+          """def Code.hash: Code -> int = { Code(a) -> a % 10 }"""
+          """def a = [Code(11) => 1, Code(2) => 2]"""
+          """def b = [Code(12) => 2, Code(1) => 1]""" ]
+        [ """a == b"""
+          """__hashOf(a) == __hashOf(b)"""
+          """a == (b \map.insert(Code(3), 3))""" ]
+    |> runSource
+    |> assertRan "T\nT\nF\n"
+
+[<Fact>]
+let ``Run - maps built in different orders are equal inside records, lists and nominal types, through list.contains and a local function`` () =
+    comparing
+        [ """type Holder = protected (counts: map(string, int))"""
+          """def a = ["x" => 1, "y" => 2, "z" => 3]"""
+          """def b = ["z" => 3, "y" => 2, "x" => 1]"""
+          """def same = { p, q -> p == q }""" ]
+        [ """(counts = a, n = 1) == (counts = b, n = 1)"""
+          """[a, a] == [b, b]"""
+          """Holder(counts = a) == Holder(counts = b)"""
+          """list.contains([["q" => 0], b], a)"""
+          """same(a, b)"""
+          """same(a, b \map.remove("x"))""" ]
+    |> runSource
+    |> assertRan "T\nT\nT\nT\nT\nF\n"

@@ -76,6 +76,10 @@ let internal inferMatch
             | IdentifierPattern name ->
                 let symbol, declared = declareSymbol ArmBody armBody.Id name PatternVariable false (Some armBody.Span.End) state'
                 Ok (TypeEnv.declare name symbol (TypeEnv.mono scrutineeTy) env', recordSymbolType symbol scrutineeTy declared, mkTypedPattern pattern scrutineeTy)
+            // A string literal matching a `char` is one (see `CharLiterals`).
+            | LiteralPattern(StringLit text) when CharLiterals.isChar state' scrutineeTy ->
+                CharLiterals.typeOf pattern.Span text
+                |> Result.map (fun ty -> env', addConstraint scrutineeTy ty state', mkTypedPattern pattern scrutineeTy)
             | LiteralPattern literal ->
                 let ty, recorded = NumericLiterals.typeOf state' pattern.Span None literal
                 let constrained = addConstraint scrutineeTy ty recorded

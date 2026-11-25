@@ -2,7 +2,7 @@
 title: json, reflection
 description: Writing and reading any type as JSON, with no encoder or decoder written for it
 order: 15.55
-package: nanyx.json 0.2.0
+package: nanyx.json 0.4.0
 ---
 
 `json.encode` writes a value of any type as JSON text, and `json.decode` reads text into the type it is given, by
@@ -14,7 +14,7 @@ A record is an object, a tag with no payload its name, a tag with one an object 
 `#none` is left out:
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import nanyx.json/json as json
 
@@ -39,26 +39,29 @@ match json.encode(drawing)
 
 def plan = '{"title": "Plan", "made_by": "Ada", "shapes": [{"circle": 2}]}'
 
-match json.decode(plan, into = type Drawing)
+match json.decode(type Drawing, plan)
   | #some(read) -> println("{read.title} by {read.author}")
   | failure -> println(json.describe(failure))
 
--- {"title":"Sketch","shapes":["point",{"circle":1.5},{"rect":{"width":2,"height":1}}]}
+-- {"title":"Sketch","shapes":["point",{"circle":1.5},{"rect":{"height":1,"width":2}}]}
 -- Plan by #some(Ada)
 ```
+
+A record is written as an object, and for now its fields come out in an unspecified order, as an object's keys do (see
+[json](json)), not the order the type writes them in.
 
 A failure is a tag of its own, which `json.describe` writes: `#invalidJson` for text that isn't JSON, `#doesNotFit` for
 a value that doesn't fit the type, and `#cannotEncode` for a part of a value that JSON can't hold, each with where:
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import nanyx.json/json as json
 
 type Point = (x: int, y: int)
 
 def show = { text ->
-  match json.decode(text, into = type list(Point))
+  match json.decode(type list(Point), text)
     | #some(points) -> println("{list.length(points)} points")
     | failure -> println(json.describe(failure))
 }
@@ -90,13 +93,41 @@ module that calls it ([#2382](https://github.com/nanyx-lang/nanyx/issues/2382)),
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.2.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.4.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 ## `encode`
 
 ```nanyx fragment
 def encode: [Typed(a)] a -> #some(string) | #cannotEncode(path: list(PathStep), message: string)
 ```
+
+`value` as JSON text, with no encoder written for it, printed compactly as [`print`](json#print) prints:
+`json.encode((name = "Ada", age = 36))` is `#some("\{"name":"Ada","age":36}")`. The value is
+written by walking its type. A record is an object of its fields, each under its name, or the
+`name` of a `@json(name = "...")` attribute written before it, and a tuple is an array. A tag
+with no payload is its name, as a string, and a tag with one is an object with one member, the
+payload under the tag's name, as `{"circle": 1.5}`. An option, `#some(x) | #none`, is `x` or
+`null`, and a record's field that is `#none` is left out. A list, an array and a set are arrays,
+a map with string keys is an object, and any other map an array of `[key, value]` pairs. Numbers
+of every size are numbers, and `()` is `null`.
+
+A function and a nominal type can't be written: they are an `EncodeError`, with the path to
+them. A nominal type shows its structure only to its own module, and `encode` learns the value's
+type from the prelude's `Typed`, so not even a nominal type of your own module is shown to it.
+Write one with `json.encodeWith(x, json.encoderFor(type T))`, which sees `T` from where
+`type T` is written, or with an `Encoder` of your own.
+
+## `encodeValue`
+
+```nanyx fragment
+def encodeValue: [Typed(a)] a -> #some(Json) | #cannotEncode(path: list(PathStep), message: string)
+```
+
+`value` as a `Json` value, with no encoder written for it, written by walking its type as
+[`encode`](#encode) writes it: `json.encodeValue((name = "Ada", tags = ["x"]))` is
+`#some(#object(["name" => #string("Ada"), "tags" => #array([#string("x")])]))`. For a value to
+put in a larger `Json` value, or to print with [`printPretty`](json#printpretty). A function and a nominal type
+can't be written: they are an `EncodeError`, with the path to them.
 
 ## `encoderFor`
 
@@ -122,20 +153,20 @@ part of a value by its type, within a `Decoder` of your own. A member that is mi
 ## `decodeValue`
 
 ```nanyx fragment
-def decodeValue: (Json, into: Type(into)) -> #some(into) | #doesNotFit(path: list(PathStep), message: string)
+def decodeValue: Type(a), Json -> #some(a) | #doesNotFit(path: list(PathStep), message: string)
 ```
 
-A value of the type `into` read from `value` by walking the type, as [`decode`](#decode) reads one, or a
+A value of the type given first, read from the `Json` value by walking the type, as [`decode`](#decode) reads one, or a
 `DecodeError` with the path to what didn't fit, and why.
 
 ## `decode`
 
 ```nanyx fragment
-def decode: (string, into: Type(into)) -> #some(into) | #doesNotFit(path: list(PathStep), message: string) | #invalidJson(position: int, line: int, column: int, message: string)
+def decode: Type(a), string -> #some(a) | #doesNotFit(path: list(PathStep), message: string) | #invalidJson(position: int, line: int, column: int, message: string)
 ```
 
-A value of the type `into` read from the JSON `text`, with no decoder written for it:
-`json.decode(text, into = type User)`. The type is walked as [`encode`](#encode) walks it, so what
+A value of the type given first, read from the JSON text, with no decoder written for it:
+`json.decode(type User, text)`. The type is walked as [`encode`](#encode) walks it, so what
 `encode` writes, `decode` reads back. A missing member is an error, but for a field whose type is
 an option, which reads a missing member and `null` as `#none`. A number read as an `int` must be
 whole, and one read as a sized number must be in its range.

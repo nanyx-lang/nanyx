@@ -391,7 +391,7 @@ internal static partial class CliCommands
             ? FSharpList<ComponentFunction>.Empty
             : ComponentInterface.imports(entry.Value.Typed.Value);
         var exports = ListModule.OfSeq(functions.Select(function => Tuple.Create(ComponentInterface.exportName(witPackage, function.Export), function)));
-        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(library is null ? ComponentEntryModule.ofWorld(component.World) : ComponentEntry.Library), componentExports: exports, yieldAtEveryWait: false), deferred, timings))
+        if (!TryEmitWat(shell, entry.Value, shell.Out, out var wat, new CodeGen.WasmOptions(false, inlineCalls, release, SourceRoot(package.Manifest.Root), true, false, dbgToEmbedder: false, exportStart: false, component: component is null ? null : FSharpOption<ComponentEntry>.Some(library is null ? ComponentEntryModule.ofWorld(component.World) : ComponentEntry.Library), componentExports: exports, yieldAtEveryWait: false, frameDrops: false), deferred, timings))
         {
             return 1;
         }
@@ -570,7 +570,7 @@ internal static partial class CliCommands
     /// Compiles a script, as <see cref="Script.compileFile"/> does, with a stopwatch on the shell's stderr while that is
     /// a terminal, and each module's time after it with <paramref name="timings"/> (see <see cref="CompileProgress"/>).
     /// </summary>
-    private static CompileResult CompileScript(Shell shell, string inputFile, bool timings)
+    internal static CompileResult CompileScript(Shell shell, string inputFile, bool timings)
     {
         using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)), shell.DisplayPath, timings);
         var result = Script.compileFileReportingIn(shell.Packages, progress.Listener, shell.FullPath(inputFile));
@@ -1091,12 +1091,20 @@ internal static partial class CliCommands
         }
 
         var result = CompileScript(compiling, inputFile, timings);
-        PrintDiagnostics(compiling, WorthStoppingFor(result.Diagnostics), compiling.Error);
+        return RunCompiledScript(compiling, inputFile, result, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile, yieldAtEveryWait);
+    }
+
+    /// <summary>Runs the script <paramref name="inputFile"/>, compiled to <paramref name="result"/>, as <c>run</c> does
+    /// once it has compiled it: so a caller can compile a script once and run it more than one way, as the tests of the
+    /// docs' examples run each with and without inlining.</summary>
+    internal static int RunCompiledScript(Shell shell, string inputFile, CompileResult result, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false)
+    {
+        PrintDiagnostics(shell, WorthStoppingFor(result.Diagnostics), shell.Error);
         // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the
         // program reaches it.
         var deferred = ErrorsDeferred(result);
-        ReportDeferredRun(compiling, deferred, result.Diagnostics);
-        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait);
+        ReportDeferredRun(shell, deferred, result.Diagnostics);
+        return RunProgram(shell, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait);
     }
 
     /// <summary>
@@ -1266,7 +1274,7 @@ internal static partial class CliCommands
     private static int RunWasm(Shell shell, CompileResult result, string inputFile, string? outputPath, bool release, ProgramFormat format)
     {
         var deferred = !release && ErrorsDeferred(result);
-        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false), deferred))
+        if (!TryEmitWat(shell, result, shell.Out, out var wat, new CodeGen.WasmOptions(false, true, release, SourceRoot(null), true, false, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false), deferred))
         {
             return 1;
         }

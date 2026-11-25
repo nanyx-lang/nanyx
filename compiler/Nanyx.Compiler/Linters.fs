@@ -715,18 +715,10 @@ module ResultOnlyTypeVariables =
           Description =
             "A function whose result has a type variable that a context it requires names but no parameter fixes: nothing at a call says which type it is but a type written on the result. Take it as a type argument." }
 
-    /// The name of the context `context` is, as the model has it.
-    let private contextName (context: Ty) =
-        match context with
-        | TyApply(name, _)
-        | TyAlias(name, _, _) -> Some name
-        | TyNominal(nominal, _, _, _) -> Some nominal.Name
-        | _ -> None
-
     /// The variables of `ty` that no parameter of it fixes, which a context of `contexts` names and its result has.
     let private unfixed (ty: Ty) (contexts: Ty list) : int list =
         match Unifier.unalias ty with
-        | TyFunc(input, output, _) when not (contexts |> List.exists (contextName >> (=) (Some TypeValues.typedContext))) ->
+        | TyFunc(input, output, _) when not (contexts |> List.exists (FunctionContexts.contextName >> (=) (Some TypeValues.typedContext))) ->
             let named = contexts |> List.map TypeEnv.freeTyVars
             // The variables a parameter fixes, and those a context naming one of them fixes with it.
             let rec closed (fixedVars: Set<int>) =
@@ -996,14 +988,7 @@ module UnusedContexts =
         let nodes =
             SyntaxTree.expressionsWithin value
             |> List.collect (fun expr -> expr.Id :: (model.Lowered |> Map.tryFind expr.Id |> Option.defaultValue []))
-        // A protected or private context is a nominal type.
-        let names (contexts: Ty list) =
-            contexts
-            |> List.choose (function
-                | TyApply(name, _)
-                | TyAlias(name, _, _) -> Some name
-                | TyNominal(nominal, _, _, _) -> Some nominal.Name
-                | _ -> None)
+        let names (contexts: Ty list) = contexts |> List.choose FunctionContexts.contextName
         let ofCallee =
             nodes
             |> List.collect (fun node ->

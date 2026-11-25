@@ -38,7 +38,8 @@ let inferFor
             match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
             | Lists.ListType elementTy -> Ok ((elementTy, false), afterIterable)
             | Seqs.SeqType elementTy -> Ok ((elementTy, (match iterable.Kind with RangeSyntax.Call(_, None) -> true | _ -> false)), afterIterable)
-            // A map's elements are its entries, each a key and its value, in the order of `map.toList`.
+            // A map's elements are its entries, each a key and its value, and a set's its elements: the backend walks
+            // the store (see `StoreWalk`).
             | Maps.MapType(key, value) -> Ok ((tupleRecordType [ key; value ], false), afterIterable)
             | Sets.SetType element -> Ok ((element, false), afterIterable)
             // A type nothing has settled yet is a list, unless a signature requires `Iterable` of it.

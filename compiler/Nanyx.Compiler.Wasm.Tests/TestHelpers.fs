@@ -124,10 +124,11 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (github: NyxC
         File.Delete inputFile
 
 /// The packages from the index that the tests' programs and the docs' examples use, though the compiler doesn't ship
-/// them, so that no test needs the network: `nanyx.json` 0.1.0 and 0.2.0, the `.nyxpkg`s their releases on
-/// nanyx-lang/json carry (`Packages/nanyx.json-<version>.nyxpkg`, downloaded from the releases, whose SHA-256s the index
-/// records). They are listed in an index on disk, in a directory of its own, and downloaded into the store's cache once,
-/// before any test reads them, so that tests run in parallel never unpack one at the same time.
+/// them, so that no test needs the network: `nanyx.json` 0.1.0, 0.2.0 and 0.4.0, and `nanyx.regex` 0.1.0, the `.nyxpkg`s their
+/// releases on nanyx-lang/json and nanyx-lang/regex carry (`Packages/<package>-<version>.nyxpkg`, downloaded from the
+/// releases, whose SHA-256s the index records). They are listed in an index on disk, in a directory of its own, and
+/// downloaded into the store's cache once, before any test reads them, so that tests run in parallel never unpack one at
+/// the same time.
 let private packagesForTests =
     lazy
         (let directory = Path.Combine(Path.GetTempPath(), $"nanyx-test-index-{Guid.NewGuid():N}")
@@ -138,26 +139,27 @@ let private packagesForTests =
          Directory.CreateDirectory(Path.Combine(store.Index, "artifacts")) |> ignore
          Directory.CreateDirectory(Path.Combine(store.Index, "index", "nanyx")) |> ignore
          File.WriteAllText(Path.Combine(store.Index, "config.json"), """{ "format": 1, "index": "index/" }""")
-         let versions =
-             [ "0.1.0"; "0.2.0" ]
-             |> List.map (fun version ->
-                 let file = $"nanyx.json-{version}.nyxpkg"
-                 let bytes = File.ReadAllBytes(Path.Combine(__SOURCE_DIRECTORY__, "Packages", file))
-                 File.WriteAllBytes(Path.Combine(store.Index, "artifacts", file), bytes)
-                 version, PackageArchive.sha256 bytes)
-         let entries =
-             versions
-             |> List.map (fun (version, sha256) ->
-                 $$"""{ "version": "{{version}}", "url": "../../artifacts/nanyx.json-{{version}}.nyxpkg", "sha256": "{{sha256}}", "dependencies": {}, "unlisted": false, "available": true }""")
-         File.WriteAllText(
-             Path.Combine(store.Index, "index", "nanyx", "nanyx.json.json"),
-             $$"""{ "name": "nanyx.json", "versions": [{{String.concat ", " entries}}] }"""
-         )
-         for version, sha256 in versions do
-             let locked = { Name = "nanyx.json"; Version = (SemanticVersion.tryParse version).Value; Sha256 = sha256; Dependencies = [] }
-             match PackageIndex.download store locked with
-             | Result.Ok _ -> ()
-             | Result.Error message -> failwith message
+         for name, versions in [ "nanyx.json", [ "0.1.0"; "0.2.0"; "0.4.0" ]; "nanyx.regex", [ "0.1.0" ] ] do
+             let versions =
+                 versions
+                 |> List.map (fun version ->
+                     let file = $"{name}-{version}.nyxpkg"
+                     let bytes = File.ReadAllBytes(Path.Combine(__SOURCE_DIRECTORY__, "Packages", file))
+                     File.WriteAllBytes(Path.Combine(store.Index, "artifacts", file), bytes)
+                     version, PackageArchive.sha256 bytes)
+             let entries =
+                 versions
+                 |> List.map (fun (version, sha256) ->
+                     $$"""{ "version": "{{version}}", "url": "../../artifacts/{{name}}-{{version}}.nyxpkg", "sha256": "{{sha256}}", "dependencies": {}, "unlisted": false, "available": true }""")
+             File.WriteAllText(
+                 Path.Combine(store.Index, "index", "nanyx", $"{name}.json"),
+                 $$"""{ "name": "{{name}}", "versions": [{{String.concat ", " entries}}] }"""
+             )
+             for version, sha256 in versions do
+                 let locked = { Name = name; Version = (SemanticVersion.tryParse version).Value; Sha256 = sha256; Dependencies = [] }
+                 match PackageIndex.download store locked with
+                 | Result.Ok _ -> ()
+                 | Result.Error message -> failwith message
          store)
 
 /// The package store the tests build and run with: an index on disk and a cache of their own, with the packages from
@@ -360,6 +362,18 @@ type TempDirectory() =
     interface IDisposable with
         member _.Dispose() = try Directory.Delete(path, true) with _ -> ()
 
+/// `nanyx run --memory` on a script of `source`, which writes its memory report to stderr after the program's own.
+let runWithMemoryReport (source: string) : RunOutcome =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" source
+    nanyxWithInput "" [ "run"; "--memory"; Path.Combine(directory.Path, "main.nyx") ]
+
+/// The number the memory report in `outcome`'s stderr gives on the line of `measure`, such as `"peak live bytes"`.
+let reportedMemory (measure: string) (outcome: RunOutcome) : int64 =
+    let found = Regex.Match(outcome.StandardError, $@"{Regex.Escape measure} +([\d,]+)")
+    Assert.True(found.Success, $"no '{measure}' in:\n{outcome.StandardError}")
+    int64 (found.Groups.[1].Value.Replace(",", ""))
+
 /// A store whose cache and index are directories in `directory`, which can't fetch from GitHub.
 let storeIn (directory: TempDirectory) : NyxCompiler.PackageStore =
     { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = NyxCompiler.GitHub.unsupported }
@@ -488,6 +502,30 @@ let runSourceWithOptions (checkMemory: bool) (inlineCalls: bool) (standardInput:
     try runScriptWithOptions checkMemory inlineCalls standardInput inputPath
     finally Directory.Delete(directory, true)
 
+/// `source` compiled once, as `nanyx run` compiles a script, and run as it would run it, with inlining and without it:
+/// what each run gives, inlined first. Compiling is most of what a run takes, so this takes about half what running it
+/// both ways with `runSourceWithOptions` does (#2553).
+let runSourceBothWays (source: string) : RunOutcome * RunOutcome =
+    let directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"nanyx-run-{Guid.NewGuid():N}")).FullName
+    let inputPath = Path.Combine(directory, "main.nyx")
+    File.WriteAllText(inputPath, source.ReplaceLineEndings "\n")
+    try
+        let mutable compiled = None
+        let compiling =
+            inProcess (Directory.GetCurrentDirectory()) "" [] (fun shell ->
+                if CliCommands.TryPullScript(shell, inputPath) then
+                    compiled <- Some(CliCommands.CompileScript(shell, inputPath, false))
+                    0
+                else 1)
+        match compiled with
+        | Some result ->
+            let run (inlineCalls: bool) =
+                inProcess (Directory.GetCurrentDirectory()) "" [] (fun shell ->
+                    CliCommands.RunCompiledScript(shell, inputPath, result, MemoryCheck.Off, false, null, inlineCalls))
+            run true, run false
+        | None -> compiling, compiling
+    finally Directory.Delete(directory, true)
+
 let runSourceWith (checkMemory: bool) (standardInput: string) (source: string) : RunOutcome =
     runSourceWithOptions checkMemory true standardInput source
 
@@ -555,6 +593,15 @@ let withoutDbgLocations (outcome: RunOutcome) =
 let withoutStack (stderr: string) =
     stderr.ReplaceLineEndings("\n").Split('\n') |> Array.filter (fun line -> not (line.StartsWith "  ")) |> String.concat "\n"
 
+/// `x` as a Nanyx float literal, with all the digits it takes to be read back as `x`: `1.0e-300`, not .NET's `1E-300`.
+let floatLiteral (x: float) =
+    let text = x.ToString("R", Globalization.CultureInfo.InvariantCulture).Replace("E+", "e").Replace("E", "e")
+    let mantissa, exponent =
+        match text.IndexOf 'e' with
+        | -1 -> text, ""
+        | at -> text.Substring(0, at), text.Substring at
+    (if mantissa.Contains '.' then mantissa else mantissa + ".0") + exponent
+
 /// The options the in-process tests compile with: memory checks on, so that the counters are there to read.
 let checkedOptions = { WasmOptions.Default with CheckMemory = true }
 
@@ -575,11 +622,16 @@ type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmt
         match func.Invoke value with
         | :? int64 as result -> int result
         | result -> result :?> int
+    /// Calls the function `name`, which takes an `i32` and returns nothing, with `argument`.
+    member _.Run(name: string, argument: int) = instance.GetAction<int>(name).Invoke argument
     member _.Drop(ty: Transpiler.Wasm.CoreIr.IrType, value: int) =
         instance.GetAction<int>(Transpiler.Wasm.CoreIrDrop.dropName ty).Invoke value
     member _.HeapPointer = counter CheckedExports.heapPointer
     member _.Allocations = counter CheckedExports.allocations
     member _.LiveBlocks = counter CheckedExports.liveBlocks
+    /// The value of the global `name`, which the module exports, as an `i32`.
+    member _.Global(name: string) = counter name
+    member _.SetGlobal(name: string, value: int) = instance.GetGlobal(name).SetValue(value)
     /// The most bytes there have been in blocks in use at once.
     member _.PeakLiveBytes = counter CheckedExports.peakLiveBytes
     /// The size of the memory in bytes, which never shrinks: how far the heap has ever reached, to the page.
@@ -596,6 +648,25 @@ let allocationsOf (program: WasmProgram) (name: string) (argument: int) =
     let before = program.Allocations
     let result = program.Call(name, argument)
     program.Allocations - before, result
+
+/// Asserts that `name(n)` in `program` takes time that grows with `n`, not with its square: less than ten times what
+/// `name(n / 4)` takes. A linear function takes about 4 times as long, and a quadratic one 16. When the first runs miss,
+/// each size runs again in turn, and each one's quickest run counts, so that load on the machine, which slows one run
+/// and not the other, can't make the test fail (#2388).
+let callsInLinearTime (program: WasmProgram) (name: string) (n: int) =
+    let time (size: int) =
+        let clock = System.Diagnostics.Stopwatch.StartNew()
+        program.Call(name, size) |> ignore
+        clock.Elapsed.TotalMilliseconds
+    program.Call(name, n / 4) |> ignore
+    let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
+    let atQuarter, atN = time (n / 4), time n
+    let atQuarter, atN =
+        if isLinear atQuarter atN then atQuarter, atN
+        else
+            let again = List.init 3 (fun _ -> time (n / 4), time n)
+            min atQuarter (again |> List.map fst |> List.min), min atN (again |> List.map snd |> List.min)
+    Assert.True(isLinear atQuarter atN, $"{name}({n:N0}) took {atN:F1} ms, {atN / atQuarter:F1} times the {atQuarter:F1} ms of {name}({n / 4:N0})")
 
 /// `wat`, a module compiled with `checkedOptions`, instantiated and run (see `WasmProgram`), with the drop functions of `dropped`
 /// exported.

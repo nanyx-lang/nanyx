@@ -265,18 +265,24 @@ export def Trie.toString: [ToString(k), ToString(v)] Trie(k, v) -> string = { tr
     | pairs -> "Trie{__listToString(pairs, { pair -> "{pair.0} => {pair.1}" })}"
 }
 
+--| Whether `a` and `b` hold the same keys with the same values, whatever order the keys were added
+  in.
+export def Trie.`==`: [Eq(k), Eq(v)] Trie(k, v), Trie(k, v) -> bool = { Trie(a), Trie(b) ->
+  a == b
+}
+
 -- StringTrie ------------------------------------------------------------------------------------
 
 --| A trie whose keys are strings, each read as its characters, as [`string.chars`] gives them. Its
   functions take and give strings, and give its keys sorted.
-export type StringTrie(v) = protected Trie(string, v)
+export type StringTrie(v) = protected Trie(char, v)
 
 --| The string trie with no keys.
 export def StringTrie.empty: StringTrie(v) = StringTrie(Trie.empty)
 
 --| The pairs in `pairs`, each key joined back into a string, sorted by key.
-def sortedStrings: list((list(string), v)) -> list((string, v)) = { pairs ->
-  list.sortBy(list.map(pairs, { pair -> (string.concat(pair.0), pair.1) }), { pair -> pair.0 })
+def sortedStrings: list((list(char), v)) -> list((string, v)) = { pairs ->
+  list.sortBy(list.map(pairs, { pair -> (string.fromChars(pair.0), pair.1) }), { pair -> pair.0 })
 }
 
 --| `trie` with `key` mapped to `value`, in place of any value it had.
@@ -351,7 +357,7 @@ export def StringTrie.longestPrefixOf
   : StringTrie(v), string -> #some(string, v) | #none
   = { StringTrie(trie), key ->
     match Trie.longestPrefixOf(trie, string.chars(key))
-      | #some(prefix, value) -> #some(string.concat(prefix), value)
+      | #some(prefix, value) -> #some(string.fromChars(prefix), value)
       | #none -> #none
   }
 
@@ -362,3 +368,11 @@ export def StringTrie.toString: [ToString(v)] StringTrie(v) -> string = { trie -
     | [] -> "StringTrie[=>]"
     | pairs -> "StringTrie{__listToString(pairs, { pair -> "{pair.0} => {pair.1}" })}"
 }
+
+--| Whether `a` and `b` hold the same keys with the same values, whatever order the keys were added
+  in.
+export def StringTrie.`==`
+  : [Eq(v)] StringTrie(v), StringTrie(v) -> bool
+  = { StringTrie(a), StringTrie(b) ->
+    a == b
+  }

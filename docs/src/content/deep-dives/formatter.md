@@ -18,7 +18,7 @@ how it decides where lines break, and how it guarantees it never changes what a 
 | Printing | `compiler/Nanyx.Formatter`: a syntax tree in, Nanyx source out |
 | CLI | `nanyx format` (`FormatCommand`) |
 | Editor | `FormattingHandler` and `RangeFormatting` in the language server |
-| Info view | `SignatureLayout.layOut`: a signature written for a reader (`name: type`), laid out as a def's at the view's width |
+| Info view | `SignatureLayout.layOut`: a signature written for a reader (`name: type`), laid out as a def's at the view's width; only one that doesn't fit on a line as it is ([#2406](https://github.com/nanyx-lang/nanyx/issues/2406)) |
 
 The formatter only moves whitespace and comments, adds or removes brackets and blank lines, and sorts imports. Style
 diagnostics (naming, unused code, preferring one construct to another) belong to the
@@ -57,6 +57,12 @@ construct are written once, as documents, and the printer decides where to break
   workflow keyword applied to a value, `try x`, `yield x` or `return x`, that is an item in brackets (an argument, a
   field, an element or an entry) is not, since the parser ends it at the item's `,` or line break
   (`Position.endsWithItsItem`, [#2411](https://github.com/nanyx-lang/nanyx/issues/2411)).
+- A tuple is bracketed but for a def's value, after the `=` of a `def`, a destructuring def or a `mut`, where the
+  parser reads it the same without: `def point = 3, 4`, `def x, y = 1, 2` (`Formatter.defValueDoc`). It is bracketed
+  there too when it is broken over lines, or when an item is an `if`, a `match` or a block, which would take in the
+  items after it. Everywhere else it keeps its brackets, as the parser needs them: a lambda's body, a match arm's
+  result, a block's last expression, `return`, `:=`, an argument and an item of a list
+  ([#2653](https://github.com/nanyx-lang/nanyx/issues/2653)).
 - Literals are stored by value (`IntLit of int`, a decoded `StringLit`), so they are printed from their source text,
   through their spans, and `0xFF`, `1_000` and escapes survive. The text between the holes of an interpolated string
   has no span of its own: `SourceText.WrittenStringText` finds it in the source after the opening quote or the hole before it,

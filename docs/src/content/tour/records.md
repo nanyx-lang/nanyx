@@ -23,8 +23,10 @@ You can also use positional fields:
 
 ```nanyx
 -- Record with positional fields (aka a tuple)
-def point = (10, 20)
+def point = 10, 20
 ```
+
+A tuple is written in brackets, `(10, 20)`, but for a def's value, after the `=`, where it needs none.
 
 A positional field's name is its position: the fields of `(10, 20)` are `` `0` `` and `` `1` ``. So a field written with a number for its name, `` (`0`: int, `1`: int) ``, is a positional field, the same as `(int, int)`, and the formatter writes it that way.
 

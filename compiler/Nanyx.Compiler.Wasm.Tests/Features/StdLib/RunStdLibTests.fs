@@ -139,12 +139,13 @@ let ``Run - text lines and words`` () =
 let ``Run - text chars takes a string apart by code point`` () =
     let source = """import nanyx/text
 
-println(string.join("abc" \chars, "|"))
-println(string.join(string.chars("héllo"), "|"))
+def joined = { s -> string.join(list.map(string.chars(s), char.toString), "|") }
+println(joined("abc"))
+println(joined("héllo"))
 println("{list.length(string.chars("héllo"))} {string.length("héllo")}")
 println("{list.length(string.chars(""))}")
-println(string.join(string.chars("a€b😀c"), "|"))
-println("{string.concat(string.chars("a€b😀c")) == "a€b😀c"}")
+println(joined("a€b😀c"))
+println("{string.fromChars(string.chars("a€b😀c")) == "a€b😀c"}")
 """
     runSource source |> assertRan "a|b|c\nh|é|l|l|o\n5 6\n0\na|€|b|😀|c\ntrue\n"
 
@@ -392,15 +393,6 @@ println(float.fromString("1.7976931348623157e308") == #some(1.7976931348623157e3
 9007199254740993.0000000000000000000000000001 -> #some(9007199254740994.0)
 123456789012345678901234567890 -> #some(1.2345678901234568e29)
 true""")
-
-/// `x` as a Nanyx float literal, with all the digits it takes to be read back as `x`: `1.0e-300`, not .NET's `1E-300`.
-let private floatLiteral (x: float) =
-    let text = x.ToString("R", Globalization.CultureInfo.InvariantCulture).Replace("E+", "e").Replace("E", "e")
-    let mantissa, exponent =
-        match text.IndexOf 'e' with
-        | -1 -> text, ""
-        | at -> text.Substring(0, at), text.Substring at
-    (if mantissa.Contains '.' then mantissa else mantissa + ".0") + exponent
 
 [<Fact>]
 let ``Run - Float.fromString reads back the largest, the smallest and thousands of random floats`` () =

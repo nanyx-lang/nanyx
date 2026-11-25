@@ -34,9 +34,9 @@ characters or grapheme clusters), indices and widths are byte offsets, `uppercas
 only change ASCII letters, and the trimming and `words` functions only treat ASCII whitespace as
 whitespace. Multi-byte characters pass through unchanged, except that `padStart` and `padEnd` cut
 their fill at a byte count, so a multi-byte `fill` can be cut mid-character. `chars`, `reverse` and
-`codePoints` work by character, where a character is one Unicode code point: they read each UTF-8
-sequence's lead byte, so they never cut a character in half. `fromCodePoint` turns a code point
-back into a character. `toUtf8` gives a string's bytes as an array, and `fromUtf8` turns bytes
+`codePoints` work by character, where a character is one Unicode scalar value, a `char`: they read
+each UTF-8 sequence's lead byte, so they never cut a character in half. `fromChars` and
+`fromCodePoint` turn characters back into a string. `toUtf8` gives a string's bytes as an array, and `fromUtf8` turns bytes
 back into a string, checking that they are well-formed UTF-8.
 
 Every function here is stack-safe: each one that walks a string calls itself only in tail
@@ -256,6 +256,19 @@ def string.concat: list(string) -> string
 
 The `pieces` concatenated end to end.
 
+## `string.build`
+
+```nanyx fragment
+def string.build: [c] ([c, Emit(string)] () -> ()) -> string
+```
+
+The string of the pieces `block` emits, through `Emit`, in the order it emits them:
+`string.build { for rows | row -> emit(row.name); emit(",") }`. `block` runs once, now, under a
+handler that copies each piece into one buffer, of 64 bytes at first, and into one twice its size
+when it is full, and then into a string of the length written. So it takes time in proportion to
+the length of the result, and allocates a number of blocks that grows with the log of that length,
+where joining the pieces one at a time with `++` copies the string so far for each of them.
+
 ## `string.replace`
 
 ```nanyx fragment
@@ -285,12 +298,19 @@ The runs of non-whitespace in `s`, in order. Stack-safe: it works however many w
 ## `string.chars`
 
 ```nanyx fragment
-def string.chars: string -> list(string)
+def string.chars: string -> list(char)
 ```
 
-Each character of `s` as a string of its own, in order. A character is one Unicode code point, so
-"héllo" has five characters though it is six bytes long. Stack-safe: it works on a string of any
-length.
+Each character of `s`, in order. A character is one Unicode scalar value, a `char`, so "héllo"
+has five though it is six bytes long. Stack-safe: it works on a string of any length.
+
+## `string.fromChars`
+
+```nanyx fragment
+def string.fromChars: list(char) -> string
+```
+
+The string of `chars`, in order: `string.fromChars(["h", "é"])` is `"hé"`.
 
 ## `string.reverse`
 
@@ -308,8 +328,9 @@ def string.codePoints: string -> list(int)
 ```
 
 The Unicode code point of each character of `s`, in order: `"aé€" \codePoints` is
-`[97, 233, 8364]`. It has one number for each of [`string.chars`](#stringchars). Stack-safe: it works on a string
-of any length.
+`[97, 233, 8364]`. It has one number for each of [`string.chars`](#stringchars), which gives the chars
+themselves, each of whose code point [`char.toInt`](prelude-chars#chartoint) gives: prefer those. Stack-safe: it works on a
+string of any length.
 
 ## `string.fromCodePoint`
 
@@ -319,7 +340,8 @@ def string.fromCodePoint: int -> #some(string) | #invalidCodePoint
 
 The character whose Unicode code point is `codePoint`, as a string: `string.fromCodePoint(233)` is
 `#some("é")`. A negative number, a surrogate (55296 to 57343, `0xD800` to `0xDFFF`) or a number past
-the last code point (1114111, `0x10FFFF`) gives `#invalidCodePoint`.
+the last code point (1114111, `0x10FFFF`) gives `#invalidCodePoint`. [`char.fromInt`](prelude-chars#charfromint) gives the
+char itself, which [`char.toString`](prelude-chars#chartostring) makes a string: prefer those.
 
 ## `string.toUtf8`
 

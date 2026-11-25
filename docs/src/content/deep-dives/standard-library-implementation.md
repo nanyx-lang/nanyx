@@ -102,7 +102,8 @@ and its explicit imports take precedence over the prelude's, so a module can def
 
 The prelude is split by topic across `prelude.nyx` and the files beside it that start `@partial module prelude`:
 `prelude-contexts.nyx` (equality, ordering, hashing, joining and text), `prelude-numbers.nyx` (`int` and `float`,
-`Add`, `Sub`, `Num`, powers and bitwise functions on ints), `prelude-sized-numbers.nyx`, `prelude-conversions.nyx`, `prelude-results.nyx` (results,
+`Add`, `Sub`, `Num`, powers and bitwise functions on ints), `prelude-sized-numbers.nyx`, `prelude-chars.nyx` (`char`'s
+code point and text), `prelude-conversions.nyx`, `prelude-results.nyx` (results,
 options and `proc`), `prelude-lists.nyx`, `prelude-sequences.nyx` (lazy sequences and ranges), `prelude-maps.nyx`
 (maps and sets) and `prelude-arrays.nyx` (reading an array, and what collection literals are built with). `prelude.nyx` keeps the module's doc
 comment and what fits no topic: `crash`, `ignore`, booleans and memory blocks.
@@ -196,6 +197,13 @@ in a loop over the bytes, where a search written in Nanyx called a helper to add
 index and one to read a byte at every place it tried. Give it a name and type in `Intrinsics`, and
 a WebAssembly body of the same name in `runtimeHelpers`, and list it, with the helpers it calls, in
 `helperDependencies` (the order of that list is the order helpers are emitted in, so add new ones at the end).
+
+An intrinsic can also stand for data. `float.fromString` reads a decimal of up to 19 significant digits with the
+Eisel–Lemire algorithm, written in Nanyx in `prelude-numbers.nyx`, which needs the top 128 bits of every power of five
+from 5^-342 to 5^308. `__nanyx_power_of_five` gives one 64-bit word of that table. The compiler works the table out
+with big integers (`Nanyx.Compiler.Wasm/PowersOfFive.fs`) and places it, 10,416 bytes, in the data of only the modules
+that call the intrinsic (`UsesPowersOfFive` in `CoreIrFacts`), after their other static data, with its address in a
+global. A program that never reads a float doesn't carry it.
 
 Format what you write before committing it: CI fails if any file under `stdlib/` is not formatted (see
 [AGENTS.md](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md#nanyx-code)).
