@@ -973,7 +973,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | IrFunction(input, _, members, _) ->
                 members, (IrType.tupleElements input |> Option.map (List.map snd) |> Option.defaultValue [ input ])
             | _ -> [], []
-        let call atoms =
+        let callThen (k: Expr -> Expr) atoms =
             CoreIrLowerMembers.coerceAll this.MemberTools scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
                 match knownOf closure, closure.Type with
                 | Some (KnownFunction(wrapper, wrapped, at)), IrFunction(input, _, _, _) ->
@@ -995,6 +995,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                             bindTemp (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) output) (fun result ->
                                 CoreIrLowerMembers.coerce this.MemberTools scope result ty (fun atom -> k (Expr.make (Atom atom) ty)))
                         | _ -> k (Expr.make (CallClosure(closure, atoms @ memberAtoms, Borrowing)) ty)))
+        let call = callThen k
         let elements =
             match closure.Type with
             | IrFunction(input, _, _, _) -> IrType.tupleElements input
@@ -1004,13 +1005,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | _, (_ :: _ :: _ as several) when takesOneValue ->
             atomsOf scope several (fun atoms -> CoreIrLowerArguments.asTuple bindElement atoms (fun tuple -> call [ tuple ]))
         | _, flatArgs when (match closure.Type with IrFunction(IrUnit, _, _, _) -> true | _ -> false) ->
-            // What the argument does is done first; its value, the unit, isn't passed.
-            let rec run (remaining: Expression list) =
-                match remaining with
-                | [] -> call []
-                | { Kind = UnitExpr } :: rest -> run rest
-                | arg :: rest -> this.Complex scope arg (fun value -> let after = run rest in Expr.make (Do(value, after)) after.Type)
-            run flatArgs
+            // What the argument does is done first, as part of the call, which may be an operand computed where it is
+            // used, after others that wait (#2662); its value, the unit, isn't passed.
+            let effects =
+                flatArgs
+                |> List.map (this.Tail scope)
+                |> List.filter (fun effect -> match effect.Kind with Atom _ -> false | _ -> true)
+            callThen (fun call -> k (List.foldBack (fun effect rest -> Expr.make (Do(effect, rest)) rest.Type) effects call)) []
         | Some elements, [ tuple ] ->
             // Each element is read from the tuple, so one that is not a name is held in a local first.
             this.AtomsInLocals scope [ tuple ] (fun atoms ->
