@@ -49,3 +49,17 @@ println(count(build(1000000, [])))
     let outcome = runSourceWith false "" source
     Assert.Equal(message "count", outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
+
+[<Fact>]
+let ``A program run from a thread with a small stack still runs out of its own stack, not the thread's`` () =
+    // A 1 MB thread, as Windows' main thread is. The program runs on a thread of its own with room past its stack
+    // limit (see `ProgramStack`), so it traps there whatever the caller's stack. Without it, Windows stopped the whole
+    // process when the program reached the end of the caller's stack (#2708).
+    let source =
+        normalized """def deep = { n -> if n == 0 then 0 else 1 + deep(n - 1) }
+
+println("{deep(100000)}")
+"""
+    let outcome = Nanyx.LargeStack.runWithStack (1024 * 1024) (fun () -> runSource source)
+    Assert.Equal(message "deep", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(1, outcome.ExitCode)

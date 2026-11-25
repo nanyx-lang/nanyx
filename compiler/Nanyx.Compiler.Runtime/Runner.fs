@@ -238,7 +238,9 @@ module WasmRunner =
         (listener: IProbeListener option)
         (profiled: (Result<byte array, string> -> unit) option)
         : Result<'a, RunError> * 'b option =
-        use engine = if profiled.IsSome then new Engine(GuestProfiler.Configure(new Config())) else new Engine()
+        // On a thread of its own, so that the guest's stack limit comes before the end of the thread's (see `ProgramStack`).
+        ProgramStack.run <| fun () ->
+        use engine = ProgramStack.engine (if profiled.IsSome then GuestProfiler.Configure else id)
         match compile engine program with
         | Error err -> Error err, None
         | Ok module' ->
