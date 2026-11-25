@@ -7,233 +7,284 @@ open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrEmitLocals
 
 /// The parts of a map's or a set's store a `for` loop's walk reads (see `StoreWalk` and `Maps.storeOf`), from its IR
-/// type: a bucket's payload, `(h, entries)`, and a node's, `(bits, children)`.
+/// type: a node's payload, `(leafBits, leaves, nodeBits, nodes)`.
 module private StoreLayout =
-    /// The payload of the tag `tag` of the walk's store.
-    let payload (walk: StoreWalk) (tag: string) : IrType =
+    /// The payload of the walk's store's `#node`.
+    let payload (walk: StoreWalk) : IrType =
         match IrType.unfold walk.StoreType with
         | IrTags tags ->
-            tags |> List.tryFind (fst >> (=) tag) |> Option.bind snd |> Option.defaultWith (fun () -> internalError $"a store without a #{tag}")
+            tags |> List.tryFind (fst >> (=) "node") |> Option.bind snd |> Option.defaultWith (fun () -> internalError "a store without a #node")
         | other -> internalError $"a store of type '{IrType.show other}'"
 
-    let private second (walk: StoreWalk) (tag: string) =
-        match payload walk tag with
-        | IrRecord fields when fields.Length = 2 -> fields
-        | other -> internalError $"a store's #{tag} of '{IrType.show other}'"
+    /// The fields of a node's payload.
+    let fields (walk: StoreWalk) =
+        match payload walk with
+        | IrRecord fields when fields.Length = 4 -> fields
+        | other -> internalError $"a store's #node of '{IrType.show other}'"
 
-    /// Where the second part of the payload of `tag`, a bucket's entries or a node's children, is.
-    let secondOffset (walk: StoreWalk) (tag: string) = CoreIrLayout.fieldOffset (second walk tag) 1
-
-    /// The type of a bucket's entries.
-    let entries (walk: StoreWalk) = snd (second walk "bucket").[1]
+    /// The type of a bucket, a list of entries.
+    let bucket (walk: StoreWalk) =
+        match snd (fields walk).[1] with
+        | IrArray bucket -> bucket
+        | other -> internalError $"a node's buckets of '{IrType.show other}'"
 
     /// The type of an entry, a key and its value.
     let entry (walk: StoreWalk) =
-        match entries walk with
+        match bucket walk with
         | IrList entry -> entry
-        | other -> internalError $"a bucket's entries of '{IrType.show other}'"
-
-    /// The type of a node's children.
-    let childrenType (walk: StoreWalk) = snd (second walk "node").[1]
-
-/// The code that starts the walk from the store on the stack: the root is the store to go into first.
-let start (stream: ForStream) (walk: StoreWalk) : string list =
-    [ $"local.tee ${localName walk.Root}"
-      $"local.set ${localName walk.Pending}"
-      "i32.const 0"
-      $"local.set ${localName stream.Cursor}"
-      "i32.const 0"
-      $"local.set ${localName walk.Depth}"
-      "i64.const 0"
-      $"local.set ${localName walk.Path}" ]
+        | other -> internalError $"a bucket of '{IrType.show other}'"
 
 /// The code that moves the cursor on to the next entry of the bucket it is in.
 let advance (touching: string -> string) (stream: ForStream) (walk: StoreWalk) : string list =
     let cursor = localName stream.Cursor
     [ $"local.get ${cursor}"; touching $"i32.load offset={CoreIrLayout.tailOffset (StoreLayout.entry walk)}"; $"local.set ${cursor}" ]
 
-/// The code at the top of each time round a `for` loop's walk of a map's or a set's store (see `StoreWalk`): it looks
-/// for a bucket with an entry left in it, going into the store's nodes and back up out of them, and ends the loop
-/// (`done'`) once it is back out of the root; then it takes the entry, or a set's element, borrowed.
-let next (touching: string -> string) (bucketCode: int) (depth: int) (done': string) (stream: ForStream) (walk: StoreWalk) : string list =
+let private indent (by: int) (lines: string list) = lines |> List.map (fun line -> String.replicate by " " + line)
+
+/// The pieces of code the walk is made of, over its locals.
+type private Walk(touching: string -> string, stream: ForStream, walk: StoreWalk) =
     let local (var: Var) = localName var
-    let cursor, pending, children, index, level, path, root =
-        local stream.Cursor, local walk.Pending, local walk.Children, local walk.Index, local walk.Depth, local walk.Path, local walk.Root
-    let seek, found, up = $"$__store_seek_{depth}", $"$__store_found_{depth}", $"$__store_up_{depth}"
     let load (ty: IrType) (offset: int) = touching (CoreIrLayout.load ty offset)
-    let loadWord = touching "i32.load"
-    let bucketPayload = load (StoreLayout.payload walk "bucket") CoreIrLayout.payloadOffset
-    let bucketEntries = load (StoreLayout.entries walk) (StoreLayout.secondOffset walk "bucket")
-    // The array of the children of the node at the top of the stack.
-    let childrenOf = [ load (StoreLayout.payload walk "node") CoreIrLayout.payloadOffset; load (StoreLayout.childrenType walk) (StoreLayout.secondOffset walk "node") ]
-    // The child of the array on the stack at the index on the stack.
-    let childAt = [ "i32.const 4"; "i32.mul"; "i32.add"; touching $"i32.load offset={CoreIrLayout.arrayElementOffset walk.StoreType 0}" ]
-    // The bits of `path` for the level on the stack, from its low end.
+    let fields = StoreLayout.fields walk
+
+    member _.Cursor = local stream.Cursor
+    member _.Pending = local walk.Pending
+    member _.Node = local walk.Node
+    member _.LeafBits = local walk.LeafBits
+    member _.Leaves = local walk.Leaves
+    member _.Remaining = local walk.Remaining
+    member _.LeafIndex = local walk.LeafIndex
+    member _.LeafEnd = local walk.LeafEnd
+    member _.Level = local walk.Depth
+    member _.Path = local walk.Path
+    member _.Root = local walk.Root
+    member _.Load ty offset = load ty offset
+
+    /// The field at `slot` of the node payload on the stack.
+    member _.Field(slot: int) = load (snd fields.[slot]) (CoreIrLayout.fieldOffset fields slot)
+
+    /// A node's bits at `slot`, which fit 32, as an `i32`.
+    member this.Bits(slot: int) = [ this.Field slot; "i32.wrap_i64" ]
+
+    /// The payload of the node whose cell is on the stack.
+    member _.PayloadOf = load (StoreLayout.payload walk) CoreIrLayout.payloadOffset
+
+    /// The element of the array on the stack at the index on the stack: a bucket's list, or a node's cell.
+    member _.ElementAt =
+        [ "i32.const 4"; "i32.mul"; "i32.add"; touching $"i32.load offset={CoreIrLayout.arrayElementOffset (StoreLayout.bucket walk) 0}" ]
+
+    /// `LeafEnd` set: how many buckets come before the next node it goes into, or all of them.
+    member this.LeafEndSet =
+        [ $"local.get ${this.LeafBits}"
+          "i32.const 0"
+          $"local.get ${this.Remaining}"
+          "i32.sub"
+          $"local.get ${this.Remaining}"
+          "i32.and"
+          "i32.const 1"
+          "i32.sub"
+          "i32.and"
+          "i32.popcnt"
+          $"local.set ${this.LeafEnd}" ]
+
+    /// Goes into the node whose cell is on the stack, a level down, from its first bucket or node.
+    member this.Enter =
+        [ this.PayloadOf
+          $"local.tee ${this.Node}"
+          yield! this.Bits 0
+          $"local.set ${this.LeafBits}"
+          $"local.get ${this.Node}"
+          this.Field 1
+          $"local.set ${this.Leaves}"
+          $"local.get ${this.Node}"
+          yield! this.Bits 2
+          $"local.set ${this.Remaining}"
+          "i32.const 0"
+          $"local.set ${this.LeafIndex}"
+          yield! this.LeafEndSet
+          $"local.get ${this.Level}"
+          "i32.const 1"
+          "i32.add"
+          $"local.set ${this.Level}" ]
+
+/// The code that starts the walk from the store on the stack: it goes into the root, or, for `#empty`, a code, which is
+/// odd, stands at a level with nothing left, so that the walk ends at once.
+let start (touching: string -> string) (stream: ForStream) (walk: StoreWalk) : string list =
+    let w = Walk(touching, stream, walk)
+    [ $"local.tee ${w.Root}"
+      "i32.const 1"
+      "i32.and"
+      "if"
+      "  i32.const 0"
+      $"  local.set ${w.Remaining}"
+      "  i32.const 0"
+      $"  local.set ${w.LeafIndex}"
+      "  i32.const 0"
+      $"  local.set ${w.LeafEnd}"
+      "  i32.const 1"
+      $"  local.set ${w.Level}"
+      "else"
+      "  i32.const 0"
+      $"  local.set ${w.Level}"
+      $"  local.get ${w.Root}"
+      yield! w.Enter |> indent 2
+      "end"
+      "i32.const 0"
+      $"local.set ${w.Cursor}"
+      "i64.const 0"
+      $"local.set ${w.Path}" ]
+
+/// The code at the top of each time round a `for` loop's walk of a map's or a set's store (see `StoreWalk`): it looks
+/// for a bucket with an entry left in it, taking each node's buckets and nodes in the order of their five-bit values:
+/// the buckets before its next node one after another from its array, then that node, gone into. It goes back up out
+/// of a node with nothing left, and ends the loop (`done'`) once it is back out of the root; then it takes the entry, or
+/// a set's element, borrowed.
+let next (touching: string -> string) (depth: int) (done': string) (stream: ForStream) (walk: StoreWalk) : string list =
+    let w = Walk(touching, stream, walk)
+    let seek, found, up = $"$__store_seek_{depth}", $"$__store_found_{depth}", $"$__store_up_{depth}"
+    // How many bits of the bits on the stack are below the bit on the stack: where its element is.
+    let below = [ "i32.const 1"; "i32.sub"; "i32.and"; "i32.popcnt" ]
+    // The five bits of `path` for the level on the stack, from its low end.
     let pathAt = [ "i32.const 5"; "i32.mul"; "i64.extend_i32_u"; "i64.shr_u"; "i64.const 31"; "i64.and"; "i32.wrap_i64" ]
+    // How far up `path` the bits of the level of the node it is in are, as an `i64`.
+    let shiftOfLevel = [ $"local.get ${w.Level}"; "i32.const 1"; "i32.sub"; "i32.const 5"; "i32.mul"; "i64.extend_i32_u" ]
     [ $"block {found}"
       $"  loop {seek}"
       // An entry left in the bucket it is in.
-      $"    local.get ${cursor}"
+      $"    local.get ${w.Cursor}"
       $"    br_if {found}"
-      // A store to go into: the root, or a node's child.
-      $"    local.get ${pending}"
-      "    if"
-      $"      local.get ${pending}"
-      "      i32.const 1"
-      "      i32.and"
-      "      if"
-      "        i32.const 0"
-      $"        local.set ${pending}"
-      $"        br {seek}"
-      "      end"
-      $"      local.get ${pending}"
-      $"      {loadWord}"
-      $"      i32.const {bucketCode}"
-      "      i32.eq"
-      "      if"
-      $"        local.get ${pending}"
-      $"        {bucketPayload}"
-      $"        {bucketEntries}"
-      $"        local.set ${cursor}"
-      "        i32.const 0"
-      $"        local.set ${pending}"
-      $"        br {seek}"
-      "      end"
-      // A node: inside another, the index of the child it is there (the one before `index`) is kept in the path.
-      $"      local.get ${level}"
-      "      if"
-      $"        local.get ${path}"
-      "        i64.const 31"
-      $"        local.get ${level}"
-      "        i32.const 1"
-      "        i32.sub"
-      "        i32.const 5"
-      "        i32.mul"
-      "        i64.extend_i32_u"
-      "        i64.shl"
-      "        i64.const -1"
-      "        i64.xor"
-      "        i64.and"
-      $"        local.get ${index}"
-      "        i32.const 1"
-      "        i32.sub"
-      "        i64.extend_i32_u"
-      $"        local.get ${level}"
-      "        i32.const 1"
-      "        i32.sub"
-      "        i32.const 5"
-      "        i32.mul"
-      "        i64.extend_i32_u"
-      "        i64.shl"
-      "        i64.or"
-      $"        local.set ${path}"
-      "      end"
-      $"      local.get ${pending}"
-      yield! childrenOf |> List.map (fun line -> "      " + line)
-      $"      local.set ${children}"
-      "      i32.const 0"
-      $"      local.set ${index}"
-      $"      local.get ${level}"
-      "      i32.const 1"
-      "      i32.add"
-      $"      local.set ${level}"
-      "      i32.const 0"
-      $"      local.set ${pending}"
-      $"      br {seek}"
-      "    end"
-      // In no node, with nothing to go into: the walk is over.
-      $"    local.get ${level}"
-      "    i32.eqz"
-      $"    {done'}"
-      // The next child of the node it is in.
-      $"    local.get ${index}"
-      $"    local.get ${children}"
-      $"    {loadWord}"
+      // A bucket before the next node, read straight from the node's array, the cell of its first entry held in the
+      // cursor. A bucket is never empty.
+      $"    local.get ${w.LeafIndex}"
+      $"    local.get ${w.LeafEnd}"
       "    i32.lt_u"
       "    if"
-      $"      local.get ${index}"
+      $"      local.get ${w.Leaves}"
+      $"      local.get ${w.LeafIndex}"
+      yield! w.ElementAt |> indent 6
+      $"      local.set ${w.Cursor}"
+      $"      local.get ${w.LeafIndex}"
       "      i32.const 1"
       "      i32.add"
-      $"      local.set ${index}"
-      // A bucket, as most children are, is gone into here, the child held in the cursor, and a node at the top. A
-      // child is never empty.
-      $"      local.get ${children}"
-      $"      local.get ${index}"
-      "      i32.const 1"
-      "      i32.sub"
-      yield! childAt |> List.map (fun line -> "      " + line)
-      $"      local.tee ${cursor}"
-      $"      {loadWord}"
-      $"      i32.const {bucketCode}"
-      "      i32.eq"
-      "      if"
-      $"        local.get ${cursor}"
-      $"        {bucketPayload}"
-      $"        {bucketEntries}"
-      $"        local.set ${cursor}"
-      $"        br {found}"
-      "      end"
-      $"      local.get ${cursor}"
-      $"      local.set ${pending}"
+      $"      local.set ${w.LeafIndex}"
+      $"      br {found}"
+      "    end"
+      // The next node, its lowest bit left, gone into, its five-bit value kept in the path.
+      $"    local.get ${w.Remaining}"
+      "    if"
       "      i32.const 0"
-      $"      local.set ${cursor}"
+      $"      local.get ${w.Remaining}"
+      "      i32.sub"
+      $"      local.get ${w.Remaining}"
+      "      i32.and"
+      $"      local.tee ${w.Pending}"
+      $"      local.get ${w.Remaining}"
+      "      i32.xor"
+      $"      local.set ${w.Remaining}"
+      $"      local.get ${w.Path}"
+      "      i64.const 31"
+      yield! shiftOfLevel |> indent 6
+      "      i64.shl"
+      "      i64.const -1"
+      "      i64.xor"
+      "      i64.and"
+      $"      local.get ${w.Pending}"
+      "      i32.ctz"
+      "      i64.extend_i32_u"
+      yield! shiftOfLevel |> indent 6
+      "      i64.shl"
+      "      i64.or"
+      $"      local.set ${w.Path}"
+      $"      local.get ${w.Node}"
+      $"      {w.Field 3}"
+      $"      local.get ${w.Node}"
+      yield! w.Bits 2 |> indent 6
+      $"      local.get ${w.Pending}"
+      yield! below |> indent 6
+      yield! w.ElementAt |> indent 6
+      yield! w.Enter |> indent 6
       $"      br {seek}"
       "    end"
       // Out of the node it is in, back up to the one above: down again from the root along the path, `pending`
-      // counting the levels, and on from the child after the one it took there.
-      $"    local.get ${level}"
+      // counting the levels, and on from the bucket or node after the one it took there.
+      $"    local.get ${w.Level}"
       "    i32.const 1"
       "    i32.sub"
-      $"    local.tee ${level}"
+      $"    local.tee ${w.Level}"
       "    i32.eqz"
       $"    {done'}"
-      $"    local.get ${root}"
-      yield! childrenOf |> List.map (fun line -> "    " + line)
-      $"    local.set ${children}"
+      $"    local.get ${w.Root}"
+      $"    {w.PayloadOf}"
+      $"    local.set ${w.Node}"
       "    i32.const 0"
-      $"    local.set ${pending}"
+      $"    local.set ${w.Pending}"
       $"    block {up}_done"
       $"      loop {up}"
-      $"        local.get ${pending}"
-      $"        local.get ${level}"
+      $"        local.get ${w.Pending}"
+      $"        local.get ${w.Level}"
       "        i32.const 1"
       "        i32.sub"
       "        i32.ge_u"
       $"        br_if {up}_done"
-      $"        local.get ${children}"
-      $"        local.get ${path}"
-      $"        local.get ${pending}"
-      yield! pathAt |> List.map (fun line -> "        " + line)
-      yield! childAt |> List.map (fun line -> "        " + line)
-      yield! childrenOf |> List.map (fun line -> "        " + line)
-      $"        local.set ${children}"
-      $"        local.get ${pending}"
+      $"        local.get ${w.Node}"
+      $"        {w.Field 3}"
+      $"        local.get ${w.Node}"
+      yield! w.Bits 2 |> indent 8
+      "        i32.const 1"
+      $"        local.get ${w.Path}"
+      $"        local.get ${w.Pending}"
+      yield! pathAt |> indent 8
+      "        i32.shl"
+      yield! below |> indent 8
+      yield! w.ElementAt |> indent 8
+      $"        {w.PayloadOf}"
+      $"        local.set ${w.Node}"
+      $"        local.get ${w.Pending}"
       "        i32.const 1"
       "        i32.add"
-      $"        local.set ${pending}"
+      $"        local.set ${w.Pending}"
       $"        br {up}"
       "      end"
       "    end"
-      "    i32.const 0"
-      $"    local.set ${pending}"
-      $"    local.get ${path}"
-      $"    local.get ${level}"
+      // The bits up to the one it took at this level, `2 << value` less one, held in `pending`.
+      "    i32.const 2"
+      $"    local.get ${w.Path}"
+      $"    local.get ${w.Level}"
       "    i32.const 1"
       "    i32.sub"
-      yield! pathAt |> List.map (fun line -> "    " + line)
+      yield! pathAt |> indent 4
+      "    i32.shl"
       "    i32.const 1"
-      "    i32.add"
-      $"    local.set ${index}"
+      "    i32.sub"
+      $"    local.set ${w.Pending}"
+      $"    local.get ${w.Node}"
+      yield! w.Bits 0 |> indent 4
+      $"    local.tee ${w.LeafBits}"
+      $"    local.get ${w.Pending}"
+      "    i32.and"
+      "    i32.popcnt"
+      $"    local.set ${w.LeafIndex}"
+      $"    local.get ${w.Node}"
+      $"    {w.Field 1}"
+      $"    local.set ${w.Leaves}"
+      $"    local.get ${w.Node}"
+      yield! w.Bits 2 |> indent 4
+      $"    local.get ${w.Pending}"
+      "    i32.const -1"
+      "    i32.xor"
+      "    i32.and"
+      $"    local.set ${w.Remaining}"
+      yield! w.LeafEndSet |> indent 4
       $"    br {seek}"
       "  end"
       "end"
       // The entry, or a set's element, the bucket's cell holds.
-      $"local.get ${cursor}"
-      load (StoreLayout.entry walk) 0
+      $"local.get ${w.Cursor}"
+      w.Load (StoreLayout.entry walk) 0
       yield!
           (if walk.Keys then
                match StoreLayout.entry walk with
-               | IrRecord fields -> [ load stream.Element.Type (CoreIrLayout.fieldOffset fields 0) ]
+               | IrRecord fields -> [ w.Load stream.Element.Type (CoreIrLayout.fieldOffset fields 0) ]
                | other -> internalError $"a set's entry of '{IrType.show other}'"
            else [])
       $"local.set ${localName stream.Element}" ]
