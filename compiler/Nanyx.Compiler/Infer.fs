@@ -283,6 +283,10 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | Some (Error errors) -> Error errors
             | None -> Error [ StandardLibraryImports.unknown state.StandardLibraryExports.Value DiagnosticCodes.UnknownIdentifier expr.Span $"'{name}' is not in scope" env.Names.Keys name ]
     | SpreadSyntax.Call parts -> RecordSpread.infer inferExpr env state expr parts
+    // A loop over a map or a set run by a builder's `for`, which takes a list (see `WorkflowMembers.loopOverStore`).
+    | FunctionCall(name, spanOpt, (iterable :: others as args)) when name = WorkflowSyntax.forMember && state.WorkflowMemberPlaces.ContainsKey expr.Id ->
+        WorkflowMembers.loopOverStore inferExpr env state expr iterable others
+        |> Option.defaultWith (fun () -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args)
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->
         let expectedInput, expectedReturn =

@@ -94,7 +94,8 @@ Every tag other than `#some` is a failure, and the block collects them: a `try` 
 too: `#invalid(#empty)` and `#invalid(#tooLong)` make `#invalid(#empty | #tooLong)`. Payloads of
 other types must agree.
 
-A `for` loop over a list whose body uses `try` or `return` is run by `for`, item by item. A
+A `for` loop over a list, a map or a set whose body uses `try` or `return` is run by `for`, item
+by item, a map's or a set's items its entries or elements in the order `toList` gives. A
 `try` that fails in the body ends the whole block with that failure, and a `return` ends it
 with its value, as they do outside the loop: the items after it, and what follows the loop,
 don't run.

@@ -58,9 +58,10 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   the trie's nodes a level at a time, keeping the child it took at each level in five bits of one `int`, and goes back
   up by going down again from the root along it. It reads six words for each entry, where a list's walk reads two, so
   it takes about two and a half times as long ([#2671](https://github.com/nanyx-lang/nanyx/issues/2671)). A map
-  walked in step with a sequence is walked as the list `toList` gives (`CoreIrLowerLoops.forEachPulling`), and a
-  `for` inside a builder can't walk a map at all yet: the builder's `for` takes a list
-  ([#2672](https://github.com/nanyx-lang/nanyx/issues/2672)). A type's
+  walked in step with a sequence is walked as the list `toList` gives (`CoreIrLowerLoops.forEachPulling`). A `for`
+  loop in a builder's block whose body uses a keyword is run by the builder's `for` member, which takes a list, so a
+  map or a set there is copied to the list `toList` gives (`WorkflowMembers.loopOverStore`,
+  [#2672](https://github.com/nanyx-lang/nanyx/issues/2672)), unlike a plain loop's. A type's
   description boxes a map's keys and values in place, and unboxes them again, through the prelude's
   `__mapStoreConverted` (`Maps.convertedStore`), which keeps the store's shape and hashes: nothing hashes or compares
   a boxed key, and a lookup by one is refused when the program compiles, as `==` on a box is.
