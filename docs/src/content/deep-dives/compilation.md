@@ -60,7 +60,10 @@ constraints from where one failed are set aside and the rest solved again, until
 for each list it solved lately, and solves the constraints in front of one with those, rather than the whole list again
 (`Solving.agreeing`). A failure in the module would otherwise have each type looked up after it solve the whole module
 again, twice, and a package with an error in it take minutes to check
-([#2449](https://github.com/nanyx-lang/nanyx/issues/2449)).
+([#2449](https://github.com/nanyx-lang/nanyx/issues/2449)). What agreed is a copy of the list, with no checkpoint in it,
+so a checkpoint reached first counts ahead of it: a constraint set aside while a def was being checked, as one is in the
+prelude's `proc`, no longer is once the def agrees, and the defs after it are solved on top of their checkpoints rather
+than from the start ([#2709](https://github.com/nanyx-lang/nanyx/issues/2709)).
 
 Solved on top of an earlier solution, a variable can stand for another that stands for another in turn: an else-if
 joins each branch to the next, so each branch's variable stands for the one before it. `Unifier.unifyFrom` follows such
