@@ -48,7 +48,7 @@ type ShadowStack() =
         | Return -> ()
 
 module Probing =
-    /// The module a debug build's probes import (see `Transpiler.Wasm.CoreIrEmit.probeModule`).
+    /// The module a debug build's probes import (see `Transpiler.Wasm.CoreIrEmitImports.probeModule`).
     let moduleName = "nanyx:debug"
 
     /// The string at `address` in the program's memory: its UTF-8 bytes, with their count in the word before them.

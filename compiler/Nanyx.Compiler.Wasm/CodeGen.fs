@@ -1000,7 +1000,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         | Some func ->
             // A module with probes asks the runtime whether it is probing before anything else runs.
             let before =
-                if facts.UsesProbes then [ $"call ${CoreIrEmit.probingEnabled}"; $"global.set ${CoreIrEmit.probing}" ] else []
+                if facts.UsesProbes then [ $"call ${CoreIrEmitImports.probingEnabled}"; $"global.set ${CoreIrEmitImports.probing}" ] else []
             let emitted = CoreIrEmit.emitStart context func before (CoreIrCachedValues.teardown cachedValues)
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
@@ -1110,10 +1110,10 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // core module defines both of the runtime's WASI functions itself, on `wasi:cli`.
     let moduleUsesIoHelpers = facts.UsesDbgHelpers || moduleUsesStandardStreams || options.Component.IsSome
     // The WASI functions the runtime imports itself. A foreign function of one of them is the same import (see
-    // `CoreIrEmit.importName`), so the module declares it once.
+    // `CoreIrEmitImports.importName`), so the module declares it once.
     let runtimeImports =
-        [ if moduleUsesIoHelpers then CoreIrEmit.wasiFdWrite
-          if usedHelperSet.Contains Helpers.procExit || options.Component.IsSome then CoreIrEmit.wasiProcExit ]
+        [ if moduleUsesIoHelpers then CoreIrEmitImports.wasiFdWrite
+          if usedHelperSet.Contains Helpers.procExit || options.Component.IsSome then CoreIrEmitImports.wasiProcExit ]
     // The foreign functions a component's core module defines itself (see `ComponentAbi.externs`).
     let definedExterns = options.Component |> Option.map ComponentAbi.externs |> Option.defaultValue []
     let isComponentImport (declared: Extern) = componentImports |> List.exists (fst >> (=) declared)
@@ -1124,15 +1124,15 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             match definedExterns |> List.tryFind (fun defined -> defined.Module = declared.Module && defined.Name = declared.Name) with
             | Some defined when defined = declared -> false
             | Some defined ->
-                raise (BackendFailure (Diagnostics.general DiagnosticCodes.ConflictingExterns $"A foreign function imports \"{declared.Name}\" from \"{declared.Module}\" with another type than the compiler defines it with: declare it as `{CoreIrEmit.importDeclaration defined |> fun text -> text.Trim()}`"))
+                raise (BackendFailure (Diagnostics.general DiagnosticCodes.ConflictingExterns $"A foreign function imports \"{declared.Name}\" from \"{declared.Module}\" with another type than the compiler defines it with: declare it as `{CoreIrEmitImports.importDeclaration defined |> fun text -> text.Trim()}`"))
             | None -> true)
         |> List.filter (fun declared ->
             match runtimeImports |> List.tryFind (fun runtime -> runtime.Module = declared.Module && runtime.Name = declared.Name) with
             | Some runtime when runtime = declared -> false
             | Some runtime ->
-                raise (BackendFailure (Diagnostics.general DiagnosticCodes.ConflictingExterns $"A foreign function imports \"{declared.Name}\" from \"{declared.Module}\" with another type than the runtime's: declare it as `{CoreIrEmit.importDeclaration runtime |> fun text -> text.Trim()}`"))
+                raise (BackendFailure (Diagnostics.general DiagnosticCodes.ConflictingExterns $"A foreign function imports \"{declared.Name}\" from \"{declared.Module}\" with another type than the runtime's: declare it as `{CoreIrEmitImports.importDeclaration runtime |> fun text -> text.Trim()}`"))
             | None -> true)
-        |> List.map CoreIrEmit.importDeclaration
+        |> List.map CoreIrEmitImports.importDeclaration
         |> String.concat "\n"
     // Everything that allocates does it through `$alloc`, and `$free` gives the top of the heap back to it.
     let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc || usedHelperSet.Contains Helpers.free
@@ -1145,7 +1145,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               |> List.map (fun name -> helpers |> Map.find name)
           match options.Component with
           | Some entry ->
-              yield ComponentAbi.functions entry CoreIrEmit.importName
+              yield ComponentAbi.functions entry CoreIrEmitImports.importName
               yield exportFunctions
               yield importFunctions
           | None -> ()
@@ -1162,7 +1162,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               | Some entry ->
                   ComponentAbi.imports entry
                   if not componentImports.IsEmpty then ComponentImports.declarations componentImports
-              | None -> yield! runtimeImports |> List.map CoreIrEmit.importDeclaration
+              | None -> yield! runtimeImports |> List.map CoreIrEmitImports.importDeclaration
 
               memoryDirective
               """  (export "memory" (memory 0))"""
@@ -1225,13 +1225,13 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // which a module the runtime runs gives what it prints to (see `EmitContext.DbgToRuntime`).
     let probeImports =
         [ if facts.UsesProbes then
-              $"""  (import "{CoreIrEmit.probeModule}" "enabled" (func ${CoreIrEmit.probingEnabled} (result i32)))"""
-              $"""  (import "{CoreIrEmit.probeModule}" "probe" (func ${CoreIrEmit.probeCall} (param i32) (result i32)))"""
-              $"""  (import "{CoreIrEmit.probeModule}" "local" (func ${CoreIrEmit.probeLocal} (param i32 i32)))"""
+              $"""  (import "{CoreIrEmitImports.probeModule}" "enabled" (func ${CoreIrEmitImports.probingEnabled} (result i32)))"""
+              $"""  (import "{CoreIrEmitImports.probeModule}" "probe" (func ${CoreIrEmitImports.probeCall} (param i32) (result i32)))"""
+              $"""  (import "{CoreIrEmitImports.probeModule}" "local" (func ${CoreIrEmitImports.probeLocal} (param i32 i32)))"""
           if facts.UsesDbgHelpers && (options.Probes || options.DbgToEmbedder) then
-              $"""  (import "{CoreIrEmit.probeModule}" "dbg" (func ${CoreIrEmit.dbgImport} (param i32 i32 i32 i32) (result i32)))""" ]
+              $"""  (import "{CoreIrEmitImports.probeModule}" "dbg" (func ${CoreIrEmitImports.dbgImport} (param i32 i32 i32 i32) (result i32)))""" ]
         |> String.concat "\n"
-    let probeGlobal = if facts.UsesProbes then $"  (global ${CoreIrEmit.probing} (mut i32) (i32.const 0))" else ""
+    let probeGlobal = if facts.UsesProbes then $"  (global ${CoreIrEmitImports.probing} (mut i32) (i32.const 0))" else ""
 
     let allImports =
         [ if not (String.IsNullOrWhiteSpace foreignImports) then foreignImports
