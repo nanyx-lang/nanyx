@@ -19,7 +19,7 @@ Two things are fixed already and constrain everything below:
 
 # What a crash does
 
-`crash`, `orCrash`, a failed `assert`, a [deferred error](./deferred-errors) and a non-exhaustive match all write a
+`crash`, `orCrash`, a failed `assert`, a [deferred error](../tour/error-handling#deferred-errors) and a non-exhaustive match all write a
 message to stderr and end in WebAssembly's `unreachable`, which **traps**. A trap unwinds the instance's whole stack
 back to the host, and leaves its linear memory exactly as it was: reference counts half updated, an in-place update
 half done, the allocator's lists mid-change. Nothing can safely run in that memory again.
@@ -151,7 +151,7 @@ that needs it doesn't type-check there. That's the capability model doing its jo
 
 ## Streams: async sequences
 
-A [lazy sequence](./lazy-sequences) carries the contexts its steps need, `[k] seq(a)`, so a sequence whose steps wait
+A [lazy sequence](../deep-dives/lazy-sequences) carries the contexts its steps need, `[k] seq(a)`, so a sequence whose steps wait
 is just a `seq` with `Async` among them. That's what Kotlin calls a *flow*: a stream of values that are produced
 one at a time, possibly waiting between them, and only when someone reads them. `file.lines` has this shape,
 with `FileSystem`.

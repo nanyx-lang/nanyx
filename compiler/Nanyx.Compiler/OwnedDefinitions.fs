@@ -1,5 +1,5 @@
 /// A type's owned definitions are in scope wherever its values are, whether or not their module is imported (#1514,
-/// "Extending a type" in the docs' work in progress). A definition is owned when it is attached in the module that
+/// "Extending a type" in the docs' Attached definitions page). A definition is owned when it is attached in the module that
 /// defines its type, or, for a built-in type, in the standard library: `Point.norm` in `Point`'s module, `string.length`
 /// in `nanyx/text`. So a module that gets a `Point` from a function of another module pipes it to `norm` without
 /// importing `Point`'s module, and `"abc" \length` needs no import. Each module that owns definitions of a type the

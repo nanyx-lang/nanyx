@@ -5,8 +5,8 @@ open NyxCompiler.InferState
 
 /// Operators a def's type requires by the member each reads, rather than by a context's name: `` def add: [`+`: a, a ->
 /// a] = { + } ``. The language no longer has this form (#1531): it was only another way of writing the prelude's
-/// context that has the member, which the inference of operator contexts finds anyway (\r?\n/// )
-/// docs' work in progress). Each one is an error whose fix writes that context, at the type the member's type is
+/// context that has the member, which the inference of operator contexts finds anyway (see "Operators find their
+/// context" in the docs' Contexts page). Each one is an error whose fix writes that context, at the type the member's type is
 /// written for: `Add(a)` for `` `+`: a, a -> a ``. Several on one type are the contexts `OperatorContexts.covering`
 /// gives: `` [(`+`: a, a -> a), (`*`: a, a -> a)] `` is `[Num(a)]`.
 ///

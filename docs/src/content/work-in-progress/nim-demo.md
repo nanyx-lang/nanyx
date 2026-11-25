@@ -33,7 +33,7 @@ which the [playground host](../advanced/hosts#the-playground-host) provides.
 
 **In the playground** (a console program): the example as it is, as one of the playground's examples. You edit
 a strategy, press Run and see who wins, the game tree and the scoreboard. The playground's Examples menu holds only
-the tour's examples, so this needs examples from elsewhere in it ([Playground](./playground#plan)).
+the tour's examples, so this needs examples from elsewhere in it ([#2762](https://github.com/nanyx-lang/nanyx/issues/2762)).
 
 **In a page of its own** (a browser app): `nanyx.dev/demos/nim`.
 

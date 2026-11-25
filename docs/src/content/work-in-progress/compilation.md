@@ -32,7 +32,8 @@ Out of scope here, with their own workstreams:
   under the [`error messages`](https://github.com/nanyx-lang/nanyx/labels/error%20messages) label.
 - Spans, symbols and the semantic model, when they are built for linters: [Linters](./linters). The
   refactors land in this codebase, but the design and tracking live there.
-- Editor features: [Language server](./language-server).
+- Editor features: [Language server](../deep-dives/language-server), with the work tracked under the
+  [`lsp`](https://github.com/nanyx-lang/nanyx/labels/lsp) label.
 
 # Where the compiler stands
 

@@ -11,7 +11,7 @@ This page proposes how Nanyx code is tested: a test is a definition marked `@tes
 Other parts of the design already say what testing must do:
 
 - [Hosts](./hosts#the-test-runner-is-a-host) says `nanyx test` runs the program under a test host. That host finds test functions instead of an `@entry`, and provides fake or recording versions of the contexts the code needs.
-- [Deferred errors](./deferred-errors) says every test runs in a debug build. A test that reaches a type error fails with that error, and the others pass or fail on their own.
+- [Deferred errors](../tour/error-handling#deferred-errors) mean every test runs in a debug build. A test that reaches a type error fails with that error, and the others pass or fail on their own.
 - The [principles](../meta/principles) say a developer is never blocked from running their tests because, say, a commented-out line left a variable unused.
 
 This page fills in the rest: how a test is written, how it fails, and how the runner reports it.
@@ -156,7 +156,7 @@ A test that runs for longer than a time limit fails, with a message that says so
 
 ## Deferred errors
 
-`nanyx test` is a debug build, as `nanyx run` is. A type or name error is reported, and the test that reaches it fails with that error's message, as `` `parses a point` `` does above. The others run as usual, so a change can be tested while other code is still broken. `nanyx test --release` refuses to run if there is any error.
+`nanyx test` is a debug build, as `nanyx run` is. A type or name error is reported, and the test that reaches it fails with that error's message, as `` `parses a point` `` does above. The others run as usual, so a change can be tested while other code is still broken: this is what makes deferral useful for red-green iteration. `nanyx test --release` refuses to run if there is any error.
 
 The tests run in a core module, as `nanyx run`'s program does, so a test that reaches a call of an `@import` fails with
 `NYX0278` ([Components](../deep-dives/components#a-programs-own-imports)). When `nanyx test` is built, that error's message,
@@ -175,6 +175,7 @@ These fit the design but are not part of the first version:
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
+- **A file system in memory.** A ready-made `FileSystem`, which a test loads with `use`, that holds its files in memory, so a test can write files and read them back without faking each member by hand.
 - **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the docs' ([compilation](../deep-dives/compilation#docs-examples)); `nanyx test` could do the same for a package's.
 
 # Prior art

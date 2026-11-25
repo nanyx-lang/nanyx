@@ -711,8 +711,8 @@ module NotSyntax =
     let builtIn = "not"
 
 /// `-x`: a call to the built-in "__negate" with its operand. On a built-in number it is the number's negation; on any
-/// other type it calls that type's `negate`, a member of the prelude's `Add` (\r?\n/// )
-/// in progress).
+/// other type it calls that type's `negate`, a member of the prelude's `Sub` (see "Sub(a)" in the docs' Contexts
+/// page).
 module NegateSyntax =
     let builtIn = "__negate"
 

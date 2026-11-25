@@ -5,8 +5,10 @@ order: 8
 ---
 
 What maps and sets do is described on [maps and sets](../stdlib/prelude-maps) and in
-[Collections](../tour/collections). This page says how the compiler builds them. Their known gaps, what is left and the
-open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work in progress.
+[Collections](../tour/collections). This page says how the compiler builds them. What is still open is in issues: tag
+keys of different names in a chain of inserts ([#2757](https://github.com/nanyx-lang/nanyx/issues/2757)), a linter
+rule for a key written twice in a literal ([#2760](https://github.com/nanyx-lang/nanyx/issues/2760)), and whether a
+map can be passed where its lookup's function type is wanted ([#2763](https://github.com/nanyx-lang/nanyx/issues/2763)).
 
 # How it works
 

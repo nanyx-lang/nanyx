@@ -6,8 +6,9 @@ order: 10
 
 Foreign functions (`@extern`) and host memory (`nanyx/host.memory`) are described for users in
 [Hosts](../advanced/hosts#foreign-functions). This page says how the compiler builds them, and why they are gated by
-`HostRuntime`. What is planned and the open questions are on [Foreign functions](../work-in-progress/foreign-functions)
-in Work in progress. They are what [hosts](./hosts) are built on.
+`HostRuntime`. They are what [hosts](./hosts) are built on. The browser host's imports, and how a host package carries
+the JavaScript that implements them, are on [Hosts](../work-in-progress/hosts) in Work in progress; whether a pure
+extern may be called without `HostRuntime` is [#2743](https://github.com/nanyx-lang/nanyx/issues/2743).
 
 # What's built
 

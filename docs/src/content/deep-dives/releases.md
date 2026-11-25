@@ -5,8 +5,11 @@ order: 21
 ---
 
 How to install the compiler is on [Installation](../getting-started/installation). This page says how a release is
-made and how it reaches users. The package managers still to come and the open questions are on
-[Distribution](../work-in-progress/distribution) in Work in progress.
+made and how it reaches users. The package managers still to come are issues: a Homebrew tap
+([#2733](https://github.com/nanyx-lang/nanyx/issues/2733)), an apt repository
+([#2734](https://github.com/nanyx-lang/nanyx/issues/2734)) and an install script
+([#2737](https://github.com/nanyx-lang/nanyx/issues/2737)), and so is signing the binaries
+([#2740](https://github.com/nanyx-lang/nanyx/issues/2740)).
 
 # The binaries
 

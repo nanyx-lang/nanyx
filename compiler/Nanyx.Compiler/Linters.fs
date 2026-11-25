@@ -445,8 +445,7 @@ module UnusedPrivateDefinitions =
         |> List.ofSeq
 
 /// The official linter's `noTagInCommon` rule: `==` or `!=` on two values of closed tag types that share no tag, such
-/// as `#red == #some(1)`. The operands are joined, not made equal (\r?\n/// )
-/// work in progress), so this type-checks, and is always false (or always true).
+/// as `#red == #some(1)`. The operands are joined, not made equal (see "Eq(a)" in the docs' Contexts page), so this type-checks, and is always false (or always true).
 module NoTagInCommon =
     let rule =
         { Id = "noTagInCommon"
