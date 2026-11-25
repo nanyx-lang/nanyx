@@ -306,7 +306,7 @@ So the builder decides how the iterations combine. `proc`'s `for` goes through t
 
 For now the loop must be a statement of its own in the block, and walk one list, map or set.
 
-A loop over a long list is stack-safe when every step is a [tail call](../tour/functions#tail-recursion): the body's call of the rest of the loop is its last, so the builder's `for` and the members the body uses have to call what they are given last too. `proc`'s do, so a `proc` loop runs in constant stack however many items it walks. A member that does something after its continuation returns, as `defer` does, makes each step keep a stack frame.
+For now a builder's `for` loop keeps a stack frame for each item it walks, so a loop over a long list, of some thousands of items, runs out of stack. That holds for `proc`'s too, though `proc`'s `for` and the body's call of the rest of the loop are written as [tail calls](../tour/functions#tail-recursion): the body and the rest of the loop are passed to a `for` that is generic in its items and its result, and the compiler converts each call's result back to the loop's own types after it returns, so no step's call is the last thing it does ([#2683](https://github.com/nanyx-lang/nanyx/issues/2683)). A loop whose body uses no keyword runs as a plain loop, in constant stack, so for a long list handle the value with a `match` in the body. A member that does something after its continuation returns, as `defer` does, makes each step keep a frame too, and always will.
 
 ## Where a keyword can't be
 
