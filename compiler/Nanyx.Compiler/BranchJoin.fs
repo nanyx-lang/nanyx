@@ -2,6 +2,7 @@
 module NyxCompiler.BranchJoin
 
 open NyxCompiler
+open Parser.Program
 open NyxCompiler.InferState
 
 /// Branches of one type generic in contexts that carry different contexts, as `[c, d] seq(a)` and `[d] seq(a)` do,
@@ -236,3 +237,19 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                 let anchor = branchTypes.[anchorIndex]
                 let others = branchTypes |> List.removeAt anchorIndex
                 anchor, others |> List.fold (fun st ty -> addConstraint (settled anchor) (settled ty) st) state
+
+/// The error for `expr`, an `if` whose `else` is left out (see `IfSyntax`), so that it gives `()` when its condition is
+/// false, where its then branch `thenExpr` gives a value of `thenTy`, which is known not to be `()`: the mismatch with
+/// `()` would say nothing of the `else` there isn't. None where the then branch is `()`, or still may be.
+let internal leftOutElseError (state: InferState) (expr: Expression) (thenExpr: Expression) (elseExpr: Expression) (thenTy: Ty) : Diagnostic option =
+    let resolved = Unifier.unalias (resolveSoFar state thenTy)
+    match resolved with
+    | _ when not (IfSyntax.isLeftOut thenExpr elseExpr) -> None
+    | TyVar _
+    | TyPrimitive "unit" -> None
+    | _ when Unifier.isBottom resolved || Unifier.holdsError resolved -> None
+    | _ ->
+        let written = Unifier.tyToDisplayString Ascii resolved
+        Some (
+            Diagnostics.at DiagnosticCodes.TypeMismatch expr.Span
+                $"This `if` has no `else`, so it gives '()' when its condition is false: add an `else` of type '{written}'")

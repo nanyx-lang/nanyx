@@ -61,7 +61,7 @@ let private headThen (c: Cursor) (readBranch: unit -> Expression) =
 /// else branch; any other condition is an `IfExpr`, which is checked as a match when its tests bind names (see
 /// `IsSyntax.asMatch`). A left-out `else` is `()` made up at the then branch.
 let private desugarIf (span: SourceSpan) (head: Expression) (thenExpr: Expression) (elseOpt: Expression option) =
-    let elseExpr = elseOpt |> Option.defaultWith (fun () -> Expression.from thenExpr UnitExpr)
+    let elseExpr = elseOpt |> Option.defaultWith (fun () -> IfSyntax.leftOutElse thenExpr)
     match head.Kind with
     | IsSyntax.Test(value, pattern, None) ->
         Expression.at span (Match([ value ], [ [ pattern ], thenExpr; [ Pattern.at elseExpr.Span WildcardPattern ], elseExpr ]))

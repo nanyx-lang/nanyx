@@ -416,12 +416,20 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match inferExpr env nextState elseExpr with
                 | Error err -> Error err
                 | Ok (elseExprTyped, finalState) ->
-                    let resultTy, constrained = joinBranchTypes Set.empty finalState [ thenExprTyped.Type; elseExprTyped.Type ]
                     // The condition and branches are kept as statements so that walks over the typed tree (the
                     // backend's collection of local and pattern-bound types) reach what they bind, such as a
                     // match in the else branch of a multi-branch if.
                     let children = [ condExpr; thenExprTyped; elseExprTyped ] |> List.map TypedExprStatement
-                    Ok (mkTypedExpr expr resultTy None (Some children) None, constrained)
+                    // A number literal can't be `()`, so one in the then branch of an `if` without an `else` is of its
+                    // default type at once, for the error to say.
+                    let finalState = if IfSyntax.isLeftOut thenExpr elseExpr then NumericLiterals.settleWithin [ thenExprTyped.Type ] finalState else finalState
+                    match BranchJoin.leftOutElseError finalState expr thenExpr elseExpr thenExprTyped.Type with
+                    | Some error ->
+                        // It fails to check, as the `if` it would be with an `else`, so nothing is reported again.
+                        Ok (mkTypedExpr expr thenExprTyped.Type None (Some children) None, { finalState with FailedExprs = (expr.Id, [ error ]) :: finalState.FailedExprs })
+                    | None ->
+                        let resultTy, constrained = joinBranchTypes Set.empty finalState [ thenExprTyped.Type; elseExprTyped.Type ]
+                        Ok (mkTypedExpr expr resultTy None (Some children) None, constrained)
     // Desugaring has made each `except` a `match`; one checked before then is checked as that match.
     | Except(value, arms) -> inferExprKind env state { expr with Kind = Except.asMatch expr value arms }
     | Match(scrutinees, arms) -> InferMatch.inferMatch inferExpr inferAll inferLambdaWithExpected env state expr scrutinees arms
