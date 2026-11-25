@@ -30,7 +30,7 @@ extern may be called without `HostRuntime` is [#2743](https://github.com/nanyx-l
   it is; an import that returns nothing leaves unit. An extern named as a value is a closure over a
   wrapper, as a top-level function is: lambda lifting is given the externs' numbers of parameters
   (`LambdaLifting.lift`), and the wrapper's body is the `CallImport` (`CoreIrLowerLifted.wrapperCalling`). The module declares each import a call reaches once
-  (`CoreIrFacts.Imports`, `CoreIrEmit.importDeclaration`), as `$import_<module>_<name>`, before every other import,
+  (`CoreIrFacts.Imports`, `CoreIrEmitImports.importDeclaration`), as `$import_<module>_<name>`, before every other import,
   and exports its memory.
 - **Running it.** `nanyx run` links Wasmtime's WASI, so an extern of a WASI preview 1 function runs, and the runtime's
   own imports (below). Any other import fails when the module is instantiated, with Wasmtime's message naming it.
@@ -90,7 +90,7 @@ extern may be called without `HostRuntime` is [#2743](https://github.com/nanyx-l
   (`ImportedContextTypes`, the module's own, and those in the callee's type, where a foreign function has them),
   anywhere in a module that isn't a host. The runtime imports `fd_write` and `proc_exit` itself only for `dbg`, a
   deferred error and the memory checks, and a foreign function of a WASI function shares the runtime's name for it
-  (`CoreIrEmit.importName`), so the module imports it once. A component's core module defines both functions itself on `wasi:cli` instead of
+  (`CoreIrEmitImports.importName`), so the module imports it once. A component's core module defines both functions itself on `wasi:cli` instead of
   importing them ([Components](./components)).
 
 # Why it's built this way

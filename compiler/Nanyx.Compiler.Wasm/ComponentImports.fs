@@ -93,7 +93,7 @@ let private wrapper (context: ExportContext) (index: int) (declared: NyxCompiler
     let parameters = arguments |> List.map (fun (argument, ir) -> $"(param {argument} {CoreIrLayout.valueType ir})") |> String.concat " "
     let result = if declared.Result.IsSome then $"(result {CoreIrLayout.valueType resultIr})" else ""
     let declarations = generator.Declarations |> String.concat " "
-    [ $"(func ${CoreIrEmit.importName declared} {parameters} {result} {declarations}"
+    [ $"(func ${CoreIrEmitImports.importName declared} {parameters} {result} {declarations}"
       yield! indented body
       ")" ]
     |> String.concat "\n"

@@ -16,6 +16,7 @@ open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.WatPieces
+open Transpiler.Wasm.CoreIrEmitImports
 open Transpiler.Wasm.CoreIrEmitIntrinsics
 open Transpiler.Wasm.CoreIrEmitLocals
 
@@ -133,34 +134,6 @@ type Emitted =
 let private join (separator: string) (parts: string seq) =
     parts |> Seq.filter (fun part -> part <> "") |> String.concat separator
 
-/// WASI's module, which the runtime's own imports come from.
-let private wasi = "wasi_snapshot_preview1"
-
-/// The name of the function the module imports a foreign function as. A WASI function is named as the runtime names
-/// its own imports, so that a foreign function of one the runtime imports is that import.
-let importName (declared: Extern) =
-    if declared.Module = wasi then sanitizeIdentifier declared.Name
-    else sanitizeIdentifier $"import_{declared.Module}_{declared.Name}"
-
-/// WASI's `fd_write` and `proc_exit`, as the runtime imports them: what `dbg`, a deferred error and a failed memory
-/// check write with, and exit with.
-let wasiFdWrite =
-    { Module = wasi; Name = "fd_write"; Parameters = List.replicate 4 ExternValue.I32; Result = Some ExternValue.I32 }
-
-let wasiProcExit = { Module = wasi; Name = "proc_exit"; Parameters = [ ExternValue.I32 ]; Result = None }
-
-/// The import of a foreign function, as the module declares it.
-let importDeclaration (declared: Extern) =
-    let valueType (value: ExternValue) =
-        match value with
-        | ExternValue.I32 -> "i32"
-        | ExternValue.I64 -> "i64"
-        | ExternValue.F32 -> "f32"
-        | ExternValue.F64 -> "f64"
-    let parameters = if declared.Parameters.IsEmpty then "" else $""" (param {declared.Parameters |> List.map valueType |> String.concat " "})"""
-    let result = declared.Result |> Option.map (fun value -> $" (result {valueType value})") |> Option.defaultValue ""
-    $"""  (import "{declared.Module}" "{declared.Name}" (func ${importName declared}{parameters}{result}))"""
-
 /// The temporaries an expression uses directly, which it computes as part of its own code.
 let rec private tempsUsedBy (expr: Expr) : Var list =
     let ofAtoms atoms = atoms |> List.choose (function AVar v when v.Kind = Temp -> Some v | _ -> None)
@@ -197,17 +170,6 @@ let rec private tempsUsedBy (expr: Expr) : Var list =
     | FloatConstant _
     | Crash _
     | Probe _ -> []
-
-/// What a debug build's probes import from the runtime, the module `nanyx:debug` (see `CoreIrProbes`): whether it is
-/// probing, read into a global when the program starts; the probe, which takes a probe's number and gives whether to
-/// write its locals; and the writing of a local, its name and its text.
-let probeModule = "nanyx:debug"
-let probingEnabled = "__nanyx_probing_enabled"
-let probing = "__nanyx_probing"
-let probeCall = "__nanyx_probe"
-let probeLocal = "__nanyx_probe_local"
-/// `dbg`, which a debug build the runtime runs imports from `nanyx:debug` (see `EmitContext.DbgToRuntime`).
-let dbgImport = "__nanyx_dbg"
 
 /// Which variables a probe in a chain may write (see `CoreIrProbes`): those the rest of the chain after it reads but does
 /// not bind itself. One it never reads again may have been given up already, so a probe leaves it out. Where each
