@@ -95,7 +95,8 @@ module TypeValues =
           "bool", TyPrimitive "bool"
           "string", TyPrimitive "string"
           "unit", TyPrimitive "unit"
-          "f32", F32.ty ]
+          "f32", F32.ty
+          Chars.name, Chars.ty ]
         @ (SizedInteger.all |> List.map (fun integer -> (SizedInteger.name integer).ToLowerInvariant(), SizedInteger.ty integer))
 
     /// The tags of a collection's description, each with how many element types it has and the collection of them.
