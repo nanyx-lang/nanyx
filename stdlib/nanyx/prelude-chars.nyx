@@ -22,13 +22,13 @@ export def char.fromInt: int -> #some(char) | #invalidCodePoint = { n ->
 
 --| The UTF-8 continuation byte that holds the six bits of `codePoint` above its lowest `shift`.
 def continuationByte: int, int -> string = { codePoint, shift ->
-  __nanyx_string_from_byte(128 + codePoint / shift % 64)
+  __nanyx_string_from_byte(128 + codePoint // shift % 64)
 }
 
 --| `c` as a string of its own: its UTF-8 encoding, 1 to 4 bytes. `char.toString("é")` is `"é"`.
 export def char.toString: char -> string = { c ->
   def codePoint = char.toInt(c)
-  def lead = { first, shift -> __nanyx_string_from_byte(first + codePoint / shift) }
+  def lead = { first, shift -> __nanyx_string_from_byte(first + codePoint // shift) }
   def next = { shift -> continuationByte(codePoint, shift) }
 
   if codePoint < 128

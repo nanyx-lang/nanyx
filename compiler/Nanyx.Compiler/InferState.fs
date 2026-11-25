@@ -51,12 +51,21 @@ type PendingContextInstance =
 /// was still a variable where the operator is written, at `At`: `x + y` on two parameters. `MemberName` is the
 /// context member the operator reads: itself, or `negate` for prefix `-`. Once the def is inferred, a type that
 /// turned out to be one of the def's own variables is one the def requires the prelude's context with that member of,
-/// and any other is a number, or for `++` is left as it is (see `ArithmeticInference`).
+/// and any other is a number, or for `++` is left as it is (see `ArithmeticInference`). `ResultTy` is the type the
+/// operator gives: its operands', or for `/` their `fraction` (see `Fractions`).
 type PendingArithmetic =
     { InDef: Identifier
       Operator: NodeId
       MemberName: Identifier
       OperandTy: Ty
+      ResultTy: Ty
+      At: SourceSpan }
+
+/// A `/` whose operands' type, `OperandTy`, was still a variable where it is written, at `At`, and so whose result's
+/// type, `ResultTy`, is a variable too: the operands' `fraction` once they are a number (see `Fractions`).
+type PendingFraction =
+    { OperandTy: Ty
+      ResultTy: Ty
       At: SourceSpan }
 
 /// What an arithmetic operator in a def that writes its type needs of a type variable of that def, should its operands
@@ -212,6 +221,8 @@ type InferState =
             PendingReferences: Set<NodeId>;
             /// The arithmetic operators left to be read once the def around them is inferred (see `PendingArithmetic`).
             PendingArithmetic: PendingArithmetic list;
+            /// The `/`s whose result's type waits on their operands' (see `PendingFraction`).
+            PendingFractions: PendingFraction list;
             /// The number literals of the module so far, the latest first, to be checked against their types once those
             /// are known (see `NumericLiterals`).
             NumericLiterals: NumericLiteral list;
@@ -485,6 +496,7 @@ let emptyState =
             PendingContextInstances = [];
             PendingReferences = Set.empty;
             PendingArithmetic = [];
+            PendingFractions = [];
             NumericLiterals = [];
             UnsettledLiterals = [];
             LeftOutTypeArguments = [];

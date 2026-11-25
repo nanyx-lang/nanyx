@@ -15,7 +15,7 @@ open Nanyx.Compiler.Tests.TestSupport
 let ``A sized integer type is a number of its own name`` (name: string) =
     let source =
         $"""
-def f = {{ (a: {name}), (b: {name}) -> -a * b + a / b - a %% b }}
+def f = {{ (a: {name}), (b: {name}) -> -a * b + a // b - a %% b }}
 def less = {{ (a: {name}), (b: {name}) -> a < b }}
 def same = {{ (a: {name}), (b: {name}) -> a == b }}
 """
@@ -50,7 +50,7 @@ def text = I16.toString(I16.zero)
 let ``A definition attached to a sized integer is reached by a pipe`` () =
     let source =
         """
-def I32.halve = { (n: I32) -> n / I32.fromInt(2) }
+def I32.halve = { (n: I32) -> n // I32.fromInt(2) }
 def half = { (n: I32) -> n \halve }
 """
     Assert.Equal("I32 -> I32", typeOf source "half")

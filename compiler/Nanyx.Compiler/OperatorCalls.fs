@@ -132,5 +132,5 @@ module internal OperatorCalls =
         match definition instanceMember attached env state expr operandTy operandTy with
         | Some (callee, scheme, instance) -> Ok (infer state expr callee scheme instance operandTy)
         | None ->
-            ArithmeticOperators.check state expr NegateSyntax.builtIn operandTy operandTy numberTy
+            ArithmeticOperators.check state expr NegateSyntax.builtIn operandTy operandTy operandTy numberTy
             |> Result.map (fun negated -> operandTy, negated)

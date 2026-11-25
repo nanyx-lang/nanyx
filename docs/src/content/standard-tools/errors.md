@@ -1413,7 +1413,7 @@ def opt: [c] ([Opt, c] () -> t) -> t = { block ->
     return = { value -> #some(value) }
   ) in block()
 }
-def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 def show = { n -> opt {
   def h = try half(n)
   h + 1  -- error NYX0206: This `opt` block can end here without `return`, and the context `opt` runs it under has no `zero` to be its value then: ...
@@ -1428,7 +1428,7 @@ A workflow keyword, such as `try` or `return`, is used outside a builder block. 
 builder that runs the block.
 
 ```nanyx
-def halve: int -> #some(int) | #none = { n -> if n % 2 == 0 then #some(n / 2) else #none }
+def halve: int -> #some(int) | #none = { n -> if n % 2 == 0 then #some(n // 2) else #none }
 
 def quarter = { n ->
   def h = try halve(n)  -- error NYX0207: `try` is a workflow keyword, so it can only be used inside a builder block, such as `proc { ... }`
@@ -2695,6 +2695,32 @@ unit min: Time = 60_000mss  -- error NYX0291: There is no unit 'mss' here: did y
 ```
 
 To fix it, correct the unit's name, declare it with `unit`, or import the module that exports it.
+
+# NYX0292: Negative power of a type whose fraction is another
+
+`x ** -n` is written on a value of a type whose `/` gives another type, its `fraction`
+([Num(a)](../advanced/contexts#numa)). A negative power is `1 / x ** n`, which is a `fraction`, while `**` gives a value
+of the type itself, as it does on `float` and `F32`, whose fraction is themselves.
+
+```nanyx
+type Count = protected (n: int)
+
+def Count.zero: Count = Count(n = 0)
+def Count.`+`: Count, Count -> Count = { a, b -> Count(n = a.n + b.n) }
+def Count.`-`: Count, Count -> Count = { a, b -> Count(n = a.n - b.n) }
+def Count.negate: Count -> Count = { a -> Count(n = -a.n) }
+def Count.`*`: Count, Count -> Count = { a, b -> Count(n = a.n * b.n) }
+def Count.`/`: Count, Count -> float = { a, b -> a.n / b.n }
+def Count.`//`: Count, Count -> Count = { a, b -> Count(n = a.n // b.n) }
+def Count.`%`: Count, Count -> Count = { a, b -> Count(n = a.n % b.n) }
+def Count.fromInt: int -> Count = { n -> Count(n = n) }
+def Count.isInteger: bool = false
+
+def half = Count(n = 2) ** -1  -- error NYX0292: A negative power of a 'Count' is '1 / x ** n', a 'float', ...
+```
+
+To fix it, write the fraction as a division, `Count.fromInt(1) / x ** 1`, whose type is the `fraction`. A negative exponent that is
+not a literal stops the program when it runs.
 
 # NYX0301: Not supported by the WebAssembly backend
 

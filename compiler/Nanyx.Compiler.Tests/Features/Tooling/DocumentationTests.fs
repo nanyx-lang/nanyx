@@ -36,7 +36,7 @@ let private doubling =
     """--| Doubles `n`. See [`half`].
 export def double = { n -> n * 2 }
 
-def half = { n -> n / 2 }
+def half = { n -> n // 2 }
 """
 
 [<Fact>]

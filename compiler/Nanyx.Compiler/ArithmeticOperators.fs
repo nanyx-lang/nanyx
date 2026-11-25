@@ -3,11 +3,12 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// `+`, `-`, `*`, `/` and `%`, and prefix `-` (see "Add(a)", "Sub(a)" and "Num(a)" on the docs' Contexts page). On
-/// `int` and `float` they are the built-in operators. Each reads the context member of its name, and prefix `-` reads
+/// `+`, `-`, `*`, `/`, `//` and `%`, and prefix `-` (see "Add(a)", "Sub(a)" and "Num(a)" on the docs' Contexts page).
+/// On `int` and `float` they are the built-in operators. Each reads the context member of its name, and prefix `-` reads
 /// `negate`, through the prelude's smallest context that has it (see `OperatorContexts`): `+` through `Add`, whose
 /// members are `zero` and `` `+` ``, `-` and prefix `-` through `Sub`, whose members are `` `-` `` and `negate`, and
-/// `*`, `/` and `%` through `Num`, which has `Add`'s and `Sub`'s members and those three, and `fromInt`. On a type that attaches the member, or a type variable of a function that
+/// `*`, `/`, `//` and `%` through `Num`, which has `Add`'s and `Sub`'s members and those four, and `fromInt`. Each gives
+/// a value of its operands' type, but `/`, which gives their `fraction` (see `Fractions`). On a type that attaches the member, or a type variable of a function that
 /// requires the context of it, the operator calls the member (see `OperatorCalls`). The compiler's own instances for
 /// `int` and `float` are the members the prelude attaches to them, which are what generic code is passed.
 ///
@@ -31,7 +32,10 @@ module internal ArithmeticOperators =
     let powerFunction = "__pow"
 
     /// The arithmetic operators.
-    let operators = [ "+"; "-"; "*"; "/"; "%" ]
+    let operators = [ "+"; "-"; "*"; "/"; "//"; "%" ]
+
+    /// The operator that divides with a fraction, whose value is of its operands' `fraction` (see `Fractions`).
+    let divide = "/"
 
     /// Whether `op` is an arithmetic operator.
     let isOperator (op: string) = List.contains op operators
@@ -50,19 +54,21 @@ module internal ArithmeticOperators =
         | "-" -> Some "subtracts"
         | "*" -> Some "multiplies"
         | "/" -> Some "divides"
+        | "//" -> Some "floors the quotient of"
         | "%" -> Some "takes the remainder of"
         | _ when op = NegateSyntax.builtIn -> Some "negates"
         | _ -> None
 
     /// The context the operator `op` needs of a type variable it is used on, the prelude's smallest with the member it
-    /// reads, and what the operator does: `Add` for `+`, `Sub` for `-` and prefix `-`, and `Num` for `*`, `/` and
-    /// `%`. A module checked without the prelude has no context to require.
+    /// reads, and what the operator does: `Add` for `+`, `Sub` for `-` and prefix `-`, and `Num` for `*`, `/`, `//`
+    /// and `%`. A module checked without the prelude has no context to require.
     let private contextFor (state: InferState) (op: string) =
         match does op, OperatorContexts.smallest state (memberOf op) with
         | Some does, Some context -> Some (context, does)
         | _ -> None
 
-    /// Checks `expr`, the operator `op` on operands of the types `leftTy` and `rightTy`, which calls no definition. An
+    /// Checks `expr`, the operator `op` on operands of the types `leftTy` and `rightTy`, which gives a value of the type
+    /// `resultTy` (see `resultOf`) and calls no definition. An
     /// operand whose type is already known not to be a number is an error that names the operator. So is one of a type
     /// variable of the type the function around it writes, which then does not require the context the operator needs
     /// of it: had it, the operator would have called its member. That one fails to check, and the def around it
@@ -83,7 +89,7 @@ module internal ArithmeticOperators =
             | _ -> None
         known leftTy |> Option.orElse (known rightTy) |> Option.defaultValue TypeResolution.numericType
 
-    let check (state: InferState) (expr: Expression) (op: string) (leftTy: Ty) (rightTy: Ty) (numberTy: Ty) : Result<InferState, Diagnostic list> =
+    let check (state: InferState) (expr: Expression) (op: string) (leftTy: Ty) (rightTy: Ty) (resultTy: Ty) (numberTy: Ty) : Result<InferState, Diagnostic list> =
         let tys = [ leftTy; rightTy ] |> List.map (resolveSoFar state)
         let declaredVar = tys |> List.tryPick (function TyVar({ Name = Some _ } as v) -> Some v | _ -> None)
         let areVariables = tys |> List.forall (function TyVar { Name = None } -> true | _ -> false)
@@ -93,7 +99,7 @@ module internal ArithmeticOperators =
             let error = NumericLiterals.undeclared state expr.Span op { Def = defName; Context = context; Does = does } v
             Ok { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs }
         | None, Some _, None, DefScope(defName, true) when areVariables ->
-            let pending = { InDef = defName; Operator = expr.Id; MemberName = memberOf op; OperandTy = leftTy; At = expr.Span }
+            let pending = { InDef = defName; Operator = expr.Id; MemberName = memberOf op; OperandTy = leftTy; ResultTy = resultTy; At = expr.Span }
             Ok { state with PendingArithmetic = pending :: state.PendingArithmetic }
         | _ when NumericLiterals.isOpen state leftTy -> Ok state
         | _ when areVariables ->
@@ -103,6 +109,11 @@ module internal ArithmeticOperators =
                 | _ -> None
             Ok (NumericLiterals.awaitOperand op expr leftTy requires state)
         | _ -> Ok (addConstraint leftTy numberTy state)
+
+    /// The type of `expr`, the built-in arithmetic operator `op` on operands of the type `operandTy`, and `state` with it
+    /// recorded: that type, or its `fraction` for `/` (see `Fractions`).
+    let resultOf (state: InferState) (expr: Expression) (op: string) (operandTy: Ty) : Ty * InferState =
+        if op = divide then Fractions.resultOf state expr.Span operandTy else operandTy, state
 
     /// What a literal operand of an arithmetic operator or a comparison is, where it is not the literal it would be
     /// elsewhere.
@@ -169,6 +180,21 @@ module internal ArithmeticOperators =
             | _ -> Ok (operand, state)
         reread left right state
         |> Result.bind (fun (left, next) -> reread right left next |> Result.map (fun (right, next) -> left, right, next))
+    /// The error for `expr`, `left ** right` with `right` a negative literal, on a value of the type `leftTy` whose `/`
+    /// gives `fraction`, another type, if it does. A negative power of a type that is not an integer type is `1 / x ** n`,
+    /// a `fraction`, which the prelude's `__pow` gives as the type itself, as it is on `float` and `F32`; one whose
+    /// `fraction` is another type has no such power. An integer type's is not this error: its `**` stops the program,
+    /// as any negative power of an integer does.
+    let negativePowerError (expr: Expression) (right: Expression) (leftTy: Ty) (fraction: Ty option) : Diagnostic option =
+        match right.Kind, Unifier.unalias leftTy, fraction |> Option.map Unifier.unalias with
+        | LiteralExpr(IntLit n), (TyNominal _ as own), Some fraction when n.Sign < 0 && fraction <> own && (TypeEnv.freeTyVars fraction).IsEmpty ->
+            let at = match expr.Kind with BinaryOp(_, Some opSpan, _, _) -> opSpan | _ -> expr.Span
+            let ownText, fractionText = Unifier.tyToDisplayString Ascii own, Unifier.tyToDisplayString Ascii fraction
+            Some (
+                Diagnostics.at DiagnosticCodes.NegativePowerOfFraction at
+                    $"A negative power of a '{ownText}' is '1 / x ** n', a '{fractionText}', which `/` on '{ownText}' gives, and not a '{ownText}': write `{ownText}.fromInt(1) / x ** {-n}` for it")
+        | _ -> None
+
     /// `expr`, `left ** right`, inferred by `infer` as the call `__pow(left, right)` that it is, and recorded in
     /// `ReadAs` to be written as it.
     let inferPower

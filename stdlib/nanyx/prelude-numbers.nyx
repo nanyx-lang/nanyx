@@ -58,20 +58,26 @@ export context Add(a) = (zero: a, `+`: (a, a) -> a)
   attaching the two members, `` def Money.`-` = ... `` and `def Money.negate = ...`.
 export context Sub(a) = (`-`: (a, a) -> a, negate: a -> a)
 
---| The numbers of type `a`: [`Add`]'s and [`Sub`]'s members, and `x * y`, `x / y` and `x % y`. In a
-  function whose type requires it, any other integer literal beside a value of type `a` is `fromInt`
-  of it, so `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and
-  `float`. A function that requires `Num(a)` can call one that requires `Add(a)` or `Sub(a)`: a
-  `Num` has every member they have. On an integer type `/` truncates and `%` takes the sign of `x`;
-  on `float` they are IEEE 754's. `math.mod` is the modulo with the sign of `y`. `isInteger` says which `a` is: `true` for an integer type, so
-  `x ** -1` stops the program on one.
+--| The numbers of type `a`: [`Add`]'s and [`Sub`]'s members, and `x * y`, `x / y`, `x // y` and
+  `x % y`. In a function whose type requires it, any other integer literal beside a value of type
+  `a` is `fromInt` of it, so `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }`
+  work at `int` and `float`. A function that requires `Num(a)` can call one that requires `Add(a)`
+  or `Sub(a)`: a `Num` has every member they have.
+
+  `x / y` divides with a fraction, and gives a `fraction`, the type's associated type: `float` for
+  `int`, the sized integers and `float`, and `F32` for `F32`, so `7 / 2` is 3.5. `x // y` divides
+  and rounds down, toward negative infinity, and `x % y` is what is left, with the sign of `y`, so
+  `x == (x // y) * y + x % y`: `-7 // 2` is -4 and `-7 % 2` is 1. `isInteger` says which `a` is:
+  `true` for an integer type, so `x ** -1` stops the program on one.
 export context Num(a) = (
+  fraction: type
   zero: a
   `+`: (a, a) -> a
   `-`: (a, a) -> a
   negate: a -> a
   `*`: (a, a) -> a
-  `/`: (a, a) -> a
+  `/`: (a, a) -> fraction
+  `//`: (a, a) -> a
   `%`: (a, a) -> a
   fromInt: int -> a
   isInteger: bool
@@ -110,13 +116,21 @@ export def int.`*`: int, int -> int = { x, y ->
   x * y
 }
 
---| `x` divided by `y`, truncated towards zero: `7 / 2` is 3 and `-7 / 2` is -3.
-export def int.`/`: int, int -> int = { x, y ->
+--| `x` divided by `y`, with the fraction: `7 / 2` is 3.5. Both are converted to `float` first, so an
+  `int` past `2 ** 53` is rounded to the nearest float, and `1 / 0` is infinity.
+export def int.`/`: int, int -> float = { x, y ->
   x / y
 }
 
---| The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1. For the modulo with the
-  sign of `y`, which wraps an index into a range, see `math.mod`.
+--| `x` divided by `y`, rounded down to a whole number: `7 // 2` is 3 and `-7 // 2` is -4. Dividing by
+  0 stops the program.
+export def int.`//`: int, int -> int = { x, y ->
+  x // y
+}
+
+--| What is left of `x` after `x // y`, with the sign of `y`: `7 % 2` is 1 and `-7 % 2` is 1, so that
+  `x == (x // y) * y + x % y`. It wraps an index into a range: `-1 % 5` is 4. Dividing by 0 stops the
+  program.
 export def int.`%`: int, int -> int = { x, y ->
   x % y
 }
@@ -197,7 +211,14 @@ export def float.`/`: float, float -> float = { x, y ->
   x / y
 }
 
---| The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
+--| `x` divided by `y`, rounded down to a whole number, as a float: `7.5 // 2.0` is 3.0 and
+  `-7.5 // 2.0` is -4.0.
+export def float.`//`: float, float -> float = { x, y ->
+  x // y
+}
+
+--| What is left of `x` after `x // y`, with the sign of `y`, as Python's `%` is: `7.5 % 2.0` is 1.5
+  and `-7.5 % 2.0` is 0.5.
 export def float.`%`: float, float -> float = { x, y ->
   x % y
 }
@@ -217,19 +238,21 @@ export def float.isInteger: bool = false
 def powOnto: [Num(a)] a, int, a -> a = { base, exponent, acc ->
   if exponent == 0
     then acc
-    else powOnto(base * base, exponent / 2, if exponent % 2 == 0 then acc else acc * base)
+    else powOnto(base * base, exponent // 2, if exponent % 2 == 0 then acc else acc * base)
 }
 
 --| What `base ** exponent` is: `base` multiplied by itself `exponent` times, so `2 ** 10` is 1024
   and `x ** 0` is 1. A negative exponent is `1 / base ** -exponent` on a type that is not an
   integer type, so `2.0 ** -1` is 0.5; on an integer type, which can't hold the result, it
-  stops the program, as [`crash`] does.
+  stops the program, as [`crash`] does, and says to write `1 / x ** n` for the fraction.
 export def __pow: [Num(a)] a, int -> a = { base, exponent ->
   if exponent >= 0
     then powOnto(base, exponent, fromInt(1))
     else if isInteger
-      then crash("{exponent} is a negative exponent, and an integer raised to one isn't an integer")
-      else fromInt(1) / powOnto(base, -exponent, fromInt(1))
+      then crash(
+        "{exponent} is a negative exponent, and an integer raised to one isn't an integer: for the fraction, write 1 / x ** {-exponent}"
+      )
+      else __nanyx_to_float(fromInt(1) / powOnto(base, -exponent, fromInt(1)))
 }
 
 --| What `f >> g` is: the function that applies `f`, and then `g` to what `f` returns.
@@ -730,8 +753,8 @@ def leadingZerosFrom: int, int, int -> int = { w, count, step ->
   if step == 0
     then count
     else if int.shiftRightUnsigned(w, 64 - step) == 0
-      then leadingZerosFrom(int.shiftLeft(w, step), count + step, step / 2)
-      else leadingZerosFrom(w, count, step / 2)
+      then leadingZerosFrom(int.shiftLeft(w, step), count + step, step // 2)
+      else leadingZerosFrom(w, count, step // 2)
 }
 
 --| Whether `x` is less than `y`, both read as if they had no sign.
@@ -840,10 +863,10 @@ def binaryExponentFrom: float, int, float, int -> int = { x, step, power, k ->
   if step == 0
     then k
     else if x >= power
-      then binaryExponentFrom(x / power, step / 2, next, k + step)
+      then binaryExponentFrom(x / power, step // 2, next, k + step)
       else if x * power < 2.0
-        then binaryExponentFrom(x * power, step / 2, next, k - step)
-        else binaryExponentFrom(x, step / 2, next, k)
+        then binaryExponentFrom(x * power, step // 2, next, k - step)
+        else binaryExponentFrom(x, step // 2, next, k)
 }
 
 -- A candidate float is `mantissa * 2 ** k`, with `mantissa` a whole number below 2 ** 53 and `k`
@@ -978,7 +1001,7 @@ def limbsMulInt: list(int), int -> list(int) = { xs, v ->
 
 --| `xs` times `2 ** n`, for an `n` of zero or more.
 def limbsShiftLeft: list(int), int -> list(int) = { xs, n ->
-  prependZeros(shiftBitsOnto(xs, n % 32, 0, []), n / 32)
+  prependZeros(shiftBitsOnto(xs, n % 32, 0, []), n // 32)
 }
 
 --| `xs` with `count` limbs that are 0 in front.

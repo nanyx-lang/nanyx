@@ -232,7 +232,7 @@ def holds: Assertion, Text, int -> bool = { assertion, text, pos ->
   `high`.
 def inRanges: array((int, int)), int, int, int -> bool = { ranges, c, low, high ->
   if low >= high then false else
-    def middle = (low + high) / 2
+    def middle = (low + high) // 2
 
     match ranges(middle)
       | #some(first, last) ->

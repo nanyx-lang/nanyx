@@ -21,11 +21,10 @@ let wasmBinaryInstruction op =
     | _ -> None
 
 /// The i64 instruction for an operator on ints that has one: not `+`, `-` and `*`, which call the helpers that stop the
-/// program when the result does not fit (see `WasmRuntime.Helpers.intAdd`).
+/// program when the result does not fit (see `WasmRuntime.Helpers.intAdd`), nor `//` and `%`, which call the helpers
+/// that floor them (see `DivisionCode`). `/` on ints divides floats (see `CoreIrLower`).
 let wasmIntInstruction op =
     match op with
-    | "/" -> Some "i64.div_s"
-    | "%" -> Some "i64.rem_s"
     | "==" -> Some "i64.eq"
     | "!=" -> Some "i64.ne"
     | "<" -> Some "i64.lt_s"

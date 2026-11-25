@@ -207,8 +207,8 @@ pattern int, int -> int -> #Between | _ = { low, high ->
 
 def size = { (n: int), (limit: int) ->
   match n
-    | #Between(0, limit / 2) -> "small"
-    | #Between(limit / 2 + 1, limit) -> "big"
+    | #Between(0, limit // 2) -> "small"
+    | #Between(limit // 2 + 1, limit) -> "big"
     | _ -> "out of range"
 }
 

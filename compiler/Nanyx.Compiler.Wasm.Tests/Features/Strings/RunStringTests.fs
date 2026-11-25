@@ -33,7 +33,7 @@ let ``Run - an interpolated string inside a hole leaves the holes around it alon
 def pad: string, int -> string = { text, width -> string.padStart(text, width = width, fill = " ") }
 
 def money: int -> string = { pence ->
-  def pounds = pence / 100
+  def pounds = pence // 100
   def rest = pence % 100
   "£{pounds}.{string.padStart("{rest}", width = 2, fill = "0")}"
 }

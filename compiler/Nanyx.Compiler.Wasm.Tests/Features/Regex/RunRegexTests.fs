@@ -11,8 +11,8 @@ open TranspilerWasmTestHelpers
 //
 // The package is not shipped with the compiler: it is published to the index from nanyx-lang/regex (#2631). Its
 // sources here, under `nanyx.regex/`, are a copy, test data only, of packages/nanyx.regex as it was on this
-// repository's main when it moved (nanyx.regex 0.1.0), so that these tests download nothing. They are not kept in step
-// with the package's releases.
+// repository's main when it moved (nanyx.regex 0.1.0), so that these tests download nothing, with its halvings written
+// `//` since `/` divides with a fraction (#2716). They are not kept in step with the package's releases.
 
 /// The directory of the copy of `nanyx.regex` the scripts depend on by its path.
 let private regexPackage = System.IO.Path.Combine(__SOURCE_DIRECTORY__, "nanyx.regex")

@@ -161,6 +161,7 @@ def main = {
     negate = { x -> x }
     `*` = { x, y -> x }
     `/` = { x, y -> x }
+    `//` = { x, y -> x }
     `%` = { x, y -> x }
     fromInt = { n -> "n" }
     isInteger = false
@@ -171,5 +172,5 @@ def main = {
                 .ReplaceLineEndings "\n")
     Assert.Equal("() -> string", Unifier.tyToString typed.Types.["main"])
     match instancesOf typed with
-    | [ InstanceInScope(Kind (TypeApply ("Num", [ Kind (TypeName "string") ])), FromUse _) ] -> ()
+    | [ InstanceInScope(Kind (TypeApply ("Num", Kind (TypeName "string") :: _)), FromUse _) ] -> ()
     | other -> failwith $"Expected the Num(string) the use loads, got %A{other}"

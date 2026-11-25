@@ -109,7 +109,7 @@ def main = {
 [<Fact>]
 let ``Run - workflow keywords in the branches of an if or match end or continue the whole block`` () =
     let source =
-        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 
 def check: int -> #some(int) | #negative | #odd = { n -> proc {
   if n < 0 then try #negative
@@ -171,7 +171,7 @@ unknown""")
 let ``Run - an if or match with a keyword in a branch, nested in a statement, ends or continues the whole block`` () =
     // The value of a destructuring def, and an operand of `+`, are not statements of their own.
     let source = """
-def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 
 def pair: int -> #some(int) = { n -> proc {
   def (a, b) = if n < 0 then return 0 else (n, n * 2)
@@ -309,7 +309,7 @@ println(m3(1, -2))
 [<Fact>]
 let ``Run - the prelude's proc and option helpers need no import`` () =
     let source =
-        normalized """def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+        normalized """def half: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 def quarter = { n -> proc {
   def h = try half(n)
   return try half(h)
@@ -339,7 +339,7 @@ println("{seven} {three}")
 [<Fact>]
 let ``Run - a proc block that ends without return runs for what it does and is #some()`` () =
     let source =
-        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 
 def show: [Console] int -> #some() | #odd = { n -> proc {
   def h = try halve(n)

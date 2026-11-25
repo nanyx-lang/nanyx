@@ -87,7 +87,7 @@ const tests = [
     const result = await playground('::dependency nanyx.fs\n\nimport nanyx.fs/file as file\nimport nanyx.fs/path as path\n\nignore(file.read(path.of("notes.txt")))\n');
     assert.equal(result.exit, null);
     assert.equal(result.diagnostics.length, 1);
-    assert.match(result.diagnostics[0], /^NYX0205: .*'nanyx\.playground\/playground\.host' does not provide/);
+    assert.match(result.diagnostics[0], /^NYX0205: .*'nanyx\.playground\.host\/playground\.host' does not provide/);
   }],
   ["the page is cross-origin isolated, so programs can read input", async (_, page) => {
     assert.equal(await page.evaluate(() => window.playground.canReadInput), true);

@@ -97,7 +97,7 @@ def matchOf: Regex, Text, array(int) -> Match = { regex, text, slots ->
   }
 
   def groups = array.init(
-    array.length(slots) / 2
+    array.length(slots) // 2
     { number ->
       def start = slot(number * 2)
       def end = slot(number * 2 + 1)

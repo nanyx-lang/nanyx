@@ -62,6 +62,23 @@ Arithmetic and comparison work on two values of the same type, through the [`Add
 `Num(a)`](./contexts) contexts, which every numeric type has. Nothing is converted implicitly, so adding an `I32` to an
 `int` is a type error until one side is [converted](#conversions).
 
+## Division
+
+`/` divides with a fraction, so on every integer type it gives a `float`, and on `F32` an `F32`: each type's
+`fraction` ([Num(a)](./contexts#numa)). `//` divides to a whole number of the same type, rounding down, and `%` is what
+is left, with the sign of the right operand. On an unsigned type the two never round, and are what they are on any
+other; on a signed one, `-7 // 2` is `-4` and `-7 % 2` is `1`:
+
+```nanyx
+def a: I8 = -7
+def b: I8 = 2
+println("{a / b} {a // b} {a % b}") -- -3.5 -4 1
+```
+
+An `I64` or `U64` past 2<sup>53</sup> is rounded to the nearest `float` before `/` divides it. `//` on a signed type
+overflows when it divides the smallest value by -1, whose quotient does not fit, and stops the program as the overflow
+below does. `x // 0` and `x % 0` stop the program on every integer type.
+
 ## Overflow
 
 Integer arithmetic whose result does not fit its type stops the program with a runtime error, as division by zero

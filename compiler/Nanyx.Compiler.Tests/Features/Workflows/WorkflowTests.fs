@@ -13,7 +13,7 @@ let ``A workflow keyword in a branch of an if or match statement has the rest of
     // value a branch ends with is what a `def` of the statement binds. In `label`, a failure only one branch adds is in
     // an annotation too.
     let source =
-        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 def negative: int -> #some(int) | #negative = { n -> if n < 0 then #negative else #some(n) }
 def check = { n -> proc {
   if n < 0 then try negative(n)
@@ -56,7 +56,7 @@ let ``A workflow keyword the rest of its block cannot follow is reported where i
     // It used to become a call to the builder's member with no continuation, and fail as a type mismatch (#347).
     let reported (body: string) =
         let source =
-            "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n" +
+            "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }\n" +
             "def f: list(int) -> #some(int) | #odd = { xs -> proc {\n" + body + "\n  return 0\n} }"
         match (Compiler.compile source).Diagnostics with
         | [ diagnostic ] ->
@@ -76,7 +76,7 @@ let ``A workflow keyword the rest of its block cannot follow is reported where i
         reported "  def m = false or (if true then try halve(2) == 1 else false)")
     // A builder block of its own inside a lambda has its own continuation.
     let nested =
-        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+        normalized """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 def f = { xs -> proc {
   def results = list.map(xs, { x -> proc {
     def h = try halve(x)
@@ -89,7 +89,7 @@ def f = { xs -> proc {
 [<Fact>]
 let ``try and return outside a builder block are reported as workflow keywords`` () =
     // They used to be calls to functions named `try` and `return`, reported as unknown functions (#350).
-    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }\n"
     let reported (keyword: string) (definition: string) =
         let source = halve + definition
         let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
@@ -294,7 +294,7 @@ def run = { x -> proc {
 [<Fact>]
 let ``A proc block's failures include a try's though only one branch has it`` () =
     // The joined branches used to drop the failure of a `try` that only one of them has (#354).
-    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }\n"
     let inferred (body: string) =
         let result = Compiler.compile (halve + "def label = { n -> proc {\n" + body + "\n  return text\n} }")
         Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
@@ -315,7 +315,7 @@ let ``A proc block's failures include a try's though only one branch has it`` ()
 [<Fact>]
 let ``An annotation that leaves out a try's failure is a mismatch`` () =
     // It used to be accepted, though `label(3)` is `#odd` (#354).
-    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }\n"
     let diagnosticCodes (body: string) =
         let result = Compiler.compile (halve + "def label: int -> #some(string) = { n -> proc {\n" + body + "\n} }")
         result.Diagnostics |> List.map (fun diagnostic -> diagnostic.Code)
@@ -333,7 +333,7 @@ let ``An annotation that leaves out a try's failure is a mismatch`` () =
 [<Fact>]
 let ``A bare tag given to try in one branch widens the block's failures`` () =
     // The tag used to close the rest of the union `try` expects, so the branches failed to agree (#353).
-    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }\n"
+    let halve = "def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }\n"
     let inferred (source: string) =
         let result = Compiler.compile (halve + source)
         Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
@@ -424,7 +424,7 @@ def opt: [c] ([Opt, c] () -> t) -> t = {{ block ->
     return = {{ value -> #some(value) }}{zeroValue}
   ) in block()
 }}
-def half: int -> #some(int) | #odd = {{ n -> if n %% 2 == 0 then #some(n / 2) else #odd }}
+def half: int -> #some(int) | #odd = {{ n -> if n %% 2 == 0 then #some(n // 2) else #odd }}
 """
         .ReplaceLineEndings "\n"
 

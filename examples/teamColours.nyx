@@ -69,7 +69,7 @@ pattern OpenGame -> #SetInPlay | #SetWon | #GameWon = { game ->
   match setWinner(game.rules, game.teams, currentSet)
     | #none -> #SetInPlay
     | #some(winner) ->
-      def setsToWin = game.rules.maxSets / 2 + 1
+      def setsToWin = game.rules.maxSets // 2 + 1
       if setsWon(game, winner) >= setsToWin then #GameWon else #SetWon
 }
 

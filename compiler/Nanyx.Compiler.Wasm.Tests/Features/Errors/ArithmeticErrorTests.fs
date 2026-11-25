@@ -33,13 +33,13 @@ println(grow(1))
 [<Fact>]
 let ``Division by zero says so`` () =
     """def z = list.length([])
-println(7 / z)
+println(7 // z)
 """
     |> assertStopsWith "division by zero" [ "<top level> (main.nyx:2)" ]
 
 [<Fact>]
 let ``Division by zero names the function it happened in`` () =
-    """def divide: int, int -> int = { a, b -> if a == 0 then 0 else a / b + divide(a - 1, b) }
+    """def divide: int, int -> int = { a, b -> if a == 0 then 0 else a // b + divide(a - 1, b) }
 
 println(divide(3, list.length([])))
 """
@@ -51,6 +51,23 @@ let ``The remainder by zero is division by zero`` () =
 println(7 % z)
 """
     |> assertStopsWith "division by zero" [ "<top level> (main.nyx:2)" ]
+
+[<Fact>]
+let ``Dividing the smallest value of a signed type by -1 to a whole number overflows`` () =
+    """def smallest: I8 = -128
+def minusOne: I8 = -1
+println(smallest // minusOne)
+"""
+    |> assertStopsWith "integer overflow: the result is out of the range of I8" [ "<top level> (main.nyx:3)" ]
+    """def smallest = -9223372036854775807 - 1
+println(smallest // -1)
+"""
+    |> assertStopsWith "integer overflow: the result is out of the range of int" [ "<top level> (main.nyx:2)" ]
+
+[<Fact>]
+let ``Dividing with a fraction by zero is infinite, not an error`` () =
+    let outcome = runSource "def z = list.length([])\nprintln(\"{7 / z} {0 / z}\")\n"
+    assertRan "Infinity NaN\n" outcome
 
 [<Fact>]
 let ``A float that is NaN made an int says which floats can't be, and what to use instead`` () =

@@ -743,6 +743,7 @@ type private FunctionEmitter(context: EmitContext) =
                 | "+" -> $"call ${helper Helpers.intAdd}"
                 | "-" -> $"call ${helper Helpers.intSub}"
                 | "*" -> $"call ${helper Helpers.intMul}"
+                | "//" | "%" -> $"call ${helper (DivisionCode.intHelper op).Value}"
                 | _ ->
                     match wasmIntInstruction op with
                     | Some instruction -> instruction
@@ -758,12 +759,13 @@ type private FunctionEmitter(context: EmitContext) =
             | None -> internalError $"no instruction for the operator `{op}`"
         | Prim(Not, operands) -> join "\n    " [ atoms operands; "i32.eqz" ]
         | Prim(FloatBinary op, [ left; right ]) ->
-            // The instruction on the values; a comparison's result is the i32 it leaves. An `F32` is an `f32`, whose
-            // remainder is taken as a float's, which is exact, and narrowed back.
+            // The instruction on the values; a comparison's result is the i32 it leaves. An `F32` is an `f32`, whose `//`
+            // and `%`, helpers (see `DivisionCode`), are taken as a float's, which are exact, and narrowed back.
             let isF32 = atomType left = IrF32
-            let widen = if isF32 && op = "%" then "f64.promote_f32" else ""
+            let floored = DivisionCode.floatHelper op
+            let widen = if isF32 && floored.IsSome then "f64.promote_f32" else ""
             let instruction =
-                if op = "%" then Some (join "\n    " [ $"call ${helper Helpers.floatRem}"; (if isF32 then "f32.demote_f64" else "") ])
+                if floored.IsSome then Some (join "\n    " [ $"call ${helper floored.Value}"; (if isF32 then "f32.demote_f64" else "") ])
                 elif isF32 then wasmFloatInstruction op |> Option.map (fun instruction -> instruction.Replace("f64.", "f32."))
                 else wasmFloatInstruction op
             match instruction with
