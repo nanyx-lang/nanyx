@@ -53,7 +53,9 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
 - **The compiler reads a map only through the prelude.** It reads a map's entries or a set's elements through the
   prelude's `map.toList` and `set.toList` (`Maps.toList` and `Sets.toList`), which linking always keeps: a `for` loop
   over a map walks the list `toList` gives (`Loops.fs`), which it makes on every pass, until the loop walks the
-  trie itself ([#2661](https://github.com/nanyx-lang/nanyx/issues/2661)), and so does `dbg` (`CoreIrLowerDbg.fs`). A type's
+  trie itself ([#2661](https://github.com/nanyx-lang/nanyx/issues/2661)), and so does `dbg` (`CoreIrLowerDbg.fs`). A `for` loop in a builder's block whose body uses a keyword is run by the
+  builder's `for` member, which takes a list, so a map or a set there is copied to the list `toList` gives
+  (`WorkflowMembers.loopOverStore`, [#2672](https://github.com/nanyx-lang/nanyx/issues/2672)), unlike a plain loop's. A type's
   description boxes a map's keys and values in place, and unboxes them again, through the prelude's
   `__mapStoreConverted` (`Maps.convertedStore`), which keeps the store's shape and hashes: nothing hashes or compares
   a boxed key, and a lookup by one is refused when the program compiles, as `==` on a box is.

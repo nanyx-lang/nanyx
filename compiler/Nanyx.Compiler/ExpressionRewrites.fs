@@ -57,6 +57,21 @@ module internal ExpressionRewrites =
     /// first: the map's lookup takes the call's arguments as they are rewritten. A call that is already what it is read as
     /// keeps its arguments as they are rewritten: `(x ** 2) ** 3`.
     let writeAsRead (readAs: Map<NodeId, Expression>) (expr: Expression) : Expression =
+        // Whether `read`, an argument as read, is `arg` as written passed through a call of one argument.
+        let wraps (arg: Expression) (read: Expression) =
+            match read.Kind with
+            | FunctionCall(_, _, [ inner ]) -> inner.Id = arg.Id
+            | _ -> false
+        // Whether a call's arguments as read are those written, but for at least one passed through a call.
+        let wrapsAnArgument (args: Expression list) (readArgs: Expression list) =
+            args.Length = readArgs.Length
+            && List.exists2 wraps args readArgs
+            && List.forall2 (fun (arg: Expression) (read: Expression) -> arg.Id = read.Id || wraps arg read) args readArgs
+        // `arg`, rewritten, as it is read: passed through the call it is read as passed through, if it is.
+        let rewrapped (arg: Expression) (read: Expression) =
+            match read.Kind with
+            | FunctionCall(callee, span, [ inner ]) when inner.Id = arg.Id -> { read with Kind = FunctionCall(callee, span, [ arg ]) }
+            | _ -> arg
         // A spread in a collection literal (see `CollectionSyntax`) is read as the call that makes a list of it, which
         // takes the operand as it is rewritten.
         let spreadAsRead (spread: Expression) (operand: Expression) =
@@ -93,6 +108,11 @@ module internal ExpressionRewrites =
                 | CoalesceOperator.Call(left, right), Some { Kind = FunctionCall(callee, span, [ _; Kind (Lambda(parameters, _, takesUnit)) as fallback ]) } ->
                     FunctionCall(callee, span, [ left; { fallback with Kind = Lambda(parameters, right, takesUnit) } ])
                 | BinaryOp(_, _, left, right), Some { Kind = FunctionCall(callee, span, [ _; _ ]) } -> FunctionCall(callee, span, [ left; right ])
+                // A call read with an argument passed through a call, as a builder's `for` over a map is given the list
+                // `map.toList` makes of it (see `WorkflowMembers.loopOverStore`), keeps its arguments as they are
+                // rewritten, the one passed through the call as read.
+                | FunctionCall(_, _, args), Some { Kind = FunctionCall(callee, span, readArgs) } when wrapsAnArgument args readArgs ->
+                    FunctionCall(callee, span, List.map2 rewrapped args readArgs)
                 // The typed tree can hold the call already, as it does in a top-level def's value: it keeps its arguments
                 // as they are rewritten, rather than becoming the call as first read, whose operands are not.
                 | FunctionCall(name, _, args), Some { Kind = FunctionCall(callee, _, readArgs) } when name = callee && args.Length = readArgs.Length -> kind

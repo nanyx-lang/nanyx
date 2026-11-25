@@ -24,3 +24,23 @@ let missing (state: InferState) (node: NodeId) (name: Identifier) : Diagnostic =
         else
             $"`{name}` is a keyword of this `{builder}` block, but the context `{builder}` runs it under has no member `{name}`: give the context a `{name}`, or write the block after a builder that has one"
     Diagnostics.at DiagnosticCodes.InvalidWorkflow place message
+
+type private Infer = TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>
+
+/// `expr`, the call of a builder's `for` member a loop whose body uses a keyword is run by, when the loop is over a map
+/// or a set: the member takes a list, so the loop's `iterable` is read as the list `map.toList` or `set.toList` gives,
+/// and the call is recorded in `ReadAs` to be written with it (#2672). The iterable is inferred once to see what it is,
+/// and that inference set aside, as a spread's is (see `CollectionLiterals.inferSpread`). None for any other iterable,
+/// which the member is given as it is.
+let loopOverStore (infer: Infer) (env: TypeEnv) (state: InferState) (expr: Expression) (iterable: Expression) (others: Expression list) =
+    match infer env state iterable with
+    | Error _ -> None
+    | Ok (typed, seen) ->
+        match Unifier.unalias (resolveSoFar seen typed.Type) with
+        | Maps.MapType _ -> Some Maps.toList
+        | Sets.SetType _ -> Some Sets.toList
+        | _ -> None
+        |> Option.map (fun toList ->
+            let asList = Expression.from iterable (FunctionCall(toList, None, [ iterable ]))
+            let call = { expr with Kind = FunctionCall(WorkflowSyntax.forMember, None, asList :: others) }
+            infer env state call |> Result.map (fun (typed, next) -> { typed with Expr = expr }, { next with ReadAs = next.ReadAs |> Map.add expr.Id call }))
