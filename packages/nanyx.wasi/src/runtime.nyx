@@ -5,6 +5,7 @@ export module runtime
 
 import (
   nanyx/async as (Async)
+  nanyx/clock as (wholeMilliseconds)
   nanyx/host.async as (cancelled, waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
@@ -12,7 +13,7 @@ import (
   nanyx.http/request as (Request)
   nanyx.http/response as (Response)
   nanyx.http/wire as (readResponse, writeRequest)
-  preview1 as (millisecondsOn)
+  preview1 as (timeOn)
 )
 
 @extern("nanyx:http", "start")
@@ -87,19 +88,19 @@ def answered: [HostRuntime] I32, I32 -> #some(Response) | HttpError = { kind, le
     | _ -> #other(answer)
 }
 
---| Waits until `ms` milliseconds have passed on the monotonic clock, while the program's other tasks
-  run: until then, it waits on the runtime for no longer than is left. In a cancelled task it
-  returns at once, or as soon as the task is cancelled.
-export def sleepOnRuntime: [Async, HostRuntime] int -> () = { ms ->
-  sleepUntil(millisecondsOn(1) + ms)
+--| Waits until `time` has passed on the monotonic clock, while the program's other tasks run:
+  until then, it waits on the runtime for no longer than is left, in whole milliseconds, rounded
+  up. In a cancelled task it returns at once, or as soon as the task is cancelled.
+export def sleepOnRuntime: [Async, HostRuntime] Time(int) -> () = { time ->
+  sleepUntil(timeOn(1) + time)
 }
 
 --| Waits until the monotonic clock reads `deadline`.
-def sleepUntil: [Async, HostRuntime] int -> () = { deadline ->
-  def left = deadline - millisecondsOn(1)
+def sleepUntil: [Async, HostRuntime] Time(int) -> () = { deadline ->
+  def left = deadline - timeOn(1)
 
-  if left <= 0 or cancelled() then () else
-    match int.toI32(left)
+  if left <= 0ns or cancelled() then () else
+    match int.toI32(wholeMilliseconds(left))
       | #some(timeout) -> waitOnHost(runtimeWait, timeout)
       | #outOfRange -> waitOnHost(runtimeWait, 2_000_000_000)
 

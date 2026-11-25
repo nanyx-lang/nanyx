@@ -16,7 +16,7 @@
 import (
   nanyx/array
   nanyx/async as (Async)
-  nanyx/clock as (Clock, wholeMilliseconds)
+  nanyx/clock as (Clock)
   nanyx/host.async as (cancelled)
   nanyx/host.memory
   nanyx/host.runtime
@@ -205,7 +205,7 @@ export def provide
     use Clock(
       now = { _ -> Instant.epoch \plus(timeOn(0)) }
       ticks = { _ -> timeOn(1) }
-      sleep = { time -> sleepOnRuntime(wholeMilliseconds(time)) }
+      sleep = { time -> sleepOnRuntime(time) }
     )
 
     f()

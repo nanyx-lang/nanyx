@@ -33,8 +33,3 @@ export def timeOn: [HostRuntime] I32 -> Time(int) = { clock ->
   free(block)
   nanoseconds * 1ns
 }
-
---| The time on WASI's clock `clock` in whole milliseconds (see [`timeOn`]).
-export def millisecondsOn: [HostRuntime] I32 -> int = { clock ->
-  timeOn(clock) // 1ms
-}
