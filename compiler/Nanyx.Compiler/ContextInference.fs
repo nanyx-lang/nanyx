@@ -419,10 +419,7 @@ module internal ContextInference =
             state.PendingContextInstances
             |> List.filter (fun p ->
                 not (earlier.Contains (p.Call, p.Index))
-                && not p.ChecksOnly
-                && (WellKnownContexts.tryFind p.Context).IsNone
-                && not (WellKnownContexts.isOperatorPending p)
-                && not (InterpolationHoles.isHole p.Callee))
+                && not p.ChecksOnly)
         if candidates.IsEmpty || scheme.Quantified.IsEmpty then state
         else
             let subst = fst (Solving.solve state.Constraints)
@@ -451,6 +448,14 @@ module internal ContextInference =
                             PendingContextInstances = left
                             HoleScopes = state.HoleScopes |> Map.filter (fun call _ -> leftCalls.Contains call || not (takenCalls |> Set.exists (fst >> (=) call))) }
                         symbol name contexts (Some signature)
+                // A comparison taken calls the `==` of the instance the def is passed, or the prelude's function that
+                // orders by it, as one in a top-level def does (see `ContextInstances.resolvePendingInstances`).
+                let inputOf ty = TypeResolution.inputTypeFromArgs [ ty; ty ]
+                let takenOf isPending = taken |> List.map fst |> List.filter isPending
+                let registered =
+                    registered
+                    |> EqualityOperators.callMembers inputOf (takenOf EqualityOperators.isPending)
+                    |> OrderingOperators.callHelpers inputOf (takenOf OrderingOperators.isPending)
                 match symbol with
                 | Some symbol ->
                     let contextTys = required |> List.map (fun (ctxName, vars) -> TyApply(ctxName, vars |> List.map TyVar))

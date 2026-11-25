@@ -186,7 +186,7 @@ and memberAtoms (tools: MemberTools) (scope: Scope) (node: NodeId option) (membe
                 | [ _, var ] -> Some var
                 | _ -> None
             match foundAtCall, scope.Members |> Map.tryFind key |> Option.orElseWith compatible, tools.Input.AmbientMembers |> Map.tryFind key with
-            | Some argument, _, _ -> argumentAtom tools scope argument None found
+            | Some (argument, memberTy), _, _ -> argumentAtom tools scope argument memberTy found
             | None, Some var, _ -> found (AVar var)
             | None, None, Some wrapper -> found (wrapperClosure tools wrapper None)
             | None, None, None -> cannot $"the context member '{ContextMemberKey.text key}', which is not in scope"
