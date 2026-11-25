@@ -2722,6 +2722,38 @@ def half = Count(n = 2) ** -1  -- error NYX0292: A negative power of a 'Count' i
 To fix it, write the fraction as a division, `Count.fromInt(1) / x ** 1`, whose type is the `fraction`. A negative exponent that is
 not a literal stops the program when it runs.
 
+# NYX0293: Dimension's storage that no parameter fixes
+
+A signature names a dimension whose storage, the number type that holds its values, is not the type of a parameter, so
+nothing a call passes says what it is. A dimension written without its storage, as `Time`, is of a storage of its own
+([Units and dimensions](../work-in-progress/units-and-dimensions#dimensions-in-types)).
+
+```nanyx
+dimension Time
+
+@baseUnit unit ns: Time
+
+def average: list(Time) -> Time = { ts -> average(ts) }  -- error NYX0293: The number that stores 'Time' here is not the type of a parameter, ...
+```
+
+To fix it, write the storage as a parameter's, as in `list(Time(a)) -> Time(a)`, or write a storage, as in
+`Time(int)`.
+
+# NYX0294: Storage written for a constrained dimension
+
+A dimension constrained to one storage, as `dimension Bytes(int)` is, is written with a storage. It is always stored as
+the one it is constrained to, so it is written without one.
+
+```nanyx
+dimension Bytes(int)
+
+@baseUnit unit B: Bytes
+
+def size: Bytes(a) -> Bytes = { b -> b }  -- error NYX0294: 'Bytes' is constrained to one storage, so it is written without one: ...
+```
+
+To fix it, write the dimension alone: `Bytes -> Bytes`.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

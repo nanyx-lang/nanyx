@@ -72,6 +72,7 @@ let rec private varsIn (keyOf: TyVar -> 'key option) (general: Ty) (specific: Ty
     | TyScope g, TyScope s -> recur g s
     | TyAlias(_, gs, gu), TyAlias(_, ss, su) when gs.Length = ss.Length -> all ((gu, su) :: List.zip gs ss)
     | TyNominal(_, _, gu, _), TyNominal(_, _, su, _) -> recur gu su
+    | TyMeasure(_, g), TyMeasure(_, s) -> recur g s
     | TyRecord(gf, _), TyRecord(sf, _) -> all (fieldPairs gf sf)
     | TyOpenRecord(gf, _), TyOpenRecord(sf, _) -> all (fieldPairs gf sf)
     | TyTag(_, Some g), TyTag(_, Some s) -> recur g s

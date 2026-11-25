@@ -733,6 +733,12 @@ module Unifier =
                     let pairConstraints = pairs |> List.map (fun (lTy, rTy) -> (lTy, rTy, Equal, origin))
                     loop subst (pairConstraints @ rest)
                 | TyScope lScope, TyScope rScope -> loop subst ((lScope, rScope, Equal, origin) :: rest)
+                // Two measured values are of one type when they are of one dimension and their storages are one type. A
+                // measured value is never of a type of another kind, its storage included.
+                | TyMeasure(lDimension, lStorage), TyMeasure(rDimension, rStorage) when lDimension = rDimension ->
+                    loop subst ((lStorage, rStorage, Equal, origin) :: rest)
+                | TyMeasure _, _
+                | _, TyMeasure _ -> Error (mismatchMessage l r, origin, TypesDiffer)
                 // One nominal type is the same as another when their arguments are, whether its parameters are used
                 // in what it is made from or not; that is then the same too. What one that names itself is made from
                 // holds the same arguments again (see `RecursiveNominals`).

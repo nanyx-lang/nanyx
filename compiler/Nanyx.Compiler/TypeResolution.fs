@@ -282,6 +282,15 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         | Some prim -> prim, state
         | None ->
             match tryFindTypeDef name state with
+            // A dimension is a measured value: `Bytes` of the storage it is constrained to, and `Time` of a storage of its
+            // own, as a `_` is (see `Units`).
+            | Some info when info.IsDimension ->
+                let state = recordTypeReference typeExpr info state
+                match info.Parameters with
+                | [] -> TyMeasure(Dimension.ofBase (TypeDefInfo.nominalId info), info.Underlying), state
+                | _ ->
+                    let storage, next = freshVar state
+                    TyMeasure(Dimension.ofBase (TypeDefInfo.nominalId info), storage), next
             | Some info -> namedType (recordTypeReference typeExpr info state) name info
             | None when TypeValues.descriptionArities |> Map.tryFind name = Some 0 -> TyApply(name, []), state
             | None -> TyPrimitive name, state
@@ -361,6 +370,14 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             FunctionContexts.cellType argTys.[0] scope, current
         else
             match tryFindTypeDef name current with
+            // `Time(a)`: a measured value of the storage written. A constrained dimension's is its own, and writing
+            // another is an error (see `Units.dimensionArgumentErrors`).
+            | Some info when info.IsDimension ->
+                let storage =
+                    match info.Parameters, argTys with
+                    | [ _ ], [ storage ] -> storage
+                    | _ -> info.Underlying
+                TyMeasure(Dimension.ofBase (TypeDefInfo.nominalId info), storage), recordTypeReference typeExpr info current
             | Some info when not (isNominal info) ->
                 let current = recordTypeReference typeExpr info current
                 if info.Parameters.Length = argTys.Length then

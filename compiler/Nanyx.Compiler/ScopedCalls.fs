@@ -25,6 +25,7 @@ let rec private pairScopes (general: Ty) (instantiated: Ty) : (string * Ty * Ty)
     | TyTag(_, Some g), TyTag(_, Some s) -> pairScopes g s
     // A value of a scoped type, `MRef(a)`, holds its scope in its arguments, not in what it is made from.
     | TyNominal(_, gs, g, _), TyNominal(_, ss, s, _) -> all (gs @ [ g ]) (ss @ [ s ])
+    | TyMeasure(_, g), TyMeasure(_, s) -> pairScopes g s
     | _ -> []
 
 /// The names of the scoped contexts among `written`, contexts as a def's type writes them.

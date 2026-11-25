@@ -165,6 +165,7 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
     | TyScope scope, TyScope scope' -> bindScheme bindings scope scope'
     | TyNominal(nominal, _, underlying, _), TyNominal(nominal', _, underlying', _) when nominal = nominal' ->
         bindScheme bindings underlying underlying'
+    | TyMeasure(dimension, storage), TyMeasure(dimension', storage') when dimension = dimension' -> bindScheme bindings storage storage'
     | _ -> cannot "a generic definition's type does not fit how it is used"
 
 /// `bindings` with the context variables among `contexts`, those of a function type or a type generic in contexts in a
@@ -271,6 +272,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     // A `Map`'s keys are in the order a record's fields are stored in.
     | TyRecord(fields, _) -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
     | TyNominal _ as nominal -> toIrType (RecursiveNominals.underlying nominal)
+    // A measured value is its storage, in its dimension's base unit (see `Units`).
+    | TyMeasure(_, storage) -> toIrType storage
     | TyApply("list", [ element ]) -> IrList(toIrType element)
     // A map and a set are laid out as their stores (see `Maps.storeOf` and `Sets.storeOf`).
     | Maps.MapType(key, value) -> toIrType (Maps.storeOf key value)

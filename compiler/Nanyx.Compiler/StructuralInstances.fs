@@ -107,6 +107,7 @@ module internal StructuralInstances =
             | _ -> None
         | TyApply(name, args) -> all args |> Option.map (fun args -> TyApply(name, args))
         | TyScope scope -> all [ scope ] |> Option.map (List.exactlyOne >> TyScope)
+        | TyMeasure(dimension, storage) -> closed rigid storage |> Option.map (fun storage -> TyMeasure(dimension, storage))
         | TySelf args -> all args |> Option.map TySelf
         | TyRecursive(body, args) ->
             match all (body :: args) with

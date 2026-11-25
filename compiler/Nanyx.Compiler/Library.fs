@@ -477,9 +477,12 @@ module Compiler =
                 let patternErrors = CustomPatterns.check patternScope desugared @ rewriteErrors
                 // A parameter that takes a type is written as one of type `Type(a)` (see `TypeArguments`), and a
                 // context's associated types as its last parameters (see `AssociatedTypes`).
+                // A signature that names a dimension is read with the storages it leaves out, each of which requires `Num`
+                // (see `DimensionSignatures`).
+                let desugared, signatureErrors = DimensionSignatures.ofModule state.TypeDefs desugared
                 let desugared, typeArgumentErrors = TypeArguments.rewrite desugared
                 let desugared, associatedErrors = AssociatedTypes.rewrite state.TypeDefs desugared
-                let associatedErrors = typeArgumentErrors @ associatedErrors
+                let associatedErrors = signatureErrors @ typeArgumentErrors @ associatedErrors
                 let types, items, (state: NyxCompiler.Infer.InferState), inferErrors = NyxCompiler.InferModule.inferModuleWithEnv env state desugared
                 let subst, mismatches = Solving.solveLeavingUnknown state.Constraints |> fun (subst, mismatches) -> Unifier.keepWrittenNames (Seq.append types.Values (state.AssociatedVariables |> Seq.map TyVar)) subst, mismatches
                 // Every error in the module is reported: the items that failed to check, and each conflict among the

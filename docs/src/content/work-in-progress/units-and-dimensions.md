@@ -7,8 +7,9 @@ order: 2
 > **Status: designed, being built.** The first step, single dimensions over any numeric storage, is settled below and is
 > being built; derived dimensions such as `Length/Time` come second and still have open questions (see
 > [Step 2](#step-2-derived-dimensions) and [Open questions](#open-questions)). The compiler reads unit literals and
-> checks the declarations of dimensions and units ([Units of measure](../deep-dives/units) says how), but it does not
-> type a number with a unit yet: it reports each as [`NYX0285`](../standard-tools/errors#nyx0285).
+> checks the declarations of dimensions and units, and reads dimensions in types, as [Dimensions in types](#dimensions-in-types)
+> says ([Units of measure](../deep-dives/units) says how); it does not type a number with a unit yet, and reports each
+> as [`NYX0285`](../standard-tools/errors#nyx0285).
 
 Nanyx will check units of measure at compile time, so a length cannot be added to a time, and a call reads as what
 it means:

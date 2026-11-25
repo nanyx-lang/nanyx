@@ -48,6 +48,10 @@ let private renamed (written: (TypeDefInfo -> bool) -> string -> string) (ty: Ty
         | TySelf args -> TySelf(List.map rename args)
         | TyScope scope -> TyScope(rename scope)
         | TyContexts contexts -> TyContexts(List.map rename contexts)
+        | TyMeasure(dimension, storage) ->
+            let dimension =
+                dimension |> List.map (fun (id, exponent) -> { id with Name = written (fun info -> info.IsDimension && TypeDefInfo.nominalId info = id) id.Name }, exponent)
+            TyMeasure(dimension, rename storage)
     rename ty
 
 /// `ty` with each type and context it names given the name a module writes it by, from the module's `typeDefs` and
