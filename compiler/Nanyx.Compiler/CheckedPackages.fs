@@ -6,13 +6,12 @@ open System.IO
 open System.Security.Cryptography
 open System.Text
 
-/// A package's checked file as it is written: the hash of the files it was checked from, the module each file it checked
-/// first declares, by key, what checking each of its modules gave, by key, each read only when it is first asked for, and
+/// A package's checked file as it is written: the hash of the files it was checked from, what checking each of its
+/// modules gave, by key, each read only when it is first asked for, and
 /// the modules outside it that its checks imported, all the way down, each with the token of the checked file it was
 /// read from (see `CheckedFileOrigins`).
 type internal CheckedPackageFile =
     { SourceHash: string
-      Modules: string list
       Checked: Map<string, Lazy<CheckedResult>>
       Imports: (string * string) list }
 
@@ -146,7 +145,6 @@ module internal CheckedPackages =
             else raise (ForeignId id)
         let file =
             { SourceHash = sourceHash modules
-              Modules = checkedModules |> List.map fst
               Checked = checkedModules |> List.map (fun (key, result) -> key, lazy result) |> Map.ofList
               Imports = imports }
         if last - first >= rangeSize then

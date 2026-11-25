@@ -4,7 +4,7 @@
 /// packages the compiler ships beside it, but for the hosts (see `ShippedPackages`), whose modules a program doesn't
 /// import; and, for a page that pins a published package in its front matter, `package: nanyx.json 0.1.0`, from that
 /// version of the package (see `pinOf`). The reference sits on its page between `beginMarkerOf` its pin and `endMarker`, and the
-/// rest of the page is written by hand.
+/// rest of the page is written by hand. Beside the pages, a list of the nominal types they name (`nominalTypesFile`).
 module NyxCompiler.StandardLibraryDocs
 
 open System
@@ -241,26 +241,33 @@ let private compileErrors (packageDirectory: string) (documented: Documented lis
     else Some(if errors.IsEmpty then "it doesn't compile" else String.concat "; " errors)
 
 /// The public modules of each published package that `pins` names at a version (see `pinOf`), read from the package
-/// cache of `store`, and downloaded into it from its index first if it isn't there, as a script's `::dependency` is
-/// (see `Script.pull`); or, for a pin, why it can't be: it can't be downloaded or read, or a public module of it
+/// cache of `store`, and downloaded into it from its index first if it isn't there, as a script's pins are (see
+/// `ScriptDependencies`); or, for a pin, why it can't be: it can't be downloaded or read, or a public module of it
 /// doesn't compile. `directory` is where the pages are.
 let private published (store: PackageStore) (directory: string) (pins: (string * SemanticVersion) list) =
     pins
     |> List.map (fun (name, version) ->
         let pin = name, version
-        // The pin is read as a script beside the pages that names it in a `::dependency` line would be.
+        // The pin is a script's beside the pages, as its messages name it.
         let script = Path.Combine(directory, "stdlib-docs.nyx")
-        let text = $"::dependency {name} {version}\n"
+        let dependency =
+            { Name = name
+              Source = FromIndex { Minimum = version; Written = string version }
+              NameSpan = SourceSpan.none
+              SourceSpan = SourceSpan.none }
         let pulled =
             if Directory.Exists(PackageStore.directoryOf store name version) then Ok()
-            else Script.pull store script text |> Result.map ignore |> Result.mapError (String.concat "; ")
+            else ScriptDependencies.pull store script [ pin ] |> Result.map ignore |> Result.mapError (String.concat "; ")
         let modules =
             pulled
-            |> Result.bind (fun () ->
-                let directives = Script.readFrom store script text
-                match directives.Build |> Option.bind (fun build -> build.Dependencies |> List.tryFind (fun dependency -> dependency.Package = name)) with
-                | Some modules -> Ok modules
-                | None -> Error(directives.Diagnostics |> List.map _.Message |> String.concat "; "))
+            |> Result.bind (fun () -> ScriptDependencies.cached store script [ pin ] |> Result.mapError (String.concat "; "))
+            |> Result.bind (fun locked ->
+                Package.scriptModules Hosts.consolePackage store locked script SourceSpan.none None [ dependency ] []
+                |> Result.mapError (List.map _.Message >> String.concat "; "))
+            |> Result.bind (fun modules ->
+                match modules.Dependencies |> List.tryFind (fun found -> found.Package = name) with
+                | Some found -> Ok found
+                | None -> Error $"'{name}' {version} has no modules")
         let documented =
             modules
             |> Result.map (publicModules (Some pin))
@@ -349,12 +356,13 @@ let private nominalTypes (compiled: Documented list) : string =
 
 /// What `update` finds for one page.
 type PageUpdate =
-    /// The page's reference is the library's.
+    /// The page's reference, or the list of nominal types, is what the library, the packages it ships and the packages
+    /// the pages pin give.
     | UpToDate
-    /// The page's text with its reference as the library has it.
+    /// The page's text, or the list's, as they give it.
     | OutOfDate of string
     /// The page cannot be written: there is no page for a file that exports names, or the page has no markers, or it
-    /// has markers but no file of the library, or of a shipped package, is its.
+    /// has markers but nothing is its, or it pins a package that can't be read, or whose files are not its.
     | Unwritable of string
 
 /// What each page of the library's reference in `directory` (docs/src/content/stdlib) needs, by its path: its text with

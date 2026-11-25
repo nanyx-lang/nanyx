@@ -87,7 +87,7 @@ let rangePrecedence = 6
 /// `value is pattern` (see `IsSyntax`), which binds like an operator: looser than equality and tighter than `and`, so
 /// `a == b is #true` tests `a == b`, and `x is #some(v) and v > 3` is an `and` of the test. It does not group, nor go side by
 /// side with `>>=` or `=<<`, and only a looser operator may follow its pattern.
-let isOperator = { Text = "is"; Precedence = 4; Associativity = NonAssociative; IsSpare = false; ShortCircuits = false }
+let isOperator = { Text = IsSyntax.keyword; Precedence = 4; Associativity = NonAssociative; IsSpare = false; ShortCircuits = false }
 
 /// The precedence of prefix `-` and `not`, which bind tighter than every binary operator: `-x ** 2` is `(-x) ** 2`.
 let prefixPrecedence = (binaryOperators |> List.map _.Precedence |> List.max) + 1

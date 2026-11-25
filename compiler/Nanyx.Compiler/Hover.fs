@@ -259,7 +259,7 @@ let moduleAt (file: string) (result: CompileResult) (offset: int) : ModuleHover 
 /// them, each with what it is there, named as the type at the use names its variables: `a`, `string`.
 type Instantiation = { Declared: string; Bindings: (string * string) list; Definition: SourceSpan }
 
-/// The `Instantiation` of what `hoveredAt` found (see `instantiationAt`).
+/// The `Instantiation` of what `hoveredAt` found (see `typeAndInstantiationAt`).
 let private instantiationOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (hovered: Ty * Symbol option * SourceSpan) : Instantiation option =
     match hovered with
     | ty, Some symbol, _ when symbol.Kind = TopLevelValue || symbol.Kind = LocalValue ->
@@ -294,17 +294,11 @@ let private instantiationOf (names: TypeNotation) (rename: Ty -> Ty) (typed: Typ
             else Some { Declared = declaredWritten; Bindings = bindings; Definition = symbol.Declaration })
     | _ -> None
 
-/// The signature of the def that the name at `offset` in the compiled root module refers to, or declares, when it is not
-/// what `typeAt` shows there, as an `Instantiation`: on a use of a generic def, where its type variables are filled in.
-/// The def is a top-level or local one, the module's own or one an import brings in. `None` when no such name is at
-/// `offset`, or its type there is its signature: a def that is not generic, or the def's own name.
-let instantiationAt (names: TypeNotation) (result: CompileResult) (offset: int) : Instantiation option =
-    match result.Syntax, result.Typed with
-    | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.bind (instantiationOf names id typed)
-    | _ -> None
-
-/// What `typeAt` and `instantiationAt` show at `offset`, from one search for what is there, with the types and contexts
-/// they name named by `rename` (see `Signatures.relativeAt`).
+/// What `typeAt` shows at `offset`, and the signature of the def that the name there refers to, or declares, when it is
+/// not that, as an `Instantiation`: on a use of a generic def, where its type variables are filled in. The def is a
+/// top-level or local one, the module's own or one an import brings in; there is no `Instantiation` when no such name
+/// is at `offset`, or its type there is its signature: a def that is not generic, or the def's own name. Both come from
+/// one search for what is there, with the types and contexts they name named by `rename` (see `Signatures.relativeAt`).
 let typeAndInstantiationAt (names: TypeNotation) (rename: Ty -> Ty) (result: CompileResult) (offset: int) : HoverInfo option * Instantiation option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->

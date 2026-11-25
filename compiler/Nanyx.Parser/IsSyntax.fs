@@ -3,8 +3,8 @@ namespace Parser.Program
 /// `value is pattern`, a `bool` that says whether `value` matches `pattern`: a match of `value` against the pattern,
 /// whose arm is `true` and whose wildcard arm, made up at the pattern, is `false`, both made up at the `is`. In an `and`
 /// chain, what follows the test is the arm's body in place of `true`, so the names the pattern binds are in scope
-/// for the rest of the chain: `x is #some(v) and v > 3` is `match x | #some(v) -> v > 3 | _ -> false`. See
-/// `IsChains` for an `if` whose condition binds names.
+/// for the rest of the chain: `x is #some(v) and v > 3` is `match x | #some(v) -> v > 3 | _ -> false`. See `asMatch`
+/// and `BindingIf` for an `if` whose condition binds names.
 module IsSyntax =
     let keyword = "is"
 
