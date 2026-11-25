@@ -220,6 +220,17 @@ module internal ImportMerging =
             |> Map.filter (fun name _ -> isSelected name)
             |> Map.fold (fun acc name signature -> acc |> Map.add (ModuleLinking.importedName qualifier name) signature) state.ContextSignatures
         let typeDefs = ModuleLinking.mergeTypeDefs typeDefs exportedTypeDefs
+        // A unit is written unqualified, as in `500ms`, under an alias too: an import brings in the units its module
+        // exports, or those it selects. Two units of one name are ambiguous where the name is written (see `Units`).
+        let units, ambiguousUnits =
+            ModuleLinking.exportedUnits imported
+            |> Map.filter (fun name _ -> isSelected name)
+            |> Map.fold (fun (units, ambiguous) name info ->
+                match units |> Map.tryFind name with
+                | Some existing when existing <> info ->
+                    let each = ambiguous |> Map.tryFind name |> Option.defaultValue [ existing ]
+                    units, ambiguous |> Map.add name (List.distinct (each @ [ info ]))
+                | _ -> units |> Map.add name info, ambiguous) (state.Units, state.AmbiguousUnits)
         // The contexts the imported functions require that this module cannot name are carried in with their
         // definitions, hidden, so a call to one is checked as a call needing the context is here: an ambient
         // one, and a parameterised one, whose instance each call finds (an attached `Point.show` for a
@@ -287,6 +298,8 @@ module internal ImportMerging =
                         acc |> Map.add id (item.Span :: (acc |> Map.tryFind id |> Option.defaultValue []))) state.ImportSites
                 ContextRequirements = contextRequirements
                 ContextSignatures = contextSignatures
+                Units = units
+                AmbiguousUnits = ambiguousUnits
                 ImportedBlockNames =
                     imported.BlockReExports
                     |> List.filter (fun (name, _) -> isSelected name)

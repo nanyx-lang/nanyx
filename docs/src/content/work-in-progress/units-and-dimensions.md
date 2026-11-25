@@ -6,9 +6,9 @@ order: 2
 
 > **Status: designed, being built.** The first step, single dimensions over any numeric storage, is settled below and is
 > being built; derived dimensions such as `Length/Time` come second and still have open questions (see
-> [Step 2](#step-2-derived-dimensions) and [Open questions](#open-questions)). The compiler reads unit literals and the
-> declarations of dimensions and units, and the formatter lays them out, but it does not check them yet: it reports
-> each as [`NYX0285`](../standard-tools/errors#nyx0285) until the checker does.
+> [Step 2](#step-2-derived-dimensions) and [Open questions](#open-questions)). The compiler reads unit literals and
+> checks the declarations of dimensions and units ([Units of measure](../deep-dives/units) says how), but it does not
+> type a number with a unit yet: it reports each as [`NYX0285`](../standard-tools/errors#nyx0285).
 
 Nanyx will check units of measure at compile time, so a length cannot be added to a time, and a call reads as what
 it means:
@@ -70,7 +70,12 @@ unit KiB: Bytes = 1_024B
   of a module block, not in a def's body.
 - Units are names of their own kind, apart from values and types: `500ms` means the unit `ms` even where a value named
   `ms` is in scope. A module exports and imports dimensions and units as it does types, with `export` before the
-  declaration: `export dimension Time` and `export unit ms: Time = 1_000us`.
+  declaration: `export dimension Time` and `export unit ms: Time = 1_000us`. A unit can't be written qualified, so an
+  import brings in the units its module exports unqualified, under an alias too, or only those it selects:
+  `import time as (Time, ms)`. Two imports that bring in units of one name are an error only where the name is
+  written, as two imports' values of one name are, and a unit the module declares itself is the one its name means.
+- A module can add units to a dimension another module declares, `unit ps: Time = 0.001ns`, but not its base unit,
+  which is declared with the dimension.
 
 The base unit is declared, not worked out from the smallest unit in scope, so a unit declared in another module, such as
 `unit ps: Time = 0.001ns`, can't change how a dimension is stored. A unit finer than the base is a fraction of it, which

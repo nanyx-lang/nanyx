@@ -639,7 +639,8 @@ let private readTypeDefBody (state: InferState) (name: Identifier) (modifiers: T
               Symbol = None
               Members = Map.empty
               Doc = ""
-              FieldAttributes = Map.empty }
+              FieldAttributes = Map.empty
+              IsDimension = false }
         let ty, next = typeExprToTy { state with TypeDefs = state.TypeDefs |> Map.add name self } body
         match RecursiveAliases.selfReferences ty with
         | true, false -> RecursiveAliases.close paramVars ty, { next with TypeDefs = next.TypeDefs |> Map.remove name }
@@ -829,7 +830,8 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           Symbol = None
           Members = Map.empty
           Doc = ""
-          FieldAttributes = Map.empty }
+          FieldAttributes = Map.empty
+          IsDimension = false }
     let underlyingTy, next = readTypeDefBody stateWithParams name modifiers paramVars self body
     let selfReferences = if canReferToItself stateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
     let nextNominals =
@@ -874,7 +876,8 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           Symbol = symbol
           Members = members
           Doc = ""
-          FieldAttributes = if isContextDef modifiers then Map.empty else fieldAttributesOf body }
+          FieldAttributes = if isContextDef modifiers then Map.empty else fieldAttributesOf body
+          IsDimension = false }
     // A name of the type in its own definition refers to it, as any other does.
     let next = selfReferences |> List.fold (fun state typeExpr -> recordTypeReference typeExpr info state) next
     { next with

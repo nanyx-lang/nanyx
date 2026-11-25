@@ -247,8 +247,13 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 preboundFreshVars <- preboundFreshVars |> Map.add name ty
                 env <- declareTopLevel name symbol (TypeEnv.mono ty) env
         | _ -> ()
-    for name, modifiers, parameters, body in inDependencyOrder module' do
+    // A dimension is registered as the private nominal type it is (see `Units`), and its units after every type.
+    for name, modifiers, parameters, body in inDependencyOrder (Units.withDimensionsAsTypes module') do
         state <- registerTypeDef state name modifiers parameters body
+    state <- Units.markDimensions module' state
+    let withUnits, unitErrors = Units.declare (hasInstance env state "Num") state module'
+    state <- withUnits
+    errors <- errors @ unitErrors
     for item in module' do
         prebind item
 
@@ -468,8 +473,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | ModuleBlock _ -> ()
         // Attributes are resolved by the compiler front end before inference (see Attributes.applyAttributes).
         | Attribute _ -> ()
-        | DimensionDecl _
-        | UnitDecl _ -> errors <- errors @ [ Units.declarationNotChecked item.Span ]
+        // A dimension is the type it is registered as, and a unit is in `state.Units` (see `Units.declare`).
+        | DimensionDecl _ ->
+            match (Units.withDimensionsAsTypes [ item ]).Head.Kind with
+            | Def (TypeDef(name, modifiers, parameters, body)) -> emit (TypedDef (TypedTypeDef(name, modifiers, parameters, body)))
+            | _ -> ()
+        | UnitDecl _ -> ()
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
             errors <- errors @ DefAnnotations.typeDefErrors state name modifiers parameters body

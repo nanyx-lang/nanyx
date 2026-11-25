@@ -2592,16 +2592,109 @@ To fix it, write one character, or use a `string` where the value is more than o
 
 # NYX0285: Units of measure not checked yet
 
-A program declares a dimension or a unit, or writes a number with a unit, such as `500ms`. The compiler reads
-[units of measure](../work-in-progress/units-and-dimensions) but does not check them yet, so it can't compile a
-program that uses them.
+A program writes a number with a unit, such as `500ms`. The compiler checks the declarations of
+[dimensions and units](../work-in-progress/units-and-dimensions) but does not type a number with a unit yet, so it
+can't compile a program that writes one.
 
 ```nanyx
+dimension Time
+
+@baseUnit unit ns: Time
+unit ms: Time = 1_000_000ns
+
 def timeout = 500ms  -- error NYX0285: A number with a unit is read but not checked yet, ...
 ```
 
-To fix it, write the number without its unit, as `500` milliseconds, until units are checked. A space between a number
-and a name, as in `100 ms`, makes them a number and a name again.
+To fix it, write the number without its unit, as `500` milliseconds, until numbers with units are checked. A space
+between a number and a name, as in `100 ms`, makes them a number and a name again.
+
+# NYX0286: Dimension without a base unit
+
+A dimension has no base unit, the unit its values are stored in, or a unit is neither its dimension's base unit nor a
+multiple of another unit ([Units and dimensions](../work-in-progress/units-and-dimensions)).
+
+```nanyx
+dimension Time  -- error NYX0286: 'Time' has no base unit, the unit its values are stored in: ...
+```
+
+To fix it, mark one unit of the dimension `@baseUnit`, as in `@baseUnit unit ns: Time`, and define every other unit as
+a multiple of a unit of the dimension, as `unit ms: Time = 1_000_000ns` is.
+
+# NYX0287: Base unit that can't be one
+
+A unit is marked `@baseUnit` where it can't be the base unit: its dimension has a base unit already, it is defined as
+a multiple of another unit, or its dimension is declared in another module, which declares the dimension's base unit.
+
+```nanyx
+dimension Time
+
+@baseUnit unit ns: Time
+@baseUnit unit ps: Time  -- error NYX0287: 'Time' has a base unit already: ...
+```
+
+To fix it, keep one base unit for each dimension, in the dimension's own module, and define the others as multiples:
+`unit ps: Time = 0.001ns`.
+
+# NYX0288: Units defined in a circle
+
+A unit is defined as a multiple of itself, directly or through other units, so it is no multiple of the base unit.
+
+```nanyx
+dimension Time
+
+@baseUnit unit ns: Time
+unit a: Time = 2b  -- error NYX0288: 'a' is defined as a multiple of itself, through 'b', ...
+unit b: Time = 3a  -- error NYX0288: 'b' is defined as a multiple of itself, through 'a', ...
+```
+
+To fix it, define one of the units as a multiple of another that is not defined through it, such as the base unit.
+
+# NYX0289: Unit defined in another dimension's units
+
+A unit is defined as a multiple of a unit of another dimension. A unit of a dimension is a multiple of the dimension's
+base unit, so it is defined in that dimension's units.
+
+```nanyx
+dimension Time
+
+@baseUnit unit ns: Time
+
+dimension Length(float)
+
+@baseUnit unit m: Length
+unit far: Length = 3ns  -- error NYX0289: 'far' is a unit of 'Length', but 'ns' is a unit of 'Time': ...
+```
+
+To fix it, define the unit as a multiple of a unit of its own dimension.
+
+# NYX0290: Dimension stored in a type that isn't a number
+
+A dimension is constrained to a storage type, as `dimension Bytes(int)` is, that has no `Num` instance. A dimension's
+values are numbers, added, scaled and compared.
+
+```nanyx
+dimension Flags(bool)  -- error NYX0290: A dimension is stored as a number, but 'bool' has no `Num` instance: ...
+
+@baseUnit unit f: Flags
+```
+
+To fix it, store the dimension as a number type, such as `int` or `float`, or leave it unconstrained, `dimension Flags`,
+to store it as any.
+
+# NYX0291: Unknown unit
+
+A number is written with a unit, or a unit is defined as a multiple of one, that the module does not know: it declares
+no unit of that name, and imports none.
+
+```nanyx
+dimension Time
+
+@baseUnit unit ns: Time
+unit ms: Time = 1_000_000ns
+unit min: Time = 60_000mss  -- error NYX0291: There is no unit 'mss' here: did you mean 'ms'?
+```
+
+To fix it, correct the unit's name, declare it with `unit`, or import the module that exports it.
 
 # NYX0292: Negative power of a type whose fraction is another
 

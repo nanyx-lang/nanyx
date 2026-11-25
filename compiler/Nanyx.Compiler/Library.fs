@@ -757,6 +757,7 @@ module Compiler =
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty
                           ScriptEntryValues = state.ScriptEntryValues
+                          Units = state.Units
                           Declared = state.Declared }
                      Errors = moduleErrors
                      Undeferred = undeferred

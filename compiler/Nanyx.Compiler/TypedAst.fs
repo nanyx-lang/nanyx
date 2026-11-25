@@ -307,11 +307,24 @@ type TypeDefInfo =
       /// The doc comment the definition has, as Markdown, or empty: what the type's description says of it.
       Doc: string
       /// The attributes written before each field of a record type's definition, by the field's name.
-      FieldAttributes: Map<string, FieldAttribute list> }
+      FieldAttributes: Map<string, FieldAttribute list>
+      /// Declared `dimension Time` or `dimension Bytes(int)`: a kind of quantity, a private nominal type generic in the
+      /// number that stores it unless constrained to one (see `Units`).
+      IsDimension: bool }
 
 module TypeDefInfo =
     /// The identity of the nominal type `info` defines.
     let nominalId (info: TypeDefInfo) : NominalId = { Home = info.Home; Name = info.Name }
+
+/// A unit of measure, `unit ms: Time = 1_000us`: its dimension's identity, how many of the dimension's base units it is,
+/// exactly, and the module it is declared in, which exports it if `IsExport` (see `Units`). A unit's name is of a
+/// kind of its own, apart from values and types.
+type UnitInfo =
+    { Name: string
+      Dimension: NominalId
+      Scale: Rational
+      Home: ModuleOrigin
+      IsExport: bool }
 
 /// A definition marked `@component`, which a component built from the program exports, in the WIT interface its module
 /// names (see `ComponentInterface`).
@@ -477,6 +490,8 @@ type TypedModule =
       InlinedCalleeTypes: Map<NodeId, Ty>
       /// A script's values that need a context, which run in its entry point (see `InferState.ScriptEntryValues`).
       ScriptEntryValues: Set<Identifier>
+      /// The units of measure the module can write, by name: its own and those its imports bring in (see `Units`).
+      Units: Map<string, UnitInfo>
       /// The names the module's own nodes declare, as the parser recorded them, each where it is written: a record's
       /// fields and a context's members among them, which have no nodes of their own (see `DeclaredNames`).
       Declared: DeclaredNames }

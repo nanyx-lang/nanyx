@@ -36,6 +36,7 @@
     <Compile Include="Features\Calls\BuiltInCallTests.fs" />
     <Compile Include="Features\Chars\CharLiteralTests.fs" />
     <Compile Include="Features\Units\UnitsNotCheckedTests.fs" />
+    <Compile Include="Features\Units\UnitDeclarationTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />
