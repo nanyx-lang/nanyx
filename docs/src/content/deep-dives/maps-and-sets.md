@@ -51,9 +51,16 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   store is a recursive type inside the other, and the backend's `IrSelf` says which of the recursive types around it
   it stands for (`CoreIr.fs`).
 - **The compiler reads a map only through the prelude.** It reads a map's entries or a set's elements through the
-  prelude's `map.toList` and `set.toList` (`Maps.toList` and `Sets.toList`), which linking always keeps: a `for` loop
-  over a map walks the list `toList` gives (`Loops.fs`), which it makes on every pass, until the loop walks the
-  trie itself ([#2661](https://github.com/nanyx-lang/nanyx/issues/2661)), and so does `dbg` (`CoreIrLowerDbg.fs`). A type's
+  prelude's `map.toList` and `set.toList` (`Maps.toList` and `Sets.toList`), which linking always keeps, as `dbg`
+  does (`CoreIrLowerDbg.fs`), but for a `for` loop, which walks the store's trie itself and hands the body the entries
+  its buckets hold, borrowed, making nothing ([#2661](https://github.com/nanyx-lang/nanyx/issues/2661)): the
+  backend's `OverStore` loop source (`StoreWalk` in `CoreIr.fs`, its code in `CoreIrEmitStoreWalk.fs`) goes into
+  the trie's nodes a level at a time, keeping the child it took at each level in five bits of one `int`, and goes back
+  up by going down again from the root along it. It reads six words for each entry, where a list's walk reads two, so
+  it takes about two and a half times as long ([#2671](https://github.com/nanyx-lang/nanyx/issues/2671)). A map
+  walked in step with a sequence is walked as the list `toList` gives (`CoreIrLowerLoops.forEachPulling`), and a
+  `for` inside a builder can't walk a map at all yet: the builder's `for` takes a list
+  ([#2672](https://github.com/nanyx-lang/nanyx/issues/2672)). A type's
   description boxes a map's keys and values in place, and unboxes them again, through the prelude's
   `__mapStoreConverted` (`Maps.convertedStore`), which keeps the store's shape and hashes: nothing hashes or compares
   a boxed key, and a lookup by one is refused when the program compiles, as `==` on a box is.

@@ -224,3 +224,23 @@ def a = { (n: int) ->
 def b = { (x: int) -> call({ a(x - 1) + 1 }) }
 
 println(a(3))""")
+
+[<Fact>]
+let ``A function that waits in a for loop over a map resumes at the entry it stopped at`` () =
+    assertRuns
+        "820\n41\n"
+        (waiting
+         + """
+def total: [Async] map(int, int) -> int = { m ->
+  memory {
+    mut sum = 0
+    for m | (k, v) ->
+      sum := sum + call({ v })
+    sum
+  }
+}
+
+def deep = (0..40) \seq.map { i -> (i * 32 * 32 * 32, i) } \seq.toList \map.fromList
+
+println(total(deep))
+println(map.length(deep))""")

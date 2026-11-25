@@ -1285,6 +1285,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverRange(first, last) -> [ atomCode first; $"local.set ${localName stream.Element}"; atomCode last; $"local.set ${localName stream.End}" ]
             | OverRangeFrom first -> [ atomCode first; $"local.set ${localName stream.Element}" ]
             | OverList list -> [ atomCode list; $"local.set ${localName stream.Cursor}" ]
+            | OverStore(store, walk) -> atomCode store :: CoreIrEmitStoreWalk.start stream walk
         // A range counts in ints; a list's cursor moves to each cell's tail, after its head.
         let next (stream: ForStream) =
             match stream.Source with
@@ -1293,6 +1294,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverList _ ->
                 let cursor = localName stream.Cursor
                 [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; load stream.Element.Type 0; $"local.set ${localName stream.Element}" ]
+            | OverStore(_, walk) -> CoreIrEmitStoreWalk.next touching (tagCode (context.TagId "bucket")) depth done' stream walk
         let advance (stream: ForStream) =
             match stream.Source with
             | OverRange _
@@ -1302,6 +1304,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverList _ ->
                 let cursor = localName stream.Cursor
                 [ $"local.get ${cursor}"; touching $"i32.load offset={CoreIrLayout.tailOffset stream.Element.Type}"; $"local.set ${cursor}" ]
+            | OverStore(_, walk) -> CoreIrEmitStoreWalk.advance touching stream walk
         let bodyCode = this.Sequence false loop.Body
         let bodyDrop = dropValue loop.Body.Type
         // The starting atoms are read in the order `tempsUsedBy` gives them. A state machine resuming in the body has
