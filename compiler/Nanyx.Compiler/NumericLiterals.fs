@@ -210,12 +210,29 @@ module internal NumericLiterals =
     let settleLiterals (literals: NumericLiteral list) (state: InferState) : InferState =
         literals |> List.fold (fun current literal -> addConstraint literal.Type (defaultType literal.Value) current) state
 
+    /// The literals with no unit not yet settled that are where a measured value is, `isLong(0)` for a `Time`, each with
+    /// the measured type's storage, still a variable, that is in `tys`. `check` reports such a literal, and makes its
+    /// storage the literal's kind.
+    let private measuredIn (tys: Ty list) (state: InferState) : (NumericLiteral * TyVar) list =
+        let inTys = tys |> List.map (resolveSoFar state >> TypeEnv.freeTyVars) |> Set.unionMany
+        if inTys.IsEmpty then []
+        else
+            state.UnsettledLiterals
+            |> List.choose (fun literal ->
+                match literal.Value, resolveSoFar state literal.Type with
+                | (IntLit _ | FloatLit _), TyMeasure(_, TyVar storage) when inTys.Contains storage.Id -> Some (literal, storage)
+                | _ -> None)
+
     /// `state` with each literal of a variable of its own that is in `tys` made its default type, if there is one: where
-    /// a call finds the instance of a context of the literal's type, the type cannot wait for the rest of the def.
+    /// a call finds the instance of a context of the literal's type, the type cannot wait for the rest of the def. A
+    /// literal with no unit where a measured value is has its storage made its kind, as `check` makes it, so that what
+    /// the measured value requires of its storage, `Num` of it, is found and not reported too.
     let settleIn (tys: Ty list) (state: InferState) : InferState option =
-        match openIn tys state with
-        | [] -> None
-        | settling -> Some (settleLiterals settling state)
+        match openIn tys state, measuredIn tys state with
+        | [], [] -> None
+        | settling, measured ->
+            let state = settleLiterals settling state
+            Some (measured |> List.fold (fun current (literal, storage) -> addConstraint (TyVar storage) (defaultType literal.Value) current) state)
 
     /// Whether a value of the type `ty`, as far as `state` knows it, can be of the type `target`: `ty` is `target`, or
     /// it is still a literal's own variable and `target` is a number of the literal's kind.
