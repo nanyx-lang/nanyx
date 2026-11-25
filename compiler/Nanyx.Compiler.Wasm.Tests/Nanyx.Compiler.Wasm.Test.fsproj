@@ -143,6 +143,7 @@
     <Compile Include="Features\Maps\RunMapEqualityTests.fs" />
     <Compile Include="Features\Maps\RunMapMatchTests.fs" />
     <Compile Include="Features\Maps\RunMapBuilderLoopTests.fs" />
+    <Compile Include="Features\Maps\MapWalkCostTests.fs" />
     <Compile Include="Features\Loops\RunLoopTests.fs" />
     <Compile Include="Features\Loops\RunSeqLoopTests.fs" />
     <Compile Include="Features\Loops\RunIterableLoopTests.fs" />

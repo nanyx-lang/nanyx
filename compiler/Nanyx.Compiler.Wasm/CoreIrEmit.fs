@@ -1311,7 +1311,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverRange(first, last) -> [ atomCode first; $"local.set ${localName stream.Element}"; atomCode last; $"local.set ${localName stream.End}" ]
             | OverRangeFrom first -> [ atomCode first; $"local.set ${localName stream.Element}" ]
             | OverList list -> [ atomCode list; $"local.set ${localName stream.Cursor}" ]
-            | OverStore(store, walk) -> atomCode store :: CoreIrEmitStoreWalk.start stream walk
+            | OverStore(store, walk) -> atomCode store :: CoreIrEmitStoreWalk.start touching stream walk
         // A range counts in ints; a list's cursor moves to each cell's tail, after its head.
         let next (stream: ForStream) =
             match stream.Source with
@@ -1320,7 +1320,7 @@ type private FunctionEmitter(context: EmitContext) =
             | OverList _ ->
                 let cursor = localName stream.Cursor
                 [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; load stream.Element.Type 0; $"local.set ${localName stream.Element}" ]
-            | OverStore(_, walk) -> CoreIrEmitStoreWalk.next touching (tagCode (context.TagId "bucket")) depth done' stream walk
+            | OverStore(_, walk) -> CoreIrEmitStoreWalk.next touching depth done' stream walk
         let advance (stream: ForStream) =
             match stream.Source with
             | OverRange _

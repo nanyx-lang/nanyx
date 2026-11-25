@@ -333,10 +333,11 @@ and ForSource =
     | OverStore of Atom * StoreWalk
 
 /// How a `for` loop walks a map's or a set's store: the stream's `Cursor` is the cell of the bucket it is in, and these
-/// hold the rest. It goes into the store's nodes one level at a time, keeping the child it took at each level in five
-/// bits of `Path` (a trie is no deeper than 13 levels, the last of four bits, so they fit an `int`), and goes back up
-/// by going down again from the root along `Path`: it makes nothing, and counts no reference, as a list's walk counts
-/// none.
+/// hold the rest. It goes into the store's nodes one level at a time, taking each node's buckets and nodes in the order
+/// of their five-bit values, reading a bucket straight from its node's array, and keeping the value of the node it
+/// took at each level in five bits of `Path` (a trie is no deeper than 13 levels, the last of four bits, so they fit an
+/// `int`). It goes back up by going down again from the root along `Path`: it makes nothing, and counts no reference,
+/// as a list's walk counts none.
 and StoreWalk =
     { /// The store's type (see `Maps.storeOf`).
       StoreType: IrType
@@ -344,12 +345,20 @@ and StoreWalk =
       Keys: bool
       /// The store the loop walks.
       Root: Var
-      /// A store to go into next, a bucket or a node, or 0.
+      /// The bit of the node it goes into next.
       Pending: Var
-      /// The array of the children of the node it is in.
-      Children: Var
-      /// Where it is in `Children`: the child it takes next.
-      Index: Var
+      /// The payload of the node it is in: its bits and arrays.
+      Node: Var
+      /// The bits of the node it is in that have a bucket.
+      LeafBits: Var
+      /// The array of the buckets of the node it is in.
+      Leaves: Var
+      /// The bits of the nodes of the node it is in it has not gone into yet.
+      Remaining: Var
+      /// Where it is in `Leaves`: the bucket it takes next.
+      LeafIndex: Var
+      /// Where in `Leaves` the buckets before the next node it goes into end.
+      LeafEnd: Var
       /// How many nodes it is inside.
       Depth: Var
       /// The child it took at each level.
@@ -610,7 +619,7 @@ module ForLoop =
         loop.Streams |> List.collect (fun stream ->
             [ stream.Cursor; stream.End; stream.Element ]
             @ (match stream.Source with
-               | OverStore(_, walk) -> [ walk.Root; walk.Pending; walk.Children; walk.Index; walk.Depth; walk.Path ]
+               | OverStore(_, walk) -> [ walk.Root; walk.Pending; walk.Node; walk.LeafBits; walk.Leaves; walk.Remaining; walk.LeafIndex; walk.LeafEnd; walk.Depth; walk.Path ]
                | _ -> []))
 
 module Pattern =

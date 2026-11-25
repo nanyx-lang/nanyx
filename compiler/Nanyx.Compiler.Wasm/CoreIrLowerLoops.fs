@@ -60,8 +60,12 @@ let forEach
           Keys = keys
           Root = local "root" IrWord
           Pending = local "pending" IrWord
-          Children = local "children" IrWord
-          Index = local "index" IrWord
+          Node = local "node" IrWord
+          LeafBits = local "leafbits" IrWord
+          Leaves = local "leaves" IrWord
+          Remaining = local "remaining" IrWord
+          LeafIndex = local "leafindex" IrWord
+          LeafEnd = local "leafend" IrWord
           Depth = local "depth" IrWord
           Path = local "path" IrInt }
     // What a store's walk gives: a map's entry, or a set's element.
@@ -69,8 +73,8 @@ let forEach
         let entry =
             match IrType.unfold storeTy with
             | IrTags tags ->
-                match tags |> List.tryFind (fst >> (=) "bucket") |> Option.bind snd with
-                | Some (IrRecord [ _; _, IrList entry ]) -> entry
+                match tags |> List.tryFind (fst >> (=) "node") |> Option.bind snd with
+                | Some (IrRecord [ _; _, IrArray (IrList entry); _; _ ]) -> entry
                 | _ -> internalError $"a store of '{IrType.show storeTy}'"
             | other -> internalError $"a store of '{IrType.show other}'"
         match entry with
