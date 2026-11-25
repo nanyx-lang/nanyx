@@ -189,7 +189,7 @@ in.
 ## `StringTrie`
 
 ```nanyx fragment
-type StringTrie(v) = protected Trie(string, v)
+type StringTrie(v) = protected Trie(char, v)
 ```
 
 A trie whose keys are strings, each read as its characters, as [`string.chars`](text#stringchars) gives them. Its

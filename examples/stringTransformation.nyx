@@ -21,7 +21,7 @@ def splitWords: string -> list(string) = { input ->
 def capitalize: string -> string = { word ->
   match word \chars
     | [] -> ""
-    | [first, ...rest] -> first \uppercase ++ rest \string.join("") \lowercase
+    | [first, ...rest] -> char.toString(first) \uppercase ++ string.fromChars(rest) \lowercase
 }
 
 export def rejoin: list(string), Casing -> string = { words, casing ->
