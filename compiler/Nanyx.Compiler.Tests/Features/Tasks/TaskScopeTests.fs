@@ -22,6 +22,16 @@ let ``A def that starts tasks doesn't require their scope`` () =
     Assert.Equal(Some "def both: [Async] α -> string", hoverType source "both")
 
 [<Fact>]
+let ``A def that starts tasks and calls itself last is shown as written, not as the def its body runs in`` () =
+    // It is two defs, one opening the scope and one running the body in it (see `TaskScopes`), and the first is the
+    // one written.
+    let annotated =
+        withTasks "def work: [Async] int, int -> int = { n, acc ->\n  if n == 0 then acc else work(n - 1, acc + await(start! n))\n}"
+    Assert.Equal(Some "def work: [Async] int, int -> int", hoverType annotated "work")
+    let inferred = withTasks "def work = { n, acc ->\n  if n == 0 then acc else work(n - 1, acc + await(start! n))\n}"
+    Assert.Equal(Some "def work: [Async] int, int -> int", hoverType inferred "work")
+
+[<Fact>]
 let ``A task given back from the def that started it is the escape of its scope`` () =
     let source = withTasks "def leaks = { _ -> start({ 1 }) }"
     let code, message, at = onlyDiagnostic source
