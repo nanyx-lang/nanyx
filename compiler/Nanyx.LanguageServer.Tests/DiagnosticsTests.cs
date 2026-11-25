@@ -314,10 +314,11 @@ public sealed class DiagnosticsTests : LanguageServerTestBase
         var uri = DocumentUri.FromFileSystemPath(path);
         var text = NyxCompiler.StandardLibrary.tryLoadFile("nanyx/" + fileName).Value;
 
-        // Checking one of the prelude's files checks the whole prelude, which takes seconds. This only guards against the
-        // server never publishing, so it is given 90 s at least, or three times what the check takes here if that is
-        // more. Load on the machine changes between the check here and the server's: in CI, a check of under 2 s here
-        // was followed by one in the server that took more than 30.
+        // Checking one of the prelude's files checks the whole prelude, which takes seconds, and on a loaded machine more
+        // than the timeout: the check here is given the allowance too, or the test is cancelled before the server is
+        // asked. This only guards against the server never publishing, so the server is given 90 s at least, or three
+        // times what the check here took if that is more.
+        AllowFor(MinimumStandardLibraryCheck);
         var checking = System.Diagnostics.Stopwatch.StartNew();
         NyxCompiler.Compiler.compileStandardLibraryFile(NyxCompiler.Linters.none, path, text);
         AllowFor(TimeSpan.FromTicks(Math.Max(MinimumStandardLibraryCheck.Ticks, (3 * checking.Elapsed).Ticks)));
