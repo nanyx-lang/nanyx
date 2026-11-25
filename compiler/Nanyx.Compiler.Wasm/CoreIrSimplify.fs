@@ -748,18 +748,19 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
 /// The most passes the simplifier makes over a body before it is given back as it is by then.
 let private passes = 8
 
-/// The body of `f` simplified, given the functions it may call as they are by now, and whether anything changed.
+/// The body of `f` simplified, given the functions it may call as they are by now, and whether it is settled: whether the
+/// last pass changed nothing, so that simplifying it again would give it back as it is. A
+/// pass reads only the number of parameters and the result type of the functions it may call, which inlining into them
+/// never changes, so a settled body stays settled until something else changes it (see `CoreIrInline`).
 let simplify (functions: Dictionary<string, Function>) (f: Function) : Expr * bool =
     let mutable body = f.Body
     let mutable changed = true
-    let mutable any = false
     let mutable pass = 0
     while changed && pass < passes do
         let simplifier = Simplifier(functions, { f with Body = body })
         let simplified = simplifier.Sequence Map.empty body
         let stripped, didStrip = withoutUnread simplified
         changed <- simplifier.Changed || didStrip
-        any <- any || changed
         body <- stripped
         pass <- pass + 1
-    body, any
+    body, not changed
