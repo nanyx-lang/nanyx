@@ -8,6 +8,92 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.40.0
+
+*25 November 2026*
+
+A release about numbers, characters and maps. `/` gives a fraction and a new `//` divides and rounds down, a `char`
+type holds one Unicode scalar value, and maps and sets are hash tries, much faster than before. The shipped packages
+take new names, with every host named `<name>.host`. Five changes break code: they are marked below.
+
+**Language**
+
+- `/` divides with a fraction on every number type, so `7 / 2` is `3.5`, and `//` divides and rounds down. `%` is
+  floored to match, so `-7 % 2` is `1`. `Num` has a `fraction` type, which its `/` gives. **This breaks code** that
+  divides ints and expects an int: write `//` ([Operators](../tour/operators#arithmetic-and-comparison),
+  [Sized numbers](../advanced/sized-numbers#division)). A negative power of a type whose fraction is another type is
+  [NYX0292](../standard-tools/errors#nyx0292).
+- `char` is one Unicode scalar value. A string literal is a `char` where a `char` is expected, and one that isn't
+  exactly one scalar value there is [NYX0284](../standard-tools/errors#nyx0284) ([Types](../tour/types#characters)).
+- A record pattern can name some fields alone and rename others, as in `(x, y = b)`
+  ([Pattern matching](../tour/pattern-matching#records)).
+- A manifest's `package` can give `nanyx = "0.40"`, the oldest compiler the package builds with, which `nanyx new`
+  writes and `nanyx publish` requires. An older compiler reports [NYX0052](../standard-tools/errors#nyx0052)
+  ([Packages](../tour/packages#package-manifests)).
+- A number with a unit straight after it, `500ms`, is read as one literal, and `dimension` and `unit` declarations are
+  parsed, the first step of units of measure. A letter straight after a hexadecimal, octal or binary number is an
+  error.
+
+**Standard library**
+
+- The shipped packages are renamed: `nanyx.console.core` is `nanyx.cli`, the console host `nanyx.console` is
+  `nanyx.cli.host`, `nanyx.http.core` is `nanyx.http`, the HTTP host `nanyx.http` is `nanyx.http.host`, and
+  `nanyx.playground` is `nanyx.playground.host`. **This breaks code** that names one by its old name, which is
+  [NYX0054](../standard-tools/errors#nyx0054) and gives the new one ([Hosts](../advanced/hosts)).
+- `nanyx.regex` is no longer shipped: it is a package of its own in the package index.
+- `char` has `toInt`, `fromInt`, `toString`, `isDigit`, `isAsciiLetter` and `isWhitespace`, `string.chars` gives a
+  `list(char)`, and `string.fromChars` joins one back. **This breaks code** that used `string.chars` as a list of
+  strings ([prelude-chars](../stdlib/prelude-chars)).
+- Maps and sets give their entries in the order of their keys' hashes, which is unspecified, rather than the order
+  they were added, and `json.print` and `json.encode` write an object's keys in that order too. **This breaks code**
+  that relied on insertion order: sort for an order of your own
+  ([Collections](../tour/collections#common-collection-abstractions)). A map or a set can now be a key, or an element
+  of a set.
+- `Array` has `list`'s core collection functions, among them `filter`, `filterMap`, `select`, `find`, `any`, `all`,
+  `sort`, `sortBy`, `take`, `skip`, `zip` and `scan`, none of which builds a list on the way ([array](../stdlib/array)).
+- `string.build` builds a string from the pieces a block emits, in one growing buffer ([text](../stdlib/text)).
+- `int` and each sized integer type have `maxValue` and `minValue`
+  ([Sized numbers](../advanced/sized-numbers#overflow)).
+- `math.mod` is gone, since `%` is now floored. **This breaks code** that calls it: write `%`.
+- `float.pow` of an exponent that isn't a whole number is within a unit in the last place of the exact power.
+
+**Tools**
+
+- Hover, go to definition, references, rename and Info View show a call last in a scope def as the call written,
+  rather than by a generated name.
+- Info View names a protected or private context, with its link.
+- The formatter writes a def's tuple value without brackets, `def x, y = 1, 2`.
+- `nanyx stdlib-docs` reports a pinned package that doesn't compile, where it crashed.
+
+**Performance**
+
+- A map's lookup, insert and remove take time in proportion to the log of its size: building a 100,000-key map and
+  reading it back takes about 1.3 s, from 91 s. A `for` loop over a map or a set walks it in place and allocates
+  nothing.
+- Reading a decimal of up to 19 digits as a float uses Eisel–Lemire, without big numbers.
+- The compiler runs with server garbage collection, and stops inlining a function once its body is settled.
+- A def of thousands of calls that pass lambdas, or of thousands of `start!`s, is type checked in linear time.
+- A lambda is specialised on the context members its function knows, so `list.sum` and the other folds call them
+  directly, and a function called through a function value borrows its context members.
+- A task's memory is freed when it finishes, and a def that starts a task and calls itself last runs as a loop, as
+  does a scope def that writes no type.
+
+**Fixes**
+
+- A `for` over a map or a set in a builder, whose body uses `try` or `return`, compiles and runs.
+- Each item of a list literal is checked against a known expected element type, so two lambdas giving different tags
+  of the expected union fit.
+- A lambda that calls an unannotated def that waits waits too, and a def in a cycle with it sees the contexts it
+  requires.
+- A lambda finds the instance it is given inside a `use` of the same context at another type.
+- Comparing maps whose types hold a type variable nothing solves, or maps in a trie, compares their entries.
+- A task's function that holds a `memory` block's value is caught however the task is started.
+- A script's statements no longer share type variables, which gave a spurious NYX0233.
+- A def that starts a task without naming `start` is reported at the call, with a span.
+- A lambda that `yield`s given to a builder is NYX0201 at its `yield`, saying to write `emit`.
+- A keyword call such as `start!` that calls a local named `start` is reported at the keyword, naming the local.
+- A unit argument's work is done inside a call through a function value, where it could be lost across a wait.
+
 # 0.39.0
 
 *24 November 2026*
