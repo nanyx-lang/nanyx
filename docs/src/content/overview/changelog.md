@@ -8,6 +8,54 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.41.0
+
+*25 November 2026*
+
+A release about units of measure. A number can carry a unit, `500ms`, the type checker keeps a dimension's units
+apart, and arithmetic and printing know them. The prelude declares `Time`, and `sleep` takes one. It also fixes a
+regression in 0.40.0 with imported generic types. One change breaks code: it is marked below.
+
+**Language**
+
+- `dimension` and `unit` declarations are checked. A dimension is a type, `Time(int)`, stored as the number it is
+  generic in, and a unit is a scale of its dimension's base unit, worked out exactly. A unit that can't be one is an
+  error, from [NYX0286](../standard-tools/errors#nyx0286) to [NYX0291](../standard-tools/errors#nyx0291)
+  ([Units and dimensions](../work-in-progress/units-and-dimensions)).
+- A number with a unit, `500ms` or `0.5s`, is a value of the unit's dimension, stored as its number of base units.
+  It must be a whole number of them in an integer storage, and a number with no unit is never a measured value.
+- A signature that names a dimension, `Time, Time -> bool`, gives each storage it leaves out a type variable of its
+  own that requires `Num`. A storage that no parameter fixes is [NYX0293](../standard-tools/errors#nyx0293), and a
+  storage written for a dimension that fixes its own is [NYX0294](../standard-tools/errors#nyx0294).
+- `+`, `-` and `%` take two values of one dimension, `*` scales one by a number, and `/` and `//` of two values of one
+  dimension give a plain number. Two dimensions in one sum, or a product of two dimensions, is a type mismatch that
+  names them.
+- A measured value has a `toString`, which writes it in the largest unit it is a whole number of: `120s` prints as
+  `2min`, and zero as `0ns`.
+- A `char`'s type description is `#char` ([Inspecting a type](../tour/functions#inspecting-a-type)).
+
+**Standard library**
+
+- The prelude declares `dimension Time` with the units `ns`, `us`, `ms`, `s`, `min`, `hr` and `d`, seen by every
+  module on every host. A module's own `Time` or unit of the same name is the one its names mean
+  ([prelude: time](../stdlib/prelude-time)).
+- `sleep` takes a `Time(int)`: `sleep(500ms)`, `sleep(0.5s)`. A host waits for the time's whole milliseconds, rounded
+  up. **This breaks code** that calls `sleep` with a number of milliseconds, or that writes a `Clock` whose `sleep`
+  takes an `int`: write `sleep(500ms)` ([clock](../stdlib/clock)).
+- `char` has `isAsciiUppercase`, `isAsciiLowercase`, `isAsciiAlphanumeric`, `uppercase` and `lowercase`
+  ([prelude-chars](../stdlib/prelude-chars)).
+
+**Fixes**
+
+- An imported generic type whose `==` is inferred to require `Eq`, such as one that compares its members with
+  `list.contains`, can be compared again where its values are made without a written type; 0.40.0 rejected these with
+  a type mismatch. A generic record type's constructor makes a value of each type it is given, so `Box(v = 1)` and
+  `Box(v = "x")` no longer clash.
+- A local function that declares `[Eq(t)]`, `[Ord(t)]` or `[Hash(t)]` can be called with a built-in type such as
+  `int`, `string` or a list; before, it was a backend error.
+- A tag that isn't one of a union's tags is reported with the union's tags listed, and the closest suggested.
+- An `if` with no `else` whose `then` branch gives a value says that it has no `else`, and so gives `()`.
+
 # 0.40.0
 
 *25 November 2026*
