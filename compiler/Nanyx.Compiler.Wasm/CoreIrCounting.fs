@@ -49,9 +49,12 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
     // A float is passed as the number in its box, which is only read.
     | CallImport(_, args) -> all Borrowed args
     | MakeClosure(_, _, captured) -> all Owned captured
-    // The closure is the environment, which the entry called borrows or owns (see `CoreIrClosureEntries`). Its code
-    // reads the closure again for the table slot after the arguments, so the closure counts as used last.
-    | CallClosure(closure, args, Borrowing) -> all Owned args @ [ AVar closure, Borrowed ]
+    // The closure is the environment, which the entry called borrows or owns (see `CoreIrClosureEntries`), as it does
+    // the context members passed after the arguments (#2559). Its code reads the closure again for the table slot after
+    // the arguments, so the closure counts as used last.
+    | CallClosure(closure, args, Borrowing) ->
+        let arguments = args.Length - CoreIrClosureEntries.memberCount closure.Type
+        (args |> List.mapi (fun index arg -> arg, if index < arguments then Owned else Borrowed)) @ [ AVar closure, Borrowed ]
     | CallClosure(closure, args, Owning) -> all Owned args @ [ AVar closure, Owned ]
     | Interpolate parts -> parts |> List.choose (function Hole(hole, _) -> Some(AVar hole, Borrowed) | Text _ -> None)
     | Dbg(_, text) -> [ text, Borrowed ]
@@ -235,8 +238,10 @@ let private couldReuse (func: Function) (borrowed: Set<int>) : bool =
         | _ -> false)
 
 /// Which parameters each function owns. A function called through the function table (a lifted lambda, or the
-/// wrapper of a function passed as a value) borrows its environment and owns the rest, as every call through a closure
-/// passes them owned; its owning entry owns them all (see `CoreIrClosureEntries`). Another function owns a parameter on
+/// wrapper of a function passed as a value) borrows its environment and the context members it is called with, which
+/// are its last parameters, and owns the rest, as every call through a closure passes them so; its owning entry owns
+/// them all (see `CoreIrClosureEntries`). The caller holds its members throughout, so a call need not count them up and
+/// down (#2559). Another function owns a parameter on
 /// the heap when it takes it over somewhere (passes it on owned, stores it, returns it), and borrows it when it only
 /// reads it. A parameter it matches on is borrowed as Lean 4 infers it: when nothing bound from it is taken over (see
 /// `borrowedFrom`), save by a call that borrows it in turn, and no arm could reuse its block (see `couldReuse`). A
@@ -246,10 +251,13 @@ let private couldReuse (func: Function) (borrowed: Set<int>) : bool =
 let internal inferOwnership (functions: Function list) : Ownership =
     let indirect = CoreIrClosureEntries.targets functions
     let owningEntries = indirect |> Set.map CoreIrClosureEntries.owningName
+    let members = CoreIrClosureEntries.memberCounts functions
     let entries =
         functions
         |> List.filter (fun f -> indirect.Contains f.Name)
-        |> List.map (fun f -> f.Name, f.Params |> List.mapi (fun index _ -> if index = 0 then Borrowed else Owned))
+        |> List.map (fun f ->
+            let arguments = f.Params.Length - (members |> Map.tryFind f.Name |> Option.defaultValue 0)
+            f.Name, f.Params |> List.mapi (fun index _ -> if index = 0 || index >= arguments then Borrowed else Owned))
     let uses = Dictionary<string, Use array>()
     for f in functions do
         if not (indirect.Contains f.Name || owningEntries.Contains f.Name) then
@@ -292,6 +300,26 @@ let internal inferOwnership (functions: Function list) : Ownership =
                     | _ -> ())
     current ()
 
+/// The variables `func` borrows, by id: its parameters on the heap that `ownership` says it borrows, and what they keep
+/// alive (see `borrowedFrom`). Every other variable on the heap holds a reference of its own.
+let internal borrowedIn (ownership: Ownership) (func: Function) : Set<int> =
+    func.Params
+    |> List.indexed
+    |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && parameterUse ownership func.Name index = Borrowed)
+    |> List.map (snd >> _.Id)
+    |> Set.ofList
+    |> borrowedFrom func
+
+/// The reuse tokens of `func`, by id: the variables a release keeps the block it gives up in (see `CoreIrReuse`).
+let internal reuseTokens (func: Function) : Set<int> =
+    nodes func.Body
+    |> Seq.choose (fun e ->
+        match e.Kind with
+        | Release(released, _) -> released.Token
+        | _ -> None)
+    |> Seq.map _.Id
+    |> Set.ofSeq
+
 /// Counts one function's body. `addresses` gives the strings a value is an address in (see `addressFlow`), which a use
 /// of the value uses too. `owningEntries` gives the owning entry of each function a closure is over that has one.
 type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEntries: Map<string, string>, func: Function) =
@@ -301,13 +329,7 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEn
     let free = Dictionary<Expr, Set<int>>(HashIdentity.Reference)
     let tails = HashSet<Expr>(results func.Body, HashIdentity.Reference)
     // The variables the function borrows: its borrowed parameters, and what they keep alive (see `borrowedFrom`).
-    let borrowed =
-        func.Params
-        |> List.indexed
-        |> List.filter (fun (index, parameter) -> isHeapType parameter.Type && parameterUse ownership func.Name index = Borrowed)
-        |> List.map (snd >> _.Id)
-        |> Set.ofList
-        |> borrowedFrom func
+    let borrowed = borrowedIn ownership func
 
     do
         for parameter in func.Params do
@@ -486,7 +508,7 @@ type private Counter(ownership: Ownership, addresses: Atom -> Var list, owningEn
             this.Instruction owned after owning (operands ownership owning)
         | Call(name, (AVar environment :: _ as args)) when owningEntries.ContainsKey name && this.DiesInTailCall owned after e environment ->
             let owning = { e with Kind = Call(owningEntries.[name], args) }
-            this.Instruction owned after owning ((AVar environment, Owned) :: List.tail (operands ownership e))
+            this.Instruction owned after owning (args |> List.map (fun arg -> arg, Owned))
         | _ -> this.Instruction owned after e (operands ownership e)
 
     /// Whether `e` is a call in tail position that passes `closure` as an environment, and it dies there: a temporary,

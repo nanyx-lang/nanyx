@@ -76,11 +76,16 @@
     <Compile Include="Features\Contexts\RunBlockContextTests.fs" />
     <Compile Include="Features\Contexts\RunAttachedContextDefTests.fs" />
     <Compile Include="Features\Contexts\DirectMemberCallTests.fs" />
+    <Compile Include="Features\Contexts\BorrowedMemberTests.fs" />
     <Compile Include="Features\Contexts\LambdaKnownMemberTests.fs" />
     <Compile Include="Features\Async\WaitingSpecialisationTests.fs" />
     <Compile Include="Features\Async\RunStateMachineTests.fs" />
     <Compile Include="Features\Async\RunTaskTests.fs" />
+    <Compile Include="Features\Async\WaitDepthTests.fs" />
+    <Compile Include="Features\Async\RunScopeTailCallTests.fs" />
+    <Compile Include="Features\Async\TaskMemoryTests.fs" />
     <Compile Include="Features\Async\RunCancellationTests.fs" />
+    <Compile Include="Features\Async\FrameDropTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />
@@ -209,6 +214,7 @@
     <Compile Include="Features\Records\RunRecordSpreadTests.fs" />
     <Compile Include="Features\Records\RunFunctionFieldTests.fs" />
     <Compile Include="Features\Sets\RunSetTests.fs" />
+    <Compile Include="Features\Chars\RunCharTests.fs" />
     <Compile Include="Features\Arrays\RunArrayTests.fs" />
     <Compile Include="Features\Arrays\RunArrayCallTests.fs" />
     <Compile Include="Features\Arrays\ArrayAllocationTests.fs" />

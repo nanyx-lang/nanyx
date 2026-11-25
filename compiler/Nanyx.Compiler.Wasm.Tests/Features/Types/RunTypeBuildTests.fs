@@ -146,3 +146,30 @@ show(decodeAt(object([("name", #string("Ada")), ("age", #string("old")), ("roles
 """
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan "(active = true, age = 36, name = Ada, roles = [#admin, #member(2)])\nerror: expected a number\n"
+
+[<Fact>]
+let ``Run - a record holding a map and a set is rebuilt from its fields, its map and set still equal and found in`` () =
+    let source =
+        """type Stock = (counts: map(string, int), seen: set(int), name: string)
+
+def copyOf: a, Type(a) -> #some(a) | #error(string) = { value, t ->
+  match t
+    | #record(r) -> r.build { f -> #some(f.get(value)) }
+    | else -> #error("not a record")
+}
+
+def stock: Stock = (counts = ["a" => 1, "b" => 2, "c" => 3], seen = set.fromList([1, 2, 3]), name = "s")
+
+match copyOf(stock, type Stock)
+  | #some(copy) ->
+    println(copy == stock)
+    println(copy.counts("b"))
+    println(map.containsKey(copy.counts, "d"))
+    println(set.contains(copy.seen, 2))
+    println(copy.counts == (["c" => 3, "b" => 2] \map.insert("a", 1)))
+    println(copy.seen == (set.fromList([3, 1]) \set.insert(2)))
+    println(map.toList(copy.counts) == map.toList(stock.counts))
+  | #error(e) -> println(e)
+"""
+    runSource (source.ReplaceLineEndings "\n")
+    |> assertRan "true\n#some(2)\nfalse\ntrue\ntrue\ntrue\ntrue\n"

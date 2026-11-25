@@ -18,7 +18,9 @@ workstream. Work is tracked under the `error messages` label.
   as well: "expected because of this annotation", "first defined here". The CLI shows a related location as one line,
   with no excerpt.
 - **Where a type mismatch points.** A mismatch is reported where the constraint that failed was made, which is not
-  always where the conflicting types came from (see [Deferred errors](./deferred-errors#open-questions)).
+  always where the conflicting types came from (see [Deferred errors](./deferred-errors#open-questions)). A `match`
+  whose arms, an `if` whose branches, or a list whose items differ is reported at the whole of it, not at the one that
+  differs ([#2688](https://github.com/nanyx-lang/nanyx/issues/2688)).
 - **Field names.** The syntax tree keeps no span for a record field's name, so an error about one is reported at the
   nearest node that has a span.
 - **Syntax errors.** A syntax error the parser has no message of its own for says what it expected at the furthest

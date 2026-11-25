@@ -28,7 +28,7 @@ export scoped context TaskScope = protected ()
 --| A task: something running at the same time as the code that started it, in the same instance, which gives back
   a value of type `a` when it finishes. [`Async.start`] starts one and [`Async.await`] waits for it. It belongs to the scope it
   was started in, so it can't leave that def.
-export type Task(a) = [TaskScope] protected (handle: I32)
+export type Task(a) = [TaskScope] protected (cell: () -> a)
 
 --| Runs `block` as a scope of its own for the tasks it starts, and gives back its result once every
   one of them has finished, awaited or not. The body of each module-level def that starts a task is
@@ -52,7 +52,7 @@ export def Async.start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = 
   -- The task keeps what `work` gives back as a function that gives it, so that the scheduler can drop it, whatever
   -- its type, and each `await` gets a reference of its own.
   Task(
-    handle = __nanyx_task_start(
+    cell = __nanyx_task_start(
       {
         def value = work()
         __nanyx_task_finish({ value })
@@ -64,8 +64,8 @@ export def Async.start: [Async, TaskScope, c] ([Async, c] () -> a) -> Task(a) = 
 --| Waits for `task` to finish, and gives back what it gave back. A task can be awaited more than once: each gives
   back the same value.
 export def Async.await: [Async, TaskScope] Task(a) -> a = { task ->
-  __nanyx_task_wait(task.handle)
-  __nanyx_task_result(task.handle)
+  __nanyx_task_wait(task.cell)
+  __nanyx_task_result(task.cell)
 }
 
 --| Runs each of `contestants` as a task, and gives back what the first to finish gave back, once
@@ -81,11 +81,11 @@ export def Async.race: [Async, c] list(([Async, c] () -> a)) -> a = { contestant
         def tasks = list.map(contestants, { contestant -> Async.start(contestant) })
         __nanyx_scope_wait_any()
 
-        match list.find(tasks, { task -> __nanyx_task_done(task.handle) })
+        match list.find(tasks, { task -> __nanyx_task_done(task.cell) })
           | #some(winner) ->
-            for tasks | task -> if task.handle != winner.handle
-              then __nanyx_task_cancel(task.handle)
-              else ()
+            for tasks | task -> if __nanyx_task_done(task.cell)
+              then ()
+              else __nanyx_task_cancel(task.cell)
 
             Async.await(winner)
           | #notFound -> crash("race: no contestant has finished")

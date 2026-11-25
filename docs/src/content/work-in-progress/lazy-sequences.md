@@ -18,7 +18,9 @@ section. This page keeps what is still open.
    type doesn't name; a type nothing settles is walked as a list, unless a signature around the loop requires
    `Iterable` of it. A written signature pays for it, and how to make that shorter is an
    [open question](#open-questions).
-2. **A range of characters** waits on a character type ([#2196](https://github.com/nanyx-lang/nanyx/issues/2196)).
+2. **A range of characters.** `char` exists, but has no `succ`, so `a..e` of two chars is `NYX0205`, a missing
+   `Enumerable(char)`. Which types other than `int` get ranges is
+   [#1700](https://github.com/nanyx-lang/nanyx/issues/1700).
 3. **`seq.cache`,** not written yet, would give the sequences that want it stored tails, so that walking one twice
    does its work once.
 4. **Builders that push through `Emit`,** and `seq { }` as a library handler on async's state machines: on

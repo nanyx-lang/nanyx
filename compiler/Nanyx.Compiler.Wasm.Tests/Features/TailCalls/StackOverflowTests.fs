@@ -7,7 +7,7 @@ open Xunit
 open TranspilerWasmTestHelpers
 
 let private message (name: string) =
-    $"Runtime error: the program ran out of stack in '{name}': a recursive call that isn't in tail position uses stack for every call (see https://nanyx.dev/docs/tour/functions#tail-recursion)\n"
+    $"Runtime error: the program ran out of stack in '{name}': a call that isn't a tail call keeps its caller's stack until it returns, so a function that calls itself that way uses stack for every call (see https://nanyx.dev/docs/tour/functions#tail-recursion)\n"
 
 [<Fact>]
 let ``A function that recurses too deeply runs out of stack, named, without a backtrace`` () =

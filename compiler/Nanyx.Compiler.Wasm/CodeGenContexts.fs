@@ -278,7 +278,7 @@ let writtenArgumentType (named: (string * Ty) list) (annotated: (TypeExpr * Ty) 
     | TypeName varName ->
         vars
         |> Map.tryFind varName
-        |> Option.orElse (if SizedNumber.isName varName then Some (TyPrimitive varName) else None)
+        |> Option.orElse (if SizedNumber.isName varName || varName = Chars.name then Some (TyPrimitive varName) else None)
         |> Option.orElse (writtenTy argument)
     | TypeVar varName -> vars |> Map.tryFind varName
     // A tag, or a union of them, as an associated type is fixed with: `FromString(a, failure = #invalidInt)`.

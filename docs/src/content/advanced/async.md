@@ -72,6 +72,23 @@ Nothing that holds a task can leave its def: giving back a `Task`, or a lambda t
 scope is the def, not the nearest lambda: a task started in a local def or a lambda belongs to the def it is written
 in. A function that awaits a task it is given borrows its caller's scope.
 
+A def that is a scope and is called last by another, or by itself, joins the caller's scope rather than opening its own,
+so the call stays a [tail call](../tour/functions#tail-recursion), and a def that starts a task in each turn and calls
+itself last is a loop. Every turn's tasks belong to the outermost call's scope: one nobody awaits is waited for when that
+call returns, at the loop's end, not at the end of its turn. A scope keeps only its tasks still running, so a loop that
+awaits the task of each turn holds the same memory however many turns it runs. Both defs must write their types, and be
+in the same module;
+a def that writes no type opens a scope of its own wherever it is called, so calling it last isn't a tail call.
+
+```nanyx
+def total: [Async] int, int -> int = { n, acc ->
+  if n == 0 then acc else total(n - 1, acc + await(start! n))
+}
+
+println(total(100_000, 0))
+-- 5000050000
+```
+
 A def is a scope when its body names `start` (or `Async.start`), so a def that starts a task only through another
 name, as `go(...)` after `def go = Async.start` does, is not one, and starting the task there is an error
 ([NYX0211](../standard-tools/errors#nyx0211)): name `start` in the def itself.

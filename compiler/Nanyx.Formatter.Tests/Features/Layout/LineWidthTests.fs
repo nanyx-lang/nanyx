@@ -23,7 +23,7 @@ let ``A record or tuple that does not fit has one element per line, with no comm
         formatWith 30 "def p = (name = \"Ada\", born = 1815, field = maths)")
     Assert.Equal(lines [ "def t = ("; "  alpha"; "  beta"; "  gamma"; ")" ], formatWith 15 "def t = (alpha, beta, gamma)")
     unchanged "def p = (name = \"Ada\", born = 1815)\n"
-    unchanged "def t = (alpha, beta, gamma)\n"
+    unchanged "def t = alpha, beta, gamma\n"
 
 [<Fact>]
 let ``The outermost brackets break first`` () =

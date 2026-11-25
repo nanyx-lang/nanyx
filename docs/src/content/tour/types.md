@@ -49,6 +49,43 @@ There is no separate `number` type. Generic code over numbers requires a [contex
 
 `int` is a 64-bit integer and `float` a 64-bit floating-point number, on every platform. Numbers of other fixed widths are types of their own: `I8`, `I16`, `I32`, `U8`, `U16`, `U32`, `U64` and `F32`. A literal takes the type the code around it expects, `def small: U8 = 200`, their arithmetic stops the program when the result does not fit, and each converts to the others with a definition named after the target, `I32.toInt` or `int.toU8`, which gives `#outOfRange` when the value may not fit; see [Sized numbers](../advanced/sized-numbers).
 
+# Characters
+
+`char` is one Unicode scalar value: a code point from 0 to 0x10FFFF that isn't a surrogate, as Rust's `char` is. It
+is not a UTF-16 code unit, and not what a reader sees as one character, which may be several scalar values. A string
+is UTF-8 bytes, as before; a `char` is one of the scalar values it holds.
+
+There is no literal of its own: a string literal is a `char` where a `char` is expected, as `200` is a `U8` where a
+`U8` is expected. Anywhere else it is a `string`, so `def c = "A"` is a string.
+
+```nanyx
+def initial: char = "A"
+def smile: char = "\u{1F600}"
+
+def isVowel: char -> bool = { c ->
+  match c
+    | "a" | "e" | "i" | "o" | "u" -> true
+    | _ -> false
+}
+
+println(isVowel(initial))
+println(initial < "B")
+-- false
+-- true
+```
+
+What expects a `char` is a definition's written type, a parameter's, a list or record that is expected to hold chars,
+the value a pattern matches, and the other side of `==`, `<` and the other comparisons. There, the literal must be
+exactly one scalar value: `""`, `"ab"`, a literal with holes, and `"é"` written as `e` and a combining accent are each
+the error [NYX0284](../standard-tools/errors#nyx0284).
+
+A char's code point is `char.toInt(c)`, and `char.toString(c)` is the string of it; `string.chars` gives a string's
+chars, and `string.fromChars` a string of them (see [chars](../stdlib/prelude-chars)).
+
+A literal is a `char` only where the code around it already expects one when it is checked. In a function whose
+parameter's type nothing gives yet, `{ c -> c == "a" }`, the literal is a string, so `c` is a string too, and giving the
+function a `char` is a type mismatch. Write the parameter's type: `{ c: char -> c == "a" }`.
+
 # Built-in type names
 
 Each built-in type has a capitalised name, which is the type, and a lowercase alias, a keyword that means exactly that type, as `string` means `String` in .NET:
@@ -67,7 +104,7 @@ Each built-in type has a capitalised name, which is the type, and a lowercase al
 
 The two are the same type everywhere, so `List(int)` and `list(int)` are one type, and so are `def String.trim` and `def string.trim` (see [Attached definitions](../advanced/attached-definitions#attaching-to-a-built-in-type)). The compiler prints the alias: an error message or a hover says `list(string)`.
 
-`Int`, `Float` and `Bool` are not types at all: writing one is the error `NYX0114`, with a fix that writes `int`, `float` or `bool`.
+`Int`, `Float`, `Bool` and `Char` are not types at all: writing one is the error `NYX0114`, with a fix that writes `int`, `float`, `bool` or `char`.
 
 # Record types
 
@@ -99,7 +136,7 @@ Tuples are anonymous records with numbered fields:
 
 ```nanyx
 -- Tuple type
-def point: int, int = (10, 20)
+def point: int, int = 10, 20
 
 -- Named tuple (equivalent to record)
 def coords: (x: int, y: int) = (x = 10, y = 20)

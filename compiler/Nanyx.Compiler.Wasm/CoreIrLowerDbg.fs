@@ -75,6 +75,7 @@ let printable (toIrType: Ty -> IrType) (ty: Ty) =
         | _ ->
         match Unifier.unalias ty with
         | TyPrimitive("int" | "bool" | "float" | "F32" | "string")
+        | Chars.CharType
         | SizedIntegerType _ -> true
         | TyTag _
         | TyUnion _ as union -> tagsOf union |> List.forall (snd >> Option.forall part)
@@ -122,8 +123,9 @@ let key (printer: Printer) : string =
     | ShowingRest(ty, false) -> $"__dbg_rest_{mangle ty}"
     | ShowingRest(ty, true) -> $"__dbg_entries_{mangle ty}"
 
-/// The function `name` that is `printer`.
-let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Function =
+/// The function `name` that is `printer`. `callee` gives the name to call a definition by at a type, as a map's and a
+/// set's `toList` are called for their entries.
+let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name: string) (printer: Printer) : Function =
     let text (parts: InterpolationPart list) = Expr.make (Interpolate parts) IrString
     let local (prefix: string) (ty: IrType) = tools.NewVar prefix Local ty
 
@@ -226,6 +228,12 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                 IrString)
     | Showing ty ->
         let value = tools.NewVar "__dbg_value" Param (tools.ToIrType ty)
+        // The entries or elements of `value`, a map or a set, in a local, as the list the prelude's `toList` gives.
+        let listed (collection: Ty) (elementTy: Ty) (k: Var -> Expr) =
+            let listTy = Lists.ofType elementTy
+            let toList = callee (match collection with Sets.SetType _ -> Sets.toList | _ -> Maps.toList) (TyFunc(collection, listTy, []))
+            let elements = local "__dbg_elements" (tools.ToIrType listTy)
+            Expr.letIn elements (Expr.make (Call(toList, [ AVar value ])) elements.Type) (k elements)
         let body =
             match constantText ty with
             | Some constant -> Expr.make (Atom(AString constant)) IrString
@@ -240,6 +248,10 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
             | TyPrimitive "float" -> Expr.make (CallRuntime(Helpers.floatToString, [ AVar value ], true)) IrString
             | TyPrimitive "F32" -> Expr.make (CallRuntime(Helpers.f32ToString, [ AVar value ], true)) IrString
             | TyPrimitive "string" -> Expr.make (CallRuntime(Helpers.stringQuote, [ AVar value ], true)) IrString
+            // A char is written as a string literal of it.
+            | Chars.CharType ->
+                let text = tools.NewTemp IrString
+                Expr.letIn text (Expr.make (CallRuntime(Helpers.charToString, [ AVar value ], true)) IrString) (Expr.make (CallRuntime(Helpers.stringQuote, [ AVar text ], true)) IrString)
             | TyTag _
             | TyUnion _ as union ->
                 let arm (tagName: string, payload: Ty option) =
@@ -262,11 +274,14 @@ let printerFunction (tools: PrinterTools) (name: string) (printer: Printer) : Fu
                     text (Text "(" :: separated written @ [ Text ")" ]))
             | TyApply("list", [ elementTy ]) ->
                 listText value elementTy "" (showElement elementTy) (ShowingRest(elementTy, false))
-            // A map and a set are written as a list of their entries or elements, after their type's name.
+            // A map and a set are written as the list their `toList` gives, of their entries or elements, after their
+            // type's name.
             | Maps.MapType(keyTy, valueTy) ->
                 let entryTy = TyRecord(Map.ofList [ "0", keyTy; "1", valueTy ], FieldOrder.none)
-                listText value entryTy "Map" (fun entry k -> entryText entry keyTy valueTy k) (ShowingRest(entryTy, true))
-            | Sets.SetType elementTy -> listText value elementTy "Set" (showElement elementTy) (ShowingRest(elementTy, false))
+                listed ty entryTy (fun entries ->
+                    listText entries entryTy "Map" (fun entry k -> entryText entry keyTy valueTy k) (ShowingRest(entryTy, true)))
+            | Sets.SetType elementTy ->
+                listed ty elementTy (fun elements -> listText elements elementTy "Set" (showElement elementTy) (ShowingRest(elementTy, false)))
             // An array is written as the list of its elements is, after its type's name.
             | Arrays.ArrayType elementTy ->
                 let elements = local "__dbg_elements" (IrList(tools.ToIrType elementTy))

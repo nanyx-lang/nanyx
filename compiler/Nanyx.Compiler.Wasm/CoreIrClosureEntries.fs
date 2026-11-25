@@ -24,6 +24,23 @@ let targets (functions: Function list) : Set<string> =
         made @ static')
     |> Set.ofSeq
 
+/// How many context members a call of a function value of type `ty` passes after its arguments (see `IrFunction`).
+let memberCount (ty: IrType) =
+    match IrType.unfold ty with
+    | IrFunction(_, _, members, _) -> members.Length
+    | _ -> 0
+
+/// How many context members a closure over each function in `functions` a closure is over is called with, by the
+/// function's name: the last of its parameters are those members, which it borrows (see `CoreIrCounting`).
+let memberCounts (functions: Function list) : Map<string, int> =
+    functions
+    |> Seq.collect (fun func -> allExprs func.Body)
+    |> Seq.collect (fun e ->
+        let made = match e.Kind with MakeClosure(name, _, _) -> [ name, memberCount e.Type ] | _ -> []
+        let static' = directAtoms e |> List.choose (function AStaticClosure(name, _, ty) -> Some(name, memberCount ty) | _ -> None)
+        made @ static')
+    |> Map.ofSeq
+
 /// Whether every closure over `func` captures nothing, and so is static data (see `closureOver`): its environment holds
 /// the table slot alone.
 let capturesNothing (func: Function) =
@@ -31,11 +48,14 @@ let capturesNothing (func: Function) =
     | environment :: _ -> environment.Type = IrRecord [ "0", IrWord ]
     | [] -> true
 
-/// `functions` with each of them a closure is over, one of `over`, followed by its owning entry, unless it is its own.
-let withOwningEntries (over: Set<string>) (functions: Function list) : Function list =
+/// `functions` with each of them a closure is over, one of `over`, followed by its owning entry, unless it is its own: a
+/// function whose closures capture nothing, and that is called with no context members (`members`), which the function
+/// borrows and its owning entry owns.
+let withOwningEntries (over: Set<string>) (members: Map<string, int>) (functions: Function list) : Function list =
     functions
     |> List.collect (fun func ->
-        if over.Contains func.Name && not (capturesNothing func) then [ func; { func with Name = owningName func.Name } ]
+        let called = members |> Map.tryFind func.Name |> Option.defaultValue 0
+        if over.Contains func.Name && (not (capturesNothing func) || called > 0) then [ func; { func with Name = owningName func.Name } ]
         else [ func ])
 
 /// The owning entry of each function in `functions` a closure is over that has one among them: its copy, or the

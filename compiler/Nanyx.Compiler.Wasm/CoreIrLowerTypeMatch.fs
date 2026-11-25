@@ -43,6 +43,8 @@ type TypeMatchTools =
       Complex: Scope -> Expression -> (Expr -> Expr) -> Expr
       /// Lowers an arm's body in tail position, adapted to the `match`'s type.
       Branch: Scope -> Expression -> IrType -> Expr
+      /// The name to call a definition by at a type, as the prelude's `Maps.convertedStore` is called.
+      Callee: string -> Ty -> string
       /// The function that builds a part of a description, asked for by its name and how it is lowered.
       Request: string -> Lowering -> string
       /// The function a box of a value of this type is a closure over (see `CoreIrLowerBoxes.readerFunction`).
@@ -353,15 +355,66 @@ let rec private canonical (tools: TypeMatchTools) (ty: Ty) (atom: Atom) (k: Atom
                 bindLocal tools "__array" (call Intrinsics.arrayOfList [ AVar boxed ] (IrArray IrBox)) (AVar >> box)))
     | _ -> box atom
 
-/// The IR type of the elements of the collection `collection` in their canonical form: a box for each, and a map's
-/// entries each a tuple of boxes.
+/// The IR type of the collection `collection` in its canonical form: a list of a box for each element, and a map's or a
+/// set's store with its keys and values boxed.
 and canonicalElements (tools: TypeMatchTools) (collection: Ty) : IrType =
     match Unifier.unalias collection with
-    | Maps.MapType _ -> IrList(IrRecord [ "0", IrBox; "1", IrBox ])
+    | Maps.MapType _ -> tools.ToIrType (Maps.ofTypes boxedTy boxedTy)
+    | Sets.SetType _ -> tools.ToIrType (Sets.ofType boxedTy)
     | _ -> IrList IrBox
 
-/// The function that gives the elements of a value of `collection`, a list, a set or a map, each in its canonical form.
-let canonicalisingFunction (tools: TypeMatchTools) (functionName: string) (collection: Ty) : Function =
+/// The function a closure that boxes a value of `ty` in its canonical form is over: it takes the closure's environment
+/// and the value.
+let canonicalisingValueFunction (tools: TypeMatchTools) (functionName: string) (ty: Ty) : Function =
+    let environment = tools.NewVar ClosureSyntax.envParameter Param (IrRecord [ "0", IrWord ])
+    let value = tools.NewVar "__value" Param (tools.ToIrType ty)
+    { Name = functionName
+      Source = functionName
+      TypeArguments = []
+      Params = [ environment; value ]
+      Result = IrBox
+      Body = canonical tools ty (AVar value) (fun boxed -> Expr.make (Atom boxed) IrBox)
+      Place = None }
+
+/// The function that gives the store of a value of `collection`, a map or a set, with each key and value converted
+/// from `from` to `into`, the type each is in the store it is given and the one it gives, by a closure over the
+/// function `converter` asks for at the type: the prelude's `Maps.convertedStore`, which keeps the store's shape and
+/// hashes as they are. So boxing the keys of a map never hashes a box: nothing hashes or compares a key again.
+let storeConvertingFunction
+    (tools: TypeMatchTools) (functionName: string) (collection: Ty) (from: Ty -> Ty) (into: Ty -> Ty) (converter: Ty -> string) : Function =
+    let closureOf (ty: Ty) =
+        let closureTy = IrFunction(tools.ToIrType (from ty), tools.ToIrType (into ty), [], false)
+        Expr.make (Atom(AStaticClosure(converter ty, 2, closureTy))) closureTy
+    let call (name: string) (args: (Ty * Atom) list) (resultTy: Ty) =
+        let instanceTy = TyFunc(TyRecord(args |> List.mapi (fun index (ty, _) -> string index, ty) |> Map.ofList, FieldOrder.none), resultTy, [])
+        Expr.make (Call(tools.Callee name instanceTy, List.map snd args)) (tools.ToIrType resultTy)
+    let converterTy (ty: Ty) = TyFunc(from ty, into ty, [])
+    let given, result, body =
+        match Unifier.unalias collection with
+        | Maps.MapType(key, value) ->
+            let store = tools.NewVar "__store" Param (tools.ToIrType (Maps.ofTypes (from key) (from value)))
+            let resultTy = Maps.storeOf (into key) (into value)
+            store, tools.ToIrType resultTy,
+            bindLocal tools "__keys" (closureOf key) (fun keys ->
+                bindLocal tools "__values" (closureOf value) (fun values ->
+                    call Maps.convertedStore [ Maps.storeOf (from key) (from value), AVar store; converterTy key, AVar keys; converterTy value, AVar values ] resultTy))
+        | Sets.SetType element ->
+            let store = tools.NewVar "__store" Param (tools.ToIrType (Sets.ofType (from element)))
+            let resultTy = Sets.storeOf (into element)
+            store, tools.ToIrType resultTy,
+            bindLocal tools "__elements" (closureOf element) (fun elements ->
+                call Sets.convertedStore [ Sets.storeOf (from element), AVar store; converterTy element, AVar elements ] resultTy)
+        | other -> internalError $"a store of '{Unifier.tyToString other}'"
+    { Name = functionName
+      Source = functionName
+      TypeArguments = []
+      Params = [ given ]
+      Result = result
+      Body = body
+      Place = None }
+
+/// The function that gives the elements of a list, each boxed in its canonical form.
+let private listCanonicalisingFunction (tools: TypeMatchTools) (functionName: string) (elementTy: Ty) (collection: Ty) : Function =
     let given = tools.ToIrType collection
     let element = match given with IrList element -> element | other -> internalError $"canonical elements of '{IrType.show other}'"
     let result = canonicalElements tools collection
@@ -370,19 +423,8 @@ let canonicalisingFunction (tools: TypeMatchTools) (functionName: string) (colle
     let tail = tools.NewVar "__tail" Local given
     let rest k = bindLocal tools "__rest" (Expr.make (Call(functionName, [ AVar tail ])) result) k
     let cons (converted: Atom) = rest (fun rest -> Expr.make (CallRuntime(Helpers.listCons, [ converted; AVar rest ], true)) result)
-    let body =
-        match Unifier.unalias collection with
-        | Maps.MapType(key, value) ->
-            bindLocal tools "__key" (Expr.make (Field(AVar head, 0)) (match element with IrRecord fields -> snd fields.[0] | _ -> element)) (fun keyVar ->
-                bindLocal tools "__value" (Expr.make (Field(AVar head, 1)) (match element with IrRecord fields -> snd fields.[1] | _ -> element)) (fun valueVar ->
-                    canonical tools key (AVar keyVar) (fun boxedKey ->
-                        canonical tools value (AVar valueVar) (fun boxedValue ->
-                            bindLocal tools "__entry" (Expr.make (MakeRecord [ "0", boxedKey; "1", boxedValue ]) (IrRecord [ "0", IrBox; "1", IrBox ])) (AVar >> cons)))))
-        | Lists.ListType elementTy
-        | Sets.SetType elementTy -> canonical tools elementTy (AVar head) cons
-        | other -> internalError $"canonical elements of '{Unifier.tyToString other}'"
     let arms =
-        [ { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = body }
+        [ { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = canonical tools elementTy (AVar head) cons }
           { Patterns = [ PWildcard ]; Body = Expr.make (MakeList []) result } ]
     { Name = functionName
       Source = functionName
@@ -391,6 +433,17 @@ let canonicalisingFunction (tools: TypeMatchTools) (functionName: string) (colle
       Result = result
       Body = Expr.make (Match([ list ], arms)) result
       Place = None }
+
+/// The function that gives a value of `collection` with its elements, or a map's keys and values, each boxed in its
+/// canonical form: a list of boxes for a list, and a store of boxes for a map or a set, its shape and hashes as they are.
+let canonicalisingFunction (tools: TypeMatchTools) (functionName: string) (collection: Ty) : Function =
+    match Unifier.unalias collection with
+    | Lists.ListType elementTy -> listCanonicalisingFunction tools functionName elementTy collection
+    | Maps.MapType _
+    | Sets.SetType _ ->
+        let converter (ty: Ty) = tools.Request ("__canonical_value_" + Identifiers.sanitizeIdentifier (Unifier.tyToString ty)) (CanonicalisingValue ty)
+        storeConvertingFunction tools functionName collection id (fun _ -> boxedTy) converter
+    | other -> internalError $"canonical elements of '{Unifier.tyToString other}'"
 
 /// The environment a closure that captures nothing is given, and the box it is called with.
 let getterParameters (tools: TypeMatchTools) =

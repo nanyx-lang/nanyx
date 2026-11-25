@@ -69,6 +69,25 @@ module F32 =
 
     let ty = TyPrimitive name
 
+/// `char`, one Unicode scalar value: a code point from 0 to 0x10FFFF that isn't a surrogate. A primitive type of its
+/// name, 4 bytes at run time. A string literal is a `char` where one is expected (see `CharLiterals`).
+module Chars =
+    let name = "char"
+
+    let ty = TyPrimitive name
+
+    /// The one Unicode scalar value `text` is, if it is exactly one.
+    let scalarOf (text: string) : int option =
+        match text.EnumerateRunes() |> Seq.truncate 2 |> List.ofSeq with
+        | [ rune ] when not (System.Char.IsSurrogate(text, 0)) || text.Length = 2 -> Some rune.Value
+        | _ -> None
+
+    /// The type `char`.
+    let (|CharType|_|) (ty: Ty) =
+        match ty with
+        | TyPrimitive typeName when typeName = name -> Some ()
+        | _ -> None
+
 /// Whether `typeName` names a sized number type other than `int` and `float`: a sized integer or `F32`.
 module SizedNumber =
     let isName (typeName: string) = typeName = F32.name || (SizedInteger.tryOfName typeName).IsSome

@@ -202,13 +202,6 @@ let private lambdaHeading (lambda: Expression) : string =
     | Lambda(parameters, _, _) when not parameters.IsEmpty -> $"""{{ {parameters |> List.map fst |> String.concat ", "} -> … }}"""
     | _ -> "{ … }"
 
-/// The name of the context `context` is.
-let internal contextName (context: Ty) : Identifier option =
-    match context with
-    | TyApply(name, _)
-    | TyAlias(name, _, _) -> Some name
-    | _ -> None
-
 /// Where an instance of `ctxName` the compiler builds from `members` (each member's name and the definition it is)
 /// comes from: the compiler's own, a definition derived from the type's parts, or definitions attached to the type,
 /// which are named `Type.member`.
@@ -265,21 +258,21 @@ let internal callContextsOf
         |> Option.map (fun symbol -> contextsAtCall typed symbol call)
         |> Option.defaultValue []
         |> List.mapi (fun index context ->
-            match List.tryItem index instances |> Option.flatten, contextName context with
+            match List.tryItem index instances |> Option.flatten, FunctionContexts.contextName context with
             | Some (InstanceInScope(_, provider)), _ -> Some (provided context provider)
             | Some (InstanceSynthesized members), Some ctxName -> Some (context, builtSource ctxName members, SourceSpan.none, None)
             | Some (InstanceDerived _), _ -> Some (context, Derived, SourceSpan.none, None)
             | Some InstanceBuiltIn, _ -> Some (context, BuiltIn, SourceSpan.none, None)
             | None, Some ctxName ->
                 providers
-                |> List.tryFind (fun p -> contextName p.Context = Some ctxName)
+                |> List.tryFind (fun p -> FunctionContexts.contextName p.Context = Some ctxName)
                 |> Option.map (fun p -> provided context p.Provider)
             | _ -> None)
         |> List.choose id
-    let covered = declared |> List.choose (fun (context, _, _, _) -> contextName context) |> Set.ofList
+    let covered = declared |> List.choose (fun (context, _, _, _) -> FunctionContexts.contextName context) |> Set.ofList
     let others =
         providers
-        |> List.filter (fun p -> contextName p.Context |> Option.forall (covered.Contains >> not))
+        |> List.filter (fun p -> FunctionContexts.contextName p.Context |> Option.forall (covered.Contains >> not))
         |> List.map (fun p -> provided p.Context p.Provider)
     declared @ others
 
@@ -390,7 +383,7 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
         let contextsWritten, callWritten = List.splitAt contexts.Length written
         let scoped (symbol: Symbol) typeWritten =
             { Name = symbol.Name; Type = typeWritten; Kind = symbol.Kind; Declaration = symbol.Declaration; Symbol = symbol }
-        let writtenName (ty: Ty) = contextName (rename ty) |> Option.defaultValue ""
+        let writtenName (ty: Ty) = FunctionContexts.contextName (rename ty) |> Option.defaultValue ""
         let documented (ty: Ty) (instance: Symbol option) = Option.toList instance @ Option.toList (contextSymbol typed ty)
         let localNames =
             List.map2

@@ -66,7 +66,7 @@ let ``Run - insert adds a key, or replaces its value, and leaves the map it was 
           "println(keys(replaced))"
           """println("{map.length(replaced)}")""" ]
     |> runSource
-    |> assertRan "3\n10\nnot found\nabc\n3\n"
+    |> assertRan "3\n10\nnot found\nbac\n3\n"
 
 [<Fact>]
 let ``Run - remove takes a key out, and containsKey says whether a map has one`` () =
@@ -130,7 +130,7 @@ let ``Run - list.groupBy takes a key of any type with an Eq and a Hash`` () =
           """def byBoth = people \groupBy { p -> (p.city, p.age) }"""
           """println("{map.length(byBoth)} {names(byBoth(("Leeds", 30)) \someOr([]))}")""" ]
     |> runSource
-    |> assertRan "Leeds York \nAnn,Cy,\n3 Cy,\n"
+    |> assertRan "York Leeds \nAnn,Cy,\n3 Cy,\n"
 
 [<Fact>]
 let ``Run - List.groupBy groups elements by a key, in order`` () =
@@ -142,17 +142,17 @@ let ``Run - List.groupBy groups elements by a key, in order`` () =
           "println(show(map.toList(groups) \\list.map({ group -> group.0 })))"
           """println("{map.length(list.groupBy([], { (x: int) -> x }))}")""" ]
     |> runSource
-    |> assertRan "135\n24\n10\n0\n"
+    |> assertRan "135\n24\n01\n0\n"
 
 [<Fact>]
-let ``Run - a for loop walks a map's entries, in the order their keys were added`` () =
+let ``Run - a for loop walks a map's entries, in the order of map.toList`` () =
     program
         []
         [ """def dict = ["one" => "uno", "two" => "dos"] \insert("one", "un")"""
           """for dict | key, value -> println("{key} => {value}")"""
           """for dict, 1.. | entry, i -> println("{i}: {entry.1}")""" ]
     |> runSource
-    |> assertRan "one => un\ntwo => dos\n1: un\n2: dos\n"
+    |> assertRan "two => dos\none => un\n1: dos\n2: un\n"
 
 [<Fact>]
 let ``Run - a nominal type with its own == and hash can be a key, compared by its own ==`` () =
@@ -205,7 +205,7 @@ let ``Run - fold walks a map's keys and values in order`` () =
           """println("{m \map.fold(0, { total, key, value -> total + value })}")"""
           """println(m \map.fold("", { acc, key, value -> acc ++ key ++ "{value}" }))""" ]
     |> runSource
-    |> assertRan "3\na1b2\n"
+    |> assertRan "3\nb2a1\n"
 
 [<Fact>]
 let ``Run - map changes a map's values and keeps its keys`` () =
@@ -217,7 +217,7 @@ let ``Run - map changes a map's values and keeps its keys`` () =
           """def named = m \map.map { n -> "#{n}" }"""
           """println(map.get(named, "a") \someOr("none"))""" ]
     |> runSource
-    |> assertRan "20\nab\n#10\n"
+    |> assertRan "20\nba\n#10\n"
 
 [<Fact>]
 let ``Run - filter keeps the entries that pass the test`` () =
@@ -254,7 +254,7 @@ let ``Run - union keeps the first map's keys and takes the second's values`` () 
           """show(map.union(map.empty, defaults))"""
           """show(["b" => 2, "a" => 1] \map.union(["c" => 3, "a" => 10]))""" ]
     |> runSource
-    |> assertRan "a1b2c3d4\na1b20c3\na1b2\na1b2\nb2a10c3\n"
+    |> assertRan "b2a1c3d4\nb20a1c3\nb2a1\nb2a1\nb2a10c3\n"
 
 [<Fact>]
 let ``Run - unionWith combines the values of a key both maps have`` () =
@@ -267,7 +267,7 @@ let ``Run - unionWith combines the values of a key both maps have`` () =
           """show(counts \map.unionWith(map.empty, { a, b -> a + b }))"""
           """show(map.unionWith(map.empty, counts, { a, b -> a + b }))""" ]
     |> runSource
-    |> assertRan "tea2cake1pie4\ntea2cake6pie4\ntea-5cake1\ntea2cake1\ntea2cake1\n"
+    |> assertRan "tea2pie4cake1\ntea2pie4cake6\ntea-5cake1\ntea2cake1\ntea2cake1\n"
 [<Fact>]
 let ``Run - a map is written as its literal is, each key and value by its own toString`` () =
     program
@@ -282,3 +282,103 @@ let ``Run - a map is written as its literal is, each key and value by its own to
           """println(described([#tea => [1, 2]]))""" ]
     |> runSource
     |> assertRan "[tea => 3, cake => 1]\n[tea => 3, cake => 1]\n[[tea => 3, cake => 1], [pie => 4]]\n(count = 2, prices = [1 => #some(2.5)])\n[=>]\nhas [#tea => [1, 2]]\n"
+
+/// A program that builds a map of `size` keys, then looks up, inserts and removes 100,000 of them.
+let private churning (size: int) =
+    $"""def size = {size}
+def built = (0..size - 1) \seq.fold(map.empty, {{ m, k -> map.insert(m, k, k) }})
+def found = (0..99999) \seq.fold(0, {{ total, i -> total + (built(i %% size) \someOr(0)) }})
+def changed = (0..99999) \seq.fold(built, {{ m, i -> map.insert(m, i %% size, i) }})
+def removed = (0..99999) \seq.fold(changed, {{ m, i -> map.remove(m, i %% size) }})
+println("{{found > 0}} {{map.length(changed)}} {{map.length(removed)}}")
+"""
+
+[<Fact>]
+let ``Run - a lookup, an insert and a remove take time that grows with the log of the map's size`` () =
+    let timed (size: int) =
+        let watch = System.Diagnostics.Stopwatch.StartNew()
+        runSourceWith false "" (churning size) |> assertRan $"true {size} 0\n"
+        watch.Elapsed.TotalSeconds
+    timed 1000 |> ignore
+    let small = timed 1000
+    let large = timed 100000
+    // 100 times the keys: a list's linear walk takes some 100 times as long; a trie's few levels more take little.
+    Assert.True(large < small * 4.0, $"1,000 keys took {small:F2}s, 100,000 took {large:F2}s")
+
+[<Fact>]
+let ``Run - keys whose hashes are all the same are kept in one order however they were added, and found and removed`` () =
+    runSource
+        """type Key = protected string
+
+def Key.`==`: Key, Key -> bool = { Key(a), Key(b) -> a == b }
+def Key.hash: Key -> int = { _ -> 7 }
+def Key.toString: Key -> string = { Key(a) -> a }
+
+def a = [Key("x") => 1, Key("y") => 2, Key("z") => 3] \map.remove(Key("y")) \map.insert(Key("w"), 4)
+def b = [Key("w") => 4, Key("z") => 3] \map.insert(Key("x"), 1)
+println(map.keys(a) \list.map(Key.toString) == map.keys(b) \list.map(Key.toString))
+println(a == b)
+println(a(Key("z")))
+println(a(Key("y")))
+def left = a \map.remove(Key("w")) \map.remove(Key("x"))
+println(map.toList(left) \list.map { entry -> "{entry.0}={entry.1}" })
+println(map.length(left \map.remove(Key("z"))))
+"""
+    |> assertRan "true\ntrue\n#some(3)\n#notFound\n[z=3]\n0\n"
+
+/// A program whose functions build a map of `n` keys and walk it once or twice with `for`, for counting what a walk
+/// allocates (see `StoreWalk`).
+let private walking =
+    normalized """def built: int -> map(int, int) = { n -> (0..n - 1) \seq.fold(map.empty, { m, k -> map.insert(m, k, k) }) }
+
+def walked: map(int, int) -> int = { m ->
+  memory {
+    mut sum = 0
+    for m | (k, v) -> sum := sum + v
+    sum
+  }
+}
+
+def once: int -> int = { n -> walked(built(n)) }
+
+def twice: int -> int = { n ->
+  def m = built(n)
+  walked(m) + walked(m)
+}
+"""
+
+[<Fact>]
+let ``Run - a for loop over a map allocates nothing for its entries, however many there are`` () =
+    use program = instantiateWasm walking []
+    let extraPass (n: int) =
+        let one, sum = allocationsOf program "once" n
+        let two, doubled = allocationsOf program "twice" n
+        Assert.Equal(2 * sum, doubled)
+        two - one
+    // An extra pass makes the same few blocks, its memory block's, whatever the size: none for an entry or a node.
+    let small = extraPass 100
+    Assert.Equal(small, extraPass 10000)
+    Assert.InRange(small, 0, 2)
+
+[<Fact>]
+let ``Run - a for loop over a map walks every entry of a deep trie once, nests, and walks in step with a list`` () =
+    program
+        [ """def deep = (0..40) \seq.map { i -> (i * 32 * 32 * 32, i) } \seq.toList \map.fromList"""
+          """def total: map(int, int) -> int = { m ->
+  memory {
+    mut sum = 0
+    for m | (k, v) -> sum := sum + v
+    sum
+  }
+}""" ]
+        [ """println(total(deep))"""
+          """def pairs = memory {
+    mut count = 0
+    for deep | (a, _) ->
+      for deep | (b, _) -> count := count + 1
+    count
+  }"""
+          """println(pairs)"""
+          """for set.fromList([3, 4]), ["x", "y"] | n, s -> println(n + string.length(s))""" ]
+    |> runSource
+    |> assertRan "820\n1681\n4\n5\n"

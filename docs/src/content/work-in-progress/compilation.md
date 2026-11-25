@@ -47,15 +47,14 @@ Out of scope here, with their own workstreams:
 
 # Goals
 
-- Every example in the language tour compiles and runs, and a test keeps it that way.
+- Every example in the docs compiles and runs, and a test keeps it that way.
 - A gap between the docs and the compiler is either fixed or filed, with the phase label that says where it is.
 - The compiler stays fast enough to run on every keystroke in the editor.
 
 # Plan
 
-1. **Docs coverage beyond the tour.** The examples of the other sections (`advanced` but for Custom patterns,
-   `cookbook` but for JSON parsing, and `coming-from-other-languages`) are not compiled, and can follow one page at a
-   time. The blocks marked `skip=` wait on the issues they name.
+1. **The docs' skipped examples.** Every page's examples are compiled and run
+   ([Docs examples](../deep-dives/compilation#docs-examples)); the blocks marked `skip=` wait on the issues they name.
 2. **Parser error recovery inside an item.** The parser reads past a syntax error to the next top-level item, so
    later errors and later analysis are not lost ([The parser](../deep-dives/parser) in Deep dives).
    Recovering inside an item, at the next statement or arm, is open: see

@@ -158,6 +158,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | Some ty -> toIrType (substitute subst ty)
         | None -> cannot "an expression without a type"
 
+    /// The type of `expr` as the type checker has it, at the function's type arguments, unaliased.
+    let sourceTypeOf (expr: Expression) : Ty option =
+        input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst >> Unifier.unalias)
+
     /// The type of `rhs`, a closure over the lifted lambda `target`, when it is a local function generic in type
     /// variables of its own.
     let genericLocalType (target: string) (rhs: Expression) =
@@ -333,6 +337,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | _ -> cannot "a `type` of a type that is only known when the program runs"
         | LiteralExpr(IntLit value) -> k (Expr.make (Atom(intAtom value (tyOf expr))) (tyOf expr))
         | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
+        // A string literal where a `char` is expected is one, its code point (see `CharLiterals`).
+        | LiteralExpr(StringLit value) when tyOf expr = IrSized SizedInteger.U32 ->
+            match Chars.scalarOf value with
+            | Some scalar -> k (Expr.make (Atom(ASized(SizedInteger.U32, int64 scalar))) (tyOf expr))
+            | None -> internalError "a char literal that is not one character, which the checker reports"
         | LiteralExpr(StringLit value) -> k (Expr.make (Atom(AString value)) IrString)
         | LiteralExpr(FloatLit value) -> k (Expr.make (FloatConstant value) (tyOf expr))
         | IdentifierExpr name -> this.Identifier scope expr name k
@@ -357,11 +366,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let depth = scope.ForDepth
             let lowerBody vars = this.Tail { scope with Vars = vars; ForDepth = depth + 1 } body
             if CoreIrLowerLoops.pullsSequence tyOf iterables then
+                let storeAsList = CoreIrLowerLoops.storeAsList sourceTypeOf callee toIrType
                 let local name ty = newVar (uniqueName name) Local ty
                 let members wanted k = CoreIrLowerMembers.memberAtoms this.MemberTools scope None wanted k
                 // The iterables are held in locals, which the loop's own locals are set from.
-                CoreIrLowerLoops.forEachPulling local tyOf (this.AtomsInLocals scope) members lowerBody scope.Vars depth iterables parameters k
-            else CoreIrLowerLoops.forEach newVar tyOf (this.Atoms scope) lowerBody scope.Vars depth iterables parameters k
+                CoreIrLowerLoops.forEachPulling local tyOf storeAsList (this.AtomsInLocals scope) members lowerBody scope.Vars depth iterables parameters k
+            else CoreIrLowerLoops.forEach newVar tyOf (CoreIrLowerLoops.walksStore sourceTypeOf) (this.Atoms scope) lowerBody scope.Vars depth iterables parameters k
         | WhileSyntax.Call(condition, body) ->
             let inner = { scope with ForDepth = scope.ForDepth + 1 }
             k (CoreIrLowerLoops.whileLoop scope.ForDepth (this.Tail inner condition) (this.Tail inner body))
@@ -1298,6 +1308,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeOf = tyOf
           Complex = this.Complex
           Branch = this.Branch
+          Callee = callee
           Request = fun name lowering -> request (SpecKey.plain name []) Map.empty lowering
           Reader = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Reader
           Convert = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Convert }
@@ -1397,12 +1408,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
-        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
+        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools callee functionName printer
         | Describing -> CoreIrLowerTypeMatch.describingFunction this.TypeMatchTools functionName
         | FieldGetting(recordType, fieldName) -> CoreIrLowerTypeMatch.fieldGettingFunction this.TypeMatchTools functionName recordType fieldName
         | CaseGetting(unionType, caseName) -> CoreIrLowerTypeMatch.caseGettingFunction this.TypeMatchTools functionName unionType caseName
         | Canonicalising collection -> CoreIrLowerTypeMatch.canonicalisingFunction this.TypeMatchTools functionName collection
         | Decanonicalising collection -> CoreIrLowerBuild.decanonicalisingFunction this.TypeMatchTools functionName collection
+        | CanonicalisingValue ty -> CoreIrLowerTypeMatch.canonicalisingValueFunction this.TypeMatchTools functionName ty
+        | DecanonicalisingValue ty -> CoreIrLowerBuild.decanonicalisingValueFunction this.TypeMatchTools functionName ty
         | MakingRecord recordType -> CoreIrLowerBuild.makingFunction this.TypeMatchTools functionName recordType
         | CaseBuilding(unionType, caseName) -> CoreIrLowerBuild.caseBuildingFunction this.TypeMatchTools functionName unionType caseName
         | Building buildTy -> CoreIrLowerBuild.buildingFunction this.TypeMatchTools functionName buildTy
@@ -1507,6 +1520,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | CaseGetting _
         | Canonicalising _
         | Decanonicalising _
+        | CanonicalisingValue _
+        | DecanonicalisingValue _
         | MakingRecord _
         | CaseBuilding _
         | Building _
