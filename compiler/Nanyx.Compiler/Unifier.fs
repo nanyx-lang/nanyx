@@ -156,6 +156,28 @@ module Unifier =
         let differences = differencesText "has" (sortedNames (sprintf "#%s")) (Set.toList onlyLeft) (Set.toList onlyRight)
         $"Tag union mismatch: '{tyToString left}' vs '{tyToString right}', where {differences}"
 
+    /// Says that the tag `tag` is not one of the tags of the closed union `union`, which are `tags`, in the order the
+    /// union writes them, with the closest of them as a question where one is close: `'#purple' is not one of the tags
+    /// of 'Color': '#red', '#green' or '#blue'`. The union is named where it is written with an alias's name.
+    let private notOneOfTagsMessage (tag: string) (union: Ty) (tags: string list) : MismatchText = fun tyToString ->
+        let written = tags |> List.map (fun name -> $"'#{name}'") |> Diagnostics.listedOr
+        let whose =
+            match tyToString union with
+            | named when named <> TypePrinting.tyToString union -> $"the tags of '{named}'"
+            | _ -> "the union's tags"
+        let suggestions = NameSuggestions.closest tags tag |> List.map (sprintf "#%s")
+        $"'#{tag}' is not one of {whose}: {written}{NameSuggestions.question suggestions}"
+
+    /// The error for a tag `ty` that the closed union `union`, whose tags are `items`, does not name, if `ty` is such a
+    /// tag: no member's failure says it, as each is only another tag. A tag the union names, with another payload, has
+    /// its member's failure, which says what differs.
+    let private tagNotInUnion (union: Ty) (items: Ty list) (named: Map<string, Ty>) (rest: TyVar option) (ty: Ty) : MismatchText option =
+        match ty, rest with
+        | TyTag(name, _), None when not (named.ContainsKey name) ->
+            let tags = items |> List.choose (function TyTag(tag, _) -> Some tag | _ -> None)
+            Some (notOneOfTagsMessage name union tags)
+        | _ -> None
+
     /// Says which fields only one of two records has: `Record field mismatch: '...' vs '...', where only the first has
     /// 'a' and only the second has 'y'`.
     let private recordKeyMessage leftKeys rightKeys left right : MismatchText = fun tyToString ->
@@ -876,8 +898,9 @@ module Unifier =
                             | [] ->
                                 // The rest takes a tag the union does not name; one it names is that member, which
                                 // did not unify (`#some(int)` is not the rest of `#some() | r`).
-                                match lRest with
-                                | Some restVar when isTagLike ty && not (lMap.ContainsKey (tagUnionKey ty)) -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
+                                match lRest, tagNotInUnion l lItems lMap lRest ty with
+                                | Some restVar, _ when isTagLike ty && not (lMap.ContainsKey (tagUnionKey ty)) -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
+                                | _, Some message -> Error (message, origin, TypesDiffer)
                                 | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin, TypesDiffer))
                             | item :: restItems ->
                                 match loop subst ((item, ty, Equal, origin) :: emptyRest lRest @ rest) with
@@ -892,8 +915,9 @@ module Unifier =
                         let rec tryItems items (failures: Mismatch list) =
                             match items with
                             | [] ->
-                                match rRest with
-                                | Some restVar when isTagLike ty && not (rMap.ContainsKey (tagUnionKey ty)) -> loop subst ((ty, TyVar restVar, Equal, origin) :: rest)
+                                match rRest, tagNotInUnion r rItems rMap rRest ty with
+                                | Some restVar, _ when isTagLike ty && not (rMap.ContainsKey (tagUnionKey ty)) -> loop subst ((ty, TyVar restVar, Equal, origin) :: rest)
+                                | _, Some message -> Error (message, origin, TypesDiffer)
                                 | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin, TypesDiffer))
                             | item :: restItems ->
                                 match loop subst ((ty, item, Equal, origin) :: emptyRest rRest @ rest) with
