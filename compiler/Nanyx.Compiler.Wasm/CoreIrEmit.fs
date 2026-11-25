@@ -644,17 +644,18 @@ type private FunctionEmitter(context: EmitContext) =
             let name, result = machine
             let resumeSlot = context.FunctionSlot (TaskLowering.Names.resumeEntry name) 1
             helper Helpers.alloc |> ignore
+            helper Helpers.free |> ignore
             let stop (at: int) =
                 let kept = found.Saved.[at] |> List.map (fun var -> localOf var, CoreIrLayout.valueType var.Type) |> List.distinctBy fst
                 TaskLowering.stopAfter frameLocal.Value resumeSlot at kept (CoreIrLayout.valueType result)
-            let resumable (at: int) (resultType: string) (resumeType: string) (call: string) =
-                TaskLowering.resumable resumeLocal.Value childLocal.Value at resumeType resultType call
+            let resumable (at: int) (resultType: string) (resumeType: string) (direct: TaskLowering.DirectResume option) (call: string) =
+                TaskLowering.resumable resumeLocal.Value childLocal.Value at resumeType resultType direct call
             // A call of a function value first stops once, when every wait does (see `WasmOptions.YieldAtEveryWait`).
             let yielded, state =
                 if CoreIrSplitPoints.statesOf context.YieldAtEveryWait expr = 2 then
                     let unitResume = (context.IndirectCall(TaskLowering.resumeTypeOf "i32"); TaskLowering.resumeTypeName "i32")
                     // Skipped when resuming at the call, after it.
-                    let yieldCode = join "\n    " [ resumable state "i32" unitResume $"call ${TaskLowering.Names.yieldOnce}"; "drop"; stop state ]
+                    let yieldCode = join "\n    " [ resumable state "i32" unitResume None $"call ${TaskLowering.Names.yieldOnce}"; "drop"; stop state ]
                     [ unlessResuming (Some (state, state)) yieldCode ], state + 1
                 else [], state
             // Nothing follows a tail call: the callee's frame takes the function's place, so it keeps nothing.
@@ -662,7 +663,8 @@ type private FunctionEmitter(context: EmitContext) =
             else
                 let resumed = conversion calleeResult expr.Type
                 let call = this.UnmarkedValue false deferred onStack expr
-                let call = resumable state (CoreIrLayout.valueType expr.Type) (resumeType ()) call
+                let direct = TaskLowering.directResume context.StateMachines context.Signature context.FunctionSlot expr
+                let call = resumable state (CoreIrLayout.valueType expr.Type) (resumeType ()) direct call
                 let call = if resumed = "" then call else internalError "a call that can stop whose value needs converting"
                 join "\n    " [ yield! yielded; call; stop state ]
         | None when not context.StateMachines.IsEmpty && CoreIrSplitPoints.isSplit context.StateMachines expr ->

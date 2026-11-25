@@ -61,3 +61,11 @@ let ``A mismatch of a char and a string says how to make a literal a char`` () =
     let code, message, _ = onlyDiagnostic (withFinalNewline "def f = { x -> x == \"a\" }\n\ndef g: char -> bool = f")
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     Assert.EndsWith("a string literal is a char only where a char is expected, so write the type, as in `{ c: char -> ... }`", message)
+
+[<Fact>]
+let ``A string's chars are a list of chars, and chars make a string`` () =
+    let types = definedTypes "def cs = \"héllo\" \\string.chars\ndef s = string.fromChars(cs)\ndef n = char.toInt(\"A\")\ndef c = char.fromInt(65)\n"
+    Assert.Equal("list(char)", Unifier.tyToString types.["cs"])
+    Assert.Equal("string", Unifier.tyToString types.["s"])
+    Assert.Equal("int", Unifier.tyToString types.["n"])
+    Assert.Equal("#some(char) | #invalidCodePoint", Unifier.tyToString types.["c"])
