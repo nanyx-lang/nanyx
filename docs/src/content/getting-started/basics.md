@@ -224,7 +224,7 @@ def inc = { n -> n + 1 }
 ```
 
 A doc comment can document a `def` (at the top level or inside a function), a `type` or `context`, a member of a
-context, a field of a record type and a tag of a union type:
+context, a field of a record type, a tag of a union type, and a [dimension or a unit](../work-in-progress/units-and-dimensions):
 
 ```nanyx
 --| A shape on the screen.

@@ -71,6 +71,20 @@ def one = {
     Assert.Empty(reported source)
 
 [<Fact>]
+let ``A doc comment on a dimension or a unit is not reported`` () =
+    let source =
+        """--| Length.
+dimension Length
+
+--| The base unit.
+@baseUnit unit m: Length
+
+--| A thousand metres.
+unit km: Length = 1_000m
+"""
+    Assert.Empty(reported source)
+
+[<Fact>]
 let ``A doc comment at the end of the file is reported`` () =
     Assert.Equal<string list>([ "--| Nothing after it." ], reported "def a = 1\n--| Nothing after it.\n" |> List.map snd)
 

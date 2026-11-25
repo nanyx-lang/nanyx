@@ -9,8 +9,8 @@ open Parser.Program
 
 /// What a doc comment documents.
 type DocTarget =
-    /// A declaration: a `def` (at the top level or in a block), a `type` or `context`, a field of a record type or a
-    /// member of a context. The span is that of the name it declares, as `DeclaredNames` has it.
+    /// A declaration: a `def` (at the top level or in a block), a `type` or `context`, a field of a record type, a
+    /// member of a context, a `dimension` or a `unit`. The span is that of the name it declares, as `DeclaredNames` has it.
     | DocumentsDeclaration of SourceSpan
     /// A tag of a union type. The span is that of the tag, from its `#`.
     | DocumentsTag of SourceSpan
@@ -30,7 +30,8 @@ type DocComment =
 /// (`` [`name`] ``) can be found.
 type FileDocComments =
     { Comments: DocComment list
-      /// Each name the file's top level declares (a def, a type, a context), with the span it is declared at.
+      /// Each name the file's top level declares (a def, a type, a context, a dimension, a unit), with the span it is
+      /// declared at.
       TopLevel: (Identifier * SourceSpan) list }
 
 module DocComments =
@@ -103,7 +104,19 @@ module DocComments =
                 | TypeTag _ when not (SourceSpan.isNone typeExpr.Span) -> [ DocumentsTag typeExpr.Span, typeExpr.Span.Start ]
                 | _ -> TypeExpr.children typeExpr |> List.collect walk
             items |> List.collect typeDefBodies |> List.collect walk
-        let targets = declarations @ tags
+        // A dimension or a unit, whose name is where its declaration noted it (see `noteDocumentable`).
+        let rec unitDeclarations (item: TopLevelItem) =
+            match item.Kind with
+            | DimensionDecl(_, name, _)
+            | UnitDecl(_, name, _, _) ->
+                documentableStarts
+                |> Map.tryFind item.Span.Start
+                |> Option.map (fun start -> name, lines.Span filePath start (start + name.Length))
+                |> Option.toList
+            | ModuleBlock(_, items) -> items |> List.collect unitDeclarations
+            | _ -> []
+        let units = items |> List.collect unitDeclarations
+        let targets = declarations @ tags @ (units |> List.map (fun (_, span) -> DocumentsDeclaration span, span.Start))
 
         // The first item written but for attributes (as `codeAfter` skips them), which a doc comment before it
         // documents the module by if it is `module` or an import: `@partial module prelude` is a module declaration.
@@ -117,16 +130,26 @@ module DocComments =
             |> List.sortBy _.Span.Start
             |> List.tryHead
 
-        // Where the code after `offset` starts: past blank lines and `@attribute` lines. `None` at the end of the file.
+        // Where each attribute ends, by where it starts, at the top level or in a module block.
+        let rec attributes (item: TopLevelItem) =
+            match item.Kind with
+            | Attribute _ when not (SourceSpan.isNone item.Span) -> [ item.Span.Start, item.Span.End ]
+            | ModuleBlock(_, items) -> items |> List.collect attributes
+            | _ -> []
+        let attributeEnds = items |> List.collect attributes |> Map.ofList
+
+        // Where the code after `offset` starts: past blank lines and attributes, which may be on the line of what they
+        // apply to, as `@baseUnit unit ns: Time` is, or on a line of their own. `None` at the end of the file.
         let rec codeAfter offset =
             let mutable i = offset
             while i < source.Length && Char.IsWhiteSpace source[i] do
                 i <- i + 1
             if i >= source.Length then None
             elif source[i] = '@' then
-                match source.IndexOf('\n', i) with
-                | -1 -> None
-                | lineEnd -> codeAfter lineEnd
+                match attributeEnds |> Map.tryFind i, source.IndexOf('\n', i) with
+                | Some attributeEnd, _ -> codeAfter attributeEnd
+                | None, -1 -> None
+                | None, lineEnd -> codeAfter lineEnd
             else Some i
 
         // A comment before the first item documents the module if that is `module` or an import: the code after it is
@@ -162,7 +185,7 @@ module DocComments =
             | Def (TypeDef(_, _, _, body)) -> declared |> Map.tryFind (body.Id, TypeDefBody) |> Option.toList |> List.collect (List.truncate 1)
             | ModuleBlock(_, items) -> items |> List.collect topLevel
             | _ -> []
-        { Comments = docs; TopLevel = items |> List.collect topLevel }
+        { Comments = docs; TopLevel = (items |> List.collect topLevel) @ units }
 
     /// The doc comments of a file that does not parse: none.
     let none: FileDocComments = { Comments = []; TopLevel = [] }
