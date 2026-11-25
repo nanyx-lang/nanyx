@@ -79,7 +79,7 @@ echo()
 
 /** A program whose two tasks take turns where one sleeps, which the playground host provides `Async` for. */
 const tasks = `def later: [Async, Clock, Console] string -> () = { text ->
-  sleep(100)
+  sleep(100ms)
   println(text)
 }
 
