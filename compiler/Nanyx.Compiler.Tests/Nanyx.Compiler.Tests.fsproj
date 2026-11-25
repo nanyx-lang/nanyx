@@ -249,6 +249,7 @@
     <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
     <Compile Include="Features\Types\FieldSuggestionTests.fs" />
+    <Compile Include="Features\Types\TagNotInUnionTests.fs" />
     <Compile Include="Features\Types\RecordFieldOrderTests.fs" />
     <Compile Include="Features\Types\RecordSpreadTests.fs" />
     <Compile Include="Features\Types\RecursiveAliasesTests.fs" />

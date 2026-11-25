@@ -1284,6 +1284,15 @@ def r =
 
 A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any tag.
 
+A tag given where a union without a rest is expected, that the union doesn't name, is reported with the union's tags, and
+the one it most likely means:
+
+```nanyx
+type Color = #red | #green | #blue
+
+def c: Color = #gren  -- error NYX0201: '#gren' is not one of the tags of 'Color': '#red', '#green' or '#blue': did you mean '#green'?
+```
+
 A lambda with `yield` in it is a lazy sequence, and a builder such as `list.select` or `list.build` takes a function
 that calls `emit` for each value instead ([Building a collection](../advanced/sequences-and-queries#building-a-collection)).
 Giving it a lambda that yields is reported at the first `yield`:
