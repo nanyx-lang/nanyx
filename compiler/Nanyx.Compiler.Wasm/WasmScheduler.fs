@@ -3,11 +3,18 @@
 /// that keep them in the def that started them. `nanyx/async` is written on the intrinsics they implement.
 ///
 /// A task is a block of `taskSize` bytes, which no reference counts: its state, the function it runs until that
-/// returns, the frame it stopped in, the scope it belongs to, the next task in the queue and in its scope, the function
-/// that gives its result, its own innermost scope, and the regions of the `memory` blocks it is in (see `WasmRegions`),
-/// which the scheduler swaps in when it runs it. A scope is a block of its parent and the first of its tasks. Each task
-/// has a scope of its own for the tasks it starts directly, so it finishes only once they have; the main task, which
-/// runs the program's own code, is made when something first needs it, and freed when its outermost scope ends.
+/// returns, the frame it stopped in, the scope it belongs to, the next task in the queue, the tasks after and before it
+/// in its scope, its cell, its own innermost scope, and the regions of the `memory` blocks it is in (see `WasmRegions`),
+/// which the scheduler swaps in when it runs it. A scope is a block of its parent, the first of its tasks, and how many
+/// of its tasks have finished. Each task has a scope of its own for the tasks it starts directly, so it finishes only
+/// once they have; the main task, which runs the program's own code, is made when something first needs it, and freed
+/// when its outermost scope ends.
+///
+/// A task's `Task` value holds its cell, not its block: an object with a closure's header, counted and dropped as a
+/// closure is (its type is `() -> a`, though nothing calls it), which holds what the task gave back once it has, and the
+/// task's block until it has finished. The block holds the cell too. When a task finishes, the scheduler takes it out
+/// of its scope and frees its block, and the cell lives on for as long as a `Task` holds it, so a task can be awaited
+/// again, and a scope holds only the tasks still running, however many it has started (#2666).
 ///
 /// The queue is first in, first out, so the order tasks run in is fixed. A task that waits, for another task, for a
 /// scope's tasks or on the host, stops and goes to the back of the queue, and looks again when it is resumed. A task that
@@ -79,6 +86,12 @@ module Names =
     let pending = "__nanyx_scope_pending"
     let close = "__nanyx_scope_close"
     let leave = "__nanyx_scope_leave"
+    /// Takes a finished task out of its scope and frees its block.
+    let retire = "__nanyx_task_retire"
+    /// Cancels the task of a block, and every task it started.
+    let cancelBlock = "__nanyx_task_cancel_block"
+    /// What a cell's info word calls when the cell is dropped: it drops what the task gave back.
+    let cellDrop = "__nanyx_task_cell_drop"
 
 /// The names `nanyx/async` calls: a module that calls one has the scheduler.
 let intrinsics =
@@ -96,28 +109,35 @@ let private frame = TaskLowering.taskFrameOffset
 let private scope = 12
 let private next = 16
 let private sibling = 20
-/// Where `taskResult`, which the emitter writes out where it is used, reads the function that gives a task's result.
-let resultOffset = 24
+let private cell = 24
 let private ownScope = 28
 let private innermostRegion = 32
 let private outermostRegion = 36
 /// 1 once the task is cancelled (see `Names.taskCancel`).
 let private cancelled = 40
-let private taskSize = 44
+/// The task before it in its scope, whose `sibling` it is: 0 for the first.
+let private before = 44
+let private taskSize = 48
 
-/// A task's states: made, running (it has started), finishing (its function returned, and the tasks it started may
-/// not have), and finished.
+/// A cell's fields, after the word a closure's function is in, which is 0: what the task gave back, as a function of
+/// nothing that gives it (0 until it has), and the task's block (0 once it has finished).
+let private cellResult = 4
+let private cellTask = 8
+let private cellSize = 12
+
+/// A task's states: made, running (it has started), and finishing (its function returned, and the tasks it started may
+/// not have). Once they have, it has finished, and its block is freed (see `Names.retire`).
 let private made = 0
 let private started = 1
 let private finishing = 2
-let private finished = 3
 
-/// A scope's fields.
+/// A scope's fields: its parent, its first task still running, and how many of its tasks have finished.
 let private parent = 0
 let private first = 4
-let private scopeSize = 8
+let private retired = 8
+let private scopeSize = 12
 
-/// The helpers' code, given the function table slots of the four waits' resume entries, the indirect type of a
+/// The helpers' code, given the function table slots of the four waits' resume entries and of `Names.cellDrop`, the indirect type of a
 /// function of one `i32` that gives one, as a task's function and a resume entry are, and that of a function of two,
 /// as the host's wait is, which is called with its closure and the timeout.
 let helpers
@@ -125,6 +145,7 @@ let helpers
     (scopeExitResumeSlot: int)
     (hostWaitResumeSlot: int)
     (scopeWaitAnyResumeSlot: int)
+    (cellDropSlot: int)
     (oneToOne: string)
     (twoToOne: string)
     : string list =
@@ -232,7 +253,8 @@ let helpers
         "end"
         "local.get $t"
         ")" ]
-      [ $"(func ${Names.taskStart} (param $f i32) (result i32) (local $t i32) (local $s i32) (local $cur i32)"
+      // Starts a task of the function `f`, and gives its cell, with a count of two: the caller's and the block's.
+      [ $"(func ${Names.taskStart} (param $f i32) (result i32) (local $t i32) (local $s i32) (local $cur i32) (local $c i32)"
         $"call ${Names.current}"
         "local.set $cur"
         yield! zeroed "$t" taskSize
@@ -260,11 +282,102 @@ let helpers
         $"i32.load offset={first}"
         $"i32.store offset={sibling}"
         "local.get $s"
+        $"i32.load offset={first}"
+        "if"
+        "local.get $s"
+        $"i32.load offset={first}"
+        "local.get $t"
+        $"i32.store offset={before}"
+        "end"
+        "local.get $s"
         "local.get $t"
         $"i32.store offset={first}"
         "local.get $t"
         $"call ${Names.enqueue}"
+        $"i32.const {cellSize}"
+        $"i32.const {cellDropSlot}"
+        $"call ${Helpers.newObject}"
+        "local.tee $c"
+        $"i32.const {Header.withInfo}"
+        "i32.sub"
+        "i32.const 2"
+        "i32.store"
+        "local.get $c"
+        "i32.const 0"
+        "i32.store"
+        "local.get $c"
+        "i32.const 0"
+        $"i32.store offset={cellResult}"
+        "local.get $c"
         "local.get $t"
+        $"i32.store offset={cellTask}"
+        "local.get $t"
+        "local.get $c"
+        $"i32.store offset={cell}"
+        "local.get $c"
+        ")" ]
+      // Drops what the task of the cell `p` gave back, when the cell is dropped.
+      [ $"(func ${Names.cellDrop} (param $p i32) (result i32)"
+        "local.get $p"
+        $"i32.load offset={cellResult}"
+        "if"
+        "local.get $p"
+        $"i32.load offset={cellResult}"
+        $"call ${Names.dropObject}"
+        "end"
+        "i32.const 0"
+        ")" ]
+      // Takes the finished task `t` out of its scope, which counts it, gives up its block's reference to its cell, and
+      // frees the block. It is no longer the task running, if it was.
+      [ $"(func ${Names.retire} (param $t i32) (local $s i32) (local $c i32)"
+        "local.get $t"
+        $"i32.load offset={scope}"
+        "local.set $s"
+        "local.get $t"
+        $"i32.load offset={before}"
+        "if"
+        "local.get $t"
+        $"i32.load offset={before}"
+        "local.get $t"
+        $"i32.load offset={sibling}"
+        $"i32.store offset={sibling}"
+        "else"
+        "local.get $s"
+        "local.get $t"
+        $"i32.load offset={sibling}"
+        $"i32.store offset={first}"
+        "end"
+        "local.get $t"
+        $"i32.load offset={sibling}"
+        "if"
+        "local.get $t"
+        $"i32.load offset={sibling}"
+        "local.get $t"
+        $"i32.load offset={before}"
+        $"i32.store offset={before}"
+        "end"
+        "local.get $s"
+        "local.get $s"
+        $"i32.load offset={retired}"
+        "i32.const 1"
+        "i32.add"
+        $"i32.store offset={retired}"
+        "local.get $t"
+        $"i32.load offset={cell}"
+        "local.tee $c"
+        "i32.const 0"
+        $"i32.store offset={cellTask}"
+        "local.get $c"
+        $"call ${Names.dropObject}"
+        $"global.get ${Names.running}"
+        "local.get $t"
+        "i32.eq"
+        "if"
+        "i32.const 0"
+        $"global.set ${Names.running}"
+        "end"
+        "local.get $t"
+        $"call ${free}"
         ")" ]
       [ $"(func ${Names.dropObject} (param $p i32)"
         "local.get $p"
@@ -289,8 +402,9 @@ let helpers
         ")" ]
       [ $"(func ${Names.taskFinish} (param $r i32)"
         $"call ${Names.current}"
+        $"i32.load offset={cell}"
         "local.get $r"
-        $"i32.store offset={resultOffset}"
+        $"i32.store offset={cellResult}"
         ")" ]
       [ $"(func ${Names.scopeEnter} (local $cur i32) (local $s i32)"
         $"call ${Names.current}"
@@ -304,59 +418,15 @@ let helpers
         "local.get $s"
         $"i32.store offset={ownScope}"
         ")" ]
-      // Whether a task of the scope has not finished.
-      [ $"(func ${Names.pending} (param $s i32) (result i32) (local $t i32)"
+      // Whether a task of the scope has not finished: it holds only those.
+      [ $"(func ${Names.pending} (param $s i32) (result i32)"
         "local.get $s"
         $"i32.load offset={first}"
-        "local.set $t"
-        "block $done"
-        "loop $each"
-        "local.get $t"
-        "i32.eqz"
-        "br_if $done"
-        "local.get $t"
-        $"i32.load offset={state}"
-        $"i32.const {finished}"
-        "i32.ne"
-        "if"
-        "i32.const 1"
-        "return"
-        "end"
-        "local.get $t"
-        $"i32.load offset={sibling}"
-        "local.set $t"
-        "br $each"
-        "end"
-        "end"
         "i32.const 0"
+        "i32.ne"
         ")" ]
-      // Drops what each task of the scope gave back, and frees them and the scope.
-      [ $"(func ${Names.close} (param $s i32) (local $t i32) (local $after i32)"
-        "local.get $s"
-        $"i32.load offset={first}"
-        "local.set $t"
-        "block $done"
-        "loop $each"
-        "local.get $t"
-        "i32.eqz"
-        "br_if $done"
-        "local.get $t"
-        $"i32.load offset={sibling}"
-        "local.set $after"
-        "local.get $t"
-        $"i32.load offset={resultOffset}"
-        "if"
-        "local.get $t"
-        $"i32.load offset={resultOffset}"
-        $"call ${Names.dropObject}"
-        "end"
-        "local.get $t"
-        $"call ${free}"
-        "local.get $after"
-        "local.set $t"
-        "br $each"
-        "end"
-        "end"
+      // Frees the scope, whose tasks have all finished, and so have been taken out of it (see `Names.retire`).
+      [ $"(func ${Names.close} (param $s i32)"
         "local.get $s"
         $"call ${free}"
         ")" ]
@@ -411,19 +481,19 @@ let helpers
         $"call ${Names.leave}"
         ")" ]
       resumeWhile Names.scopeExitResume [ $"call ${Names.current}"; $"i32.load offset={ownScope}"; $"call ${Names.pending}" ] [ $"call ${Names.leave}" ]
-      [ $"(func ${Names.taskWait} (param $h i32) (local $frame i32)"
-        "local.get $h"
-        $"i32.load offset={state}"
-        $"i32.const {finished}"
-        "i32.eq"
+      // Waits until the task of the cell `c` has finished: until its block is gone.
+      [ $"(func ${Names.taskWait} (param $c i32) (local $frame i32)"
+        "local.get $c"
+        $"i32.load offset={cellTask}"
+        "i32.eqz"
         "if"
         "return"
         "end"
-        yield! stopWith waitResumeSlot [ "local.get $h" ]
+        yield! stopWith waitResumeSlot [ "local.get $c" ]
         ")" ]
       resumeWhile
           Names.waitResume
-          [ "local.get $frame"; "i32.load offset=16"; $"i32.load offset={state}"; $"i32.const {finished}"; "i32.ne" ]
+          [ "local.get $frame"; "i32.load offset=16"; $"i32.load offset={cellTask}"; "i32.const 0"; "i32.ne" ]
           []
       // Waits on the host: keeps `wait`, the host's function that waits, to make when every task has stalled, for the
       // shortest timeout given, and stops until it has made it.
@@ -510,8 +580,18 @@ let helpers
         "i32.const 0"
         $"global.set ${Names.stalled}"
         ")" ]
-      // Cancels `t` and every task it started, in each of its scopes, and theirs in turn.
-      [ $"(func ${Names.taskCancel} (param $t i32) (local $s i32) (local $u i32)"
+      // Cancels the task of the cell `c`, unless it has finished.
+      [ $"(func ${Names.taskCancel} (param $c i32)"
+        "local.get $c"
+        $"i32.load offset={cellTask}"
+        "if"
+        "local.get $c"
+        $"i32.load offset={cellTask}"
+        $"call ${Names.cancelBlock}"
+        "end"
+        ")" ]
+      // Cancels the task of the block `t` and every task it started, in each of its scopes, and theirs in turn.
+      [ $"(func ${Names.cancelBlock} (param $t i32) (local $s i32) (local $u i32)"
         "local.get $t"
         "i32.const 1"
         $"i32.store offset={cancelled}"
@@ -536,7 +616,7 @@ let helpers
         "i32.eqz"
         "if"
         "local.get $u"
-        $"call ${Names.taskCancel}"
+        $"call ${Names.cancelBlock}"
         "end"
         "local.get $u"
         $"i32.load offset={sibling}"
@@ -562,15 +642,21 @@ let helpers
         "i32.const 0"
         "end"
         ")" ]
-      // Whether the task of handle `t` has given back its value: its function has returned.
-      [ $"(func ${Names.taskDone} (param $t i32) (result i32)"
-        "local.get $t"
-        $"i32.load offset={state}"
-        $"i32.const {finishing}"
-        "i32.ge_u"
+      // Whether the task of the cell `c` has given back its value: its function has returned.
+      [ $"(func ${Names.taskDone} (param $c i32) (result i32)"
+        "local.get $c"
+        $"i32.load offset={cellResult}"
+        "i32.const 0"
+        "i32.ne"
         ")" ]
-      // Whether a task of the scope `s` has given back its value.
+      // Whether a task of the scope `s` has given back its value: one has finished, or one still in it has returned.
       [ $"(func ${Names.anyDone} (param $s i32) (result i32) (local $t i32)"
+        "local.get $s"
+        $"i32.load offset={retired}"
+        "if"
+        "i32.const 1"
+        "return"
+        "end"
         "local.get $s"
         $"i32.load offset={first}"
         "local.set $t"
@@ -580,7 +666,9 @@ let helpers
         "i32.eqz"
         "br_if $done"
         "local.get $t"
-        $"call ${Names.taskDone}"
+        $"i32.load offset={state}"
+        $"i32.const {finishing}"
+        "i32.ge_u"
         "if"
         "i32.const 1"
         "return"
@@ -717,11 +805,7 @@ let helpers
         $"i32.load offset={ownScope}"
         $"call ${Names.close}"
         "local.get $t"
-        "i32.const 0"
-        $"i32.store offset={ownScope}"
-        "local.get $t"
-        $"i32.const {finished}"
-        $"i32.store offset={state}"
+        $"call ${Names.retire}"
         ")" ]
       // The task running stopped: it has stalled if it was resumed and is still waiting. It goes to the back of the
       // queue, and the others run, until its turn comes again.
@@ -753,10 +837,10 @@ let helpers
         | lines -> lines |> List.map (fun line -> "  " + line) |> String.concat "\n")
 
 /// The helpers the scheduler calls.
-let dependencies = [ Helpers.alloc; Helpers.free; Helpers.release; WasmRegions.Names.regionGlobals ]
+let dependencies = [ Helpers.alloc; Helpers.free; Helpers.release; Helpers.newObject; WasmRegions.Names.regionGlobals ]
 
-/// The code that reads what the finished task of the handle on the stack gave back, a value of WebAssembly type
-/// `result`: it calls the function the task keeps it as, through `function`, a local, and the indirect type `type'` of
+/// The code that reads what the finished task of the cell on the stack gave back, a value of WebAssembly type
+/// `result`: it calls the function the cell keeps it as, through `function`, a local, and the indirect type `type'` of
 /// a function of one `i32` that gives a `result`.
 let readResult (function': string) (type': string) : string list =
-    [ $"i32.load offset={resultOffset}"; $"local.tee ${function'}"; $"local.get ${function'}"; "i32.load"; $"call_indirect (type ${type'})" ]
+    [ $"i32.load offset={cellResult}"; $"local.tee ${function'}"; $"local.get ${function'}"; "i32.load"; $"call_indirect (type ${type'})" ]
