@@ -234,6 +234,10 @@ and TypeExprKind =
     /// `type a`, the old form of a function's positional parameter that takes a type argument, now written `Type(a)`:
     /// its value is of type `Type(a)`, and the type variable `a` is the type passed. It still compiles, with a warning.
     | TypeArgument of TypeExpr
+    /// `Time * Time`, a derived dimension: the product of two dimensions (see `UnitSyntax`).
+    | TypeProduct of TypeExpr * TypeExpr
+    /// `Length / Time`, a derived dimension: one dimension divided by another (see `UnitSyntax`).
+    | TypeQuotient of TypeExpr * TypeExpr
 
 and TypeRecordField =
     /// A named field: its name, whether it is `mut`, its type and its default value.
@@ -365,8 +369,9 @@ and TopLevelItemKind =
     /// written in parentheses straight after the name, like a tag's payload: `@test(#io)`.
     | Attribute of Identifier * Expression option
     /// `dimension Time`, a kind of quantity, a type generic in the number that stores it, or `dimension Bytes(int)`,
-    /// constrained to one storage type (see `UnitSyntax`).
-    | DimensionDecl of isExport: bool * Identifier * storage: TypeExpr option
+    /// constrained to one storage type, or `dimension Speed = Length / Time`, a name for a derived dimension (see
+    /// `UnitSyntax`).
+    | DimensionDecl of isExport: bool * Identifier * storage: TypeExpr option * derived: TypeExpr option
     /// `unit ms: Time = 1_000us`, a unit of a dimension that is a constant multiple of another unit, a `UnitLit`, or
     /// `unit ns: Time`, with no multiple, the dimension's base unit, which `@baseUnit` before it marks (see `UnitSyntax`).
     | UnitDecl of isExport: bool * Identifier * dimension: Identifier * multiple: Expression option
@@ -1076,7 +1081,9 @@ module TypeExpr =
         | TypeRecord fields
         | TypeOpenRecord(fields, _) ->
             fields |> List.choose (function TypeField(_, _, typeOpt, _) -> typeOpt | TypeFieldAttribute _ -> None)
-        | TypeFunc(arg, ret) -> [ arg; ret ]
+        | TypeFunc(arg, ret)
+        | TypeProduct(arg, ret)
+        | TypeQuotient(arg, ret) -> [ arg; ret ]
         | TypeTag(_, payload) -> Option.toList payload
         | TypeWithContext(contexts, inner) -> contexts @ [ inner ]
         | TypeConstraint(_, inner, _)
@@ -1108,6 +1115,8 @@ module TypeExpr =
             | TypeRecord fields -> TypeRecord(List.map (mapField f) fields)
             | TypeOpenRecord(fields, row) -> TypeOpenRecord(List.map (mapField f) fields, row)
             | TypeFunc(arg, ret) -> TypeFunc(f arg, f ret)
+            | TypeProduct(left, right) -> TypeProduct(f left, f right)
+            | TypeQuotient(left, right) -> TypeQuotient(f left, f right)
             | TypeTag(name, payload) -> TypeTag(name, Option.map f payload)
             | TypeWithContext(contexts, inner) -> TypeWithContext(List.map f contexts, f inner)
             | TypeConstraint(name, inner, predicate) -> TypeConstraint(name, f inner, predicate)
@@ -1407,6 +1416,12 @@ module UnitSyntax =
         match attribute.Kind, next.Kind with
         | Attribute(name, None), UnitDecl _ -> name = baseUnitAttribute
         | _ -> false
+
+    /// The operators that join dimensions in a derived dimension, `Length / Time` and `Time * Time` (`TypeProduct`,
+    /// `TypeQuotient`), as they are written.
+    let times = "*"
+
+    let over = "/"
 
     /// A number with a unit as it is written: `500ms`.
     let written (number: WrittenNumber) (unitName: string) = WrittenNumber.text number + unitName

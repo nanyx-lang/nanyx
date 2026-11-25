@@ -73,13 +73,26 @@ module internal Units =
     /// The parameter a dimension that is not constrained is generic in: the number that stores it.
     let private storageParameter = "a"
 
+    /// `derived`, a derived dimension, with each dimension it names stored as `storage`: `Length(a) / Time(a)`.
+    let rec private storedAs (storage: Identifier) (derived: TypeExpr) : TypeExpr =
+        match derived.Kind with
+        | TypeName name -> TypeExpr.at derived.Span (TypeApply(name, [ TypeExpr.at derived.Span (TypeVar storage) ]))
+        | TypeProduct _
+        | TypeQuotient _ -> TypeExpr.mapChildren (storedAs storage) derived
+        | _ -> derived
+
     /// `items` with each dimension's declaration as the type definition it stands for, `type Time(a) = private a` or
     /// `type Bytes = private int`, for the type definitions to be registered with (see `TypeResolution.registerTypeDef`).
+    /// A derived dimension, `dimension Speed = Length / Time`, is an alias of what it names, generic in its storage as
+    /// its parts are: `type Speed(a) = Length(a) / Time(a)`, so it is the same dimension wherever it is written.
     let withDimensionsAsTypes (items: TopLevelItem list) : TopLevelItem list =
         items
         |> List.map (fun item ->
             match item.Kind with
-            | DimensionDecl(isExport, name, storage) ->
+            | DimensionDecl(isExport, name, _, Some derived) ->
+                let modifiers = if isExport then [ Export ] else []
+                { item with Kind = Def (TypeDef(name, modifiers, [ storageParameter, None ], storedAs storageParameter derived)) }
+            | DimensionDecl(isExport, name, storage, None) ->
                 let modifiers = (if isExport then [ Export ] else []) @ [ Private ]
                 let parameters, body =
                     match storage with
@@ -90,7 +103,7 @@ module internal Units =
 
     /// The dimensions `items` declare, each with its declaration.
     let private dimensionsOf (items: TopLevelItem list) =
-        items |> List.choose (fun item -> match item.Kind with DimensionDecl(_, name, storage) -> Some (name, storage, item) | _ -> None)
+        items |> List.choose (fun item -> match item.Kind with DimensionDecl(_, name, storage, _) -> Some (name, storage, item) | _ -> None)
 
     /// `state` with each dimension `items` declare marked as one among its type definitions.
     let markDimensions (items: TopLevelItem list) (state: InferState) : InferState =
@@ -135,7 +148,12 @@ module internal Units =
     /// The dimension `name` names, written at `span`, or the error saying it names none.
     let private dimensionNamed (state: InferState) (name: Identifier) (span: SourceSpan) : Result<NominalId, Diagnostic> =
         match state.TypeDefs |> Map.tryFind name with
-        | Some info when info.IsDimension -> Ok (TypeDefInfo.nominalId info)
+        | Some info when info.IsDimension && info.IsNominal -> Ok (TypeDefInfo.nominalId info)
+        | Some info when info.IsDimension ->
+            Error (
+                Diagnostics.at DiagnosticCodes.UnitOfDerivedDimension span
+                    $"'{name}' is a derived dimension, which has no units of its own: a value of it is written in its parts' units, as `100m / 9.58s` is"
+                |> Diagnostics.about name)
         | Some _ ->
             Error (Diagnostics.at DiagnosticCodes.UnknownType span $"'{name}' is a type, not a dimension: a unit belongs to a dimension, declared as `dimension {Names.written name}`" |> Diagnostics.about name)
         | None ->
@@ -182,7 +200,7 @@ module internal Units =
             dimensionsOf items
             |> List.collect (fun (name, _, item) ->
                 match state.TypeDefs |> Map.tryFind name with
-                | Some info when info.IsDimension && info.Home = state.Home ->
+                | Some info when info.IsDimension && info.IsNominal && info.Home = state.Home ->
                     let id = TypeDefInfo.nominalId info
                     match declared |> List.filter (fun (unit, dimension) -> dimension = id && unit.IsBase) with
                     | [] ->

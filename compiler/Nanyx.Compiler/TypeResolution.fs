@@ -290,14 +290,18 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         | None ->
             match tryFindTypeDef name state with
             // A dimension is a measured value: `Bytes` of the storage it is constrained to, and `Time` of a storage of its
-            // own, as a `_` is (see `Units`).
-            | Some info when info.IsDimension ->
+            // own, as a `_` is (see `Units`). A derived one, `Speed`, is an alias of its dimensions.
+            | Some info when info.IsDimension && info.IsNominal ->
                 let state = recordTypeReference typeExpr info state
                 match info.Parameters with
                 | [] -> TyMeasure(Dimension.ofBase (TypeDefInfo.nominalId info), info.Underlying), state
                 | _ ->
                     let storage, next = freshVar state
                     TyMeasure(Dimension.ofBase (TypeDefInfo.nominalId info), storage), next
+            // A derived dimension, `Speed`, is what it names, `Length / Time`, of a storage of its own.
+            | Some info when info.IsDimension ->
+                let storage, next = freshVar (recordTypeReference typeExpr info state)
+                Unifier.applyToParameters info.Parameters [ storage ] info.Underlying, next
             | Some info -> namedType (recordTypeReference typeExpr info state) name info
             | None when TypeValues.descriptionArities |> Map.tryFind name = Some 0 -> TyApply(name, []), state
             | None -> TyPrimitive name, state
@@ -379,12 +383,16 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             match tryFindTypeDef name current with
             // `Time(a)`: a measured value of the storage written. A constrained dimension's is its own, and writing
             // another is an error (see `DimensionSignatures.withStorages`).
-            | Some info when info.IsDimension ->
+            | Some info when info.IsDimension && info.IsNominal ->
                 let storage =
                     match info.Parameters, argTys with
                     | [ _ ], [ storage ] -> storage
                     | _ -> info.Underlying
                 TyMeasure(Dimension.ofBase (TypeDefInfo.nominalId info), storage), recordTypeReference typeExpr info current
+            // `Speed(float)`: the derived dimension it names, `Length / Time`, stored as written, with no alias around it,
+            // so it is one type with `Length(float) / Time(float)` wherever either is written.
+            | Some info when info.IsDimension && info.Parameters.Length = argTys.Length ->
+                Unifier.applyToParameters info.Parameters argTys info.Underlying, recordTypeReference typeExpr info current
             | Some info when not (isNominal info) ->
                 let current = recordTypeReference typeExpr info current
                 if info.Parameters.Length = argTys.Length then
@@ -397,6 +405,16 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
                 nominalType info (argTys @ scope @ writtenContexts info []), current
             | Some info -> TyApply(name, argTys), recordTypeReference typeExpr info current
             | None -> TyApply(name, argTys), current
+    // `Length / Time`: the dimensions of both sides multiplied or divided, of the storage they share, which
+    // `DimensionSignatures` checks is one. A side that is no dimension is an error there too.
+    | TypeProduct(left, right)
+    | TypeQuotient(left, right) ->
+        let leftTy, current = typeExprToTy state left
+        let rightTy, current = typeExprToTy current right
+        let combine = match typeExpr.Kind with TypeProduct _ -> Dimension.multiply | _ -> Dimension.divide
+        match Unifier.unalias leftTy, Unifier.unalias rightTy with
+        | TyMeasure(leftDimension, storage), TyMeasure(rightDimension, _) -> Dimension.measured (combine leftDimension rightDimension) storage, current
+        | _ -> Unifier.errorType, current
     | TypeFunc(arg, ret) ->
         let argTy, next = typeExprToTy state arg
         let retTy, nextState = typeExprToTy next ret
@@ -516,7 +534,9 @@ let rec internal typeNamesIn (typeExpr: TypeExpr) : (Identifier * SourceSpan) li
         |> List.collect (function
             | TypeField(_, _, Some t, _) -> ofType t
             | _ -> [])
-    | TypeFunc(arg, ret) -> ofType arg @ ofType ret
+    | TypeFunc(arg, ret)
+    | TypeProduct(arg, ret)
+    | TypeQuotient(arg, ret) -> ofType arg @ ofType ret
     | TypeTag(_, Some payload)
     | TypeWithContext(_, payload)
     | TypeConstraint(_, payload, _)

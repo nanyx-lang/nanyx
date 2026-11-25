@@ -286,6 +286,7 @@
     <Compile Include="Features\Units\RunUnitLiteralTests.fs" />
     <Compile Include="Features\Units\RunMeasuredArithmeticTests.fs" />
     <Compile Include="Features\Units\RunMeasuredDisplayTests.fs" />
+    <Compile Include="Features\Units\RunDerivedDimensionTests.fs" />
     <Compile Include="Features\Workflows\RunWorkflowTests.fs" />
     <Compile Include="Features\Workflows\RunWorkflowLoopTests.fs" />
     <Compile Include="Features\Workflows\RunKeywordKindTests.fs" />

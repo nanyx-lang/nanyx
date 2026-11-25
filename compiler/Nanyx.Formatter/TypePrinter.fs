@@ -83,8 +83,21 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
                 | TypeUnion _
                 | TypeFunc _
                 | TypeWithContext _ -> parenType item
-                | _ -> atomType item)
+                | _ -> dimensionType item)
             |> Doc.join (text " & ")
+        | _ -> dimensionType t
+
+    /// A derived dimension, `Length / Time`, read from the left, so a product or quotient on the right is bracketed:
+    /// `Length / (Time * Time)`.
+    and dimensionType (t: TypeExpr) : Doc =
+        let right (operand: TypeExpr) =
+            match operand.Kind with
+            | TypeProduct _
+            | TypeQuotient _ -> parenType operand
+            | _ -> atomType operand
+        match t.Kind with
+        | TypeProduct(left, operand) -> cat [ dimensionType left; text $" {UnitSyntax.times} "; right operand ]
+        | TypeQuotient(left, operand) -> cat [ dimensionType left; text $" {UnitSyntax.over} "; right operand ]
         | _ -> atomType t
 
     and parenType (t: TypeExpr) : Doc =
@@ -124,6 +137,8 @@ type TypePrinter(expression: Expression -> Doc, expressionFollowed: Expression -
         | TypeFunc _
         | TypeUnion _
         | TypeIntersection _
+        | TypeProduct _
+        | TypeQuotient _
         | TypeWithContext _ -> parenType t
 
     /// Type arguments are a list of types, so one function argument needs no brackets: `map(a -> b)`, and nor does one

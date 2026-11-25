@@ -672,10 +672,11 @@ let format (options: Options) (parsed: SourceModule) : string =
             | None -> cat [ text "export "; imports.ImportSource item.Source ]
         | Expr value -> expr statementPosition value
         | Attribute(n, argument) -> attributeDoc n argument i.Span
-        | DimensionDecl(isExport, n, storage) ->
+        | DimensionDecl(isExport, n, storage, derived) ->
             let export = if isExport then "export " else ""
             cat [ text $"{export}{UnitSyntax.dimensionKeyword} {Names.written n}"
-                  (match storage with Some t -> cat [ text "("; typeExpr t; text ")" ] | None -> Doc.empty) ]
+                  (match storage with Some t -> cat [ text "("; typeExpr t; text ")" ] | None -> Doc.empty)
+                  (match derived with Some t -> cat [ text " = "; typeExpr t ] | None -> Doc.empty) ]
         | UnitDecl(isExport, n, dimension, multiple) ->
             let export = if isExport then "export " else ""
             cat [ text $"{export}{UnitSyntax.unitKeyword} {Names.written n}: {Names.written dimension}"
