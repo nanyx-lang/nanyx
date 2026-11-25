@@ -89,31 +89,32 @@ let rec private callingInScope (scopeDefs: Set<Identifier>) (free: Set<NodeId>) 
 /// that runs its body in its caller's scope, and itself, opening the scope and calling that one in it. `None` when it
 /// writes no function's type: the def that runs its body would require the caller's scope without writing it.
 let private splitScopeDef (scopeDefs: Set<Identifier>) (isExport: bool) (name: Identifier) (written: TypeExpr option) (value: Expression) =
-    match value.Kind, written |> Option.bind requiringScope with
+    match value.Kind, (match written with Some w -> requiringScope w |> Option.map Some | None -> Some None) with
     | Lambda(parameters, body, takesUnit), Some inScopeType ->
         let free =
             SyntaxTree.freeReferences value
             |> List.choose (fun (referenced, at) -> if scopeDefs.Contains referenced then Some at.Id else None)
             |> Set.ofList
         let inScopeName = TaskScopeSyntax.inCallersScope name
-        let inScope = ValueDef(false, inScopeName, Some inScopeType, { value with Kind = Lambda(parameters, callingInScope scopeDefs free body, takesUnit) })
+        let inScope = ValueDef(false, inScopeName, inScopeType, { value with Kind = Lambda(parameters, callingInScope scopeDefs free body, takesUnit) })
         // The opening def names its parameters itself, as one written `_` can't be passed on.
         let passed = parameters |> List.mapi (fun index (_, written) -> $"__scopeArgument{index}", written)
         let arguments = passed |> List.map (fun (parameter, _) -> Expression.at body.Span (IdentifierExpr parameter))
         let call = Expression.at body.Span (FunctionCall(inScopeName, None, arguments))
-        let opening = ValueDef(isExport, name, written, Expression.from value (Lambda(passed, scoped call, takesUnit)))
-        Some(inScope, opening)
+        let openingValue = Expression.from value (Lambda(passed, scoped call, takesUnit))
+        Some(inScope, ValueDef(isExport, name, written, openingValue), openingValue.Id)
     | _ -> None
 
 /// `items`, with each module-level def that starts a task a scope, and whether any is.
-let rec private scopedItems (ownStart: bool) (isEntry: Expression -> bool) (items: TopLevelItem list) : TopLevelItem list * bool =
+let rec private scopedItems (ownStart: bool) (isEntry: Expression -> bool) (items: TopLevelItem list) : TopLevelItem list * bool * (NodeId * NodeId) list =
     let mutable any = false
+    let mutable openings = []
     let scopeDefs =
         items
         |> List.choose (fun item ->
             match item.Kind with
             // An attached def, `Type.name`, is called by its type and stays one def.
-            | Def(ValueDef(_, name, Some written, ({ Kind = Lambda _ } as value))) when startsTask ownStart value && (requiringScope written).IsSome && not (name.Contains '.') -> Some name
+            | Def(ValueDef(_, name, written, ({ Kind = Lambda _ } as value))) when startsTask ownStart value && (written |> Option.forall (fun w -> (requiringScope w).IsSome)) && not (name.Contains '.') -> Some name
             | _ -> None)
         |> Set.ofList
     let items =
@@ -123,16 +124,18 @@ let rec private scopedItems (ownStart: bool) (isEntry: Expression -> bool) (item
             | Def(ValueDef(isExport, name, typeOpt, value)) ->
                 let split = if scopeDefs.Contains name then splitScopeDef scopeDefs isExport name typeOpt value else None
                 match split, scopedValue ownStart value with
-                | Some(inScope, opening), _ ->
+                | Some(inScope, opening, openingId), _ ->
                     any <- true
+                    openings <- (openingId, value.Id) :: openings
                     [ { item with Kind = Def inScope; Id = NodeId.next () }; { item with Kind = Def opening } ]
                 | None, Some value ->
                     any <- true
                     [ { item with Kind = Def(ValueDef(isExport, name, typeOpt, value)) } ]
                 | None, None -> [ item ]
             | ModuleBlock(name, inner) ->
-                let inner, anyInner = scopedItems ownStart isEntry inner
+                let inner, anyInner, innerOpenings = scopedItems ownStart isEntry inner
                 any <- any || anyInner
+                openings <- innerOpenings @ openings
                 [ { item with Kind = ModuleBlock(name, inner) } ]
             // A script's entry point, the lambda its statements are made into (see `Scripts.asEntry`).
             | Expr({ Kind = FunctionCall(callee, range, [ entry ]) } as call) when isEntry call ->
@@ -142,12 +145,20 @@ let rec private scopedItems (ownStart: bool) (isEntry: Expression -> bool) (item
                     [ { item with Kind = Expr { call with Kind = FunctionCall(callee, range, [ entry ]) } } ]
                 | None -> [ item ]
             | _ -> [ item ])
-    items, any
+    items, any, openings
 
 /// `module'` with each module-level def that starts a task, and a script's entry point if it does, a scope. In a module
 /// that defines a `start` of its own, only `Async.start` starts one. `isEntry` says whether a top-level call is the one
 /// that runs the script's entry point. A module with a scope imports `nanyx/async` for it, under `TaskScopeSyntax.alias`.
-let wrap (isEntry: Expression -> bool) (module': Module) : Module =
-    match scopedItems (definesStart module') isEntry module' with
-    | items, true -> TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport asyncModule) (Some TaskScopeSyntax.alias) ]) :: items
-    | items, false -> items
+let wrap (declared: DeclaredNames) (isEntry: Expression -> bool) (module': Module) : Module * DeclaredNames =
+    let items, any, openings = scopedItems (definesStart module') isEntry module'
+    let declared =
+        openings
+        |> List.fold (fun acc (opening, original) ->
+            match acc |> Map.tryFind (original, DefValue) with
+            | Some names -> acc |> Map.add (opening, DefValue) names
+            | None -> acc) declared
+    let items =
+        if any then TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport asyncModule) (Some TaskScopeSyntax.alias) ]) :: items
+        else items
+    items, declared
