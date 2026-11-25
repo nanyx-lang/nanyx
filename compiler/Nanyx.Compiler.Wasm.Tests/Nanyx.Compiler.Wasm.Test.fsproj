@@ -232,6 +232,7 @@
     <Compile Include="Features\StdLib\RunStdLibTests.fs" />
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />
+    <Compile Include="Features\StdLib\RunIntegerBoundsTests.fs" />
     <Compile Include="Features\StdLib\RunMathTrigonometryTests.fs" />
     <Compile Include="Features\StdLib\RunMathHyperbolicTests.fs" />
     <Compile Include="Features\StdLib\RunMathSpecialFloatTests.fs" />
