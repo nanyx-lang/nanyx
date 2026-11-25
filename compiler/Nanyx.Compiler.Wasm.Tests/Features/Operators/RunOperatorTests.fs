@@ -135,7 +135,8 @@ def main = {
   println("{math.pow(2, 8)} {math.pow(1.5, 3)} {pow(3, 4)} {cube(2)} {cube(0.5)}")
 }
 """
-    runSource source |> assertRan "1024 2.25 512 64 18 0.25\n1.4142135623730951 1024.0 0.0316227766016838 0.0\n256 3.375 81 8 0.125\n"
+    // 10 ** -1.5 is the float nearest it, 0.03162277660168379, since #2537; it was a unit out.
+    runSource source |> assertRan "1024 2.25 512 64 18 0.25\n1.4142135623730951 1024.0 0.03162277660168379 0.0\n256 3.375 81 8 0.125\n"
 
 [<Fact>]
 let ``Run - boolean keywords not, and, or`` () =
