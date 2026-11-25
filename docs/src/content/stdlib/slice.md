@@ -251,8 +251,8 @@ def Slice.sortWith: [c] Slice(a), ([c] (a, a) -> #less | #equal | #greater) -> a
 
 An array of the elements of `s` in the order `order` gives: `order(a, b)` says whether `a` comes
 before `b` (`#less`), after it (`#greater`), or either way (`#equal`), as `compare` does. The sort
-is stable: elements `order` finds equal keep their order. It is [`MArray.sortWith`](mslice#marraysortwith)'s merge sort,
-on a copy of the elements.
+is stable: elements `order` finds equal keep their order. It is [`array.sortWith`](array#arraysortwith) of a copy of
+the elements.
 
 ## `Slice.sortBy`
 

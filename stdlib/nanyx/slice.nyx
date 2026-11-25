@@ -19,11 +19,7 @@
   literal `Slice[1, 2, 3]` a slice of all of a new array.
 module slice
 
-import (
-  nanyx/array
-  nanyx/marray
-  nanyx/mslice
-)
+import nanyx/array
 
 export type Slice(a) = private (items: Array(a), start: int, length: int)
 
@@ -236,16 +232,12 @@ export def Slice.reverse: Slice(a) -> Array(a) = { s ->
 
 --| An array of the elements of `s` in the order `order` gives: `order(a, b)` says whether `a` comes
   before `b` (`#less`), after it (`#greater`), or either way (`#equal`), as `compare` does. The sort
-  is stable: elements `order` finds equal keep their order. It is [`MArray.sortWith`]'s merge sort,
-  on a copy of the elements.
+  is stable: elements `order` finds equal keep their order. It is [`array.sortWith`] of a copy of
+  the elements.
 export def Slice.sortWith
   : [c] Slice(a), ([c] a, a -> #less | #equal | #greater) -> Array(a)
   = { s, order ->
-    memory {
-      def sorted = MArray.fromArray(Slice.toArray(s))
-      MArray.sortWith(sorted, order)
-      MArray.toArray(sorted)
-    }
+    array.sortWith(Slice.toArray(s), order)
   }
 
 --| An array of the elements of `s` in ascending order of `key`. The sort is stable: elements with the
