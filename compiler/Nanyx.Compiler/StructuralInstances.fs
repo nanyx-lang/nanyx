@@ -263,8 +263,6 @@ module internal StructuralInstances =
 
     let private partName (index: int) = $"__p{index}"
 
-    /// The integer types whose every value is an `int`, each with the prelude's conversion to one.
-    let private wholeStorages = set [ "I8"; "I16"; "I32"; "U8"; "U16"; "U32" ]
 
     /// The text a derived `toString` writes for `value`, a measured value of `dimension` stored as `storage`: its number
     /// of base units in the largest of `units` it is a whole number of, by a prelude function, where the storage is an
@@ -277,7 +275,7 @@ module internal StructuralInstances =
         let text (s: string) = expr (LiteralExpr (StringLit s))
         let stored = call Units.storageIntrinsic [ value ]
         let before, after =
-            match units |> List.tryFind (fun info -> info.Scale = Rational.one) with
+            match units |> List.tryFind UnitInfo.isBase with
             | Some baseUnit -> "", baseUnit.Name
             | None -> $"{Dimension.text dimension}(", ")"
         let inUnits (helper: Identifier) (number: Expression) (scales: (UnitInfo * Expression) list) =
@@ -292,10 +290,12 @@ module internal StructuralInstances =
             |> List.filter (fun info -> Rational.isWhole info.Scale)
             |> List.map (fun info -> info, expr (LiteralExpr (IntLit info.Scale.Numerator)))
         let fractional () =
-            units |> List.map (fun info -> info, expr (LiteralExpr (FloatLit (float info.Scale.Numerator / float info.Scale.Denominator))))
+            units |> List.map (fun info -> info, expr (LiteralExpr (FloatLit (Rational.toFloat info.Scale))))
         match Unifier.unalias storage with
         | TyPrimitive "int" -> inUnits InterpolationHoles.measuredIntFunction stored (whole ())
-        | TyPrimitive name when wholeStorages.Contains name -> inUnits InterpolationHoles.measuredIntFunction (call $"{name}.toInt" [ stored ]) (whole ())
+        // A sized integer whose every value is an `int`, through the prelude's conversion to one.
+        | SizedIntegerType integer when SizedInteger.bits integer < 64 ->
+            inUnits InterpolationHoles.measuredIntFunction (call $"{SizedInteger.name integer}.toInt" [ stored ]) (whole ())
         | TyPrimitive "float" -> inUnits InterpolationHoles.measuredFloatFunction stored (fractional ())
         | TyPrimitive "F32" -> inUnits InterpolationHoles.measuredFloatFunction (call "F32.toFloat" [ stored ]) (fractional ())
         | _ -> expr (InterpolatedString [ StringText before; StringExpr (call InterpolationHoles.holeFunction [ stored ]); StringText after ])

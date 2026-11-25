@@ -9,7 +9,7 @@ prelude brings it, and `Method`, into every module of a program. Make one with `
 with `with`:
 
 ```nanyx fragment
-def request = Request.of(#get, "https://example.com/report") with timeout = 5000
+def request = Request.of(#get, "https://example.com/report") with timeout = 5s
 ```
 # Reference
 
@@ -32,11 +32,12 @@ What a request asks the server to do.
 ## `Request`
 
 ```nanyx fragment
-type Request = (method: Method, url: string, headers: list((string, string)), body: string, timeout: int)
+type Request = (method: Method, url: string, headers: list((string, string)), body: string, timeout: Time(int))
 ```
 
 An HTTP request: what it asks (`method`) of which resource (`url`), with its headers, each a name
-and a value, in the order they are sent, and its body, as text. `timeout` is how many milliseconds to wait for the answer before giving up.
+and a value, in the order they are sent, and its body, as text. `timeout` is how long to wait for
+the answer before giving up: `5s`.
 
 ## `Request.of`
 

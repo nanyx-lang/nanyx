@@ -136,9 +136,8 @@ module internal ArithmeticOperators =
     /// `NumericLiterals`).
     let private literalReading (env: TypeEnv) (state: InferState) (literal: Expression) (otherTy: Ty) : LiteralReading option =
         let bound (name: Identifier) = (TypeEnv.tryFind name env).IsSome
-        let isLiteralVar (v: TyVar) = state.UnsettledLiterals |> List.exists (fun other -> resolveSoFar state other.Type = TyVar v)
         match literal.Kind, Unifier.unalias (resolveSoFar state otherTy), state.ContextScope with
-        | LiteralExpr value, (TyVar v as var), DefScope(defName, false) when bound zero && not (isLiteralVar v) ->
+        | LiteralExpr value, (TyVar v as var), DefScope(defName, false) when bound zero && not (NumericLiterals.isUnsettledVar state v) ->
             let tyText = Unifier.tyToDisplayString Ascii var
             match value with
             | IntLit n when n.IsZero -> Some (AsMember { literal with Kind = IdentifierExpr zero })
@@ -166,13 +165,12 @@ module internal ArithmeticOperators =
     /// integer type.
     let private measuredReading (env: TypeEnv) (state: InferState) (literal: Expression) (number: WrittenNumber) (unitName: Identifier) (storage: Ty) : LiteralReading option =
         let bound (name: Identifier) = (TypeEnv.tryFind name env).IsSome
-        let isLiteralVar (v: TyVar) = state.UnsettledLiterals |> List.exists (fun other -> resolveSoFar state other.Type = TyVar v)
         match Unifier.unalias (resolveSoFar state storage), state.ContextScope, state.Units |> Map.tryFind unitName with
-        | TyVar v, DefScope(_, false), Some info when bound zero && not (isLiteralVar v) ->
-            let value = Rational.multiply (Rational.ofWritten number) info.Scale
+        | TyVar v, DefScope(_, false), Some info when bound zero && not (NumericLiterals.isUnsettledVar state v) ->
+            let value = NumericLiterals.inBaseUnits state number unitName
             let dimension = Dimension.ofBase info.Dimension
             if not (Rational.isWhole value) then
-                let written = $"{WrittenNumber.text number}{unitName}"
+                let written = UnitSyntax.written number unitName
                 Some (Wrong (Diagnostics.at DiagnosticCodes.TypeMismatch literal.Span
                                  $"'{written}' is {Rational.text value} of its base unit, which no number of '{Unifier.tyToDisplayString Ascii (TyVar v)}' may be, as an integer type can't: write a whole number of the base unit"))
             elif value.Numerator.IsZero then Some (AsMeasured({ literal with Kind = IdentifierExpr zero }, dimension))

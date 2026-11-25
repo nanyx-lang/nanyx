@@ -24,6 +24,9 @@ module Rational =
 
     let multiply (a: Rational) (b: Rational) : Rational = make (a.Numerator * b.Numerator) (a.Denominator * b.Denominator)
 
+    /// The float nearest `r`.
+    let toFloat (r: Rational) = float r.Numerator / float r.Denominator
+
     /// Whether `r` is a whole number.
     let isWhole (r: Rational) = r.Denominator.IsOne
 

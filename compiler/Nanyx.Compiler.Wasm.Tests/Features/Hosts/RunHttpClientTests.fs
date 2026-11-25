@@ -97,7 +97,7 @@ let ``A request with no answer in its timeout is #timeout`` () =
             200, [], "late")
     let outcome =
         try
-            run $"""match http.send(Request.of(#get, "{server.Url}/slow") with timeout = 200)
+            run $"""match http.send(Request.of(#get, "{server.Url}/slow") with timeout = 200ms)
   | #some(_) -> println("answered")
   | #timeout -> println("timed out")
   | _ -> println("another error")
@@ -105,6 +105,18 @@ let ``A request with no answer in its timeout is #timeout`` () =
         finally
             release.Set()
     outcome |> assertPrinted "timed out\n"
+
+[<Fact>]
+let ``A request's timeout is a time, and a plain number is not one`` () =
+    use server = new TestServer(echo)
+    run $"""match http.send(Request.of(#get, "{server.Url}/hello") with timeout = 2s)
+  | #some(response) -> println(response.body)
+  | _ -> println("no answer")
+"""
+    |> assertPrinted "Hello!\n"
+    let outcome = run $"""def request = Request.of(#get, "{server.Url}/hello") with timeout = 2000
+"""
+    Assert.Contains("NYX0201", outcome.StandardError)
 
 [<Fact>]
 let ``A server that isn't there, or a URL that isn't one, is an error saying so`` () =
