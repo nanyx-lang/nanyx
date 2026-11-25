@@ -94,7 +94,7 @@ let private callsAround (typed: TypedModule) (syntax: Module) (offset: int) =
 let private serves (entry: Ty * InfoView.ContextSource * SourceSpan) (context: Ty, source: InfoView.ContextSource, span: SourceSpan) =
     let entryContext, entrySource, entrySpan = entry
     entrySource = source && entrySpan = span
-    && (source <> InfoView.Inferred || InfoView.contextName entryContext = InfoView.contextName context)
+    && (source <> InfoView.Inferred || FunctionContexts.contextName entryContext = FunctionContexts.contextName context)
 
 /// The providers of the innermost def around `offset`, each with the calls it serves, and the span a position must be in
 /// to highlight them: the whole `use`, or the provider's own span.
@@ -123,7 +123,7 @@ let private flowOf (names: TypeNotation) (rename: Ty -> Ty) (name: string, entri
         List.map2
             (fun ((context, source, span), _, calls) contextWritten ->
                 { Context = contextWritten
-                  Name = InfoView.contextName (rename context) |> Option.defaultValue ""
+                  Name = FunctionContexts.contextName (rename context) |> Option.defaultValue ""
                   Source = source
                   Span = span
                   Calls = calls |> List.map served })
