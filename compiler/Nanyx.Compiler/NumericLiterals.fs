@@ -19,7 +19,7 @@ module internal NumericLiterals =
 
     /// The type of `literal`, written at `span` (as the expression `node`, unless it is a pattern), and `state` with it
     /// recorded: a variable of its own for a number, and the literal's type for any other. For a number with a unit, it
-    /// is the type of its storage, which the measured value's type is of (see `Units.literalType`).
+    /// is the type of its storage, which the measured value's type is of (see the `UnitLit` arm in `Infer.fs`).
     let typeOf (state: InferState) (span: SourceSpan) (node: NodeId option) (literal: Literal) : Ty * InferState =
         match literal with
         | IntLit _
@@ -179,6 +179,10 @@ module internal NumericLiterals =
             | TyVar ({ Name = None } as v) -> Some (literal, v)
             | _ -> None)
 
+    /// Whether `v` is the own variable of a number literal whose type nothing has settled yet.
+    let isUnsettledVar (state: InferState) (v: TyVar) =
+        state.UnsettledLiterals |> List.exists (fun literal -> resolveSoFar state literal.Type = TyVar v)
+
     /// Whether `ty` is, so far, a literal's own variable: a number, but of a type the code around it has not settled.
     let isOpen (state: InferState) (ty: Ty) =
         match resolveSoFar state ty with
@@ -301,7 +305,7 @@ module internal NumericLiterals =
             $"'{written}' has no unit, so it is no '{Dimension.text dimension}': write it with a unit of '{Dimension.text dimension}', or `zero` for nothing of it"
 
     /// How many base units of its dimension the number with a unit `number unitName` is, exactly.
-    let private inBaseUnits (state: InferState) (number: WrittenNumber) (unitName: Identifier) : Rational =
+    let inBaseUnits (state: InferState) (number: WrittenNumber) (unitName: Identifier) : Rational =
         let scale = state.Units |> Map.tryFind unitName |> Option.map _.Scale |> Option.defaultValue Rational.one
         Rational.multiply (Rational.ofWritten number) scale
 
@@ -313,9 +317,9 @@ module internal NumericLiterals =
         let baseUnit =
             state.Units
             |> Map.tryFind unitName
-            |> Option.bind (fun info -> state.Units |> Map.tryFindKey (fun _ other -> other.Dimension = info.Dimension && other.Scale = Rational.one))
+            |> Option.bind (fun info -> state.Units |> Map.tryFindKey (fun _ other -> other.Dimension = info.Dimension && UnitInfo.isBase other))
             |> Option.defaultValue "base unit"
-        let written = $"{WrittenNumber.text number}{unitName}"
+        let written = UnitSyntax.written number unitName
         match Unifier.unalias ty with
         | TyPrimitive "int"
         | SizedIntegerType _ when not (Rational.isWhole value) ->
@@ -331,7 +335,7 @@ module internal NumericLiterals =
             match outOfRange { Type = ty; Value = integer; At = span; Node = None; Operator = None; Requires = None } ty with
             | Some message -> Error (Diagnostics.at DiagnosticCodes.LiteralOutOfRange span $"'{written}' is {value.Numerator} '{baseUnit}': {message}")
             | None -> Ok integer
-        | _ -> Ok (FloatLit (float value.Numerator / float value.Denominator))
+        | _ -> Ok (FloatLit (Rational.toFloat value))
 
     /// `state` with every literal settled, and each that cannot be of the type it has, as the constraints solve it, an
     /// error. A number with a unit is stored as its number of base units, the plain literal it is read as from then on

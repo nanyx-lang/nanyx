@@ -352,6 +352,10 @@ type UnitInfo =
       Home: ModuleOrigin
       IsExport: bool }
 
+module UnitInfo =
+    /// Whether `info` is its dimension's base unit, the one its values are stored in.
+    let isBase (info: UnitInfo) = info.Scale = Rational.one
+
 /// A definition marked `@component`, which a component built from the program exports, in the WIT interface its module
 /// names (see `ComponentInterface`).
 type ComponentExport =

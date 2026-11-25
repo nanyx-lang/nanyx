@@ -25,7 +25,7 @@ module internal MeasuredArithmetic =
     /// Whether `ty` is a number literal's own type, which nothing has settled yet.
     let private isLiteral (state: InferState) (ty: Ty) =
         match resolveSoFar state ty with
-        | TyVar v -> state.UnsettledLiterals |> List.exists (fun literal -> resolveSoFar state literal.Type = TyVar v)
+        | TyVar v -> NumericLiterals.isUnsettledVar state v
         | _ -> false
 
     /// The dimension of `ty`, if it is a measured value.
