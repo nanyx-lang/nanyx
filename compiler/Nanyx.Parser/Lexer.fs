@@ -104,7 +104,7 @@ let private isIdentifierChar (c: char) = Char.IsLetter c || Char.IsAsciiDigit c 
 let private isFence (line: string) = line.Length >= 3 && line |> Seq.forall ((=) '-')
 
 /// Whether the number at `start` of `text` is hexadecimal, octal or binary: `0x1F`, `0o17`, `0b101`.
-let private isRadixNumber (text: string) (start: int) =
+let internal isRadixNumber (text: string) (start: int) =
     let at (i: int) = if i < text.Length then text[i] else '\000'
     at start = '0' && "xXoObB".IndexOf(at (start + 1)) >= 0 && (Uri.IsHexDigit(at (start + 2)) || at (start + 2) = '_')
 

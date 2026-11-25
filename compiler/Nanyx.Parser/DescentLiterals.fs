@@ -21,7 +21,7 @@ let private sign (c: Cursor) =
 /// Whether the number written as `text` is an integer: no fraction and no exponent.
 let private isInteger (text: string) =
     let lower = text.ToLowerInvariant()
-    lower.StartsWith "0x" || lower.StartsWith "0o" || lower.StartsWith "0b" || not (text.Contains '.' || lower.Contains 'e')
+    Lexer.isRadixNumber text 0 || not (text.Contains '.' || lower.Contains 'e')
 
 /// Reports the first run of digits and `_`s in `text`, a number written at `start`, whose `_` isn't between two digits:
 /// the whole number's digits, then its fraction's, then its exponent's.
@@ -62,7 +62,7 @@ let intLiteral (c: Cursor) : Literal * SourceSpan =
         raise NoMatch
     let lower = text.ToLowerInvariant()
     let value =
-        if lower.StartsWith "0x" || lower.StartsWith "0o" || lower.StartsWith "0b" then
+        if Lexer.isRadixNumber text 0 then
             if text.Contains '_' then c.GiveUp "a `_` in a hexadecimal, octal or binary number"
             let radix = match lower[1] with 'x' -> 16 | 'o' -> 8 | _ -> 2
             let magnitude =
@@ -80,8 +80,7 @@ let private floatLiteral (c: Cursor) : Literal * SourceSpan =
     let signText = sign c
     let token = c.Expect Number
     let text = c.Text token
-    let lower = text.ToLowerInvariant()
-    if lower.StartsWith "0x" || lower.StartsWith "0o" || lower.StartsWith "0b" || hasUnit c token then raise NoMatch
+    if Lexer.isRadixNumber text 0 || hasUnit c token then raise NoMatch
     let written =
         if isInteger text then
             // `1.`: the lexer reads the `.` apart, since no digit follows it.

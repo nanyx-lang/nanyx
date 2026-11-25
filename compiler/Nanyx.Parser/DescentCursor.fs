@@ -107,10 +107,13 @@ type Cursor(file: string, source: string, laid: Laid array) =
         | _ -> false
 
     /// Whether the code token at the cursor is on the line the one before it ends on.
-    member this.OnSameLine =
-        match this.Token with
-        | Some token when index > 0 ->
-            match laid[index - 1] with
+    member this.OnSameLine = this.OnSameLineAt 0
+
+    /// Whether the code token `offset` tokens on from the cursor is on the line the one before it ends on.
+    member this.OnSameLineAt (offset: int) =
+        match this.At offset with
+        | Code token when index + offset > 0 ->
+            match laid[index + offset - 1] with
             | Code previous -> not (source.AsSpan(previous.End, token.Start - previous.End).Contains '\n')
             | _ -> false
         | _ -> false

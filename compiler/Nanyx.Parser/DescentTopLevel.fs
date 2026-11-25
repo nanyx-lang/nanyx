@@ -233,7 +233,7 @@ let private unitDeclarationAhead (c: Cursor) =
     | Code word, Code declared ->
         let text = c.Text word
         word.Kind = Name && (text = UnitSyntax.dimensionKeyword || text = UnitSyntax.unitKeyword) && declared.Kind = Name
-        && not (c.Source.AsSpan(word.End, declared.Start - word.End).Contains '\n')
+        && c.OnSameLineAt(wordAt + 1)
     | _ -> false
 
 /// `dimension Time`, `dimension Bytes(int)`, `unit ns: Time` or `unit ms: Time = 1_000us`, after `export` if it is
