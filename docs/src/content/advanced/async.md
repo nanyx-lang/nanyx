@@ -75,9 +75,9 @@ in. A function that awaits a task it is given borrows its caller's scope.
 A def that is a scope and is called last by another, or by itself, joins the caller's scope rather than opening its own,
 so the call stays a [tail call](../tour/functions#tail-recursion), and a def that starts a task in each turn and calls
 itself last is a loop. Every turn's tasks belong to the outermost call's scope: one nobody awaits is waited for when that
-call returns, at the loop's end, not at the end of its turn. For now a scope frees its tasks only when it ends, awaited
-or not, so such a loop holds a little memory for each task it has started until it returns
-([#2666](https://github.com/nanyx-lang/nanyx/issues/2666)). Both defs must write their types, and be in the same module;
+call returns, at the loop's end, not at the end of its turn. A scope keeps only its tasks still running, so a loop that
+awaits the task of each turn holds the same memory however many turns it runs. Both defs must write their types, and be
+in the same module;
 a def that writes no type opens a scope of its own wherever it is called, so calling it last isn't a tail call.
 
 ```nanyx

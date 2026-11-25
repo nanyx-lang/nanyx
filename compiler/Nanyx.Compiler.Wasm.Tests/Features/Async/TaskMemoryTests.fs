@@ -32,6 +32,29 @@ let ``A loop that starts a task in each turn and awaits it holds the same memory
     Assert.True(atMore - atFewer < 256L, $"{atFewer} bytes at their peak for 100,000 turns, and {atMore} for 400,000")
     Assert.True(atFewer < 4096L, $"{atFewer} bytes at their peak for 100,000 turns")
 
+/// A def that writes its type, awaits a task in each of `turns` turns and calls itself last, which is a loop with one
+/// scope for all its turns (#2562).
+let private selfCalling (turns: int) =
+    normalized
+        $"""def work: [Async] int, int -> int = {{ n, acc ->
+  if n == 0 then acc else work(n - 1, acc + await(start! n))
+}}
+
+@entry
+def main = {{
+  ignore(work({turns}, 0))
+  println("done")
+}}
+"""
+
+[<Fact>]
+let ``A def that awaits a task in each turn and calls itself last holds the same memory for 400,000 turns as for 100,000`` () =
+    // Its one scope kept each turn's task until the loop returned: 6,400,160 bytes at their peak for 100,000 turns.
+    let atFewer = peakOf (selfCalling 100_000)
+    let atMore = peakOf (selfCalling 400_000)
+    Assert.True(atMore - atFewer < 256L, $"{atFewer} bytes at their peak for 100,000 turns, and {atMore} for 400,000")
+    Assert.True(atFewer < 4096L, $"{atFewer} bytes at their peak for 100,000 turns")
+
 [<Fact>]
 let ``A task can be awaited more than once, after it has finished, and each await gives what it gave back`` () =
     normalized
