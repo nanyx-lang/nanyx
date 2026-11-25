@@ -13,13 +13,13 @@ import nanyx/async as (Async)
 
 --| The time. A host supplies one; a `use` of `Clock(...)` makes any other.
 export context Clock = (
-  --| The time of day, as wall clocks read it: milliseconds since the start of 1970, UTC (Unix
-    time). It can jump, forwards or backwards, when the system's clock is set, so use [`ticks`]
-    to time something.
-  now: () -> int
-  --| Milliseconds since a start the host chooses, which never go backwards: the time between two
-    calls is how long passed between them. Only differences between its values mean anything.
-  ticks: () -> int
+  --| The time of day, as wall clocks read it: an `Instant`. It can jump, forwards or
+    backwards, when the system's clock is set, so use [`ticks`] to time something.
+  now: () -> Instant
+  --| The time since a start the host chooses, which never goes backwards: the time between two
+    calls is how long passed between them, `ticks() - start`. Only differences between its values
+    mean anything.
+  ticks: () -> Time(int)
   --| Waits until at least `time` has passed on [`ticks`], while the program's other tasks run:
     `sleep(500ms)`. A wait of no time, or less, returns at once.
   sleep: [Async] Time(int) -> ()

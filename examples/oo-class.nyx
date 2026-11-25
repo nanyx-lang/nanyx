@@ -13,10 +13,9 @@ expires, and models it the Nanyx way:
   - its dependencies become contexts
 ---
 
--- Times are milliseconds since 1970, as `Clock.now` gives them
-type Attestation = (certificateChain: list(string), generatedAt: int)
+type Attestation = (certificateChain: list(string), generatedAt: Instant)
 
-type Settings = (tokenExpiryMs: int, maxRetryAttempts: int)
+type Settings = (tokenExpiry: Time(int), maxRetryAttempts: int)
 
 export type AttestationCache = (settings: Settings, current: #some(Attestation) | #none)
 
@@ -27,7 +26,7 @@ export def AttestationCache.new: Settings -> AttestationCache = { settings ->
 def AttestationCache.needsRefresh: [Clock] AttestationCache -> bool = { cache ->
   match cache.current
     | #none -> true
-    | #some(attestation) -> now() - attestation.generatedAt >= cache.settings.tokenExpiryMs
+    | #some(attestation) -> now() \since(attestation.generatedAt) >= cache.settings.tokenExpiry
 }
 
 -- The service that produces attestations is a dependency, so it is a context
@@ -82,7 +81,7 @@ def show: (#some(AttestationCache) | #attestationFailed) -> string = {
 
 @entry
 def main = {
-  def settings = Settings(tokenExpiryMs = 60_000, maxRetryAttempts = 3)
+  def settings = Settings(tokenExpiry = 1min, maxRetryAttempts = 3)
   def empty = AttestationCache.new(settings)
 
   use Attester(
@@ -90,19 +89,36 @@ def main = {
     generateCertificateChain = { challenge -> #some(["leaf for {challenge}", "root"]) }
   )
 
-  def first = use Clock(now = { 1_000 }, ticks = { 0 }, sleep = { _ -> () }) in empty \refresh
+  def first = use Clock(
+    now = { Instant.epoch \plus(1s) }
+    ticks = { 0ns }
+    sleep = { _ -> () }
+  ) in empty \refresh
+
   println(show(first))
 
   match first
     -- Still fresh a little later, so nothing is generated
     | #some(cache) ->
       println(
-        show(use Clock(now = { 30_000 }, ticks = { 0 }, sleep = { _ -> () }) in cache \refresh)
+        show(
+          use Clock(
+            now = { Instant.epoch \plus(30s) }
+            ticks = { 0ns }
+            sleep = { _ -> () }
+          ) in cache \refresh
+        )
       )
 
       -- Expired after a minute, so a new one is generated
       println(
-        show(use Clock(now = { 90_000 }, ticks = { 0 }, sleep = { _ -> () }) in cache \refresh)
+        show(
+          use Clock(
+            now = { Instant.epoch \plus(90s) }
+            ticks = { 0ns }
+            sleep = { _ -> () }
+          ) in cache \refresh
+        )
       )
     | #attestationFailed -> ()
 
@@ -111,5 +127,13 @@ def main = {
     generateCertificateChain = { _ -> #attestationFailed }
   )
 
-  println(show(use Clock(now = { 1_000 }, ticks = { 0 }, sleep = { _ -> () }) in empty \refresh))
+  println(
+    show(
+      use Clock(
+        now = { Instant.epoch \plus(1s) }
+        ticks = { 0ns }
+        sleep = { _ -> () }
+      ) in empty \refresh
+    )
+  )
 }

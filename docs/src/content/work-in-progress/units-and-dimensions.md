@@ -11,7 +11,8 @@ order: 2
 > arithmetic on them, and writes measured values as text, as [Dimensions in types](#dimensions-in-types),
 > [Literals](#literals), [Arithmetic](#arithmetic) and [Display](#display) say ([Units of measure](../deep-dives/units)
 > says how). The prelude declares `Time`, and `Clock`'s `sleep` takes one, as [Time in the standard
-> library](#time-in-the-standard-library) says. `Instant` and the standard library's other dimensions are still to come.
+> library](#time-in-the-standard-library) says, and [`Instant`](#instant), a point in time. The standard library's other
+> dimensions are still to come.
 
 Nanyx will check units of measure at compile time, so a length cannot be added to a time, and a call reads as what
 it means:
@@ -205,13 +206,28 @@ needs `%` and `==` on the storage, which `ToString(a)` doesn't give; a function 
 # Instant
 
 `Instant` is a point in time: an `int` of nanoseconds since the start of 1970, UTC, which covers about 292 years either
-side exactly. `Clock`'s `now` returns one.
+side exactly. The prelude declares it, beside `Time` (`stdlib/nanyx/prelude-instant.nyx`), as a private type. `Clock`'s
+`now` returns one, and `ticks` the `Time(int)` since a start the host chooses, so a difference of two is a time too.
+
+An instant is moved and measured by functions attached to it, not by operators:
 
 | Expression | Type |
 |---|---|
-| `i - j` | `Time(int)` |
-| `i + t`, `i - t` | `Instant`, for a `Time(int)` `t` |
-| `i + j` | error |
+| `i \since(j)` | `Time(int)`, exactly: the time from `j` to `i` |
+| `i \plus(t)`, `i \minus(t)` | `Instant`, for a `Time(int)` `t` |
+| `Instant.epoch` | `Instant`: the start of 1970, which a host's clock counts from |
+
+`-` and `+` can't be attached instead: an operator is read through the prelude's `Sub` and `Add`, whose members take
+two values of one type, so no attached `-` makes two instants a `Time`. A rule in the compiler for one library type
+would be a special case, so operators on `Instant` wait for a general answer to [affine
+quantities](#step-2-derived-dimensions), below.
+
+An instant is written as ISO 8601 writes it, in UTC, and read from it: `Instant.toIsoString`, which is its `toString`,
+gives `2026-11-25T18:20:57Z`, with a fraction of a second only when it isn't whole (`…57.25Z`); `Instant.toIsoDate` the
+date alone, `2026-11-25`; and `Instant.fromIsoString` reads either, with a fraction and a `±hh:mm` offset, giving
+`#notIso` with where the text stops being ISO 8601, or `#outOfRange`. Dates are proleptic Gregorian; a year outside 0000
+to 9999 is written with a sign and six digits, ISO 8601's expanded form, though an `int` of nanoseconds reaches only
+1677 to 2262. Two instants are equal, ordered and hashed by their nanoseconds.
 
 # Step 2: derived dimensions
 
@@ -229,7 +245,8 @@ Not part of the first step, and not settled.
   `d * d = Length^2`. This is the largest piece of the work; Kennedy's "Types for Units-of-Measure" gives an algorithm
   that fits a Hindley–Milner checker. `Time(a)` already means a `Time` stored as `a`, so a dimension variable needs a
   spelling of its own.
-- **Affine quantities.** `Instant` and `Time` are a point and a distance. Temperature has the same shape (a
+- **Affine quantities.** `Instant` and `Time` are a point and a distance, and until this is settled an `Instant` is
+  moved and measured with named functions (see [Instant](#instant)). Temperature has the same shape (a
   temperature and a temperature difference). Open: whether the language has a general form for this, or each is a
   library type.
 

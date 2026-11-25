@@ -16,6 +16,7 @@
   ],
   "private": [
     "Decoder",
+    "Instant",
     "MArray",
     "MList",
     "MRef",

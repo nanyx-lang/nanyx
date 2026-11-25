@@ -1,5 +1,5 @@
---| `wasi:clocks`, as `Clock` reads them: the time of day and the monotonic clock, in milliseconds, and
-  a wait on the monotonic clock that lets the program's other tasks run.
+--| `wasi:clocks`, as `Clock` reads them: the time of day and the monotonic clock, to the
+  nanosecond, and a wait on the monotonic clock that lets the program's other tasks run.
 export module clocks
 
 import (
@@ -20,20 +20,20 @@ def monotonicClockNow: [HostRuntime] () -> I64
 @extern("wasi:clocks/monotonic-clock@0.3.0", "[async-lower]wait-for")
 def monotonicWaitFor: [HostRuntime] I64 -> I32
 
---| The time of day in milliseconds since 1970: `wasi:clocks/system-clock`'s `now` writes it as
-  seconds, then nanoseconds at 8.
-export def timeOfDay: [HostRuntime] () -> int = { _ ->
+--| The time of day, as the time since the start of 1970: `wasi:clocks/system-clock`'s `now`
+  writes it as seconds, then nanoseconds at 8.
+export def timeOfDay: [HostRuntime] () -> Time(int) = { _ ->
   def block = allocate(24)
   def instant = aligned8(block)
   systemClockNow(instant)
-  def milliseconds = readI64(instant) * 1000 + I32.toInt(readI32(instant + 8)) // 1_000_000
+  def time = readI64(instant) * 1s + I32.toInt(readI32(instant + 8)) * 1ns
   free(block)
-  milliseconds
+  time
 }
 
---| Milliseconds on `wasi:clocks/monotonic-clock`, which never goes backwards.
-export def ticks: [HostRuntime] () -> int = { _ ->
-  monotonicClockNow() // 1_000_000
+--| The time on `wasi:clocks/monotonic-clock`, which never goes backwards.
+export def ticks: [HostRuntime] () -> Time(int) = { _ ->
+  monotonicClockNow() * 1ns
 }
 
 --| Waits until `ms` milliseconds have passed on `wasi:clocks/monotonic-clock`, while the program's

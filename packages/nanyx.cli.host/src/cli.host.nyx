@@ -30,7 +30,7 @@ import (
   nanyx.fs/path as (Path)
   nanyx.fs/path as path
   nanyx.http/client as (Http)
-  nanyx.wasi/preview1 as (millisecondsOn, systemBits)
+  nanyx.wasi/preview1 as (timeOn, systemBits)
   nanyx.wasi/runtime as (sendThroughRuntime, sleepOnRuntime)
 )
 
@@ -203,8 +203,8 @@ export def provide
     use Random(bits = { _ -> systemBits() })
 
     use Clock(
-      now = { _ -> millisecondsOn(0) }
-      ticks = { _ -> millisecondsOn(1) }
+      now = { _ -> Instant.epoch \plus(timeOn(0)) }
+      ticks = { _ -> timeOn(1) }
       sleep = { time -> sleepOnRuntime(wholeMilliseconds(time)) }
     )
 

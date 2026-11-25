@@ -5,16 +5,16 @@ order: 12.65
 ---
 
 A function that reads the time requires `Clock`. The console and HTTP hosts provide one that reads the operating
-system's clocks, and their preludes bring `Clock` into every module of a program. `now()` is the time of day, in
-milliseconds since the start of 1970 (Unix time); `ticks()` counts milliseconds from a start of the host's choosing and
-never goes backwards, so the difference between two of its values is how long passed between them:
+system's clocks, and their preludes bring `Clock` into every module of a program. `now()` is the time of day, an
+[`Instant`](prelude-instant); `ticks()` is the time since a start of the host's choosing, a `Time(int)`, and never goes
+backwards, so the difference between two of its values is how long passed between them:
 
 ```nanyx
 def start = ticks()
 def total = list.sum([1, 2, 3, 4])
 def took = ticks() - start
 println(total)
-println(took >= 0)
+println(took >= 0ns)
 -- 10
 -- true
 ```
@@ -53,12 +53,12 @@ def stamp: [Async, Clock] string -> string = { text ->
 }
 
 def stamped = { _ ->
-  use Clock(now = { _ -> 1_700_000_000_000 }, ticks = { _ -> 0 }, sleep = { _ -> () })
+  use Clock(now = { _ -> Instant.epoch \plus(1_700_000_000s) }, ticks = { _ -> 0ns }, sleep = { _ -> () })
   stamp("started")
 }
 
 println(stamped())
--- 1700000000000: started
+-- 2023-11-14T22:13:20Z: started
 ```
 
 # Reference
@@ -79,19 +79,19 @@ that names `Clock` imports it with `import nanyx/clock as (Clock)`.
 
 ```nanyx fragment
 context Clock = (
-  now: () -> int
-  ticks: () -> int
+  now: () -> Instant
+  ticks: () -> Time(int)
   sleep: [Async] Time(int) -> ()
 )
 ```
 
 The time. A host supplies one; a `use` of `Clock(...)` makes any other.
 
-- `now`: The time of day, as wall clocks read it: milliseconds since the start of 1970, UTC (Unix
-  time). It can jump, forwards or backwards, when the system's clock is set, so use `ticks`
-  to time something.
-- `ticks`: Milliseconds since a start the host chooses, which never go backwards: the time between two
-  calls is how long passed between them. Only differences between its values mean anything.
+- `now`: The time of day, as wall clocks read it: an `Instant`. It can jump, forwards or
+  backwards, when the system's clock is set, so use `ticks` to time something.
+- `ticks`: The time since a start the host chooses, which never goes backwards: the time between two
+  calls is how long passed between them, `ticks() - start`. Only differences between its values
+  mean anything.
 - `sleep`: Waits until at least `time` has passed on `ticks`, while the program's other tasks run:
   `sleep(500ms)`. A wait of no time, or less, returns at once.
 
