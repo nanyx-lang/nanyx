@@ -79,7 +79,7 @@ In this example, the pattern `[head, ...tail]` matches a non-empty list, binding
 
 ```nanyx
 -- Destructure a tuple
-def (x, y) = (10, 20)
+def (x, y) = 10, 20
 ```
 
 The brackets around the outermost tuple can be left off, so `def x, y = (10, 20)` is the same binding. Nested tuples still need theirs:
@@ -130,7 +130,7 @@ A pattern whose fields have no `=` can end in `...` too. Each field is read as i
 ```nanyx
 def greet: (name: string, age: int, email: string) -> string = { | (name, ...) -> "Hello, {name}" }
 
-def point = (3, 4, 5)
+def point = 3, 4, 5
 
 match point
   | (x, ...) -> println("x is {x}")
