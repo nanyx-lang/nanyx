@@ -7,9 +7,8 @@ module internal NyxCompiler.WrittenReferences
 
 open Parser.Program
 
-/// The references of `typed` as its source writes them: a reference to the def that runs a scope def's body in its
-/// caller's scope is to that scope def, whose name is declared where the made-up def's empty declaration is.
-let ofModule (typed: TypedModule) : Map<NodeId, SymbolId> =
+/// The references of `typed` as its source writes them (see `ofModule`).
+let private written (typed: TypedModule) : Map<NodeId, SymbolId> =
     let madeUp =
         typed.Symbols
         |> Map.filter (fun _ symbol ->
@@ -32,3 +31,27 @@ let ofModule (typed: TypedModule) : Map<NodeId, SymbolId> =
                 written |> Map.tryFind (symbol.Declaration.File, symbol.Declaration.Start) |> Option.map (fun scopeDef -> id, scopeDef))
             |> Map.ofSeq
         typed.References |> Map.map (fun _ id -> scopeDefOf |> Map.tryFind id |> Option.defaultValue id)
+
+/// The written references of each typed module asked about, kept while it is, as the editor asks about one for each
+/// name it reads.
+let private computed = System.Runtime.CompilerServices.ConditionalWeakTable<TypedModule, Map<NodeId, SymbolId>>()
+
+/// The references of `typed` as its source writes them: a reference to the def that runs a scope def's body in its
+/// caller's scope is to that scope def, whose name is declared where the made-up def's empty declaration is.
+let ofModule (typed: TypedModule) : Map<NodeId, SymbolId> = computed.GetValue(typed, written)
+
+/// The symbol the name at the node `node` of `typed` refers to, as its source writes it.
+let symbolOf (typed: TypedModule) (node: NodeId) : Symbol option =
+    ofModule typed |> Map.tryFind node |> Option.bind typed.Symbols.TryFind
+
+/// `ty`, the type of what the call at `node` of `typed` calls, as the source writes the call: without the scope of
+/// tasks that the def it calls in place of a scope def requires.
+let calleeType (typed: TypedModule) (node: NodeId) (ty: Ty) : Ty =
+    match typed.References |> Map.tryFind node, ofModule typed |> Map.tryFind node, Unifier.unalias ty with
+    | Some called, Some written, TyFunc(input, output, contexts) when called <> written ->
+        let ownScope context =
+            match context with
+            | FunctionContexts.ScopedContext(name, _) -> name = TaskScopes.scopeContext
+            | _ -> false
+        TyFunc(input, output, contexts |> List.filter (ownScope >> not))
+    | _ -> ty

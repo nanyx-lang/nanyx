@@ -96,7 +96,7 @@ let at
             |> List.filter (fun expr ->
                 match written source expr with
                 // A function that is not found has nothing to convert to.
-                | Some (_, span, _) -> span.Start <= offset && offset <= span.End && typed.References.ContainsKey expr.Id
+                | Some (_, span, _) -> span.Start <= offset && offset <= span.End && (WrittenReferences.ofModule typed).ContainsKey expr.Id
                 | None -> false)
             |> List.sortBy (fun expr -> expr.Span.End - expr.Span.Start)
             |> List.tryHead
@@ -142,7 +142,7 @@ let at
                 let rec steps (pipe: Expression) =
                     match written source pipe with
                     | Some (name, _, first :: _) ->
-                        let symbol = typed.References |> Map.tryFind pipe.Id |> Option.bind typed.Symbols.TryFind
+                        let symbol = WrittenReferences.symbolOf typed pipe.Id
                         (name, symbol |> Option.map (fun symbol -> symbol.Name))
                         :: (if isPipe first then steps first else [])
                     | _ -> []
