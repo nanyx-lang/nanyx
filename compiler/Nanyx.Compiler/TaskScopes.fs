@@ -53,10 +53,13 @@ let private scopedValue (ownStart: bool) (value: Expression) : Expression option
 
 // A scope def that is called last by one joins its caller's scope (#2562): the call stays a tail call, so a def that
 // starts tasks and calls itself last is a loop, and the tasks of every turn belong to the outermost call's scope, which
-// waits for them. So each scope def `f` that writes a function's type is two: `f`, whose body opens the scope and calls
-// the other in it, and `TaskScopeSyntax.inCallersScope f`, which has `f`'s body and writes `f`'s type requiring its
-// caller's scope too. A call that is last in the body of such a def, of another of the same module or module block,
-// calls the second. A scope def that writes no type stays one def, its body the scope (#2665).
+// waits for them. So such a scope def `f` is two: `f`, whose body opens the scope and calls the other in it, and
+// `TaskScopeSyntax.inCallersScope f`, which has `f`'s body and requires its caller's scope too, as `f`'s type with it
+// added if `f` writes one, or as inferred. A call that is last in the body of such a def, of another of the same module
+// or module block, calls the second. Every scope def that writes a function's type is split; one that writes no type is
+// split only if a scope def that is split calls it last, itself included, and otherwise stays one def, its body the
+// scope (#2665). `f` keeps the node of the lambda written for it, and so its declaration, which hover and go to
+// definition find; the second has a node of its own, which declares its parameters as `f`'s does (see `wrap`).
 
 /// `written`, the type a scope def writes, as the def that runs its body in its caller's scope writes it: requiring the
 /// scope of tasks too. `None` when it is not a function's type.
@@ -67,13 +70,10 @@ let private requiringScope (written: TypeExpr) : TypeExpr option =
     | TypeFunc _ -> Some (TypeExpr.at written.Span (TypeWithContext([ scope ], written)))
     | _ -> None
 
-/// `body` with each call in a place it gives back, of one of `scopeDefs` by a name in `free`, calling the def that runs
-/// that def's body in its caller's scope instead.
-let rec private callingInScope (scopeDefs: Set<Identifier>) (free: Set<NodeId>) (body: Expression) : Expression =
-    let last = callingInScope scopeDefs free
+/// `body` with `change` made to each expression in a place it gives back.
+let rec private changingLast (change: Expression -> Expression) (body: Expression) : Expression =
+    let last = changingLast change
     match body.Kind with
-    | FunctionCall(name, range, args) when scopeDefs.Contains name && free.Contains body.Id ->
-        { body with Kind = FunctionCall(TaskScopeSyntax.inCallersScope name, range, args) }
     | Block statements ->
         match List.rev statements with
         | ({ Kind = ExprStatement value } as statement) :: before ->
@@ -83,71 +83,130 @@ let rec private callingInScope (scopeDefs: Set<Identifier>) (free: Set<NodeId>) 
     | Match(values, arms) -> { body with Kind = Match(values, arms |> List.map (fun (patterns, arm) -> patterns, last arm)) }
     | UseIn(value, inner) -> { body with Kind = UseIn(value, last inner) }
     | ContextNames(names, inner) -> { body with Kind = ContextNames(names, last inner) }
-    | _ -> body
+    | _ -> change body
 
-/// The scope def `name`, whose type is `written` and whose value is the lambda `value`, as the two defs it is: the one
-/// that runs its body in its caller's scope, and itself, opening the scope and calling that one in it. `None` when it
-/// writes no function's type: the def that runs its body would require the caller's scope without writing it.
-let private splitScopeDef (scopeDefs: Set<Identifier>) (isExport: bool) (name: Identifier) (written: TypeExpr option) (value: Expression) =
-    match value.Kind, written |> Option.bind requiringScope with
-    | Lambda(parameters, body, takesUnit), Some inScopeType ->
+/// The scope defs among `scopeDefs` that the lambda `value` calls in a place its body gives back, by the name each is
+/// called by, where nothing in `value` binds it.
+let private calledLast (scopeDefs: Set<Identifier>) (value: Expression) : Set<Identifier> =
+    match value.Kind with
+    | Lambda(_, body, _) ->
         let free =
             SyntaxTree.freeReferences value
             |> List.choose (fun (referenced, at) -> if scopeDefs.Contains referenced then Some at.Id else None)
             |> Set.ofList
+        let mutable called = Set.empty
+        changingLast
+            (fun last ->
+                match last.Kind with
+                | FunctionCall(name, _, _) when scopeDefs.Contains name && free.Contains last.Id -> called <- called.Add name
+                | _ -> ()
+                last)
+            body
+        |> ignore
+        called
+    | _ -> Set.empty
+
+/// `body`, of the lambda `value`, with each call in a place it gives back, of one of `scopeDefs` where nothing in
+/// `value` binds its name, calling the def that runs that def's body in its caller's scope instead.
+let private callingInScope (scopeDefs: Set<Identifier>) (value: Expression) (body: Expression) : Expression =
+    let called = calledLast scopeDefs value
+    let free =
+        SyntaxTree.freeReferences value
+        |> List.choose (fun (referenced, at) -> if called.Contains referenced then Some at.Id else None)
+        |> Set.ofList
+    body
+    |> changingLast (fun last ->
+        match last.Kind with
+        | FunctionCall(name, range, args) when called.Contains name && free.Contains last.Id ->
+            { last with Kind = FunctionCall(TaskScopeSyntax.inCallersScope name, range, args) }
+        | _ -> last)
+
+/// The scope def `name`, whose type is `written`, if it writes one, and whose value is the lambda `value`, as the two
+/// defs it is: the one that runs its body in its caller's scope, with a node of its own, and itself, opening the scope
+/// and calling that one in it. `None` when it writes a type that is not a function's.
+let private splitScopeDef (scopeDefs: Set<Identifier>) (isExport: bool) (name: Identifier) (written: TypeExpr option) (value: Expression) =
+    let inScopeType =
+        match written with
+        | Some written -> requiringScope written |> Option.map Some
+        | None -> Some None
+    match value.Kind, inScopeType with
+    | Lambda(parameters, body, takesUnit), Some inScopeType ->
         let inScopeName = TaskScopeSyntax.inCallersScope name
-        let inScope = ValueDef(false, inScopeName, Some inScopeType, { value with Kind = Lambda(parameters, callingInScope scopeDefs free body, takesUnit) })
+        let inScopeValue = { value with Id = NodeId.next (); Kind = Lambda(parameters, callingInScope scopeDefs value body, takesUnit) }
         // The opening def names its parameters itself, as one written `_` can't be passed on.
         let passed = parameters |> List.mapi (fun index (_, written) -> $"__scopeArgument{index}", written)
         let arguments = passed |> List.map (fun (parameter, _) -> Expression.at body.Span (IdentifierExpr parameter))
         let call = Expression.at body.Span (FunctionCall(inScopeName, None, arguments))
-        let opening = ValueDef(isExport, name, written, Expression.from value (Lambda(passed, scoped call, takesUnit)))
-        Some(inScope, opening)
+        let opening = { value with Kind = Lambda(passed, scoped call, takesUnit) }
+        Some(ValueDef(false, inScopeName, inScopeType, inScopeValue), ValueDef(isExport, name, written, opening), inScopeValue.Id)
     | _ -> None
 
-/// `items`, with each module-level def that starts a task a scope, and whether any is.
-let rec private scopedItems (ownStart: bool) (isEntry: Expression -> bool) (items: TopLevelItem list) : TopLevelItem list * bool =
-    let mutable any = false
+/// The defs of `items` that are split (see `splitScopeDef`), by name: each that starts a task, but an attached one,
+/// `Type.name`, which is called by its type and stays one def, and one that writes a type that is not a function's;
+/// and, of those, one that writes no type only while a def that is split calls it last.
+let private splitDefs (ownStart: bool) (items: TopLevelItem list) : Set<Identifier> =
     let scopeDefs =
         items
         |> List.choose (fun item ->
             match item.Kind with
-            // An attached def, `Type.name`, is called by its type and stays one def.
-            | Def(ValueDef(_, name, Some written, ({ Kind = Lambda _ } as value))) when startsTask ownStart value && (requiringScope written).IsSome && not (name.Contains '.') -> Some name
+            | Def(ValueDef(_, name, written, ({ Kind = Lambda _ } as value))) when
+                startsTask ownStart value && not (name.Contains '.') && written |> Option.forall (requiringScope >> Option.isSome) ->
+                Some (name, (written.IsSome, value))
             | _ -> None)
-        |> Set.ofList
-    let items =
+        |> Map.ofList
+    let rec settle (split: Set<Identifier>) =
+        let called = split |> Seq.map (fun name -> calledLast split (snd scopeDefs[name])) |> Set.unionMany
+        let kept = split |> Set.filter (fun name -> fst scopeDefs[name] || called.Contains name)
+        if kept = split then split else settle kept
+    settle (scopeDefs.Keys |> Set.ofSeq)
+
+/// `items`, with each module-level def that starts a task a scope, whether any is, and the node of the def made for
+/// each split def to run its body in its caller's scope, with the node of its lambda as written.
+let rec private scopedItems (ownStart: bool) (isEntry: Expression -> bool) (items: TopLevelItem list) : TopLevelItem list * bool * (NodeId * NodeId) list =
+    let scopeDefs = splitDefs ownStart items
+    let scoped =
         items
-        |> List.collect (fun item ->
+        |> List.map (fun item ->
             match item.Kind with
             | Def(ValueDef(isExport, name, typeOpt, value)) ->
                 let split = if scopeDefs.Contains name then splitScopeDef scopeDefs isExport name typeOpt value else None
                 match split, scopedValue ownStart value with
-                | Some(inScope, opening), _ ->
-                    any <- true
-                    [ { item with Kind = Def inScope; Id = NodeId.next () }; { item with Kind = Def opening } ]
-                | None, Some value ->
-                    any <- true
-                    [ { item with Kind = Def(ValueDef(isExport, name, typeOpt, value)) } ]
-                | None, None -> [ item ]
+                | Some(inScope, opening, inScopeId), _ ->
+                    [ { item with Kind = Def inScope; Id = NodeId.next () }; { item with Kind = Def opening } ], true, [ inScopeId, value.Id ]
+                | None, Some value -> [ { item with Kind = Def(ValueDef(isExport, name, typeOpt, value)) } ], true, []
+                | None, None -> [ item ], false, []
             | ModuleBlock(name, inner) ->
-                let inner, anyInner = scopedItems ownStart isEntry inner
-                any <- any || anyInner
-                [ { item with Kind = ModuleBlock(name, inner) } ]
+                let inner, anyInner, made = scopedItems ownStart isEntry inner
+                [ { item with Kind = ModuleBlock(name, inner) } ], anyInner, made
             // A script's entry point, the lambda its statements are made into (see `Scripts.asEntry`).
             | Expr({ Kind = FunctionCall(callee, range, [ entry ]) } as call) when isEntry call ->
                 match scopedValue ownStart entry with
-                | Some entry ->
-                    any <- true
-                    [ { item with Kind = Expr { call with Kind = FunctionCall(callee, range, [ entry ]) } } ]
-                | None -> [ item ]
-            | _ -> [ item ])
-    items, any
+                | Some entry -> [ { item with Kind = Expr { call with Kind = FunctionCall(callee, range, [ entry ]) } } ], true, []
+                | None -> [ item ], false, []
+            | _ -> [ item ], false, [])
+    scoped |> List.collect (fun (items, _, _) -> items),
+    scoped |> List.exists (fun (_, any, _) -> any),
+    scoped |> List.collect (fun (_, _, made) -> made)
 
-/// `module'` with each module-level def that starts a task, and a script's entry point if it does, a scope. In a module
-/// that defines a `start` of its own, only `Async.start` starts one. `isEntry` says whether a top-level call is the one
-/// that runs the script's entry point. A module with a scope imports `nanyx/async` for it, under `TaskScopeSyntax.alias`.
-let wrap (isEntry: Expression -> bool) (module': Module) : Module =
-    match scopedItems (definesStart module') isEntry module' with
-    | items, true -> TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport asyncModule) (Some TaskScopeSyntax.alias) ]) :: items
-    | items, false -> items
+/// `module'` with each module-level def that starts a task, and a script's entry point if it does, a scope, and
+/// `declared`, the names the parser recorded as declared by each node, with those of each def made to run a scope def's
+/// body in its caller's scope: its lambda declares the def and the parameters that the lambda written for the scope
+/// def does. In a module that defines a `start` of its own, only `Async.start` starts one. `isEntry` says whether a
+/// top-level call is the one that runs the script's entry point. A module with a scope imports `nanyx/async` for it,
+/// under `TaskScopeSyntax.alias`.
+let wrap (declared: DeclaredNames) (isEntry: Expression -> bool) (module': Module) : Module * DeclaredNames =
+    let items, any, made = scopedItems (definesStart module') isEntry module'
+    let declared =
+        made
+        |> List.fold (fun acc (inScope, written) ->
+            // The def is declared where the scope def is, but by an empty span there, so that the name written is the
+            // scope def's alone to hover and go to.
+            let copy (declarer: Declarer) (place: SourceSpan -> SourceSpan) (acc: DeclaredNames) =
+                match acc |> Map.tryFind (written, declarer) with
+                | Some names -> acc |> Map.add (inScope, declarer) (names |> List.map (fun (name, span) -> name, place span))
+                | None -> acc
+            acc |> copy DefValue (fun span -> { span with End = span.Start }) |> copy LambdaParameters id) declared
+    let items =
+        if any then TopLevelItem.synthetic (Import [ ImportItem.synthetic (ModuleImport asyncModule) (Some TaskScopeSyntax.alias) ]) :: items
+        else items
+    items, declared

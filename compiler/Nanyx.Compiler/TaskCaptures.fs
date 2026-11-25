@@ -99,6 +99,8 @@ let unscopedErrors (typeOf: string -> Ty option) (calleeType: NodeId -> Ty optio
         |> List.collect (fun item ->
             match item.Kind with
             | Def(ValueDef(_, _, _, { Kind = Lambda(_, { Kind = FunctionCall(callee, _, _) }, _) })) when callee = TaskScopeSyntax.scopeCall -> []
+            // The def that runs a scope def's body in its caller's scope requires that scope (see `TaskScopes`).
+            | Def(ValueDef(_, TaskScopeSyntax.InCallersScope _, None, _)) -> []
             | Def(ValueDef(_, name, None, ({ Kind = Lambda _ } as value))) -> [ name, value ]
             | ModuleBlock(_, inner) -> defs inner
             | _ -> [])

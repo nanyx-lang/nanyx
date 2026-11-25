@@ -355,11 +355,11 @@ module Compiler =
                             | (SourceFile _ | InMemory), _ when host.IsSome -> Scripts.asEntry host.Value (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
                             | _ -> desugared, None
                         // Each module-level def that starts a task is a scope for its tasks (see `TaskScopes`).
-                        let desugared =
+                        let desugared, declared =
                             match origin with
-                            | StandardLibraryModule _ -> desugared
+                            | StandardLibraryModule _ -> desugared, declared
                             | SourceFile _
-                            | InMemory -> TaskScopes.wrap (fun call -> script |> Option.exists (fun (entry, _) -> entry.Call |> List.contains call.Id)) desugared
+                            | InMemory -> TaskScopes.wrap declared (fun call -> script |> Option.exists (fun (entry, _) -> entry.Call |> List.contains call.Id)) desugared
                         let desugared, nameErrors = BuiltinTypeNames.replace declared desugared
                         let nameErrors = TypeNames.definitionErrors declared @ nameErrors
                         let lowered = entries |> List.fold (fun acc entry -> Map.add entry.Attribute entry.Call acc) lowered

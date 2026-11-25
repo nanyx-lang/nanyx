@@ -131,3 +131,20 @@ let ``The rule can be turned off on its own`` () =
     let source = "module m\ndef scale = 2\n"
     let result = Compiler.compileWith { Linters.everyLinter with Severities = Map.ofList [ code, None ] } source
     Assert.Empty(result.Diagnostics)
+
+[<Fact>]
+let ``A def that starts tasks and is only called last by another is used`` () =
+    // The call last in `ping` calls the def that runs `pong`'s body in its caller's scope (see `TaskScopes`), which is
+    // a use of `pong`.
+    let source =
+        normalized """module games
+import nanyx/async as (Async, Task)
+def ping: [Async] int, int -> int = { n, acc ->
+  if n == 0 then acc else pong(n - 1, acc + await(start! n))
+}
+def pong: [Async] int, int -> int = { n, acc ->
+  if n == 0 then acc else ping(n - 1, acc + await(start! 2 * n))
+}
+export def run: [Async] () -> int = { () -> ping(10, 0) }
+"""
+    Assert.Empty(reported source)
