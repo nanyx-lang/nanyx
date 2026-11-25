@@ -38,7 +38,7 @@ def appendedFrom: int, string -> string = { n, s ->
 def appended: int -> int = { n -> string.length(appendedFrom(n, "")) }
 """
 
-[<Fact>]
+[<Fact; Trait("Category", "Timing")>]
 let ``string.build makes the string of 100,000 pieces in time that grows with their number`` () =
     use program = instantiateWasm building []
     Assert.Equal(600_000, program.Call("built", 100_000))

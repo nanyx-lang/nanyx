@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Timing, shared by the test projects that time anything (see TestTiming.fs). -->
+    <Compile Include="..\TestTiming.fs" Link="TestTiming.fs" />
     <Compile Include="TestHelpers.fs" />
     <Compile Include="Features\Blocks\BlockTests.fs" />
     <Compile Include="Features\Blocks\SemicolonTests.fs" />

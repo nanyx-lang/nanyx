@@ -248,7 +248,8 @@ let compileClean (source: string) =
 /// quadratic 16. Both inputs are prepared first, outside the timing, and each run starts with what earlier runs and
 /// the preparing left collected, so that a collection of their garbage doesn't land in it (#2636). Each size is timed
 /// twice, in turn, after a run to warm up, and its quickest run counts; when they miss, each is timed five times
-/// more, so that load on the machine, which slows some runs and not others, can't make the test fail (#2388).
+/// more, so that load on the machine, which slows some runs and not others, can't make the test fail (#2388). It is a
+/// timing test (see `TestTiming`).
 let takesLinearTime (n: int) (prepare: int -> 'input) (run: 'input -> unit) =
     let quarter = n / 4
     let small, large = prepare quarter, prepare n
@@ -256,9 +257,7 @@ let takesLinearTime (n: int) (prepare: int -> 'input) (run: 'input -> unit) =
         System.GC.Collect()
         System.GC.WaitForPendingFinalizers()
         System.GC.Collect()
-        let watch = System.Diagnostics.Stopwatch.StartNew()
-        run input
-        watch.Elapsed.TotalMilliseconds
+        Nanyx.TestTiming.millisecondsOf (fun () -> run input)
     let quickest (runs: int) = List.init runs (fun _ -> time small, time large) |> List.reduce (fun (a, b) (c, d) -> min a c, min b d)
     time small |> ignore
     let isLinear (atQuarter: float, atN: float) = atN < 10.0 * atQuarter

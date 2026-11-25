@@ -613,7 +613,7 @@ let checkedOptions = { WasmOptions.Default with CheckMemory = true }
 /// A program compiled with memory checks (see `WasmOptions.CheckMemory`), instantiated on Wasmtime with a WASI that
 /// reads nothing and writes nowhere, and its top-level code run. The drop functions of some types are exported as
 /// well, so that a test can call its functions, give up what they return, and see how far the heap has grown, how
-/// often it allocated, and how many blocks are still in use.
+/// often it allocated, how many blocks are still in use, and how much work a call did (see `Work`).
 type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmtime.Instance) =
     let memory = instance.GetMemory("memory")
     let counter (name: string) = instance.GetGlobal(name).GetValue() :?> int
@@ -627,6 +627,14 @@ type WasmProgram(engine: Wasmtime.Engine, store: Wasmtime.Store, instance: Wasmt
         match func.Invoke value with
         | :? int64 as result -> int result
         | result -> result :?> int
+    /// How much work calling the function `name` with `argument` does: the fuel it uses, which is about one for each
+    /// instruction it runs, the same however busy the machine is. A test that compares two calls' costs compares
+    /// these, not the time they take. A `memory.copy` costs one whatever its length, and where in memory the data is
+    /// costs nothing, so a cost that is in those is timed instead (see `Timing`).
+    member this.Work(name: string, argument: int) : uint64 =
+        let before = store.Fuel
+        this.Call(name, argument) |> ignore
+        before - store.Fuel
     /// Calls the function `name`, which takes an `i32` and returns nothing, with `argument`.
     member _.Run(name: string, argument: int) = instance.GetAction<int>(name).Invoke argument
     member _.Drop(ty: Transpiler.Wasm.CoreIr.IrType, value: int) =
@@ -657,12 +665,10 @@ let allocationsOf (program: WasmProgram) (name: string) (argument: int) =
 /// Asserts that `name(n)` in `program` takes time that grows with `n`, not with its square: less than ten times what
 /// `name(n / 4)` takes. A linear function takes about 4 times as long, and a quadratic one 16. When the first runs miss,
 /// each size runs again in turn, and each one's quickest run counts, so that load on the machine, which slows one run
-/// and not the other, can't make the test fail (#2388).
+/// and not the other, can't make the test fail (#2388). It is a timing test (see `TestTiming`): where the cost is in
+/// the instructions run, rather than in copying or in where the data is, compare `WasmProgram.Work` instead.
 let callsInLinearTime (program: WasmProgram) (name: string) (n: int) =
-    let time (size: int) =
-        let clock = System.Diagnostics.Stopwatch.StartNew()
-        program.Call(name, size) |> ignore
-        clock.Elapsed.TotalMilliseconds
+    let time (size: int) = Nanyx.TestTiming.millisecondsOf (fun () -> program.Call(name, size) |> ignore)
     program.Call(name, n / 4) |> ignore
     let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
     let atQuarter, atN = time (n / 4), time n
@@ -679,8 +685,10 @@ let instantiateWat (wat: string) (dropped: Transpiler.Wasm.CoreIr.IrType list) =
     let dropName = Transpiler.Wasm.CoreIrDrop.dropName
     let exports =
         dropped |> List.map (fun ty -> $"  (export \"{dropName ty}\" (func ${dropName ty}))") |> String.concat "\n"
-    let engine = new Wasmtime.Engine()
+    // With fuel, so that `WasmProgram.Work` can count what a call does: more than any test uses.
+    let engine = new Wasmtime.Engine((new Wasmtime.Config()).WithFuelConsumption true)
     let store = new Wasmtime.Store(engine)
+    store.Fuel <- System.UInt64.MaxValue / 2UL
     store.SetWasiConfiguration(Wasmtime.WasiConfiguration())
     use module' = Wasmtime.Module.FromText(engine, "program", wat.Substring(0, wat.LastIndexOf ')') + exports + "\n)")
     use linker = new Wasmtime.Linker(engine)

@@ -174,35 +174,14 @@ let ``Reading a decimal of 17 digits, or at either end of the range, allocates n
     Assert.Equal(liveBefore, program.LiveBlocks)
 
 [<Fact>]
-let ``Reading a decimal of 17 digits, or at either end of the range, takes less than twice one of 16 digits`` () =
+let ``Reading a decimal of 17 digits, or at either end of the range, does less than twice the work of one of 16 digits`` () =
     use program = instantiateWasm reading []
-    let time (name: string) =
+    let work (name: string) =
         program.Call(name, 1000) |> ignore
-        GC.Collect()
-        let clock = Diagnostics.Stopwatch.StartNew()
-        program.Call(name, 50000) |> ignore
-        clock.Elapsed.TotalMilliseconds
-    // Each decimal is timed between two runs of the decimal of 16 digits, and compared with the mean of those two, so
-    // that load on the machine, which comes and goes, slows both sides of a comparison alike. Each one's best ratio
-    // counts, and they are compared again until each holds or twenty rounds have run (#2388): comparing each one's
-    // quickest run with the quickest of the 16 digits, which may have come at a quieter moment, missed under the full
-    // suite's load. Before #2560, 0.30000000000000004 took 5 times as long as 3.141592653589793, and the smallest normal
-    // float over 40 times.
-    let best = Collections.Generic.Dictionary<string, float * float * float>()
-    let note (name: string) (slow: float) (sixteen: float) =
-        let ratio = slow / sixteen
-        match best.TryGetValue name with
-        | true, (bestRatio, _, _) when bestRatio <= ratio -> ()
-        | _ -> best.[name] <- (ratio, slow, sixteen)
-    let holds (name: string) = let ratio, _, _ = best.[name] in ratio < 2.0
-    let mutable round = 0
-    while round < 20 && (round < 3 || not (slowBefore |> List.forall holds)) do
-        for name in slowBefore do
-            let before = time "sixteen"
-            let slow = time name
-            let after = time "sixteen"
-            note name slow ((before + after) / 2.0)
-        round <- round + 1
+        float (program.Work(name, 1000))
+    // Before #2560, 0.30000000000000004 took 5 times as long as 3.141592653589793, and the smallest normal float over
+    // 40 times.
+    let sixteen = work "sixteen"
     for name in slowBefore do
-        let ratio, slow, sixteen = best.[name]
-        Assert.True(holds name, $"{name} took {slow:F1} ms, {ratio:F2} times the {sixteen:F1} ms of a decimal of 16 digits beside it")
+        let slow = work name
+        Assert.True(slow / sixteen < 2.0, $"{name} took {slow} fuel, {slow / sixteen:F2} times the {sixteen} of a decimal of 16 digits")

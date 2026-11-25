@@ -44,7 +44,7 @@ def run: int -> int = { n -> string.length(build(n, "")) }
 // large list, which was then kept in address order.
 
 [<Fact>]
-let ``Heap reuse - dropping eighty thousand strings of 38 bytes takes time in proportion to their number`` () =
+let ``Heap reuse - dropping eighty thousand strings of 38 bytes takes work in proportion to their number`` () =
     let source =
         normalized
             """def nums: int, list(int) -> list(int) = { n, acc ->
@@ -57,10 +57,11 @@ def total: list(string), int -> int = {
 def run: int -> int = { n -> total(list.map(nums(n, []), { i -> "a fairly long string, number {i}, here" }), 0) }
 """
     use program = instantiateWasm source []
-    let clock = System.Diagnostics.Stopwatch.StartNew()
     Assert.Equal(80000, program.Call("run", 80000))
-    clock.Stop()
-    Assert.True(clock.ElapsedMilliseconds < 1000L, $"80,000 strings took {clock.ElapsedMilliseconds} ms")
+    Assert.Equal(0, program.LiveBlocks)
+    // In proportion, about 4 times the work of a quarter as many; walking the list would be 16 times or more.
+    let atQuarter, atAll = float (program.Work("run", 20000)), float (program.Work("run", 80000))
+    Assert.True(atAll < 6.0 * atQuarter, $"80,000 strings took {atAll} fuel, {atAll / atQuarter:F1} times the {atQuarter} of 20,000")
     Assert.Equal(0, program.LiveBlocks)
 
 // A block too big for a size class goes on the large list, but `free` finds the free blocks either side of it by the
@@ -69,7 +70,7 @@ def run: int -> int = { n -> total(list.map(nums(n, []), { i -> "a fairly long s
 // another: in a list kept in address order, each would have been put after all the others.
 
 [<Fact>]
-let ``Heap reuse - dropping eighty thousand strings of 300 bytes, apart, takes time in proportion to their number`` () =
+let ``Heap reuse - dropping eighty thousand strings of 300 bytes, apart, takes work in proportion to their number`` () =
     let source =
         normalized
             """def line: int -> string = { n ->
@@ -85,8 +86,9 @@ def total: list(string), int -> int = {
 def run: int -> int = { n -> total(list.reverse(strings(n, [])), 0) }
 """
     use program = instantiateWasm source []
-    let clock = System.Diagnostics.Stopwatch.StartNew()
     Assert.Equal(80000, program.Call("run", 80000))
-    clock.Stop()
-    Assert.True(clock.ElapsedMilliseconds < 1000L, $"80,000 strings took {clock.ElapsedMilliseconds} ms")
+    Assert.Equal(0, program.LiveBlocks)
+    // In proportion, about 4 times the work of a quarter as many; walking the list would be 16 times or more.
+    let atQuarter, atAll = float (program.Work("run", 20000)), float (program.Work("run", 80000))
+    Assert.True(atAll < 6.0 * atQuarter, $"80,000 strings took {atAll} fuel, {atAll / atQuarter:F1} times the {atQuarter} of 20,000")
     Assert.Equal(0, program.LiveBlocks)

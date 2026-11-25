@@ -115,6 +115,10 @@ those files workable. Problems with the code's structure are tracked as GitHub i
   Use them. Don't write another temp-directory helper or single-diagnostic helper.
 - **Check which error.** An error test asserts the diagnostic's code, or the message it expects. A test
   that only asserts "some error was reported" also passes when an unrelated error breaks the program.
+- **Count work rather than time it.** A test that compares costs compares an amount of work where it can, as a
+  WebAssembly program's fuel (`WasmProgram.Work`). One that has to time something does it with
+  `TestTiming.millisecondsOf` and is marked `[<Trait("Category", "Timing")>]`, which a local run may leave out with
+  `--filter "Category!=Timing"` and CI runs ([compiler/README.md](compiler/README.md#running-tests)).
 - **Show what differed.** A failing comparison should print the difference: use `Assert.Equal(expected,
   actual)`, not `failwith "mismatch"`.
 

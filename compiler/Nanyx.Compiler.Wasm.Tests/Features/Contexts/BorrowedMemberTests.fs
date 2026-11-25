@@ -97,20 +97,10 @@ def plain: int -> int = { n -> loopWith({ x -> x + 1 }, n, 0) }
 [<Fact>]
 let ``A call of a function value that requires a context costs about what one that requires nothing does`` () =
     use program = instantiateWasm ownContext []
-    let time (name: string) =
+    let work (name: string) =
         Assert.Equal(1000, program.Call(name, 1000))
-        let clock = System.Diagnostics.Stopwatch.StartNew()
-        program.Call(name, 2_000_000) |> ignore
-        clock.Elapsed.TotalMilliseconds
+        float (program.Work(name, 100_000))
     // Counting the member up and down at each call took several times as long as the call.
-    let holds (withMember: float) (plain: float) = withMember / plain < 2.0
-    let withMember, plain = time "withMember", time "plain"
-    // When the first runs miss, each is run again in turn, and each one's quickest run counts, so that load on the
-    // machine, which slows one run and not the other, can't make the test fail (#2388).
-    let withMember, plain =
-        if holds withMember plain then withMember, plain
-        else
-            let again = List.init 5 (fun _ -> time "withMember", time "plain")
-            min withMember (again |> List.map fst |> List.min), min plain (again |> List.map snd |> List.min)
-    Assert.True(holds withMember plain, $"2,000,000 calls took {withMember:F1} ms with a member, and {plain:F1} ms without")
+    let withMember, plain = work "withMember", work "plain"
+    Assert.True(withMember / plain < 2.0, $"100,000 calls took {withMember} fuel with a member, and {plain} without")
     Assert.Equal(0, program.LiveBlocks)

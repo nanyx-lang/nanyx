@@ -24,6 +24,6 @@ let ``A block's free names are the names it uses and does not bind, in the order
 
 // Each statement's names were added to all the names before them, so a block of n statements took n² time: lambda
 // lifting spent 5 of the 5.4 seconds it took on a memory block of 16,000 stores there (#2408).
-[<Fact>]
+[<Fact; Trait("Category", "Timing")>]
 let ``A block's free names are found in time that grows with its length`` () =
     takesLinearTime 16_000 (storing >> runOf) (SyntaxTree.freeNames >> ignore)
