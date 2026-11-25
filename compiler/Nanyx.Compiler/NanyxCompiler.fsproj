@@ -62,6 +62,7 @@
     <Compile Include="Units.fs" />
     <Compile Include="Fractions.fs" />
     <Compile Include="ArithmeticOperators.fs" />
+    <Compile Include="MeasuredArithmetic.fs" />
     <Compile Include="AppendOperator.fs" />
     <Compile Include="CompositionOperators.fs" />
     <Compile Include="CoalesceOperator.fs" />

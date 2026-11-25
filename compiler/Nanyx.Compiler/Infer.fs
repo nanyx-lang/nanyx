@@ -313,7 +313,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         state
         |> Contexts.outsideValue (fun state -> inferLambdaWithExpected lambdaEnv state expr args body expectedInput expectedReturn)
         |> Result.map (Contexts.withSuppliedInstances instances expr)
-    | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power ->
+    // A power of a measured value would be of a derived dimension, which a later step adds (see `MeasuredArithmetic`). The
+    // base is inferred alone to see, and what that finds is set aside.
+    | BinaryOp(op, opSpan, left, right) when op = ArithmeticOperators.power ->
+        match inferExpr env state left |> Result.toOption |> Option.bind (fun (typed, next) -> MeasuredArithmetic.dimensionOf next typed.Type) with
+        | Some dimension -> Error [ MeasuredArithmetic.powerError (opSpan |> Option.defaultValue expr.Span) dimension ]
+        | None ->
         ArithmeticOperators.inferPower (inferExpr env) state expr left right
         |> Result.bind (fun (typed, next) ->
             // The fraction `/` gives on the base's type, where a definition attached to it says (see `negativePowerError`).
@@ -523,56 +528,69 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
             |> Result.bind (fun (leftExpr, rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
         | Error err -> Error err
         | Ok (leftExpr, rightExpr, nextState) ->
-            let arithmetic = match expr.Kind with BinaryOp(op, _, _, _) -> ArithmeticOperators.isOperator op | _ -> false
-            let nextState, constrained = NumericLiterals.atOperator arithmetic leftExpr.Type rightExpr.Type nextState
-            let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
-            // Inside an attached `==`, `==` on its own type compares by structure rather than calling itself.
-            let attached (name: Identifier) =
-                tryResolveAttachedFunction env (resolveSoFar nextState leftExpr.Type) name
-                |> Option.filter (fun found ->
-                    name <> EqualityOperators.equals
-                    || (nextState.ContextScope <> DefScope(found, false) && nextState.ContextScope <> DefScope(found, true)))
-            match OperatorCalls.definition (memberOfInstanceInScope env nextState) attached env nextState expr leftExpr.Type input with
-            | Some (callee, scheme, instance) ->
-                let resultTy, called = OperatorCalls.infer nextState expr callee scheme instance input
-                // A definition that requires a parameterised context finds its instance as a call to it does (#1594).
-                let opSpan = match expr.Kind with BinaryOp(_, opSpan, _, _) -> opSpan | _ -> None
-                match requireOperatorContexts env called expr callee (SyntaxTree.nameSpan opSpan expr) |> Result.bind (fun called -> resolveCallInstances env called expr callee (SyntaxTree.nameSpan opSpan expr)) with
-                | Error _ when snd (Solving.solve called.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok called
-                | resolved -> resolved
-                |> Result.map (fun called -> mkTypedExpr expr resultTy None None None, called)
-            | None ->
+            // The operator on operands of these types, which `MeasuredArithmetic` may have read as their storages.
+            let operatorOn (leftExpr: TypedExpr) (rightExpr: TypedExpr) (nextState: InferState) =
+                let arithmetic = match expr.Kind with BinaryOp(op, _, _, _) -> ArithmeticOperators.isOperator op | _ -> false
+                let nextState, constrained = NumericLiterals.atOperator arithmetic leftExpr.Type rightExpr.Type nextState
+                let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
+                // Inside an attached `==`, `==` on its own type compares by structure rather than calling itself.
+                let attached (name: Identifier) =
+                    tryResolveAttachedFunction env (resolveSoFar nextState leftExpr.Type) name
+                    |> Option.filter (fun found ->
+                        name <> EqualityOperators.equals
+                        || (nextState.ContextScope <> DefScope(found, false) && nextState.ContextScope <> DefScope(found, true)))
+                match OperatorCalls.definition (memberOfInstanceInScope env nextState) attached env nextState expr leftExpr.Type input with
+                | Some (callee, scheme, instance) ->
+                    let resultTy, called = OperatorCalls.infer nextState expr callee scheme instance input
+                    // A definition that requires a parameterised context finds its instance as a call to it does (#1594).
+                    let opSpan = match expr.Kind with BinaryOp(_, opSpan, _, _) -> opSpan | _ -> None
+                    match requireOperatorContexts env called expr callee (SyntaxTree.nameSpan opSpan expr) |> Result.bind (fun called -> resolveCallInstances env called expr callee (SyntaxTree.nameSpan opSpan expr)) with
+                    | Error _ when snd (Solving.solve called.Constraints) |> List.exists (snd >> SourceSpan.contains expr.Span) -> Ok called
+                    | resolved -> resolved
+                    |> Result.map (fun called -> mkTypedExpr expr resultTy None None None, called)
+                | None ->
+                match expr.Kind with
+                | BinaryOp(op, _, _, _) when op = AppendOperator.operator ->
+                    AppendOperator.check constrained expr leftExpr.Type rightExpr.Type
+                    |> Result.map (fun (resultTy, joined) -> mkTypedExpr expr resultTy None None None, joined)
+                | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op ->
+                    let resultTy, constrained = ArithmeticOperators.resultOf constrained expr op leftExpr.Type
+                    ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type resultTy (ArithmeticOperators.numericOperandType constrained leftExpr.Type rightExpr.Type)
+                    |> Result.map (fun numericConstrained -> mkTypedExpr expr resultTy None None None, numericConstrained)
+                | BinaryOp(op, _, _, _) when OrderingOperators.isOperator op ->
+                    OrderingOperators.require (orderingInstance op expr.Span) env constrained expr op leftExpr.Type input
+                    |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
+                | BinaryOp(op, _, _, _) when EqualityOperators.isOperator op ->
+                    // Tags are joined, not made equal, as an `if`'s branches are: `o == #none` leaves `o` open to other
+                    // tags. Anything else is made equal.
+                    let operandTy, joined =
+                        if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
+                            joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
+                        else leftExpr.Type, constrained
+                    let comparesParts = comparesOwnParts env Set.empty EqualityOperators.equals (partInstanceIn env joined EqualityOperators.context) (fun _ -> true)
+                    let derive = derivedComparison env Set.empty (fun _ -> None) expr.Id expr.Span
+                    EqualityOperators.require (wellKnownInstance WellKnownContexts.equality op expr.Span) comparesParts derive env joined expr op operandTy input
+                    |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
+                | BinaryOp(op, _, _, _) when ["and"; "or"] |> List.contains op ->
+                    // Both operands are already unified with each other; pin them to bool.
+                    let boolConstrained = constrained |> addConstraint leftExpr.Type (TyPrimitive "bool")
+                    Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, boolConstrained)
+                // A spare operator (`^`, `<>`, ...) means only what a definition of it gives it.
+                | BinaryOp(op, opSpan, left, _) ->
+                    let at = opSpan |> Option.defaultValue expr.Span
+                    Error [ OperatorCalls.undefinedSpare (MemoryCells.isCell env constrained) op at left (resolveSoFar nextState leftExpr.Type) ]
+                | _ -> Ok (mkTypedExpr expr leftExpr.Type None None None, constrained)
+            // An arithmetic operator on a measured value is the operator on its storage, whose result has the dimension
+            // the table says (see `MeasuredArithmetic`).
             match expr.Kind with
-            | BinaryOp(op, _, _, _) when op = AppendOperator.operator ->
-                AppendOperator.check constrained expr leftExpr.Type rightExpr.Type
-                |> Result.map (fun (resultTy, joined) -> mkTypedExpr expr resultTy None None None, joined)
             | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op ->
-                let resultTy, constrained = ArithmeticOperators.resultOf constrained expr op leftExpr.Type
-                ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type resultTy (ArithmeticOperators.numericOperandType constrained leftExpr.Type rightExpr.Type)
-                |> Result.map (fun numericConstrained -> mkTypedExpr expr resultTy None None None, numericConstrained)
-            | BinaryOp(op, _, _, _) when OrderingOperators.isOperator op ->
-                OrderingOperators.require (orderingInstance op expr.Span) env constrained expr op leftExpr.Type input
-                |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
-            | BinaryOp(op, _, _, _) when EqualityOperators.isOperator op ->
-                // Tags are joined, not made equal, as an `if`'s branches are: `o == #none` leaves `o` open to other
-                // tags. Anything else is made equal.
-                let operandTy, joined =
-                    if EqualityOperators.joinsOperands (resolveSoFar nextState leftExpr.Type) (resolveSoFar nextState rightExpr.Type) then
-                        joinBranchTypes Set.empty nextState [ leftExpr.Type; rightExpr.Type ]
-                    else leftExpr.Type, constrained
-                let comparesParts = comparesOwnParts env Set.empty EqualityOperators.equals (partInstanceIn env joined EqualityOperators.context) (fun _ -> true)
-                let derive = derivedComparison env Set.empty (fun _ -> None) expr.Id expr.Span
-                EqualityOperators.require (wellKnownInstance WellKnownContexts.equality op expr.Span) comparesParts derive env joined expr op operandTy input
-                |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)
-            | BinaryOp(op, _, _, _) when ["and"; "or"] |> List.contains op ->
-                // Both operands are already unified with each other; pin them to bool.
-                let boolConstrained = constrained |> addConstraint leftExpr.Type (TyPrimitive "bool")
-                Ok (mkTypedExpr expr (TyPrimitive "bool") None None None, boolConstrained)
-            // A spare operator (`^`, `<>`, ...) means only what a definition of it gives it.
-            | BinaryOp(op, opSpan, left, _) ->
-                let at = opSpan |> Option.defaultValue expr.Span
-                Error [ OperatorCalls.undefinedSpare (MemoryCells.isCell env constrained) op at left (resolveSoFar nextState leftExpr.Type) ]
-            | _ -> Ok (mkTypedExpr expr leftExpr.Type None None None, constrained)
+                match MeasuredArithmetic.read nextState expr op leftExpr.Type rightExpr.Type with
+                | Some (Ok reading) ->
+                    operatorOn { leftExpr with Type = reading.Left } { rightExpr with Type = reading.Right } nextState
+                    |> Result.map (fun (typed, next) -> { typed with Type = reading.Result typed.Type }, next)
+                | Some (Error error) -> Error [ error ]
+                | None -> operatorOn leftExpr rightExpr nextState
+            | _ -> operatorOn leftExpr rightExpr nextState
 
 /// `value` piped to the function `name`, its name at `spanOpt`, with `args`: a call of the function attached to
 /// `value`'s type under that name, if there is one, or else of `name` itself.
