@@ -105,6 +105,7 @@
     <Compile Include="Features\Equality\EqualityTests.fs" />
     <Compile Include="Features\Equality\UnionRestEqualityTests.fs" />
     <Compile Include="Features\Equality\AttachedEqualityTests.fs" />
+    <Compile Include="Features\Equality\NominalEqualityInferenceTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />
     <Compile Include="Features\Hashing\HashTests.fs" />
     <Compile Include="Features\Hosts\AsyncTests.fs" />
@@ -124,6 +125,7 @@
     <Compile Include="Features\Imports\PackageBuildTests.fs" />
     <Compile Include="Features\Imports\PartialModuleTests.fs" />
     <Compile Include="Features\Imports\ImportedTypeTests.fs" />
+    <Compile Include="Features\Imports\ImportedGenericTypeTests.fs" />
     <Compile Include="Features\Imports\SelectiveImportTests.fs" />
     <Compile Include="Features\Imports\ReExportTests.fs" />
     <Compile Include="Features\Inference\ErrorRecoveryTests.fs" />
