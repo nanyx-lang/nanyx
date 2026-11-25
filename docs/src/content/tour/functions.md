@@ -453,6 +453,8 @@ A pipe `x \f(y)` is the call `f(x, y)`, so the same rules apply to it. Nothing e
 
 A [workflow](../advanced/workflows) block is a call to its builder, with the rest of the block passed to each keyword as a closure, and the same rules apply to that code.
 
+A def that starts a task waits for its tasks before it returns ([Async](../advanced/async#each-def-is-a-scope)), so a call last in it is not a tail call, unless what it calls is another def that starts tasks: then that def's tasks join the caller's, and the call stays a tail call. Both defs must write their types for that.
+
 # Function composition
 
 Functions can be composed to create new functions:
