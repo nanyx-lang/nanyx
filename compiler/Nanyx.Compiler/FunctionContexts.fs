@@ -17,6 +17,14 @@ module FunctionContexts =
         | TyScope scope -> Some scope
         | _ -> None
 
+    /// The name of the context `context` is. A protected or private context is a nominal type.
+    let contextName (context: Ty) : Identifier option =
+        match context with
+        | TyApply(name, _)
+        | TyAlias(name, _, _) -> Some name
+        | TyNominal(nominal, _, _, _) -> Some nominal.Name
+        | _ -> None
+
     /// The context a cell's type is of (see `cellType`): `Memory`, as the prelude declares it.
     let cellContext = "Memory"
 
