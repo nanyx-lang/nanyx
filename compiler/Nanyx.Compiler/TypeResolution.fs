@@ -46,6 +46,7 @@ let private lookupPrimitive (name: string) =
     | "bool"
     | "string"
     | "unit" -> Some (primitiveType name)
+    | _ when name = Chars.name -> Some Chars.ty
     | "undefined" -> Some Unifier.bottomType
     | _ when SizedNumber.isName name -> Some (primitiveType name)
     | _ -> None
@@ -58,6 +59,8 @@ let internal isBuiltInTypeName (name: string) =
     || name = CellPassingSyntax.typeName
     || Maps.isTypeName name
     || Sets.isTypeName name
+    || name = Maps.storeName
+    || name = Sets.storeName
     || Arrays.isTypeName name
     || Boxes.isTypeName name
     || MutableArrays.isTypeName name
@@ -333,6 +336,10 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
             Maps.ofTypes argTys.[0] argTys.[1], current
         elif Sets.isTypeName name && argTys.Length = 1 then
             Sets.ofType argTys.[0], current
+        elif name = Maps.storeName && argTys.Length = 2 then
+            Maps.storeOf argTys.[0] argTys.[1], current
+        elif name = Sets.storeName && argTys.Length = 1 then
+            Sets.storeOf argTys.[0], current
         elif Arrays.isTypeName name && argTys.Length = 1 then
             Arrays.ofType argTys.[0], current
         elif Boxes.isTypeName name && argTys.Length = 1 then

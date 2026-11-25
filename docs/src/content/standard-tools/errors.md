@@ -1124,8 +1124,8 @@ To fix it, rename or remove one of the definitions.
 
 # NYX0114: Not a built-in type
 
-A type is written `Int`, `Float` or `Bool`. Those are not types: the built-in types are `int`, `float` and `bool`. An
-editor offers to write the right name.
+A type is written `Int`, `Float`, `Bool` or `Char`. Those are not types: the built-in types are `int`, `float`, `bool`
+and `char`. An editor offers to write the right name.
 
 ```nanyx
 def count: Int = 3  -- error NYX0114: A built-in type's name is in lower case: write 'int'
@@ -2538,6 +2538,19 @@ def obj = parse("Ada")  -- error NYX0283: 'parse' requires 'Decode' of a type no
 
 To fix it, write the type on the def, `def obj: Person = parse("Ada")`, or give the function a
 [type argument](../tour/functions#type-arguments) and pass the type: `parse(type Person, "Ada")`.
+
+# NYX0284: Char literal that is not one character
+
+A string literal is written where a `char` is expected, and it is not exactly one Unicode scalar value. A `char` is
+one scalar value, so the literal must be one: not empty, not two characters, not a literal with holes, and not a
+letter written with a combining accent after it, which is two scalar values however it looks
+([Characters](../tour/types#characters)).
+
+```nanyx
+def initial: char = "Ab"  -- error NYX0284: A char is one Unicode scalar value, ...
+```
+
+To fix it, write one character, or use a `string` where the value is more than one.
 
 # NYX0301: Not supported by the WebAssembly backend
 

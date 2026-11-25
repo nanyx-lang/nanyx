@@ -86,6 +86,13 @@ module TaskScopeSyntax =
     let context = "TaskScope"
     let alias = "__async"
     let scopeCall = alias + ".Async.concurrent"
+    let private inCallersScopePrefix = "__inScope_"
+    /// The made-up name of the def that runs the body of the scope def `name` in its caller's scope, which a scope def
+    /// that calls `name` last calls instead (see `TaskScopes`).
+    let inCallersScope (name: string) = inCallersScopePrefix + name
+    /// The scope def whose body the def of a made-up name runs in its caller's scope (see `inCallersScope`).
+    let (|InCallersScope|_|) (name: string) =
+        if name.StartsWith inCallersScopePrefix then Some (name.Substring inCallersScopePrefix.Length) else None
 
 /// What makes a nominal type the type it is: the module that defines it, and the name it is defined under there
 /// (`Person`, or `money.Money` in a `module money =` block). Two modules that each define a `Person` define two

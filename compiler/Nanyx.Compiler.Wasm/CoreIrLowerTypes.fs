@@ -238,6 +238,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyPrimitive "string" -> IrString
     | TyPrimitive "float" -> IrFloat
     | TyPrimitive "F32" -> IrF32
+    // A `char` is its code point, which fits in 32 bits and is never negative.
+    | Chars.CharType -> IrSized SizedInteger.U32
     | TyPrimitive "?error" -> IrError
     | BoxedType -> IrBox
     // A scoped context's scope means nothing at run time: a value of the context's type is unit.
@@ -269,10 +271,9 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyRecord(fields, _) -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
     | TyNominal _ as nominal -> toIrType (RecursiveNominals.underlying nominal)
     | TyApply("list", [ element ]) -> IrList(toIrType element)
-    // A map is the list of its entries, each a tuple of its key and its value (see `Maps`).
-    | Maps.MapType(key, value) -> toIrType (TyApply("list", [ TyRecord(Map.ofList [ "0", key; "1", value ], FieldOrder.none) ]))
-    // A set is the list of its elements (see `Sets`).
-    | Sets.SetType element -> IrList(toIrType element)
+    // A map and a set are laid out as their stores (see `Maps.storeOf` and `Sets.storeOf`).
+    | Maps.MapType(key, value) -> toIrType (Maps.storeOf key value)
+    | Sets.SetType element -> toIrType (Sets.storeOf element)
     | Arrays.ArrayType element -> IrArray(toIrType element)
     // A mutable array is laid out as an array is (see `MutableArrays`).
     | MutableArrays.MutableArrayType element -> CoreIrRegions.boxType (IrArray(toIrType element))

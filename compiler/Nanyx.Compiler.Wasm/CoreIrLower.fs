@@ -333,6 +333,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | _ -> cannot "a `type` of a type that is only known when the program runs"
         | LiteralExpr(IntLit value) -> k (Expr.make (Atom(intAtom value (tyOf expr))) (tyOf expr))
         | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
+        // A string literal where a `char` is expected is one, its code point (see `CharLiterals`).
+        | LiteralExpr(StringLit value) when tyOf expr = IrSized SizedInteger.U32 ->
+            match Chars.scalarOf value with
+            | Some scalar -> k (Expr.make (Atom(ASized(SizedInteger.U32, int64 scalar))) (tyOf expr))
+            | None -> internalError "a char literal that is not one character, which the checker reports"
         | LiteralExpr(StringLit value) -> k (Expr.make (Atom(AString value)) IrString)
         | LiteralExpr(FloatLit value) -> k (Expr.make (FloatConstant value) (tyOf expr))
         | IdentifierExpr name -> this.Identifier scope expr name k
@@ -1397,7 +1402,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
-        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
+        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools callee functionName printer
         | Describing -> CoreIrLowerTypeMatch.describingFunction this.TypeMatchTools functionName
         | FieldGetting(recordType, fieldName) -> CoreIrLowerTypeMatch.fieldGettingFunction this.TypeMatchTools functionName recordType fieldName
         | CaseGetting(unionType, caseName) -> CoreIrLowerTypeMatch.caseGettingFunction this.TypeMatchTools functionName unionType caseName

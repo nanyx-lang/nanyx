@@ -21,7 +21,7 @@ nanyx install nanyx.json
 instead, which `nanyx run` downloads:
 
 ```nanyx fragment
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 ```
 
 Import its module under a name, `json`, so that its `print` doesn't clash with the console's.
@@ -33,7 +33,7 @@ Import its module under a name, `json`, so that its `print` doesn't clash with t
 it needs:
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import nanyx.json/json as json
 
@@ -53,20 +53,20 @@ match json.parse(data)
 # Writing JSON
 
 Build a `Json` value from its tags, and write it with `json.print`, compactly, or `json.printPretty`, a member or
-element to a line. An object's members are written in the order its map has them, which for a map literal is the
-order they are written in:
+element to a line. An object's members are written in the order its map has them, which for now is unspecified: a
+map gives its keys in the order of their hashes, not the order they were written in.
 
 ```nanyx fragment
 def user = #object(["name" => #string("Alice"), "age" => #number(30.0), "active" => #bool(true)])
 
 println(json.print(user))
--- {"name":"Alice","age":30,"active":true}
+-- {"name":"Alice","active":true,"age":30}
 
 println(json.printPretty(user, indent = 2))
 -- {
 --   "name": "Alice",
---   "age": 30,
---   "active": true
+--   "active": true,
+--   "age": 30
 -- }
 ```
 
@@ -88,10 +88,11 @@ with no decoder or encoder written for it. A record is an object, a tag with a p
 without its name, and an option is its value or `null`, left out when it is `#none`. A field's key is its name, or the
 one a `@json(name = "...")` attribute before it gives. `json.encode` gives `#some` of the text, or `#cannotEncode` for
 a part that can't be written, a function or a nominal type whose structure it can't see, and `json.decode` gives
-`#some` of the value, or `#doesNotFit` when a document doesn't fit; `json.describe` says where:
+`#some` of the value, or `#doesNotFit` when a document doesn't fit; `json.describe` says where. A record's fields are
+written in an unspecified order for now, as an object's keys are:
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import nanyx.json/json as json
 
@@ -113,11 +114,11 @@ match json.encode(ada)
 
 def data = '{"users": [{"name": "Alice", "age": 30, "role": "admin"}, {"name": "Bob", "age": "25", "role": "admin"}]}'
 
-match json.decode(data, into = type (users: list(User)))
+match json.decode(type (users: list(User)), data)
   | #some(read) -> println(json.encode(read.users) \orCrash("users are written"))
   | failure -> println(json.describe(failure))
 
--- {"name":"Ada","age":36,"role":{"member":{"team":"core"}}}
+-- {"name":"Ada","role":{"member":{"team":"core"}},"age":36}
 -- users[1].age: Expected a whole number, found a string
 ```
 
@@ -128,7 +129,7 @@ time, each with `try`, `json.decoderFor(type T)` reads a part by walking its typ
 decoder; encoders from `nanyx.json/encode` go the other way, run by `json.encodeWith`:
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import (
   nanyx.json/encode as encode
@@ -157,7 +158,7 @@ match json.decodeWith('[{"title": "home", "at": {"x": 1, "y": 2}}]', json.list(p
   | #some(places) -> println(json.encodeWith(places, encode.list(placeEncoder)))
   | failure -> println(json.describe(failure))
 
--- [{"title":"home","at":{"x":1,"y":2}}]
+-- [{"at":{"x":1,"y":2},"title":"home"}]
 ```
 
 The [decoders](../stdlib/json-typed) page lists the rest: lists, maps, optional members, tagged unions and more.

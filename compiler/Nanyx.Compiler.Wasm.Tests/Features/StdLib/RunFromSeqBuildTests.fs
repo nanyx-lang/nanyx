@@ -63,7 +63,7 @@ let ``Run - set and map fromSeq and build, a later key winning`` () =
     if more then emit(("y", 2))
   })"""
     runSource source
-    |> assertRan "0\n[1, 2, 3, 4, 5]\n[0, 1, 2]\n[1]\n[a => 3, b => 2]\n0\n[0 => 0, 1 => 1]\n[x => 1]\n"
+    |> assertRan "0\n[1, 2, 3, 4, 5]\n[0, 1, 2]\n[1]\n[b => 2, a => 3]\n0\n[0 => 0, 1 => 1]\n[x => 1]\n"
 
 [<Fact>]
 let ``Run - Stack and Queue fromSeq and build`` () =

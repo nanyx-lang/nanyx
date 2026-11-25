@@ -91,12 +91,17 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
                 else Some (TyVar var, Unifier.apply closing solved))
     let held = Boxes.heldVariables closedTy
     let quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
-    // A variable of the def's type that a task's work stands for is a work variable of the def (see `TaskWork`).
+    // A variable of the def's type that a task's work stands for is a work variable of the def (see `TaskWork`). Only
+    // one among a function's contexts can be: a def whose type has none, as most have, looks at no work variable, which
+    // a def of many tasks has many of (#2551).
+    let workCandidates = Set.intersect quantified (TaskWork.contextVariables closedTy)
     let taskWork =
+        if workCandidates.IsEmpty then state.TaskWork
+        else
         state.TaskWork
         |> Map.fold (fun marked id at ->
             TypeEnv.freeTyVars (Unifier.apply subst (TyVar(TyVar.ordinary id None)))
-            |> Set.intersect quantified
+            |> Set.intersect workCandidates
             |> Set.fold (fun marked var -> if Map.containsKey var marked then marked else marked |> Map.add var at) marked) state.TaskWork
     { Quantified = quantified
       Type = closedTy
@@ -189,6 +194,10 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
 
 and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
     match expr.Kind with
+    // A string literal is a `char` where one is expected (see `CharLiterals`).
+    | LiteralExpr(StringLit text) when ExpectedLiterals.expectsChar state expr ->
+        CharLiterals.typeOf expr.Span text |> Result.map (fun ty -> mkTypedExpr expr ty None None None, state)
+    | InterpolatedString _ when ExpectedLiterals.expectsChar state expr -> CharLiterals.withHoles expr.Span
     | LiteralExpr literal ->
         let ty, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
         Ok (mkTypedExpr expr ty None None None, next)
@@ -457,10 +466,26 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
 /// An operator applied to `left` and `right` that is neither `**`, a composition nor `??`: read through a definition
 /// of it if one is found, or else as the operator built in.
 and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) (left: Expression) (right: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
+    // A string literal compared with a `char` is one, on either side (see `CharLiterals`): on the right, it is checked
+    // knowing so; on the left, it is read again once the right is known, a literal's type taking no constraint.
+    let compares =
+        match expr.Kind with
+        | BinaryOp(op, _, _, _) -> EqualityOperators.isOperator op || OrderingOperators.isOperator op
+        | _ -> false
+    let leftAsChar (leftExpr: TypedExpr) (rightExpr: TypedExpr) (state: InferState) =
+        match left.Kind with
+        | LiteralExpr(StringLit text) when compares && CharLiterals.isChar state rightExpr.Type ->
+            CharLiterals.typeOf left.Span text
+            |> Result.map (fun ty -> { leftExpr with Type = ty }, rightExpr, { state with ExprTypes = state.ExprTypes |> Map.add left.Id ty })
+        | _ -> Ok (leftExpr, rightExpr, state)
     match inferExpr env state left with
     | Error err -> Error err
     | Ok (leftExpr, next) ->
-        match inferExpr env next right |> Result.bind (fun (rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
+        let next = if compares && CharLiterals.isChar next leftExpr.Type then ExpectedLiterals.expect Chars.ty next right else next
+        match
+            inferExpr env next right
+            |> Result.bind (fun (rightExpr, nextState) -> leftAsChar leftExpr rightExpr nextState)
+            |> Result.bind (fun (leftExpr, rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
         | Error err -> Error err
         | Ok (leftExpr, rightExpr, nextState) ->
             let arithmetic = match expr.Kind with BinaryOp(op, _, _, _) -> ArithmeticOperators.isOperator op | _ -> false

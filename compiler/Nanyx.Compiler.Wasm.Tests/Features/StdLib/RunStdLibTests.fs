@@ -393,15 +393,6 @@ println(float.fromString("1.7976931348623157e308") == #some(1.7976931348623157e3
 123456789012345678901234567890 -> #some(1.2345678901234568e29)
 true""")
 
-/// `x` as a Nanyx float literal, with all the digits it takes to be read back as `x`: `1.0e-300`, not .NET's `1E-300`.
-let private floatLiteral (x: float) =
-    let text = x.ToString("R", Globalization.CultureInfo.InvariantCulture).Replace("E+", "e").Replace("E", "e")
-    let mantissa, exponent =
-        match text.IndexOf 'e' with
-        | -1 -> text, ""
-        | at -> text.Substring(0, at), text.Substring at
-    (if mantissa.Contains '.' then mantissa else mantissa + ".0") + exponent
-
 [<Fact>]
 let ``Run - Float.fromString reads back the largest, the smallest and thousands of random floats`` () =
     let random = Random 2521

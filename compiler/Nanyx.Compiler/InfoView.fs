@@ -202,11 +202,12 @@ let private lambdaHeading (lambda: Expression) : string =
     | Lambda(parameters, _, _) when not parameters.IsEmpty -> $"""{{ {parameters |> List.map fst |> String.concat ", "} -> … }}"""
     | _ -> "{ … }"
 
-/// The name of the context `context` is.
+/// The name of the context `context` is. A protected or private context is a nominal type.
 let internal contextName (context: Ty) : Identifier option =
     match context with
     | TyApply(name, _)
     | TyAlias(name, _, _) -> Some name
+    | TyNominal(nominal, _, _, _) -> Some nominal.Name
     | _ -> None
 
 /// Where an instance of `ctxName` the compiler builds from `members` (each member's name and the definition it is)

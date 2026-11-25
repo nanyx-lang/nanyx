@@ -64,4 +64,4 @@ def main = {
 }
 """
     runSource (source.ReplaceLineEndings "\n")
-    |> assertRan "[3, 1, 2]\n[3, 1, 2]\n[(b, 3), (a, 1)]\n[(b, 3), (a, 1)]\n3\n1\n2\nb=3\na=1\n[]\n"
+    |> assertRan "[1, 2, 3]\n[1, 2, 3]\n[(b, 3), (a, 1)]\n[(b, 3), (a, 1)]\n1\n2\n3\nb=3\na=1\n[]\n"

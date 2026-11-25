@@ -2,7 +2,7 @@
 title: encode
 description: Writing types of your own as JSON
 order: 15.7
-package: nanyx.json 0.2.0
+package: nanyx.json 0.4.0
 ---
 
 `json.encode(value)` writes a value of any type as JSON text with nothing written for it, by walking its type: see
@@ -15,7 +15,7 @@ Here a shape is written with its kind in a member of its own, as the decoders pa
 writes a tag as an object of one member:
 
 ```nanyx
-::dependency nanyx.json 0.2.0
+::dependency nanyx.json 0.4.0
 
 import (
   nanyx.json/encode as encode
@@ -49,7 +49,7 @@ println(json.encodeWith(sketch, drawing))
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.2.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.4.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 Encoders: a value of a type of your own written as JSON, the other way from `json`'s decoders.
 

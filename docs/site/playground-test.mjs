@@ -118,9 +118,18 @@ const readyOn = (target) => target.waitForSelector("html[data-playground=ready]"
 const ready = () => readyOn(page);
 const idleOn = (target) => target.waitForSelector("[data-run]:not([hidden]):not([disabled])", { timeout: 60_000 });
 const idle = () => idleOn(page);
-const runOn = async (target) => {
+/**
+ * Clicks Run on `target` and waits for the run it starts to begin, by the part of the output pane each run adds, which
+ * stays. Waiting for the button to be hidden instead missed a run quick enough to give it back between two looks, and
+ * a page behind the others, whose animation frames are throttled, looks seldom: so the waits poll on a timer (#2554).
+ */
+const startRunOn = async (target) => {
+  const runs = await target.locator(".pg-run").count();
   await target.click("[data-run]");
-  await target.waitForFunction(() => document.querySelector("[data-run]")?.hidden || document.querySelector("[data-run]")?.disabled);
+  await target.waitForFunction((before) => document.querySelectorAll(".pg-run").length > before, runs, { polling: 100 });
+};
+const runOn = async (target) => {
+  await startRunOn(target);
   await idleOn(target);
 };
 const run = () => runOn(page);
@@ -135,8 +144,7 @@ const firstRunnableCode = () =>
   page.locator("[data-tour-run]:has(.tour-run-button)").first().locator("xpath=preceding-sibling::*[1]").locator("xpath=descendant-or-self::pre").first();
 /** Runs the editor's code, ending its input whenever it waits for some, until it ends. */
 const runToTheEndOn = async (target) => {
-  await target.click("[data-run]");
-  await target.waitForFunction(() => document.querySelector("[data-run]")?.hidden || document.querySelector("[data-run]")?.disabled);
+  await startRunOn(target);
   const input = target.locator("[data-input-line] input");
   for (;;) {
     await target.waitForFunction(
@@ -144,7 +152,7 @@ const runToTheEndOn = async (target) => {
         !document.querySelector("[data-input-line]")?.hidden ||
         (!document.querySelector("[data-run]")?.hidden && !document.querySelector("[data-run]")?.disabled),
       null,
-      { timeout: 60_000 },
+      { timeout: 60_000, polling: 100 },
     );
     if (!(await input.isVisible())) break;
     await input.press("Control+d");

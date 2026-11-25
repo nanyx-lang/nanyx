@@ -33,6 +33,7 @@
     <Compile Include="Features\Calls\CallCheckTimeTests.fs" />
     <Compile Include="Features\Calls\FunctionFieldCallTests.fs" />
     <Compile Include="Features\Calls\BuiltInCallTests.fs" />
+    <Compile Include="Features\Chars\CharLiteralTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />

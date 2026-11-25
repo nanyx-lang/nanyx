@@ -135,7 +135,7 @@ dbg(noInts)
 [main.nyx:4] []
 [main.nyx:5] Map["tea" => 3, "cake" => 4]
 [main.nyx:7] Map[]
-[main.nyx:8] Set[3, 1]
+[main.nyx:8] Set[1, 3]
 [main.nyx:10] Set[]
 """
 
