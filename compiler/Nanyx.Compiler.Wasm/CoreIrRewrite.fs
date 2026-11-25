@@ -108,8 +108,12 @@ let rec mapVarsAndPlaces (var: Var -> Var) (depth: int -> int) (place: Place opt
                 { walk with
                     Root = var walk.Root
                     Pending = var walk.Pending
-                    Children = var walk.Children
-                    Index = var walk.Index
+                    Node = var walk.Node
+                    LeafBits = var walk.LeafBits
+                    Leaves = var walk.Leaves
+                    Remaining = var walk.Remaining
+                    LeafIndex = var walk.LeafIndex
+                    LeafEnd = var walk.LeafEnd
                     Depth = var walk.Depth
                     Path = var walk.Path }
             )
