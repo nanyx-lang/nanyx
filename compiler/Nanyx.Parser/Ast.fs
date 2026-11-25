@@ -475,6 +475,15 @@ module Expression =
     /// An expression the compiler made up that has no source of its own.
     let synthetic (kind: ExpressionKind) = at SourceSpan.none kind
 
+/// `if c then a` with no `else` (see the control-flow page): its else branch is `()`, made up where the then branch is
+/// written, so the `if` gives `()` when its condition is false.
+module IfSyntax =
+    /// The else branch a left-out `else` is, for the then branch `thenExpr`.
+    let leftOutElse (thenExpr: Expression) = Expression.from thenExpr UnitExpr
+
+    /// Whether `elseExpr`, the else branch of an `if` whose then branch is `thenExpr`, is one a left-out `else` made up.
+    let isLeftOut (thenExpr: Expression) (elseExpr: Expression) = elseExpr.Kind = UnitExpr && elseExpr.Span = thenExpr.Span
+
 /// `for xs, ys | arms` (see the loops page): a call to the built-in "__for" with the iterables and then a lambda that
 /// takes one element of each, in order. The loop walks the iterables in step and stops when the shortest ends.
 module ForSyntax =

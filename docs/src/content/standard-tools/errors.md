@@ -1269,6 +1269,13 @@ def count: int = "three"  -- error NYX0201: 'string' vs 'int'
 To fix it, change the value, or the annotation, so that the two types agree. Where the types come from far apart, an
 annotation on a definition in between shows which of them is wrong.
 
+An `if` with no `else` gives `()` when its condition is false, so one whose `then` branch gives something else is
+reported at the `if`, saying that it has no `else`:
+
+```nanyx
+def size = { n: int -> if n > 10 then "big" }  -- error NYX0201: This `if` has no `else`, so it gives '()' when its condition is false: add an `else` of type 'string'
+```
+
 A match arm for a tag that the value's union doesn't have can never match, so it is reported too, with the union's
 tags and the one it most likely means:
 
