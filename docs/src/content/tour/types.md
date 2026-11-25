@@ -79,6 +79,9 @@ the value a pattern matches, and the other side of `==`, `<` and the other compa
 exactly one scalar value: `""`, `"ab"`, a literal with holes, and `"é"` written as `e` and a combining accent are each
 the error [NYX0284](../standard-tools/errors#nyx0284).
 
+A char's code point is `char.toInt(c)`, and `char.toString(c)` is the string of it; `string.chars` gives a string's
+chars, and `string.fromChars` a string of them (see [chars](../stdlib/prelude-chars)).
+
 A literal is a `char` only where the code around it already expects one when it is checked. In a function whose
 parameter's type nothing gives yet, `{ c -> c == "a" }`, the literal is a string, so `c` is a string too, and giving the
 function a `char` is a type mismatch. Write the parameter's type: `{ c: char -> c == "a" }`.
