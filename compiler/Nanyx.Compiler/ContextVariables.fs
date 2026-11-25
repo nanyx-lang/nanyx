@@ -82,7 +82,8 @@ let rec private pairs (isVariable: TyVar -> bool) (general: Ty) (specific: Ty) :
     | TyUnion gs, TyUnion ss -> all gs ss
     | TyRecord(gf, _), TyRecord(sf, _) when Set.ofSeq gf.Keys = Set.ofSeq sf.Keys -> all (List.ofSeq gf.Values) (List.ofSeq sf.Values)
     | TyTag(_, Some g), TyTag(_, Some s)
-    | TyScope g, TyScope s -> pairs isVariable g s
+    | TyScope g, TyScope s
+    | TyMeasure(_, g), TyMeasure(_, s) -> pairs isVariable g s
     | _ -> []
 
 /// `contexts`, a function type's, resolved by `resolve` as far as the types so far go: a context variable is what it

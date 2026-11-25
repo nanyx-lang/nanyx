@@ -31,7 +31,8 @@ module internal ContextInference =
             | TyRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyOpenRecord(fields, row) -> (fields |> Map.toList |> List.collect (snd >> collect)) @ [ row ]
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
-            | TyScope scope -> collect scope
+            | TyScope scope
+            | TyMeasure(_, scope) -> collect scope
         collect ty |> List.distinctBy _.Id
 
     /// A name for each type variable of `ty`, by its id: `a`, `b`, `c`, ..., in the order they appear, then `a1`, `b1`.
@@ -66,6 +67,9 @@ module internal ContextInference =
                 if args.IsEmpty || not (args |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)) then Some (TypeName(nominalName nominal))
                 else all args |> Option.map (fun args -> TypeApply(nominalName nominal, args))
             | TyPrimitive name -> Some (TypeName name)
+            // A measured value of one dimension is written as the dimension applied to its storage, `Time(int)`.
+            | TyMeasure([ id, 1 ], storage) -> typeExprOf names storage |> Option.map (fun storage -> TypeApply(nominalName id, [ storage ]))
+            | TyMeasure _ -> None
             | TyAlias(name, [], _) -> Some (TypeName(aliasName name))
             | FunctionContexts.CellType(held, _) -> typeExprOf names held |> Option.map (fun held -> TypeApply(CellPassingSyntax.typeName, [ held ]))
             | TyAlias(name, args, _) -> all args |> Option.map (fun args -> TypeApply(aliasName name, args))
@@ -178,7 +182,8 @@ module internal ContextInference =
             | TyRecord(fields, _)
             | TyOpenRecord(fields, _) -> fields |> Map.toList |> List.collect (snd >> collect)
             | TyTag(_, payload) -> payload |> Option.map collect |> Option.defaultValue []
-            | TyScope scope -> collect scope
+            | TyScope scope
+            | TyMeasure(_, scope) -> collect scope
         collect ty |> List.distinctBy _.Id
 
     /// Whether `pending` is passed nothing for its context when it is of a rest of a union in the def's type: a

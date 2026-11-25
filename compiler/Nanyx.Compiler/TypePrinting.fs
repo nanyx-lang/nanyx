@@ -329,6 +329,8 @@ module TypePrinting =
         // Only where the contexts a type carries are printed on their own, which a reader never sees: they are written
         // in front of the type.
         | TyContexts contexts -> $"""[{writtenContexts contexts |> List.map (contextAsPrinted p >> printTy p false) |> String.concat ", "}]"""
+        // A measured value is written as its dimension applied to its storage, `Time(int)`.
+        | TyMeasure(dimension, storage) -> $"{Dimension.text dimension}({printTy p false storage})"
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.
     let tyToString (ty: Ty) : string = printTy (printingFor "..." (fun _ -> []) [] ty) true ty
@@ -348,6 +350,7 @@ module TypePrinting =
             | TyFunc(arg, ret, contexts) ->
                 (writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
             | TyContexts contexts -> writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect
+            | TyMeasure(_, storage) -> collect storage
             | TyRecord(fields, _) ->
                 match tryTupleLikeRecord fields with
                 | Some tupleItems, namedFields ->

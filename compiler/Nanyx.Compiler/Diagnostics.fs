@@ -233,6 +233,8 @@ module DiagnosticCodes =
     let DimensionStorageNotNumber = code 290 "Dimension stored in a type that isn't a number" Severity.Error
     let UnknownUnit = code 291 "Unknown unit" Severity.Error
     let NegativePowerOfFraction = code 292 "Negative power of a type whose fraction is another" Severity.Error
+    let StorageOnlyInResult = code 293 "Dimension's storage that no parameter fixes" Severity.Error
+    let ConstrainedDimensionStorage = code 294 "Storage written for a constrained dimension" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -266,7 +268,7 @@ module DiagnosticCodes =
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar; UnitsNotChecked
           DimensionWithoutBaseUnit; MisplacedBaseUnit; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
-          NegativePowerOfFraction
+          NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

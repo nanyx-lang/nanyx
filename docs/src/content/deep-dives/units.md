@@ -5,8 +5,8 @@ order: 22
 ---
 
 [Units and dimensions](../work-in-progress/units-and-dimensions) in Work in progress has the design. This page says what
-the compiler does with it today: it reads all of it, and checks the declarations of dimensions and units, but it does
-not type a number with a unit yet.
+the compiler does with it today: it reads all of it, checks the declarations of dimensions and units, and reads
+dimensions in types, but it does not type a number with a unit yet.
 
 # Reading
 
@@ -20,8 +20,19 @@ start of a top-level item with a name after them, as `UnitSyntax` says, and are 
 
 A dimension is registered as the private nominal type it is (`Units.withDimensionsAsTypes`): `dimension Time` as
 `type Time(a) = private a`, generic in the number that stores it, and `dimension Bytes(int)` as `type Bytes = private
-int`. Its `TypeDefInfo` is marked `IsDimension`. Being a type, it is written in annotations, exported, imported, aliased
-and selected as any type is, and its type definition goes to the backend, which erases it as it does any nominal type.
+int`. Its `TypeDefInfo` is marked `IsDimension`, so it is exported, imported, aliased and selected as any type is.
+
+A value of a dimension is a measured value, `TyMeasure`: its dimension, a list of base dimensions each with its
+exponent (step 2's `Length/Time` is one of the same kind), and its storage. `Time(int)` in a type is
+`TyMeasure([Time, 1], int)`, `Bytes` is of the storage it is constrained to, and two measured values are of one type when
+their dimensions are one and their storages are. The backend lays one out as its storage.
+
+`DimensionSignatures` reads each def's signature, top-level or local, before a context's associated types are written
+out (see `AssociatedTypes`): a dimension written without its storage, `Time`, is given a storage variable of its own,
+named by the first letters the signature doesn't write, and each storage variable requires `Num`, so
+`def overlap: Time, Time -> bool` is read as `[Num(a), Num(b)] Time(a), Time(b) -> bool`. A storage that is not the type
+of a parameter is [`NYX0293`](../standard-tools/errors#nyx0293), and a storage written for a constrained dimension,
+`Bytes(a)`, is [`NYX0294`](../standard-tools/errors#nyx0294).
 
 # Units
 

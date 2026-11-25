@@ -136,6 +136,11 @@ type TyVarKind =
     /// The scope of the scoped context of this name that a signature writes, shared by every one of that name in it.
     | SignatureScope of context: string
 
+/// A dimension a measured value is of: base dimensions, each with its exponent, sorted by dimension and none with the
+/// exponent 0, so that two equal dimensions are equal lists. A dimension declared with `dimension Time` is `Time` with
+/// the exponent 1; the first step of units of measure writes no other (see `Units`).
+type Dimension = (NominalId * int) list
+
 /// Internal types used during type inference.
 type TyVar =
     { Id: int
@@ -186,14 +191,17 @@ type Ty =
     /// The contexts a type generic in contexts carries, as the last argument of its nominal type (see
     /// `FunctionContexts.carried`). A reader writes them in front of the type, `[FileSystem] Stream(string)`.
     | TyContexts of Ty list
+    /// A measured value: a number of the storage type with a dimension, `Time(int)`, which is its storage at run time,
+    /// measured in the dimension's base unit (see `Units`).
+    | TyMeasure of Dimension * storage: Ty
 
 /// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
 /// treats differently, and hands the others to `Ty.map`, `Ty.fold` or `Ty.exists`.
 module Ty =
     /// The types `ty` is made of, one level down: a nominal's or an alias's arguments then what it stands for, a function's input, result and contexts, a record's fields in order of their names, an open record's fields
     /// then its row as a variable, a tag's payload, an applied type's arguments, a union's members, the contexts a type
-    /// carries, a closed recursive definition then its arguments, and the arguments of a reference to the alias inside
-    /// one.
+    /// carries, a closed recursive definition then its arguments, the arguments of a reference to the alias inside
+    /// one, and a measured value's storage.
     let children (ty: Ty) : Ty list =
         match ty with
         | TyVar _
@@ -211,6 +219,7 @@ module Ty =
         | TyUnion args
         | TyContexts args -> args
         | TyScope scope -> [ scope ]
+        | TyMeasure(_, storage) -> [ storage ]
 
     /// `ty` with `f` applied to each of the types it is made of, one level down (see `children`). An open record's row
     /// is kept as it is.
@@ -231,12 +240,29 @@ module Ty =
         | TyUnion items -> TyUnion(List.map f items)
         | TyScope scope -> TyScope(f scope)
         | TyContexts contexts -> TyContexts(List.map f contexts)
+        | TyMeasure(dimension, storage) -> TyMeasure(dimension, f storage)
 
     /// `f` folded over the types `ty` is made of, one level down, in the order `children` gives them.
     let fold (f: 'State -> Ty -> 'State) (state: 'State) (ty: Ty) : 'State = children ty |> List.fold f state
 
     /// Whether `predicate` holds for one of the types `ty` is made of, one level down.
     let exists (predicate: Ty -> bool) (ty: Ty) : bool = children ty |> List.exists predicate
+
+module Dimension =
+    /// The dimension `id` declares, alone.
+    let ofBase (id: NominalId) : Dimension = [ id, 1 ]
+
+    /// `dimension` as it is written: `Time`, or a product and quotient of dimensions, `Length/Time^2`.
+    let text (dimension: Dimension) : string =
+        let part (id: NominalId, exponent: int) = if abs exponent = 1 then id.Name else $"{id.Name}^{abs exponent}"
+        let above = dimension |> List.filter (fun (_, exponent) -> exponent > 0) |> List.map part
+        let below = dimension |> List.filter (fun (_, exponent) -> exponent < 0) |> List.map part
+        let product parts = String.concat " * " parts
+        match above, below with
+        | [], [] -> "1"
+        | _, [] -> product above
+        | [], _ -> $"1/{product below}"
+        | _ -> $"{product above}/{product below}"
 
 /// A simple typed expression placeholder for future expansion. `Arguments` are a call's arguments (a pipe's
 /// include the piped value first), so a lambda passed to a call keeps its inferred type.
