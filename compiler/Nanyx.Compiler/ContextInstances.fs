@@ -646,6 +646,8 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         | Some literalsSettled -> contextArgTysAtCall literalsSettled before signature scheme.Type calleeTy args
                         | None -> argTys, argTysAsRead, read, current
                     shared.Value <- read
+                    // A dimension's `Add` and `Sub` are its storage's (see `Units.contexts`).
+                    let argTys, argTysAsRead = Units.storageArguments current ctxName argTys, Units.storageArguments current ctxName argTysAsRead
                     let settled = choosingArguments current ctxName argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)
                     let current = recordAssociatedArguments current call.Id ctxName args argTysAsRead
                     // A well-known context of a type with no member attached is the compiler's own (see

@@ -120,6 +120,8 @@ module internal ArithmeticOperators =
     type private LiteralReading =
         /// The member of the context the function requires that it is written as.
         | AsMember of Expression
+        /// The member a number with a unit is written as, its number of base units, of the dimension it is a value of.
+        | AsMeasured of Expression * Dimension
         /// The error at the literal: it cannot be of the type it is used at.
         | Wrong of Diagnostic
 
@@ -158,6 +160,43 @@ module internal ArithmeticOperators =
             | _ -> None
         | _ -> None
 
+    /// What the number with a unit `literal`, `number unitName`, is beside a measured value of the generic storage
+    /// `storage`: its number of base units, as `literalReading` reads a plain literal beside a value of a type variable,
+    /// `fromInt(500000000)` for `500ms`, or `zero`. A fraction of a base unit is no number of a storage that may be an
+    /// integer type.
+    let private measuredReading (env: TypeEnv) (state: InferState) (literal: Expression) (number: WrittenNumber) (unitName: Identifier) (storage: Ty) : LiteralReading option =
+        let bound (name: Identifier) = (TypeEnv.tryFind name env).IsSome
+        let isLiteralVar (v: TyVar) = state.UnsettledLiterals |> List.exists (fun other -> resolveSoFar state other.Type = TyVar v)
+        match Unifier.unalias (resolveSoFar state storage), state.ContextScope, state.Units |> Map.tryFind unitName with
+        | TyVar v, DefScope(_, false), Some info when bound zero && not (isLiteralVar v) ->
+            let value = Rational.multiply (Rational.ofWritten number) info.Scale
+            let dimension = Dimension.ofBase info.Dimension
+            if not (Rational.isWhole value) then
+                let written = $"{WrittenNumber.text number}{unitName}"
+                Some (Wrong (Diagnostics.at DiagnosticCodes.TypeMismatch literal.Span
+                                 $"'{written}' is {Rational.text value} of its base unit, which no number of '{Unifier.tyToDisplayString Ascii (TyVar v)}' may be, as an integer type can't: write a whole number of the base unit"))
+            elif value.Numerator.IsZero then Some (AsMeasured({ literal with Kind = IdentifierExpr zero }, dimension))
+            elif bound fromInt then
+                Some (AsMeasured({ literal with Kind = FunctionCall(fromInt, None, [ Expression.at literal.Span (LiteralExpr(IntLit value.Numerator)) ]) }, dimension))
+            else None
+        | _ -> None
+
+    /// What the literal `operand` is beside a value of the type `otherTy`, an operand of the operator `op`: beside a
+    /// measured value, a number with a unit is read by `measuredReading`, and a plain literal that scales it by
+    /// `literalReading` as beside its storage; any other as `literalReading` reads it.
+    let private readingBeside (env: TypeEnv) (state: InferState) (op: string) (operand: Expression) (otherTy: Ty) : LiteralReading option =
+        match operand.Kind, Unifier.unalias (resolveSoFar state otherTy) with
+        | LiteralExpr(UnitLit(number, unitName)), TyMeasure(_, storage) -> measuredReading env state operand number unitName storage
+        | LiteralExpr(UnitLit _), _ -> None
+        | LiteralExpr _, TyMeasure(_, storage) when List.contains op [ "*"; "/"; "//" ] -> literalReading env state operand storage
+        | _ -> literalReading env state operand otherTy
+
+    /// `state` without the number literal `literal` is among those to settle and check: it is read as another
+    /// expression.
+    let private withoutLiteral (literal: Expression) (state: InferState) =
+        let other (recorded: NumericLiteral) = recorded.Node <> Some literal.Id
+        { state with NumericLiterals = List.filter other state.NumericLiterals; UnsettledLiterals = List.filter other state.UnsettledLiterals }
+
     /// The operands `left` and `right` of `expr`, an arithmetic operator, a comparison, `==` or `!=`, with a literal
     /// among them that is not the literal it would be elsewhere (see `literalReading`) inferred again as the member it
     /// is written as, by `infer`, and recorded in `ReadAs` to be written as it. A literal that cannot be of the type it
@@ -171,12 +210,21 @@ module internal ArithmeticOperators =
         (right: TypedExpr)
         : Result<TypedExpr * TypedExpr * InferState, Diagnostic list> =
         let reread (operand: TypedExpr) (other: TypedExpr) (state: InferState) =
-            match expr.Kind, literalReading env state operand.Expr other.Type with
-            | BinaryOp(op, _, _, _), Some (AsMember asMember) when readsLiterals op ->
+            let op = match expr.Kind with BinaryOp(op, _, _, _) -> op | _ -> ""
+            match readsLiterals op, readingBeside env state op operand.Expr other.Type with
+            | true, Some (AsMember asMember) ->
                 infer state asMember
                 |> Result.map (fun (typed, next) -> typed, { next with ReadAs = next.ReadAs |> Map.add asMember.Id asMember })
-            | BinaryOp(op, _, _, _), Some (Wrong error) when readsLiterals op ->
-                Ok ({ operand with Type = other.Type }, { state with FailedExprs = (operand.Expr.Id, [ error ]) :: state.FailedExprs })
+            | true, Some (AsMeasured(asMember, dimension)) ->
+                infer state asMember
+                |> Result.map (fun (typed, next) ->
+                    let measured = TyMeasure(dimension, typed.Type)
+                    { typed with Type = measured },
+                    { withoutLiteral operand.Expr next with
+                        ReadAs = next.ReadAs |> Map.add asMember.Id asMember
+                        ExprTypes = next.ExprTypes |> Map.add asMember.Id measured })
+            | true, Some (Wrong error) ->
+                Ok ({ operand with Type = other.Type }, { withoutLiteral operand.Expr state with FailedExprs = (operand.Expr.Id, [ error ]) :: state.FailedExprs })
             | _ -> Ok (operand, state)
         reread left right state
         |> Result.bind (fun (left, next) -> reread right left next |> Result.map (fun (right, next) -> left, right, next))

@@ -120,7 +120,7 @@ module internal OperatorCalls =
     /// `expr`, `-x` on an operand of the type `operandTy`: a call to the `negate` of that type or of the function's
     /// `Sub` (see `definition`), or else the negation of a built-in number. `numberTy` is the number that negation is
     /// of, `float` or `int`, as far as the operand's type is known.
-    let inferNegation
+    let rec inferNegation
         (instanceMember: Identifier -> Ty -> (TypeExpr * TypeScheme) option)
         (attached: Identifier -> Identifier option)
         (env: TypeEnv)
@@ -129,6 +129,12 @@ module internal OperatorCalls =
         (operandTy: Ty)
         (numberTy: Ty)
         : Result<Ty * InferState, Diagnostic list> =
+        match Unifier.unalias (resolveSoFar state operandTy) with
+        // A measured value is negated as its storage is, and keeps its dimension (see `MeasuredArithmetic`).
+        | TyMeasure(dimension, storage) ->
+            inferNegation instanceMember attached env state expr storage storage
+            |> Result.map (fun (negated, next) -> TyMeasure(dimension, negated), next)
+        | _ ->
         match definition instanceMember attached env state expr operandTy operandTy with
         | Some (callee, scheme, instance) -> Ok (infer state expr callee scheme instance operandTy)
         | None ->

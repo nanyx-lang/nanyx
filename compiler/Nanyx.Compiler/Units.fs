@@ -42,6 +42,20 @@ module internal Units =
         |> Option.filter (fun info -> info.Parameters.IsEmpty)
         |> Option.map _.Underlying
 
+    /// The prelude's contexts every dimension has an instance of: its storage's, since a measured value is its storage
+    /// at run time. It has no `Num`: `Num`'s `*` takes two values of one type, and a `Time` times a `Time` is no `Time`.
+    let contexts = set [ "Add"; "Sub" ]
+
+    /// `argTys`, the arguments of the context `ctxName` that a call finds an instance of, with a measured value read as
+    /// its storage where the context is one every dimension has (see `contexts`).
+    let storageArguments (state: InferState) (ctxName: Identifier) (argTys: Ty list) : Ty list =
+        match argTys with
+        | [ ty ] when contexts.Contains ctxName ->
+            match Unifier.unalias (resolveSoFar state ty) with
+            | TyMeasure(_, storage) -> [ storage ]
+            | _ -> argTys
+        | _ -> argTys
+
     /// The parameter a dimension that is not constrained is generic in: the number that stores it.
     let private storageParameter = "a"
 

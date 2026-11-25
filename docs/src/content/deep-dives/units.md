@@ -6,7 +6,8 @@ order: 22
 
 [Units and dimensions](../work-in-progress/units-and-dimensions) in Work in progress has the design. This page says what
 the compiler does with it today: it reads all of it, checks the declarations of dimensions and units, reads dimensions
-in types, and types numbers with units, but it does not type arithmetic on measured values yet.
+in types, types numbers with units, and types arithmetic on measured values, of one dimension each: derived dimensions,
+`Length/Time`, are a later step.
 
 # Reading
 
@@ -74,5 +75,22 @@ must fit the storage, as a plain literal must. A plain literal where a measured 
 with no unit is never a measured value. `dbg` writes a measured value as its dimension around its number of base units,
 `Time(500000000)`.
 
-A number with a unit beside a value of a generic storage, `t + 5ms` in a `[Num(a)] Time(a)` function, is read as `fromInt`
-of its base units as a plain literal is, with the arithmetic on measured values (#2799).
+# Arithmetic
+
+`MeasuredArithmetic.read` types an arithmetic operator with a measured operand as the operator on the storages, which is
+what it is at run time, and gives the result its dimension as the Arithmetic table on the design page says: `Infer`
+types the operator on operands of the storages' types, through the storage's own `+` (built in for a number type, the
+instance's member for a generic storage), and wraps the result. So `t / 2` on a `Time(a)` is a `Time` of what `/`
+gives on an `a`, its `fraction`, and `t / u` that `fraction` itself; the backend compiles the storage's operator on the
+measured values, which are their storages. Prefix `-` is read the same way (`OperatorCalls.inferNegation`). Two
+dimensions, a number with no unit beside a measured value in a sum, a difference or a remainder, and a product,
+quotient or power that would be of a derived dimension are errors that say so.
+
+Beside a value of a generic storage, a number with a unit is its number of base units as the storage's `fromInt`, or
+`zero`, and a plain number that scales a measured value is read as beside its storage
+(`ArithmeticOperators.readLiterals`), so `t + 5ms` and `t * 2` hold in a `[Num(a)] Time(a)` function.
+
+Every dimension has `Add` and `Sub`, `Units.contexts`, and a call finds a dimension's instance of them at its storage
+(`Units.storageArguments`), so `[Add(a)] a, a -> a` sums times and `zero` is the zero of a dimension. It has no `Num`.
+Equality and ordering compare a measured value as its storage (see `WellKnownContexts`); at a generic storage they
+need the storage's `Eq` or `Ord`, which a signature writes.
