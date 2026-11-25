@@ -108,6 +108,22 @@ def int.zero: int
 
 The `int` that adds nothing.
 
+## `int.maxValue`
+
+```nanyx fragment
+def int.maxValue: int
+```
+
+The largest `int`, `9223372036854775807` (`2 ** 63 - 1`). Arithmetic that goes past it stops the program.
+
+## `int.minValue`
+
+```nanyx fragment
+def int.minValue: int
+```
+
+The smallest `int`, `-9223372036854775808` (`-(2 ** 63)`). Arithmetic that goes below it stops the program.
+
 ## `` int.`+` ``
 
 ```nanyx fragment

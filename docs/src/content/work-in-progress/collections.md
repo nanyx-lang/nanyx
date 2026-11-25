@@ -60,30 +60,30 @@ updated as [the work](#the-work) lands:
 | | `list` | `Array` | `Slice` | `seq` | `set` | `map` | `MList` | `MArray` | `MSlice` | `MStack` | `Stack` | `Queue` | `Trie` |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `map` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – | – | – | ? | ? | ? |
-| `filter` | ✓ | **+** | ✓ | ✓ | ✓ | ✓ | – | – | – | – | ? | ? | ? |
-| `filterMap` | ✓ | **+** | ✓ | ✓ | ✓ | ✓ | – | – | – | – | ? | ? | ? |
+| `filter` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – | – | – | ? | ? | ? |
+| `filterMap` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | – | – | – | – | ? | ? | ? |
 | `fold` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `select` | ✓ | **+** | ✓ | ✓ | ✓ | ? | – | – | – | – | ? | ? | ? |
-| `selectOne` | ✓ | **+** | ✓ | ✓ | ? | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `find` | ✓ | **+** | ✓ | ✓ | ? | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `findIndex` | ✓ | **+** | ✓ | ✓ | – | – | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `any` | ✓ | **+** | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `all` | ✓ | **+** | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | **+** | ? | ? | ? |
-| `contains` | ✓ | **+** | ✓ | ✓ | ✓ | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
+| `select` | ✓ | ✓ | ✓ | ✓ | ✓ | ? | – | – | – | – | ? | ? | ? |
+| `selectOne` | ✓ | ✓ | ✓ | ✓ | ? | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
+| `find` | ✓ | ✓ | ✓ | ✓ | ? | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
+| `findIndex` | ✓ | ✓ | ✓ | ✓ | – | – | **+** | **+** | **+** | **+** | ? | ? | ? |
+| `any` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | **+** | ? | ? | ? |
+| `all` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | **+** | ? | ? | ? |
+| `contains` | ✓ | ✓ | ✓ | ✓ | ✓ | ? | **+** | **+** | **+** | **+** | ? | ? | ? |
 | `length` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `isEmpty` | ✓ | **+** | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | ✓ | ✓ | ✓ | ✓ |
+| `isEmpty` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **+** | **+** | **+** | ✓ | ✓ | ✓ | ✓ |
 | `toList` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `fromList` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **+** | ✓ | ✓ | ✓ | ✓ |
 | `fromArray` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | **+** | ✓ | ✓ | ✓ | ✓ |
 | `at` | ✓ | ✓ | ✓ | ✓ | – | ? | ✓ | ✓ | ✓ | ? | ? | ? | ? |
-| `reverse` | ✓ | **+** | ✓ | – | – | – | **+** | **+** | ✓ | **+** | ? | ? | ? |
-| `sort` | ✓ | **+** | ✓ | – | – | – | **+** | ✓ | ✓ | **+** | ? | ? | ? |
-| `sortBy` | ✓ | **+** | ✓ | – | – | – | **+** | ✓ | ✓ | **+** | ? | ? | ? |
-| `sortWith` | ✓ | **+** | ✓ | – | – | – | **+** | ✓ | ✓ | **+** | ? | ? | ? |
-| `take` | ✓ | **+** | ✓ | ✓ | – | – | – | – | – | – | ? | ? | ? |
-| `skip` | ✓ | **+** | ✓ | ✓ | – | – | – | – | – | – | ? | ? | ? |
-| `zip` | ✓ | **+** | ✓ | ✓ | – | – | – | – | – | – | ? | ? | ? |
-| `scan` | ✓ | **+** | ✓ | ✓ | – | – | – | – | – | – | ? | ? | ? |
+| `reverse` | ✓ | ✓ | ✓ | – | – | – | **+** | **+** | ✓ | **+** | ? | ? | ? |
+| `sort` | ✓ | ✓ | ✓ | – | – | – | **+** | ✓ | ✓ | **+** | ? | ? | ? |
+| `sortBy` | ✓ | ✓ | ✓ | – | – | – | **+** | ✓ | ✓ | **+** | ? | ? | ? |
+| `sortWith` | ✓ | ✓ | ✓ | – | – | – | **+** | ✓ | ✓ | **+** | ? | ? | ? |
+| `take` | ✓ | ✓ | ✓ | ✓ | – | – | – | – | – | – | ? | ? | ? |
+| `skip` | ✓ | ✓ | ✓ | ✓ | – | – | – | – | – | – | ? | ? | ? |
+| `zip` | ✓ | ✓ | ✓ | ✓ | – | – | – | – | – | – | ? | ? | ? |
+| `scan` | ✓ | ✓ | ✓ | ✓ | – | – | – | – | – | – | ? | ? | ? |
 | `fill` | – | – | – | – | – | – | **+** | **+** | ✓ | **+** | – | – | – |
 
 The `Trie` column stands for `StringTrie` too, which has the same functions. The table leaves out what isn't in the core set, such as `list`'s
@@ -95,7 +95,7 @@ One issue per type, or per group of functions:
 
 | Issue | What | Stage |
 |---|---|---|
-| [#2187](https://github.com/nanyx-lang/nanyx/issues/2187) | `Array`: the core and ordered functions it is missing | Ready |
+| [#2187](https://github.com/nanyx-lang/nanyx/issues/2187) | `Array`: the core and ordered functions it is missing | Done |
 | [#2188](https://github.com/nanyx-lang/nanyx/issues/2188) | `Array` functional but in place: `map`, `filter`, `reverse` and the sorts reuse an exclusive array's block | Ready, after #2187 |
 | [#2189](https://github.com/nanyx-lang/nanyx/issues/2189) | `Slice`: the core and ordered functions it is missing, and `ofArray` renamed `fromArray` | Done |
 | [#2192](https://github.com/nanyx-lang/nanyx/issues/2192) | `MList`, `MArray`, `MStack` and `MSlice`: the read-only core functions, and in-place `sort`, `reverse` and `fill` | Ready |

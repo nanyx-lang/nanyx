@@ -355,3 +355,23 @@ let ``Prepare gives the name's own part`` () =
     match Rename.prepare Rename.Module "" source result offset with
     | Some (Ok target) -> Assert.Equal(("shout", "shout"), (target.Name, source.Substring(target.Span.Start, target.Span.End - target.Span.Start)))
     | other -> failwithf "expected a target, got %A" other
+
+[<Fact>]
+let ``A def that starts tasks and calls itself last is renamed at its call`` () =
+    // The call is of the def that runs its body in its caller's scope (see `TaskScopes`), which is not written.
+    Assert.Equal(
+        normalized
+            """import nanyx/async as (Async, Task)
+
+def loop = { n, acc ->
+  if n == 0 then acc else loop(n - 1, acc + await(start! n))
+}
+""",
+        renamedTo
+            "loop"
+            """import nanyx/async as (Async, Task)
+
+def wo$$rk = { n, acc ->
+  if n == 0 then acc else work(n - 1, acc + await(start! n))
+}
+""")

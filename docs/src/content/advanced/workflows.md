@@ -296,7 +296,7 @@ def total: list(string) -> #some(int) | #empty = { items ->
 }
 ```
 
-The `for` member of the builder's context runs such a loop. It takes the list, the body and the rest of the block. The body takes an item and the rest of the loop, which it calls to go on to the next item once it has finished with this one. A `for` loop statement like the one above becomes, roughly:
+The `for` member of the builder's context runs such a loop. It takes the list, the body and the rest of the block. A loop over a map or a set is given the list `map.toList` or `set.toList` makes of it, so a builder's `for` takes only lists. The body takes an item and the rest of the loop, which it calls to go on to the next item once it has finished with this one. A `for` loop statement like the one above becomes, roughly:
 
 ```nanyx fragment
 for(items, { item, next -> <the body, then next()> }, { <the rest of the block> })
@@ -304,16 +304,16 @@ for(items, { item, next -> <the body, then next()> }, { <the rest of the block> 
 
 So the builder decides how the iterations combine. `proc`'s `for` goes through the items in order and stops at the first failure or `return`, since a body that ends that way never calls `next`. Another builder could collect every failure, or run the iterations at the same time. A loop whose body uses no keyword runs as a loop, and needs no `for`. One that does, in a builder whose context has no `for`, is a compile error, which says to handle the value with a `match` in the body or give the context a `for`.
 
-For now the loop must be a statement of its own in the block, and walk one list.
+For now the loop must be a statement of its own in the block, and walk one list, map or set.
 
-A loop over a long list is stack-safe when every step is a [tail call](../tour/functions#tail-recursion): the body's call of the rest of the loop is its last, so the builder's `for` and the members the body uses have to call what they are given last too. `proc`'s do, so a `proc` loop runs in constant stack however many items it walks. A member that does something after its continuation returns, as `defer` does, makes each step keep a stack frame.
+For now a builder's `for` loop keeps a stack frame for each item it walks, so a loop over a long list, of some thousands of items, runs out of stack. That holds for `proc`'s too, though `proc`'s `for` and the body's call of the rest of the loop are written as [tail calls](../tour/functions#tail-recursion): the body and the rest of the loop are passed to a `for` that is generic in its items and its result, and the compiler converts each call's result back to the loop's own types after it returns, so no step's call is the last thing it does ([#2683](https://github.com/nanyx-lang/nanyx/issues/2683)). A loop whose body uses no keyword runs as a plain loop, in constant stack, so for a long list handle the value with a `match` in the body. A member that does something after its continuation returns, as `defer` does, makes each step keep a frame too, and always will.
 
 ## Where a keyword can't be
 
 A keyword whose continuation cannot be the rest of the block is an error:
 
 - **Inside a lambda.** A lambda runs when it is called, not where it is written. This includes a lambda passed to a function, as in `list.map(xs, { x -> try f(x) })`. A builder block of its own inside the lambda, such as `{ x -> proc { ... } }`, is fine.
-- **In the body of a `for` loop that isn't a statement of its own, or that walks several collections.** Make the loop a statement of its own over one list, or handle the value with a `match` in the body.
+- **In the body of a `for` loop that isn't a statement of its own, or that walks several collections.** Make the loop a statement of its own over one list, map or set, or handle the value with a `match` in the body.
 - **In a `while` loop.** Its condition and body run again each time round. Handle the value with a `match` in the loop instead.
 - **In a part of an expression that may not run.** That means the right of `and` or `or`, as in `ok or (if c then try f() else false)`, or a branch of an `if` or an arm of a `match` that is itself in such a part. Make the `if` or `match` a statement of its own.
 

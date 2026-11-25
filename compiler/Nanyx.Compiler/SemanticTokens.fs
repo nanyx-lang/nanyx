@@ -218,7 +218,7 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
             expressions
             |> List.collect (fun expr ->
                 let referenced =
-                    match typed.References |> Map.tryFind expr.Id |> Option.bind typed.Symbols.TryFind, Definition.nameSpan expr with
+                    match WrittenReferences.symbolOf typed expr.Id, Definition.nameSpan expr with
                     | Some symbol, Some span when not (ReservedNames.isHidden symbol) ->
                         match expr.Kind with
                         | BinaryOp _ -> [ { Span = span; Type = TokenType.Operator; Modifiers = (if isLibrary symbol then [ TokenModifier.DefaultLibrary ] else []) } ]
@@ -227,7 +227,7 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
                 // A name brought in by an import is written under its alias, `m` in `m.foo`.
                 let alias =
                     match typed.ImportReferences |> Map.tryFind expr.Id |> Option.bind typed.Symbols.TryFind with
-                    | Some import when typed.References |> Map.tryFind expr.Id <> Some import.Id && (textOf expr.Span).StartsWith(import.Name + ".", System.StringComparison.Ordinal) ->
+                    | Some import when WrittenReferences.ofModule typed |> Map.tryFind expr.Id <> Some import.Id && (textOf expr.Span).StartsWith(import.Name + ".", System.StringComparison.Ordinal) ->
                         [ { Span = firstChars import.Name.Length expr.Span; Type = TokenType.Namespace; Modifiers = [] } ]
                     | _ -> []
                 let own =
@@ -260,7 +260,7 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
                         | _ -> None)
                     |> List.map (fun span -> { Span = span; Type = TokenType.Property; Modifiers = [ TokenModifier.Declaration ] })
                 | _ ->
-                    match typed.References |> Map.tryFind typeExpr.Id |> Option.bind typed.Symbols.TryFind, Definition.typeNameSpan typeExpr with
+                    match WrittenReferences.symbolOf typed typeExpr.Id, Definition.typeNameSpan typeExpr with
                     | Some symbol, Some span -> named symbol span false
                     | _ -> [])
         let patterns =

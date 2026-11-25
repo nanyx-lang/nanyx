@@ -28,7 +28,7 @@ let inModule (file: string) (result: CompileResult) : NominalName list =
             |> Map.ofSeq
         let named (info: TypeDefInfo) (span: SourceSpan) =
             { Span = lastChars (Names.written (Names.ownPart info.Name)).Length span; IsPrivate = info.IsPrivate }
-        let referenced (id: NodeId) = typed.References |> Map.tryFind id
+        let referenced (id: NodeId) = WrittenReferences.ofModule typed |> Map.tryFind id
         // `T.member`, an attached definition of the nominal type `T`, written at `span`: the span of `T`, if it is written.
         let attachedType (symbol: Symbol) (span: SourceSpan) =
             let dot = symbol.Name.LastIndexOf '.'

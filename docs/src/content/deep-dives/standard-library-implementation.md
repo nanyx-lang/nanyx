@@ -141,8 +141,9 @@ A published package's public module, such as `nanyx.json`'s `json`, has a page t
 reference is from in its front matter, `package: nanyx.json 0.1.0` (`StandardLibraryDocs.pinOf`). `stdlib-docs` reads
 that version from the package cache, downloading it from the index first if it isn't there, as a script's
 `::dependency nanyx.json 0.1.0` is, and writes its reference as for a shipped package, after a marker that names the
-package and version (`beginMarkerOf`). A pin that can't be read, a page whose reference is from another package than
-the one it pins, and a pin written wrong are errors. The test reads the version from the tests' index on disk, so it
+package and version (`beginMarkerOf`). A pin that can't be read, a pinned version with a public module that doesn't compile, which
+`stdlib-docs` reports with that module's errors, a page whose reference is from another package than the one it pins,
+and a pin written wrong are errors. The test reads the version from the tests' index on disk, so it
 needs no network (`packagesForTests` in the Wasm tests' `TestHelpers.fs`, from the `.nyxpkg` in their `Packages`
 directory). To show a newer version's reference, change the pin, give the tests' index that version, and write the
 references again.

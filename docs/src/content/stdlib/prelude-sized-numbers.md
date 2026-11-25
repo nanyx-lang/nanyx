@@ -16,6 +16,24 @@ The definitions attached to the [sized number types](../advanced/sized-numbers),
 def I8.zero: I8
 ```
 
+## `I8.maxValue`
+
+```nanyx fragment
+def I8.maxValue: I8
+```
+
+The largest `I8`, `127` (`2 ** 7 - 1`). Arithmetic that goes past it stops the
+program, and `int.toI8` of a number past it gives `#outOfRange`.
+
+## `I8.minValue`
+
+```nanyx fragment
+def I8.minValue: I8
+```
+
+The smallest `I8`, `-128` (`-(2 ** 7)`). Arithmetic that goes below it stops the
+program, and `int.toI8` of a number below it gives `#outOfRange`.
+
 ## `` I8.`+` ``
 
 ```nanyx fragment
@@ -87,6 +105,24 @@ def I8.toString: I8 -> string
 ```nanyx fragment
 def I16.zero: I16
 ```
+
+## `I16.maxValue`
+
+```nanyx fragment
+def I16.maxValue: I16
+```
+
+The largest `I16`, `32767` (`2 ** 15 - 1`). Arithmetic that goes past it stops the
+program, and `int.toI16` of a number past it gives `#outOfRange`.
+
+## `I16.minValue`
+
+```nanyx fragment
+def I16.minValue: I16
+```
+
+The smallest `I16`, `-32768` (`-(2 ** 15)`). Arithmetic that goes below it stops the
+program, and `int.toI16` of a number below it gives `#outOfRange`.
 
 ## `` I16.`+` ``
 
@@ -160,6 +196,24 @@ def I16.toString: I16 -> string
 def I32.zero: I32
 ```
 
+## `I32.maxValue`
+
+```nanyx fragment
+def I32.maxValue: I32
+```
+
+The largest `I32`, `2147483647` (`2 ** 31 - 1`). Arithmetic that goes past it stops the
+program, and `int.toI32` of a number past it gives `#outOfRange`.
+
+## `I32.minValue`
+
+```nanyx fragment
+def I32.minValue: I32
+```
+
+The smallest `I32`, `-2147483648` (`-(2 ** 31)`). Arithmetic that goes below it stops the
+program, and `int.toI32` of a number below it gives `#outOfRange`.
+
 ## `` I32.`+` ``
 
 ```nanyx fragment
@@ -231,6 +285,24 @@ def I32.toString: I32 -> string
 ```nanyx fragment
 def U8.zero: U8
 ```
+
+## `U8.maxValue`
+
+```nanyx fragment
+def U8.maxValue: U8
+```
+
+The largest `U8`, `255` (`2 ** 8 - 1`). Arithmetic that goes past it stops the
+program, and `int.toU8` of a number past it gives `#outOfRange`.
+
+## `U8.minValue`
+
+```nanyx fragment
+def U8.minValue: U8
+```
+
+The smallest `U8`, `0`: it has no sign. Arithmetic that goes below it stops the program, and
+`int.toU8` of a negative number gives `#outOfRange`.
 
 ## `` U8.`+` ``
 
@@ -304,6 +376,24 @@ def U8.toString: U8 -> string
 def U16.zero: U16
 ```
 
+## `U16.maxValue`
+
+```nanyx fragment
+def U16.maxValue: U16
+```
+
+The largest `U16`, `65535` (`2 ** 16 - 1`). Arithmetic that goes past it stops the
+program, and `int.toU16` of a number past it gives `#outOfRange`.
+
+## `U16.minValue`
+
+```nanyx fragment
+def U16.minValue: U16
+```
+
+The smallest `U16`, `0`: it has no sign. Arithmetic that goes below it stops the program, and
+`int.toU16` of a negative number gives `#outOfRange`.
+
 ## `` U16.`+` ``
 
 ```nanyx fragment
@@ -376,6 +466,24 @@ def U16.toString: U16 -> string
 def U32.zero: U32
 ```
 
+## `U32.maxValue`
+
+```nanyx fragment
+def U32.maxValue: U32
+```
+
+The largest `U32`, `4294967295` (`2 ** 32 - 1`). Arithmetic that goes past it stops the
+program, and `int.toU32` of a number past it gives `#outOfRange`.
+
+## `U32.minValue`
+
+```nanyx fragment
+def U32.minValue: U32
+```
+
+The smallest `U32`, `0`: it has no sign. Arithmetic that goes below it stops the program, and
+`int.toU32` of a negative number gives `#outOfRange`.
+
 ## `` U32.`+` ``
 
 ```nanyx fragment
@@ -447,6 +555,24 @@ def U32.toString: U32 -> string
 ```nanyx fragment
 def U64.zero: U64
 ```
+
+## `U64.maxValue`
+
+```nanyx fragment
+def U64.maxValue: U64
+```
+
+The largest `U64`, `18446744073709551615` (`2 ** 64 - 1`). Arithmetic that goes past it stops the
+program. Every `int` of zero or more is below it.
+
+## `U64.minValue`
+
+```nanyx fragment
+def U64.minValue: U64
+```
+
+The smallest `U64`, `0`: it has no sign. Arithmetic that goes below it stops the program, and
+`int.toU64` of a negative number gives `#outOfRange`.
 
 ## `` U64.`+` ``
 

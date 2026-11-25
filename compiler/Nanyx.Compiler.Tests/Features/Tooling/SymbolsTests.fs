@@ -365,3 +365,31 @@ let ``Hovering an imported type's name shows its definition`` () =
     Assert.Equal(
         Some ("type Sequence(a) = [k] protected (next: ([k] () -> #next(a, seq(a)) | #done))", "Sequence"),
         typeDefinitionHover "" (Compiler.compile source) source (offsetOf source "Sequence" 0 1))
+
+/// A def that starts tasks and calls itself last, as `work`: annotated, and with its type inferred.
+let private loops =
+    [ "import nanyx/async as (Async, Task)\n\ndef work: [Async] int, int -> int = { n, acc ->\n  if n == 0 then acc else work(n - 1, acc + await(start! n))\n}\n"
+      "import nanyx/async as (Async, Task)\n\ndef work = { n, acc ->\n  if n == 0 then acc else work(n - 1, acc + await(start! n))\n}\n" ]
+
+[<Fact>]
+let ``A def that starts tasks and calls itself last goes to itself from its call, and the call is a reference to it`` () =
+    // The call is of the def that runs its body in its caller's scope (see `TaskScopes`), which is not written.
+    for source in loops do
+        let result = Compiler.compile source
+        Assert.Equal(Some (TopLevelValue, "", offsetOf source "work" 0 0), definitionOf result (offsetOf source "work(n" 0 0))
+        Assert.Equal<(string * int) list>([ "work", offsetOf source "work(n" 0 0 ], referencesAt source (offsetOf source "work" 0 0))
+
+[<Fact>]
+let ``A def that starts tasks and is only called last by another has that call among its references`` () =
+    let source =
+        normalized """import nanyx/async as (Async, Task)
+
+def ping = { n, acc ->
+  if n == 0 then acc else pong(n - 1, acc + await(start! n))
+}
+
+def pong = { n, acc ->
+  if n == 0 then acc else ping(n - 1, acc + await(start! 2 * n))
+}
+"""
+    Assert.Equal<(string * int) list>([ "pong", offsetOf source "pong(n" 0 0 ], referencesAt source (offsetOf source "pong" 1 0))

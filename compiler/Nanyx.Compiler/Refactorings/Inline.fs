@@ -68,7 +68,7 @@ let private shadowedAt (file: string) (typed: TypedModule) (inside: SourceSpan) 
     exprs
     |> List.collect within
     |> List.tryPick (fun part ->
-        typed.References
+        WrittenReferences.ofModule typed
         |> Map.tryFind part.Id
         |> Option.bind typed.Symbols.TryFind
         |> Option.filter (fun symbol -> not (SourceSpan.contains inside symbol.Declaration) && not (MadeUpNames.isMadeUp symbol.Name))
@@ -80,7 +80,7 @@ let private shadowedAt (file: string) (typed: TypedModule) (inside: SourceSpan) 
 /// The uses of `inlined`'s symbol in `syntax`: the expressions that name it, each once.
 let private usesOf (typed: TypedModule) (syntax: Module) (inlined: Inlined) =
     Hover.allExpressions syntax
-    |> List.filter (fun expr -> not (SourceSpan.isNone expr.Span) && typed.References |> Map.tryFind expr.Id = Some inlined.Symbol.Id)
+    |> List.filter (fun expr -> not (SourceSpan.isNone expr.Span) && WrittenReferences.ofModule typed |> Map.tryFind expr.Id = Some inlined.Symbol.Id)
     |> List.distinctBy (fun expr -> expr.Span.Start, expr.Span.End)
     |> List.sortBy (fun expr -> expr.Span.Start)
 
@@ -90,7 +90,7 @@ let private inlineValue (file: string) (source: string) (typed: TypedModule) (va
     let valueText = SourceSpan.textIn source value.Span
     let readsCell =
         within value
-        |> List.choose (fun part -> typed.References |> Map.tryFind part.Id |> Option.bind typed.Symbols.TryFind)
+        |> List.choose (fun part -> WrittenReferences.symbolOf typed part.Id)
         |> List.tryFind (isCell (cellsIn values))
     match used.Kind, readsCell, shadowedAt file typed value.Span [ value ] used.Span.Start with
     | _, Some cell, _ -> Error $"It reads the cell `{cell.Name}`, which may change before it is used"
@@ -143,7 +143,7 @@ let private inlineCall
     let arguments = match arguments with [ { Kind = UnitExpr } ] when parameters.IsEmpty -> [] | _ -> arguments
     let isNamed (argument: Expression) = match argument.Kind with RecordExpr fields -> fields |> List.exists (function NamedField _ -> true | _ -> false) | _ -> false
     let bodyParts = body |> within
-    let usesOf (symbol: Symbol) = bodyParts |> List.filter (fun part -> typed.References |> Map.tryFind part.Id = Some symbol.Id)
+    let usesOf (symbol: Symbol) = bodyParts |> List.filter (fun part -> WrittenReferences.ofModule typed |> Map.tryFind part.Id = Some symbol.Id)
     if parameters |> List.exists (fun (_, annotation) -> match annotation with CellPassingSyntax.CellParameter _ -> true | _ -> false) then
         Error "It takes a cell"
     elif arguments |> List.exists isNamed then Error "It is called with named arguments"

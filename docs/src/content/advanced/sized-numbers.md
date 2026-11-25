@@ -79,6 +79,19 @@ This holds for every integer type, unsigned ones included: subtracting a larger 
 overflow like any other, not a wrap to 4 billion. A program that needs a negative difference converts to a signed type
 first.
 
+Each integer type names its bounds, `maxValue` and `minValue`, beside its `zero`: `I32.maxValue` is `2147483647`,
+`int.minValue` is `-9223372036854775808` and `U8.minValue` is `0`. A program can check against them before it adds,
+or start a running minimum at `int.maxValue`:
+
+```nanyx
+def fits: I32, I32 -> bool = { a, b ->
+  I32.toInt(a) + I32.toInt(b) <= I32.toInt(I32.maxValue)
+}
+
+println(fits(2_000_000_000, 2_000_000_000))
+-- false
+```
+
 Code that wants arithmetic that wraps on purpose, such as a hash function, asks for it by name: `I32.wrappingAdd`,
 `I32.wrappingSub` and `I32.wrappingMul`, on each integer type. That is the only way to get it, so a wrap is always
 visible in the code:

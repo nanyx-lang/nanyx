@@ -90,7 +90,7 @@ let private referencesIn (typed: TypedModule) (expr: Expression) =
     within expr
     |> List.choose (fun part ->
         match part.Kind with
-        | IdentifierExpr name -> Some (name, typed.References |> Map.tryFind part.Id)
+        | IdentifierExpr name -> Some (name, WrittenReferences.ofModule typed |> Map.tryFind part.Id)
         | _ -> None)
 
 /// Why `expr` can't be moved before `site`, whose text runs from `siteStart`: it uses `try` or `return`, whose meaning
@@ -107,7 +107,7 @@ let private movingRefusal (typed: TypedModule) (outer: Expression list) (siteSta
             | AssignSyntax.Call(({ Kind = IdentifierExpr name } as target), _) when
                 part.Span.End <= expr.Span.Start
                 && siteStart <= part.Span.Start
-                && (typed.References |> Map.tryFind target.Id |> Option.exists reads.Contains) ->
+                && (WrittenReferences.ofModule typed |> Map.tryFind target.Id |> Option.exists reads.Contains) ->
                 Some name
             | _ -> None)
     if usesKeyword then Some "It uses `try` or `return`, whose meaning depends on the block it is written in"

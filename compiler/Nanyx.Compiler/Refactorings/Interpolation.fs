@@ -34,7 +34,7 @@ let private isString (typed: TypedModule) (expr: Expression) =
 /// `ToString` context's member, or a type's attached `toString`, which is its instance's.
 let private toStringOf (typed: TypedModule) (expr: Expression) =
     let callsToString () =
-        typed.References
+        WrittenReferences.ofModule typed
         |> Map.tryFind expr.Id
         |> Option.bind typed.Symbols.TryFind
         |> Option.exists (fun symbol ->

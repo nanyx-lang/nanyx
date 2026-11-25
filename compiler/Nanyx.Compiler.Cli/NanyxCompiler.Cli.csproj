@@ -18,6 +18,13 @@
       (bytecodealliance/wasmtime-dotnet#374). Keep the process off the shadow stack until that is fixed.
     -->
     <CetCompat>false</CetCompat>
+    <!--
+      Collect garbage on every core (server GC). A long chain keeps the heap large for the whole compile, and a
+      workstation collection then takes most of the backend's time: a memory block of 16,000 stores builds in 12.9 s
+      rather than 16.7 s (#2579). On .NET 10 server GC adapts its heaps to the application's size (DATAS), so a small
+      compile and `nanyx lsp` use about as much memory as before.
+    -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>

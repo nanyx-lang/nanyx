@@ -215,6 +215,19 @@ Nothing starts it: like `Console`, the host provides it.
   type, isn't a scope, and is inferred to require `TaskScope` starts a task through another name (`def go =
   Async.start`); `TaskCaptures.unscopedErrors` reports it (`NYX0211`) at its first call whose callee requires
   `TaskScope`, and a script that calls it is then not told its entry point doesn't fit the host's `run`.
+- **A scope def called last joins its caller's scope.** So that a def that starts tasks and calls itself last is a loop,
+  `TaskScopes` makes such a def `f` two: `f`, whose body opens the scope and calls the other in it, and
+  `TaskScopeSyntax.inCallersScope f` (`__inScope_f`), which has `f`'s body and requires its caller's `TaskScope`, as
+  `f`'s type with it added or, for a def that writes no type, as inferred. In the body of a def that is split, a call
+  in tail position of another of the same module or module block calls its `__inScope_` def, so it stays a tail call
+  and its tasks join the caller's. Every scope def that writes a function's type is split; one that writes no type is
+  split only while one that is split calls it last, itself included (`TaskScopes.splitDefs`). `f` keeps the node of
+  the lambda written for it, and so the declaration hover and go to definition find; the `__inScope_` def's lambda is a
+  new node, which `TaskScopes.wrap` declares as `f`'s, by an empty span, and its parameters as `f`'s, so that an
+  unannotated one has a symbol, and is inferred, as `f` is. `TaskCaptures.unscopedErrors` leaves out an `__inScope_` def
+  that writes no type, which requires `TaskScope` on purpose. The linters and the editor's hover, go to definition,
+  references, rename, highlighting and refactorings read a module's references as its source writes them
+  (`WrittenReferences`), where a call of an `__inScope_` def is one of `f`, with `f`'s type at the call.
 - **Tasks share only values.** A function that uses a cell or a reference requires its `memory` block's `Memory`, and
   a task's function must not (`NYX0279`). The check is on types, not names (`TaskWork`): where inference names
   `Async.start` or `Async.race`, the context variables of the functions its type takes are _work variables_; a def

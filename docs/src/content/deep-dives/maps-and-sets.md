@@ -30,16 +30,19 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   `stdlib/nanyx/prelude-maps.nyx`: whoever changes one changes the other. The prelude turns a map into its store and
   back through four intrinsics, `__nanyx_map_of_store`, `__nanyx_map_store`, `__nanyx_set_of_store` and
   `__nanyx_set_store`, which the backend compiles to nothing, and the backend lays a map out as its store.
-- **The store** is a hash trie: `#empty`, the map with no keys; `#bucket(h, entries)`, the entries, each a key and its
-  value, of the keys whose hash is `h`, one or, when hashes collide, more; and `#node(bits, children)`, the keys whose
-  hashes agree on the bits the nodes above read, split by the next five bits of the hash, from its low end, with a bit
-  of `bits` set for each five-bit value some key has and a trie for each in the array `children`, in the order of the
-  values. A set is the store of a map from its elements to `()`. A lookup, an insert or a remove reads one node a level,
+- **The store** is a hash trie: `#empty`, the map with no keys, and `#node(leafBits, leaves, nodeBits, nodes)`, the
+  keys whose hashes agree on the bits the nodes above read, split by the next five bits of the hash, from its low end.
+  `leafBits` has a bit set for each five-bit value whose keys the array `leaves` holds as a *bucket*, and `nodeBits` for
+  each whose keys a node of the array `nodes` holds, each array in the order of the values. A bucket is a list of the
+  entries, each a key and its value, of the keys whose hash is the same: one, or, when hashes collide, more. It doesn't
+  keep the hash, so an insert that meets a bucket of other keys hashes one of them again to tell a collision from two
+  keys to split. A set is the store of a map from its elements to `()`. A lookup, an insert or a remove reads one node a level,
   and a level takes five bits of a 64-bit hash, so it takes time that grows with the log of the size (`findIn`,
   `insertedIn` and `removedFrom` in `prelude-maps.nyx`). An insert makes only the nodes on the key's path new, and
   shares the rest.
-- **One trie for one set of keys.** A node has two children or more, or one that is a node, as inserting two keys whose
-  hashes agree on more bits makes; a node left with one bucket by a remove, or by `map.filter`, is that bucket instead. The
+- **One trie for one set of keys.** The root is a node, or `#empty`. A node below it has two buckets or nodes or more, or
+  one node, as inserting two keys whose hashes agree on more bits makes; a node left with one bucket alone by a remove,
+  or by `map.filter`, is that bucket in the node above instead. The
   keys in a bucket are in the compiler's own order of their structure, which the backend has for every type
   a key can be (`CoreIrOrdering.fs`): tags by their numbers and then their payloads, and a recursive type as what it is
   made of, though neither has an `Ord`, so `<` on them is still an error. So the same keys make the same trie however
@@ -55,12 +58,15 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   does (`CoreIrLowerDbg.fs`), but for a `for` loop, which walks the store's trie itself and hands the body the entries
   its buckets hold, borrowed, making nothing ([#2661](https://github.com/nanyx-lang/nanyx/issues/2661)): the
   backend's `OverStore` loop source (`StoreWalk` in `CoreIr.fs`, its code in `CoreIrEmitStoreWalk.fs`) goes into
-  the trie's nodes a level at a time, keeping the child it took at each level in five bits of one `int`, and goes back
-  up by going down again from the root along it. It reads six words for each entry, where a list's walk reads two, so
-  it takes about two and a half times as long ([#2671](https://github.com/nanyx-lang/nanyx/issues/2671)). A map
-  walked in step with a sequence is walked as the list `toList` gives (`CoreIrLowerLoops.forEachPulling`), and a
-  `for` inside a builder can't walk a map at all yet: the builder's `for` takes a list
-  ([#2672](https://github.com/nanyx-lang/nanyx/issues/2672)). A type's
+  the trie's nodes a level at a time. In each node it takes the run of buckets before the next node straight from
+  `leaves`, by index, then goes into that node, keeping its five-bit value at each level in five bits of one `int`, and
+  goes back up by going down again from the root along it. A bucket of one entry costs three loads, its slot, the
+  entry and the end of the list, where a list's walk reads two, and the walk takes about 1.3 to 1.9 times as long as
+  a list's ([#2671](https://github.com/nanyx-lang/nanyx/issues/2671)). A map
+  walked in step with a sequence is walked as the list `toList` gives (`CoreIrLowerLoops.forEachPulling`). A `for`
+  loop in a builder's block whose body uses a keyword is run by the builder's `for` member, which takes a list, so a
+  map or a set there is copied to the list `toList` gives (`WorkflowMembers.loopOverStore`,
+  [#2672](https://github.com/nanyx-lang/nanyx/issues/2672)), unlike a plain loop's. A type's
   description boxes a map's keys and values in place, and unboxes them again, through the prelude's
   `__mapStoreConverted` (`Maps.convertedStore`), which keeps the store's shape and hashes: nothing hashes or compares
   a boxed key, and a lookup by one is refused when the program compiles, as `==` on a box is.

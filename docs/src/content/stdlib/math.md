@@ -241,7 +241,8 @@ The base-2 logarithm of `x`, the power 2 is raised to to give `x`: exact at a po
 def sin: float -> float
 ```
 
-The sine of `x`, an angle in radians: `sin(pi / 6.0)` is `0.5`. NaN for an infinite `x`.
+The sine of `x`, an angle in radians: `sin(pi / 2.0)` is `1.0`, and `sin(pi / 6.0)` is
+`0.49999999999999994`, not `0.5`, as `pi` is a little below the true pi. NaN for an infinite `x`.
 
 ## `cos`
 
@@ -257,8 +258,9 @@ The cosine of `x`, an angle in radians: `cos(pi)` is `-1.0`. NaN for an infinite
 def tan: float -> float
 ```
 
-The tangent of `x`, an angle in radians, its sine over its cosine: `tan(pi / 4.0)` is `1.0`. NaN
-for an infinite `x`.
+The tangent of `x`, an angle in radians, its sine over its cosine: `tan(0.0)` is `0.0`, and
+`tan(pi / 4.0)` is `0.9999999999999999`, not `1.0`, as `pi` is a little below the true pi. NaN for an
+infinite `x`.
 
 ## `atan`
 

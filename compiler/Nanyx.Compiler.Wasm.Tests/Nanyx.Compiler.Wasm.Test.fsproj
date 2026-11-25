@@ -142,6 +142,8 @@
     <Compile Include="Features\Maps\RunMapTests.fs" />
     <Compile Include="Features\Maps\RunMapEqualityTests.fs" />
     <Compile Include="Features\Maps\RunMapMatchTests.fs" />
+    <Compile Include="Features\Maps\RunMapBuilderLoopTests.fs" />
+    <Compile Include="Features\Maps\MapWalkCostTests.fs" />
     <Compile Include="Features\Loops\RunLoopTests.fs" />
     <Compile Include="Features\Loops\RunSeqLoopTests.fs" />
     <Compile Include="Features\Loops\RunIterableLoopTests.fs" />
@@ -238,6 +240,7 @@
     <Compile Include="Features\StdLib\RunStackSafeTests.fs" />
     <Compile Include="Features\StdLib\RunMathExpTests.fs" />
     <Compile Include="Features\StdLib\RunFloatPowTests.fs" />
+    <Compile Include="Features\StdLib\RunIntegerBoundsTests.fs" />
     <Compile Include="Features\StdLib\RunMathTrigonometryTests.fs" />
     <Compile Include="Features\StdLib\RunMathHyperbolicTests.fs" />
     <Compile Include="Features\StdLib\RunMathSpecialFloatTests.fs" />
@@ -266,6 +269,7 @@
     <Compile Include="Features\StdLib\RunCollectionLengthTests.fs" />
     <Compile Include="Features\StdLib\RunCollectionAtTests.fs" />
     <Compile Include="Features\StdLib\RunSliceCoreTests.fs" />
+    <Compile Include="Features\StdLib\RunArrayCoreTests.fs" />
     <Compile Include="Features\StdLib\RunSetMapQueryTests.fs" />
     <Compile Include="Features\Strings\RunStringTests.fs" />
     <Compile Include="Features\Strings\RunInterpolationTests.fs" />

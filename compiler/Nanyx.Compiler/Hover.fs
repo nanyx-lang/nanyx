@@ -124,7 +124,7 @@ let private declared (symbol: Symbol) (typeWritten: string) =
 /// What hover describes at `offset` in the compiled root module, as `typeAt` finds it: its type there, the symbol of
 /// the name it is, if it is one, and its span.
 let private hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty * Symbol option * SourceSpan) option =
-    let referenced (expr: Expression) = typed.References |> Map.tryFind expr.Id |> Option.bind typed.Symbols.TryFind
+    let referenced (expr: Expression) = WrittenReferences.symbolOf typed expr.Id
     // Only the module's own declarations have types recorded, so no imported one is found here.
     let declarations =
         typed.SymbolTypes
@@ -141,7 +141,9 @@ let private hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty 
                 match calleeSpan expr with
                 // What syntax is desugared to (`__pow` for `**`) is not a name the user wrote: the expression is hovered.
                 | Some nameSpan when contains offset nameSpan && not (referenced expr |> Option.exists ReservedNames.isHidden) ->
-                    typed.CalleeTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, referenced expr, nameSpan, depth, 0)
+                    typed.CalleeTypes
+                    |> Map.tryFind expr.Id
+                    |> Option.map (fun ty -> WrittenReferences.calleeType typed expr.Id ty, referenced expr, nameSpan, depth, 0)
                 | _ -> None
             let name =
                 match expr.Kind with

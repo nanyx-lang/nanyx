@@ -11,22 +11,26 @@
 -- a new map.
 --
 -- A map is held as its store, a `__mapStore(k, v)`: a hash trie, whose shape the compiler defines
--- (`Maps.storeOf`) and every algorithm on which is here. Each key is kept with its hash, `h`:
+-- (`Maps.storeOf`) and every algorithm on which is here:
 --
 --   #empty                     the map with no keys, never part of another trie
---   #bucket(h, entries)        the entries of the keys whose hash is `h`, one or more, each a key
---                              and its value, in the compiler's own order of their keys' structure
---                              (`__compare`)
---   #node(bits, children)      the keys whose hashes agree on the bits the nodes above read, split by
---                              the next five: `bits` has bit `c` set for each five-bit value `c` some
---                              key has there, and `children` a trie for each, in the order of `c`
+--   #node(leafBits, leaves, nodeBits, nodes)
+--                              the keys whose hashes agree on the bits the nodes above read, split by
+--                              the next five: `leafBits` has bit `c` set for each five-bit value `c`
+--                              whose keys `leaves` holds as a bucket, and `nodeBits` for each whose
+--                              keys a node of `nodes` holds, each array in the order of `c`
 --
--- A node at depth `d` reads bits `5d` to `5d + 4` of a hash, from its low end. A node has two
--- children or more, or one that is a node, as inserting two keys whose hashes agree on more bits
--- makes; never one bucket alone, which removing a key collapses into its place. So the
--- same keys make the same trie however they were added and removed, and its walk gives them in one
--- order, that of their hashes read five bits at a time from the low end: unspecified, but the same
--- for equal maps (see docs/src/content/deep-dives/maps-and-sets.md).
+-- A bucket is the entries of the keys whose hashes are the same, one or more, each a key and its
+-- value, in the compiler's own order of their keys' structure (`__compare`). It doesn't keep the
+-- hash: an insert that meets a bucket of other keys hashes one of them again. A node at depth `d`
+-- reads bits `5d` to `5d + 4` of a hash, from its low end, and its two sets of bits share none. The
+-- root is a node, or `#empty`. A node below it has two buckets or nodes or more, or one node, as
+-- inserting two keys whose hashes agree on more bits makes; never one bucket alone, which removing a
+-- key moves up into the node above. So the same keys make the same trie however they were added and
+-- removed, and its walk gives them in one order, that of their hashes read five bits at a time from
+-- the low end: unspecified, but the same for equal maps (see
+-- docs/src/content/deep-dives/maps-and-sets.md). A `for` loop reads a bucket straight from its node's
+-- array (`StoreWalk` in the compiler).
 
 --| The five bits of the hash `h` a node at `shift` reads.
 def chunkOf: int, int -> int = { h, shift ->
@@ -45,7 +49,7 @@ def bitCount: int -> int = { bits ->
   int.bitAnd(halves + int.shiftRightUnsigned(halves, 16), 63)
 }
 
---| Where in a node's children, with `bits` set, the child for the bit `bit` is, or would go.
+--| Where in a node's array, with `bits` set, the element for the bit `bit` is, or would go.
 def slotOf: int, int -> int = { bits, bit ->
   bitCount(int.bitAnd(bits, bit - 1))
 }
@@ -115,166 +119,489 @@ def placedEntry: list((k, v)), k, v, list((k, v)) -> list((k, v)) = {
     | _ -> placedEntry(rest, key, value, [(entryKey, entryValue), ...acc])
 }
 
+--| The node of `leafBits` and its buckets, `leaves`, and `nodeBits` and its nodes, `nodes`.
+def nodeWith
+  : int, array(list((k, v))), int, array(__mapStore(k, v)) -> __mapStore(k, v)
+  = { leafBits, leaves, nodeBits, nodes ->
+    #node(leafBits, leaves, nodeBits, nodes)
+  }
+
+--| The node at `shift` with `entries`, a bucket, alone.
+def bucketNode: list((k, v)), int, int -> __mapStore(k, v) = { entries, h, shift ->
+  nodeWith(
+    int.shiftLeft(1, chunkOf(h, shift))
+    __nanyx_array_of_list([entries])
+    0
+    __nanyx_array_new(0)
+  )
+}
+
+--| The hash of the keys of `entries`, a bucket's, which all have the same one.
+def bucketHash: [Hash(k)] list((k, v)) -> int = {
+  | [] -> 0
+  | [(key, _), ..._] -> hash(key)
+}
+
 --| The value `store` holds for `key`, whose hash is `h`, or `#notFound`, below a node at `shift`.
 def findIn
   : [Eq(k)] __mapStore(k, v), k, int, int -> #some(v) | #notFound
   = { store, key, h, shift ->
     match store
       | #empty -> #notFound
-      | #bucket(bucketHash, entries) -> (if bucketHash == h
-        then findEntry(entries, key)
-        else #notFound)
-      | #node(bits, children) ->
-        def bit = int.shiftLeft(1, chunkOf(h, shift))
-
-        if int.bitAnd(bits, bit) == 0
-          then #notFound
-          else findIn(__nanyx_array_get(children, slotOf(bits, bit)), key, h, shift + 5)
+      | #node(leafBits, leaves, nodeBits, nodes) -> findInNode(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        key
+        h
+        shift
+      )
   }
 
---| The node at `shift` that holds `first`, whose keys' hash is `firstHash`, and `second`, whose keys'
-  hash is `secondHash`, another: a chain of nodes as long as the two hashes agree, then one node
-  with both.
-def joined
-  : __mapStore(k, v), int, __mapStore(k, v), int, int -> __mapStore(k, v)
-  = { first, firstHash, second, secondHash, shift ->
-    def firstChunk = chunkOf(firstHash, shift)
-    def secondChunk = chunkOf(secondHash, shift)
-    def bits = int.bitOr(int.shiftLeft(1, firstChunk), int.shiftLeft(1, secondChunk))
+--| [`findIn`] a node of `leafBits`, `leaves`, `nodeBits` and `nodes`.
+def findInNode
+  : [Eq(k)]
+    int, array(list((k, v))), int, array(__mapStore(k, v)), k, int, int -> #some(v) | #notFound
+  = { leafBits, leaves, nodeBits, nodes, key, h, shift ->
+    def bit = int.shiftLeft(1, chunkOf(h, shift))
 
-    if firstChunk == secondChunk
-      then #node(
-        bits
+    if int.bitAnd(leafBits, bit) != 0
+      then findEntry(__nanyx_array_get(leaves, slotOf(leafBits, bit)), key)
+      else if int.bitAnd(nodeBits, bit) != 0
+        then findIn(__nanyx_array_get(nodes, slotOf(nodeBits, bit)), key, h, shift + 5)
+        else #notFound
+  }
+
+--| The node at `shift` that holds `first`, a bucket whose keys' hash is `firstHash`, and `second`,
+  another whose keys' hash is `secondHash`: a chain of nodes as long as the two hashes agree, then
+  one node with both.
+def joined
+  : list((k, v)), int, list((k, v)), int, int -> __mapStore(k, v)
+  = { first, firstHash, second, secondHash, shift ->
+    def firstBit = int.shiftLeft(1, chunkOf(firstHash, shift))
+    def secondBit = int.shiftLeft(1, chunkOf(secondHash, shift))
+
+    if firstBit == secondBit
+      then nodeWith(
+        0
+        __nanyx_array_new(0)
+        firstBit
         __nanyx_array_of_list([joined(first, firstHash, second, secondHash, shift + 5)])
       )
-      else if firstChunk < secondChunk
-        then #node(bits, __nanyx_array_of_list([first, second]))
-        else #node(bits, __nanyx_array_of_list([second, first]))
+      else if firstBit < secondBit
+        then nodeWith(
+          int.bitOr(firstBit, secondBit)
+          __nanyx_array_of_list([first, second])
+          0
+          __nanyx_array_new(0)
+        )
+        else nodeWith(
+          int.bitOr(firstBit, secondBit)
+          __nanyx_array_of_list([second, first])
+          0
+          __nanyx_array_new(0)
+        )
   }
 
 --| `store`, below a node at `shift`, with `key`, whose hash is `h`, holding `value`, in place of any
   value it held.
 def insertedIn
-  : [Eq(k)] __mapStore(k, v), k, int, v, int -> __mapStore(k, v)
+  : [Eq(k), Hash(k)] __mapStore(k, v), k, int, v, int -> __mapStore(k, v)
   = { store, key, h, value, shift ->
     match store
-      | #empty -> #bucket(h, [(key, value)])
-      | #bucket(bucketHash, entries) -> (if bucketHash != h
-        then joined(store, bucketHash, #bucket(h, [(key, value)]), h, shift)
-        else #bucket(h, placedEntry(withoutEntry(entries, key, []), key, value, [])))
-      | #node(bits, children) ->
-        def bit = int.shiftLeft(1, chunkOf(h, shift))
-        def slot = slotOf(bits, bit)
-
-        if int.bitAnd(bits, bit) == 0
-          then #node(int.bitOr(bits, bit), insertedAt(children, slot, #bucket(h, [(key, value)])))
-          else #node(
-            bits
-            replacedAt(
-              children
-              slot
-              insertedIn(__nanyx_array_get(children, slot), key, h, value, shift + 5)
-            )
-          )
+      | #empty -> bucketNode([(key, value)], h, shift)
+      | #node(leafBits, leaves, nodeBits, nodes) -> insertedInNode(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        key
+        h
+        value
+        shift
+      )
   }
 
---| Whether `store` is a node.
-def isNode: __mapStore(k, v) -> bool = {
-  | #node(_, _) -> true
-  | _ -> false
-}
+--| [`insertedIn`] a node of `leafBits`, `leaves`, `nodeBits` and `nodes`.
+def insertedInNode
+  : [Eq(k), Hash(k)]
+    int, array(list((k, v))), int, array(__mapStore(k, v)), k, int, v, int -> __mapStore(k, v)
+  = { leafBits, leaves, nodeBits, nodes, key, h, value, shift ->
+    def bit = int.shiftLeft(1, chunkOf(h, shift))
 
---| `store`, below a node at `shift`, without `key`, whose hash is `h`. A node left with one child
-  that is not a node is that child.
+    if int.bitAnd(leafBits, bit) != 0
+      then insertedInBucket(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        slotOf(leafBits, bit)
+        bit
+        key
+        h
+        value
+        shift
+      )
+      else if int.bitAnd(nodeBits, bit) != 0
+        then insertedInChild(
+          leafBits
+          leaves
+          nodeBits
+          nodes
+          slotOf(nodeBits, bit)
+          key
+          h
+          value
+          shift
+        )
+        else nodeWith(
+          int.bitOr(leafBits, bit)
+          insertedAt(leaves, slotOf(leafBits, bit), [(key, value)])
+          nodeBits
+          nodes
+        )
+  }
+
+--| [`insertedInNode`], whose bucket at `slot`, for `bit`, the key goes in: the bucket with it, if
+  its keys have the key's hash, or a node of the two buckets in its place.
+def insertedInBucket
+  : [Eq(k), Hash(k)]
+    int,
+    array(list((k, v))),
+    int,
+    array(__mapStore(k, v)),
+    int,
+    int,
+    k,
+    int,
+    v,
+    int
+    -> __mapStore(k, v)
+  = { leafBits, leaves, nodeBits, nodes, slot, bit, key, h, value, shift ->
+    def entries = __nanyx_array_get(leaves, slot)
+    def theirs = bucketHash(entries)
+
+    if theirs == h
+      then nodeWith(
+        leafBits
+        replacedAt(leaves, slot, placedEntry(withoutEntry(entries, key, []), key, value, []))
+        nodeBits
+        nodes
+      )
+      else nodeWith(
+        int.bitXor(leafBits, bit)
+        removedAt(leaves, slot)
+        int.bitOr(nodeBits, bit)
+        insertedAt(
+          nodes
+          slotOf(nodeBits, bit)
+          joined(entries, theirs, [(key, value)], h, shift + 5)
+        )
+      )
+  }
+
+--| [`insertedInNode`], whose node at `slot` the key goes in.
+def insertedInChild
+  : [Eq(k), Hash(k)]
+    int, array(list((k, v))), int, array(__mapStore(k, v)), int, k, int, v, int -> __mapStore(k, v)
+  = { leafBits, leaves, nodeBits, nodes, slot, key, h, value, shift ->
+    def child = insertedIn(__nanyx_array_get(nodes, slot), key, h, value, shift + 5)
+    nodeWith(leafBits, leaves, nodeBits, replacedAt(nodes, slot, child))
+  }
+
+--| `store`, below a node at `shift`, without `key`, whose hash is `h`. A node left with no keys is
+  `#empty`, which only the root is; the node above takes in a node left with one bucket alone.
 def removedFrom
   : [Eq(k)] __mapStore(k, v), k, int, int -> __mapStore(k, v)
   = { store, key, h, shift ->
     match store
       | #empty -> store
-      | #bucket(bucketHash, entries) -> (if bucketHash != h
-        then store
-        else match withoutEntry(entries, key, [])
-          | [] -> #empty
-          | left -> #bucket(h, left))
-      | #node(bits, children) ->
-        def bit = int.shiftLeft(1, chunkOf(h, shift))
-        def slot = slotOf(bits, bit)
-
-        if int.bitAnd(bits, bit) == 0
-          then store
-          else match removedFrom(__nanyx_array_get(children, slot), key, h, shift + 5)
-            | #empty -> withoutChild(int.bitXor(bits, bit), removedAt(children, slot))
-            | child -> if __nanyx_array_length(children) == 1 and not isNode(child)
-              then child
-              else #node(bits, replacedAt(children, slot, child))
+      | #node(leafBits, leaves, nodeBits, nodes) -> removedFromNode(
+        store
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        key
+        h
+        shift
+      )
   }
 
---| The node of `bits` and `children`, whose child one was just taken out of: the child left, if it is
-  the only one and not a node.
-def withoutChild: int, array(__mapStore(k, v)) -> __mapStore(k, v) = { bits, children ->
-  if __nanyx_array_length(children) == 1 and not isNode(__nanyx_array_get(children, 0))
-    then __nanyx_array_get(children, 0)
-    else #node(bits, children)
-}
+--| [`removedFrom`] `store`, a node of `leafBits`, `leaves`, `nodeBits` and `nodes`.
+def removedFromNode
+  : [Eq(k)]
+    __mapStore(k, v),
+    int,
+    array(list((k, v))),
+    int,
+    array(__mapStore(k, v)),
+    k,
+    int,
+    int
+    -> __mapStore(k, v)
+  = { store, leafBits, leaves, nodeBits, nodes, key, h, shift ->
+    def bit = int.shiftLeft(1, chunkOf(h, shift))
+
+    if int.bitAnd(leafBits, bit) != 0
+      then removedFromBucket(leafBits, leaves, nodeBits, nodes, slotOf(leafBits, bit), bit, key)
+      else if int.bitAnd(nodeBits, bit) != 0
+        then removedFromChild(
+          leafBits
+          leaves
+          nodeBits
+          nodes
+          slotOf(nodeBits, bit)
+          bit
+          key
+          h
+          shift
+        )
+        else store
+  }
+
+--| [`removedFromNode`], whose bucket at `slot`, for `bit`, holds the key if any does.
+def removedFromBucket
+  : [Eq(k)] int, array(list((k, v))), int, array(__mapStore(k, v)), int, int, k -> __mapStore(k, v)
+  = { leafBits, leaves, nodeBits, nodes, slot, bit, key ->
+    match withoutEntry(__nanyx_array_get(leaves, slot), key, [])
+      | [] -> nodeOrEmpty(int.bitXor(leafBits, bit), removedAt(leaves, slot), nodeBits, nodes)
+      | left -> nodeWith(leafBits, replacedAt(leaves, slot, left), nodeBits, nodes)
+  }
+
+--| The node of `leafBits`, `leaves`, `nodeBits` and `nodes`, or `#empty` when it has neither.
+def nodeOrEmpty
+  : int, array(list((k, v))), int, array(__mapStore(k, v)) -> __mapStore(k, v)
+  = { leafBits, leaves, nodeBits, nodes ->
+    if leafBits == 0 and nodeBits == 0 then #empty else nodeWith(leafBits, leaves, nodeBits, nodes)
+  }
+
+--| [`removedFromNode`], whose node at `slot`, for `bit`, holds the key if any does: the node left in
+  its place, or its one bucket, if that is all it has left.
+def removedFromChild
+  : [Eq(k)]
+    int,
+    array(list((k, v))),
+    int,
+    array(__mapStore(k, v)),
+    int,
+    int,
+    k,
+    int,
+    int
+    -> __mapStore(k, v)
+  = { leafBits, leaves, nodeBits, nodes, slot, bit, key, h, shift ->
+    match removedFrom(__nanyx_array_get(nodes, slot), key, h, shift + 5)
+      | #empty -> nodeOrEmpty(leafBits, leaves, int.bitXor(nodeBits, bit), removedAt(nodes, slot))
+      | #node(childLeafBits, childLeaves, childNodeBits, childNodes) -> withChild(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        slot
+        bit
+        childLeafBits
+        childLeaves
+        childNodeBits
+        childNodes
+      )
+  }
+
+--| The node of `leafBits`, `leaves`, `nodeBits` and `nodes`, with the node of `childLeafBits`,
+  `childLeaves`, `childNodeBits` and `childNodes` at `slot`, for `bit`, in place of the one there:
+  as a bucket, if it holds one bucket alone.
+def withChild
+  : int,
+    array(list((k, v))),
+    int,
+    array(__mapStore(k, v)),
+    int,
+    int,
+    int,
+    array(list((k, v))),
+    int,
+    array(__mapStore(k, v))
+    -> __mapStore(k, v)
+  = { leafBits, leaves, nodeBits, nodes, slot, bit, childLeafBits, childLeaves, childNodeBits, childNodes ->
+    if childNodeBits == 0 and bitCount(childLeafBits) == 1
+      then nodeWith(
+        int.bitOr(leafBits, bit)
+        insertedAt(leaves, slotOf(leafBits, bit), __nanyx_array_get(childLeaves, 0))
+        int.bitXor(nodeBits, bit)
+        removedAt(nodes, slot)
+      )
+      else nodeWith(
+        leafBits
+        leaves
+        nodeBits
+        replacedAt(nodes, slot, nodeWith(childLeafBits, childLeaves, childNodeBits, childNodes))
+      )
+  }
 
 --| The entries of `store`, each a key and its value, in the order of its walk, then `rest`.
 def entriesOnto: __mapStore(k, v), list((k, v)) -> list((k, v)) = { store, rest ->
   match store
     | #empty -> rest
-    | #bucket(_, [entry]) -> [entry, ...rest]
-    | #bucket(_, entries) -> reverseOnto(reverseOnto(entries, []), rest)
-    | #node(_, children) -> childrenOnto(children, __nanyx_array_length(children) - 1, rest)
+    | #node(leafBits, leaves, nodeBits, nodes) -> nodeEntriesOnto(
+      leafBits
+      leaves
+      nodeBits
+      nodes
+      31
+      rest
+    )
 }
 
---| The entries of `children` up to the one at `index`, in order, then `rest`.
-def childrenOnto
-  : array(__mapStore(k, v)), int, list((k, v)) -> list((k, v))
-  = { children, index, rest ->
-    if index < 0
+--| The entries of a node of `leafBits`, `leaves`, `nodeBits` and `nodes`, of its buckets and nodes
+  for the five-bit values up to `chunk`, in order, then `rest`.
+def nodeEntriesOnto
+  : int, array(list((k, v))), int, array(__mapStore(k, v)), int, list((k, v)) -> list((k, v))
+  = { leafBits, leaves, nodeBits, nodes, chunk, rest ->
+    if chunk < 0
       then rest
-      else childrenOnto(children, index - 1, entriesOnto(__nanyx_array_get(children, index), rest))
+      else nodeEntriesOnto(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        chunk - 1
+        chunkEntriesOnto(leafBits, leaves, nodeBits, nodes, __nanyx_shift_left(1, chunk), rest)
+      )
   }
+
+--| The entries of the bucket or node a node of `leafBits`, `leaves`, `nodeBits` and `nodes` has for
+  `bit`, if any, then `rest`.
+def chunkEntriesOnto
+  : int, array(list((k, v))), int, array(__mapStore(k, v)), int, list((k, v)) -> list((k, v))
+  = { leafBits, leaves, nodeBits, nodes, bit, rest ->
+    if __nanyx_bit_and(leafBits, bit) != 0
+      then bucketOnto(elementFor(leaves, leafBits, bit), rest)
+      else if __nanyx_bit_and(nodeBits, bit) != 0
+        then entriesOnto(elementFor(nodes, nodeBits, bit), rest)
+        else rest
+  }
+
+--| The element of `elements`, a node's array, whose bits are `bits`, for the bit `bit`. It is generic
+  in what the array holds, and calls intrinsics rather than `int`'s functions, as every function
+  the compiler calls a map through must: one that isn't generic would be made for every program,
+  whether it reads a map or not.
+def elementFor: array(a), int, int -> a = { elements, bits, bit ->
+  def below = __nanyx_bit_and(bits, bit - 1)
+
+  def pairs = below - __nanyx_bit_and(__nanyx_shift_right_unsigned(below, 1), 1431655765)
+
+  def nibbles = __nanyx_bit_and(pairs, 858993459) +
+    __nanyx_bit_and(__nanyx_shift_right_unsigned(pairs, 2), 858993459)
+
+  def bytes = __nanyx_bit_and(nibbles + __nanyx_shift_right_unsigned(nibbles, 4), 252645135)
+  def halves = bytes + __nanyx_shift_right_unsigned(bytes, 8)
+
+  __nanyx_array_get(
+    elements
+    __nanyx_bit_and(halves + __nanyx_shift_right_unsigned(halves, 16), 63)
+  )
+}
+
+--| `entries`, a bucket's, in order, then `rest`.
+def bucketOnto: list((k, v)), list((k, v)) -> list((k, v)) = {
+  | [entry], rest -> [entry, ...rest]
+  | entries, rest -> reverseOnto(reverseOnto(entries, []), rest)
+}
 
 --| `step` applied to `acc` and each key and value of `store` in turn, in the order of its walk.
 def foldStore: [c] __mapStore(k, v), b, ([c] b, k, v -> b) -> b = { store, acc, step ->
   match store
     | #empty -> acc
-    | #bucket(_, entries) -> list.fold(entries, acc, { acc, entry -> step(acc, entry.0, entry.1) })
-    | #node(_, children) -> foldChildren(children, 0, acc, step)
+    | #node(leafBits, leaves, nodeBits, nodes) -> foldNode(
+      leafBits
+      leaves
+      nodeBits
+      nodes
+      0
+      acc
+      step
+    )
 }
 
---| `step` applied to `acc` and each key and value of `children` from the one at `index` on.
-def foldChildren
-  : [c] array(__mapStore(k, v)), int, b, ([c] b, k, v -> b) -> b
-  = { children, index, acc, step ->
-    if index < __nanyx_array_length(children)
-      then foldChildren(
-        children
-        index + 1
-        foldStore(__nanyx_array_get(children, index), acc, step)
+--| `step` applied to `acc` and each key and value of a node of `leafBits`, `leaves`, `nodeBits` and
+  `nodes`, of its buckets and nodes for the five-bit values from `chunk` on.
+def foldNode
+  : [c] int, array(list((k, v))), int, array(__mapStore(k, v)), int, b, ([c] b, k, v -> b) -> b
+  = { leafBits, leaves, nodeBits, nodes, chunk, acc, step ->
+    if chunk > 31
+      then acc
+      else foldNode(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        chunk + 1
+        foldChunk(leafBits, leaves, nodeBits, nodes, int.shiftLeft(1, chunk), acc, step)
         step
       )
-      else acc
   }
 
---| `store` with `convertKey` of each key and `convertValue` of each value in its place, each hash
-  and the shape as they are, so nothing is hashed or compared again.
+--| `step` applied to `acc` and each key and value of the bucket or node a node of `leafBits`,
+  `leaves`, `nodeBits` and `nodes` has for `bit`, if any.
+def foldChunk
+  : [c] int, array(list((k, v))), int, array(__mapStore(k, v)), int, b, ([c] b, k, v -> b) -> b
+  = { leafBits, leaves, nodeBits, nodes, bit, acc, step ->
+    if int.bitAnd(leafBits, bit) != 0
+      then foldEntries(__nanyx_array_get(leaves, slotOf(leafBits, bit)), acc, step)
+      else if int.bitAnd(nodeBits, bit) != 0
+        then foldStore(__nanyx_array_get(nodes, slotOf(nodeBits, bit)), acc, step)
+        else acc
+  }
+
+--| `step` applied to `acc` and each key and value of `entries` in turn.
+def foldEntries: [c] list((k, v)), b, ([c] b, k, v -> b) -> b = {
+  | [], acc, _ -> acc
+  | [(key, value), ...rest], acc, step -> foldEntries(rest, step(acc, key, value), step)
+}
+
+--| `store` with `convertKey` of each key and `convertValue` of each value in its place, the shape
+  as it is, so nothing is hashed or compared again.
 def convertedStore
   : [c] __mapStore(k, v), ([c] k -> j), ([c] v -> w) -> __mapStore(j, w)
   = { store, convertKey, convertValue ->
     match store
       | #empty -> #empty
-      | #bucket(h, entries) -> #bucket(h, convertedEntries(entries, convertKey, convertValue, []))
-      | #node(bits, children) -> #node(
-        bits
+      | #node(leafBits, leaves, nodeBits, nodes) -> nodeWith(
+        leafBits
+        convertedLeaves(
+          leaves
+          __nanyx_array_new(__nanyx_array_length(leaves))
+          0
+          convertKey
+          convertValue
+        )
+        nodeBits
         convertedChildren(
-          children
-          __nanyx_array_new(__nanyx_array_length(children))
+          nodes
+          __nanyx_array_new(__nanyx_array_length(nodes))
           0
           convertKey
           convertValue
         )
       )
+  }
+
+--| `made`, a new array, once each of `leaves`, buckets, from `index` on is written into it with
+  `convertKey` of each key and `convertValue` of each value in its place.
+def convertedLeaves
+  : [c]
+    array(list((k, v))), array(list((j, w))), int, ([c] k -> j), ([c] v -> w) -> array(list((j, w)))
+  = { leaves, made, index, convertKey, convertValue ->
+    if index < __nanyx_array_length(leaves) then
+      __nanyx_array_write(
+        made
+        index
+        convertedEntries(__nanyx_array_get(leaves, index), convertKey, convertValue, [])
+      )
+
+      convertedLeaves(leaves, made, index + 1, convertKey, convertValue)
+    else made
   }
 
 --| `entries`, a bucket's, with `convertKey` of each key and `convertValue` of each value in its
@@ -285,22 +612,9 @@ def convertedEntries: [c] list((k, v)), ([c] k -> j), ([c] v -> w), list((j, w))
     rest
     convertKey
     convertValue
-    [convertedEntry(key, value, convertKey, convertValue), ...acc]
+    [(convertKey(key), convertValue(value)), ...acc]
   )
 }
-
---| The entry of `convertKey` of `key` and `convertValue` of `value`. The functions the compiler
-  calls a map through make no lambda, which would be numbered ahead of the program's own, so no arm
-  of theirs holds statements, which would make one. The calls are made before the entry, as `def`s,
-  because the backend can't yet inline them into its arguments (#2662): with that fixed, this can go.
-def convertedEntry
-  : [c] k, v, ([c] k -> j), ([c] v -> w) -> (j, w)
-  = { key, value, convertKey, convertValue ->
-    def convertedKey = convertKey(key)
-    def convertedValue = convertValue(value)
-
-    (convertedKey, convertedValue)
-  }
 
 --| `x` as it is.
 def unchanged: a -> a = { x -> x }
@@ -328,9 +642,8 @@ def convertedChildren
   }
 
 --| A map's store with `convertKey` of each key and `convertValue` of each value in its place, its
-  hashes and shape as they are: how the compiler boxes the keys and values of a map for its type's
-  description, and unboxes them again, without hashing anything (see `Maps.convertedStore` in the
-  compiler).
+  shape as it is: how the compiler boxes the keys and values of a map for its type's description,
+  and unboxes them again, without hashing anything (see `Maps.convertedStore` in the compiler).
 export def __mapStoreConverted
   : [c] __mapStore(k, v), ([c] k -> j), ([c] v -> w) -> __mapStore(j, w)
   = { store, convertKey, convertValue ->
@@ -346,18 +659,205 @@ export def __setStoreConverted
   }
 
 --| `store` with the entries `f` gives `#some` for, each with the value it gives, and without the
-  others: the entries kept stay where they were, and a node left with one child that is not a node
-  is that child, so the trie is the one their keys make.
+  others: the entries kept stay where they were, and a node below the root left with one bucket alone
+  is that bucket in the node above, so the trie is the one their keys make.
 def chosenStore
   : [c] __mapStore(k, v), ([c] k, v -> #some(w) | #skip) -> __mapStore(k, w)
   = { store, f ->
     match store
       | #empty -> #empty
-      | #bucket(h, entries) -> (match chosenEntries(entries, f, [])
-        | [] -> #empty
-        | chosen -> #bucket(h, chosen))
-      | #node(bits, children) -> chosenChildren(children, bits, 0, 0, [], f)
+      | #node(leafBits, leaves, nodeBits, nodes) -> chosenNode(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        0
+        0
+        []
+        0
+        []
+        f
+      )
   }
+
+--| The node of the buckets and nodes of a node of `leafBits`, `leaves`, `nodeBits` and `nodes` for
+  the five-bit values from `chunk` on, each with the entries `f` chooses, after `keptLeafBits` and
+  `keptLeaves`, and `keptNodeBits` and `keptNodes`, the ones before, last first, that keep any; or
+  `#empty`, if none does.
+def chosenNode
+  : [c]
+    int,
+    array(list((k, v))),
+    int,
+    array(__mapStore(k, v)),
+    int,
+    int,
+    list(list((k, w))),
+    int,
+    list(__mapStore(k, w)),
+    ([c] k, v -> #some(w) | #skip)
+    -> __mapStore(k, w)
+  = { leafBits, leaves, nodeBits, nodes, chunk, keptLeafBits, keptLeaves, keptNodeBits, keptNodes, f ->
+    def bit = int.shiftLeft(1, chunk)
+
+    if chunk > 31
+      then nodeOrEmpty(
+        keptLeafBits
+        __nanyx_array_of_list(reverseOnto(keptLeaves, []))
+        keptNodeBits
+        __nanyx_array_of_list(reverseOnto(keptNodes, []))
+      )
+      else if int.bitAnd(leafBits, bit) != 0
+        then chosenBucket(
+          leafBits
+          leaves
+          nodeBits
+          nodes
+          chunk
+          keptLeafBits
+          keptLeaves
+          keptNodeBits
+          keptNodes
+          chosenEntries(__nanyx_array_get(leaves, slotOf(leafBits, bit)), f, [])
+          f
+        )
+        else if int.bitAnd(nodeBits, bit) != 0
+          then chosenChild(
+            leafBits
+            leaves
+            nodeBits
+            nodes
+            chunk
+            keptLeafBits
+            keptLeaves
+            keptNodeBits
+            keptNodes
+            chosenStore(__nanyx_array_get(nodes, slotOf(nodeBits, bit)), f)
+            f
+          )
+          else chosenNode(
+            leafBits
+            leaves
+            nodeBits
+            nodes
+            chunk + 1
+            keptLeafBits
+            keptLeaves
+            keptNodeBits
+            keptNodes
+            f
+          )
+  }
+
+--| [`chosenNode`] on from the next five-bit value, with `chosen`, the entries kept of the bucket for
+  `chunk`, kept if there are any.
+def chosenBucket
+  : [c]
+    int,
+    array(list((k, v))),
+    int,
+    array(__mapStore(k, v)),
+    int,
+    int,
+    list(list((k, w))),
+    int,
+    list(__mapStore(k, w)),
+    list((k, w)),
+    ([c] k, v -> #some(w) | #skip)
+    -> __mapStore(k, w)
+  = { leafBits, leaves, nodeBits, nodes, chunk, keptLeafBits, keptLeaves, keptNodeBits, keptNodes, chosen, f ->
+    match chosen
+      | [] -> chosenNode(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        chunk + 1
+        keptLeafBits
+        keptLeaves
+        keptNodeBits
+        keptNodes
+        f
+      )
+      | _ -> chosenNode(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        chunk + 1
+        int.bitOr(keptLeafBits, int.shiftLeft(1, chunk))
+        [chosen, ...keptLeaves]
+        keptNodeBits
+        keptNodes
+        f
+      )
+  }
+
+--| [`chosenNode`] on from the next five-bit value, with `chosen`, what is kept of the node for
+  `chunk`: nothing, a bucket alone, which is kept as a bucket, or a node.
+def chosenChild
+  : [c]
+    int,
+    array(list((k, v))),
+    int,
+    array(__mapStore(k, v)),
+    int,
+    int,
+    list(list((k, w))),
+    int,
+    list(__mapStore(k, w)),
+    __mapStore(k, w),
+    ([c] k, v -> #some(w) | #skip)
+    -> __mapStore(k, w)
+  = { leafBits, leaves, nodeBits, nodes, chunk, keptLeafBits, keptLeaves, keptNodeBits, keptNodes, chosen, f ->
+    match bucketAlone(chosen)
+      | #some(entries) -> chosenBucket(
+        leafBits
+        leaves
+        nodeBits
+        nodes
+        chunk
+        keptLeafBits
+        keptLeaves
+        keptNodeBits
+        keptNodes
+        entries
+        f
+      )
+      | #none -> match chosen
+        | #empty -> chosenNode(
+          leafBits
+          leaves
+          nodeBits
+          nodes
+          chunk + 1
+          keptLeafBits
+          keptLeaves
+          keptNodeBits
+          keptNodes
+          f
+        )
+        | _ -> chosenNode(
+          leafBits
+          leaves
+          nodeBits
+          nodes
+          chunk + 1
+          keptLeafBits
+          keptLeaves
+          int.bitOr(keptNodeBits, int.shiftLeft(1, chunk))
+          [chosen, ...keptNodes]
+          f
+        )
+  }
+
+--| The one bucket of `store`, if it is a node with that alone.
+def bucketAlone: __mapStore(k, v) -> #some(list((k, v))) | #none = {
+  | #node(leafBits, leaves, 0, _) -> (if bitCount(leafBits) == 1
+    then #some(__nanyx_array_get(leaves, 0))
+    else #none)
+  | _ -> #none
+}
 
 --| The entries of `entries` `f` gives `#some` for, each with the value it gives, in order, after
   `acc`, the ones before, last first.
@@ -372,68 +872,6 @@ def chosenEntries
 def chosenOnto: k, (#some(w) | #skip), list((k, w)) -> list((k, w)) = {
   | key, #some(value), acc -> [(key, value), ...acc]
   | _, #skip, acc -> acc
-}
-
---| The node of the children of `children` from the one at `index` on, of the bits of `bits` from
-  the one for that child on, each with the entries `f` chooses, after `kept`, the bits and the
-  children before, last first, that keep any: none is no trie, and one that is not a node is that
-  child.
-def chosenChildren
-  : [c]
-    array(__mapStore(k, v)),
-    int,
-    int,
-    int,
-    list((int, __mapStore(k, w))),
-    ([c] k, v -> #some(w) | #skip)
-    -> __mapStore(k, w)
-  = { children, bits, index, from, kept, f ->
-    if index < __nanyx_array_length(children)
-      then chosenChild(children, bits, index, lowestBitFrom(bits, from), kept, f)
-      else match kept
-        | [] -> #empty
-        | [(_, child)] -> (if isNode(child) then nodeOf(kept) else child)
-        | _ -> nodeOf(kept)
-  }
-
---| The node of `kept`, its children each with its bit, last first.
-def nodeOf: list((int, __mapStore(k, v))) -> __mapStore(k, v) = { kept ->
-  nodeOnto(kept, 0, [])
-}
-
---| The node of `kept`, its children each with its bit, last first, and of `bits` and `children`, the
-  ones after them, in order.
-def nodeOnto: list((int, __mapStore(k, v))), int, list(__mapStore(k, v)) -> __mapStore(k, v) = {
-  | [], bits, children -> #node(bits, __nanyx_array_of_list(children))
-  | [(bit, child), ...rest], bits, children -> nodeOnto(
-    rest
-    int.bitOr(bits, bit)
-    [child, ...children]
-  )
-}
-
---| [`chosenChildren`] on from the child at `index`, whose bit is `bit`, with its entries chosen.
-def chosenChild
-  : [c]
-    array(__mapStore(k, v)),
-    int,
-    int,
-    int,
-    list((int, __mapStore(k, w))),
-    ([c] k, v -> #some(w) | #skip)
-    -> __mapStore(k, w)
-  = { children, bits, index, bit, kept, f ->
-    match chosenStore(__nanyx_array_get(children, index), f)
-      | #empty -> chosenChildren(children, bits, index + 1, bit + bit, kept, f)
-      | child -> chosenChildren(children, bits, index + 1, bit + bit, [(bit, child), ...kept], f)
-  }
-
---| The lowest bit set in `bits` that is `from` or above it, `from` being a single bit or 0 for the
-  lowest of all.
-def lowestBitFrom: int, int -> int = { bits, from ->
-  def start = if from == 0 then 1 else from
-
-  if int.bitAnd(bits, start) != 0 then start else lowestBitFrom(bits, start + start)
 }
 
 --| How many keys `store` holds.

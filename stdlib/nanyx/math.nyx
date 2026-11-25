@@ -216,7 +216,8 @@ def quarterOf: float -> int = { n ->
   __nanyx_float_to_int(n - 4.0 * __nanyx_float_floor(n / 4.0))
 }
 
---| The sine of `x`, an angle in radians: `sin(pi / 6.0)` is `0.5`. NaN for an infinite `x`.
+--| The sine of `x`, an angle in radians: `sin(pi / 2.0)` is `1.0`, and `sin(pi / 6.0)` is
+  `0.49999999999999994`, not `0.5`, as `pi` is a little below the true pi. NaN for an infinite `x`.
 export def sin: float -> float = { x ->
   if isFinite(x) then sinIn(lessTurns(x, quarterTurns(x)), quarterOf(quarterTurns(x))) else nan
 }
@@ -244,8 +245,9 @@ def cosIn: float, int -> float = { r, quarter ->
       else if quarter == 2 then -cosOfReduced(r) else sinOfReduced(r)
 }
 
---| The tangent of `x`, an angle in radians, its sine over its cosine: `tan(pi / 4.0)` is `1.0`. NaN
-  for an infinite `x`.
+--| The tangent of `x`, an angle in radians, its sine over its cosine: `tan(0.0)` is `0.0`, and
+  `tan(pi / 4.0)` is `0.9999999999999999`, not `1.0`, as `pi` is a little below the true pi. NaN for an
+  infinite `x`.
 export def tan: float -> float = { x ->
   if isFinite(x) then tanIn(lessTurns(x, quarterTurns(x)), quarterOf(quarterTurns(x))) else nan
 }
