@@ -277,8 +277,6 @@ As `map.union`, but where both have a key the value is `combine` of `m`'s value 
 def set.empty: set(a)
 ```
 
-The set with no elements.
-
 ## `set.fromList`
 
 ```nanyx fragment

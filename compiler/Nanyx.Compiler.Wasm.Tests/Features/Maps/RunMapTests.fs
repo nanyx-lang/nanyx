@@ -282,3 +282,46 @@ let ``Run - a map is written as its literal is, each key and value by its own to
           """println(described([#tea => [1, 2]]))""" ]
     |> runSource
     |> assertRan "[tea => 3, cake => 1]\n[tea => 3, cake => 1]\n[[tea => 3, cake => 1], [pie => 4]]\n(count = 2, prices = [1 => #some(2.5)])\n[=>]\nhas [#tea => [1, 2]]\n"
+
+/// A program that builds a map of `size` keys, then looks up, inserts and removes 100,000 of them.
+let private churning (size: int) =
+    $"""def size = {size}
+def built = (0..size - 1) \seq.fold(map.empty, {{ m, k -> map.insert(m, k, k) }})
+def found = (0..99999) \seq.fold(0, {{ total, i -> total + (built(i %% size) \someOr(0)) }})
+def changed = (0..99999) \seq.fold(built, {{ m, i -> map.insert(m, i %% size, i) }})
+def removed = (0..99999) \seq.fold(changed, {{ m, i -> map.remove(m, i %% size) }})
+println("{{found > 0}} {{map.length(changed)}} {{map.length(removed)}}")
+"""
+
+[<Fact>]
+let ``Run - a lookup, an insert and a remove take time that grows with the log of the map's size`` () =
+    let timed (size: int) =
+        let watch = System.Diagnostics.Stopwatch.StartNew()
+        runSourceWith false "" (churning size) |> assertRan $"true {size} 0\n"
+        watch.Elapsed.TotalSeconds
+    timed 1000 |> ignore
+    let small = timed 1000
+    let large = timed 100000
+    // 100 times the keys: a list's linear walk takes some 100 times as long; a trie's few levels more take little.
+    Assert.True(large < small * 4.0, $"1,000 keys took {small:F2}s, 100,000 took {large:F2}s")
+
+[<Fact>]
+let ``Run - keys whose hashes are all the same are kept in one order however they were added, and found and removed`` () =
+    runSource
+        """type Key = protected string
+
+def Key.`==`: Key, Key -> bool = { Key(a), Key(b) -> a == b }
+def Key.hash: Key -> int = { _ -> 7 }
+def Key.toString: Key -> string = { Key(a) -> a }
+
+def a = [Key("x") => 1, Key("y") => 2, Key("z") => 3] \map.remove(Key("y")) \map.insert(Key("w"), 4)
+def b = [Key("w") => 4, Key("z") => 3] \map.insert(Key("x"), 1)
+println(map.keys(a) \list.map(Key.toString) == map.keys(b) \list.map(Key.toString))
+println(a == b)
+println(a(Key("z")))
+println(a(Key("y")))
+def left = a \map.remove(Key("w")) \map.remove(Key("x"))
+println(map.toList(left) \list.map { entry -> "{entry.0}={entry.1}" })
+println(map.length(left \map.remove(Key("z"))))
+"""
+    |> assertRan "true\ntrue\n#some(3)\n#notFound\n[z=3]\n0\n"

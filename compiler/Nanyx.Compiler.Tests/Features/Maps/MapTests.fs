@@ -73,16 +73,14 @@ let ``A map whose values are functions cannot be compared with ==`` () =
     Assert.Equal("'map(int, (int -> int))' cannot be compared with ==: a value it holds is a function, and functions have no equality", message)
 
 [<Fact>]
-let ``A map compared by a local function is an error for now`` () =
+let ``A map compared by a local function is compared by the compiler's own ==`` () =
     let local =
         """def same = {
   def local = { a, b -> a == b }
   local(["a" => 1], ["a" => 1])
 }
 """
-    let code, message, _ = onlyDiagnostic (local.ReplaceLineEndings "\n")
-    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
-    Assert.Equal("'local' compares values of type 'map(string, int)' with the compiler's own ==, which cannot compare a map or a set yet: a local function, or a function that compares a union's rest, is passed no other", message)
+    Assert.Empty((Compiler.compile (local.ReplaceLineEndings "\n")).Diagnostics)
 
 [<Fact>]
 let ``A call generic in the types of the sets it compares is passed the == derived for them`` () =
@@ -90,13 +88,11 @@ let ``A call generic in the types of the sets it compares is passed the == deriv
     Assert.Equal<string list>([ "list(set(a)) -> int" ], typesOf source [ "count" ])
 
 [<Fact>]
-let ``Maps and sets cannot be ordered or hashed`` () =
+let ``Maps and sets cannot be ordered, but are hashed, so they can be keys`` () =
     let code, message, _ = onlyDiagnostic (withFinalNewline """def less = ["a" => 1] < ["a" => 1]""")
     Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
     Assert.Equal("'map(string, int)' cannot be ordered with <: maps have no order", message)
-    let code, message, _ = onlyDiagnostic "def keyed = [set.fromList([1]) => 1]\n"
-    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, code)
-    Assert.Equal("'__map' hashes values of type 'set(int)', which cannot be hashed: sets have no hash", message)
+    Assert.Empty((Compiler.compile "def keyed = [set.fromList([1]) => 1, set.fromList([2]) => 2]\n").Diagnostics)
 
 [<Fact>]
 let ``A key whose type attaches == and no hash is an error at the literal`` () =
