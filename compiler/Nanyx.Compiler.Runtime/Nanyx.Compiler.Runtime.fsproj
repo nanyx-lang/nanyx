@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="ProgramStack.fs" />
     <Compile Include="AsyncImport.fs" />
     <Compile Include="HttpImport.fs" />
     <Compile Include="SpanTable.fs" />
@@ -42,6 +43,11 @@
   <ItemGroup>
     <!-- Embeds the Wasmtime engine; the package ships the native library for every platform the CLI is published for. -->
     <PackageReference Include="Wasmtime" Version="48.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- For `Nanyx.LargeStack`, which runs a program on a thread with a stack of its own (see `ProgramStack`). -->
+    <ProjectReference Include="..\Nanyx.Parser\Nanyx.Parser.fsproj" />
   </ItemGroup>
 
 </Project>

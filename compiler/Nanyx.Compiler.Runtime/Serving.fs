@@ -121,7 +121,7 @@ module WasmServer =
         (listening: string -> unit)
         (report: string -> unit)
         : Result<unit, RunError> =
-        use engine = new Engine()
+        use engine = ProgramStack.engine id
         match WasmRunner.compile engine program with
         | Error error -> Error error
         | Ok module' ->
@@ -141,10 +141,11 @@ module WasmServer =
                         while not stop.IsCancellationRequested do
                             let context = listener.GetContextAsync().WaitAsync(stop).GetAwaiter().GetResult()
                             // Each instance runs on a thread of its own, so that one whose handler waits, on an
-                            // outbound request say, holds only that thread, not one the listener needs.
+                            // outbound request say, holds only that thread, not one the listener needs, and with
+                            // the stack a program runs with (see `ProgramStack`).
                             let task =
                                 Task.Factory.StartNew(
-                                    (fun () -> answer engine module' table io arguments gate report context),
+                                    (fun () -> ProgramStack.run (fun () -> answer engine module' table io arguments gate report context)),
                                     TaskCreationOptions.LongRunning)
                             answering.TryAdd(task, ()) |> ignore
                             task.ContinueWith(fun (finished: Task) -> answering.TryRemove finished |> ignore) |> ignore

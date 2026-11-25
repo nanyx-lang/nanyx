@@ -56,6 +56,14 @@ is `count`) and with a local `rec`'s own name (`__rec_go_16` is `go`), and passe
 whose names start with `__`. A library function keeps its module's prefix (`list_fold`). The CLI writes the message
 (`ReportRunError` in `RunProgram.cs`). A host other than the CLI reads the trap in its own runtime.
 
+A program may use 512 KiB of stack (`ProgramStack.guestStack` in `ProgramStack.fs`). Wasmtime runs it on the native
+stack of the thread that calls into it, and traps once the program has used that much, but only if the thread has that
+much left: otherwise the program reaches the end of the thread's stack first, which Linux and macOS turn into the same
+trap but which on Windows stops the whole process ([#2708](https://github.com/nanyx-lang/nanyx/issues/2708)). So the
+runner, the server (for a program whose host answers HTTP requests, each request's) and the componentizer each run a
+program on a thread of its own, of 8 MB
+(`ProgramStack.threadStack`), whichever thread called them: Windows gives its main thread 1 MB.
+
 # Checking tail position
 
 The official linter's `nonTailRecursion` rule reports a function that calls itself other than in tail position. It
