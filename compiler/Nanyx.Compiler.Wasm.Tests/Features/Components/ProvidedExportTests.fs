@@ -27,7 +27,7 @@ let private clock (import: Wasmtime.FunctionImport) =
 
 [<Fact>]
 let ``An export that requires Clock runs under the console component root's Clock`` () =
-    use time = package consoleHostEntry "module stamp\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() }\n"
+    use time = package consoleHostEntry "module stamp\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() // 1ms }\n"
     let built = nanyxIn time.Path [ "build"; "--release" ]
     Assert.Equal("", built.StandardError)
     Assert.Equal(0, built.ExitCode)
@@ -42,7 +42,7 @@ let ``An export that requires Clock runs under the console component root's Cloc
 [<Fact>]
 let ``An export that requires a context the host's root doesn't provide is NYX0237 at the export`` () =
     let stamp =
-        "module stamp\n\nexport context Calendar = (today: () -> int)\n\n@component\nexport def later: [Calendar, Clock] int -> int = { delay -> delay + today() + ticks() }\n"
+        "module stamp\n\nexport context Calendar = (today: () -> int)\n\n@component\nexport def later: [Calendar, Clock] int -> int = { delay -> delay + today() + ticks() // 1ms }\n"
     use time = package consoleHostEntry stamp
     let checkedPackage = nanyxIn time.Path [ "check" ]
     Assert.Equal(1, checkedPackage.ExitCode)
@@ -53,7 +53,7 @@ let ``An export that requires a context the host's root doesn't provide is NYX02
 [<Fact>]
 let ``An export that requires contexts under a host whose root has no provide is NYX0237 at the export`` () =
     let host = $"host = (package = \"nanyx.http.host\", version = \"{Toolchain.version}\")"
-    use time = package host "module stamp\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() }\n"
+    use time = package host "module stamp\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() // 1ms }\n"
     let checkedPackage = nanyxIn time.Path [ "check" ]
     let output = checkedPackage.StandardOutput + checkedPackage.StandardError
     Assert.Equal(1, checkedPackage.ExitCode)
@@ -62,7 +62,7 @@ let ``An export that requires contexts under a host whose root has no provide is
 
 [<Fact>]
 let ``An export that requires contexts in a package with no host is an error that says it has none`` () =
-    let stamp = "export module stamp\n\nimport nanyx/clock as (Clock)\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() }\n"
+    let stamp = "export module stamp\n\nimport nanyx/clock as (Clock)\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() // 1ms }\n"
     use time = package "" stamp
     let checkedPackage = nanyxIn time.Path [ "check" ]
     let output = checkedPackage.StandardOutput + checkedPackage.StandardError
@@ -73,7 +73,7 @@ let ``An export that requires contexts in a package with no host is an error tha
 [<Fact>]
 let ``An export that requires contexts, and the entry, import only what the contexts they use need`` () =
     let stamp =
-        "module stamp\n\n@entry\ndef main = { println(\"hi\") }\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() }\n"
+        "module stamp\n\n@entry\ndef main = { println(\"hi\") }\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() // 1ms }\n"
     use time = package consoleHostEntry stamp
     let built = nanyxIn time.Path [ "build"; "--release"; "--wat" ]
     Assert.Equal("", built.StandardError)

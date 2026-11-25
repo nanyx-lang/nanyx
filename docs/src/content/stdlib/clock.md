@@ -53,7 +53,12 @@ def stamp: [Async, Clock] string -> string = { text ->
 }
 
 def stamped = { _ ->
-  use Clock(now = { _ -> Instant.epoch \plus(1_700_000_000s) }, ticks = { _ -> 0ns }, sleep = { _ -> () })
+  use Clock(
+    now = { _ -> Instant.epoch \plus(1_700_000_000s) }
+    ticks = { _ -> 0ns }
+    sleep = { _ -> () }
+  )
+
   stamp("started")
 }
 

@@ -16,6 +16,7 @@ match Instant.fromIsoString("2026-11-25T19:20:57.25+01:00")
     println(end \since(start))
     println(end \Instant.toIsoDate)
   | _ -> println("not ISO 8601")
+
 -- 2026-11-25T18:20:57.25Z
 -- 90s
 -- 2026-11-25
