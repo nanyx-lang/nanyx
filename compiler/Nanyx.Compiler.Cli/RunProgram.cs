@@ -196,7 +196,7 @@ internal static partial class CliCommands
             case RunError.StackOverflow overflow:
                 var where = FSharpOption<string>.get_IsSome(overflow.functionName) ? $" in '{overflow.functionName.Value}'" : "";
                 errors.WriteLine(
-                    $"Runtime error: the program ran out of stack{where}: a recursive call that isn't in tail position uses stack for every call (see {TailRecursionDocs})");
+                    $"Runtime error: the program ran out of stack{where}: a call that isn't a tail call keeps its caller's stack until it returns, so a function that calls itself that way uses stack for every call (see {TailRecursionDocs})");
                 return 1;
             case RunError.ArithmeticError arithmetic:
                 // The stack names the function, when there is one.

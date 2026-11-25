@@ -352,7 +352,7 @@ linter's `settings`, or its `rules`. The message lists the fields it takes.
 ```nanyx
 -- file: demo.nyxp
 (
-  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: Package has no field 'src': its fields are 'name', 'version', 'sources', 'repository', 'host'
+  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: Package has no field 'src': its fields are 'name', 'version', 'sources', 'repository', 'nanyx', 'host', 'hostLibrary'
 )
 ```
 
@@ -904,6 +904,20 @@ To move to a listed version in a package, delete the version's entry from `nanyx
 build, locks the newest listed version the manifest accepts. If it accepts none, change the version it asks for first.
 In a script, change the version its `::dependency` names. Or keep the version, if you need it.
 
+# NYX0052: Package that needs a newer compiler
+
+The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running.
+The message names both versions:
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0", nanyx = "99.0")  -- error NYX0052: The package builds with nanyx 99.0 or later
+)
+```
+
+To fix it, install a newer compiler. If the package does build with this one, lower its `nanyx`.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which
@@ -1087,8 +1101,9 @@ To fix it, move the definition into the block, or into a block of its own that t
 
 # NYX0111: Not implemented
 
-The program has `???`, which stands for code not written yet. It type-checks as any type, so the rest of the program
-can be checked, but it cannot be run in a release build.
+The program has `???`, which stands for code not written yet. It has the type `undefined`, which fits wherever a value
+of any type is expected, so the rest of the program can be checked, and nothing that uses it is another error. It cannot
+be run in a release build.
 
 ```nanyx
 def total: int -> int = { x -> ??? }  -- error NYX0111: `???` stands for code not written yet
@@ -1109,8 +1124,8 @@ To fix it, rename or remove one of the definitions.
 
 # NYX0114: Not a built-in type
 
-A type is written `Int`, `Float` or `Bool`. Those are not types: the built-in types are `int`, `float` and `bool`. An
-editor offers to write the right name.
+A type is written `Int`, `Float`, `Bool` or `Char`. Those are not types: the built-in types are `int`, `float`, `bool`
+and `char`. An editor offers to write the right name.
 
 ```nanyx
 def count: Int = 3  -- error NYX0114: A built-in type's name is in lower case: write 'int'
@@ -1230,6 +1245,30 @@ def r =
 ```
 
 A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any tag.
+
+A lambda with `yield` in it is a lazy sequence, and a builder such as `list.select` or `list.build` takes a function
+that calls `emit` for each value instead ([Building a collection](../advanced/sequences-and-queries#building-a-collection)).
+Giving it a lambda that yields is reported at the first `yield`:
+
+```nanyx
+def positives = [1, -2, 3] \list.select { x -> if x > 0 then yield x }  -- error NYX0201: This `yield` makes the lambda a lazy sequence, but it is given where a function that calls `emit` is expected, as a builder such as `list.select` or `list.build` takes: write `emit(x)` for `yield x`
+```
+
+A keyword call such as `start! e` is a call of the def named by the keyword, `start({ e })`, so a local, a parameter or a
+pattern's variable of that name is called instead. When it doesn't take a block, the error is reported at the keyword
+and names it:
+
+```nanyx
+import nanyx/async as (Async)
+
+def work = { _ ->
+  def start = 5
+  def t = start! 1  -- error NYX0201: 'start!' calls the local 'start' defined at line 4, of type 'int', not 'Async.start': ...
+  start
+}
+```
+
+To fix it, rename the local, or call the keyword's def by its whole name, `Async.start({ 1 })`.
 
 # NYX0202: Annotation too general
 
@@ -1405,6 +1444,10 @@ def greet: string -> () = { name -> println("Hello, {name}") }  -- error NYX0211
 
 To fix it, add the context to the definition's type, as in `[Console] string -> ()`, or load an instance with `use`
 ([Contexts](../advanced/contexts)).
+
+A module-level def that starts a task without naming `start` gets this error too, at the call that starts it: only a
+def whose body names `start` is the scope of its tasks ([Async](../advanced/async#each-def-is-a-scope)). Start the task
+with `start` in the def itself.
 
 # NYX0212: Nominal type constructed outside its module
 
@@ -2401,8 +2444,10 @@ function in.
 
 # NYX0279: Task that holds what belongs to a memory block
 
-A task is started with a function that uses a `memory` block's cells or references (`MRef`, `MList`). Tasks share only
-immutable values, so that another task can never change what one holds while it waits
+A task is started with a function that uses a `memory` block's cells or references (`MRef`, `MList`), by `start`, by
+`race`, or by anything that starts a task with the function it is given, such as a local `def spawn = { f -> start(f) }`
+or `start` under another name. Tasks share only immutable values, so that another task can never change what one holds
+while it waits, and a task can't run on once the block has freed what it holds
 ([Async](../advanced/async#tasks-share-only-values)).
 
 ```nanyx
@@ -2468,6 +2513,44 @@ println(deserialise(type int, "abc"))
 
 To fix it, write `Type(a)` for `type a`, and `into: Type(into)` for `into: type`, as the editor's quick fix does. Calls
 don't change: they still pass `type int`.
+
+# NYX0283: Value of a type only a later use fixes
+
+A def that writes no type and whose value is not a function calls a function that requires a context of the type it
+gives back, and nothing in the def says what that type is. A later use of the value, such as
+`def person: Person = obj`, doesn't fix it: a value's type is fixed where it is defined.
+
+```nanyx
+type Person = (name: string)
+
+context Decode(a) = (decode: string -> a)
+
+def Person.decode: string -> Person = { s ->
+  Person(name = s)
+}
+
+def parse: [Decode(a)] string -> a = { json ->
+  decode(json)
+}
+
+def obj = parse("Ada")  -- error NYX0283: 'parse' requires 'Decode' of a type nothing in the definition of 'obj' fixes, ...
+```
+
+To fix it, write the type on the def, `def obj: Person = parse("Ada")`, or give the function a
+[type argument](../tour/functions#type-arguments) and pass the type: `parse(type Person, "Ada")`.
+
+# NYX0284: Char literal that is not one character
+
+A string literal is written where a `char` is expected, and it is not exactly one Unicode scalar value. A `char` is
+one scalar value, so the literal must be one: not empty, not two characters, not a literal with holes, and not a
+letter written with a combining accent after it, which is two scalar values however it looks
+([Characters](../tour/types#characters)).
+
+```nanyx
+def initial: char = "Ab"  -- error NYX0284: A char is one Unicode scalar value, ...
+```
+
+To fix it, write one character, or use a `string` where the value is more than one.
 
 # NYX0301: Not supported by the WebAssembly backend
 

@@ -31,6 +31,7 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
     let definitions = input.Definitions |> Map.ofList
     let names = System.Collections.Generic.Dictionary<SpecKey, string>()
     let usedNames = System.Collections.Generic.HashSet<string>(input.Definitions |> Seq.map (fst >> sanitizeIdentifier))
+    let specialisationNames = NameSupply(usedNames)
     let pending = System.Collections.Generic.Queue<SpecKey * Map<int, Ty> * Lowering>()
     let counts = System.Collections.Generic.Dictionary<string, int>()
     // Every function lowered, by its key, with the specialisations it calls; or why it could not be.
@@ -60,9 +61,7 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
                 let candidate =
                     if specKey.TypeArguments.IsEmpty && specKey.Known.IsEmpty then sanitizeIdentifier defName
                     else
-                        let candidate = freeName usedNames.Contains (specialisationName specKey)
-                        usedNames.Add candidate |> ignore
-                        candidate
+                        specialisationNames.Fresh(specialisationName specKey)
                 names.[specKey] <- candidate
                 requestedAt.[specKey] <- currentSpan.Value () |> Option.orElse (requestSpan key)
                 pending.Enqueue((specKey, bindings, lowering))

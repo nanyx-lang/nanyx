@@ -100,7 +100,7 @@ def items = seq({
 })
 ```
 
-`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `yield` the block ends with has no rest, and is `__seqLast(x)`, the sequence of `x` alone. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.flatMap` over the loop's collection. As with a plain `for` loop, that can be anything `Iterable`: a sequence or a range, which is walked as it is, or a list, an array, a set, a map or a type of your own that attaches `toSeq`, which is read through its sequence. A loop in `list.build { ... }` walks a list as it is written, `for xs | x -> yield x`.
+`yield x` with the rest of the block after it is `seq.cons(x, { rest })`, and the end of the block, or of a branch that doesn't yield, is `seq.empty()`. A `yield` the block ends with has no rest, and is `__seqLast(x)`, the sequence of `x` alone. A `for` loop whose body yields gives the sequences its body gives for each element, one after another, then goes on to the rest of the block: it's `seq.flatMap` over the loop's collection. As with a plain `for` loop, that can be anything `Iterable`: a sequence or a range, which is walked as it is, or a list, an array, a set, a map or a type of your own that attaches `toSeq`, which is read through its sequence.
 
 ```nanyx
 def evens = seq {
@@ -111,7 +111,7 @@ def evens = seq {
 println(evens \seq.toList)
 ```
 
-Any lambda with a `yield` in it is a sequence, not only a block after `seq`, so a function can take one: `list.select` gives back every value its lambda yields for each element, as in `xs \list.select { x -> if x > 0 then yield x }`.
+Any lambda with a `yield` in it is a sequence, not only a block after `seq`. The builders that take every value at once, such as `list.build` and `list.select`, don't take a sequence: their lambda calls `emit`, which pushes each value as it comes, so nothing is lazy and nothing is made per value but the result ([Building a collection](./sequences-and-queries#building-a-collection)).
 
 A sequence has no `return`: it ends where its block does. `yield` gives no value, so it's a statement of its own, never bound with `def`. And it can't be in a `while` loop, whose body runs again each time round: walk a sequence with a `for` loop instead, or make the sequence with `seq.unfold`.
 

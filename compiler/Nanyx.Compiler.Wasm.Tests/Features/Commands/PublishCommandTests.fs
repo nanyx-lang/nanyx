@@ -96,7 +96,7 @@ type private FakeGitHub(indexFiles: (string * string) list) =
 
 /// acme.util at `version`, in `util`, released on `acme/util`, whose module `strings` is `source`.
 let private util (directory: TempDirectory) (version: string) (source: string) =
-    directory.Write "util/util.nyxp" $"(package = (name = \"acme.util\", version = \"{version}\", repository = \"acme/util\"))\n"
+    directory.Write "util/util.nyxp" $"(package = (name = \"acme.util\", version = \"{version}\", repository = \"acme/util\", nanyx = \"0.1\"))\n"
     directory.Write "util/strings.nyx" source
     Path.Combine(directory.Path, "util")
 
@@ -287,7 +287,7 @@ let ``A bump too small is refused, listing the changes that need a bigger one, a
     Assert.Empty(github.Requests)
 
 [<Fact>]
-let ``A version published already, a package with no repository, and one not formatted are refused`` () =
+let ``A version published already, a package with no repository or no nanyx, and one not formatted are refused`` () =
     use directory = new TempDirectory()
     let app = util directory "1.0.0" shout
     let store = storeIn directory true
@@ -303,6 +303,12 @@ let ``A version published already, a package with no repository, and one not for
     Assert.Equal(
         "error: acme.util has no `repository`, the GitHub repository whose releases are its versions: add `repository = \"owner/name\"` to the `package` in util.nyxp\n",
         noRepository.StandardError.ReplaceLineEndings "\n"
+    )
+    directory.Write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"1.1.0\", repository = \"acme/util\"))\n"
+    let noNanyx = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal(
+        $"error: acme.util doesn't say the oldest compiler it builds with, which the package index records so that an older one never chooses it: add `nanyx = \"{NewPackage.nanyxOf Toolchain.version}\"` to the `package` in util.nyxp\n",
+        noNanyx.StandardError.ReplaceLineEndings "\n"
     )
     util directory "1.1.0" (shout.Replace("def shout = ", "def shout =  ")) |> ignore
     let unformatted = nanyxWithGitHub store github.Client app [ "publish" ]

@@ -60,7 +60,7 @@ let canHoldMutable (ty: IrType) =
         | IrBox -> true
         // The type itself again, which holds what its body holds.
         | IrRecursive body -> holds body
-        | IrSelf
+        | IrSelf _
         | IrInt
         | IrSized _
         | IrBool
@@ -119,20 +119,13 @@ let tracked (newLocal: IrType -> Var) (held: IrType) (value: Atom) (k: Atom -> E
     let tracking = Expr.make (CallRuntime(WasmRegions.Names.regionTrack, [ AVar box ], false)) IrUnit
     Expr.make (Let(box, Expr.make (MakeRecord (boxFields value)) boxTy, Expr.make (Let(track, tracking, body)) body.Type)) body.Type
 
-/// `k` of what the box `box` holds, with a reference of its own, in a local made by `newLocal`.
-let private unboxed (newLocal: IrType -> Var) (box: Atom) (k: Atom -> Expr) : Expr =
-    match atomType box with
-    | RegionBox held ->
-        let inner = newLocal held
-        let body = k (AVar inner)
-        Expr.make (Let(inner, Expr.make (Field(box, boxValueSlot)) held, body)) body.Type
-    | other -> internalError $"a mutable array of type '{IrType.show other}', which is not a box"
-
 /// The intrinsic `name` of a mutable array, on `atoms`, of type `resultTy`, passed to `k`: an `MArray` is a box holding
 /// an array (see `boxType`), so that it is on a region as an `MRef` is. One that makes an array makes it as an array's
-/// intrinsic does and puts it in a new box. One that reads the array, or writes an element for the first time, does so
-/// to what the box holds. `marraySet`, which changes an element, promotes the value onto the box's region first (see
-/// `withBarrier`), and changes the element of what the box holds in place.
+/// intrinsic does and puts it in a new box. One that reads the array, or writes an element for the first time, is given
+/// the box, and reads the array it holds with no reference of its own (see `CoreIrEmit.ArrayIntrinsic`): the box lives
+/// until the intrinsic is done, and nothing puts another array in it. Counting a read of the array gave every
+/// `MArray.at` and `MArray.set` a dup and a drop (#2417). `marraySet`, which changes an element, promotes the value onto
+/// the box's region first (see `withBarrier`), and changes the element of the array in place.
 let mutableArray (newLocal: IrType -> Var) (name: string) (atoms: Atom list) (resultTy: IrType) (k: Expr -> Expr) : Expr =
     let intrinsic = NyxCompiler.Intrinsics.asArrayIntrinsic name
     let returns = not (NyxCompiler.Intrinsics.returnsUnit name)
@@ -143,10 +136,15 @@ let mutableArray (newLocal: IrType -> Var) (name: string) (atoms: Atom list) (re
         let body = tracked newLocal arrayTy (AVar array) (fun box -> k (Expr.make (Atom box) (atomType box)))
         Expr.make (Let(array, call intrinsic atoms arrayTy, body)) body.Type
     else
-        // Reading what the box holds comes before the call, so the operands are held in locals first.
-        settled newLocal atoms (fun atoms ->
-            let apply (atoms: Atom list) = unboxed newLocal atoms.Head (fun array -> k (call intrinsic (array :: atoms.Tail) resultTy))
-            if name = NyxCompiler.Intrinsics.marraySet then withBarrier newLocal WasmRegions.Names.regionStore atoms apply else apply atoms)
+        let apply (atoms: Atom list) = k (call intrinsic atoms resultTy)
+        if name = NyxCompiler.Intrinsics.marraySet then withBarrier newLocal WasmRegions.Names.regionStore atoms apply else apply atoms
+
+/// The array a mutable array's box holds, for its type `ty`, or `ty` itself when it is not a box: an array intrinsic is
+/// given a mutable array's box (see `mutableArray`).
+let arrayIn (ty: IrType) =
+    match ty with
+    | RegionBox held -> held
+    | other -> other
 
 /// Whether `name` is an intrinsic of a mutable array (see `mutableArray`).
 let isMutableArrayIntrinsic (name: string) =

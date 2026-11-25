@@ -90,12 +90,25 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
                 if Unifier.isMadeUpRest var || Set.isEmpty (Set.intersect madeUpIds (TypeEnv.freeTyVars solved)) then None
                 else Some (TyVar var, Unifier.apply closing solved))
     let held = Boxes.heldVariables closedTy
-    { Quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
+    let quantified = TypeEnv.freeTyVars closedTy |> Set.filter (fun id -> not (envVars.Contains id || held.Contains id))
+    // A variable of the def's type that a task's work stands for is a work variable of the def (see `TaskWork`). Only
+    // one among a function's contexts can be: a def whose type has none, as most have, looks at no work variable, which
+    // a def of many tasks has many of (#2551).
+    let workCandidates = Set.intersect quantified (TaskWork.contextVariables closedTy)
+    let taskWork =
+        if workCandidates.IsEmpty then state.TaskWork
+        else
+        state.TaskWork
+        |> Map.fold (fun marked id at ->
+            TypeEnv.freeTyVars (Unifier.apply subst (TyVar(TyVar.ordinary id None)))
+            |> Set.intersect workCandidates
+            |> Set.fold (fun marked var -> if Map.containsKey var marked then marked else marked |> Map.add var at) marked) state.TaskWork
+    { Quantified = quantified
       Type = closedTy
       Symbol = None
       ProvidedBy = None },
     (own |> List.map (fun v -> TyVar v, bottom)) @ solvedWithMadeUp
-    |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) state
+    |> List.fold (fun st (var, closedTy) -> addConstraint var closedTy st) { state with TaskWork = taskWork }
 
 /// The types of a lambda's parameters when its input is expected to be `expectedInput`. Several parameters take a
 /// record's fields, by name or by position. Against an input known not to be a record they are a tuple of fresh
@@ -169,6 +182,7 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
                 |> Result.map (ScopedCalls.leave expr)
                 |> Result.map (fun next -> typedExpr, next)
             | _ -> Ok (typedExpr, next))
+        |> Result.map (fun (typedExpr, next) -> typedExpr, Unreached.readAsNever env next expr)
     let recovered =
         match inferred with
         | Ok _ -> inferred
@@ -180,6 +194,10 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
 
 and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
     match expr.Kind with
+    // A string literal is a `char` where one is expected (see `CharLiterals`).
+    | LiteralExpr(StringLit text) when ExpectedLiterals.expectsChar state expr ->
+        CharLiterals.typeOf expr.Span text |> Result.map (fun ty -> mkTypedExpr expr ty None None None, state)
+    | InterpolatedString _ when ExpectedLiterals.expectsChar state expr -> CharLiterals.withHoles expr.Span
     | LiteralExpr literal ->
         let ty, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
         Ok (mkTypedExpr expr ty None None None, next)
@@ -190,14 +208,16 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         |> Result.map (fun (_, current) -> mkTypedExpr expr (TyPrimitive "string") None None None, current)
     | UnitExpr ->
         Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, state)
-    // The placeholder for code not written yet is an error like any other, so a release build refuses it and a debug
-    // build defers it: it has the error type, and stops the program if reached.
     // A workflow keyword's call, or a builder block's `zero`, reads a member of the context the builder runs its block
     // under, which must be in scope by its name.
     | IdentifierExpr name
     | FunctionCall(name, _, _) when WorkflowMembers.isMissing env state expr.Id name -> Error [ WorkflowMembers.missing state expr.Id name ]
+    // The placeholder for code not written yet is an error, so a release build refuses it and a debug build defers it,
+    // stopping the program if it is reached. It has the type `undefined`, as `crash(...)` has: it never gives a value,
+    // so it fits any type without fixing a type variable, and nothing that uses it is another error.
     | IdentifierExpr name when name = Parser.Program.ImplicitNames.notImplemented ->
-        Error [ Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "`???` stands for code not written yet" ]
+        let error = Diagnostics.at DiagnosticCodes.NotImplemented expr.Span "`???` stands for code not written yet"
+        Ok (mkTypedExpr expr Unifier.bottomType None None None, { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs })
     | IdentifierExpr name ->
         match TypeEnv.tryFind name env with
         | Some scheme when not (referenceErrors name expr scheme state).IsEmpty -> Error (referenceErrors name expr scheme state)
@@ -343,6 +363,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             | [] ->
                 let elementTy, nextState = freshVar current
                 mkTypedExpr expr (listType elementTy) None None None, nextState
+            // Checked against a `list(a)` whose `a` is known, each element is given where an `a` is expected, as an
+            // argument is: two lambdas that give back different tags of the union `a`'s result is fit it, though they
+            // don't join. Where `a` is still a variable, as `list.length`'s is, the elements say what it is, joined.
+            | typedItems when expectedElement |> Option.exists (fun element -> match resolveSoFar current element with TyVar _ -> false | _ -> true) ->
+                let element = expectedElement.Value
+                mkTypedExpr expr (listType element) None None None,
+                typedItems |> List.fold (fun constrained item -> addAssignableConstraintAt item.Expr.Span item.Type element constrained) current
             | typedItems ->
                 // The elements are joined as an `if`'s branches are, so `[#red, #green]` is a `list(#red | #green)`.
                 let elementTy, constrained = joinBranchTypes Set.empty current (typedItems |> List.map _.Type)
@@ -439,10 +466,26 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
 /// An operator applied to `left` and `right` that is neither `**`, a composition nor `??`: read through a definition
 /// of it if one is found, or else as the operator built in.
 and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) (left: Expression) (right: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
+    // A string literal compared with a `char` is one, on either side (see `CharLiterals`): on the right, it is checked
+    // knowing so; on the left, it is read again once the right is known, a literal's type taking no constraint.
+    let compares =
+        match expr.Kind with
+        | BinaryOp(op, _, _, _) -> EqualityOperators.isOperator op || OrderingOperators.isOperator op
+        | _ -> false
+    let leftAsChar (leftExpr: TypedExpr) (rightExpr: TypedExpr) (state: InferState) =
+        match left.Kind with
+        | LiteralExpr(StringLit text) when compares && CharLiterals.isChar state rightExpr.Type ->
+            CharLiterals.typeOf left.Span text
+            |> Result.map (fun ty -> { leftExpr with Type = ty }, rightExpr, { state with ExprTypes = state.ExprTypes |> Map.add left.Id ty })
+        | _ -> Ok (leftExpr, rightExpr, state)
     match inferExpr env state left with
     | Error err -> Error err
     | Ok (leftExpr, next) ->
-        match inferExpr env next right |> Result.bind (fun (rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
+        let next = if compares && CharLiterals.isChar next leftExpr.Type then ExpectedLiterals.expect Chars.ty next right else next
+        match
+            inferExpr env next right
+            |> Result.bind (fun (rightExpr, nextState) -> leftAsChar leftExpr rightExpr nextState)
+            |> Result.bind (fun (leftExpr, rightExpr, nextState) -> ArithmeticOperators.readLiterals (inferExpr env) env nextState expr leftExpr rightExpr) with
         | Error err -> Error err
         | Ok (leftExpr, rightExpr, nextState) ->
             let arithmetic = match expr.Kind with BinaryOp(op, _, _, _) -> ArithmeticOperators.isOperator op | _ -> false
@@ -605,6 +648,8 @@ and private readMember (env: TypeEnv) (state: InferState) (expr: Expression) (ba
             // What failed to check was reported where it failed; reading from it is not another error.
             | None when Unifier.isError baseTy ->
                 Ok (mkTypedExpr expr Unifier.errorType None None None, { next with UnknownTypeUses = expr.Id :: next.UnknownTypeUses })
+            // Nothing is read from what never gives a value, as `crash(...)` and `???` don't.
+            | None when Unifier.isBottom baseTy -> Ok (mkTypedExpr expr Unifier.bottomType None None None, next)
 
             | None -> Error [ unknownMember env memberSpan receiver baseTy memberName ]
 
@@ -851,6 +896,11 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                     // The parameterised contexts a local def that writes no type requires are part of
                                     // its type, as if written.
                                     if expectedDeclaredOpt.IsNone && contextOpt.IsNone then
+                                        let earlier = pendingBefore |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
+                                        let calls = current.PendingContextInstances |> List.filter (fun p -> not (earlier.Contains (p.Call, p.Index)))
+                                        match ContextInference.unfixedValueType current name (declarationSpan current DefValue expr) declaredTy calls with
+                                        | [] -> ()
+                                        | err -> errors <- err
                                         scheme, ContextInference.resolveLocal name symbol scheme pendingBefore generalized
                                     else scheme, generalized
                             current <-

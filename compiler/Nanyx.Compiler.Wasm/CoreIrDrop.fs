@@ -15,7 +15,7 @@ open Transpiler.Wasm.CoreIr
 let rec isHeapType (ty: IrType) =
     match ty with
     | IrRecursive _ -> isHeapType (IrType.unfold ty)
-    | IrSelf -> internalError "a recursive type's own type outside it"
+    | IrSelf _ -> internalError "a recursive type's own type outside it"
     | IrString
     | IrList _
     | IrArray _
@@ -31,6 +31,13 @@ let rec isHeapType (ty: IrType) =
     | IrUnit
     | IrError
     | IrWord -> false
+
+/// Whether a value of `ty` is a tag of a union with no payloads, which is its own code: never a cell, so its code is read
+/// with no call of `Helpers.tagCode`.
+let tagIsCode (ty: IrType) =
+    match IrType.unfold ty with
+    | IrTags _ -> not (isHeapType ty)
+    | _ -> false
 
 /// The name of the drop function of a type on the heap.
 let dropName (ty: IrType) = "__nanyx_drop_" + sanitizeIdentifier (IrType.mangle ty)
@@ -247,7 +254,7 @@ let private fieldDrops (tagId: string -> int option) (ty: IrType) : string list 
     | IrError
     | IrWord
     | IrRecursive _
-    | IrSelf -> internalError $"the fields of '{IrType.show ty}', which is not an object with fields"
+    | IrSelf _ -> internalError $"the fields of '{IrType.show ty}', which is not an object with fields"
 
 /// The body of the drop function of `ty`, which takes the value in `$p`.
 let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
@@ -295,7 +302,7 @@ let private dropBody (tagId: string -> int option) (ty: IrType) : string list =
     | IrError
     | IrWord
     | IrRecursive _
-    | IrSelf -> internalError $"a drop function for '{IrType.show ty}', which is not on the heap"
+    | IrSelf _ -> internalError $"a drop function for '{IrType.show ty}', which is not on the heap"
 
 /// The body of the function that drops the object at `$p`, a value of `ty`, a type that `defers`, whose last reference
 /// has been given up: its fields, then the object. A list's tail is given up as any other list would be.

@@ -41,10 +41,10 @@ println("{Slice.filterMap(part, tens)} {Slice.filterMap(none, tens)}")
     |> assertRan "[4, 7, 8] []\n[40, 70, 80] []\n"
 
 [<Fact>]
-let ``Run - Slice.select and Slice.selectOne give what the function yields`` () =
+let ``Run - Slice.select gives what the function emits and Slice.selectOne the first it yields`` () =
     runWithSlices
         """
-println("{Slice.select(part, { x -> if x > 3 then yield x })} {Slice.select(none, { x -> yield x })}")
+println("{Slice.select(part, { x -> if x > 3 then emit(x) })} {Slice.select(none, { x -> emit(x) })}")
 println(Slice.selectOne(part, { x -> if x < 4 then yield x }))
 println(Slice.selectOne(part, { x -> if x > 100 then yield x }))
 println(Slice.selectOne(none, { x -> yield x }))

@@ -570,7 +570,7 @@ internal static partial class CliCommands
     /// Compiles a script, as <see cref="Script.compileFile"/> does, with a stopwatch on the shell's stderr while that is
     /// a terminal, and each module's time after it with <paramref name="timings"/> (see <see cref="CompileProgress"/>).
     /// </summary>
-    private static CompileResult CompileScript(Shell shell, string inputFile, bool timings)
+    internal static CompileResult CompileScript(Shell shell, string inputFile, bool timings)
     {
         using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)), shell.DisplayPath, timings);
         var result = Script.compileFileReportingIn(shell.Packages, progress.Listener, shell.FullPath(inputFile));
@@ -1091,12 +1091,20 @@ internal static partial class CliCommands
         }
 
         var result = CompileScript(compiling, inputFile, timings);
-        PrintDiagnostics(compiling, WorthStoppingFor(result.Diagnostics), compiling.Error);
+        return RunCompiledScript(compiling, inputFile, result, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile, yieldAtEveryWait);
+    }
+
+    /// <summary>Runs the script <paramref name="inputFile"/>, compiled to <paramref name="result"/>, as <c>run</c> does
+    /// once it has compiled it: so a caller can compile a script once and run it more than one way, as the tests of the
+    /// docs' examples run each with and without inlining.</summary>
+    internal static int RunCompiledScript(Shell shell, string inputFile, CompileResult result, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false)
+    {
+        PrintDiagnostics(shell, WorthStoppingFor(result.Diagnostics), shell.Error);
         // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the
         // program reaches it.
         var deferred = ErrorsDeferred(result);
-        ReportDeferredRun(compiling, deferred, result.Diagnostics);
-        return RunProgram(compiling, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait);
+        ReportDeferredRun(shell, deferred, result.Diagnostics);
+        return RunProgram(shell, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait);
     }
 
     /// <summary>

@@ -46,6 +46,11 @@ type internal Lowering =
     | Canonicalising of Ty
     /// As the function that gives a value of this collection type from its elements boxed in their canonical form.
     | Decanonicalising of Ty
+    /// As the function a closure that boxes a value of this type in its canonical form is over, which the prelude is
+    /// passed to box a map's keys and values in place (see `Maps.convertedStore`).
+    | CanonicalisingValue of Ty
+    /// As the function a closure that unboxes a value of this type from its canonical form is over.
+    | DecanonicalisingValue of Ty
     /// As the function that makes a value of this record type from its fields' values, boxed, in its description.
     | MakingRecord of Ty
     /// As the `build` of the case of this name of this union, in its description.
@@ -65,6 +70,9 @@ type internal LocalClosure = Map<int, Ty> -> IrType list -> (Expr -> Expr) -> Ex
 /// What names refer to in the expression being lowered.
 type internal Scope =
     { Vars: Map<string, Var>
+      /// In a debug build, the locals a `def` binds in scope that a probe can write, the one bound last first (see
+      /// `CoreIrProbes`).
+      Probed: Var list
       /// How many scrutinees enclose the expression: the next `match` holds its own from this number on.
       MatchDepth: int
       /// The names of the pattern-bound locals of the arms that enclose the expression, which a nested arm must not

@@ -85,11 +85,11 @@ key, the later wins, as in [`map.fromList`](#mapfromlist). It requires the conte
 ## `map.build`
 
 ```nanyx fragment
-def map.build: [Eq(k), Hash(k), c, d] ([c] () -> [d] seq((k, v))) -> map(k, v)
+def map.build: [Eq(k), Hash(k), c] ([c, Emit((k, v))] () -> ()) -> map(k, v)
 ```
 
-The map of the entries `block` yields: `map.build { yield ("a", 1) }`. The same as
-`seq(block) \map.fromSeq`.
+The map of the entries `block` emits, through `Emit`: `map.build { emit(("a", 1)) }`. Of two
+entries with the same key, the later wins. The same as `list.build(block) \map.fromList`.
 
 ## `map.toList`
 
@@ -97,7 +97,9 @@ The map of the entries `block` yields: `map.build { yield ("a", 1) }`. The same 
 def map.toList: map(k, v) -> list((k, v))
 ```
 
-The entries of `m`, each a key and its value, in the order the keys were first added.
+The entries of `m`, each a key and its value, in the order of their keys' hashes: an order that
+is the same for two maps with the same keys, however they were built, but that a program should
+not rely on. Sort the list for an order of your own: `map.toList(m) \list.sortBy { entry -> entry.0 }`.
 
 ## `map.toSeq`
 
@@ -154,7 +156,7 @@ def list.groupBy: [Eq(b), Hash(b), c] list(a), ([c] a -> b) -> map(b, list(a))
 ```
 
 The elements of `xs` grouped by `key`: a map from each key to the elements that have it, in
-order. The keys are in the order they first appear.
+order.
 
 ## `map.keys`
 
@@ -162,7 +164,7 @@ order. The keys are in the order they first appear.
 def map.keys: map(k, v) -> list(k)
 ```
 
-The keys of `m`, in the order they were first added.
+The keys of `m`, in the order of [`map.toList`](#maptolist).
 
 ## `map.values`
 
@@ -170,7 +172,7 @@ The keys of `m`, in the order they were first added.
 def map.values: map(k, v) -> list(v)
 ```
 
-The values of `m`, in the order their keys were first added.
+The values of `m`, in the order of [`map.toList`](#maptolist).
 
 ## `map.isEmpty`
 
@@ -194,7 +196,7 @@ def map.fold: [c] map(k, v), b, ([c] (b, k, v) -> b) -> b
 def map.reduce: [c] map(k, v), ([c] (v, v) -> v) -> #some(v) | #none
 ```
 
-The values of `m` combined with `f`, in order, starting from the first: `["a" => 4, "b" => 5]
+The values of `m` combined with `f`, in the order of [`map.toList`](#maptolist), starting from the first: `["a" => 4, "b" => 5]
 \map.reduce { * }` is `#some(20)`, and an empty map, having no first value, gives `#none`. To
 start from another value, use [`map.fold`](#mapfold).
 
@@ -249,7 +251,7 @@ def map.update: [Eq(k), Hash(k), c] map(k, v), k, ([c] #some(v) | #notFound -> v
 ```
 
 `m` with `key` holding `f` of what `m` holds for it, `#some(value)` or `#notFound`. A key `m`
-does not have is added at the end.
+does not have is added.
 
 ## `map.union`
 
@@ -275,15 +277,13 @@ As `map.union`, but where both have a key the value is `combine` of `m`'s value 
 def set.empty: set(a)
 ```
 
-The set with no elements.
-
 ## `set.fromList`
 
 ```nanyx fragment
 def set.fromList: [Eq(a), Hash(a)] list(a) -> set(a)
 ```
 
-The set of the elements of `xs`, each once, in the order they first appear.
+The set of the elements of `xs`, each once.
 
 ## `set.fromArray`
 
@@ -291,7 +291,7 @@ The set of the elements of `xs`, each once, in the order they first appear.
 def set.fromArray: [Eq(a), Hash(a)] array(a) -> set(a)
 ```
 
-The set of the elements of `xs`, each once, in the order they first appear. What a literal
+The set of the elements of `xs`, each once. What a literal
 builds a set with, `set[1, 2]`, or `[1, 2]` where a set is expected.
 
 ## `set.fromSeq`
@@ -300,17 +300,17 @@ builds a set with, `set[1, 2]`, or `[1, 2]` where a set is expected.
 def set.fromSeq: [Eq(a), Hash(a), c] ([c] seq(a)) -> set(a)
 ```
 
-The set of the elements of `s`, pulled now, each once, in the order they first appear. It
+The set of the elements of `s`, pulled now, each once. It
 requires the contexts the sequence's steps do.
 
 ## `set.build`
 
 ```nanyx fragment
-def set.build: [Eq(a), Hash(a), c, d] ([c] () -> [d] seq(a)) -> set(a)
+def set.build: [Eq(a), Hash(a), c] ([c, Emit(a)] () -> ()) -> set(a)
 ```
 
-The set of what `block` yields: `set.build { yield 1  yield 1 }` holds one `1`. The same as
-`seq(block) \set.fromSeq`.
+The set of what `block` emits, through `Emit`: `set.build { emit(1); emit(1) }` holds one `1`.
+The same as `list.build(block) \set.fromList`.
 
 ## `set.toList`
 
@@ -318,7 +318,8 @@ The set of what `block` yields: `set.build { yield 1  yield 1 }` holds one `1`. 
 def set.toList: set(a) -> list(a)
 ```
 
-The elements of `s`, in the order they were first added.
+The elements of `s`, in the order of their hashes, as [`map.toList`](#maptolist) gives a map's keys: the same
+for two sets with the same elements, however they were built, but not one a program should rely on.
 
 ## `set.toSeq`
 
@@ -342,7 +343,7 @@ Whether `s` holds `x`.
 def set.insert: [Eq(a), Hash(a)] set(a), a -> set(a)
 ```
 
-`s` with `x` added at the end. A set that holds `x` is given back as it is.
+`s` with `x` added. A set that holds `x` is given back as it is.
 
 ## `set.remove`
 
@@ -382,7 +383,7 @@ def set.fold: [c] set(a), b, ([c] (b, a) -> b) -> b
 def set.reduce: [c] set(a), ([c] (a, a) -> a) -> #some(a) | #none
 ```
 
-The elements of `s` combined with `f`, in order, starting from the first: `set[1, 2, 3, 4, 5]
+The elements of `s` combined with `f`, in the order of [`set.toList`](#settolist), starting from the first: `set[1, 2, 3, 4, 5]
 \set.reduce { * }` is `#some(120)`, and an empty set, having no first element, gives `#none`. To
 start from another value, use [`set.fold`](#setfold).
 
@@ -416,12 +417,11 @@ first of them was.
 ## `set.select`
 
 ```nanyx fragment
-def set.select: [Eq(b), Hash(b), c, d] set(a), ([c] a -> [d] seq(b)) -> set(b)
+def set.select: [Eq(b), Hash(b), c] set(a), ([c, Emit(b)] a -> ()) -> set(b)
 ```
 
-The set of the values `f` yields for each element in turn. Values that come out equal are kept
-once, where the first of them was. A lambda with `yield` in it is a sequence (see `Yield`), as
-in [`list.select`](prelude-lists#listselect).
+The set of the values `f` emits for each element in turn, through `Emit`, as in
+[`list.select`](prelude-lists#listselect). Values that come out equal are kept once, where the first of them was.
 
 ## `set.any`
 
@@ -455,7 +455,7 @@ Whether `t` holds every element of `s`.
 def set.union: [Eq(a), Hash(a)] set(a), set(a) -> set(a)
 ```
 
-The elements of `s`, then those of `t` that `s` does not hold.
+The elements of `s` and those of `t`.
 
 ## `set.intersection`
 
@@ -463,7 +463,7 @@ The elements of `s`, then those of `t` that `s` does not hold.
 def set.intersection: [Eq(a), Hash(a)] set(a), set(a) -> set(a)
 ```
 
-The elements of `s` that `t` holds too, in the order of `s`.
+The elements of `s` that `t` holds too.
 
 ## `set.difference`
 
@@ -471,6 +471,6 @@ The elements of `s` that `t` holds too, in the order of `s`.
 def set.difference: [Eq(a), Hash(a)] set(a), set(a) -> set(a)
 ```
 
-The elements of `s` that `t` does not hold, in the order of `s`.
+The elements of `s` that `t` does not hold.
 
 <!-- End of the generated reference. -->

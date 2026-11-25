@@ -142,9 +142,7 @@ let private calledOnce (exported: Set<string>) (functions: Map<string, Function>
 type private Inliner
     (functions: Dictionary<string, Function>, cyclic: Set<string>, once: Set<string>, placed: HashSet<string>, prepare: string -> unit, exported: Set<string>, f: Function) =
     let mutable nextId =
-        let mutable highest = f.Params |> List.fold (fun acc p -> max acc p.Id) 0
-        mapVars (fun v -> highest <- max highest v.Id; v) id f.Body |> ignore
-        highest
+        maxVarId (f.Params |> List.fold (fun acc p -> max acc p.Id) 0) f.Body
     let mutable instances = 0
 
     let newId () =
@@ -195,7 +193,7 @@ type private Inliner
     /// One time over `body`: each call that is to be inlined is.
     member this.Round (body: Expr) : Expr * bool =
         // Simplifying makes variables of its own, which new ones must not share an id with.
-        mapVars (fun v -> nextId <- max nextId v.Id; v) id body |> ignore
+        nextId <- maxVarId nextId body
         // How often each function is called here, and the functions this body makes a closure over.
         let calls = Dictionary<string, int>()
         let closures = HashSet<string>()
@@ -380,14 +378,17 @@ let inlineCalls (start: string option) (exported: string list) (kept: Set<string
             let inliner = Inliner(current, cyclic, once, placed, prepare, exportedNames, f)
             let mutable body = f.Body
             let mutable round = 0
-            let mutable changed = true
-            while changed && round < rounds do
-                let simplified, didSimplify = CoreIrSimplify.simplify current { f with Body = body }
+            // Whether the body is settled (see `CoreIrSimplify.simplify`) and nothing was inlined into it since: another
+            // round would then simplify nothing and inline nothing, so it is gone over no more (#2579).
+            let mutable settled = false
+            while not settled && round < rounds do
+                let simplified, simplifiedSettled = CoreIrSimplify.simplify current { f with Body = body }
                 let next, didInline = inliner.Round simplified
                 body <- next
-                changed <- didSimplify || didInline
+                settled <- simplifiedSettled && not didInline
                 round <- round + 1
-            current.[name] <- { f with Body = fst (CoreIrSimplify.simplify current { f with Body = body }) }
+            let body = if settled then body else fst (CoreIrSimplify.simplify current { f with Body = body })
+            current.[name] <- { f with Body = body }
     // The functions `name` calls are inlined into first, in order, so that a long chain of calls is not gone down
     // recursively.
     and prepare (name: string) =

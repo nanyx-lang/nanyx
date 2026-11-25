@@ -48,3 +48,60 @@ def total: seq(int) -> int = { s ->
 
 A sequence whose steps need contexts says so in its type: mapping with a function that prints gives a
 `[Console] seq(b)`, which can be pulled only where `Console` is.
+
+# Building a collection
+
+A sequence is lazy, which a collection built all at once doesn't need. So `list.build`, `list.select` and the other
+`build` and `select` functions take a block that calls `emit` for each value instead, through the prelude's `Emit`
+context. The block runs once, now, and each value goes into the collection as it is emitted:
+
+```nanyx
+def evens = list.build {
+  for 1..10 | n ->
+    if n % 2 == 0 then emit(n)
+}
+
+def doubled = [1, 2, 3] \list.select { x ->
+  emit(x)
+  emit(x * 10)
+}
+
+println(evens) -- [2, 4, 6, 8, 10]
+println(doubled) -- [1, 10, 2, 20, 3, 30]
+```
+
+`string.build` builds a string the same way, from the pieces its block emits. Each piece is copied once, so a string
+of many pieces takes time in proportion to its length, where adding them one at a time with `++` copies the string so
+far for each:
+
+```nanyx
+def row = string.build {
+  for [1, 2, 3] | n ->
+    emit(int.toString(n))
+    emit(";")
+}
+
+println(row) -- 1;2;3;
+```
+
+A lambda given to `list.select` emits as many values as it likes for each element, none included. One that gives a
+whole list for each element is `list.flatMap`'s, and one that gives a sequence `seq.flatMap`'s.
+
+`emit` is an ordinary context member, so a function that emits can call another that does, and you can handle it
+yourself with `use`, here to print each value a walk emits:
+
+```nanyx
+type Tree = #leaf(int) | #node(Tree, Tree)
+
+def walk: [Emit(int)] Tree -> () = {
+  | #leaf(n) -> emit(n)
+  | #node(left, right) ->
+    walk(left)
+    walk(right)
+}
+
+use Emit(int)(emit = { n -> println(n) }) in walk(#node(#leaf(1), #node(#leaf(2), #leaf(3))))
+```
+
+A block with `yield` in it is different: it is a lazy sequence, made with `seq { ... }`
+([Workflows](./workflows#yield-and-sequences)).

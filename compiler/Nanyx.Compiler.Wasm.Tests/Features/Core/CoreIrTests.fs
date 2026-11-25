@@ -456,3 +456,19 @@ let ``A broken invariant in the emitter is an internal error, said once, that as
             "The compiler broke one of its own rules (a temporary in the core IR is never used): report it at https://github.com/nanyx-lang/nanyx/issues",
             diagnostic.Message)
     | failures -> Assert.Fail $"Expected one failure in f, got %A{failures}"
+
+[<Fact>]
+let ``A function value that can stop where its type says it can't is an internal error, not wrong code`` () =
+    // A caller knows that a function value can stop only from its type (#2558). No program type-checks to this, so it is
+    // made in the core IR: `waiting` calls a function value that waits, and `maker` makes a closure over it.
+    let waitingTy = CoreIr.IrFunction(CoreIr.IrInt, CoreIr.IrInt, [], true)
+    let f: CoreIr.Var = { Id = 1; Name = "f"; Kind = CoreIr.Param; Type = waitingTy }
+    let func name parameters result body : CoreIr.Function =
+        { Name = name; Source = name; TypeArguments = []; Params = parameters; Result = result; Body = body; Place = None }
+    let waiting = func "waiting" [ f ] CoreIr.IrInt (CoreIr.Expr.make (CoreIr.CallClosure(f, [ CoreIr.AInt 1L ], CoreIr.Borrowing)) CoreIr.IrInt)
+    let maker (closureTy: CoreIr.IrType) = func "maker" [] closureTy (CoreIr.Expr.make (CoreIr.Atom(CoreIr.AStaticClosure("waiting", 1, closureTy))) closureTy)
+    CoreIrSplitPoints.checkFunctionValues "start" [ waiting; maker waitingTy ]
+    let error =
+        Assert.Throws<CoreIr.InternalError>(fun () ->
+            CoreIrSplitPoints.checkFunctionValues "start" [ waiting; maker (CoreIr.IrFunction(CoreIr.IrInt, CoreIr.IrInt, [], false)) ])
+    Assert.Equal("the function value `waiting` can stop where it waits, but its type `(int -> int)` says it can't", error.Data0)

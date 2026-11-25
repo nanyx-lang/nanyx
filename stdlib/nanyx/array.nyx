@@ -26,10 +26,10 @@ export def array.fromSeq: [c] ([c] seq(a)) -> array(a) = { s ->
   writeBackFrom(__nanyx_array_new(count), count - 1, reversed)
 }
 
---| An array of what `block` yields: `Array.build { yield 1  if more then yield 2 }`. The same as
-  `seq(block) \array.fromSeq`.
-export def array.build: [c, d] ([c] () -> [d] seq(a)) -> array(a) = { block ->
-  array.fromSeq(seq(block))
+--| An array of what `block` emits, through [`Emit`]: `Array.build { emit(1); if more then emit(2) }`.
+  The same as `list.build(block) \array.fromList`.
+export def array.build: [c] ([c, Emit(a)] () -> ()) -> array(a) = { block ->
+  array.fromList(list.build(block))
 }
 
 -- `made`, a new array, once each of `reversed` is written into it, the first at `index` and each

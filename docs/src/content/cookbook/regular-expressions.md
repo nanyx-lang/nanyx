@@ -4,9 +4,10 @@ description: Finding, extracting and replacing text with nanyx.regex
 order: 3
 ---
 
-The compiler ships a package of regular expressions, `nanyx.regex`. Its engine takes time in proportion to the text
-for every pattern, so a pattern from a user can't hang a program, and it has no backreferences or lookaround. Its
-reference is the [regex](../stdlib/regex) page.
+Regular expressions are a package from the index, `nanyx.regex`, published from
+[nanyx-lang/regex](https://github.com/nanyx-lang/regex). Its engine takes time in proportion to the text for every
+pattern, so a pattern from a user can't hang a program, and it has no backreferences or lookaround. Its reference is the
+[regex](../stdlib/regex) page.
 
 # Setup
 
@@ -16,10 +17,10 @@ cd regexes
 nanyx install nanyx.regex
 ```
 
-A script names it in a `::dependency` line instead:
+A script names it, at the version it uses, in a `::dependency` line instead:
 
 ```nanyx fragment
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 ```
 
 Write a pattern as a raw, single-quoted string, `'\d+'`, so its backslashes need no escaping. `Regex.parse` gives back
@@ -31,7 +32,7 @@ for good, so `orCrash` is the usual way to take it.
 Anchor the pattern with `^` and `$` to test the whole string rather than finding a part of it:
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 
@@ -51,7 +52,7 @@ Each `( )` is a group, numbered from 1, and `(?<name> )` names one. `Match.group
 matched, as `#some(string)`, or `#none` when it took no part in the match:
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 
@@ -72,7 +73,7 @@ match "Released on 2026-11-17." \Regex.find(date)
 `Regex.findAll` gives a sequence that finds each match only when it is pulled, so `seq.take` stops it early:
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 
@@ -93,7 +94,7 @@ println(words \seq.take(2) \seq.toList)
 named `name` did. `Regex.replaceWith` takes a function of the match instead:
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 
@@ -115,7 +116,7 @@ println("a1b22c333" \Regex.replaceWith(number, { m -> "<{m.text}>" }))
 `Regex.split` splits a string where a pattern matches, which a fixed separator can't do:
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 
@@ -133,7 +134,7 @@ arm, with the `Match` as its payload if you want it. `#MatchesRegex` does the sa
 one built at run time:
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 
@@ -158,7 +159,7 @@ Each pattern is read once, when the match first runs it, and one that is wrong c
 A pattern made from input can be wrong, and the `RegexError` says where, counting code points from 1:
 
 ```nanyx
-::dependency nanyx.regex
+::dependency nanyx.regex 0.1.0
 
 import nanyx.regex/regex
 

@@ -175,7 +175,7 @@ println(json.print(encodeAt(User(name = "Ada", age = 36, roles = [#admin, #membe
 """
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan
-        """{"name":"Ada","age":36,"roles":[{"tag":"admin","value":null},{"tag":"member","value":2}],"active":true}
+        """{"name":"Ada","active":true,"age":36,"roles":[{"value":null,"tag":"admin"},{"value":2,"tag":"member"}]}
 """
 
 let private naming =

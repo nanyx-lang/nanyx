@@ -72,6 +72,27 @@ Nothing that holds a task can leave its def: giving back a `Task`, or a lambda t
 scope is the def, not the nearest lambda: a task started in a local def or a lambda belongs to the def it is written
 in. A function that awaits a task it is given borrows its caller's scope.
 
+A def that is a scope and is called last by another, or by itself, joins the caller's scope rather than opening its own,
+so the call stays a [tail call](../tour/functions#tail-recursion), and a def that starts a task in each turn and calls
+itself last is a loop. Every turn's tasks belong to the outermost call's scope: one nobody awaits is waited for when that
+call returns, at the loop's end, not at the end of its turn. For now a scope frees its tasks only when it ends, awaited
+or not, so such a loop holds a little memory for each task it has started until it returns
+([#2666](https://github.com/nanyx-lang/nanyx/issues/2666)). Both defs must write their types, and be in the same module;
+a def that writes no type opens a scope of its own wherever it is called, so calling it last isn't a tail call.
+
+```nanyx
+def total: [Async] int, int -> int = { n, acc ->
+  if n == 0 then acc else total(n - 1, acc + await(start! n))
+}
+
+println(total(100_000, 0))
+-- 5000050000
+```
+
+A def is a scope when its body names `start` (or `Async.start`), so a def that starts a task only through another
+name, as `go(...)` after `def go = Async.start` does, is not one, and starting the task there is an error
+([NYX0211](../standard-tools/errors#nyx0211)): name `start` in the def itself.
+
 # A smaller scope
 
 `concurrent` runs a block as a scope of its own, and gives back what the block gives back once every task started in it
@@ -96,10 +117,24 @@ batches()
 It is a function, so its block is passed in parentheses: `concurrent { ... }` would be a
 [workflow's block](./workflows). Like `start`, it is attached to `Async`.
 
+A smaller scope may await a task of the def's scope, which outlives it:
+
+```nanyx
+def outer = { _ ->
+  def t = start! 20
+  def inner = concurrent({ await(t) + await(start! 1) })
+  inner + 1
+}
+
+println(outer(()))
+-- 22
+```
+
 # Tasks share only values
 
 A task can't use what belongs to a `memory` block: starting one with a function that uses a cell or a reference
-(`MRef`, `MList`) is an error ([NYX0279](../standard-tools/errors#nyx0279)). Values are immutable, so a task can never
+(`MRef`, `MList`) is an error ([NYX0279](../standard-tools/errors#nyx0279)), whether `start` starts it, `race` does, or a
+function that passes on what it is given to either. Values are immutable, so a task can never
 change what another holds; give a task what a cell holds, and change the cell with what the task gives back.
 
 # How tasks take turns

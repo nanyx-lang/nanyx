@@ -46,11 +46,10 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         nextId <- nextId + 1
         { Id = nextId; Name = name; Kind = kind; Type = ty }
 
+    let names = NameSupply(usedNames)
+
     /// A parameter's or local's name: as written, made unique within the function.
-    let uniqueName (name: string) =
-        let candidate = freeName usedNames.Contains (sanitizeIdentifier name)
-        usedNames.Add candidate |> ignore
-        candidate
+    let uniqueName (name: string) = names.Fresh(sanitizeIdentifier name)
 
     /// A new local of type `ty`, its name `name` made unique: each call makes another.
     let newLocal (name: string) (ty: IrType) = newVar (uniqueName name) Local ty
@@ -80,12 +79,32 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     // `CoreIrProbes`).
     let probedLocals = System.Collections.Generic.Dictionary<int, string * Ty>()
 
+    // The parameters a probe writes, in order.
+    let probedParameters = ResizeArray<Var>()
+
     /// Notes that a probe writes `var`, named `name` and of `ty`, in a debug build, if a printer can write it.
     let noteProbed (name: string) (var: Var) (ty: Ty) =
         let ty = unconstrainedAsUnit ty
         // A cell's local holds its box, not the value its type is the type of.
         if input.Probes && not (MadeUpNames.isMadeUp name) && CoreIrLowerDbg.printable toIrType ty && toIrType ty = var.Type then
             probedLocals.[var.Id] <- (name, ty)
+            if var.Kind = Param then probedParameters.Add var
+
+    /// What a statement's probe writes in `scope`: the parameters, and the `probeLimit` locals bound last, of those in
+    /// scope, by name. A probe that wrote every local would make a function of n locals n² in size (#2488).
+    let probedInScope (scope: Scope) : Var list =
+        let nameOf (var: Var) = fst probedLocals.[var.Id]
+        let inScope (var: Var) = scope.Vars |> Map.tryFind (nameOf var) |> Option.exists (fun bound -> bound.Id = var.Id)
+        // A local that a later one of its name hides is passed over, but only so many, so that a long run of them
+        // costs no more than the limit.
+        let rec nearest (found: Var list) (count: int) (looked: int) (remaining: Var list) =
+            match remaining with
+            | var :: rest when count < CoreIrProbes.probeLimit && looked < 4 * CoreIrProbes.probeLimit ->
+                if inScope var then nearest (var :: found) (count + 1) (looked + 1) rest
+                else nearest found count (looked + 1) rest
+            | _ -> found
+        (probedParameters |> Seq.filter inScope |> List.ofSeq) @ nearest [] 0 0 scope.Probed
+        |> List.sortWith (fun a b -> System.String.CompareOrdinal(nameOf a, nameOf b))
 
     /// What a probe writes of `vars`: those `noteProbed` noted, each with its type's printer.
     let probeLocals (vars: Var seq) : ProbeLocal list =
@@ -246,6 +265,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// A scope with nothing in it, as at the top of the start function.
     let emptyScope =
         { Vars = Map.empty
+          Probed = []
           MatchDepth = 0
           LivePayloads = Set.empty
           InterpolationDepth = 0
@@ -313,6 +333,11 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             | _ -> cannot "a `type` of a type that is only known when the program runs"
         | LiteralExpr(IntLit value) -> k (Expr.make (Atom(intAtom value (tyOf expr))) (tyOf expr))
         | LiteralExpr(BoolLit value) -> k (Expr.make (Atom(ABool value)) IrBool)
+        // A string literal where a `char` is expected is one, its code point (see `CharLiterals`).
+        | LiteralExpr(StringLit value) when tyOf expr = IrSized SizedInteger.U32 ->
+            match Chars.scalarOf value with
+            | Some scalar -> k (Expr.make (Atom(ASized(SizedInteger.U32, int64 scalar))) (tyOf expr))
+            | None -> internalError "a char literal that is not one character, which the checker reports"
         | LiteralExpr(StringLit value) -> k (Expr.make (Atom(AString value)) IrString)
         | LiteralExpr(FloatLit value) -> k (Expr.make (FloatConstant value) (tyOf expr))
         | IdentifierExpr name -> this.Identifier scope expr name k
@@ -887,10 +912,20 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                 toIrType (substitute subst (TyFunc(inputTy, resultTy, requiredContexts lambdaTy)))
             | None -> tyOf expr
         let arity = IrType.closureArity (parameterNames target) ty
+        // The members the lambda captures that this function knows, which it is specialised on in turn, and not
+        // captured when they come last: a lambda that captured only them is a static closure, made once. A local
+        // function generic in variables of its own keeps them, since it finds its captures by its own keys (#2311).
+        let knownOf (name: string) =
+            match scope.Vars |> Map.tryFind name with
+            | Some var -> match known.TryGetValue var.Id with | true, (_, knownMember) -> Some knownMember | _ -> None
+            | None -> None
+        let knownCaptured, kept = CoreIrLowerKnown.knownCaptures input target knownOf captured
+        let captured = if bindings.IsEmpty && typeArguments.IsEmpty then kept else captured
         this.Atoms scope captured (fun atoms ->
             CoreIrLowerLocals.capturedInstances this.LocalTools scope target bindings captured atoms (fun atoms capturedLocals ->
                 let capturedTys = atoms |> List.map atomType
-                let name = request { SpecKey.plain target (self.TypeArguments @ typeArguments) with Described = self.Described } subst (LiftedCapturing(capturedTys, capturedLocals))
+                let key = { SpecKey.plain target (self.TypeArguments @ typeArguments) with Described = self.Described; Known = knownCaptured }
+                let name = request key subst (LiftedCapturing(capturedTys, capturedLocals))
                 k (closureOver name arity atoms ty)))
 
     /// What lowering a local function generic in variables of its own needs from this function's lowering (see
@@ -1089,7 +1124,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     | _ -> None
                 match written with
                 | Some place when input.Probes ->
-                    let probe = CoreIrProbes.probe ProbeKind.Statement (probeLocals (Map.values scope.Vars)) (Some place)
+                    let probe = CoreIrProbes.probe ProbeKind.Statement (probeLocals (probedInScope scope)) (Some place)
                     { lowered with Kind = Do(probe, lowered) }, rest
                 | _ -> lowered, rest)
             scope
@@ -1143,16 +1178,33 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // The local is named before its value is lowered, so that locals are declared in the order they are
             // written. Its type is its value's, which a local lambda lifting made has as well.
             let localName = uniqueName name
+            // A captured member the lambda is specialised on is known in it, as in the function that made it: it is
+            // given its value here rather than read from the environment, which may not hold it (see `Closure`).
+            let ownerParameter = if scope.CapturedMembers.ContainsKey name then CoreIrLowerKnown.ownerParameter input self.Definition name else None
+            let knownCapture =
+                ownerParameter
+                |> Option.bind (fun parameter ->
+                    self.Known |> List.tryFind (fun (key, knownMember) -> key = parameter.Key && not (KnownMember.isPassed knownMember)))
+            let valueOf (k: Expr -> Expr) =
+                match knownCapture with
+                | Some (_, knownMember) ->
+                    CoreIrLowerMembers.valueOfKnown this.MemberTools knownMember (fun value ->
+                        match ownerParameter |> Option.bind _.Type |> Option.map (substitute subst >> toIrType) with
+                        | Some ty -> CoreIrLowerMembers.coerce this.MemberTools scope value ty (fun value -> k (Expr.make (Atom value) ty))
+                        | None -> k (Expr.make (Atom value) (atomType value)))
+                | None -> this.Complex scope rhs k
             let statement =
-                this.Complex scope rhs (fun value ->
+                valueOf (fun value ->
                     let local = newVar localName Local value.Type
+                    knownCapture |> Option.iter (fun (_, knownMember) -> known.[local.Id] <- (local, knownMember))
                     this.NoteDefinedKnown local rhs value
                     input.ExprTypes |> Map.tryFind rhs.Id |> Option.iter (fun ty -> noteProbed name local (substitute subst ty))
                     let members =
                         match scope.CapturedMembers |> Map.tryFind name with
                         | Some keys -> keys |> List.fold (fun acc key -> acc |> Map.add key local) scope.Members
                         | None -> scope.Members
-                    restScope.Value <- { scope with Vars = scope.Vars |> Map.add name local; Members = members }
+                    let probed = if probedLocals.ContainsKey local.Id then local :: scope.Probed else scope.Probed
+                    restScope.Value <- { scope with Vars = scope.Vars |> Map.add name local; Probed = probed; Members = members }
                     Expr.make (Let(local, value, hole)) hole.Type)
             statement, Some (hole, restScope.Value, rest)
         | ExprStatement first :: rest -> this.Complex scope first (fun value -> Expr.make (Do(value, hole)) hole.Type), Some (hole, scope, rest)
@@ -1251,6 +1303,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeOf = tyOf
           Complex = this.Complex
           Branch = this.Branch
+          Callee = callee
           Request = fun name lowering -> request (SpecKey.plain name []) Map.empty lowering
           Reader = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Reader
           Convert = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Convert }
@@ -1350,12 +1403,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
-        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools functionName printer
+        | Printing printer -> CoreIrLowerDbg.printerFunction printerTools callee functionName printer
         | Describing -> CoreIrLowerTypeMatch.describingFunction this.TypeMatchTools functionName
         | FieldGetting(recordType, fieldName) -> CoreIrLowerTypeMatch.fieldGettingFunction this.TypeMatchTools functionName recordType fieldName
         | CaseGetting(unionType, caseName) -> CoreIrLowerTypeMatch.caseGettingFunction this.TypeMatchTools functionName unionType caseName
         | Canonicalising collection -> CoreIrLowerTypeMatch.canonicalisingFunction this.TypeMatchTools functionName collection
         | Decanonicalising collection -> CoreIrLowerBuild.decanonicalisingFunction this.TypeMatchTools functionName collection
+        | CanonicalisingValue ty -> CoreIrLowerTypeMatch.canonicalisingValueFunction this.TypeMatchTools functionName ty
+        | DecanonicalisingValue ty -> CoreIrLowerBuild.decanonicalisingValueFunction this.TypeMatchTools functionName ty
         | MakingRecord recordType -> CoreIrLowerBuild.makingFunction this.TypeMatchTools functionName recordType
         | CaseBuilding(unionType, caseName) -> CoreIrLowerBuild.caseBuildingFunction this.TypeMatchTools functionName unionType caseName
         | Building buildTy -> CoreIrLowerBuild.buildingFunction this.TypeMatchTools functionName buildTy
@@ -1460,6 +1515,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | CaseGetting _
         | Canonicalising _
         | Decanonicalising _
+        | CanonicalisingValue _
+        | DecanonicalisingValue _
         | MakingRecord _
         | CaseBuilding _
         | Building _

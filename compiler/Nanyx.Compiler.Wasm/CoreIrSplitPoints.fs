@@ -85,9 +85,9 @@ let private guardsOf (expr: Expr) : Expr list =
 let private holdsSplit (machines: Set<string>) (expr: Expr) : bool =
     CoreIrRewrite.allExprs expr |> Seq.exists (isSplit machines)
 
-/// The functions among `functions` that are state machines: each that calls a function value that can wait, or a
-/// function that is one, but not `start`, which runs them (see `TaskLowering`).
-let stateMachines (start: string) (functions: Function list) : Set<string> =
+/// The functions among `functions` other than `start` that call one for which `seeds` holds of an expression in it,
+/// or that call such a function.
+let private reaching (seeds: Expr -> bool) (start: string) (functions: Function list) : Set<string> =
     let calls =
         functions
         |> List.map (fun func ->
@@ -96,8 +96,7 @@ let stateMachines (start: string) (functions: Function list) : Set<string> =
             for expr in CoreIrRewrite.allExprs func.Body do
                 match expr.Kind with
                 | Call(name, _) -> callees.Add name |> ignore
-                | CallClosure _
-                | CallRuntime _ when isSplit Set.empty expr -> waits <- true
+                | _ when seeds expr -> waits <- true
                 | _ -> ()
             func.Name, (waits, callees))
         |> List.filter (fun (name, _) -> name <> start)
@@ -108,6 +107,43 @@ let stateMachines (start: string) (functions: Function list) : Set<string> =
             |> List.map fst
         if more.IsEmpty then machines else grow (Set.union machines (Set.ofList more))
     grow Set.empty
+
+/// The functions among `functions` that are state machines: each that calls a function value that can wait, or a
+/// function that is one, but not `start`, which runs them (see `TaskLowering`).
+let stateMachines (start: string) (functions: Function list) : Set<string> =
+    reaching (isSplit Set.empty) start functions
+
+/// The intrinsics that only code that requires `Async` calls: starting and awaiting a task, a host's wait and `race`'s.
+/// The end of a scope is not among them: any function can open a scope, and one whose type doesn't wait starts no
+/// tasks in it, so its end has nothing to wait for.
+let private asyncIntrinsics =
+    set [ NyxCompiler.Intrinsics.taskStart; NyxCompiler.Intrinsics.taskWait; NyxCompiler.Intrinsics.hostWait; NyxCompiler.Intrinsics.scopeWaitAny ]
+
+/// Checks that no function among `functions` made into a function value, by a closure over it or one that captures
+/// nothing, has a type that can't wait while it reaches what requires `Async`: a call of a function value that waits,
+/// or one of `asyncIntrinsics`. A caller knows whether a function value can stop only by its type, so one that can stop
+/// where its type says it can't would leave its caller to read the value of a call that stopped and carry on (#2558): a
+/// broken invariant of the type checker, not code to emit. `start` runs state machines without being one.
+let checkFunctionValues (start: string) (functions: Function list) : unit =
+    let waitsOnAsync (expr: Expr) =
+        match expr.Kind with
+        | CallRuntime(name, _, _) -> asyncIntrinsics.Contains name
+        | _ -> isSplit Set.empty expr
+    let waiting = reaching waitsOnAsync start functions
+    let check (name: string) (ty: IrType) =
+        match ty with
+        | IrFunction(_, _, _, false) when waiting.Contains name ->
+            internalError $"the function value `{name}` can stop where it waits, but its type `{IrType.show ty}` says it can't"
+        | _ -> ()
+    for func in functions do
+        for expr in CoreIrRewrite.allExprs func.Body do
+            match expr.Kind with
+            | MakeClosure(name, _, _) -> check name expr.Type
+            | _ -> ()
+            for atom in CoreIrRewrite.directAtoms expr do
+                match atom with
+                | AStaticClosure(name, _, ty) -> check name ty
+                | _ -> ()
 
 /// The value a link of a chain computes, if it computes one: a `Let`'s or a `Do`'s.
 let private linkValue (link: Expr) : Expr option =

@@ -201,19 +201,19 @@ export def list.find: [c] list(a), ([c] a -> bool) -> #some(a) | #notFound = {
   | [x, ...rest], matches -> if matches(x) then #some(x) else list.find(rest, matches)
 }
 
---| The values `f` yields for each element in turn, in the order it yields them. A lambda with
-  `yield` in it is a sequence (see [`Yield`]), so `items \list.select { item -> if item is #other(v)
-  then yield v }` gives the payload of each `#other`.
-export def list.select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b) = { xs, f ->
-  -- Built front to back: each value yielded goes in a new cell that becomes the tail of the last
+--| The list of what `block` emits, in the order it emits it: `list.build { emit(1); if more then
+  emit(2) }`. `block` runs once, now, under a handler of [`Emit`] that puts each value in a new cell at
+  the end of the list, so a `for` loop in it stays a loop and nothing else is made per value.
+export def list.build: [c] ([c, Emit(a)] () -> ()) -> list(a) = { block ->
+  -- Built front to back: each value emitted goes in a new cell that becomes the tail of the last
   -- one. Nothing else sees the cells until the list is given back. This is what an `MList` does,
   -- written out by hand because the prelude can't import `nanyx/mlist`, which imports the prelude.
   memory {
     mut first = []
     mut last = []
 
-    for xs | x ->
-      for f(x) | y ->
+    use Emit(
+      emit = { y ->
         def cell = [y]
 
         match last
@@ -221,14 +221,25 @@ export def list.select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b) = { xs,
           | previous -> __nanyx_list_set_tail(previous, cell)
 
         last := cell
+      }
+    ) in block()
 
     first
   }
 }
 
---| The first value `f` yields, running it on the elements in turn as [`list.select`] does, or `#notFound`
-  when it yields none. It stops at the first yield: `f` runs on no element after the one it yields
-  for, and the code after that `yield` doesn't run.
+--| The values `f` emits for each element in turn, in the order it emits them: `items \list.select {
+  item -> if item is #other(v) then emit(v) }` gives the payload of each `#other`. `f` can emit any
+  number of values for an element, none included, through [`Emit`]. A lambda that gives a list
+  instead is [`list.flatMap`]'s.
+export def list.select: [c] list(a), ([c, Emit(b)] a -> ()) -> list(b) = { xs, f ->
+  list.build { for xs | x -> f(x) }
+}
+
+--| The first value `f` yields, running it on the elements in turn, or `#notFound` when it yields
+  none. A lambda with `yield` in it is a lazy sequence (see [`Yield`]), so this stops at the first
+  yield: `f` runs on no element after the one it yields for, and the code after that `yield` doesn't
+  run.
 export def list.selectOne
   : [c, d] list(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
   = { xs, f ->

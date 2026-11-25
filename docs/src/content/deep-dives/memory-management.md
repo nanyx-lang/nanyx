@@ -50,7 +50,9 @@ definitions a module reaches in the modules it imports (the prelude included) ar
 generation (`Inlined` in `Library.fs`), so every generic function's body is available to specialise.
 
 Tags keep their odd codes: a value of type `#some(string) | #none` is still a code or a cell, decided at run time,
-and its drop function checks the low bit before reading the cell.
+and its drop function checks the low bit before reading the cell. A `match` reads the code once, into a local, before
+its first tag arm, and each arm compares that local; a value of a union with no payloads is its own code, so a match on
+one compares the value itself ([#2309](https://github.com/nanyx-lang/nanyx/issues/2309)).
 
 If code size becomes a problem, the fallback is Koka and Lean's: box values only at the generic boundaries that are
 not specialised (see [Open questions](../work-in-progress/memory-management#open-questions)).
@@ -165,8 +167,10 @@ words, so a few small classes cover them; larger objects (long strings, wide rec
   reach 256 bytes so that the strings and records programs make most of never go on that list
   ([#1464](https://github.com/nanyx-lang/nanyx/issues/1464)).
 - **Lists.** The heads are a table of 65 words at the start of the heap, and `$heap_ptr` starts after it. The
-  string literals and static closures run from address 256, and the table goes at 4096 or, when they end past that,
-  after them,
+  string literals and static closures run from address 256, followed in a module that needs them by its host's block,
+  the table of powers of five that reading a float uses (see
+  [Standard library implementation](./standard-library-implementation#adding-to-it)) and the scratch block that writing
+  one uses. The table of heads goes at 4096 or, when those end past that, after them,
   8-byte aligned (`heapBaseAfter`); the module starts with enough pages of memory to hold them. A free block keeps the next block of its list in its first word. On a small size's list, `free` pushes onto the
   front and `alloc` takes from the front, so the most recently freed block is reused first.
 - **Large blocks.** `free` joins a large block with the free large blocks just before and after it, and a block that
@@ -390,12 +394,14 @@ nodes to the IR: `dup x1, ...; e`, `drop x1, ...; e`, and `e then drop x1, ...` 
   that dies there calls the owning entry (`CallClosure` with `Owning`, which reads the slot and adds 1), since the
   caller could not drop the closure after the call; so does a call by name in tail position that passes such a
   closure as the environment, as the simplifier makes of a call of a closure it knows. Every other call of a closure
-  calls the borrowing entry, and a closure that dies there is dropped after the call. A function whose closures
-  capture nothing has no copy: they are static data, which a drop leaves alone, so it is its own owning entry. Once
-  the module is counted, an
-  owning entry nothing can call is left out: one no call names, and of a type no call through a closure that calls
-  the owning entry has. A closure called in a loop, as `list.fold` calls the function it is given, is then counted
-  neither up nor down at each call.
+  calls the borrowing entry, and a closure that dies there is dropped after the call. The borrowing entry borrows
+  the context members the call passes after its arguments too, which the caller holds throughout, and the owning
+  entry owns them ([#2559](https://github.com/nanyx-lang/nanyx/issues/2559)). A function whose closures capture
+  nothing and are called with no members has no copy: they are static data, which a drop leaves alone, so it is its
+  own owning entry. Once the module is counted, an owning entry nothing can call is left out: one no call names, and
+  of a type no call through a closure that calls the owning entry has. A closure called in a loop, as `list.fold`
+  calls the function it is given, is then counted neither up nor down at each call, and nor are the members of the
+  contexts it requires.
 - **Runtime helpers borrow.** Every helper, the ones that write to stdout and stderr among them, borrows its
   operands and returns a value of its own, except `list.cons` (which takes both over) and `++` on lists (which
   takes the second over, and copies the first's cells with a reference to each element). Strings handed to the
@@ -488,13 +494,21 @@ depth, 1 for the outermost. The innermost region is in a global, so the regions 
 word, and the outermost is in another global. The list is circular, with the region as its sentinel, so an object is
 linked and unlinked without asking whether it is first or last.
 
+**A block with nothing to free has no region.** Once inlining is done, a function that makes no box, calls no function
+value, and calls only functions that can't make one either has its `__nanyx_region_enter`s and `__nanyx_region_exit`s
+taken out (`CoreIrUnusedRegions`), so a block whose cells are all locals, as a loop is written, allocates nothing when it
+runs ([#2418](https://github.com/nanyx-lang/nanyx/issues/2418)). A block that keeps its region inside such a function has
+the region around the function's caller as its outer one, which is where its result is promoted to.
+
 **Boxes.** A mutable object is a box laid out as a record of five fields (`CoreIrRegions.boxType`): the table slot of the
 function that drops what it holds (`__nanyx_region_drop_…`, one for each type of box, called through the table as an
 environment's drop function is), the next object on its region's list, the region it is on, the previous object, then
 the value. The link fields' names start with `-`, which no field of the program's can, so they are stored first and no
 record of the program's is taken for a box. An `MRef` holds its value, a captured cell's box holds the cell's value, and
 an `MArray` holds the array its elements are in, which is laid out as an `Array` is, so reading or writing an element
-reads the box's value and then does what the array's intrinsic does (`CoreIrRegions.mutableArray`). A new box goes on
+does what the array's intrinsic does, given the box, whose array it reads with no reference of its own: the box lives
+until the intrinsic is done, and nothing puts another array in it (`CoreIrRegions.mutableArray`,
+`CoreIrEmit.ArrayIntrinsic`, [#2417](https://github.com/nanyx-lang/nanyx/issues/2417)). A new box goes on
 the innermost region (`__nanyx_region_track`). When
 counting gives up a box's last reference, its drop function takes it off its region's list (`__nanyx_region_unlink`)
 before it drops its value and frees it, as any record's does, so a box that is not in a cycle is freed as early as it

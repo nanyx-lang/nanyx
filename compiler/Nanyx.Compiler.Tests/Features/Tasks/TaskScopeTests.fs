@@ -90,6 +90,72 @@ def reads = { _ ->
     Assert.Equal("{ MRef.get(r) }", at)
 
 [<Fact>]
+let ``Starting a task through another name for start with a function that holds an MRef is an error`` () =
+    let source =
+        withFinalNewline
+            """import nanyx/async as (Async)
+import nanyx/mref
+
+def reads = { _ ->
+  def go = start
+  memory {
+    def r = MRef.new([1, 2, 3])
+    go({ MRef.get(r) })
+    1
+  }
+}"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.TaskHoldsMemory.Code, code)
+    Assert.Equal("{ MRef.get(r) }", at)
+
+[<Fact>]
+let ``Starting a task through a local def that passes on its function, with one that uses a cell, is an error`` () =
+    let source =
+        withTasks
+            """def counts = { _ ->
+  def spawn = { f -> start(f) }
+  memory {
+    mut total = 0
+    spawn({ total := total + 1 })
+    total
+  }
+}"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.TaskHoldsMemory.Code, code)
+    Assert.Equal("{ total := total + 1 }", at)
+
+[<Fact>]
+let ``Racing functions that use a cell is an error`` () =
+    let source =
+        withFinalNewline
+            """import nanyx/async as (Async)
+
+def counts = { _ ->
+  memory {
+    mut total = 0
+    def winner = race([{ sleep(1); total := total + 1; "a" }, { sleep(1); total := total + 10; "b" }])
+    "{winner} {total}"
+  }
+}"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.TaskHoldsMemory.Code, code)
+    Assert.Equal("""[{ sleep(1); total := total + 1; "a" }, { sleep(1); total := total + 10; "b" }]""", at)
+
+[<Fact>]
+let ``A local def that passes on its function may start a task with one that holds nothing of a block`` () =
+    let source =
+        withTasks
+            """def counts = { _ ->
+  def spawn = { f -> start(f) }
+  memory {
+    mut total = 41
+    def now = total
+    await(spawn({ now + 1 }))
+  }
+}"""
+    Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
 let ``A task may be given what a cell holds`` () =
     let source =
         withTasks
@@ -99,5 +165,55 @@ let ``A task may be given what a cell holds`` () =
     def now = total
     await(start({ now + 1 }))
   }
+}"""
+    Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
+let ``A def that starts a task without naming start is told so at the call`` () =
+    let source =
+        withTasks
+            """def go = Async.start
+
+def f = { _ -> go({ println("task runs") }) }
+
+f()"""
+    let code, message, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.UndeclaredContext.Code, code)
+    Assert.StartsWith("'go' starts a task, but 'f' is not the scope of its tasks", message)
+    Assert.Equal("""go({ println("task runs") })""", at)
+
+[<Fact>]
+let ``A def that names Async.start is a scope in a module that defines its own start`` () =
+    let source =
+        withTasks
+            """def start = 5
+
+def f = { _ ->
+  Async.start({ println("task runs") })
+  start
+}
+
+println(f())"""
+    Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
+let ``A script whose def gives back what starts a task is told only of the escape`` () =
+    let source =
+        withTasks
+            """def s = { _ -> seq.init(3, { i -> await(start! i * 10) }) }
+
+println(s() \seq.toList)"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.ScopedContextEscapes.Code, code)
+    Assert.Equal("start! i * 10", at)
+
+[<Fact>]
+let ``A smaller scope may await a task of the def's scope`` () =
+    let source =
+        withTasks
+            """def outer = { _ ->
+  def t = start! 20
+  def inner = concurrent({ await(t) + await(start! 1) })
+  inner + 1
 }"""
     Assert.Empty((Compiler.compile source).Diagnostics)

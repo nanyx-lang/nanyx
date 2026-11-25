@@ -15,7 +15,7 @@ A package names its host in its manifest's `host` field. A host the compiler shi
 ```nanyx fragment
 (
   package = (name = "acme.tool", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.console", version = "0.38.0")
+  host = (package = "nanyx.console", version = "0.39.0")
 )
 ```
 
@@ -70,7 +70,7 @@ match args()
 ```nanyx fragment
 (
   package = (name = "acme.report", version = "0.1.0")
-  dependencies = [(package = "nanyx.console.core", version = "0.38.0")]
+  dependencies = [(package = "nanyx.console.core", version = "0.39.0")]
 )
 ```
 
@@ -118,7 +118,7 @@ def main: Request -> Response = { request ->
 }
 ```
 
-A package names it as its host with the port to serve on, `host = (package = "nanyx.http", version = "0.38.0",
+A package names it as its host with the port to serve on, `host = (package = "nanyx.http", version = "0.39.0",
 settings = (port = 8080))`, and `nanyx run` serves it there, on 3000 when no port is given. A host declares the
 settings it takes, each with its default, so a setting it doesn't take is an error at the setting. See the
 [HTTP server cookbook](../cookbook/http-server).
@@ -358,7 +358,6 @@ The compiler ships the packages every program needs beside itself, in a `package
 - `nanyx.http.core`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
 - `nanyx.http`, the HTTP host;
 - `nanyx.wasi`, the [host library](#host-libraries) the console and HTTP hosts are written on: WASI's random source and clocks, the runtime's `nanyx:http`, and the component model's canonical ABI and WASI 0.3 interfaces their component roots use;
-- `nanyx.playground`, the playground host, which runs a console program in a web page;
-- `nanyx.regex`, for [regular expressions](../stdlib/regex).
+- `nanyx.playground`, the playground host, which runs a console program in a web page.
 
 A manifest or a directive names a package the compiler ships at the compiler's version exactly; any other version is an error that names the one shipped (`NYX0029`). In a `::host` or `::dependency` directive it needs no version at all: `::dependency nanyx.console.core`. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.

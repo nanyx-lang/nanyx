@@ -137,6 +137,16 @@ type TypeVarKey =
     /// `TyVarKind.SignatureScope`).
     | ScopeOf of context: string
 
+/// A `#delay` keyword's call, `k! e`, whose keyword names a local def, a parameter or a pattern's variable rather than
+/// the keyword's def (see `HiddenKeywords`): the keyword, where it is written, the local, its type, and the def the
+/// keyword would call, if one is in scope.
+type HiddenKeyword =
+    { Keyword: Identifier
+      At: SourceSpan
+      Local: Symbol
+      LocalType: Ty
+      KeywordDef: Identifier option }
+
 type InferState =
         { NextId: int;
             Constraints: ConstraintSet;
@@ -183,6 +193,11 @@ type InferState =
             /// entry point, in the order written, rather than at the top level.
             ScriptEntryValues: Set<Identifier>;
             DeferredContextUses: DeferredContextUse list;
+            /// For each call from a lambda of an unannotated top-level def not inferred yet there, which is in a cycle
+            /// with the def the lambda is in, the def's name, the context variable the lambda uses for it and the call's
+            /// span. Bound to the ambient contexts the def requires once the module is inferred (see
+            /// `Contexts.pendingCallContexts`).
+            PendingCallContexts: (Identifier * Ty * SourceSpan) list;
             /// The calls whose instances are found once the def around them is inferred (see `PendingContextInstance`).
             PendingContextInstances: PendingContextInstance list;
             /// The nodes of the functions named as values among `PendingContextInstances`: one whose type is still open
@@ -336,6 +351,9 @@ type InferState =
             /// The instance of a parameterised context each `use` loads, by the node of the value it loads (see
             /// `TypedModule.UseContexts`).
             UseContexts: Map<NodeId, TypeExpr>;
+            /// The type of the instance each `use` in `UseContexts` loads, as it was when the `use` was checked. What
+            /// the rest of the module settles in it is written into `UseContexts` once the module is inferred (#2550).
+            UseContextTypes: Map<NodeId, Ty>;
             /// The expressions that failed to check, each by its node with its diagnostics, the latest first. Each is
             /// typed as anything, and checking carries on around it.
             FailedExprs: (NodeId * Diagnostic list) list;
@@ -352,6 +370,12 @@ type InferState =
             /// keyword, `zero` at the end of a block that falls off without `return`, and `for` at a loop whose body
             /// uses a keyword (see `WorkflowMembers`).
             WorkflowMemberPlaces: Map<NodeId, SourceSpan * Identifier>;
+            /// Each `#delay` keyword's call, `k! e` made `k({ e })`, by its span, with where the keyword is written and
+            /// the keyword (see `WorkflowDesugaring`). Passes after desugaring make the call's node again, in its place.
+            DelayCalls: Map<SourceSpan, SourceSpan * Identifier>;
+            /// The `#delay` keyword calls whose keyword names a local rather than the keyword's def, by the call's span
+            /// (see `HiddenKeywords`).
+            HiddenKeywords: Map<SourceSpan, HiddenKeyword>;
             /// The rest variables `joinBranchTypes` made up for a branch of a type not known yet. A union with one
             /// of them, joined again, has the rest extended with the other branches' tags rather than shared.
             JoinRests: Set<int>;
@@ -373,6 +397,11 @@ type InferState =
             /// The local defs that are cells, made with `mut`, each with the scope of the `memory` block it belongs to (see
             /// `MemoryCells`).
             Cells: Map<SymbolId, Ty>;
+            /// Where a mismatch of a call's arguments, written as one tuple, is reported instead of at the tuple, by the
+            /// tuple's span: worked out only if one is (see `LambdaArguments.reportedSpan`).
+            ArgumentSpans: Map<SourceSpan, Lazy<SourceSpan>>;
+            /// The work variables (see `TaskWork`), each with where the def that starts tasks it is of was named.
+            TaskWork: Map<int, SourceSpan>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
             /// starts, the scopes the signatures around the call write, and the names bound around the call whose types
             /// are not yet known in full (see `ScopedCalls`).
@@ -444,6 +473,7 @@ let emptyState =
             ScriptValues = Map.empty;
             ScriptEntryValues = Set.empty;
             DeferredContextUses = [];
+            PendingCallContexts = [];
             PendingContextInstances = [];
             PendingReferences = Set.empty;
             PendingArithmetic = [];
@@ -494,10 +524,13 @@ let emptyState =
             AssociatedVariables = [];
             ContextProviders = Map.empty;
             UseContexts = Map.empty;
+            UseContextTypes = Map.empty;
             FailedExprs = [];
             UnhandledMatches = [];
             UnknownTypeUses = [];
             WorkflowMemberPlaces = Map.empty;
+            DelayCalls = Map.empty;
+            HiddenKeywords = Map.empty;
             JoinRests = Set.empty;
             RestArguments = Map.empty;
             OpenMatches = [];
@@ -505,6 +538,8 @@ let emptyState =
             DerivedDefs = [];
             DerivedCalls = Map.empty;
             Cells = Map.empty;
+            ArgumentSpans = Map.empty;
+            TaskWork = Map.empty;
             SupplyingCalls = Map.empty;
             EscapedContexts = Set.empty;
             OpenScopes = [];
@@ -767,7 +802,22 @@ let internal instantiate (state: InferState) (scheme: TypeScheme) : Ty * InferSt
                 let tyVar, next = freshVar current
                 current <- next
                 subst |> Map.add id tyVar) Map.empty
-        Unifier.apply substitutions scheme.Type, current
+        let ty = Unifier.apply substitutions scheme.Type
+        // Where a def that starts tasks is named, what its type is instantiated with is a task's work (see `TaskWork`).
+        let seeded =
+            match scheme.Symbol |> Option.bind current.Symbols.TryFind with
+            | Some symbol when TaskWork.startsTasks symbol -> TaskWork.variables ty
+            | _ -> []
+        let carried =
+            scheme.Quantified
+            |> Seq.filter current.TaskWork.ContainsKey
+            |> Seq.collect (fun id -> TypeEnv.freeTyVars substitutions[id])
+            |> List.ofSeq
+        let current =
+            match seeded @ carried with
+            | [] -> current
+            | work -> { current with TaskWork = work |> List.fold (fun marked id -> marked |> Map.add id current.Origin) current.TaskWork }
+        ty, current
 
 let internal mkTypedExpr expr ty body statements matchArms : TypedExpr =
     { Expr = expr; Type = ty; Body = body; Statements = statements; MatchArms = matchArms; Arguments = None }

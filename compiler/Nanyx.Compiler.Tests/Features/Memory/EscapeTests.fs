@@ -298,3 +298,39 @@ def dealt = random.seeded(42, { random.below(10) })
 [<InlineData("def s = memory {\n  def r = MRef.new(1)\n  list.toSeq([1, 2]) \\ seq.map({ n -> n + MRef.get(r) })\n}")>]
 let ``A reference can't leave its block in a structure, a type, a generic value, a closure or a sequence`` (program: string) =
     Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes $"import nanyx/mref\n\n{program}\n")
+
+/// A def whose signature names `Memory`, then a script's block that makes an `MArray` with a written type (#2589).
+let private churn =
+    """
+import nanyx/marray
+
+def churn: [Memory] MArray(int), int, int -> int = { xs, i, acc ->
+  if i == 0 then acc else
+    MArray.set(xs, i % 1000, i)
+    churn(xs, i - 1, acc + someOr(MArray.at(xs, (i * 7) % 1000), 0))
+}
+"""
+
+[<Fact>]
+let ``A script's block may give its MArray, of a written type, to a def that names Memory before it`` () =
+    let source =
+        churn
+        + """
+println(memory {
+  def xs: MArray(int) = MArray.create(1000)
+  churn(xs, 7, 0)
+})
+"""
+    Assert.Empty(codes source)
+
+[<Fact>]
+let ``A script's MArray of a written type still can't leave its block after a def that names Memory`` () =
+    let source =
+        churn
+        + """
+println(MArray.length(memory {
+  def xs: MArray(int) = MArray.create(10)
+  xs
+}))
+"""
+    Assert.Equal<string list>([ DiagnosticCodes.ScopedContextEscapes.Code ], codes source)

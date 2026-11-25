@@ -44,7 +44,7 @@ match value
   | #obj(members) -> println(map.keys(members))
   | _ -> println("not an object")
 """
-    |> assertRan "[a, b, c]\n"
+    |> assertRan "[b, a, c]\n"
 
 [<Fact>]
 let ``Run - an argument's literal is checked against the parameter's type`` () =

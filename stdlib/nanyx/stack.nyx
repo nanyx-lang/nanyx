@@ -35,9 +35,10 @@ export def Stack.fromSeq: [c] ([c] seq(a)) -> Stack(a) = { s ->
   Stack(seq.toList(s))
 }
 
---| A stack of what `block` yields, the first on top. The same as `seq(block) \Stack.fromSeq`.
-export def Stack.build: [c, d] ([c] () -> [d] seq(a)) -> Stack(a) = { block ->
-  Stack.fromSeq(seq(block))
+--| A stack of what `block` emits, through [`Emit`], the first on top. The same as
+  `list.build(block) \Stack.fromList`.
+export def Stack.build: [c] ([c, Emit(a)] () -> ()) -> Stack(a) = { block ->
+  Stack(list.build(block))
 }
 
 --| `stack` with `value` on top of it.

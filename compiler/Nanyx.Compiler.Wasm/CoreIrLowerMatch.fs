@@ -56,6 +56,10 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
                 armVars <- armVars |> Map.add name var
                 PBind var
             | LiteralPattern(IntLit value) -> PInt(intBits value)
+            | LiteralPattern(StringLit value) when valueTy = IrSized SizedInteger.U32 ->
+                match Chars.scalarOf value with
+                | Some scalar -> PInt(int64 scalar)
+                | None -> internalError "a char pattern that is not one character, which the checker reports"
             | LiteralPattern(StringLit value) -> PString value
             | LiteralPattern(FloatLit value) -> PFloat value
             // `| { % 2 == 0 } ->`: the predicate is inlined, its parameter a local the value matched here is put

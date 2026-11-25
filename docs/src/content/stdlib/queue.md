@@ -79,11 +79,11 @@ contexts the sequence's steps do.
 ## `Queue.build`
 
 ```nanyx fragment
-def Queue.build: [c, d] ([c] () -> [d] seq(a)) -> Queue(a)
+def Queue.build: [c] ([c, Emit(a)] () -> ()) -> Queue(a)
 ```
 
-A queue of what `block` yields, the first at the front. The same as
-`seq(block) \Queue.fromSeq`.
+A queue of what `block` emits, through `Emit`, the first at the front. The same as
+`list.build(block) \Queue.fromList`.
 
 ## `Queue.enqueue`
 

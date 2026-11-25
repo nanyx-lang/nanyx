@@ -213,3 +213,67 @@ println(local())
 println(given("x"))
 println(both())"""
     assertPrints "42\ngiven x\n1\n" "42\ngiven x\n1\n" source
+
+/// A def that calls one with a scope of its own is a state machine, which keeps the temporaries a call that can wait is
+/// given in locals. `between(text, copied, text.length)` counts `text` for its first argument before `text.length`
+/// gives up the reference the def holds: the kept temporary is computed after that count, as it would be where it is
+/// used (#2490).
+[<Fact>]
+let ``A call that can wait, given a value and then a field of it, keeps the value alive`` () =
+    assertPrints
+        "b\nb\n"
+        "b\nb\n"
+        """type Text = (subject: string, offsets: array(int), length: int)
+
+def byteAt: Text, int -> int = { text, i ->
+  def offsets = text.offsets
+
+  match offsets(i)
+    | #some(b) -> b
+    | #notFound -> 0
+}
+
+def between: Text, int, int -> string = { text, start, end ->
+  concurrent({
+    def from = byteAt(text, start)
+    string.substring(text.subject, start = from, length = byteAt(text, end) - from)
+  })
+}
+
+def pieces: Text -> [] seq(int) = { text ->
+  seq.unfold(0) { i -> if i + 2 > string.length(text.subject) then #done else #some(i, i + 2) }
+}
+
+def rejoin: string -> string = { s ->
+  def text = Text(subject = s, offsets = array.init(3, { i -> i }), length = 2)
+  def folded = seq.fold(pieces(text), (0, []), { (copied, done), at -> (at + 1, [between(text, copied, at), ...done]) })
+  def (copied, done) = folded
+  string.concat(list.reverse([between(text, copied, text.length), ...done]))
+}
+
+println(rejoin("ab"))
+println(rejoin("ab"))"""
+
+[<Fact>]
+let ``A task that calls itself in tail position after a lambda it made waits frees the lambda once`` () =
+    // The lambda, which holds what it captures on the heap, is held only by the task, so the count the tail call takes of
+    // it has to come before the call that waits, which drops the reference that call read it with. A debug build's
+    // return probe stands between the two (#2591).
+    let source =
+        """def waitThen: [Async, Clock] int -> int = { x ->
+  sleep(1)
+  x + 1
+}
+
+def loopWith: [c] ([c] int -> int), int, int -> int = { f, n, acc ->
+  if n == 0 then acc else loopWith(f, n - 1, f(acc))
+}
+
+def both = { (step: int) ->
+  def once = start! loopWith({ x -> waitThen(x) + step }, 1, 100)
+  def thrice = start! loopWith({ x -> waitThen(x) + step }, 3, 100)
+  "{await(once)} {await(thrice)}"
+}
+
+println(both(10))"""
+    assertPrints "111 133\n" "111 133\n" source

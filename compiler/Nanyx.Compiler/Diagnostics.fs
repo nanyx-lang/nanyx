@@ -116,6 +116,7 @@ module DiagnosticCodes =
     let KeywordsOutOfOrder = code 50 "Keywords in the wrong order" Severity.Error
     /// A warning, not an error: the build goes on.
     let UnlistedVersion = code 51 "Unlisted version" Severity.Warning
+    let NeedsNewerCompiler = code 52 "Package that needs a newer compiler" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -219,6 +220,8 @@ module DiagnosticCodes =
     let ParameterNamesNoField = code 280 "Lambda parameter that names no field" Severity.Error
     let TopLevelCell = code 281 "Cell declared at the top level" Severity.Error
     let OldFormTypeParameter = code 282 "Type parameter written the old way" Severity.Warning
+    let ValueContextTypeOpen = code 283 "Value of a type only a later use fixes" Severity.Error
+    let NotOneChar = code 284 "Char literal that is not one character" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -233,7 +236,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; VersionConflict; DependencyNotLocked; PackageFileNotUtf8; KeywordsOutOfOrder; UnlistedVersion; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; VersionConflict; DependencyNotLocked; PackageFileNotUtf8; KeywordsOutOfOrder; UnlistedVersion; NeedsNewerCompiler; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField; UnknownPattern; AmbiguousPattern; ReExportClash
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers
@@ -250,7 +253,7 @@ module DiagnosticCodes =
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
-          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter
+          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

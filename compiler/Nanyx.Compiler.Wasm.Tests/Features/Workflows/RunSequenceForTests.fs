@@ -3,19 +3,19 @@ module TranspilerWasmTests.Features.Workflows.RunSequenceFor
 open Xunit
 open TranspilerWasmTestHelpers
 
-// A `for` loop in a sequence's block, `seq { ... }` or `list.build { ... }`, walks anything `Iterable`, as a plain
+// A `for` loop in a sequence's block, `seq { ... }`, walks anything `Iterable`, as a plain
 // `for` loop does (#2420).
 
 let private ran (expected: string) (source: string) = runSource (source.ReplaceLineEndings "\n") |> assertRan expected
 
 [<Fact>]
-let ``Run - a for loop in a builder block walks a list`` () =
+let ``Run - a for loop in a seq block walks a list`` () =
     """def select: [c, d] list(a), ([c] a -> [d] seq(b)) -> list(b) = { xs, f ->
-  list.build {
+  seq {
     for xs | x ->
       for f(x) | y ->
         yield y
-  }
+  } \list.fromSeq
 }
 
 @entry
@@ -26,34 +26,34 @@ def main = {
     |> ran "[1, 10, 2, 20, 3, 30]\n"
 
 [<Fact>]
-let ``Run - a for loop in a builder block walks an array`` () =
+let ``Run - a for loop in a seq block walks an array`` () =
     """@entry
 def main = {
   def xs = Array[4, 5]
-  println(list.build { for xs | x -> yield x * 2 })
+  println(seq { for xs | x -> yield x * 2 } \list.fromSeq)
 }
 """
     |> ran "[8, 10]\n"
 
 [<Fact>]
-let ``Run - a for loop in a builder block walks a set`` () =
+let ``Run - a for loop in a seq block walks a set`` () =
     """@entry
 def main = {
   def xs = set[3, 1, 2, 3]
-  println(list.build { for xs | x -> yield x } \list.sort)
+  println(seq { for xs | x -> yield x } \list.fromSeq \list.sort)
 }
 """
     |> ran "[1, 2, 3]\n"
 
 [<Fact>]
-let ``Run - a for loop in a builder block walks a map's entries`` () =
+let ``Run - a for loop in a seq block walks a map's entries`` () =
     """@entry
 def main = {
   def m = ["a" => 1, "b" => 2]
-  println(list.build { for m | key, value -> yield "{key}={value}" })
+  println(seq { for m | key, value -> yield "{key}={value}" } \list.fromSeq)
 }
 """
-    |> ran "[a=1, b=2]\n"
+    |> ran "[b=2, a=1]\n"
 
 [<Fact>]
 let ``Run - a for loop in a seq block walks a list lazily`` () =
@@ -71,11 +71,11 @@ def main = {
     |> ran "at 1\n[1]\n"
 
 [<Fact>]
-let ``Run - a for loop in a builder block walks anything a signature says is Iterable`` () =
+let ``Run - a for loop in a seq block walks anything a signature says is Iterable`` () =
     """def plusOne: [Iterable(c, elem = int)] c -> list(int) = { xs ->
-  list.build {
+  seq {
     for xs | x -> yield x + 1
-  }
+  } \list.fromSeq
 }
 
 @entry

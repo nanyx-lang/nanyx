@@ -12,6 +12,7 @@
     <Compile Include="ClosureSyntax.fs" />
     <Compile Include="LambdaLifting.fs" />
     <Compile Include="FloatText.fs" />
+    <Compile Include="PowersOfFive.fs" />
     <Compile Include="SizedIntegerCode.fs" />
     <Compile Include="StringJoin.fs" />
     <Compile Include="StringSearch.fs" />
@@ -64,6 +65,7 @@
     <Compile Include="CoreIrCounting.fs" />
     <Compile Include="CoreIrReuse.fs" />
     <Compile Include="CoreIrReach.fs" />
+    <Compile Include="CoreIrUnusedRegions.fs" />
     <Compile Include="WatPieces.fs" />
     <Compile Include="CoreIrSplitPoints.fs" />
     <Compile Include="TaskLowering.fs" />
@@ -79,6 +81,10 @@
     <Compile Include="CodeGen.fs" />
     <Compile Include="WatSyntax.fs" />
     <Compile Include="WasmBinary.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Nanyx.Compiler.Wasm.Test" />
   </ItemGroup>
 
   <ItemGroup>

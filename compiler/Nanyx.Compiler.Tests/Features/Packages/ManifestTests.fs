@@ -149,7 +149,7 @@ let ``An unknown field is an error at its name`` () =
     Assert.Equal<string list>([ DiagnosticCodes.UnknownManifestField.Code; DiagnosticCodes.UnknownManifestField.Code ], errors |> List.map _.Code)
     Assert.Equal<string list>(
         [ "The manifest has no field 'extras': its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'"
-          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'repository', 'host', 'hostLibrary'" ],
+          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'repository', 'nanyx', 'host', 'hostLibrary'" ],
         errors |> List.map _.Message
     )
     let extras = errors.[0].Span.Value
@@ -200,7 +200,7 @@ let ``An unknown linter, rule, severity or host is an error`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.InvalidManifestValue.Code, "There is no linter 'acme.lint': the linters are 'nanyx.lint'"
           DiagnosticCodes.UnknownManifestField.Code,
-          "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'unusedResults', 'uselessExpressions', 'unawaitedTask', 'shadowedPreludeNames', 'semicolons', 'unconstructibleType', 'unusedContexts', 'repeatedPulls', 'unusedAllows', 'linterFailed'"
+          "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'resultOnlyTypeVariable', 'unusedResults', 'uselessExpressions', 'unawaitedTask', 'shadowedPreludeNames', 'semicolons', 'unconstructibleType', 'unusedContexts', 'repeatedPulls', 'unusedAllows', 'linterFailed'"
           DiagnosticCodes.InvalidManifestValue.Code, "The rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\""
           DiagnosticCodes.InvalidManifestValue.Code, "The compiler ships no package 'acme.host': give the path of a host the compiler doesn't ship, as `host = (package = \"acme.host\", path = \"../acme.host\")`" ],
         errorsOf
@@ -299,3 +299,25 @@ let ``The compiler's version is its release, with no commit`` () =
 let ``An entry is written with its strings escaped`` () =
     let reference = { Repository = { Owner = "acme"; Name = "web" }; File = None; Commit = "v\"1\\2" }
     Assert.Equal("""(package = "acme.web", github = "acme/web", rev = "v\"1\\2")""", Manifest.entryText Toolchain.version "" "acme.web" (OnGitHub reference))
+[<Fact>]
+let ``A package's nanyx is the oldest compiler it builds with, which the JSON of the manifest gives`` () =
+    let manifest = okOf """(package = (name = "acme.demo", version = "0.1.0", sources = ["src/**/*.nyx"], nanyx = "0.32"))"""
+    Assert.Equal(Some "0.32", manifest.Nanyx |> Option.map string)
+    Assert.Equal(Some "0.32.0", (okOf """(package = (name = "demo", version = "0.1.0", nanyx = "0.32.0"))""").Nanyx |> Option.map string)
+    Assert.Equal(None, (okOf """(package = (name = "demo", version = "0.1.0"))""").Nanyx)
+    Assert.Contains("\"nanyx\": \"0.32\"", Manifest.toJson manifest.Value)
+
+[<Fact>]
+let ``A package whose nanyx is newer than the compiler is one error at the field, naming both versions`` () =
+    let source = """(package = (name = "demo", version = "0.1.0", nanyx = "99.0"))"""
+    let error = errorOf source
+    Assert.Equal(DiagnosticCodes.NeedsNewerCompiler.Code, error.Code)
+    Assert.Equal($"The package builds with nanyx 99.0 or later, and this is nanyx {Toolchain.version}: install a newer compiler to build it", error.Message)
+    Assert.Equal("\"99.0\"", source.Substring(error.Span.Value.Start, error.Span.Value.End - error.Span.Value.Start))
+
+[<Fact>]
+let ``A package's nanyx must be a version, or its first numbers`` () =
+    let error = errorOf """(package = (name = "demo", version = "0.1.0", nanyx = "latest"))"""
+    Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, error.Code)
+    Assert.Equal("The package's `nanyx` \"latest\" must be a version, `1.2.0`, or its first numbers, `1.2`", error.Message)
+    Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, (errorOf """(package = (name = "demo", version = "0.1.0", nanyx = 32))""").Code)

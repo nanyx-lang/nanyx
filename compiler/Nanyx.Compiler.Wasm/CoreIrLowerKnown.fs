@@ -13,6 +13,7 @@
 module internal Transpiler.Wasm.CoreIrLowerKnown
 
 open NyxCompiler
+open Parser.Program
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 open Transpiler.Wasm.CoreIrLowerInput
@@ -190,3 +191,32 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
             for child in Expr.children e do
                 pending.Push child
     Set.ofSeq used
+
+/// The context parameter of the function the lifted lambda `lambda` is lifted from that its capture `name` is, if `name`
+/// is one: a captured member, which the lambda is specialised on by the parameter's key when the function knows it
+/// (#2311).
+let ownerParameter (input: LowerInput) (lambda: string) (name: string) : ContextParameter option =
+    match input.Lifted |> Map.tryFind lambda with
+    | Some (LiftedLambda(_, _, owner, _)) ->
+        input.ContextParameters
+        |> Map.tryFind owner
+        |> Option.bind (fun (parameters, _) -> parameters |> List.tryFind (fun parameter -> parameter.Name = name))
+    | _ -> None
+
+/// Of the captures `captured` of the lifted lambda `lambda`, the members the function that makes it knows (`knownOf`
+/// says what each name it has in scope is known as), by the keys the lambda finds them by (see `ownerParameter`): the
+/// lambda is specialised on them, and calls them directly (#2311). The members a lambda can't take that way, a
+/// lambda's environment, are not among them.
+let knownCaptures (input: LowerInput) (lambda: string) (knownOf: string -> KnownMember option) (captured: Expression list) =
+    let knownCapture (capture: Expression) =
+        match capture.Kind with
+        | IdentifierExpr name ->
+            match knownOf name, ownerParameter input lambda name with
+            | Some knownMember, Some parameter when not (KnownMember.isPassed knownMember) -> Some(parameter.Key, knownMember)
+            | _ -> None
+        | _ -> None
+    let known = captured |> List.choose knownCapture |> List.distinctBy fst
+    // Such members after the lambda's other captures need not be captured, since the lambda doesn't read them from its
+    // environment, and the others keep their places in it.
+    let kept = captured |> List.rev |> List.skipWhile (knownCapture >> Option.isSome) |> List.rev
+    known, kept

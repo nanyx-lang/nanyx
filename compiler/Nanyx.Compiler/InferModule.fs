@@ -46,6 +46,8 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
                         |> List.take index
                         |> List.tryFind (fun (_, otherTy) -> otherTy = ty)
                         |> Option.map (fun (otherName, _) -> $"'{varName}' would have to be '{otherName}'")
+                    // What failed to check was reported where it failed: it is not another error here.
+                    | concrete when Unifier.holdsError concrete -> None
                     | concrete -> Some $"'{varName}' would have to be '{Unifier.tyToString (Unifier.apply displayNames concrete)}'")
                 |> List.choose id
             if problems.IsEmpty then
@@ -220,7 +222,13 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             | _, _, Some symbol when isScriptValue value ->
                 state <- { state with ScriptValues = state.ScriptValues |> Map.add name symbol }
             | _ -> ()
-            let _, declaredTypeExprOpt = extractDefContexts typeOpt value
+            let contextOpt, declaredTypeExprOpt = extractDefContexts typeOpt value
+            // The plain contexts its type writes are known before it is inferred, so a def inferred first, as one in a
+            // cycle with it is, finds them where it calls it: a lambda there requires them (#2610). One with type
+            // arguments is read with the def's type, which may be wrong, so it is registered as the def is inferred.
+            match contextOpt |> Option.map (List.filter (fun ctx -> match ctx.Kind with TypeName _ -> true | _ -> false)) with
+            | Some (_ :: _ as plain) -> state <- registerContextRequirement state name plain declaredTypeExprOpt
+            | _ -> ()
             match declaredTypeExprOpt with
             // An annotation with a `typeof` can only be read once the values it names are in scope, so the def is
             // pre-bound as an unannotated one is, and its annotation is unified with that once it has been read. So is
@@ -294,6 +302,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     state <- { unannotated with ReadAs = unannotated.ReadAs |> Map.add written.Id lambda }
                     lambda
                 | None -> written
+            let pendingBefore = state.PendingContextInstances |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
             // A def's own name is not in scope in its annotation: `def x: typeof x` says nothing.
             match DefAnnotations.read inferTypeOfValues currentModule (Ok ()) (withoutTopLevel name env) env state name typeOpt expr with
             | Error err -> abandon isExport name expr err
@@ -377,7 +386,19 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     // A function named point-free finds its instances at the type the def writes.
                     let valueResolved =
                         if expectedDeclaredOpt.IsSome then resolveValueInstances envWithRec state expr else Ok state
-                    match rigidResult |> Result.bind (fun () -> Result.map ignore settledType) |> Result.bind (fun () -> valueResolved) |> Result.bind (fun state -> synthesizeSettledInstances env state name) with
+                    // A value that is not a function can't require a context of a type a later use would fix. Its
+                    // calls are not left to the end of the module, which would report them again.
+                    let unfixed =
+                        if expectedDeclaredOpt.IsNone && contextOpt.IsNone then
+                            let isOwn (p: PendingContextInstance) = not (pendingBefore.Contains (p.Call, p.Index))
+                            let calls = state.PendingContextInstances |> List.filter isOwn
+                            match ContextInference.unfixedValueType state name (declarationSpan state DefValue expr) declaredTy calls with
+                            | [] -> Ok ()
+                            | err ->
+                                state <- { state with PendingContextInstances = state.PendingContextInstances |> List.filter (isOwn >> not) }
+                                Error err
+                        else Ok ()
+                    match rigidResult |> Result.bind (fun () -> unfixed) |> Result.bind (fun () -> Result.map ignore settledType) |> Result.bind (fun () -> valueResolved) |> Result.bind (fun state -> synthesizeSettledInstances env state name) with
                     | Error err -> abandon isExport name expr err
                     | Ok synthesizedState ->
                         state <- synthesizedState
@@ -426,7 +447,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Expr expr when (blockAround state.ModuleBlocks expr.Span).IsSome ->
             let blockName = fst (blockAround state.ModuleBlocks expr.Span).Value
             errors <- errors @ [ Diagnostics.at DiagnosticCodes.CodeInModuleBlock expr.Span $"'{blockName}' is a module block, which can only hold definitions, types and imports, not code to run" |> Diagnostics.about blockName ]
+        // A statement has type variables of its own too: a scope the def before it wrote is not one its own
+        // annotations name.
         | Expr expr ->
+            beginDef ()
             match inferExpr env state expr with
             | Ok (typedExpr, next) ->
                 state <- next
@@ -542,6 +566,30 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                     errors <- errors @ [ contextInValue caller ctxName $"'{used.Callee}' requires" used.Span ]
             | _ -> ()
         state <- recordDeferredProviders required uses state |> recordInstanceProviders
+        // A lambda that calls a def in a cycle with its own requires the plain ambient contexts that def does: its
+        // variable for them takes them, or, where it was given since for a function type, fits them in there, as a
+        // function that requires them does (see `FunctionContexts.fit`).
+        for callee, var, span in List.rev state.PendingCallContexts do
+            let needed =
+                required |> Map.tryFind callee |> Option.defaultValue Set.empty
+                |> Set.filter (WrittenContexts.isScoped state >> not)
+                |> Set.toList
+                |> List.map (fun ctxName -> TyApply(ctxName, []))
+            match resolveSoFar state var with
+            | TyVar _ -> state <- addConstraintAt span var (TyUnion needed) state
+            | settled ->
+                let expected = match settled with TyUnion items -> items | other -> [ other ]
+                let fresh () =
+                    let made, next = freshVar state
+                    state <- next
+                    made
+                match FunctionContexts.fit fresh span needed expected with
+                | Ok constraints -> state <- { state with Constraints = List.rev constraints @ state.Constraints }
+                | Error extra ->
+                    let named = extra |> List.choose (function TyApply(name, _) -> Some $"'{name}'" | _ -> None) |> String.concat ", "
+                    let message =
+                        $"'{callee}' requires the contexts {named}, which the function this call is in is given where a function that does not require them is expected: write them on the type expected, or a context variable for any, as in `[c] a -> b`"
+                    errors <- errors @ [ Diagnostics.at DiagnosticCodes.ContextsNotAllowed span message ]
         // What an unannotated function needs is part of its type, as a context written in its type is. They come after
         // the parameterised contexts it requires, which its calls have already found instances of in that order.
         state <-

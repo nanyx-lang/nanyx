@@ -267,6 +267,24 @@ def main = {
 }
 ```
 
+The type can be left out where the rest of the def settles it, `use C(members)`: the instance is the one the block's
+calls need, or the one the members are called at. A handler that pushes each value into a list it builds loads the
+instance at the builder's own element type, whichever type that is where the builder is called:
+
+```nanyx
+context Pushed(a) = (push: a -> ())
+
+def gather: [c] ([c, Pushed(b)] () -> ()) -> list(b) = { block ->
+  memory {
+    mut found = []
+    use Pushed(push = { x -> found := [x, ...found] }) in block()
+    list.reverse(found)
+  }
+}
+
+println(gather { push(1) }) -- [1]
+```
+
 A handler can give its lambda an instance of a parameterised context too. The lambda is given it at the types its parameter's type writes, so a context with several instances for one type, such as a monoid, is chosen by the handler a block is passed to:
 
 ```nanyx
@@ -804,7 +822,7 @@ def passed: [ToString(a)] a -> string = { value ->
 
 Each part is written with the `ToString` found where the value is written: in generic code, the one the function was given for its type variable, and in a block with a `use`, the one it loads, so in the second `receipt` above `"{[Cents(250)]}"` would be `"[some cents]"`.
 
-A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/console#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`. A map's entries and a set's elements are written in the order they were first added, and the empty map writes `[=>]`.
+A record's fields are written in alphabetical order. A string is written without quotes wherever it is; [`dbg`](../stdlib/console#dbg) prints a value as you would write it in code, and ignores any `ToString`. The compiler does not look inside an alias or a nominal type that is a part: such a part is written with its own `ToString`. An empty list, `"{[]}"`, writes `[]`. A map's entries and a set's elements are written in the order `map.toList` and `set.toList` give them, the order of their hashes, and the empty map writes `[=>]`.
 
 `println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
 

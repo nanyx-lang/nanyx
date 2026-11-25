@@ -105,6 +105,28 @@ let ``A frame's locals are written as dbg writes them, those still alive where t
     Assert.Equal<(string * string) list>([ "twice", "12" ], (listen (statementAt 3) program).Locals)
 
 [<Fact>]
+let ``A statement writes every local of a small function in scope there, by name`` () =
+    let source =
+        """def total = { n: int ->
+  def a = n + 1
+  def b = n + 2
+  def c = a + b
+  a + b + c + n
+}
+
+println(total(1))
+"""
+    Assert.Equal<(string * string) list>([ "a", "2"; "b", "3"; "c", "5"; "n", "1" ], (listen (statementAt 5) source).Locals)
+
+[<Fact>]
+let ``A statement writes the parameters and the 64 locals bound last of a function with more in scope`` () =
+    let defs = [ for i in 1..70 -> $"  def x{i} = n + {i}" ] |> String.concat "\n"
+    let sum = [ for i in 1..70 -> $"x{i}" ] |> String.concat " + "
+    let source = $"def total = {{ n: int ->\n{defs}\n  {sum} + n\n}}\n\nprintln(total(0))\n"
+    let written = (listen (statementAt 72) source).Locals |> List.map fst |> Set.ofList
+    Assert.Equal<Set<string>>(Set.ofList ("n" :: [ for i in 7..70 -> $"x{i}" ]), written)
+
+[<Fact>]
 let ``A function's entry writes its parameters`` () =
     let entry (probe: Probe) = match probe.Kind with Entry "double" -> true | _ -> false
     Assert.Equal<(string * string) list>([ "n", "6" ], (listen entry program).Locals)
