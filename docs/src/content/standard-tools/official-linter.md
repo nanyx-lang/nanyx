@@ -266,7 +266,7 @@ Only the names the prelude brings into scope unqualified count. A definition att
 
 ```nanyx
 def total = { n ->
-  def tax = n / 5; n + tax -- Linter warning: Put each statement on a line of its own, rather than separating them with `;`
+  def tax = n // 5; n + tax -- Linter warning: Put each statement on a line of its own, rather than separating them with `;`
 }
 ```
 

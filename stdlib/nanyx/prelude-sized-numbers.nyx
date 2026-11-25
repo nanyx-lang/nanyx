@@ -32,8 +32,12 @@ export def I8.`*`: I8, I8 -> I8 = { x, y ->
   x * y
 }
 
-export def I8.`/`: I8, I8 -> I8 = { x, y ->
+export def I8.`/`: I8, I8 -> float = { x, y ->
   x / y
+}
+
+export def I8.`//`: I8, I8 -> I8 = { x, y ->
+  x // y
 }
 
 export def I8.`%`: I8, I8 -> I8 = { x, y ->
@@ -84,8 +88,12 @@ export def I16.`*`: I16, I16 -> I16 = { x, y ->
   x * y
 }
 
-export def I16.`/`: I16, I16 -> I16 = { x, y ->
+export def I16.`/`: I16, I16 -> float = { x, y ->
   x / y
+}
+
+export def I16.`//`: I16, I16 -> I16 = { x, y ->
+  x // y
 }
 
 export def I16.`%`: I16, I16 -> I16 = { x, y ->
@@ -136,8 +144,12 @@ export def I32.`*`: I32, I32 -> I32 = { x, y ->
   x * y
 }
 
-export def I32.`/`: I32, I32 -> I32 = { x, y ->
+export def I32.`/`: I32, I32 -> float = { x, y ->
   x / y
+}
+
+export def I32.`//`: I32, I32 -> I32 = { x, y ->
+  x // y
 }
 
 export def I32.`%`: I32, I32 -> I32 = { x, y ->
@@ -188,8 +200,12 @@ export def U8.`*`: U8, U8 -> U8 = { x, y ->
   x * y
 }
 
-export def U8.`/`: U8, U8 -> U8 = { x, y ->
+export def U8.`/`: U8, U8 -> float = { x, y ->
   x / y
+}
+
+export def U8.`//`: U8, U8 -> U8 = { x, y ->
+  x // y
 }
 
 export def U8.`%`: U8, U8 -> U8 = { x, y ->
@@ -240,8 +256,12 @@ export def U16.`*`: U16, U16 -> U16 = { x, y ->
   x * y
 }
 
-export def U16.`/`: U16, U16 -> U16 = { x, y ->
+export def U16.`/`: U16, U16 -> float = { x, y ->
   x / y
+}
+
+export def U16.`//`: U16, U16 -> U16 = { x, y ->
+  x // y
 }
 
 export def U16.`%`: U16, U16 -> U16 = { x, y ->
@@ -292,8 +312,12 @@ export def U32.`*`: U32, U32 -> U32 = { x, y ->
   x * y
 }
 
-export def U32.`/`: U32, U32 -> U32 = { x, y ->
+export def U32.`/`: U32, U32 -> float = { x, y ->
   x / y
+}
+
+export def U32.`//`: U32, U32 -> U32 = { x, y ->
+  x // y
 }
 
 export def U32.`%`: U32, U32 -> U32 = { x, y ->
@@ -344,8 +368,12 @@ export def U64.`*`: U64, U64 -> U64 = { x, y ->
   x * y
 }
 
-export def U64.`/`: U64, U64 -> U64 = { x, y ->
+export def U64.`/`: U64, U64 -> float = { x, y ->
   x / y
+}
+
+export def U64.`//`: U64, U64 -> U64 = { x, y ->
+  x // y
 }
 
 export def U64.`%`: U64, U64 -> U64 = { x, y ->
@@ -393,6 +421,10 @@ export def F32.`*`: F32, F32 -> F32 = { x, y ->
 
 export def F32.`/`: F32, F32 -> F32 = { x, y ->
   x / y
+}
+
+export def F32.`//`: F32, F32 -> F32 = { x, y ->
+  x // y
 }
 
 export def F32.`%`: F32, F32 -> F32 = { x, y ->

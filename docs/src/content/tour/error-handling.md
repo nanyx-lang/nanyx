@@ -10,7 +10,7 @@ To crash on purpose, call the prelude's `crash` with a message. It writes `crash
 
 ```nanyx
 def half: int -> int = { n ->
-  if n % 2 == 0 then n / 2 else crash("{n} is odd")
+  if n % 2 == 0 then n // 2 else crash("{n} is odd")
 }
 ```
 

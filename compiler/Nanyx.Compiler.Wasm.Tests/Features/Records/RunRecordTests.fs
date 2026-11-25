@@ -13,7 +13,7 @@ let ``Run - a nominal value over a primitive is made and taken apart with its ty
 
 def Money.toString: Money -> string = { m ->
   def Money(pence) = m
-  "{pence / 100}.{pence % 100}"
+  "{pence // 100}.{pence % 100}"
 }
 
 def describe: Money -> string = { m ->

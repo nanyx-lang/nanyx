@@ -13,7 +13,7 @@ module money =
   }
 
   export def Money.toString: Money -> string = { m ->
-    def pounds = m.pence / 100
+    def pounds = m.pence // 100
     def rest = m.pence % 100
     if rest < 10 then "£{pounds}.0{rest}" else "£{pounds}.{rest}"
   }

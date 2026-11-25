@@ -48,6 +48,8 @@ let binaryOperators =
       operator "**" 12 RightAssociative
       operator "*" 11 LeftAssociative
       operator "/" 11 LeftAssociative
+      // Division to a whole number, floored: `7 // 2` is 3. One token, and not a comment, which is `--`.
+      operator "//" 11 LeftAssociative
       operator "%" 11 LeftAssociative
       spare "^" 11 LeftAssociative
       spare "<*>" 11 LeftAssociative

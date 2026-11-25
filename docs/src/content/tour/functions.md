@@ -132,7 +132,7 @@ def sizes = numbers \map { \math.abs }
 -- Equivalent to: numbers \map { x -> x \math.abs }
 ```
 
-A body that starts with an operator (`+`, `-`, `**`, `*`, `/`, `%`, `++`, `<`, `<=`, `>`, `>=`, `==` or `!=`) or with a `.` and a field name, or with a pipe, `\f`, has left out its first operand, and that operand is the lambda's argument. The rest of the body follows as it would after any operand, with the usual precedence: `{ * 2 + 1 }` is `{ x -> x * 2 + 1 }`. Only the first operand can be left out. An operator alone, `{ + }`, takes two arguments, one for each side.
+A body that starts with an operator (`+`, `-`, `**`, `*`, `/`, `//`, `%`, `++`, `<`, `<=`, `>`, `>=`, `==` or `!=`) or with a `.` and a field name, or with a pipe, `\f`, has left out its first operand, and that operand is the lambda's argument. The rest of the body follows as it would after any operand, with the usual precedence: `{ * 2 + 1 }` is `{ x -> x * 2 + 1 }`. Only the first operand can be left out. An operator alone, `{ + }`, takes two arguments, one for each side.
 
 A leading `-` is always subtraction from the argument, so `{ - 1 }` is `{ x -> x - 1 }`. A lambda that takes no argument and returns a negative number writes the arrow: `{ -> -1 }`.
 
@@ -368,7 +368,7 @@ def sumList: list(int) -> int = {
 -- Multiple arguments with patterns
 def divide: int, int -> #some(int) | #divideByZero = {
   | _, 0 -> #divideByZero
-  | x, y -> #some(x / y)
+  | x, y -> #some(x // y)
 }
 
 -- Each arm has a pattern for each argument, except a lone `else`, which matches whatever they all are

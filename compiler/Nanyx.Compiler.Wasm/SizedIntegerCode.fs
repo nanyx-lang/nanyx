@@ -1,7 +1,9 @@
 /// The operators on the sized integers other than `int` (see "Sized numbers" in the docs' work in progress), and the
 /// helpers they call. A `U64` is held in an `i64`, and any other in an `i32`, sign-extended or zero-extended from its
 /// width (see `CoreIrLayout`). `+`, `-` and `*` stop the program when the result does not fit the type, as they do on an
-/// int, and so does `/` on a signed type, whose smallest value divided by -1 does not fit.
+/// int, and so does `//` on a signed type, whose smallest value divided by -1 does not fit. `//` and `%` are floored (see
+/// `DivisionCode`), which on an unsigned type is what its instructions do. `/` divides with a fraction, as floats (see
+/// `CoreIrLower`).
 module internal Transpiler.Wasm.SizedIntegerCode
 
 open NyxCompiler
@@ -33,9 +35,10 @@ let binary (integer: SizedInteger) (op: string) : Operation option =
     | "+" -> Some (CallHelper(helperName integer "add"))
     | "-" -> Some (CallHelper(helperName integer "sub"))
     | "*" -> Some (CallHelper(helperName integer "mul"))
-    | "/" when SizedInteger.isSigned integer -> Some (CallHelper(helperName integer "div"))
-    | "/" -> Some (Instruction $"{held}.div_{signed}")
-    | "%" -> Some (Instruction $"{held}.rem_{signed}")
+    | "//" when SizedInteger.isSigned integer -> Some (CallHelper(helperName integer "floor_div"))
+    | "//" -> Some (Instruction $"{held}.div_u")
+    | "%" when SizedInteger.isSigned integer -> Some (CallHelper(helperName integer "mod"))
+    | "%" -> Some (Instruction $"{held}.rem_u")
     | "==" -> Some (Instruction $"{held}.eq")
     | "!=" -> Some (Instruction $"{held}.ne")
     | "<" -> Some (Instruction $"{held}.lt_{signed}")
@@ -172,5 +175,13 @@ let helpers : (string * string) list =
                 [ yield name "add", narrowHelper integer (name "add") "i64.add"
                   yield name "sub", narrowHelper integer (name "sub") "i64.sub"
                   yield name "mul", narrowHelper integer (name "mul") "i64.mul"
-                  if SizedInteger.isSigned integer then yield name "div", narrowHelper integer (name "div") "i64.div_s" ]
+                  if SizedInteger.isSigned integer then
+                      yield name "floor_div", narrowHelper integer (name "floor_div") $"call ${DivisionCode.intFloorDiv}"
+                      yield name "mod", DivisionCode.signedMod (name "mod") "i32" ]
         (fromIntHelper integer, fromInt integer) :: arithmetic)
+
+/// The helpers that the helper `name` of `helpers` calls: a signed type's `//` divides as an int's does.
+let dependenciesOf (name: string) : string list =
+    if SizedInteger.all |> List.exists (fun integer -> SizedInteger.isSigned integer && name = helperName integer "floor_div") then
+        [ DivisionCode.intFloorDiv ]
+    else []

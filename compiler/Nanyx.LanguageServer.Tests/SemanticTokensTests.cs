@@ -146,10 +146,10 @@ public sealed class SemanticTokensTests : LanguageServerTestBase
             def Point.`+`: Point, Point -> Point = { a, b -> (x = a.x + b.x, y = a.y + b.y) }
             def q: Point = (x = 1, y = 2)
             def r: Point = q + q
-            def halve = { (n: int) -> if n % 2 == 0 then #some(n / 2) else #error(#odd) }
+            def halve = { (n: int) -> if n % 2 == 0 then #some(n // 2) else #error(#odd) }
             def quarter = { (n: int) -> proc {
               def half = try halve(n)
-              return half / 2
+              return half // 2
             } }
             """.ReplaceLineEndings("\n") + "\n";
         Open(uri, source);

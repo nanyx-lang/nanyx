@@ -614,6 +614,29 @@
     end
     local.get $end
   )
+  (func $__nanyx_int_mod (param $a i64) (param $b i64) (result i64)
+    (local $r i64)
+    local.get $a
+    local.get $b
+    i64.rem_s
+    local.set $r
+    local.get $r
+    i64.const 0
+    i64.ne
+    local.get $r
+    local.get $b
+    i64.xor
+    i64.const 0
+    i64.lt_s
+    i32.and
+    if (result i64)
+      local.get $r
+      local.get $b
+      i64.add
+    else
+      local.get $r
+    end
+  )
 
   (type $ctx_fn_1 (func (param i32) (result i32)))
   (type $ctx_fn_2 (func (param i32 i32) (result i32)))
@@ -815,7 +838,7 @@
   (func $__lambda_56 (param $__env i32) (param $-3C-arg-3E-_i64 i64) (result i32)
     local.get $-3C-arg-3E-_i64
     i64.const 2
-    i64.rem_s
+    call $__nanyx_int_mod
     i64.const 0
     i64.eq
   )

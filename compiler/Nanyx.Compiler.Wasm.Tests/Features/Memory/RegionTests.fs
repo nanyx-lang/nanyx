@@ -260,7 +260,7 @@ let private localCells =
     mut count = 0
 
     while rest > 0 ->
-      rest := rest / 10
+      rest := rest // 10
       count := count + 1
 
     count

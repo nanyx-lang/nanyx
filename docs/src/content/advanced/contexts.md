@@ -694,23 +694,37 @@ def distance: [Add(a), Sub(a)] a, a, a -> a = { start, step, back ->
 
 ## Num(a)
 
-`Num(a)` is the context for numbers: it has every member of `Add(a)` and `Sub(a)`, and `x * y`, `x / y` and `x % y` are read through it too.
+`Num(a)` is the context for numbers: it has every member of `Add(a)` and `Sub(a)`, and `x * y`, `x / y`, `x // y` and `x % y` are read through it too.
 
 ```nanyx
 context Num(a) = (
+  fraction: type
   zero: a
   `+`: (a, a) -> a
   `-`: (a, a) -> a
   negate: a -> a
   `*`: (a, a) -> a
-  `/`: (a, a) -> a
+  `/`: (a, a) -> fraction
+  `//`: (a, a) -> a
   `%`: (a, a) -> a
   fromInt: int -> a
   isInteger: bool
 )
 ```
 
-`isInteger` is `true` for an integer type and `false` for `float` and `F32`: `x ** -n` asks it, since a negative power of an integer isn't one.
+`x / y` divides with a fraction. Its type is `fraction`, an [associated type](#associated-types) of `Num`: `float` for `int`, the sized integers and `float`, and `F32` for `F32`. So `7 / 2` is `3.5`, and `1 / 0` is infinity, as `1.0 / 0.0` is. An `I64` or `U64` past 2^53 is rounded to the nearest `float` first, as any conversion to `float` rounds it.
+
+`x // y` divides and rounds down, toward negative infinity, and `x % y` is what is left, with the sign of `y`, so that `x == (x // y) * y + x % y` always:
+
+```nanyx
+println("{7 / 2} {7 // 2} {7 % 2}") -- 3.5 3 1
+println("{-7 // 2} {-7 % 2}") -- -4 1
+println("{-7.5 // 2.0} {-7.5 % 2.0}") -- -4.0 0.5
+```
+
+A negative number still splits into a whole part and a remainder that is not negative, so `i % length` wraps an index into a range, `-1` to the last. On `float` and `F32`, `//` is the floor of the quotient, as a float, and `%` follows it, as Python's do. On an integer type, `x // 0` and `x % 0` stop the program.
+
+`isInteger` is `true` for an integer type and `false` for `float` and `F32`: `x ** -n` asks it, since a negative power of an integer isn't one. It stops the program on an integer type, and says to write `1 / x ** n`, which gives the fraction. A type of your own whose `fraction` is another type, as when its `/` gives a `float`, has no negative power: `x ** -1` on one is an error ([NYX0285](../standard-tools/errors#nyx0285)), or stops the program where the exponent isn't a literal.
 
 In a function that requires `Num(a)`, an integer literal beside a value of type `a` is `fromInt` of it, so `2` in `x * 2` is an `a`. A decimal literal there is an error, since `a` may be an integer type.
 
@@ -719,12 +733,12 @@ def square: [Num(a)] a -> a = { x ->
   x * x
 }
 
-def mean: [Num(a)] list(a) -> a = { xs ->
+def mean: [Num(a)] list(a) -> fraction = { xs ->
   list.sum(xs) / fromInt(list.length(xs))
 }
 ```
 
-`mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves, as it would for a function that requires `Sub(a)`. On `int`, `/` truncates and `%` takes the sign of the left operand, so `mean([1, 2, 4])` is `2`; on `float` they follow IEEE 754. A measured type, such as a length, is to have an `Add` and a `Sub` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
+`mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves, as it would for a function that requires `Sub(a)`. Its division gives `fraction`, so `mean([1, 2, 4])` is the `float` `2.333...`, and `mean` of a list of `F32`s an `F32`. A function that doesn't write its type and divides values of a type variable with `/` is inferred to return that variable's `fraction`, and one that divides ints with `/` to return a `float`. A measured type, such as a length, is to have an `Add` and a `Sub` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
 
 ## Append(a)
 
@@ -783,7 +797,7 @@ A type's own `ToString`, the compiler's own, a derived one or one built from an 
 
 ```nanyx
 def pounds: int -> string = { pence ->
-  "£{pence / 100}.{pence % 100}"
+  "£{pence // 100}.{pence % 100}"
 }
 
 def receipt = "Total: {pounds(250)}" -- "Total: £2.50"

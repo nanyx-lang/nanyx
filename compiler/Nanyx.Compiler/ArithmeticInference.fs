@@ -48,8 +48,10 @@ module internal ArithmeticInference =
     /// the def settles (see `Generalising`) are read. An operator found to be on numbers constrains its operands, so
     /// the def is generalised again with them.
     ///
-    /// A top-level def requires the contexts of each of its type variables its operators are on.
+    /// A top-level def requires the contexts of each of its type variables its operators are on. Each `/` whose operands
+    /// have turned out to be of a number type gives that type's fraction (see `Fractions`).
     let generalize (generalizeDef: InferState -> TypeScheme * InferState) (generalising: Generalising) (state: InferState) : TypeScheme * InferState =
+        let generalizeDef = Fractions.settle >> generalizeDef
         let state = settleLiterals generalizeDef generalising state
         if state.PendingArithmetic.IsEmpty then generalizeDef state
         else
@@ -88,10 +90,27 @@ module internal ArithmeticInference =
                     |> List.fold (fun current (pending, ty) -> asNumbers pending ty current) { state with PendingArithmetic = pending }
                     |> generalizeDef
 
+    /// The arguments for the associated types of `context` (see `AssociatedTypes`), which the def requires of its
+    /// variable `v`, whose operators are `onV`, and `state` with them. `Num`'s `fraction` is what the `/`s among them give,
+    /// which are made one type and are no longer pending (see `Fractions`); any other is a variable of its own.
+    let private associatedArguments (state: InferState) (v: TyVar) (context: Identifier) (onV: PendingArithmetic list) : Ty list * InferState =
+        let names = TypeResolution.tryFindTypeDef context state |> Option.map _.AssociatedTypes |> Option.defaultValue []
+        names
+        |> List.mapFold (fun (current: InferState) associatedName ->
+            let divisions = onV |> List.filter (fun pending -> pending.MemberName = ArithmeticOperators.divide)
+            match divisions with
+            | first :: others when context = Fractions.context && associatedName = Fractions.associatedType ->
+                let results = divisions |> List.map (fun pending -> resolveSoFar current pending.ResultTy) |> Set.ofList
+                let made = others |> List.fold (fun next pending -> addConstraintAt pending.At pending.ResultTy first.ResultTy next) current
+                first.ResultTy,
+                { made with PendingFractions = made.PendingFractions |> List.filter (fun pending -> not (results.Contains (resolveSoFar current pending.ResultTy))) }
+            | _ -> freshVar current) state
+
     /// The arithmetic operators of the top-level def `name`, generalised as `scheme`, that are on its own type
     /// variables, and `state` with each a call that requires its context of the variable, as a call to a function
     /// that requires one is: `ContextInference.resolvePending` then makes the def require it. The operators on one
-    /// variable need the contexts `OperatorContexts.covering` gives for the members they read.
+    /// variable need the contexts `OperatorContexts.covering` gives for the members they read. A context with associated
+    /// types is required with an argument for each (see `associatedArguments`).
     let require (state: InferState) (name: Identifier) (scheme: TypeScheme) : PendingArithmetic list * InferState =
         let own, others = state.PendingArithmetic |> List.partition (fun pending -> pending.InDef = name)
         let onVariables =
@@ -113,6 +132,15 @@ module internal ArithmeticInference =
                 |> Option.defaultValue [])
             |> Map.ofList
         let contextsOf (v: TyVar) = contexts[v.Id]
+        let associated, state =
+            onVariables
+            |> List.map snd
+            |> List.distinctBy _.Id
+            |> List.collect (fun v -> contextsOf v |> List.map (fun context -> v, context))
+            |> List.mapFold (fun current (v, context) ->
+                let arguments, next = associatedArguments current v context (own |> List.filter (fun pending -> resolveSoFar current pending.OperandTy = TyVar v))
+                ((v.Id, context), arguments), next) state
+        let associated = Map.ofList associated
         let calls =
             onVariables
             |> List.choose (fun (pending, v) ->
@@ -120,7 +148,7 @@ module internal ArithmeticInference =
                 |> Option.map (fun context ->
                     pending,
                     { Def = name; Call = pending.Operator; Callee = pending.MemberName; Index = 0; Count = 1
-                      Context = context; ArgTys = [ pending.OperandTy ]; Span = pending.At; Errors = []; ChecksOnly = false }))
+                      Context = context; ArgTys = pending.OperandTy :: associated[(v.Id, context)]; Span = pending.At; Errors = []; ChecksOnly = false }))
         // Generalising left only operators on the def's own variables, so any other is on a type solved since.
         let called = calls |> List.map (fun (pending, _) -> pending.Operator) |> Set.ofList
         let settled =
@@ -145,7 +173,7 @@ module internal ArithmeticInference =
                 let input = if pending.MemberName = ArithmeticOperators.negate then ty else inputOf ty
                 { current with
                     ContextInstances = current.ContextInstances |> Map.remove pending.Operator
-                    CalleeTypes = current.CalleeTypes |> Map.add pending.Operator (TyFunc(input, ty, []))
+                    CalleeTypes = current.CalleeTypes |> Map.add pending.Operator (TyFunc(input, pending.ResultTy, []))
                     OperatorCalls = current.OperatorCalls |> Map.add pending.Operator pending.MemberName
                     OperatorInstances = current.OperatorInstances |> Map.add pending.Operator written }
             | _ -> current) state

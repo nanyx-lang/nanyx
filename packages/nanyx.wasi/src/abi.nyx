@@ -59,7 +59,7 @@ export def readableEnd: int -> I32 = { ends ->
 
 --| The writable end of a new stream or future, of the two that the `I64` `ends` holds.
 export def writableEnd: int -> I32 = { ends ->
-  I32.fromInt(ends / 4294967296)
+  I32.fromInt(ends // 4294967296)
 }
 
 --| The first address from `address` on that is a multiple of 8, where the canonical ABI lays out a
@@ -127,7 +127,7 @@ export def writeAll
   = { output, writer, address, length ->
     if length <= 0 then () else
       def status = settled(writer, output.streamWrite(writer, address, length))
-      def taken = status / 16
+      def taken = status // 16
 
       if status % 16 != 0
         then ()

@@ -24,7 +24,7 @@ def Point.toString = { p -> "({p.x}, {p.y})" }
 type Money = private int
 def Money.toString: Money -> string = { m ->
   def Money(pence) = m
-  "£{pence / 100}.{pence % 100}"
+  "£{pence // 100}.{pence % 100}"
 }
 
 @entry

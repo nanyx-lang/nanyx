@@ -385,7 +385,7 @@ def formatDecimals: bool, float, int, int -> string = { negative, magnitude, pla
 
   if places == 0
     then "{sign}{digits}"
-    else "{sign}{digits / scale}.{zeroPadded(digits % scale, held)}{zeroDigits(places - held)}"
+    else "{sign}{digits // scale}.{zeroPadded(digits % scale, held)}{zeroDigits(places - held)}"
 }
 
 --| 10 to the power `n`, times `acc`.
@@ -400,7 +400,7 @@ def zeroPadded: int, int -> string = { n, width ->
 
 --| How many decimal digits `n`, which is 0 or more, has, plus `count` - 1.
 def decimalDigits: int, int -> int = { n, count ->
-  if n < 10 then count else decimalDigits(n / 10, count + 1)
+  if n < 10 then count else decimalDigits(n // 10, count + 1)
 }
 
 --| `n` zeros.

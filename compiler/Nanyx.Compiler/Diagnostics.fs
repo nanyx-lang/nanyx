@@ -224,6 +224,7 @@ module DiagnosticCodes =
     let OldFormTypeParameter = code 282 "Type parameter written the old way" Severity.Warning
     let ValueContextTypeOpen = code 283 "Value of a type only a later use fixes" Severity.Error
     let NotOneChar = code 284 "Char literal that is not one character" Severity.Error
+    let NegativePowerOfFraction = code 285 "Negative power of a type whose fraction is another" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -255,7 +256,7 @@ module DiagnosticCodes =
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
-          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
+          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar; NegativePowerOfFraction
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

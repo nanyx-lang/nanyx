@@ -76,7 +76,7 @@ let ``A bind of two steps with one failure payload type keeps it`` () =
         compileClean (
             andThen
             + withFinalNewline """def read: string -> #some(int) | #failed(string) = { s -> int.fromString(s) except #invalidInt -> #failed("not a number") }
-def half: int -> #some(int) | #failed(string) = { n -> if n % 2 == 0 then #some(n / 2) else #failed("odd") }
+def half: int -> #some(int) | #failed(string) = { n -> if n % 2 == 0 then #some(n // 2) else #failed("odd") }
 def piped = read("42") \andThen(half)
 def called = andThen(read("42"), half)""")
     Assert.Equal("#some(int) | #failed(string)", Unifier.tyToString typed.Types.["piped"])
@@ -133,7 +133,7 @@ let ``A bind of steps whose failure payloads are not tags still needs them to be
     let source =
         andThen
         + normalized """def read: string -> #some(int) | #failed(string) = { s -> int.fromString(s) except #invalidInt -> #failed("not a number") }
-def half: int -> #some(int) | #failed(int) = { n -> if n % 2 == 0 then #some(n / 2) else #failed(n) }
+def half: int -> #some(int) | #failed(int) = { n -> if n % 2 == 0 then #some(n // 2) else #failed(n) }
 def piped = read("42") \andThen(half)
 """
     let code, _ = singleError source

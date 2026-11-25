@@ -511,10 +511,14 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             // barrier: `MList.add` stores the new cell into its reference to the last cell too, which promotes it.
             let ty = tyOf expr
             let stored = newLocal "__stored"
+            match CoreIrLowerDivision.negativePower name (SyntaxTree.flattenCallArgs args |> List.map tyOf) ty with
+            | Some stop -> k stop
+            | None ->
             this.Atoms scope (SyntaxTree.flattenCallArgs args) (fun atoms ->
                 let call atoms = k (Expr.make (CallRuntime(name, atoms, not (Intrinsics.returnsUnit name))) ty)
                 if CoreIrRegions.isMutableArrayIntrinsic name then CoreIrRegions.mutableArray stored name atoms ty k
                 elif name = Intrinsics.listSetHead then CoreIrRegions.withBarrier stored WasmRegions.Names.regionStoreOutermost atoms call
+                elif CoreIrLowerDivision.isSameType name atoms ty then k (Expr.make (Atom atoms.Head) ty)
                 // The scheduler calls a task's function with nothing but itself, so it holds the members it requires.
                 elif name = Intrinsics.taskStart then CoreIrLowerMembers.coerce this.MemberTools scope atoms.Head (IrFunction(IrUnit, IrUnit, [], true)) (fun task -> call [ task ])
                 // The scheduler calls the host's wait with its timeout and nothing else, as it calls a task's function.
@@ -735,12 +739,13 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     k (Expr.make (If(atoms.Head, ifTrue, ifFalse)) ty))
         | _ when IrType.isFloat (tyOf left) || IrType.isFloat (tyOf right) ->
             // An instruction on the floats' values.
-            // `%` has no instruction: it calls a runtime helper (see `CoreIrEmit`).
-            if op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator `{op}` on floats"
+            // `//` and `%` have no instruction: each calls a runtime helper (see `CoreIrEmit`).
+            if op <> "//" && op <> "%" && (wasmFloatInstruction op).IsNone then cannot $"the operator `{op}` on floats"
             let ty = tyOf expr
             this.Atoms scope [ left; right ] (fun atoms -> k (Expr.make (Prim(FloatBinary op, atoms)) ty))
+        | "/", _, _ -> this.Atoms scope [ left; right ] (fun atoms -> CoreIrLowerDivision.fractional bindTemp atoms (tyOf expr) k)
         | _ ->
-            if (wasmBinaryInstruction op).IsNone then cannot $"the operator `{op}`"
+            if op <> "//" && (wasmBinaryInstruction op).IsNone then cannot $"the operator `{op}`"
             for operand in [ left; right ] do
                 match tyOf operand with
                 | IrInt | IrSized _ | IrBool | IrUnit | IrError -> ()

@@ -278,7 +278,7 @@ def blocksFrom
   : [HostRuntime] ([HostRuntime] I32, I32, I32 -> I32), I32, I32, list(string) -> list(string)
   = { read, reader, buffer, blocks ->
     def status = settled(reader, read(reader, buffer, chunkSize))
-    def count = status / 16
+    def count = status // 16
     def kept = if count > 0 then [stringAt(buffer, count), ...blocks] else blocks
     if status % 16 != 0 then kept else blocksFrom(read, reader, buffer, kept)
   }
@@ -299,7 +299,7 @@ def responseBlocksFrom
   : [Async, HostRuntime] I32, I32, list(string) -> list(string)
   = { reader, buffer, blocks ->
     def status = settledAsync(reader, responseStreamRead(reader, buffer, chunkSize))
-    def count = status / 16
+    def count = status // 16
     def kept = if count > 0 then [stringAt(buffer, count), ...blocks] else blocks
     if status % 16 != 0 then kept else responseBlocksFrom(reader, buffer, kept)
   }

@@ -63,7 +63,7 @@ let ``Drop - a value of a recursive alias frees every node it holds`` () =
     let source = """
 type Tree = #leaf | #node(Tree, string, Tree)
 
-def build: int -> Tree = { n -> if n == 0 then #leaf else #node(build(n - 1), "node {n}", build(n / 2)) }
+def build: int -> Tree = { n -> if n == 0 then #leaf else #node(build(n - 1), "node {n}", build(n // 2)) }
 """
     let ty = IrRecursive(IrTags [ "leaf", None; "node", Some(IrRecord [ "0", IrSelf 0; "1", IrString; "2", IrSelf 0 ]) ])
     use program = instantiateWasm (source.ReplaceLineEndings "\n") [ ty ]

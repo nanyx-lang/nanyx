@@ -5,7 +5,7 @@ open NyxCompiler
 open Parser.Program
 open Nanyx.Compiler.Tests.TestSupport
 
-let private halve = """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }"""
+let private halve = """def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }"""
 
 /// The expression of `result`'s syntax written at `text` (its first occurrence) that `isIt` picks.
 let private writtenAt (source: string) (result: CompileResult) (text: string) (isIt: Expression -> bool) =
@@ -24,7 +24,7 @@ let ``A workflow bind's made-up call and continuation are found from the bind as
         $"""{halve}
 def quarter = {{ n -> proc {{
   def h = try halve(n)
-  return h / 2
+  return h // 2
 }} }}"""
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"%A{result.Diagnostics}")
@@ -43,7 +43,7 @@ let ``A workflow's return is found from the return as written`` () =
         $"""{halve}
 def quarter = {{ n -> proc {{
   def h = try halve(n)
-  return h / 2
+  return h // 2
 }} }}"""
     let result = Compiler.compile source
     let returned = writtenAt source result "return" (fun expr -> match expr.Kind with WorkflowReturnExpr _ -> true | _ -> false)
@@ -67,7 +67,7 @@ let ``A type error in a workflow bind is reported at the bind`` () =
         $"""{halve}
 def quarter = {{ n -> proc {{
   def h = try halve("two")
-  return h / 2
+  return h // 2
 }} }}"""
     let code, text = singleError source
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)

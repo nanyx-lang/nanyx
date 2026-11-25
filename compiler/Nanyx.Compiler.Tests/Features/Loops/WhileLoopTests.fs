@@ -34,7 +34,7 @@ let ``a while loop's condition must be a bool`` () =
 [<Fact>]
 let ``a workflow keyword in a while loop is reported where it is written`` () =
     let source = """
-def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 def f: int -> #some(int) | #odd = { n -> proc {
   while true -> halve(try halve(n))
   return 0

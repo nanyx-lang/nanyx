@@ -362,6 +362,38 @@ module Unifier =
         let unnamed = occurrences |> List.filter (fun v -> v.Name.IsNone) |> List.map (fun v -> v.Id) |> Set.ofList
         restVarIds (notation <> Source) ty |> Set.intersect once |> Set.intersect unnamed
 
+    /// The made-up variables of `ty` that are the argument for an associated type of a context it requires and appear
+    /// nowhere else, each named after that associated type where no variable of `ty` has the name yet, so that it is
+    /// left out, as a signature leaves it out: `[Num(a)] a, a -> a` (see `TypePrinting.printTy`).
+    let private associatedNaming (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : Subst =
+        let occurrences = varOccurrences ty
+        let taken = occurrences |> List.choose _.Name |> Set.ofList
+        let once = occurrences |> List.countBy _.Id |> List.filter (snd >> (=) 1) |> List.map fst |> Set.ofList
+        // A context is an application, among a function's contexts or written on its own, as a signature's are.
+        let rec contextsIn ty =
+            let own = match ty with TyApply _ | TyAlias _ -> [ ty ] | _ -> []
+            match ty with
+            | TyFunc(arg, ret, contexts) -> writtenContexts contexts @ [ arg; ret ]
+            | _ -> Ty.fold (fun found child -> found @ [ child ]) [] ty
+            |> List.collect contextsIn
+            |> List.append own
+        contextsIn ty
+        |> List.collect (function
+            | TyApply(name, args)
+            | TyAlias(name, args, _) ->
+                match associatedIn typeDefs name with
+                | associated when not associated.IsEmpty && associated.Length <= args.Length ->
+                    List.zip associated (List.skip (args.Length - associated.Length) args)
+                | _ -> []
+            | _ -> [])
+        |> List.choose (function
+            | name, TyVar v when v.Name.IsNone && once.Contains v.Id && not (taken.Contains name) -> Some (name, v)
+            | _ -> None)
+        |> List.distinctBy fst
+        |> List.distinctBy (fun (_, v) -> v.Id)
+        |> List.map (fun (name, v) -> v.Id, TyVar { v with Name = Some name })
+        |> Map.ofList
+
     /// Replaces the type variables the compiler made up in `ty` with primitives that print as their names for a
     /// reader. They are named in the order they appear, through the Greek (`α`, `β`, ...) or Latin (`a`, `b`, ...)
     /// alphabet, skipping names already taken; variables named in an annotation keep their names. A union's rest
@@ -423,6 +455,7 @@ module Unifier =
     /// associated types of the contexts of `typeDefs` written by name: `[Iter(c)] c -> elem`, `Iter(c, elem = int)`,
     /// and the tags of a union alias of `typeDefs` by its name: `#some(string) | FsError`.
     let tyToDisplayStringIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (ty: Ty) : string =
+        let ty = apply (associatedNaming typeDefs ty) ty
         printIn typeDefs notation (apply (displayRenaming notation (loneRests notation ty) ty) ty)
 
     /// `ty` for a reader, as `tyToDisplayStringIn` writes it, where no context has associated types and no union has an
@@ -442,6 +475,8 @@ module Unifier =
     /// name from an annotation that it would have been given. A rest is a bare spread only where it is lone in
     /// every one of `tys` it appears in, so it is not named in one and not in another.
     let tysToDisplayStringsIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (tys: Ty list) : string list =
+        let named = associatedNaming typeDefs (TyApply("", tys))
+        let tys = tys |> List.map (apply named)
         let renamed = displayRenaming notation (loneAcross notation tys) (TyApply("", tys))
         tys |> List.map (apply renamed >> printIn typeDefs notation)
 

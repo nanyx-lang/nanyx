@@ -16,11 +16,15 @@ open NyxCompiler.Infer
 /// The type variables of a def's annotation are rigid: the body has to work for every type they stand for.
 /// Once the constraints gathered so far are solved, each must still be a variable of its own. One bound to
 /// a concrete type, or to the same type as another of the annotation's variables, means the annotation is
-/// more general than the body, which would otherwise quietly narrow it.
-let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span: SourceSpan) (typeExpr: TypeExpr) : Result<unit, Diagnostic list> =
+/// more general than the body, which would otherwise quietly narrow it. So must each variable that stands for an
+/// associated type of a context it requires (`associated`), which the instance fixes: `fraction` in `[Num(a)] a -> a`
+/// is not `a`.
+let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span: SourceSpan) (typeExpr: TypeExpr) (associated: TyVar list) : Result<unit, Diagnostic list> =
     let vars =
         annotationVarNames typeExpr
         |> List.choose (fun varName -> state.TypeVars |> Map.tryFind (WrittenVar varName) |> Option.map (fun var -> varName, var))
+        |> fun written -> written @ (associated |> List.choose (fun var -> var.Name |> Option.map (fun varName -> varName, var)))
+        |> List.distinctBy fst
     if vars.IsEmpty then
         Ok ()
     else
@@ -381,7 +385,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         | _ -> typeOpt, contextOpt
                     let rigidResult =
                         match declaredTypeExprOpt with
-                        | Some declaredExpr -> checkAnnotationIsRigid finalState name (declarationSpan finalState DefValue expr) declaredExpr
+                        | Some declaredExpr -> checkAnnotationIsRigid finalState name (declarationSpan finalState DefValue expr) declaredExpr (associatedVariables finalState contextOpt)
                         | None -> Ok ()
                     // A function named point-free finds its instances at the type the def writes.
                     let valueResolved =
@@ -602,7 +606,9 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         acc |> Map.add name (parameterized @ (contexts |> Set.toList |> List.map (TypeName >> TypeExpr.synthetic)))) state.ContextRequirements }
         items <- items |> List.map (fun (index, item) -> index, withInferredAmbientContexts required item)
 
-    // Each number literal is checked against its type, now that every type is known (see `NumericLiterals`).
+    // Each number literal is checked against its type, now that every type is known (see `NumericLiterals`), and each
+    // `/` on a type that settles gives its fraction (see `Fractions`).
+    state <- Fractions.settle (NumericLiterals.settle (fun _ -> true) state)
     let checkedLiterals, literalErrors = NumericLiterals.check state
     state <- checkedLiterals
     errors <- errors @ literalErrors

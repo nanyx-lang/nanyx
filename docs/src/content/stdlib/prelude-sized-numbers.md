@@ -61,7 +61,13 @@ def I8.`*`: I8, I8 -> I8
 ## `` I8.`/` ``
 
 ```nanyx fragment
-def I8.`/`: I8, I8 -> I8
+def I8.`/`: I8, I8 -> float
+```
+
+## `` I8.`//` ``
+
+```nanyx fragment
+def I8.`//`: I8, I8 -> I8
 ```
 
 ## `` I8.`%` ``
@@ -151,7 +157,13 @@ def I16.`*`: I16, I16 -> I16
 ## `` I16.`/` ``
 
 ```nanyx fragment
-def I16.`/`: I16, I16 -> I16
+def I16.`/`: I16, I16 -> float
+```
+
+## `` I16.`//` ``
+
+```nanyx fragment
+def I16.`//`: I16, I16 -> I16
 ```
 
 ## `` I16.`%` ``
@@ -241,7 +253,13 @@ def I32.`*`: I32, I32 -> I32
 ## `` I32.`/` ``
 
 ```nanyx fragment
-def I32.`/`: I32, I32 -> I32
+def I32.`/`: I32, I32 -> float
+```
+
+## `` I32.`//` ``
+
+```nanyx fragment
+def I32.`//`: I32, I32 -> I32
 ```
 
 ## `` I32.`%` ``
@@ -331,7 +349,13 @@ def U8.`*`: U8, U8 -> U8
 ## `` U8.`/` ``
 
 ```nanyx fragment
-def U8.`/`: U8, U8 -> U8
+def U8.`/`: U8, U8 -> float
+```
+
+## `` U8.`//` ``
+
+```nanyx fragment
+def U8.`//`: U8, U8 -> U8
 ```
 
 ## `` U8.`%` ``
@@ -421,7 +445,13 @@ def U16.`*`: U16, U16 -> U16
 ## `` U16.`/` ``
 
 ```nanyx fragment
-def U16.`/`: U16, U16 -> U16
+def U16.`/`: U16, U16 -> float
+```
+
+## `` U16.`//` ``
+
+```nanyx fragment
+def U16.`//`: U16, U16 -> U16
 ```
 
 ## `` U16.`%` ``
@@ -511,7 +541,13 @@ def U32.`*`: U32, U32 -> U32
 ## `` U32.`/` ``
 
 ```nanyx fragment
-def U32.`/`: U32, U32 -> U32
+def U32.`/`: U32, U32 -> float
+```
+
+## `` U32.`//` ``
+
+```nanyx fragment
+def U32.`//`: U32, U32 -> U32
 ```
 
 ## `` U32.`%` ``
@@ -601,7 +637,13 @@ def U64.`*`: U64, U64 -> U64
 ## `` U64.`/` ``
 
 ```nanyx fragment
-def U64.`/`: U64, U64 -> U64
+def U64.`/`: U64, U64 -> float
+```
+
+## `` U64.`//` ``
+
+```nanyx fragment
+def U64.`//`: U64, U64 -> U64
 ```
 
 ## `` U64.`%` ``
@@ -674,6 +716,12 @@ def F32.`*`: F32, F32 -> F32
 
 ```nanyx fragment
 def F32.`/`: F32, F32 -> F32
+```
+
+## `` F32.`//` ``
+
+```nanyx fragment
+def F32.`//`: F32, F32 -> F32
 ```
 
 ## `` F32.`%` ``

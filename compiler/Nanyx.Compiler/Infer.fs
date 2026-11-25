@@ -301,7 +301,18 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         state
         |> Contexts.outsideValue (fun state -> inferLambdaWithExpected lambdaEnv state expr args body expectedInput expectedReturn)
         |> Result.map (Contexts.withSuppliedInstances instances expr)
-    | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power -> ArithmeticOperators.inferPower (inferExpr env) state expr left right
+    | BinaryOp(op, _, left, right) when op = ArithmeticOperators.power ->
+        ArithmeticOperators.inferPower (inferExpr env) state expr left right
+        |> Result.bind (fun (typed, next) ->
+            // The fraction `/` gives on the base's type, where a definition attached to it says (see `negativePowerError`).
+            let leftTy = resolveSoFar next typed.Type
+            let fraction =
+                tryResolveAttachedFunction env leftTy ArithmeticOperators.divide
+                |> Option.bind (fun name -> TypeEnv.tryFind name env)
+                |> Option.bind (fun scheme -> match Unifier.unalias scheme.Type with TyFunc(_, result, _) -> Some result | _ -> None)
+            match ArithmeticOperators.negativePowerError expr right leftTy fraction with
+            | Some error -> Error [ error ]
+            | None -> Ok (typed, next))
     | BinaryOp(op, _, left, right) when (CompositionOperators.functionFor op).IsSome ->
         inferAsCall (inferExpr env) state expr (CompositionOperators.functionFor op).Value [ left; right ]
     | CoalesceOperator.Call(left, right) -> CoalesceOperator.infer (inferExpr env) state expr left right
@@ -516,8 +527,9 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
                 AppendOperator.check constrained expr leftExpr.Type rightExpr.Type
                 |> Result.map (fun (resultTy, joined) -> mkTypedExpr expr resultTy None None None, joined)
             | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op ->
-                ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type (ArithmeticOperators.numericOperandType constrained leftExpr.Type rightExpr.Type)
-                |> Result.map (fun numericConstrained -> mkTypedExpr expr leftExpr.Type None None None, numericConstrained)
+                let resultTy, constrained = ArithmeticOperators.resultOf constrained expr op leftExpr.Type
+                ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type resultTy (ArithmeticOperators.numericOperandType constrained leftExpr.Type rightExpr.Type)
+                |> Result.map (fun numericConstrained -> mkTypedExpr expr resultTy None None None, numericConstrained)
             | BinaryOp(op, _, _, _) when OrderingOperators.isOperator op ->
                 OrderingOperators.require (orderingInstance op expr.Span) env constrained expr op leftExpr.Type input
                 |> Result.map (fun required -> mkTypedExpr expr (TyPrimitive "bool") None None None, required)

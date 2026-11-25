@@ -41,7 +41,7 @@ def main = {
 [<InlineData("-9_223_372_036_854_775_807 - 2")>]
 [<InlineData("4_000_000_000 * 4_000_000_000")>]
 [<InlineData("(-9_223_372_036_854_775_807 - 1) * -1")>]
-[<InlineData("(-9_223_372_036_854_775_807 - 1) / -1")>]
+[<InlineData("(-9_223_372_036_854_775_807 - 1) // -1")>]
 let ``Run - int arithmetic that overflows stops the program`` (expression: string) =
     let source =
         $"""

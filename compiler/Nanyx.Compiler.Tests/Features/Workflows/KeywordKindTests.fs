@@ -83,7 +83,7 @@ let ``A #delay keyword in a lambda in a builder's block is not reported as one t
   start: [c] ([c] () -> int) -> int
 )
 
-def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n / 2) else #odd }
+def halve: int -> #some(int) | #odd = { n -> if n % 2 == 0 then #some(n // 2) else #odd }
 
 def f: list(int) -> #some(list(int)) | #odd = { xs -> proc {
   use Scope(start = { thunk -> thunk() })

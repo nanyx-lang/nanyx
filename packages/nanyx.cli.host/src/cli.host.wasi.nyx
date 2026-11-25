@@ -70,7 +70,7 @@ def fill: [HostRuntime] () -> I32 = { _ ->
   if start < end then end - start else
     def reader = stdinStream()
     def status = settled(reader, stdinStreamRead(reader, stateAt(bufferOffset), bufferSize))
-    def read = status / 16
+    def read = status // 16
     writeI32(stateAt(4), 0)
     writeI32(stateAt(8), read)
     read

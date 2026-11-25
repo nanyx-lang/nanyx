@@ -90,7 +90,7 @@ let ``Report - follows what stopped the program`` () =
             """@entry
 def main = {
   def s = "a" ++ "b"
-  println("{1 / (string.length(s) - 2)}")
+  println("{1 // (string.length(s) - 2)}")
 }
 """
     Assert.Equal(1, outcome.ExitCode)

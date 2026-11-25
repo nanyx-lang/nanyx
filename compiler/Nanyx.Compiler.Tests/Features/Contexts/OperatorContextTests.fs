@@ -11,7 +11,7 @@ let private inferredContexts (typed: TypedModule) =
     | [ contexts ] ->
         contexts
         |> List.map (function
-            | TyApply(context, [ TyVar v ]) -> context, v.Id
+            | TyApply(context, TyVar v :: _) -> context, v.Id
             | other -> failwith $"Unexpected inferred context: %A{other}")
     | other -> failwith $"Expected one def with inferred contexts, got %A{other}"
 

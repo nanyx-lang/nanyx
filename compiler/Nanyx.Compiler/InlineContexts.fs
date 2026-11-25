@@ -31,10 +31,11 @@ module internal InlineContexts =
         | TyTag(_, Some g), TyTag(_, Some s) -> bindingOf parameter g s
         | _ -> None
 
-    /// The one parameter of the prelude's context `context` and the type of its member `memberName`.
+    /// The one parameter of the prelude's context `context` and the type of its member `memberName`. Its associated
+    /// types, as `Num`'s `fraction`, are parameters after it (see `AssociatedTypes`).
     let private declaredMember (state: InferState) (context: Identifier) (memberName: Identifier) : (TyVar * Ty) option =
         match state.TypeDefs |> Map.tryFind context with
-        | Some ({ Parameters = [ parameter ] } as info) ->
+        | Some ({ Parameters = parameter :: _ } as info) when info.Parameters.Length - info.AssociatedTypes.Length = 1 ->
             match Unifier.unalias info.Underlying with
             | TyRecord(fields, _) -> fields |> Map.tryFind memberName |> Option.map (fun memberTy -> parameter, memberTy)
             | _ -> None

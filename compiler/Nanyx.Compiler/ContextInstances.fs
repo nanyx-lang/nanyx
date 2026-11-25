@@ -87,12 +87,14 @@ let private sameType (a: Ty) (b: Ty) =
     || ((TypeEnv.freeTyVars a).IsEmpty && (TypeEnv.freeTyVars b).IsEmpty
         && Solving.unify [ a, b, Equal, SourceSpan.none ] |> Result.isOk)
 
-/// The members of the context `ctxName` with its parameters bound to `argTys`, each with its type.
+/// The members of the context `ctxName` with its parameters bound to `argTys`, each with its type. `argTys` may leave
+/// out the context's associated types (see `AssociatedTypes`), which then stay its own parameters.
 let private contextMemberTypes (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (Identifier * Ty) list option =
     match state.TypeDefs |> Map.tryFind ctxName with
-    | Some info when info.Parameters.Length = argTys.Length ->
+    | Some info when info.Parameters.Length = argTys.Length || info.Parameters.Length - info.AssociatedTypes.Length = argTys.Length ->
+        let parameters = List.truncate argTys.Length info.Parameters
         match Unifier.unalias info.Underlying with
-        | TyRecord(fields, _) -> Some (fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters info.Parameters argTys ty))
+        | TyRecord(fields, _) -> Some (fields |> Map.toList |> List.map (fun (name, ty) -> name, Unifier.applyToParameters parameters argTys ty))
         | _ -> None
     | _ -> None
 
@@ -105,12 +107,23 @@ let private nearestInstance (env: TypeEnv) (state: InferState) (choose: Identifi
         | TyApply(ctxName, argTys) -> choose ctxName argTys |> Option.map (fun chosen -> instance, chosen)
         | _ -> None)
 
+/// The arguments of `argTys`, those of the context `ctxName`, that choose its instance: all but its associated types,
+/// which the instance fixes (see `AssociatedTypes`).
+let private choosingArguments (state: InferState) (ctxName: Identifier) (argTys: Ty list) : Ty list =
+    let associated = state.TypeDefs |> Map.tryFind ctxName |> Option.map _.AssociatedTypes.Length |> Option.defaultValue 0
+    List.truncate (argTys.Length - min associated argTys.Length) argTys
+
 /// The instance of `ctxName` applied to `argTys` nearest in scope in `env`, with its arguments. It is chosen by the
-/// arguments but the context's associated types, which it fixes (see `AssociatedTypes`).
+/// arguments but the context's associated types, which it fixes (see `AssociatedTypes`), and which `argTys` may leave
+/// out, as a narrower context's arguments do (see `ContextShapes`).
 let private nearestOf (env: TypeEnv) (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (InstanceBinding * Ty list) option =
-    let chosenBy = argTys.Length - (state.TypeDefs |> Map.tryFind ctxName |> Option.map _.AssociatedTypes.Length |> Option.defaultValue 0)
+    let chosenBy =
+        state.TypeDefs
+        |> Map.tryFind ctxName
+        |> Option.map (fun info -> info.Parameters.Length - info.AssociatedTypes.Length)
+        |> Option.defaultValue argTys.Length
     nearestInstance env state (fun name instanceArgs ->
-        if name = ctxName && instanceArgs.Length = argTys.Length
+        if name = ctxName && (instanceArgs.Length = argTys.Length || argTys.Length = chosenBy) && instanceArgs.Length >= chosenBy
            && List.forall2 sameType (List.truncate chosenBy instanceArgs) (List.truncate chosenBy argTys) then Some instanceArgs
         else None)
 
@@ -624,7 +637,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         | Some literalsSettled -> contextArgTysAtCall literalsSettled before signature scheme.Type calleeTy args
                         | None -> argTys, argTysAsRead, read, current
                     shared.Value <- read
-                    let settled = argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)
+                    let settled = choosingArguments current ctxName argTys |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)
                     let current = recordAssociatedArguments current call.Id ctxName args argTysAsRead
                     // A well-known context of a type with no member attached is the compiler's own (see
                     // `WellKnownContexts.resolveCall`). `Eq` of a structure with a part that has an `==` of its own
@@ -938,7 +951,7 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
     // never called at that type, as `dbg(twice)` isn't (see `CoreIrLowerInstances.neverCalled` in the backend).
     let neverCalled (pending: PendingContextInstance) =
         state.PendingReferences.Contains pending.Call
-        && pending.ArgTys |> List.exists (resolveSoFar state >> TypeEnv.freeTyVars >> Set.isEmpty >> not)
+        && choosingArguments state pending.Context pending.ArgTys |> List.exists (resolveSoFar state >> TypeEnv.freeTyVars >> Set.isEmpty >> not)
     let state =
         { state with PendingContextInstances = state.PendingContextInstances |> List.filter (fun pending -> pending.Def <> name || not (neverCalled pending)) }
     let arithmetic, state = ArithmeticInference.require state name scheme

@@ -181,6 +181,19 @@ module internal NumericLiterals =
         | TyVar v -> openLiterals state |> Seq.exists (fun (_, other) -> other.Id = v.Id)
         | _ -> false
 
+    /// The literal written in the code that `ty` is, so far, the own variable of, a decimal one first if there is one. An
+    /// operand an operator left for the code around it to settle (see `awaitOperand`) is no literal.
+    let writtenLiteral (state: InferState) (ty: Ty) : Literal option =
+        match resolveSoFar state ty with
+        | TyVar v ->
+            let written =
+                openLiterals state
+                |> Seq.filter (fun (literal, other) -> other.Id = v.Id && literal.Operator.IsNone)
+                |> Seq.map (fun (literal, _) -> literal.Value)
+                |> List.ofSeq
+            written |> List.tryFind (function FloatLit _ -> true | _ -> false) |> Option.orElse (List.tryHead written)
+        | _ -> None
+
     /// The literals of a variable of its own, as `state` resolves it, that is in `tys`.
     let openIn (tys: Ty list) (state: InferState) : NumericLiteral list =
         let inTys = tys |> List.map (resolveSoFar state >> TypeEnv.freeTyVars) |> Set.unionMany

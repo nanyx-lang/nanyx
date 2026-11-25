@@ -88,7 +88,7 @@ export def settledAsync: [Async, HostRuntime] I32, I32 -> I32 = { handle, status
 --| Waits until the async call that gave `status` has returned, while the program's other tasks
   run: at once if it has, and else until the subtask the status names has, which it then drops.
 export def awaitCallAsync: [Async, HostRuntime] I32 -> () = { status ->
-  if status % 16 < returned then awaitReturn(status / 16) else ()
+  if status % 16 < returned then awaitReturn(status // 16) else ()
 }
 
 --| Waits until the subtask `subtask` has returned, and drops it.

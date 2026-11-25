@@ -42,8 +42,8 @@ def main = {
     runSource source |> assertRan "4 6\nsame x\nsame x\n"
 
 [<Fact>]
-let ``Run - the remainder of floats is truncated, with the sign of the left operand`` () =
-    // #607: `%` on floats type-checked and then had no instruction in the backend. It is C's `fmod`.
+let ``Run - the remainder of floats is floored, with the sign of the right operand`` () =
+    // #607: `%` on floats type-checked and then had no instruction in the backend. It is Python's (#2716).
     let source =
         normalized """@entry
 def main = {
@@ -52,7 +52,7 @@ def main = {
   println("{7 % 3} {(0 - 7) % 3}")
 }
 """
-    runSource source |> assertRan "1.5 -1.5 1.5 0.0 1.5\n1 -1\n"
+    runSource source |> assertRan "1.5 0.5 -0.5 0.0 1.5\n1 2\n"
 
 [<Fact>]
 let ``Run - prefix minus negates ints and floats, and keeps the sign of zero`` () =
@@ -106,20 +106,20 @@ def main = {
 
 [<Fact>]
 let ``Run - generic code multiplies and divides through Num, with integer literals, at ints and floats`` () =
-    // #610: `*`, `/` and `%` read through `Num`, a literal beside a value of the type variable is `fromInt` of it, and
+    // #610: `*`, `/`, `//` and `%` read through `Num`, a literal beside a value of the type variable is `fromInt` of it, and
     // a function that requires `Num` passes it to one that requires `Add`, and one that requires `Sub`.
     let source =
         normalized """def square: [Num(a)] a -> a = { x -> x * x }
-def halfPlusOne: [Num(a)] a -> a = { x -> x / 2 + 1 }
+def halfPlusOne: [Num(a)] a -> a = { x -> x // 2 + 1 }
 def rem3: [Num(a)] a -> a = { x -> x % 3 }
-def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)) }
+def mean: [Num(a)] list(a) -> fraction = { xs -> list.sum(xs) / fromInt(list.length(xs)) }
 @entry
 def main = {
   println("{square(3)} {square(1.5)} {halfPlusOne(7)} {halfPlusOne(7.0)} {rem3(7)} {rem3(7.5)}")
   println("{mean([1, 2, 4])} {mean([1.0, 2.0, 4.5])} {float.fromInt(3)} {int.`*`(6, 7)}")
 }
 """
-    runSource source |> assertRan "9 2.25 4 4.5 1 1.5\n2 2.5 3.0 42\n"
+    runSource source |> assertRan "9 2.25 4 4.0 1 1.5\n2.3333333333333335 2.5 3.0 42\n"
 
 [<Fact>]
 let ``Run - ** is the prelude's pow, and Float.pow takes any exponent`` () =

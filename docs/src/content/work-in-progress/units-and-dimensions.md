@@ -141,7 +141,7 @@ dimension.
 # Arithmetic
 
 `/` is fractional division and `//` integral division, floored, on every number type; `int / int` is a `float`
-([Fractional division](./fractional-division)). On a `Time(a)`, with `fraction` the type `a`'s `/` gives (a `float`
+([Num(a)](../advanced/contexts#numa)). On a `Time(a)`, with `fraction` the type `a`'s `/` gives (a `float`
 for the integer types):
 
 | Expression | Type | |

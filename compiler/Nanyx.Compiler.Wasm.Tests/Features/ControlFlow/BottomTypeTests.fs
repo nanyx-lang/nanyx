@@ -22,7 +22,7 @@ def main = {
 [<Fact>]
 let ``Run - crash writes its message to stderr and exits with 1, running nothing after it`` () =
     let source =
-        normalized """def half: int -> int = { n -> if n % 2 == 0 then n / 2 else crash("odd: {n}") }
+        normalized """def half: int -> int = { n -> if n % 2 == 0 then n // 2 else crash("odd: {n}") }
 
 @entry
 def main = {

@@ -31,5 +31,5 @@ export def millisecondsOn: [HostRuntime] I32 -> int = { clock ->
   ignore(clockTimeGet(clock, 1_000_000, at))
   def nanoseconds = readI64(at)
   free(block)
-  nanoseconds / 1_000_000
+  nanoseconds // 1_000_000
 }

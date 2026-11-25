@@ -58,7 +58,7 @@ let ``An entry over the size limit that ends in a match is inlined into the star
     let lines = [ for i in 1..8 -> $"  def x{i} = collatz({i} + 26, 0)\n  println(if x{i} > 100 then \"long\" else \"short\")" ]
     let source =
         $"""def collatz: int, int -> int = {{ n, steps ->
-  if n == 1 then steps else collatz(if n %% 2 == 0 then n / 2 else 3 * n + 1, steps + 1)
+  if n == 1 then steps else collatz(if n %% 2 == 0 then n // 2 else 3 * n + 1, steps + 1)
 }}
 
 @entry

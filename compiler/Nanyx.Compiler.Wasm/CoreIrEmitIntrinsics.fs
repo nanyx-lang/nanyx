@@ -63,7 +63,7 @@ let arrayIntrinsics =
         Intrinsics.arrayToList ]
 
 /// The operators that give a number, where the others on numbers give a bool.
-let arithmetic = set [ "+"; "-"; "*"; "/"; "%" ]
+let arithmetic = set [ "+"; "-"; "*"; "/"; "//"; "%" ]
 
 /// The code that converts a value of `from` on the stack to one of `into`, when they are held differently: only a
 /// value of no known type (see `IrError`) is held differently from a value it is taken as. It is an `i32`, and an int

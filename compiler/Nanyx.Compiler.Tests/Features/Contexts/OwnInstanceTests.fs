@@ -68,7 +68,7 @@ let ``A use can't replace a built-in type's toString`` () =
         replaced
             """
 def s = {
-  use ToString(int)(toString = { pence -> "£{pence / 100}" })
+  use ToString(int)(toString = { pence -> "£{pence // 100}" })
   "{250}"
 }
 """

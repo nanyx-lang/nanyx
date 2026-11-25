@@ -57,6 +57,7 @@
     <Compile Include="Features\Multiline\MultilineTests.fs" />
     <Compile Include="Features\Names\BacktickedNameTests.fs" />
     <Compile Include="Features\Operators\OperatorTests.fs" />
+    <Compile Include="Features\Operators\FloorDivisionTests.fs" />
     <Compile Include="Features\Operators\OperatorNameTests.fs" />
     <Compile Include="Features\Operators\CoalesceTests.fs" />
     <Compile Include="Features\Operators\OperatorSpacingTests.fs" />

@@ -54,6 +54,6 @@ module internal AppendOperator =
             let error = Diagnostics.at DiagnosticCodes.MissingContextMembers expr.Span message |> Diagnostics.about context |> ContextFixes.withAddToType state defName $"{context}({tyText})"
             Ok (resultTy, { state with FailedExprs = (expr.Id, [ error ]) :: state.FailedExprs })
         | None, Some _, None, DefScope(defName, true) when areVariables ->
-            let pending = { InDef = defName; Operator = expr.Id; MemberName = operator; OperandTy = leftTy; At = expr.Span }
+            let pending = { InDef = defName; Operator = expr.Id; MemberName = operator; OperandTy = leftTy; ResultTy = resultTy; At = expr.Span }
             Ok (resultTy, { state with PendingArithmetic = pending :: state.PendingArithmetic })
         | _ -> Ok (resultTy, state)

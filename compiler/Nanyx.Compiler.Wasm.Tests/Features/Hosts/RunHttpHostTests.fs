@@ -87,7 +87,7 @@ let ``A handler that traps answers its request with a 500, and the next request 
 @entry
 def main: Request -> Response = { request ->
   match Request.path(request)
-    | "/divide" -> Response.text(200, "{10 / string.length(request.body)}")
+    | "/divide" -> Response.text(200, "{10 // string.length(request.body)}")
     | path -> Response.text(200, "{request.method} {path} {request.body}")
 }
 """
