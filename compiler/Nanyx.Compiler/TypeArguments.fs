@@ -204,7 +204,9 @@ let rewrite (module': Module) : Module * Diagnostic list =
         | ModuleDecl _
         | Import _
         | ReExport _
-        | Attribute _ -> topLevel
+        | Attribute _
+        | DimensionDecl _
+        | UnitDecl _ -> topLevel
     let rewritten = List.map item module'
     rewritten, List.ofSeq errors
 

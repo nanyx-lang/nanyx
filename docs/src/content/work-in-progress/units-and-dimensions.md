@@ -4,10 +4,11 @@ description: "Compile-time units for numbers"
 order: 2
 ---
 
-> **Status: designed, not built.** The first step, single dimensions over any numeric storage, is settled below and is
+> **Status: designed, being built.** The first step, single dimensions over any numeric storage, is settled below and is
 > being built; derived dimensions such as `Length/Time` come second and still have open questions (see
-> [Step 2](#step-2-derived-dimensions) and [Open questions](#open-questions)). The code on this page is proposed syntax,
-> which the compiler does not read yet.
+> [Step 2](#step-2-derived-dimensions) and [Open questions](#open-questions)). The compiler reads unit literals and the
+> declarations of dimensions and units, and the formatter lays them out, but it does not check them yet: it reports
+> each as [`NYX0285`](../standard-tools/errors#nyx0285) until the checker does.
 
 Nanyx will check units of measure at compile time, so a length cannot be added to a time, and a call reads as what
 it means:
@@ -64,10 +65,12 @@ unit KiB: Bytes = 1_024B
 - Every other unit is declared with `=` as a constant multiple of a unit of the same dimension, so of the base unit in
   the end. The multiple need not be whole, and the base need not be the smallest unit: `mm` is `0.001m`. A chain of
   definitions that comes back to where it started is an error, as is a unit defined in another dimension's units.
-- `dimension` and `unit` are not reserved words. They begin a declaration only at the start of a top-level line, so
-  code that uses them as names keeps working.
+- `dimension` and `unit` are not reserved words. They begin a declaration only at the start of a top-level line, with a
+  name after them on it, so code that uses them as names keeps working. They are declared at the top level of a file or
+  of a module block, not in a def's body.
 - Units are names of their own kind, apart from values and types: `500ms` means the unit `ms` even where a value named
-  `ms` is in scope. A module exports and imports units as it does types.
+  `ms` is in scope. A module exports and imports dimensions and units as it does types, with `export` before the
+  declaration: `export dimension Time` and `export unit ms: Time = 1_000us`.
 
 The base unit is declared, not worked out from the smallest unit in scope, so a unit declared in another module, such as
 `unit ps: Time = 0.001ns`, can't change how a dimension is stored. A unit finer than the base is a fraction of it, which
@@ -112,7 +115,8 @@ always `Bytes`, and `Bytes(a)` is an error.
 
 A number followed by a unit with no space between them is one literal: `500ms`, `1_000ns`, `0.5s`, `1.5e3ms`. Its type
 is the unit's dimension, and the compiler scales it to the base unit: `0.5s` is stored as `500_000_000`. `100 ms` is
-the number `100` followed by the name `ms`. Hexadecimal, octal and binary literals take no unit, as `0x1B` is a number.
+the number `100` followed by the name `ms`. Hexadecimal, octal and binary literals take no unit, as `0x1B` is a number,
+and an exponent comes after a fraction, as in a float: `1.5e3ms`, not `1e3ms`.
 
 A unit literal's storage is the one the code around it expects, as a plain literal's type is
 ([types](../tour/types)). Where nothing expects one, the storage is the constrained dimension's, or else the one the
@@ -216,6 +220,9 @@ Not part of the first step, and not settled.
    irrational scale, as in `unit deg: Angle = (pi / 180)rad`, is open too.
 3. **Currencies.** A currency is not a fixed multiple of another, so `usd` and `eur` are not units of one `Money`
    dimension: each currency is a dimension, or the currency is a value.
+4. **Units in patterns.** A number with a unit is not a pattern yet: `| 0ms ->` is a syntax error, and a guard,
+   `| == 0ms ->`, compares with one. Open: whether a pattern matches a measured value exactly, which for a `float`
+   storage is as fragile as matching a `float`, and whether a range of them, `0ms..1s`, is a pattern.
 
 # Prior art
 

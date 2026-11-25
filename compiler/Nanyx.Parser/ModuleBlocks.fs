@@ -145,7 +145,9 @@ let rec private expandModuleBlock (prefix: string) (blockSpan: SourceSpan) (item
             @ [ TopLevelItem.at blockSpan (ModuleDecl(false, prefix)) ]
         | Import _
         | ReExport _
-        | Attribute _ -> [ item ]
+        | Attribute _
+        | DimensionDecl _
+        | UnitDecl _ -> [ item ]
         | Expr expr -> keep (Expr (rewriteExpressionInModule valueMap typeMap expr))
         | Def (ValueDef(isExport, name, typeOpt, expr)) ->
             keep (Def (ValueDef(isExport, qualifyDefName name, typeOpt |> Option.map rewriteType, rewriteExpressionInModule valueMap typeMap expr)))

@@ -110,6 +110,8 @@ let private inItem (declared: DeclaredNames) (offset: int) (item: TopLevelItem) 
         | Attribute(_, argument) -> argument |> Option.toList |> List.collect (inExpression declared offset)
         | Import items -> items |> List.map (fun item -> item.Span)
         | ReExport item -> [ item.Span ]
+        | DimensionDecl(_, _, storage) -> storage |> Option.toList |> List.collect inType
+        | UnitDecl(_, _, _, multiple) -> multiple |> Option.toList |> List.collect (inExpression declared offset)
         | ModuleDecl _
         | ModuleBlock _ -> []
     item.Span :: parts

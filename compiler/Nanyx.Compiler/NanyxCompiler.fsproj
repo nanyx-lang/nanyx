@@ -58,6 +58,7 @@
     <Compile Include="AttachedOperators.fs" />
     <Compile Include="OperatorContexts.fs" />
     <Compile Include="NumericLiterals.fs" />
+    <Compile Include="Units.fs" />
     <Compile Include="ArithmeticOperators.fs" />
     <Compile Include="AppendOperator.fs" />
     <Compile Include="CompositionOperators.fs" />

@@ -84,11 +84,30 @@ module NodeId =
     /// reads, so that their ids never meet those the reading process gives its own.
     let startAt (first: NodeId) = System.Threading.Interlocked.Exchange(&last.contents, max last.Value (first - 1L)) |> ignore
 
+/// A number exactly as written, sign and all: `Digits * 10 ** Exponent`, so `0.001` is 1 and -3 and `1.5e3` is 15 and 2,
+/// and whether it was written as a decimal, with a `.` or an exponent, rather than as a whole number.
+type WrittenNumber = { Digits: bigint; Exponent: int; Decimal: bool }
+
+module WrittenNumber =
+    /// `number` written out: `1000`, `0.001`, `1.5e3` as `15e2`.
+    let text (number: WrittenNumber) : string =
+        let sign = if number.Digits.Sign < 0 then "-" else ""
+        let digits = string (abs number.Digits)
+        if number.Exponent >= 0 then
+            sign + digits + (if number.Decimal then $"e{number.Exponent}" else System.String('0', number.Exponent))
+        else
+            let digits = digits.PadLeft(1 - number.Exponent, '0')
+            let point = digits.Length + number.Exponent
+            sign + digits.Substring(0, point) + "." + digits.Substring point
+
 type Literal =
     | StringLit of string
     | IntLit of bigint
     | FloatLit of float
     | BoolLit of bool
+    /// A number with a unit written straight after it, `500ms` or `0.5s`: the number exactly, and the unit's name (see
+    /// `UnitSyntax`).
+    | UnitLit of WrittenNumber * unit: Identifier
 
 type TypeDefModifier =
     | Export
@@ -345,6 +364,12 @@ and TopLevelItemKind =
     /// An `@name` attribute line; it applies to the top-level item that follows it (e.g. `@entry`). An argument is
     /// written in parentheses straight after the name, like a tag's payload: `@test(#io)`.
     | Attribute of Identifier * Expression option
+    /// `dimension Time`, a kind of quantity, a type generic in the number that stores it, or `dimension Bytes(int)`,
+    /// constrained to one storage type (see `UnitSyntax`).
+    | DimensionDecl of isExport: bool * Identifier * storage: TypeExpr option
+    /// `unit ms: Time = 1_000us`, a unit of a dimension that is a constant multiple of another unit, a `UnitLit`, or
+    /// `unit ns: Time`, with no multiple, the dimension's base unit, which `@baseUnit` before it marks (see `UnitSyntax`).
+    | UnitDecl of isExport: bool * Identifier * dimension: Identifier * multiple: Expression option
 
 /// An expression and where it came from. Equality and comparison look only at `Kind`, leaving out the name spans
 /// some kinds carry: two expressions are the same when they are the same code, wherever it was written. It is
@@ -1353,6 +1378,25 @@ module TopLevelItem =
     let isPartialDeclaration (attribute: TopLevelItem) (next: TopLevelItem) =
         match attribute.Kind, next.Kind with
         | Attribute(name, None), ModuleDecl _ -> name = partialAttribute
+        | _ -> false
+
+/// Units of measure: `dimension Time`, `@baseUnit unit ns: Time` and `unit ms: Time = 1_000us`. The words are not
+/// reserved: each begins a declaration only at the start of a top-level item, with a name after it on its line, so code
+/// that uses them as names keeps working.
+module UnitSyntax =
+    /// The word that begins a dimension's declaration.
+    let dimensionKeyword = "dimension"
+
+    /// The word that begins a unit's declaration.
+    let unitKeyword = "unit"
+
+    /// The attribute that marks a dimension's base unit, written on the unit's line: `@baseUnit unit ns: Time`.
+    let baseUnitAttribute = "baseUnit"
+
+    /// Whether `attribute` is `@baseUnit` and `next`, the item after it, a unit's declaration.
+    let isBaseUnitDeclaration (attribute: TopLevelItem) (next: TopLevelItem) =
+        match attribute.Kind, next.Kind with
+        | Attribute(name, None), UnitDecl _ -> name = baseUnitAttribute
         | _ -> false
 
 /// How a node declares names. One node can declare in more than one way: `def f = { x -> x }` declares `f` by

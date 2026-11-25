@@ -362,6 +362,8 @@ module UnusedPrivateDefinitions =
             | Import _
             | ReExport _
             | Attribute _
+            | DimensionDecl _
+            | UnitDecl _
             | Expr _ -> [])
 
     /// The names of the definitions that an instance built from attached definitions picks up somewhere in the module.
@@ -667,6 +669,8 @@ module UnannotatedExports =
             | Import _
             | ReExport _
             | Attribute _
+            | DimensionDecl _
+            | UnitDecl _
             | Expr _ -> [])
 
     let lint (model: SemanticModel) : Report list =
