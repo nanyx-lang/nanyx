@@ -282,7 +282,7 @@ println(describe((x = 1, y = 2), type (x: int, y: int))) -- x = the int 2, y = t
 
 The tags are:
 
-- `#int`, `#float`, `#bool`, `#string`, `#unit`, and `#i8` to `#u64` and `#f32` for the [sized numbers](types#basic-types): the type is that one.
+- `#int`, `#float`, `#bool`, `#string`, `#unit`, `#char` for a [character](types#characters), and `#i8` to `#u64` and `#f32` for the [sized numbers](types#basic-types): the type is that one.
 - `#list(elem)`, `#array(elem)` and `#set(elem)`, and `#map(key, value)`: the type is that collection, of an element type the checker never learns, which `elem` is the `Type` of. So the `#list` arm above calls `describe` again for each element, with `elem`.
 - `#function`: the type is a function's. Its input and output aren't described.
 - `#record(r)`: the type is a record, a tuple, or a nominal type made from one, seen from its home module. `r` is a `RecordInfo(a)`, with the type's `name`, its `module` (a file's name, or a standard-library module's import path) and its `doc` comment, each empty for a record written out, the `parameters` it is applied to, and its `fields` in the order the type writes them.

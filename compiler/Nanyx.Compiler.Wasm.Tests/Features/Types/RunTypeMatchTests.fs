@@ -316,3 +316,36 @@ let ``Run - map.map at a type only known when the program runs maps its values``
 println(total((m = ["a" => 1, "b" => 2]), type (m: map(string, int))))
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "3\n"
+
+[<Fact>]
+let ``Run - a char is described as #char`` () =
+    // #2658: `char` had no description, so a match on `type char` couldn't compile.
+    let source =
+        """def kind: Type(a) -> string = { t ->
+  match t
+    | #char -> "a char"
+    | #string -> "a string"
+    | else -> "something else"
+}
+
+println("{kind(type char)} {kind(type string)} {kind(type int)}")
+"""
+    runSource (normalized source) |> assertRan "a char a string something else\n"
+
+[<Fact>]
+let ``Run - json.encode of a record with a char field is an error it gives, not a compile failure`` () =
+    // #2658: nanyx.json 0.4.2 gives a description kind it doesn't know, such as `#char`, as an EncodeError.
+    let source =
+        """::dependency nanyx.json 0.4.2
+
+import nanyx.json/json as json
+
+type Grade = (name: string, letter: char)
+
+def letter: char = "A"
+
+match json.encode(Grade(name = "Ada", letter = letter))
+  | #some(text) -> println(text)
+  | #cannotEncode(e) -> println(e.message)
+"""
+    runSource (normalized source) |> assertRan "A value of this type can't be written as JSON by this version of nanyx.json\n"
