@@ -34,6 +34,20 @@ module internal Units =
         | None, Some info -> Ok info
         | None, None -> Error (unknownUnit span unitName state.Units)
 
+    /// The intrinsic that is the number a measured value is stored as, as it is: what a derived `toString` of one
+    /// writes (see `StructuralInstances`). It has no scheme, as no type can name every dimension: `Infer` types a call
+    /// of it, in any module, as the storage of its argument.
+    let storageIntrinsic = "__nanyx_measured_storage"
+
+    /// The units of the dimension `dimension` that `state`'s module can write, its own and those it imports by a name no
+    /// other unit it imports has, the largest first.
+    let seenOf (state: InferState) (dimension: NominalId) : UnitInfo list =
+        state.Units
+        |> Map.toList
+        |> List.filter (fun (name, info) -> info.Dimension = dimension && not (state.AmbiguousUnits.ContainsKey name))
+        |> List.map snd
+        |> List.sortWith (fun a b -> compare (b.Scale.Numerator * a.Scale.Denominator) (a.Scale.Numerator * b.Scale.Denominator))
+
     /// The storage the dimension `dimension` is constrained to, as `dimension Bytes(int)` is to `int`, if it is.
     let constrainedStorage (state: InferState) (dimension: NominalId) : Ty option =
         state.TypeDefs

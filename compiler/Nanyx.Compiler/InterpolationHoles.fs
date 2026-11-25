@@ -36,6 +36,12 @@ module InterpolationHoles =
     /// The prelude function the derived `toString` of an array calls, with the array and what writes an element.
     let arrayFunction = "__arrayToString"
 
+    /// The prelude functions the derived `toString` of a measured value stored as an `int` or as a `float` calls, with
+    /// its number of base units, its units' names and scales, largest first, and what is written around a number of
+    /// base units.
+    let measuredIntFunction = "__measuredIntToString"
+    let measuredFloatFunction = "__measuredFloatToString"
+
     /// Whether a call to `calleeName` is a hole's.
     let isHole (calleeName: Identifier) = calleeName = holeFunction
 

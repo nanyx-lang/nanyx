@@ -6,8 +6,8 @@ order: 22
 
 [Units and dimensions](../work-in-progress/units-and-dimensions) in Work in progress has the design. This page says what
 the compiler does with it today: it reads all of it, checks the declarations of dimensions and units, reads dimensions
-in types, types numbers with units, and types arithmetic on measured values, of one dimension each: derived dimensions,
-`Length/Time`, are a later step.
+in types, types numbers with units, types arithmetic on measured values, of one dimension each, and writes them as text:
+derived dimensions, `Length/Time`, are a later step.
 
 # Reading
 
@@ -94,3 +94,21 @@ Every dimension has `Add` and `Sub`, `Units.contexts`, and a call finds a dimens
 (`Units.storageArguments`), so `[Add(a)] a, a -> a` sums times and `zero` is the zero of a dimension. It has no `Num`.
 Equality and ordering compare a measured value as its storage (see `WellKnownContexts`); at a generic storage they
 need the storage's `Eq` or `Ord`, which a signature writes.
+
+# Printing
+
+A measured value has no `toString` attached, so a hole of one, `"{t}"`, or a call that requires `ToString` of it, finds
+one derived from its structure, as a record's is (`StructuralInstances`): a definition the compiler writes for the
+type, with the dimension's units the module can write in it (`Units.seenOf`), the largest first. Its body reads the
+value's number of base units with the intrinsic `__nanyx_measured_storage`, which `Infer` types as its argument's
+storage, since no scheme can name every dimension, and which the backend compiles as its argument, as a measured value
+is its storage.
+
+For an `int` storage, or a sized integer that converts to one, the definition calls the prelude's
+`__measuredIntToString` with the number, the units' names and their scales, and the text to write around a number of
+base units: it writes the number in the first unit it is a whole number of, `2min` for `120s`, and zero, and a number
+no unit fits, in the base unit. A `float` or `F32` storage calls `__measuredFloatToString`, which writes a whole number
+of a unit without its decimal point, `1500ms` for `1.5s`, and a number of base units as a float is, `1.5ns`. Any other
+storage, a type variable's among them, is written in the base unit through its own `ToString`, so the definition for a
+`Time(a)` requires `ToString(a)`. A module that can't write its dimension's base unit writes a number of base units as
+`dbg` does, `Time(1500000000)`.

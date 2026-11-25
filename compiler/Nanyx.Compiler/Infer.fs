@@ -299,6 +299,13 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | FunctionCall(name, spanOpt, (iterable :: others as args)) when name = WorkflowSyntax.forMember && state.WorkflowMemberPlaces.ContainsKey expr.Id ->
         WorkflowMembers.loopOverStore inferExpr env state expr iterable others
         |> Option.defaultWith (fun () -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args)
+    // The number a measured value is stored as, which a derived `toString` writes (see `StructuralInstances`).
+    | FunctionCall(name, _, [ value ]) when name = Units.storageIntrinsic ->
+        inferExpr env state value
+        |> Result.bind (fun (typed, next) ->
+            match Unifier.unalias (resolveSoFar next typed.Type) with
+            | TyMeasure(_, storage) -> Ok (mkTypedExpr expr storage None None None, next)
+            | other -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch value.Span $"'{name}' takes a measured value, not a '{Unifier.tyToString other}'" ])
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->
         let expectedInput, expectedReturn =

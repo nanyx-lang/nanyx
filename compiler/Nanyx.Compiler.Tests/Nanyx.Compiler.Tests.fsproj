@@ -39,6 +39,7 @@
     <Compile Include="Features\Units\UnitDeclarationTests.fs" />
     <Compile Include="Features\Units\DimensionTypeTests.fs" />
     <Compile Include="Features\Units\MeasuredArithmeticTests.fs" />
+    <Compile Include="Features\Units\MeasuredDisplayTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />

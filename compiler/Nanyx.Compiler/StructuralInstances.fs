@@ -8,7 +8,9 @@ open NyxCompiler.InferState
 ///
 /// A tag union, a tuple, a record, a list, a map or a set has no `toString` attached, so a hole of such a
 /// type, or a call that requires `ToString` of it, finds an instance written from its parts: `#some(a)` is written
-/// `#some(` then its payload then `)`, and the payload is written through its own `ToString`, whichever that is.
+/// `#some(` then its payload then `)`, and the payload is written through its own `ToString`, whichever that is. A
+/// measured value is one too: its number of base units, written in the largest of its dimension's units it is a whole
+/// number of (see the docs' Units of measure page).
 ///
 /// The instance is an ordinary definition the compiler writes, one for each type, as the user would have written it:
 ///
@@ -78,6 +80,10 @@ module internal StructuralInstances =
         | SetShape of Ty
         /// An array's element type. `Eq` and `ToString` are derived for an array, as for a set; `Hash` is not.
         | ArrayShape of Ty
+        /// A measured value's dimension and storage, and the units of the dimension the module sees, the largest first
+        /// (see `Units.seenOf`), which `derive` fills in. Only `ToString` is derived for one: it is compared and hashed
+        /// as its storage.
+        | MeasureShape of Dimension * storage: Ty * units: UnitInfo list
 
     let private isTuple (fields: Map<string, Ty>) = not fields.IsEmpty && WellKnownContexts.isTuple fields
 
@@ -174,6 +180,7 @@ module internal StructuralInstances =
         | Maps.MapType(key, value) -> Some (MapShape(key, value))
         | Sets.SetType element -> Some (SetShape element)
         | Arrays.ArrayType element -> Some (ArrayShape element)
+        | TyMeasure(dimension, storage) -> Some (MeasureShape(dimension, storage, []))
         | _ -> shapeOf ty
 
     /// The shape an instance of `ctxName` is derived from: `Hash` as `Eq`, so that values a derived `==` finds equal have
@@ -193,6 +200,7 @@ module internal StructuralInstances =
         | SetShape element
         | ArrayShape element -> [ element ]
         | MapShape(key, value) -> [ key; value ]
+        | MeasureShape(_, storage, _) -> [ storage ]
 
     /// The first part of the structure `ty`, at any depth, that `found` picks, as `shape` takes structures apart. A
     /// type met again is not looked inside again, as it holds what it did the first time: a recursive alias holds
@@ -255,6 +263,43 @@ module internal StructuralInstances =
 
     let private partName (index: int) = $"__p{index}"
 
+    /// The integer types whose every value is an `int`, each with the prelude's conversion to one.
+    let private wholeStorages = set [ "I8"; "I16"; "I32"; "U8"; "U16"; "U32" ]
+
+    /// The text a derived `toString` writes for `value`, a measured value of `dimension` stored as `storage`: its number
+    /// of base units in the largest of `units` it is a whole number of, by a prelude function, where the storage is an
+    /// `int` or a `float`, or a type that converts to one. Zero, a value no unit fits and a value of any other storage,
+    /// one of a type variable's, are written in the base unit, through the storage's own `ToString`, or as `dbg` writes
+    /// them, `Time(500)`, if the module sees no base unit.
+    let private measuredText (span: SourceSpan) (dimension: Dimension) (storage: Ty) (units: UnitInfo list) (value: Expression) : Expression =
+        let expr = Expression.at span
+        let call (callee: Identifier) (args: Expression list) = expr (FunctionCall(callee, None, args))
+        let text (s: string) = expr (LiteralExpr (StringLit s))
+        let stored = call Units.storageIntrinsic [ value ]
+        let before, after =
+            match units |> List.tryFind (fun info -> info.Scale = Rational.one) with
+            | Some baseUnit -> "", baseUnit.Name
+            | None -> $"{Dimension.text dimension}(", ")"
+        let inUnits (helper: Identifier) (number: Expression) (scales: (UnitInfo * Expression) list) =
+            call helper [
+                number
+                expr (ListExpr (scales |> List.map (fun (info, _) -> text info.Name)))
+                expr (ListExpr (scales |> List.map snd))
+                text before
+                text after ]
+        let whole () =
+            units
+            |> List.filter (fun info -> Rational.isWhole info.Scale)
+            |> List.map (fun info -> info, expr (LiteralExpr (IntLit info.Scale.Numerator)))
+        let fractional () =
+            units |> List.map (fun info -> info, expr (LiteralExpr (FloatLit (float info.Scale.Numerator / float info.Scale.Denominator))))
+        match Unifier.unalias storage with
+        | TyPrimitive "int" -> inUnits InterpolationHoles.measuredIntFunction stored (whole ())
+        | TyPrimitive name when wholeStorages.Contains name -> inUnits InterpolationHoles.measuredIntFunction (call $"{name}.toInt" [ stored ]) (whole ())
+        | TyPrimitive "float" -> inUnits InterpolationHoles.measuredFloatFunction stored (fractional ())
+        | TyPrimitive "F32" -> inUnits InterpolationHoles.measuredFloatFunction (call "F32.toFloat" [ stored ]) (fractional ())
+        | _ -> expr (InterpolatedString [ StringText before; StringExpr (call InterpolationHoles.holeFunction [ stored ]); StringText after ])
+
     /// The text a derived `toString` writes for a value of the type `shape` is, read from `value`.
     let private toStringBody (span: SourceSpan) (shape: Shape) : Expression =
         let expr = Expression.at span
@@ -308,6 +353,7 @@ module internal StructuralInstances =
                 | ArrayShape _ -> InterpolationHoles.arrayFunction, [ write 0 ]
                 | _ -> InterpolationHoles.listFunction, [ write 0 ]
             expr (FunctionCall(helper, None, value :: writers))
+        | MeasureShape(dimension, storage, units) -> measuredText span dimension storage units value
         | OpenTagShape _ -> invalidOp "ToString is never derived for an open union (see shapeFor)"
 
     let private otherName = "__w"
@@ -363,6 +409,7 @@ module internal StructuralInstances =
                 | ArrayShape _ -> EqualityOperators.arrayFunction
                 | _ -> EqualityOperators.listFunction
             expr (FunctionCall(helper, None, [ value; other; compare ]))
+        | MeasureShape _ -> invalidOp "Eq is never derived for a measured value, which is compared as its storage (see comparedShapeOf)"
 
     /// The prelude functions that hash a value through its `Hash`, make two hashes one, and hash a list, a map and a set
     /// through their parts' hashes.
@@ -408,7 +455,8 @@ module internal StructuralInstances =
             let hashPart = expr (Lambda([ partName 0, None ], hashOf (name (partName 0)), false))
             expr (FunctionCall(setHash, None, [ value; hashPart ]))
         | OpenTagShape _
-        | ArrayShape _ -> invalidOp "Hash is never derived for an array or an open union (see WellKnownContexts.hashing)"
+        | ArrayShape _
+        | MeasureShape _ -> invalidOp "Hash is never derived for an array, an open union or a measured value (see WellKnownContexts.hashing)"
 
     /// The definition the compiler writes for the instance of `ctxName` of the type written `written`, which
     /// requires `ctxName` of each of `varNames`: its name is `name`, and it is reported at `span`.
@@ -469,6 +517,10 @@ module internal StructuralInstances =
     let private derive (rigid: Set<int>) (span: SourceSpan) (ctxName: Identifier) (ty: Ty) (state: InferState) : (Identifier * TyVar list * InferState) option =
         derivable rigid ctxName ty
         |> Option.bind (fun (ty, shape, vars) ->
+            let shape =
+                match shape with
+                | MeasureShape([ dimension, 1 ], storage, _) -> MeasureShape([ dimension, 1 ], storage, Units.seenOf state dimension)
+                | _ -> shape
             let names = ContextInference.varNames ty
             let state = namingUnseen names ty state
             writtenIn state names ty

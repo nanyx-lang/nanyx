@@ -227,7 +227,8 @@ through it, so a type can be interpolated when it has one: a type gets one by at
 `toString`, `def Point.toString = { p -> "({p.x}, {p.y})" }`, and a block can load another with
 `use`. The compiler has its own for `int`, `float`, `bool`, `string` and tags without a payload,
 and derives one for a tag with a payload, a tuple, a record, a list, a map and a set from the
-`ToString` of each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`, `[a => 1]`.
+`ToString` of each part: `#some(3)`, `(1, two)`, `(x = 1, y = 2)`, `[1, 2, 3]`, `[a => 1]`. A
+measured value is written in the largest unit it is a whole number of: `1500ms`, `2min`.
 
 ## `int.toString`
 

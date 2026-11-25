@@ -7,10 +7,10 @@ order: 2
 > **Status: designed, being built.** The first step, single dimensions over any numeric storage, is settled below and is
 > being built; derived dimensions such as `Length/Time` come second and still have open questions (see
 > [Step 2](#step-2-derived-dimensions) and [Open questions](#open-questions)). The compiler reads unit literals and
-> checks the declarations of dimensions and units, reads dimensions in types, and types numbers with units and the
-> arithmetic on them, as [Dimensions in types](#dimensions-in-types), [Literals](#literals) and [Arithmetic](#arithmetic)
-> say ([Units of measure](../deep-dives/units) says how). Displaying a measured value, `Instant`, and the standard
-> library's dimensions are still to come.
+> checks the declarations of dimensions and units, reads dimensions in types, types numbers with units and the
+> arithmetic on them, and writes measured values as text, as [Dimensions in types](#dimensions-in-types),
+> [Literals](#literals), [Arithmetic](#arithmetic) and [Display](#display) say ([Units of measure](../deep-dives/units)
+> says how). `Instant` and the standard library's dimensions are still to come.
 
 Nanyx will check units of measure at compile time, so a length cannot be added to a time, and a call reads as what
 it means:
@@ -181,8 +181,12 @@ def halfDown: Time(a) -> Time(a) = { t -> t // 2 }
 
 A measured value prints in the largest unit in which it is a whole number: `"{1.5s}"` is `1500ms`, `"{120s}"` is
 `2min`, and `"{16.5ms}"` is `16500us`. One that is not a whole number of any unit, such as `0.25ns`, prints in the base
-unit. The dimension is known at compile time, so choosing the unit costs a division or two at run time. Printing a
-generic `Time(a)` requires `ToString(a)`.
+unit, and so does zero, `0ns`. The dimension is known at compile time, so choosing the unit costs a division or two at
+run time. Only the units the printing module can write are tried: its own, and those it imports.
+
+Printing a generic `Time(a)` requires `ToString(a)`, and prints in the base unit, `1500000000ns`, as choosing a unit
+needs `%` and `==` on the storage, which `ToString(a)` doesn't give; a function that wants the largest unit can take a
+`Time(int)`. A storage of a type variable, or a `U64`, is written that way.
 
 # Instant
 
