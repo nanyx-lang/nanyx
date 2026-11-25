@@ -1408,6 +1408,9 @@ module UnitSyntax =
         | Attribute(name, None), UnitDecl _ -> name = baseUnitAttribute
         | _ -> false
 
+    /// A number with a unit as it is written: `500ms`.
+    let written (number: WrittenNumber) (unitName: string) = WrittenNumber.text number + unitName
+
 /// How a node declares names. One node can declare in more than one way: `def f = { x -> x }` declares `f` by
 /// the lambda as a def's value, and `x` by the lambda's parameters.
 type Declarer =

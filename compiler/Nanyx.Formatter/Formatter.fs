@@ -211,7 +211,7 @@ let format (options: Options) (parsed: SourceModule) : string =
             | IntLit i -> text (string i)
             | FloatLit f -> text (f.ToString("R", CultureInfo.InvariantCulture))
             | BoolLit b -> text (if b then "true" else "false")
-            | UnitLit(number, unitName) -> text (WrittenNumber.text number + unitName)
+            | UnitLit(number, unitName) -> text (UnitSyntax.written number unitName)
 
     /// Operator and pipe chains in the module, with their operands printed as the rest of the module's are.
     and operators () : OperatorPrinter = OperatorPrinter(options.IndentSize, source, sourceText, placement, parts (), calls ())

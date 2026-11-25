@@ -378,7 +378,7 @@ let rec internal typeExprToTy (state: InferState) (typeExpr: TypeExpr) : Ty * In
         else
             match tryFindTypeDef name current with
             // `Time(a)`: a measured value of the storage written. A constrained dimension's is its own, and writing
-            // another is an error (see `Units.dimensionArgumentErrors`).
+            // another is an error (see `DimensionSignatures.withStorages`).
             | Some info when info.IsDimension ->
                 let storage =
                     match info.Parameters, argTys with
