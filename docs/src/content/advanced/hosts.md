@@ -187,13 +187,19 @@ A host is a package whose manifest says it is one, in its `package`'s `host` fie
 ```nanyx fragment
 (
   package = (
-    name = "acme.shout"
+    name = "acme.shout.host"
     version = "0.1.0"
     sources = ["src/**/*.nyx"]
     host = (root = "shout.host", prelude = "shout.prelude")
   )
 )
 ```
+
+A host's name ends in `.host`, and only a host's does: the library a host runs programs against, which declares the
+contexts it provides, takes the short name, and the host is that name with `.host` after it, as `nanyx.cli` and
+`nanyx.cli.host` are. A program names its host once, in its manifest, while a library names the short name wherever it
+imports the library, so the short name goes to the library. A package that declares a `host` under another name, or is
+named `.host` and declares none, is an error at its name ([`NYX0053`](../standard-tools/errors#nyx0053)).
 
 Naming a package as a host when its manifest doesn't declare it one is an error.
 

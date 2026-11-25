@@ -140,6 +140,7 @@
     <Compile Include="PackageModules.fs" />
     <Compile Include="PackageExports.fs" />
     <Compile Include="ShippedPackages.fs" />
+    <Compile Include="RenamedPackages.fs" />
     <Compile Include="HostPackages.fs" />
     <Compile Include="PartialModules.fs" />
     <Compile Include="WorkflowDesugaring.fs" />

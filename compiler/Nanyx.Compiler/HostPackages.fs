@@ -75,11 +75,13 @@ module HostPackages =
         shipped.GetOrAdd(name, fun name ->
             let directory = ShippedPackages.directoryOf name
             let path = Path.Combine(directory, name + ".nyxp")
+            // A host named by its old name is told its new one (see `RenamedPackages`).
+            let renamedOr (message: string) = RenamedPackages.asHost name |> Option.defaultValue message
             if not (File.Exists path) then
-                Error $"The compiler ships no package '{name}'"
+                Error (renamedOr $"The compiler ships no package '{name}'")
             else
                 match DataValue.read path (File.ReadAllText path) with
-                | Ok manifest -> ofManifest name directory manifest |> Option.map Ok |> Option.defaultValue (Error (notAHost name))
+                | Ok manifest -> ofManifest name directory manifest |> Option.map Ok |> Option.defaultValue (Error (renamedOr (notAHost name)))
                 | Error _ -> Error $"The manifest of '{name}', which the compiler ships, can't be read")
 
     /// The console host the compiler ships, which a script runs under.

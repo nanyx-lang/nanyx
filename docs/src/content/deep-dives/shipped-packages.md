@@ -35,6 +35,12 @@ progress.
   prelude that re-exports it. The reference on the `console` and `env` pages of the docs site is generated from its
   doc comments, as the standard library's is ([#1505](https://github.com/nanyx-lang/nanyx/issues/1505), see
   [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)).
+- **A host is named `<name>.host`.** A library takes the short name and the host that runs programs against it adds
+  `.host` (`Hosts.nameSuffix`); the manifest checker reports a host named otherwise, or a library named so, at its name
+  (`NYX0053`, `Manifest.checkHostName`). The shipped packages renamed to this ([#2697](https://github.com/nanyx-lang/nanyx/issues/2697))
+  are known by their old names (`RenamedPackages`): a manifest's `host` or `dependencies`, a script's directives, or
+  `--host` (through `HostPackages.tryShipped`) that names one is `NYX0054`, which gives the new name. `nanyx.http`,
+  the HTTP host's old name and the library's new one, is one only where a host is named.
 - **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
   no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it
   has no entry point.

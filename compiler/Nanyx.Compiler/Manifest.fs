@@ -305,6 +305,9 @@ module Manifest =
                     problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"The host '{name}' is found by its path, so it has no version: give one or the other"
                     None
                 | None -> Some { Package = name; Path = Some(Path.GetFullPath(Path.Combine(root, path))); Span = value.Location; Settings = settings }
+            | Some name, None when (RenamedPackages.asHost name).IsSome ->
+                problems.AddAbout DiagnosticCodes.RenamedPackage (DataValue.field "package" fields).Value.Value.Location name (RenamedPackages.asHost name).Value
+                None
             | Some name, None ->
                 let version = problems.RequiredText "the host" value.Location fields "version" versionPattern "a semantic version, `1.2.0`"
                 match HostPackages.tryShipped name with
@@ -348,6 +351,18 @@ module Manifest =
             | None -> ()
             | Some field ->
                 problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"A host's `settings` must be a record of the settings it takes with their defaults, `(port = 3000)`, not {DataValue.describe field.Value}")
+
+    /// Checks that the package `name`, whose manifest's `package` is `fields`, is named for a host exactly when it
+    /// declares that it is one: a host's name ends in `Hosts.nameSuffix`, and a library's doesn't.
+    let private checkHostName (problems: Problems) (fields: DataField list) (name: string) =
+        let declaresHost = (DataValue.field HostPackages.field fields).IsSome
+        if declaresHost <> name.EndsWith Hosts.nameSuffix then
+            let message =
+                if declaresHost then
+                    $"The package '{name}' declares a `host`, so its name must end in `{Hosts.nameSuffix}`, as '{name}{Hosts.nameSuffix}' does: a host is named for the library it runs programs against, with `{Hosts.nameSuffix}` after it"
+                else
+                    $"The package '{name}' declares no `host`, so its name must not end in `{Hosts.nameSuffix}`, which only a host's does: rename it, or declare the host it is"
+            problems.AddAbout DiagnosticCodes.HostNameConvention (DataValue.field "name" fields).Value.Value.Location name message
 
     /// The fields of an entry of `dependencies`.
     let private dependencyFields = [ "package"; "module"; "path"; "version"; "github"; "rev"; "commit" ]
@@ -462,7 +477,11 @@ module Manifest =
             let name = problems.RequiredText "a dependency" value.Location fields "package" namePattern nameRule
             let example = $"""path = "../{name |> Option.map (fun name -> name.Substring(name.LastIndexOf '.' + 1)) |> Option.defaultValue "util"}" """.TrimEnd()
             let shipped = name |> Option.filter (fun name -> ShippedPackages.isShipped name)
+            let renamed = name |> Option.bind RenamedPackages.asDependency
             match DataValue.field "path" fields, DataValue.field "version" fields with
+            | None, _ when renamed.IsSome ->
+                problems.AddAbout DiagnosticCodes.RenamedPackage (DataValue.field "package" fields).Value.Value.Location name.Value renamed.Value
+                None
             | Some _, Some version ->
                 let named = defaultArg name "here"
                 problems.Add
@@ -651,6 +670,7 @@ module Manifest =
                 match package with
                 | Some (fields, span) ->
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
+                    name |> Option.iter (checkHostName problems fields)
                     let version = problems.RequiredText "package" span fields "version" versionPattern "a semantic version, `1.2.0`"
                     DataValue.field HostPackages.field fields |> Option.iter (fun field -> checkHostDeclaration problems field.Value)
                     match DataValue.field HostLibraries.field fields with

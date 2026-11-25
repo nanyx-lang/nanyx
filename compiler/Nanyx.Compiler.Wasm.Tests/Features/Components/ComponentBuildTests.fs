@@ -71,13 +71,13 @@ let ``A program that makes HTTP requests is built as a component`` () =
     Assert.Equal(0, built.ExitCode)
     Assert.Contains("a component of nanyx:console/command", built.StandardOutput)
 
-/// A host, `acme.extra`, with a context of its own, `Extra`, whose core root's `run` is `coreRun` and whose component
+/// A host, `acme.extra.host`, with a context of its own, `Extra`, whose core root's `run` is `coreRun` and whose component
 /// root's is `componentRun`, each with what it provides and `use`s.
 let private extraHost (coreRun: string) (componentRun: string) =
-    [ "acme.extra.nyxp",
+    [ "acme.extra.host.nyxp",
       """(
   package = (
-    name = "acme.extra"
+    name = "acme.extra.host"
     version = "0.1.0"
     host = (root = "extra.host", component = (root = "extra.host.wasi", world = "wasi:cli/command@0.3.0"))
   )
@@ -124,7 +124,7 @@ let private buildUnder (host: (string * string) list) =
     use app = new TempDirectory()
     Directory.CreateDirectory(Path.Combine(app.Path, "src")) |> ignore
     let hostPath = hostDirectory.Path.Replace("\\", "/")
-    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "acme.extra", path = "{hostPath}"))"""
+    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "acme.extra.host", path = "{hostPath}"))"""
     File.WriteAllText(Path.Combine(app.Path, "app.nyxp"), manifest + "\n")
     File.WriteAllText(Path.Combine(app.Path, "src", "main.nyx"), "module main\n\n@entry\ndef main = { -> () }\n")
     nanyxIn app.Path [ "build"; "--release" ]
@@ -134,14 +134,14 @@ let ``A component root that provides a context its core root doesn't is an error
     let built = buildUnder (extraHost notProviding providing)
     Assert.Equal(1, built.ExitCode)
     Assert.Contains(DiagnosticCodes.ComponentRootContextsDiffer.Code, built.StandardOutput)
-    Assert.Contains("The component root's 'run' provides 'Extra', which the core root 'acme.extra/extra.host' doesn't", built.StandardOutput)
+    Assert.Contains("The component root's 'run' provides 'Extra', which the core root 'acme.extra.host/extra.host' doesn't", built.StandardOutput)
 
 [<Fact>]
 let ``A component root that doesn't provide a context its core root does is an error at its run`` () =
     let built = buildUnder (extraHost providing notProviding)
     Assert.Equal(1, built.ExitCode)
     Assert.Contains(DiagnosticCodes.ComponentRootContextsDiffer.Code, built.StandardOutput)
-    Assert.Contains("The component root's 'run' doesn't provide 'Extra', which the core root 'acme.extra/extra.host' does", built.StandardOutput)
+    Assert.Contains("The component root's 'run' doesn't provide 'Extra', which the core root 'acme.extra.host/extra.host' does", built.StandardOutput)
 
 [<Fact>]
 let ``A package with defs marked @component is built as a component of its own world, whose WIT is written beside it`` () =

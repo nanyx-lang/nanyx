@@ -5,10 +5,10 @@ open System.IO
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// A host, `acme.quiet`, whose `run` ends the program with the exit code 7 through `exitWith`, which is in the other
+/// A host, `acme.quiet.host`, whose `run` ends the program with the exit code 7 through `exitWith`, which is in the other
 /// fragment of its root module.
 let private quietHost =
-    [ "acme.quiet.nyxp", """(package = (name = "acme.quiet", version = "0.1.0", host = (root = "quiet.host")))
+    [ "acme.quiet.host.nyxp", """(package = (name = "acme.quiet.host", version = "0.1.0", host = (root = "quiet.host")))
 """
       "quiet.host.nyx",
       """@partial export module quiet.host
@@ -37,7 +37,7 @@ let ``A program runs under a host whose root module is split across files`` () =
     use app = new TempDirectory()
     Directory.CreateDirectory(Path.Combine(app.Path, "src")) |> ignore
     let hostPath = host.Path.Replace("\\", "/")
-    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "acme.quiet", path = "{hostPath}"))
+    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "acme.quiet.host", path = "{hostPath}"))
 """
     let main = """module main
 

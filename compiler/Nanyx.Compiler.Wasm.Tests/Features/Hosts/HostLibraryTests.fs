@@ -7,7 +7,7 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-/// A host, `acme.quiet`, whose `run` ends the program with the exit code 7 through `exitWith`, which is in
+/// A host, `acme.quiet.host`, whose `run` ends the program with the exit code 7 through `exitWith`, which is in
 /// `acme.exits`, a package it depends on, declared a host library when `hostLibrary` is true.
 let private quietHost (hostLibrary: bool) =
     [ "acme.exits/acme.exits.nyxp",
@@ -23,13 +23,13 @@ def procExit: [HostRuntime] I32 -> ()
 
 export def exitWith: [HostRuntime] () -> () = { -> procExit(7) }
 """
-      "acme.quiet/acme.quiet.nyxp",
+      "acme.quiet.host/acme.quiet.host.nyxp",
       """(
-  package = (name = "acme.quiet", version = "0.1.0", host = (root = "quiet.host"))
+  package = (name = "acme.quiet.host", version = "0.1.0", host = (root = "quiet.host"))
   dependencies = [(package = "acme.exits", path = "../acme.exits")]
 )
 """
-      "acme.quiet/quiet.host.nyx",
+      "acme.quiet.host/quiet.host.nyx",
       """export module quiet.host
 
 import (
@@ -43,7 +43,7 @@ export def run: [HostRuntime] (() -> a) -> () = { entry ->
 }
 """ ]
 
-/// What `nanyx run` does with a program under `acme.quiet` (see `quietHost`).
+/// What `nanyx run` does with a program under `acme.quiet.host` (see `quietHost`).
 let private runUnder (hostLibrary: bool) =
     use packages = new TempDirectory()
     for name, text in quietHost hostLibrary do
@@ -52,8 +52,8 @@ let private runUnder (hostLibrary: bool) =
         File.WriteAllText(path, text.ReplaceLineEndings "\n")
     use app = new TempDirectory()
     Directory.CreateDirectory(Path.Combine(app.Path, "src")) |> ignore
-    let hostPath = Path.Combine(packages.Path, "acme.quiet").Replace("\\", "/")
-    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "acme.quiet", path = "{hostPath}"))"""
+    let hostPath = Path.Combine(packages.Path, "acme.quiet.host").Replace("\\", "/")
+    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "acme.quiet.host", path = "{hostPath}"))"""
     File.WriteAllText(Path.Combine(app.Path, "app.nyxp"), manifest + "\n")
     File.WriteAllText(Path.Combine(app.Path, "src", "main.nyx"), "module main\n\n@entry\ndef main = { -> () }\n")
     nanyxIn app.Path [ "run" ]

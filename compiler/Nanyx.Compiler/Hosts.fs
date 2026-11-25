@@ -84,6 +84,10 @@ module Hosts =
     /// declares it, `nanyx/host.memory` and `nanyx/host.async`.
     let private runtimeModules = [ ModuleOrigin.hostRuntimeName; "host.memory"; "host.async" ]
 
+    /// What the name of every host package ends in, `nanyx.cli.host`: the library a host runs programs against takes the
+    /// name without it, `nanyx.cli`. A manifest is checked for it (`NYX0053`).
+    let nameSuffix = ".host"
+
     /// The package of the console host the compiler ships: what a script runs under, unless it names another, and what
     /// `nanyx new` names.
     let consolePackage = "nanyx.cli.host"

@@ -918,6 +918,41 @@ The message names both versions:
 
 To fix it, install a newer compiler. If the package does build with this one, lower its `nanyx`.
 
+# NYX0053: Host package not named for a host
+
+A host's name ends in `.host`, and only a host's does: the library a host runs programs against takes the short name,
+`nanyx.cli`, and the host is `nanyx.cli.host` ([Hosts](../advanced/hosts)). A package whose manifest declares a `host`
+under another name is an error at its name, as is a package named `.host` that declares none:
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "acme.server", version = "0.1.0", host = (root = "server.host"))  -- error NYX0053: The package 'acme.server' declares a `host`, so its name must end in `.host`
+)
+```
+
+To fix it, rename the package: a host to `acme.server.host`, or a library to a name without `.host`. If a package
+named `.host` is a host, declare its `host`.
+
+# NYX0054: Shipped package named by its old name
+
+The packages the compiler ships were renamed when every host came to be named `<name>.host`: `nanyx.console.core` is
+`nanyx.cli`, the console host `nanyx.console` is `nanyx.cli.host`, `nanyx.http.core` is `nanyx.http`, the HTTP host
+`nanyx.http` is `nanyx.http.host`, and `nanyx.playground` is `nanyx.playground.host`. A manifest's `host` or
+`dependencies`, a script's `::host` or `::dependency`, or `--host` that names one by its old name is an error that gives
+the new one. `nanyx.http` is the library's name now, so it is an error only where a host is named:
+
+```nanyx
+-- file: demo.nyxp
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [(package = "nanyx.console.core", version = "0.39.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
+)
+```
+
+To fix it, write the new name, and change the imports of its modules to match: `nanyx.console.core/console` is
+`nanyx.cli/console`, and `nanyx.http.core/request` is `nanyx.http/request`.
+
 # NYX0101: Unknown identifier
 
 A name is used that nothing in scope defines. When a standard library module exports the name, the message says which

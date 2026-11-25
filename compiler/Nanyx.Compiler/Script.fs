@@ -307,9 +307,21 @@ module Script =
                 hosts
                 |> List.skip (min 1 hosts.Length)
                 |> List.map (fun (directive, _, _) -> invalid directive.Span "A script runs under one host, which an earlier `::host` names already: remove this one")
+            // A shipped package named by its old name is told its new one (see `RenamedPackages`).
+            let renamed (rename: string -> string option) (package: DirectiveWord) (place: DirectivePlace) =
+                match place, rename package.Text with
+                | (Shipped | AtVersion _), Some message ->
+                    [ Diagnostics.at DiagnosticCodes.RenamedPackage package.Span message |> Diagnostics.about package.Text ]
+                | _ -> []
+            let renamedErrors =
+                (hosts |> List.truncate 1 |> List.collect (fun (_, package, place) -> renamed RenamedPackages.asHost package place))
+                @ (dependencies |> List.collect (fun (_, package, place) -> renamed RenamedPackages.asDependency package place))
             let unshipped =
-                (hosts |> List.truncate 1 |> List.collect (fun (_, package, place) -> notShipped package place))
-                @ (dependencies |> List.collect (fun (_, package, place) -> unpinned store package place))
+                if not renamedErrors.IsEmpty then
+                    renamedErrors
+                else
+                    (hosts |> List.truncate 1 |> List.collect (fun (_, package, place) -> notShipped package place))
+                    @ (dependencies |> List.collect (fun (_, package, place) -> unpinned store package place))
             let host, hostErrors =
                 match hosts with
                 | (directive, package, place) :: _ when unshipped.IsEmpty ->
