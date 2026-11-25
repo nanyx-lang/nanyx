@@ -16,6 +16,10 @@ tree where the mistake was, so that the rest of the def being typed keeps its ty
 language server would then learn to skip error nodes. Until then the language server reads the last text that parsed
 for the item being typed.
 
+It is also where syntax errors can get better. A syntax error the parser has no message of its own for says what it
+expected at the furthest point it read to and what it found there, `Expected `]`, found `xs``. Where several readings
+failed at that point, the list of what they expected can be long.
+
 # A concrete syntax tree
 
 Comments and whitespace travel with the lexer's tokens, so the formatter and the refactorings could work from a tree that

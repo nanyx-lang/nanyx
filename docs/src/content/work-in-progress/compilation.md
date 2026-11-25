@@ -28,7 +28,8 @@ of progress is simple: a program the documentation describes should parse, type-
 
 Out of scope here, with their own workstreams:
 
-- What diagnostics say and how they are shown: [Error messages](./error-messages).
+- What diagnostics say and how they are shown: [Compiler errors](../standard-tools/errors), with the work tracked
+  under the [`error messages`](https://github.com/nanyx-lang/nanyx/labels/error%20messages) label.
 - Spans, symbols and the semantic model, when they are built for linters: [Linters](./linters). The
   refactors land in this codebase, but the design and tracking live there.
 - Editor features: [Language server](./language-server).
