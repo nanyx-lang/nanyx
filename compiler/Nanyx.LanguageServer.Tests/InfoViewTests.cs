@@ -623,6 +623,27 @@ public sealed class InfoViewTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Info_view_names_a_protected_context()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-ProtectedContext");
+
+        Open(uri, """
+            context Log = protected (log: string -> ())
+            def note: [Log] string -> () = { message ->
+              log(message)
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 2, 6);
+
+        var context = Assert.Single(Section(view, "function", "contexts"));
+        Assert.Equal(("Log", new InfoViewName(0, 3)), (context.Text, context.Name));
+        Assert.Equal(new InfoViewName(0, 3), Assert.Single(Section(view, "function", "flow")).Name);
+    }
+
+    [Fact]
     public async Task Info_view_links_no_name_in_a_bare_type()
     {
         var uri = DocumentUri.Parse("untitled:InfoView-16");
