@@ -24,7 +24,7 @@ the backlog:
 |------------|--------|-------|
 | Compilation | [Compilation](./compilation) | [`compilation`](https://github.com/nanyx-lang/nanyx/labels/compilation) |
 | Linters | [Linters: compiler design](./linters) | [`linters`](https://github.com/nanyx-lang/nanyx/labels/linters) |
-| Error messages | [Error messages](./error-messages) | [`error messages`](https://github.com/nanyx-lang/nanyx/labels/error%20messages) |
+| Error messages | [Compiler errors](../standard-tools/errors) | [`error messages`](https://github.com/nanyx-lang/nanyx/labels/error%20messages) |
 | Language server and editor | [Language server and editor](./language-server) | [`lsp`](https://github.com/nanyx-lang/nanyx/labels/lsp) |
 | Packaging | [Packaging](./packaging) | [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) |
 | Formatter | [Formatter](../deep-dives/formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
