@@ -225,7 +225,8 @@ Nothing starts it: like `Console`, the host provides it.
   the lambda written for it, and so the declaration hover and go to definition find; the `__inScope_` def's lambda is a
   new node, which `TaskScopes.wrap` declares as `f`'s, by an empty span, and its parameters as `f`'s, so that an
   unannotated one has a symbol, and is inferred, as `f` is. `TaskCaptures.unscopedErrors` leaves out an `__inScope_` def
-  that writes no type, which requires `TaskScope` on purpose.
+  that writes no type, which requires `TaskScope` on purpose. The linters read a module's references as its source
+  writes them (`WrittenReferences`), where a call of an `__inScope_` def is a use of `f`.
 - **Tasks share only values.** A function that uses a cell or a reference requires its `memory` block's `Memory`, and
   a task's function must not (`NYX0279`). The check is on types, not names (`TaskWork`): where inference names
   `Async.start` or `Async.race`, the context variables of the functions its type takes are _work variables_; a def

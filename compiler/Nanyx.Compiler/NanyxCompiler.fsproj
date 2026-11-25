@@ -124,6 +124,7 @@
     <Compile Include="TaskCaptures.fs" />
     <Compile Include="TailPosition.fs" />
     <Compile Include="Signatures.fs" />
+    <Compile Include="WrittenReferences.fs" />
     <Compile Include="LinterModel.fs" />
     <Compile Include="LinterResultRules.fs" />
     <Compile Include="LinterTaskRules.fs" />

@@ -39,7 +39,8 @@ type SemanticModel =
       Symbols: Map<SymbolId, Symbol>
       /// The types and contexts the module can name, by the names it writes them by (see `TypedModule.TypeDefs`).
       TypeDefs: Map<string, TypeDefInfo>
-      /// The symbol each identifier, call, pipe target and qualified name resolved to, by its node.
+      /// The symbol each identifier, call, pipe target and qualified name resolved to, by its node, as the source
+      /// writes it (see `WrittenReferences`).
       References: Map<NodeId, SymbolId>
       /// The import each name brought in by an import came through, by the node that names it.
       ImportReferences: Map<NodeId, SymbolId>
@@ -69,7 +70,7 @@ module SemanticModel =
           ContextTypes = typed.ContextTypes
           Symbols = typed.Symbols
           TypeDefs = typed.TypeDefs
-          References = typed.References
+          References = WrittenReferences.ofModule typed
           ImportReferences = typed.ImportReferences
           ContextInstances = typed.ContextInstances
           ContextProviders = typed.ContextProviders
