@@ -26,14 +26,14 @@ export def timeOfDay: [HostRuntime] () -> int = { _ ->
   def block = allocate(24)
   def instant = aligned8(block)
   systemClockNow(instant)
-  def milliseconds = readI64(instant) * 1000 + I32.toInt(readI32(instant + 8)) / 1_000_000
+  def milliseconds = readI64(instant) * 1000 + I32.toInt(readI32(instant + 8)) // 1_000_000
   free(block)
   milliseconds
 }
 
 --| Milliseconds on `wasi:clocks/monotonic-clock`, which never goes backwards.
 export def ticks: [HostRuntime] () -> int = { _ ->
-  monotonicClockNow() / 1_000_000
+  monotonicClockNow() // 1_000_000
 }
 
 --| Waits until `ms` milliseconds have passed on `wasi:clocks/monotonic-clock`, while the program's

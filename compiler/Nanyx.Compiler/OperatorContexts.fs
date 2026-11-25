@@ -17,15 +17,16 @@ module internal OperatorContexts =
     /// A context's name and the names of its members.
     type Declared = Identifier * Set<Identifier>
 
-    /// The prelude's contexts of one parameter, each with its members.
+    /// The prelude's contexts of one parameter, each with its members. An associated type, as `Num`'s `fraction` is, is
+    /// a parameter a signature doesn't write (see `AssociatedTypes`), and not a member an operator reads.
     let declared (state: InferState) : Declared list =
         state.PreludeContexts
         |> Set.toList
         |> List.choose (fun name ->
             match state.TypeDefs |> Map.tryFind name with
-            | Some info when info.IsContext && info.Parameters.Length = 1 ->
+            | Some info when info.IsContext && info.Parameters.Length - info.AssociatedTypes.Length = 1 ->
                 match Unifier.unalias info.Underlying with
-                | TyRecord(fields, _) -> Some (name, Set.ofSeq fields.Keys)
+                | TyRecord(fields, _) -> Some (name, Set.ofSeq fields.Keys - Set.ofList info.AssociatedTypes)
                 | _ -> None
             | _ -> None)
 

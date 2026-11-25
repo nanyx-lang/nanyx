@@ -40,7 +40,7 @@ def apply: string, float, float -> #some(float) | #none = { op, a, b ->
     | "+" -> #some(a + b)
     | "-" -> #some(a - b)
     | "*" -> #some(a * b)
-    | "/" -> #some(a / b)
+    | "/" -> #some(a // b)
     | _ -> #none
 }
 

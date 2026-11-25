@@ -18,14 +18,14 @@ def main = {
   def b = U8.fromInt(200)
   def c = U64.fromInt(9_000_000_000_000_000_000)
   println("{I32.fromInt(5) + I32.fromInt(-7)} {b} {c + c} {a < I32.fromInt(3)} {c > U64.fromInt(1)}")
-  println("{total([U8.fromInt(1), U8.fromInt(2)])} {-I16.fromInt(300)} {I8.fromInt(-128) / I8.fromInt(3)}")
-  println("{U32.fromInt(4_000_000_000) / U32.fromInt(3)} {U32.fromInt(4_000_000_000) > U32.fromInt(1)}")
+  println("{total([U8.fromInt(1), U8.fromInt(2)])} {-I16.fromInt(300)} {I8.fromInt(-128) // I8.fromInt(3)}")
+  println("{U32.fromInt(4_000_000_000) // U32.fromInt(3)} {U32.fromInt(4_000_000_000) > U32.fromInt(1)}")
   println("{a == a} {I32.compare(a, I32.zero)} {U16.hash(U16.fromInt(65535))} {I8.toString(I8.fromInt(-5))}")
   dbg(b)
 }
 """
     runSource (source.ReplaceLineEndings "\n")
-    |> withoutDbgLocations |> assertRan "-2 200 18000000000000000000 false true\n3 -300 -42\n1333333333 true\ntrue #greater 65535 -5\n200\n"
+    |> withoutDbgLocations |> assertRan "-2 200 18000000000000000000 false true\n3 -300 -43\n1333333333 true\ntrue #greater 65535 -5\n200\n"
 
 [<Fact>]
 let ``Run - sized integers are kept in fields, payloads, lists and closures`` () =
@@ -119,7 +119,7 @@ def main = {
 [<InlineData("I8.fromInt(127) + I8.fromInt(1)", "integer overflow: the result is out of the range of I8")>]
 [<InlineData("I16.fromInt(-32768) - I16.fromInt(1)", "integer overflow: the result is out of the range of I16")>]
 [<InlineData("I32.fromInt(65536) * I32.fromInt(65536)", "integer overflow: the result is out of the range of I32")>]
-[<InlineData("I32.fromInt(-2_147_483_648) / I32.fromInt(-1)", "integer overflow: the result is out of the range of I32")>]
+[<InlineData("I32.fromInt(-2_147_483_648) // I32.fromInt(-1)", "integer overflow: the result is out of the range of I32")>]
 [<InlineData("U8.fromInt(0) - U8.fromInt(1)", "integer overflow: the result is out of the range of U8")>]
 [<InlineData("U16.fromInt(256) * U16.fromInt(256)", "integer overflow: the result is out of the range of U16")>]
 [<InlineData("U32.fromInt(4_294_967_295) + U32.fromInt(1)", "integer overflow: the result is out of the range of U32")>]
@@ -149,7 +149,7 @@ let ``Run - sized integer arithmetic that comes close to not fitting does not st
 @entry
 def main = {
   println("{I8.fromInt(126) + I8.fromInt(1)} {I8.fromInt(-127) - I8.fromInt(1)} {U8.fromInt(15) * U8.fromInt(17)}")
-  println("{U32.fromInt(65535) * U32.fromInt(65537)} {I32.fromInt(-2_147_483_648) / I32.fromInt(1)}")
+  println("{U32.fromInt(65535) * U32.fromInt(65537)} {I32.fromInt(-2_147_483_648) // I32.fromInt(1)}")
   println("{U64.fromInt(9_223_372_036_854_775_807) + U64.fromInt(9_223_372_036_854_775_807) + U64.fromInt(1)}")
 }
 """

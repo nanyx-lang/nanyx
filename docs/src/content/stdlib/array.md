@@ -15,7 +15,7 @@ println(array.length(xs))
 println(array.at(xs, 1))
 println(array.at(xs, 5))
 println(xs(2))
-println(xs \map({ x -> x / 10 }))
+println(xs \map({ x -> x // 10 }))
 -- 3
 -- #some(20)
 -- #notFound

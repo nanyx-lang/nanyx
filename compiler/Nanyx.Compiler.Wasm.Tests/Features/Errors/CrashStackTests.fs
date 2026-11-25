@@ -102,7 +102,7 @@ let ``A lambda's frame is named as one`` () =
             normalized
                 """def apply: (int -> int), int -> int = { f, n -> f(n) }
 
-println(apply({ n -> 10 / n }, 0))
+println(apply({ n -> 10 // n }, 0))
 """
         )
     Assert.Equal("Runtime error: division by zero\n  <lambda> (main.nyx:3)\n  apply (main.nyx:1)\n  <top level> (main.nyx:3)\n", outcome.StandardError.ReplaceLineEndings "\n")

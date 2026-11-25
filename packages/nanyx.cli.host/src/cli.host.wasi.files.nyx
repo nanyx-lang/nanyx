@@ -279,7 +279,7 @@ def kindIn: [HostRuntime] I32 -> #some(I32) | FsError = { stat ->
 def readInto: [HostRuntime] I32, I32, I32, I32 -> I32 = { reader, buffer, size, done ->
   if done >= size then done else
     def status = settled(reader, fileStreamRead(reader, I32.wrappingAdd(buffer, done), size - done))
-    def read = done + status / 16
+    def read = done + status // 16
     if status % 16 != 0 then read else readInto(reader, buffer, size, read)
 }
 
@@ -407,7 +407,7 @@ def namesIn
   buffer at `buffer`, after `names`.
 def namesFrom: [HostRuntime] I32, I32, list(string) -> list(string) = { reader, buffer, names ->
   def status = settled(reader, directoryStreamRead(reader, buffer, entriesAtOnce))
-  def read = namesIn(buffer, 0, status / 16, names)
+  def read = namesIn(buffer, 0, status // 16, names)
   if status % 16 != 0 then read else namesFrom(reader, buffer, read)
 }
 

@@ -7,8 +7,8 @@ open TranspilerWasmTestHelpers
 // what is on the right (#2479). Where the right operand has no effect, it is evaluated anyway, as `i32.and` or `i32.or`.
 
 let private guarded =
-    normalized """def safe: int -> bool = { x -> x != 0 and 10 / x > 1 }
-def unsafe: int -> bool = { x -> x == 0 or 10 / x > 1 }
+    normalized """def safe: int -> bool = { x -> x != 0 and 10 // x > 1 }
+def unsafe: int -> bool = { x -> x == 0 or 10 // x > 1 }
 
 @entry
 def main = {
@@ -29,7 +29,7 @@ let ``Short circuit - and and or don't evaluate their right operand when the lef
 
 [<Fact>]
 let ``Short circuit - a right operand that can trap is evaluated in a branch`` () =
-    let wat = transpileWat (normalized "def safe: int -> bool = { x -> x != 0 and 10 / x > 1 }\n")
+    let wat = transpileWat (normalized "def safe: int -> bool = { x -> x != 0 and 10 // x > 1 }\n")
     let safe = functionText "safe" wat
     Assert.Equal(1, countOccurrences "(if" safe)
     Assert.Equal(0, countOccurrences "i32.and" safe)
@@ -72,7 +72,7 @@ def bound: int, string -> int = { x, s ->
 
 let private inlinedRight =
     normalized """def count: list(string) -> int = { xs -> list.length(xs) }
-def both: list(string), int, string -> list(bool) = { xs, x, s -> [count(xs) > 1, x != 0 and 10 / x > 1 and string.isEmpty(s)] }
+def both: list(string), int, string -> list(bool) = { xs, x, s -> [count(xs) > 1, x != 0 and 10 // x > 1 and string.isEmpty(s)] }
 
 @entry
 def main = {

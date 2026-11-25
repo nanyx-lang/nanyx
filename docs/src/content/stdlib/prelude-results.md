@@ -16,7 +16,7 @@ def parse: string -> #some(int) | #notANumber(string) = { s ->
 }
 
 def half: int -> #some(int) | #odd(int) = { n ->
-  if n % 2 == 0 then #some(n / 2) else #odd(n)
+  if n % 2 == 0 then #some(n // 2) else #odd(n)
 }
 
 println(parse("42") \bindSome(half))

@@ -189,7 +189,7 @@ let ``A selection that uses return is refused`` () =
         refusal
             """def half = { (n: int) -> proc {
   def m = try (if n > 0 then #some(n) else #error(#negative))
-  [[return m / 2]]
+  [[return m // 2]]
 } }
 """)
 

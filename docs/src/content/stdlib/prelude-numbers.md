@@ -80,25 +80,31 @@ attaching the two members, `` def Money.`-` = ... `` and `def Money.negate = ...
 
 ```nanyx fragment
 context Num(a) = (
+  fraction: type
   zero: a
   `+`: a, a -> a
   `-`: a, a -> a
   negate: a -> a
   `*`: a, a -> a
-  `/`: a, a -> a
+  `/`: a, a -> fraction
+  `//`: a, a -> a
   `%`: a, a -> a
   fromInt: int -> a
   isInteger: bool
 )
 ```
 
-The numbers of type `a`: [`Add`](#add)'s and [`Sub`](#sub)'s members, and `x * y`, `x / y` and `x % y`. In a
-function whose type requires it, any other integer literal beside a value of type `a` is `fromInt`
-of it, so `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }` work at `int` and
-`float`. A function that requires `Num(a)` can call one that requires `Add(a)` or `Sub(a)`: a
-`Num` has every member they have. On an integer type `/` truncates and `%` takes the sign of `x`;
-on `float` they are IEEE 754's. `math.mod` is the modulo with the sign of `y`. `isInteger` says which `a` is: `true` for an integer type, so
-`x ** -1` stops the program on one.
+The numbers of type `a`: [`Add`](#add)'s and [`Sub`](#sub)'s members, and `x * y`, `x / y`, `x // y` and
+`x % y`. In a function whose type requires it, any other integer literal beside a value of type
+`a` is `fromInt` of it, so `def square: [Num(a)] a -> a = { x -> x * x }` and `{ x -> x * 2 }`
+work at `int` and `float`. A function that requires `Num(a)` can call one that requires `Add(a)`
+or `Sub(a)`: a `Num` has every member they have.
+
+`x / y` divides with a fraction, and gives a `fraction`, the type's associated type: `float` for
+`int`, the sized integers and `float`, and `F32` for `F32`, so `7 / 2` is 3.5. `x // y` divides
+and rounds down, toward negative infinity, and `x % y` is what is left, with the sign of `y`, so
+`x == (x // y) * y + x % y`: `-7 // 2` is -4 and `-7 % 2` is 1. `isInteger` says which `a` is:
+`true` for an integer type, so `x ** -1` stops the program on one.
 
 ## `int.zero`
 
@@ -159,10 +165,20 @@ def int.`*`: int, int -> int
 ## `` int.`/` ``
 
 ```nanyx fragment
-def int.`/`: int, int -> int
+def int.`/`: int, int -> float
 ```
 
-`x` divided by `y`, truncated towards zero: `7 / 2` is 3 and `-7 / 2` is -3.
+`x` divided by `y`, with the fraction: `7 / 2` is 3.5. Both are converted to `float` first, so an
+`int` past `2 ** 53` is rounded to the nearest float, and `1 / 0` is infinity.
+
+## `` int.`//` ``
+
+```nanyx fragment
+def int.`//`: int, int -> int
+```
+
+`x` divided by `y`, rounded down to a whole number: `7 // 2` is 3 and `-7 // 2` is -4. Dividing by
+0 stops the program.
 
 ## `` int.`%` ``
 
@@ -170,8 +186,9 @@ def int.`/`: int, int -> int
 def int.`%`: int, int -> int
 ```
 
-The remainder of `x` divided by `y`, with the sign of `x`: `-7 % 2` is -1. For the modulo with the
-sign of `y`, which wraps an index into a range, see `math.mod`.
+What is left of `x` after `x // y`, with the sign of `y`: `7 % 2` is 1 and `-7 % 2` is 1, so that
+`x == (x // y) * y + x % y`. It wraps an index into a range: `-1 % 5` is 4. Dividing by 0 stops the
+program.
 
 ## `int.fromInt`
 
@@ -298,13 +315,23 @@ def float.`/`: float, float -> float
 
 `x` divided by `y`.
 
+## `` float.`//` ``
+
+```nanyx fragment
+def float.`//`: float, float -> float
+```
+
+`x` divided by `y`, rounded down to a whole number, as a float: `7.5 // 2.0` is 3.0 and
+`-7.5 // 2.0` is -4.0.
+
 ## `` float.`%` ``
 
 ```nanyx fragment
 def float.`%`: float, float -> float
 ```
 
-The remainder of `x` divided by `y`, truncated as C's `fmod` is: `7.5 % 2.0` is 1.5.
+What is left of `x` after `x // y`, with the sign of `y`, as Python's `%` is: `7.5 % 2.0` is 1.5
+and `-7.5 % 2.0` is 0.5.
 
 ## `float.fromInt`
 

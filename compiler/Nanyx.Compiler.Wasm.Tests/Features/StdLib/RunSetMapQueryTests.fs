@@ -60,8 +60,8 @@ let ``Run - set filterMap keeps the some values, once each`` () =
     let source =
         program
             """  def s = set.fromList([1, 2, 3, 4, 5, 6])
-  println(s \set.filterMap { x -> if x > 1 then #some(x / 2) else #skip })
-  println(set.length(s \set.filterMap { x -> if x > 1 then #some(x / 2) else #skip }))
+  println(s \set.filterMap { x -> if x > 1 then #some(x // 2) else #skip })
+  println(set.length(s \set.filterMap { x -> if x > 1 then #some(x // 2) else #skip }))
   def none: set(int) = set.empty
   println(set.isEmpty(none \set.filterMap { x -> #some(x) }))"""
     runSource source |> assertRan "[1, 2, 3]\n3\ntrue\n"

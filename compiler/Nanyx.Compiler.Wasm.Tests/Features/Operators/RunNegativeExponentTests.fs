@@ -5,7 +5,7 @@ module TranspilerWasmTests.Features.Operators.RunNegativeExponent
 open Xunit
 open TranspilerWasmTestHelpers
 
-let private message = "crash: -1 is a negative exponent, and an integer raised to one isn't an integer\n"
+let private message = "crash: -1 is a negative exponent, and an integer raised to one isn't an integer: for the fraction, write 1 / x ** 1\n"
 
 [<Fact>]
 let ``Run - a float raised to a negative power is one over its positive power`` () =

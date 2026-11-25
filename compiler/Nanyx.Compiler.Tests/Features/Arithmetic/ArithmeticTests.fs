@@ -74,7 +74,7 @@ let ``A function that requires Num multiplies, takes literals and calls one that
     let source =
         normalized """def square: [Num(a)] a -> a = { x -> x * x }
 def twice: [Num(a)] a -> a = { x -> 2 * x + 0 }
-def mean: [Num(a)] list(a) -> a = { xs -> list.sum(xs) / fromInt(list.length(xs)) }
+def mean: [Num(a)] list(a) -> fraction = { xs -> list.sum(xs) / fromInt(list.length(xs)) }
 def total = mean([1.5, 2.5]) + square(2.0) + twice(1.5)
 """
     let result = Compiler.compile source

@@ -449,6 +449,12 @@ module IrType =
     /// Whether a value of `ty` is a floating-point number: a float or an `F32`.
     let isFloat (ty: IrType) = ty = IrFloat || ty = IrF32
 
+    /// Whether a value of `ty` is a number: an int, a sized integer, a float or an `F32`.
+    let isNumber (ty: IrType) =
+        match ty with
+        | IrInt | IrSized _ | IrFloat | IrF32 -> true
+        | _ -> false
+
     /// Whether a record's fields are a tuple's: its positions, `0`, `1`, ...
     let isTuple (fields: (string * IrType) list) =
         Set.ofList (List.map fst fields) = Set.ofList (List.init fields.Length string)

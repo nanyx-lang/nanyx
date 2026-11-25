@@ -13,7 +13,7 @@ import (
 
 -- Prices are whole pence, so no rounding ever creeps in.
 def money: int -> string = { pence ->
-  def pounds = pence / 100
+  def pounds = pence // 100
   def rest = pence % 100
   "£{pounds}." ++ string.padStart("{rest}", width = 2, fill = "0")
 }
@@ -133,7 +133,7 @@ def itemCount: list(Priced) -> int = {
 
 -- A tenth off orders of ten items or more, never more than £5.
 def discount: list(Priced) -> int = { lines ->
-  if itemCount(lines) >= 10 then math.min(subtotal(lines) / 10, 500) else 0
+  if itemCount(lines) >= 10 then math.min(subtotal(lines) // 10, 500) else 0
 }
 
 def printLines: [Console] list(Priced) -> () = {
@@ -212,7 +212,7 @@ def applyOp: string, int, int -> Calc(int) = { op, a, b ->
     | "+" -> #some(a + b)
     | "-" -> #some(a - b)
     | "*" -> #some(a * b)
-    | "/" -> (if b == 0 then #divideByZero else #some(a / b))
+    | "/" -> (if b == 0 then #divideByZero else #some(a // b))
     | "%" -> (if b == 0 then #divideByZero else #some(a % b))
     | "max" -> #some(math.max(a, b))
     | "min" -> #some(math.min(a, b))
@@ -289,7 +289,7 @@ def sort: list(int) -> list(int) = { xs ->
 def median: list(int) -> int = { xs ->
   def sorted = sort(xs)
   def n = list.length(sorted)
-  def middle = list.head(list.skip(sorted, n / 2))
+  def middle = list.head(list.skip(sorted, n // 2))
 
   match middle
     | #some(m) -> m
@@ -311,7 +311,7 @@ def printHours: [Console] int, list(int) -> () = { hour, amounts ->
   match amounts
     | [] -> ()
     | [amount, ...rest] ->
-      println(right("{hour}:00", 6) ++ " " ++ right("£{amount}", 4) ++ " " ++ bar(amount / 3))
+      println(right("{hour}:00", 6) ++ " " ++ right("£{amount}", 4) ++ " " ++ bar(amount // 3))
       printHours(hour + 1, rest)
 }
 

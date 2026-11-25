@@ -50,7 +50,7 @@ println(total) -- 6
 
 # Arithmetic and comparison
 
-Core arithmetic (`+`, `-`, `*`, `/`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) are sugar for the members of contexts of the prelude: `x + y` reads through [`Add`](../advanced/contexts#adda), `x - y` through [`Sub`](../advanced/contexts#suba), `x == y` through [`Eq`](../advanced/contexts#eqa), and `x < y` through [`Ord`](../advanced/contexts#orda). On the built-in types they are the built-in operators: `1 + 2` adds two ints, and calls nothing. To give your own type an operator, attach a definition to it:
+Core arithmetic (`+`, `-`, `*`, `/`, `//`, `%`, `**`) and comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) are sugar for the members of contexts of the prelude: `x + y` reads through [`Add`](../advanced/contexts#adda), `x - y` through [`Sub`](../advanced/contexts#suba), `x == y` through [`Eq`](../advanced/contexts#eqa), and `x < y` through [`Ord`](../advanced/contexts#orda). On the built-in types they are the built-in operators: `1 + 2` adds two ints, and calls nothing. To give your own type an operator, attach a definition to it:
 
 ```nanyx fragment
 def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
@@ -62,7 +62,9 @@ The operator is found by the type of its left operand, exactly as any other atta
 
 `-x` negates: it binds tighter than every infix operator, so `-x * y` is `(-x) * y`, and it is written against its operand. `-5` is a literal. On an `int` or a `float` it is the built-in negation (`-0.0` is negative zero); on any other type it is that type's `negate`, the member of `Sub`. In a [shorthand lambda](../tour/functions#shorthand-lambdas), a leading `-` is still the infix operator, so `{ - x }` is `{ n -> n - x }`, and `{ -x }` is an error, as `n -x` would be.
 
-`x ** n` is `x` to the power `n`: it binds tighter than every other infix operator and groups to the right, so `2 * 3 ** 2` is `2 * 9` and `2 ** 3 ** 2` is `2 ** 9`, 512. As prefix `-` binds tighter still, `-x ** 2` is `(-x) ** 2`. It is not a member of a context: `x ** n` is the prelude's `pow(x, n)`, `[Num(a)] (a, int) -> a`, so it works on any number type, and the exponent is an `int`. On a `float` a negative exponent is `1 / x ** -n`, so `2.0 ** -1` is `0.5`. On an `int`, or any integer type, it crashes with a message, since a negative exponent can't give an integer: `2 ** -1` stops the program. For a fractional exponent, use `float.pow(x, y)`.
+`/` divides with a fraction on every number type, so `7 / 2` is `3.5`: two ints divide to a `float`. `//` divides to a whole number, rounding down, toward negative infinity, and `%` is what is left, with the sign of the right operand: `7 // 2` is `3`, `-7 // 2` is `-4` and `-7 % 2` is `1`, so that `x == (x // y) * y + x % y`. On an integer type, `x // 0` and `x % 0` stop the program. `//` is one operator, not a comment, which is `--`. See [Num(a)](../advanced/contexts#numa) for what each gives on each number type.
+
+`x ** n` is `x` to the power `n`: it binds tighter than every other infix operator and groups to the right, so `2 * 3 ** 2` is `2 * 9` and `2 ** 3 ** 2` is `2 ** 9`, 512. As prefix `-` binds tighter still, `-x ** 2` is `(-x) ** 2`. It is not a member of a context: `x ** n` is the prelude's `pow(x, n)`, `[Num(a)] (a, int) -> a`, so it works on any number type, and the exponent is an `int`. On a `float` a negative exponent is `1 / x ** -n`, so `2.0 ** -1` is `0.5`. On an `int`, or any integer type, it crashes with a message, since a negative exponent can't give an integer: `2 ** -1` stops the program, and its message says to write `1 / 2 ** 1`, which gives the fraction. For a fractional exponent, use `float.pow(x, y)`.
 
 Generic code that needs an operator on an unknown type declares a context requirement instead, such as `[Add(a)]`, and the compiler synthesises the instance from the type's attached definitions (see [Contexts](../advanced/contexts)). A function that does not write its type has the requirement inferred, so `def add = { x, y -> x + y }` is `[Add(a)] a, a -> a` (see [Operators find their context](../advanced/contexts#operators-find-their-context)). A `use` can give an `Add` to a type that has none of its own, but it can't replace one a type has: `use Add(int)(...)` is an error, so `1 + 2` is always `3` (see [A type's own instance wins](../advanced/contexts#a-types-own-instance-wins)).
 
@@ -113,7 +115,7 @@ These are all of Nanyx's operators, tightest first. An operator binds tighter th
 | `-x` (prefix), `not` | | negation (`Sub`'s `negate`), logical not |
 | `\` | left | [pipe](../tour/piping): `x \f(y)` is `f(x, y)` |
 | `**` | right | power: `2 ** 3 ** 2` is `2 ** 9` |
-| `*` `/` `%` | left | multiplication, division, remainder (`Num`) |
+| `*` `/` `//` `%` | left | multiplication, division, division to a whole number, remainder (`Num`) |
 | `^` `<*>` | left | spare |
 | `+` `-` | left | addition (`Add`), subtraction (`Sub`) |
 | `<+>` | left | spare |
@@ -139,11 +141,11 @@ An operator that groups to the left reads `a - b - c` as `(a - b) - c`, and one 
 
 Boolean operations are the keywords `and`, `or` and `not`. `&&` and `||` are not operators, and neither is a prefix `!`: the compiler tells you to write the keyword instead. `<<` and `>>` are composition only; bitwise operations on integers are named functions. Likewise, testing a value against a pattern uses the keyword `is`, as in `x is #some(v)`. That is a `bool` expression usable anywhere, which binds like an operator between `==` and `and` in the table above, and the names its pattern binds are in scope for the rest of an `and` chain after it (see [Tests anywhere](../tour/pattern-matching#tests-anywhere)).
 
-`and` and `or` short-circuit: `a and b` evaluates `b` only when `a` is `true`, and `a or b` evaluates `b` only when `a` is `false`. So a test on the left guards what is on the right: here `10 / x` is never evaluated with `x` zero.
+`and` and `or` short-circuit: `a and b` evaluates `b` only when `a` is `true`, and `a or b` evaluates `b` only when `a` is `false`. So a test on the left guards what is on the right: here `10 // x` is never evaluated with `x` zero.
 
 ```nanyx
 def safe: int -> bool = { x ->
-  x != 0 and 10 / x > 1
+  x != 0 and 10 // x > 1
 }
 
 @entry

@@ -226,6 +226,7 @@ module DiagnosticCodes =
     let NotOneChar = code 284 "Char literal that is not one character" Severity.Error
     /// Units of measure are read but not checked yet: their declarations and literals are reported until they are.
     let UnitsNotChecked = code 285 "Units of measure not checked yet" Severity.Error
+    let NegativePowerOfFraction = code 292 "Negative power of a type whose fraction is another" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -257,7 +258,7 @@ module DiagnosticCodes =
           InvalidAssociatedType; AmbiguousAssociatedType; UnknownAssociatedType; UnfixedAssociatedType; AssociatedTypeFixedTwice
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
-          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar; UnitsNotChecked
+          ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar; UnitsNotChecked; NegativePowerOfFraction
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

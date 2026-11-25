@@ -54,7 +54,7 @@ def main = {
   def greet = { name: string -> println("Hello, {name}! {string.length(name)}") }
   greet("Ada")
   greet("Édouard")
-  println("{1.5 * 3.0} {7 / 2} {-12 % 5}")
+  println("{1.5 * 3.0} {7 / 2} {7 // 2} {-12 % 5}")
 }
 """
     Assert.Equal("ok", ended)
@@ -64,7 +64,7 @@ def main = {
 let ``A program that traps traps the same`` () =
     let _, (_, _, ended) =
         assertRunsTheSame
-            """def divide = { a: int, b: int -> a / b }
+            """def divide = { a: int, b: int -> a // b }
 
 @entry
 def main = {

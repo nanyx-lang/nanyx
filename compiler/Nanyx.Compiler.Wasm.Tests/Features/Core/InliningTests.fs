@@ -241,7 +241,7 @@ def run: int -> int = { n ->
 let ``A function whose declared result has tags its body never makes is inlined`` () =
     let source =
         normalized """def half: int -> #some(int) | #error(#odd | #negative) = { n ->
-  if n % 2 == 1 then #error(#odd) else #some(n / 2)
+  if n % 2 == 1 then #error(#odd) else #some(n // 2)
 }
 
 def run: int -> int = { n ->

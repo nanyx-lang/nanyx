@@ -111,8 +111,6 @@ module Helpers =
     let floatToString = "__nanyx_float_to_string"
     /// An `F32` is written as text by a helper of its own.
     let f32ToString = "__nanyx_f32_to_string"
-    /// `%` on floats, which WebAssembly has no instruction for.
-    let floatRem = "__nanyx_float_rem"
     let writeStderr = NyxCompiler.Intrinsics.writeStderr
     let exit = NyxCompiler.Intrinsics.exit
     /// Ends the program once a crash or an error deferred to run time has written why: a trap in a function of this
@@ -473,6 +471,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
       for storage in Storage.All do
           yield! storingHelpers checks storage
       yield! SizedIntegerCode.helpers
+      yield! DivisionCode.helpers
       Helpers.retain, retainHelper checks
       Helpers.copyBytes,
       lines
@@ -1035,34 +1034,6 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             "  local.get $value"
             "  i32.wrap_i64"
             ")" ]
-      // The truncated remainder, C's `fmod`, on floats: `a - trunc(a / b) * b`, with the sign of `a`. When `b`
-      // is infinite the quotient is zero and `0 * b` NaN, so the remainder is `a` itself (NaN when `a` is infinite).
-      Helpers.floatRem,
-      lines
-          [ $"(func ${Helpers.floatRem} (param $a f64) (param $b f64) (result f64)"
-            "  local.get $b"
-            "  f64.abs"
-            "  f64.const inf"
-            "  f64.eq"
-            "  if (result f64)"
-            "    local.get $a"
-            "    local.get $a"
-            "    local.get $a"
-            "    f64.sub"
-            "    f64.add"
-            "  else"
-            "    local.get $a"
-            "    local.get $a"
-            "    local.get $b"
-            "    f64.div"
-            "    f64.trunc"
-            "    local.get $b"
-            "    f64.mul"
-            "    f64.sub"
-            "  end"
-            "  local.get $a"
-            "  f64.copysign"
-            ")" ]
       Helpers.escapeByte,
       lines
           [ yield $"(func ${Helpers.escapeByte} (param $c i32) (result i32)"
@@ -1349,7 +1320,6 @@ let helperDependencies =
       Helpers.floatTrunc, []
       Helpers.floatToInt, []
       Helpers.intToFloat, []
-      Helpers.floatRem, []
       Helpers.escapeByte, []
       Helpers.stringQuote, [ Helpers.stringLength; Helpers.stringAlloc; Helpers.escapeByte ]
       Helpers.intAdd, []
@@ -1366,7 +1336,8 @@ let helperDependencies =
       Helpers.stringIndexBetween, [ Helpers.stringLength ]
       PowersOfFive.helper, []
       Helpers.floatFromBits, [] ]
-    @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, []))
+    @ (SizedIntegerCode.helpers |> List.map (fun (name, _) -> name, SizedIntegerCode.dependenciesOf name))
+    @ (DivisionCode.helpers |> List.map (fun (name, _) -> name, []))
     @ WasmRegions.dependencies
 
 /// The helpers that read and write no linear memory themselves: they compute on their operands, or leave that to the
@@ -1386,14 +1357,14 @@ let private helpersWithoutMemory =
           yield Helpers.floatToInt
           yield Helpers.intToFloat
           yield Helpers.floatFromBits
-          yield Helpers.floatRem
           yield Helpers.escapeByte
           yield Helpers.intAdd
           yield Helpers.intSub
           yield Helpers.intMul
           yield Helpers.intToIndex
           yield Helpers.intTextLength
-          yield! SizedIntegerCode.helpers |> List.map fst ]
+          yield! SizedIntegerCode.helpers |> List.map fst
+          yield! DivisionCode.helpers |> List.map fst ]
 
 /// Whether the helper `name` reads or writes linear memory itself.
 let touchesMemory (name: string) = not (helpersWithoutMemory.Contains name)

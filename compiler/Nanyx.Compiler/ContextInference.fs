@@ -111,9 +111,19 @@ module internal ContextInference =
 
     /// The annotation an unannotated def of the type `defTy` would write to require `contexts`, each a context's name
     /// with the variables of `defTy` it is required at: the contexts, each applied to its variables, and the type
-    /// without them. `None` when the type is one an annotation cannot write.
+    /// without them. `None` when the type is one an annotation cannot write. A context's associated type is an argument
+    /// after its own (see `AssociatedTypes`), which need not be in `defTy`: one that isn't is named after its variables.
     let annotation (defTy: Ty) (contexts: (Identifier * TyVar list) list) : (TypeExpr list * TypeExpr) option =
-        let names = varNames defTy
+        let inType = varNames defTy
+        let names =
+            contexts
+            |> List.collect snd
+            |> List.distinctBy _.Id
+            |> List.filter (fun v -> not (inType.ContainsKey v.Id))
+            |> List.fold (fun (names: Map<int, string>) v ->
+                let index = names.Count
+                let letter = string "abcdefghijklmnopqrstuvwxyz".[index % 26]
+                names |> Map.add v.Id (if index < 26 then letter else $"{letter}{index / 26}")) inType
         let written =
             contexts
             |> List.map (fun (ctxName, vars) ->
@@ -277,16 +287,39 @@ module internal ContextInference =
         let state = checkRestsAtCalls name symbol scheme state.PendingContextInstances state
         let pending, others = state.PendingContextInstances |> List.partition (fun p -> p.Def = name)
         let state = { state with PendingContextInstances = others }
-        let resolved = pending |> List.rev |> List.map (fun p -> p, p.ArgTys |> List.map (resolveSoFar state))
-        // The variables of the def's own type that a call's arguments are, if they all are.
-        let ownVars (argTys: Ty list) =
-            let vars = argTys |> List.map (function TyVar v when scheme.Quantified.Contains v.Id -> Some v | _ -> None)
+        // How many of a context's arguments are its own parameters, before its associated types (see `AssociatedTypes`).
+        let writtenOf (ctxName: Identifier) =
+            TypeResolution.tryFindTypeDef ctxName state
+            |> Option.map (fun info -> info.Parameters.Length - info.AssociatedTypes.Length)
+            |> Option.defaultValue System.Int32.MaxValue
+        let key (ctxName: Identifier, vars: TyVar list) = ctxName, vars |> List.truncate (writtenOf ctxName) |> List.map _.Id
+        // The variables of the def's own type that a call's arguments are, if they all are, and the variables its
+        // context's associated types are at, which the instance fixes, and so need not be the def's own.
+        let ownVars (ctxName: Identifier) (argTys: Ty list) =
+            let written = writtenOf ctxName
+            let vars =
+                argTys
+                |> List.mapi (fun index ty ->
+                    match ty with
+                    | TyVar v when index >= written || scheme.Quantified.Contains v.Id -> Some v
+                    | _ -> None)
             if vars |> List.forall Option.isSome then Some (vars |> List.map Option.get) else None
+        // Two calls that require one context of the same variables require it at the same associated types.
+        let state =
+            pending
+            |> List.choose (fun p -> ownVars p.Context (p.ArgTys |> List.map (resolveSoFar state)) |> Option.map (fun vars -> key (p.Context, vars), p.ArgTys))
+            |> List.groupBy fst
+            |> List.fold (fun current ((ctxName, _), calls) ->
+                let associated (argTys: Ty list) = List.skip (min (writtenOf ctxName) argTys.Length) argTys
+                match calls |> List.map (snd >> associated) with
+                | first :: others when others |> List.forall (fun other -> other.Length = first.Length) ->
+                    others |> List.fold (fun next other -> List.fold2 (fun next a b -> addConstraint a b next) next first other) current
+                | _ -> current) state
+        let resolved = pending |> List.rev |> List.map (fun p -> p, p.ArgTys |> List.map (resolveSoFar state))
         // The rests of the unions in the def's own type, which an operator or a call that only checks its context is
         // not passed one for: a call to the def checks it instead (see `checkRestsAtCalls`).
         let rests = unionRests scheme.Type |> List.map _.Id |> Set.ofList
         let ofRests (p: PendingContextInstance) (vars: TyVar list) = checksRests p && vars |> List.forall (fun v -> rests.Contains v.Id)
-        let key (ctxName: Identifier, vars: TyVar list) = ctxName, vars |> List.map _.Id
         // A well-known context of a type with more to it than a variable is that context of each of the def's
         // variables it compares values of: `Eq(list(a))` is `Eq(a)`.
         let reduced (p: PendingContextInstance) (argTys: Ty list) =
@@ -299,7 +332,7 @@ module internal ContextInference =
         let required =
             resolved
             |> List.collect (fun (p, argTys) ->
-                match ownVars argTys with
+                match ownVars p.Context argTys with
                 | Some vars when ofRests p vars -> []
                 | Some vars -> [ p.Context, vars ]
                 | None -> reduced p argTys)
@@ -313,7 +346,7 @@ module internal ContextInference =
         |> List.fold (fun result (p, argTys) ->
             result
             |> Result.bind (fun (current: InferState) ->
-                match ownVars argTys, written with
+                match ownVars p.Context argTys, written with
                 | Some vars, _ when ofRests p vars -> Ok current
                 // A call to a local function is passed nothing: the def requiring the context is all it needs.
                 | Some _, Some _ when p.ChecksOnly -> Ok current

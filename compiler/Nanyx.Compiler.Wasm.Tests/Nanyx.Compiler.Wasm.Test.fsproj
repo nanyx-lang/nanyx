@@ -193,6 +193,7 @@
     <Compile Include="Features\Nominals\RunLocalTypeTests.fs" />
     <Compile Include="Features\Numbers\RunIntTests.fs" />
     <Compile Include="Features\Numbers\RunSizedIntegerTests.fs" />
+    <Compile Include="Features\Numbers\RunDivisionTests.fs" />
     <Compile Include="Features\Numbers\RunF32Tests.fs" />
     <Compile Include="Features\Numbers\RunSizedFromStringTests.fs" />
     <Compile Include="Features\Operators\RunOperatorTests.fs" />
@@ -244,7 +245,7 @@
     <Compile Include="Features\StdLib\RunMathTrigonometryTests.fs" />
     <Compile Include="Features\StdLib\RunMathHyperbolicTests.fs" />
     <Compile Include="Features\StdLib\RunMathSpecialFloatTests.fs" />
-    <Compile Include="Features\StdLib\RunMathModGcdLcmTests.fs" />
+    <Compile Include="Features\StdLib\RunMathGcdLcmTests.fs" />
     <Compile Include="Features\StdLib\RunStringTakeSkipTests.fs" />
     <Compile Include="Features\StdLib\RunStringJoinTests.fs" />
     <Compile Include="Features\StdLib\RunStringBuildTests.fs" />
