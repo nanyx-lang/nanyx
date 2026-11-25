@@ -856,7 +856,12 @@ module Compiler =
                     match item.Source with
                     | PathImport path -> path
                     | ModuleImport name -> name
-                Error [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span "Source that has no file can import only standard library modules" |> Diagnostics.about shown ]
+                let message =
+                    match item.Source with
+                    | ModuleImport name -> RenamedPackages.inImport name
+                    | PathImport _ -> None
+                    |> Option.defaultValue "Source that has no file can import only standard library modules"
+                Error [ Diagnostics.at DiagnosticCodes.ImportNotFound item.Span message |> Diagnostics.about shown ]
 
     /// An imported module, checked the first time this compilation imports it; its source is only read then. A
     /// standard-library module is checked once per process (see `checkedStandardLibrary`), and a source file's module

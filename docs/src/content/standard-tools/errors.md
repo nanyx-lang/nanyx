@@ -82,7 +82,9 @@ import "./helpers" as helpers  -- error NYX0003: There is no file at this path, 
 def total = 1
 ```
 
-To fix it, correct the path or the module's name, or create the file.
+To fix it, correct the path or the module's name, or create the file. An import of a shipped package's module by the
+package's old name, from before the shipped packages were renamed ([`NYX0054`](#nyx0054)), says what to import now:
+`import nanyx.console.core/env` is `nanyx.cli/env`.
 
 # NYX0004: Import cycle
 
@@ -951,7 +953,8 @@ the new one. `nanyx.http` is the library's name now, so it is an error only wher
 ```
 
 To fix it, write the new name, and change the imports of its modules to match: `nanyx.console.core/console` is
-`nanyx.cli/console`, and `nanyx.http.core/request` is `nanyx.http/request`.
+`nanyx.cli/console`, and `nanyx.http.core/request` is `nanyx.http/request`. An import that still names the old package
+is [`NYX0003`](#nyx0003), whose message gives the import by the new name.
 
 # NYX0101: Unknown identifier
 

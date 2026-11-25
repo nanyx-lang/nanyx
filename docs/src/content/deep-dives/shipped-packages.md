@@ -39,7 +39,8 @@ progress.
   `.host` (`Hosts.nameSuffix`); the manifest checker reports a host named otherwise, or a library named so, at its name
   (`NYX0053`, `Manifest.checkHostName`). The shipped packages renamed to this ([#2697](https://github.com/nanyx-lang/nanyx/issues/2697))
   are known by their old names (`RenamedPackages`): a manifest's `host` or `dependencies`, a script's directives, or
-  `--host` (through `HostPackages.tryShipped`) that names one is `NYX0054`, which gives the new name. `nanyx.http`,
+  `--host` (through `HostPackages.tryShipped`) that names one is `NYX0054`, which gives the new name, and an import of
+  one of its modules by the old name is `NYX0003` with the import by the new one (`RenamedPackages.inImport`). `nanyx.http`,
   the HTTP host's old name and the library's new one, is one only where a host is named.
 - **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets
   no host import, an `@entry` there is `NYX0031` (`Attributes.applyAttributes`), and `nanyx run` on a library says it

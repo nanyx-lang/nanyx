@@ -71,3 +71,22 @@ let ``A script's directives and --host name a shipped package by its new name`` 
     match HostPackages.tryShipped "nanyx.console" with
     | Result.Error message -> Assert.Equal("The host 'nanyx.console' is now 'nanyx.cli.host'", message)
     | Result.Ok _ -> Assert.Fail "Expected the old name to be refused"
+
+[<Fact>]
+let ``An import of a renamed package's module by its old name gives the import by its new one`` () =
+    let importNotFound (result: CompileResult) =
+        result.Diagnostics
+        |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.ImportNotFound.Code)
+        |> List.map _.Message
+    let expected = [ "'nanyx.console.core' is now 'nanyx.cli': import `nanyx.cli/env`" ]
+    let source = "import nanyx.console.core/env as env\n\nprintln(1)\n"
+    // In a package that depends on `nanyx.cli`, in a script, and in source that has no file.
+    Assert.Equal<string list>(expected, importNotFound (compileWithConsoleCore ("module main\n\n" + source)))
+    withTempDir (fun directory ->
+        let script = System.IO.Path.Combine(directory, "script.nyx")
+        System.IO.File.WriteAllText(script, source)
+        Assert.Equal<string list>(expected, importNotFound (Compiler.compileFile script)))
+    Assert.Equal<string list>(expected, importNotFound (Compiler.compile source))
+    Assert.Equal<string list>(
+        [ "'nanyx.http.core' is now 'nanyx.http': import `nanyx.http/request`" ],
+        importNotFound (Compiler.compile "import nanyx.http.core/request as request\n"))
