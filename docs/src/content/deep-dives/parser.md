@@ -6,8 +6,9 @@ order: 12
 
 The parser (`compiler/Nanyx.Parser`) reads a file in three steps: a lexer turns the text into tokens, a layout pass
 makes the block structure that indentation gives them explicit, and a hand-written recursive-descent parser reads the
-tokens into the syntax tree (`Ast.fs`). [The parser](../work-in-progress/parser) in Work in progress says what is still
-open.
+tokens into the syntax tree (`Ast.fs`). What is still open is in issues:
+recovering inside an item ([#2729](https://github.com/nanyx-lang/nanyx/issues/2729)) and whether a concrete syntax
+tree is needed ([#2730](https://github.com/nanyx-lang/nanyx/issues/2730)).
 
 - **The lexer** (`Lexer.fs`): text in, tokens out, each with its offsets and its leading and trailing trivia, lossless
   whatever the text. A string with holes is a `StringStart`, the hole's tokens, a `StringMiddle` between holes and a

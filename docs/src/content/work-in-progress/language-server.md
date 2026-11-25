@@ -15,7 +15,7 @@ its options on [The nanyx command](../standard-tools/command-line#editors), and 
   the nearest node that has a span, and semantic tokens read field names from the text.
 - **Parse errors.** The parser recovers only at the next top-level item, so a parse error hides the rest of the item
   it is in: while the user types in it, hover, completion and the type hints read the last text of the file that
-  parsed (see [The parser](./parser#recovering-inside-an-item)).
+  parsed ([#2729](https://github.com/nanyx-lang/nanyx/issues/2729)).
 - **Downloaded packages.** The server does not resolve packages from the lockfile and the cache, or offer to restore
   them ([#866](https://github.com/nanyx-lang/nanyx/issues/866)).
 - **Find references and rename** search the files of the document's package, but not other packages that depend on

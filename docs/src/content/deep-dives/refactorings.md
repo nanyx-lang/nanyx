@@ -6,8 +6,8 @@ order: 14
 
 The refactorings built so far are described for users on
 [VS Code extension](../standard-tools/vs-code-extension#refactorings). This page says how a refactoring is built, and the
-rules every refactoring follows. The planned ones are on [Refactorings](../work-in-progress/refactorings) in Work in
-progress.
+rules every refactoring follows. The planned ones are issues with the
+[`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) label.
 
 # How a refactoring is built
 

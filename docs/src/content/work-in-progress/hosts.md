@@ -89,9 +89,6 @@ The [HTTP host](../advanced/hosts#the-http-host) is built: its entry is a `Reque
   The host takes the handler alone until a program needs `init`.
 - **Streamed bodies.** A body is a `string`. Streaming wants a lazy body, which depends on
   [lazy sequences](./lazy-sequences).
-- **Serving on WASI.** The HTTP host has no component root yet. Its component root would be in the `wasi:http/service`
-  world, exporting `wasi:http/handler`, so that `wasmtime serve` and other `wasi:http` hosts can run a handler. The
-  plan is on [Components](./components).
 - **Serving more widely**: a server bound to other addresses than `localhost`.
 
 Routing, middleware and templates are libraries, not part of the host: a router is a function from routes to a
@@ -138,8 +135,8 @@ provides. .NET's Generic Host, with `IHostedService`, takes the second approach.
 1. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
    beside the module. The [Nim demo](./nim-demo) is its first user.
 2. **The test host**, with [Testing](./testing).
-3. **The HTTP host on WASI**: its component root in the `wasi:http/service` world ([Components](./components)), and
-   the rest of [Serving HTTP](#serving-http).
+3. **The rest of [Serving HTTP](#serving-http).** The HTTP host's component root, exporting `wasi:http/handler`, is
+   built ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)).
 
 # Open questions
 

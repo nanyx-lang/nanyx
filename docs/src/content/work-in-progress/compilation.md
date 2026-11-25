@@ -40,7 +40,8 @@ Out of scope here, with their own workstreams:
   before the backend can generate code for it. Gaps are filed per phase under the `parser`, `type checker` and
   `wasm backend` labels.
 - **A syntax error hides the rest of its item.** The parser reads on at the next top-level item, but not inside the
-  item the mistake is in, so later problems in that item are not reported. See [The parser](./parser).
+  item the mistake is in, so later problems in that item are not reported
+  ([#2729](https://github.com/nanyx-lang/nanyx/issues/2729)).
 - **Some defs are solved afresh.** A list of constraints is solved on top of the last one solved, or of a checkpoint,
   when that can't change the result ([Solving constraints](../deep-dives/compilation#solving-constraints)). Defs that
   share a variable (mutual recursion, a use before the def is checked) and a module with a type error solve afresh,
@@ -58,8 +59,8 @@ Out of scope here, with their own workstreams:
    ([Docs examples](../deep-dives/compilation#docs-examples)); the blocks marked `skip=` wait on the issues they name.
 2. **Parser error recovery inside an item.** The parser reads past a syntax error to the next top-level item, so
    later errors and later analysis are not lost ([The parser](../deep-dives/parser) in Deep dives).
-   Recovering inside an item, at the next statement or arm, is open: see
-   [The parser](./parser#recovering-inside-an-item).
+   Recovering inside an item, at the next statement or arm, is
+   [#2729](https://github.com/nanyx-lang/nanyx/issues/2729).
 3. **Backend coverage.** Close the remaining value types and constructs the type checker accepts.
 4. **Standard library.** Implement the documented modules, writing intrinsics only where Nanyx cannot
    ([Standard library implementation](../deep-dives/standard-library-implementation)).

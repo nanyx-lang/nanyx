@@ -32,8 +32,9 @@ page keeps what is still open.
 # JSON
 
 - **Encoding and decoding any record automatically** is built on type reflection, in `nanyx.json` 0.2.0
-  ([#1789](https://github.com/nanyx-lang/nanyx/issues/1789)); what is left is on
-  [Type members and reflection](./type-members-and-reflection).
+  ([#1789](https://github.com/nanyx-lang/nanyx/issues/1789)); what is left is
+  [#2382](https://github.com/nanyx-lang/nanyx/issues/2382) and
+  [#2721](https://github.com/nanyx-lang/nanyx/issues/2721).
 - **Where the encoders live.** They are in a module of their own, `nanyx.json/encode`, because their names are the
   decoders' (`encode.string`, `json.string`). Attaching them to `Encoder` (`json.Encoder.string`) would keep one
   module, since a type's attached definitions are reached through an import's alias

@@ -8,8 +8,10 @@ A call in tail position uses no stack. The guarantee and the rules for tail posi
 [Tail recursion](../tour/functions#tail-recursion), why it is a guarantee in
 [Compiler optimisations](../meta/compiler-optimisations#optimisation-model), and the linter's rule in
 [Recursion not in tail position](../standard-tools/official-linter#recursion-not-in-tail-position). This page says how
-the compiler keeps the guarantee. What is still planned or open is on [Tail calls](../work-in-progress/tail-calls) in
-Work in progress.
+the compiler keeps the guarantee. What is still planned or open is in issues:
+`@tailrec` ([#2723](https://github.com/nanyx-lang/nanyx/issues/2723)), tail recursion modulo cons
+([#2724](https://github.com/nanyx-lang/nanyx/issues/2724)), and which constructs that run code at the end of a scope
+take their body out of tail position ([#2725](https://github.com/nanyx-lang/nanyx/issues/2725)).
 
 # Code generation
 
