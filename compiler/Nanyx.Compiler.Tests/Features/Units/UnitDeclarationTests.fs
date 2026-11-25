@@ -143,3 +143,21 @@ let ``A module adds units to an imported dimension, but not its base unit`` () =
     let base' = "import mod\n@baseUnit unit ps: Time\n"
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.MisplacedBaseUnit.Code, "unit ps: Time" ], reportedIn base' (compileImporting timeModule base'))
+
+/// A module `name` that exports a dimension `dimension` with the base unit `ms`.
+let private withMs (name: string) (dimension: string) =
+    $"module {name}\nexport dimension {dimension}\n@baseUnit export unit ms: {dimension}\nexport unit other{name}: {dimension} = 2ms\n"
+
+[<Fact>]
+let ``Two imports that bring in units of one name are NYX0105 where the name is written`` () =
+    let modules = [ "a.nyx", withMs "a" "Time"; "b.nyx", withMs "b" "Millis" ]
+    let main = "import a\nimport b\ndef x = 500ms\ndef y = 2othera\nunit z: Time = 3ms\n"
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.AmbiguousName.Code, "500ms"; DiagnosticCodes.UnitsNotChecked.Code, "2othera"; DiagnosticCodes.AmbiguousName.Code, "3ms" ],
+        reportedIn main (compileImportingAll modules main) |> List.sortBy (fun (_, text) -> main.IndexOf text))
+    let selecting = "import a\nimport b as (Millis)\ndef x = 500ms\n"
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.UnitsNotChecked.Code, "500ms" ], reportedIn selecting (compileImportingAll modules selecting))
+    let own = "import a\nimport b\nunit ms: Time = 1othera\ndef x = 500ms\n"
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.UnitsNotChecked.Code, "500ms" ], reportedIn own (compileImportingAll modules own))

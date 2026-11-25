@@ -10,19 +10,41 @@ open NyxCompiler.InferState
 /// (`InferState.Units`). The checker does not type a number with a unit yet, so it reports each where it is written.
 module internal Units =
     /// The error for a number with a unit, `500ms`, of a unit the module knows, written at `span`.
-    let literalNotChecked (span: SourceSpan) : Diagnostic =
+    let private literalNotChecked (span: SourceSpan) : Diagnostic =
         Diagnostics.at DiagnosticCodes.UnitsNotChecked span
             "A number with a unit is read but not checked yet, so a program can't use one: units of measure are being built"
 
     /// The error for `unitName`, written at `span` in a literal or a unit's definition, when the module knows no unit of
     /// that name.
-    let unknownUnit (span: SourceSpan) (unitName: Identifier) (known: Map<string, UnitInfo>) : Diagnostic =
+    let private unknownUnit (span: SourceSpan) (unitName: Identifier) (known: Map<string, UnitInfo>) : Diagnostic =
         let suggestion =
             match NameSuggestions.closest known.Keys unitName with
             | close :: _ -> $": did you mean '{close}'?"
             | [] -> ": declare it with `unit`, or import the module that exports it"
         Diagnostics.at DiagnosticCodes.UnknownUnit span $"There is no unit '{unitName}' here{suggestion}"
         |> Diagnostics.about unitName
+
+    /// The error for `unitName`, written at `span`, when two of the module's imports bring in a unit of that name.
+    let private ambiguousUnit (span: SourceSpan) (unitName: Identifier) (each: UnitInfo list) : Diagnostic =
+        let dimensions = each |> List.map (fun info -> $"'{info.Dimension.Name}'") |> List.distinct
+        let ofWhat = if dimensions.Length > 1 then $" (of {Diagnostics.listed dimensions})" else ""
+        Diagnostics.at DiagnosticCodes.AmbiguousName span
+            $"Two imports bring in a unit '{unitName}'{ofWhat}: import it from only one of them, selecting the names the other's import brings in, as `import time as (Time, s)`"
+        |> Diagnostics.about unitName
+
+    /// The unit `unitName`, written at `span`, as `state` knows it, or the error saying it knows none, or more than one.
+    let unitNamed (state: InferState) (span: SourceSpan) (unitName: Identifier) : Result<UnitInfo, Diagnostic> =
+        match state.AmbiguousUnits |> Map.tryFind unitName, state.Units |> Map.tryFind unitName with
+        | Some each, _ -> Error (ambiguousUnit span unitName each)
+        | None, Some info -> Ok info
+        | None, None -> Error (unknownUnit span unitName state.Units)
+
+    /// The error for a number with the unit `unitName`, written at `span`: NYX0285 for a unit `state` knows, until such
+    /// numbers are typed, or the error saying it knows none, or more than one.
+    let literalError (state: InferState) (span: SourceSpan) (unitName: Identifier) : Diagnostic =
+        match unitNamed state span unitName with
+        | Ok _ -> literalNotChecked span
+        | Error error -> error
 
     /// The parameter a dimension that is not constrained is generic in: the number that stores it.
     let private storageParameter = "a"
@@ -156,7 +178,7 @@ module internal Units =
     /// their definitions: a unit defined as a multiple of one in another dimension, of one there is none of, or of
     /// itself, through others or not. A unit whose scale is not found is at the scale 1, so its literals are not also
     /// reported.
-    let private scales (known: Map<string, UnitInfo>) (declared: (Declared * NominalId) list) : Map<string, Rational> * Diagnostic list =
+    let private scales (state: InferState) (declared: (Declared * NominalId) list) : Map<string, Rational> * Diagnostic list =
         let own = declared |> List.map (fun (unit, dimension) -> unit.Name, (unit, dimension)) |> Map.ofList
         let mutable found: Map<string, Rational> = Map.empty
         let errors = ResizeArray<Diagnostic>()
@@ -179,24 +201,23 @@ module internal Units =
                         | false, None -> Some Rational.one
                         | false, Some(number, target, span) ->
                             let targetDimension =
-                                match own |> Map.tryFind target, known |> Map.tryFind target with
-                                | Some (_, targetDimension), _ -> Some targetDimension
-                                | None, Some info -> Some info.Dimension
-                                | None, None -> None
+                                match own |> Map.tryFind target with
+                                | Some (_, targetDimension) -> Ok targetDimension
+                                | None -> unitNamed state span target |> Result.map _.Dimension
                             match targetDimension with
-                            | None ->
-                                errors.Add(unknownUnit span target known)
+                            | Error error ->
+                                errors.Add error
                                 None
-                            | Some targetDimension when targetDimension <> dimension ->
+                            | Ok targetDimension when targetDimension <> dimension ->
                                 errors.Add(
                                     Diagnostics.at DiagnosticCodes.UnitOfAnotherDimension span
                                         $"'{unit.Name}' is a unit of '{unit.DimensionName}', but '{target}' is a unit of '{targetDimension.Name}': define it as a multiple of a unit of '{unit.DimensionName}'"
                                     |> Diagnostics.about unit.Name)
                                 None
-                            | Some _ ->
+                            | Ok _ ->
                                 let targetScale =
                                     if own.ContainsKey target then scaleOf (name :: visiting) target
-                                    else known |> Map.tryFind target |> Option.map _.Scale
+                                    else state.Units |> Map.tryFind target |> Option.map _.Scale
                                 targetScale |> Option.map (Rational.multiply (Rational.ofWritten number))
                     scale |> Option.iter (fun scale -> found <- found |> Map.add name scale)
                     scale
@@ -224,7 +245,7 @@ module internal Units =
                 |> List.map (fun unit ->
                     Diagnostics.at DiagnosticCodes.DuplicateDefinition unit.Item.Span $"The unit '{name}' is declared already: give one of them another name"
                     |> Diagnostics.about name))
-        let found, scaleErrors = scales state.Units resolved
+        let found, scaleErrors = scales state resolved
         let own =
             resolved
             |> List.map (fun (unit, dimension) ->
@@ -236,4 +257,6 @@ module internal Units =
                   IsExport = unit.IsExport })
         let units = own |> List.fold (fun acc (name, info) -> acc |> Map.add name info) state.Units
         let errors = storageErrors hasNum state items @ dimensionErrors @ duplicates @ baseUnitErrors state items resolved @ scaleErrors
-        { state with Units = units }, errors |> List.sortBy (fun error -> error.Span |> Option.map _.Start |> Option.defaultValue 0)
+        // A unit of the module's own is the one its name means, though two imports bring in others of the name.
+        let ambiguous = own |> List.fold (fun acc (name, _) -> acc |> Map.remove name) state.AmbiguousUnits
+        { state with Units = units; AmbiguousUnits = ambiguous }, errors |> List.sortBy (fun error -> error.Span |> Option.map _.Start |> Option.defaultValue 0)

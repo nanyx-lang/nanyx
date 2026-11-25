@@ -72,7 +72,8 @@ unit KiB: Bytes = 1_024B
   `ms` is in scope. A module exports and imports dimensions and units as it does types, with `export` before the
   declaration: `export dimension Time` and `export unit ms: Time = 1_000us`. A unit can't be written qualified, so an
   import brings in the units its module exports unqualified, under an alias too, or only those it selects:
-  `import time as (Time, ms)`.
+  `import time as (Time, ms)`. Two imports that bring in units of one name are an error only where the name is
+  written, as two imports' values of one name are, and a unit the module declares itself is the one its name means.
 - A module can add units to a dimension another module declares, `unit ps: Time = 0.001ns`, but not its base unit,
   which is declared with the dimension.
 

@@ -198,8 +198,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | LiteralExpr(StringLit text) when ExpectedLiterals.expectsChar state expr ->
         CharLiterals.typeOf expr.Span text |> Result.map (fun ty -> mkTypedExpr expr ty None None None, state)
     | InterpolatedString _ when ExpectedLiterals.expectsChar state expr -> CharLiterals.withHoles expr.Span
-    | LiteralExpr(UnitLit(_, unitName)) when not (state.Units.ContainsKey unitName) -> Error [ Units.unknownUnit expr.Span unitName state.Units ]
-    | LiteralExpr(UnitLit _) -> Error [ Units.literalNotChecked expr.Span ]
+    | LiteralExpr(UnitLit(_, unitName)) -> Error [ Units.literalError state expr.Span unitName ]
     | LiteralExpr literal ->
         let ty, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
         Ok (mkTypedExpr expr ty None None None, next)

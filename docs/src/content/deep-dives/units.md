@@ -44,5 +44,7 @@ imported one, and reports:
 - a unit of a name that is no dimension (`NYX0109`), and a unit declared twice (`NYX0113`).
 
 An import brings in the units its module declares with `export unit` (`ModuleLinking.exportedUnits`), unqualified, since
-a literal can't be written with a qualifier, or only those it selects. A unit of a literal the module knows is reported as
+a literal can't be written with a qualifier, or only those it selects. Two imports that bring in different units of one
+name make it ambiguous (`InferState.AmbiguousUnits`), which is reported as `NYX0105` only where the name is written
+(`Units.unitNamed`), unless the module declares a unit of that name itself. A unit of a literal the module knows is reported as
 [`NYX0285`](../standard-tools/errors#nyx0285), until numbers with units are typed.

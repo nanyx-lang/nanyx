@@ -195,6 +195,9 @@ type InferState =
             /// The units of measure the module can write, by name: those its imports bring in, then its own (see
             /// `Units`).
             Units: Map<string, UnitInfo>;
+            /// The units two of the module's imports bring in under one name, which a literal or a unit's definition
+            /// can't write, with each unit of the name: an error only where the name is written (see `Units`).
+            AmbiguousUnits: Map<string, UnitInfo list>;
             DeferredContextUses: DeferredContextUse list;
             /// For each call from a lambda of an unannotated top-level def not inferred yet there, which is in a cycle
             /// with the def the lambda is in, the def's name, the context variable the lambda uses for it and the call's
@@ -476,6 +479,7 @@ let emptyState =
             ScriptValues = Map.empty;
             ScriptEntryValues = Set.empty;
             Units = Map.empty;
+            AmbiguousUnits = Map.empty;
             DeferredContextUses = [];
             PendingCallContexts = [];
             PendingContextInstances = [];
