@@ -1,6 +1,6 @@
 namespace NyxCompiler
 
-/// The built-in `set(a)` type (see "Maps and sets" in the docs' work in progress). What a set holds is the prelude's
+/// The built-in `set(a)` type (see "Maps and sets" in the docs' Deep dives). What a set holds is the prelude's
 /// business, which reads and builds it through two intrinsics (see `Intrinsics`), as it does a map's (see `Maps`).
 module Sets =
     /// The type's name, as a type writes it, `set(int)`, and as the prelude's set functions are attached to it.

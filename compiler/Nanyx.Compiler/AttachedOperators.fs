@@ -3,8 +3,8 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Which types may attach the members of the well-known contexts (\r?\n/// )
-/// work in progress). A structural type always compares by its structure, so that `(x = 1, y = 2)` compares the same
+/// Which types may attach the members of the well-known contexts (see "A type's own instance wins" in the docs'
+/// Contexts page). A structural type always compares by its structure, so that `(x = 1, y = 2)` compares the same
 /// whether or not the alias it is written with is known: only a nominal type, `type Email = protected string`, may attach its
 /// own `==`, `compare` or `hash`. `!=` is never attached by anything: it is always `not (a == b)`. A built-in type's
 /// order and hash are always the compiler's own, so a `compare` or `hash` attached to one, as the prelude's `int.compare`
@@ -60,8 +60,8 @@ module internal AttachedOperators =
 
     /// The standard-library modules that own the attached definition `name` (`string.length`, owned by `nanyx/text`):
     /// those that export it, where it is attached to a built-in type. A built-in type's owned definitions are in scope
-    /// wherever its values are, whether or not their module is imported (see "Extending a type" in the docs' work in
-    /// progress). None for the module being checked, which may define its own.
+    /// wherever its values are, whether or not their module is imported (see "Extending a type" in the docs'
+    /// Attached definitions page). None for the module being checked, which may define its own.
     let private ownerModules (state: InferState) (name: Identifier) : string list =
         let dot = name.LastIndexOf '.'
         // The paths are import paths, `nanyx/text`, and a module of the library is named without its package: `text`.

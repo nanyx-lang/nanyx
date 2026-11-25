@@ -36,7 +36,7 @@ they stay is an [open question](#open-questions).
 
 Every function has the same name, argument order and meaning on each type that has it, and a function that makes a
 new collection gives one of the same type, except that a `Slice`'s give an `Array`, as `Slice.map` does. Each is
-written out per type, which is simpler and faster today, rather than once over the [`Iterable`](./lazy-sequences)
+written out per type, which is simpler and faster today, rather than once over the [`Iterable`](../deep-dives/lazy-sequences)
 context.
 
 The decision named "the queue" among the mutable types, but `Queue` is immutable, as `Stack` and the tries are. Where

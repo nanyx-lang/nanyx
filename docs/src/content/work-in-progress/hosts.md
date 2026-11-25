@@ -87,8 +87,8 @@ The [HTTP host](../advanced/hosts#the-http-host) is built: its entry is a `Reque
   ```
 
   The host takes the handler alone until a program needs `init`.
-- **Streamed bodies.** A body is a `string`. Streaming wants a lazy body, which depends on
-  [lazy sequences](./lazy-sequences).
+- **Streamed bodies.** A body is a `string`. Streaming wants a lazy body, such as a
+  [lazy sequence](../deep-dives/lazy-sequences).
 - **Serving more widely**: a server bound to other addresses than `localhost`.
 
 Routing, middleware and templates are libraries, not part of the host: a router is a function from routes to a
@@ -142,7 +142,8 @@ provides. .NET's Generic Host, with `IHostedService`, takes the second approach.
 
 - **Host configuration typing.** The `settings` of the manifest's `host` are checked against the settings the host
   declares in its manifest, with their defaults: a misspelt key is an error, and so is a value of another kind than its
-  default. Whether to check them against a record type the host exports, as Nanyx types are checked, is open.
+  default. Whether to check them against a record type the host exports, as Nanyx types are checked, is open
+  ([#2746](https://github.com/nanyx-lang/nanyx/issues/2746)).
 - **Host code in another language.** A browser host needs JavaScript beside the module. How does a host package carry
   it, and how does the build write it out? The playground host ships its runner in `packages/nanyx.playground.host/runner`,
   outside its `sources`, which the compiler built for the browser publishes with the page; a general mechanism is open.

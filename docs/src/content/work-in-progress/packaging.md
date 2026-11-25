@@ -14,7 +14,7 @@ tracked under the [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packa
 # Plan
 
 1. **The official linter as a shipped package**, once its contract exists
-   ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343), [Built-ins as packages](./built-ins-as-packages)).
+   ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
 2. **Ownership in the index.** Recording a namespace owner's GitHub account ID, so that a claim survives a rename,
    and the publishers an organisation grants ([Package ownership and locking](./package-ownership-and-locking)).
    The owner check compares a namespace with the repository owner's current login.

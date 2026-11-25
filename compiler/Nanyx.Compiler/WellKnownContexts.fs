@@ -3,8 +3,8 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// The well-known contexts: the prelude's contexts the compiler knows by name (\r?\n/// )
-/// in the docs' work in progress). Each has an instance of the compiler's own for the types whose structure gives one,
+/// The well-known contexts: the prelude's contexts the compiler knows by name (see "Common contexts" in the docs'
+/// Contexts page). Each has an instance of the compiler's own for the types whose structure gives one,
 /// and most have operators that are read through it: `Eq`, for `==` and `!=`, `Ord`, for `<`, `<=`, `>` and `>=`,
 /// and `Hash`, which has none. The set is closed. What is particular to each context's operators is in `EqualityOperators` and `OrderingOperators`;
 /// what they share is here: how a call that requires one finds it, and how an operator on a type with a variable in

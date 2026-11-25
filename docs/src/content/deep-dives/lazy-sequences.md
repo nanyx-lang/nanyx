@@ -7,7 +7,14 @@ order: 19
 What sequences do is described in [Sequences and queries](../advanced/sequences-and-queries),
 [Ranges](../tour/ranges), [Workflows](../advanced/workflows#yield-and-sequences) and
 [prelude: sequences](../stdlib/prelude-sequences). This page gives the design behind them and says how the compiler
-builds them. What is still open is on [Lazy sequences](../work-in-progress/lazy-sequences) in Work in progress.
+builds them. What is still open is in issues: inferring `Iterable` for a def that writes no type
+([#2003](https://github.com/nanyx-lang/nanyx/issues/2003)), a shorter way to write such a parameter
+([#2775](https://github.com/nanyx-lang/nanyx/issues/2775)), `seq.cache`
+([#2705](https://github.com/nanyx-lang/nanyx/issues/2705)), a range of chars
+([#2731](https://github.com/nanyx-lang/nanyx/issues/2731)), a `for` over only unbounded ranges
+([#2777](https://github.com/nanyx-lang/nanyx/issues/2777)) and fusing chains of `map` and `filter`
+([#2773](https://github.com/nanyx-lang/nanyx/issues/2773)). Compiling `seq { }` on async's state machines is on
+[Effect handlers](../work-in-progress/effect-handlers).
 
 # One type
 
