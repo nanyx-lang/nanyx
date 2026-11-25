@@ -62,3 +62,48 @@ let ``A failure early in a module leaves the defs after it solved on top of what
     let failing count = moduleOf ([ "def first: int = \"one\"" ] @ pipeDefs 1 count)
     Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' vs 'int'", "\"one\""), onlyDiagnostic (failing 20))
     compilesInLinearTime 80 failing
+
+/// A copy of the prelude's `proc` (`stdlib/nanyx/prelude-results.nyx`), as `prc`: checking it sets a constraint of the
+/// call in its `for` member aside for a while, though the def agrees once it is checked.
+let private procLike =
+    [ "context Prc = ("
+      "  try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r"
+      "  return: a -> #some(a) | r"
+      "  zero: #some() | r"
+      "  for: [d] (list(x), ([d] x, ([d] () -> #some(y) | s) -> #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s"
+      ")"
+      ""
+      "def prc: [c] ([Prc, c] () -> #some(b) | r) -> #some(b) | r = { block ->"
+      "  use Prc("
+      "    try = {"
+      "      | #some(value), continue -> continue(value)"
+      "      | failure, _ -> failure"
+      "    }"
+      "    return = { value -> #some(value) }"
+      "    zero = #some()"
+      "    for = { items, body, rest -> prcFor(items, body, rest) }"
+      "  ) in block()"
+      "}"
+      ""
+      "def prcFor"
+      "  : [c]"
+      "    list(a),"
+      "    ([c] a, ([c] () -> #some(b) | r) -> #some(b) | r),"
+      "    ([c] () -> #some(b) | r)"
+      "    -> #some(b) | r"
+      "  = {"
+      "    | [], _, rest -> rest()"
+      "    | [item, ...others], body, rest -> body(item, { prcFor(others, body, rest) })"
+      "  }" ]
+
+[<Fact>]
+let ``A constraint set aside while a def is checked leaves the defs after it solved on top of it`` () =
+    // The lists after it were solved on the copy of the constraints that agreed, which has no checkpoint, so they were
+    // solved from the start each time `solvedSoFar` had forgotten that list: the more defs after it, the more (#2709).
+    // Now what it adds is the same however many defs follow it.
+    let fullSolves (lines: string list) =
+        let result, count = Solving.countingFullSolves (fun () -> Compiler.compile (moduleOf lines))
+        Assert.Empty(result.Diagnostics)
+        count
+    let addedBefore count = fullSolves (procLike @ pipeDefs 1 count) - fullSolves (pipeDefs 1 count)
+    Assert.Equal(addedBefore 10, addedBefore 40)
