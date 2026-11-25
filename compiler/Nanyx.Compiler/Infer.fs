@@ -198,7 +198,18 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | LiteralExpr(StringLit text) when ExpectedLiterals.expectsChar state expr ->
         CharLiterals.typeOf expr.Span text |> Result.map (fun ty -> mkTypedExpr expr ty None None None, state)
     | InterpolatedString _ when ExpectedLiterals.expectsChar state expr -> CharLiterals.withHoles expr.Span
-    | LiteralExpr(UnitLit(_, unitName)) -> Error [ Units.literalError state expr.Span unitName ]
+    // A number with a unit is a measured value of the unit's dimension, stored as the number the code around it expects,
+    // as a plain literal is, or the one its dimension is constrained to (see `Units`, `NumericLiterals.check`).
+    | LiteralExpr(UnitLit(_, unitName) as literal) ->
+        match Units.unitNamed state expr.Span unitName with
+        | Error error -> Error [ error ]
+        | Ok info ->
+            let storage, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
+            let next =
+                match Units.constrainedStorage next info.Dimension with
+                | Some constrained -> addConstraintAt expr.Span storage constrained next
+                | None -> next
+            Ok (mkTypedExpr expr (TyMeasure(Dimension.ofBase info.Dimension, storage)) None None None, next)
     | LiteralExpr literal ->
         let ty, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
         Ok (mkTypedExpr expr ty None None None, next)

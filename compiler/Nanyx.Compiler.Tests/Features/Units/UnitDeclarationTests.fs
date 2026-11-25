@@ -111,8 +111,7 @@ let ``A unit declared twice is NYX0113 at the second`` () =
 
 [<Fact>]
 let ``A unit's name is apart from values: a value of the same name changes nothing`` () =
-    Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnitsNotChecked.Code, "500ms" ], reported (time + "def ms = 3\ndef x = 500ms\ndef y = ms + 1"))
+    Assert.Empty(reported (time + "def ms = 3\ndef x = 500ms\ndef y = ms + 1"))
 
 /// A module that exports `Time` and its units, but for `secret`.
 let private timeModule =
@@ -123,14 +122,14 @@ let ``An import brings in the units its module exports, aliased or not`` () =
     for import in [ "import mod"; "import mod as t" ] do
         let main = $"{import}\ndef x = 500ms\ndef y = 2secret\n"
         Assert.Equal<(string * string) list>(
-            [ DiagnosticCodes.UnitsNotChecked.Code, "500ms"; DiagnosticCodes.UnknownUnit.Code, "2secret" ],
+            [ DiagnosticCodes.UnknownUnit.Code, "2secret" ],
             reportedIn main (compileImporting timeModule main))
 
 [<Fact>]
 let ``An import that selects names brings in only the units it selects`` () =
     let main = "import mod as (Time, ms)\ndef x = 500ms\ndef y = 2us\n"
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnitsNotChecked.Code, "500ms"; DiagnosticCodes.UnknownUnit.Code, "2us" ],
+        [ DiagnosticCodes.UnknownUnit.Code, "2us" ],
         reportedIn main (compileImporting timeModule main))
 
 [<Fact>]
@@ -153,11 +152,9 @@ let ``Two imports that bring in units of one name are NYX0105 where the name is 
     let modules = [ "a.nyx", withMs "a" "Time"; "b.nyx", withMs "b" "Millis" ]
     let main = "import a\nimport b\ndef x = 500ms\ndef y = 2othera\nunit z: Time = 3ms\n"
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.AmbiguousName.Code, "500ms"; DiagnosticCodes.UnitsNotChecked.Code, "2othera"; DiagnosticCodes.AmbiguousName.Code, "3ms" ],
+        [ DiagnosticCodes.AmbiguousName.Code, "500ms"; DiagnosticCodes.AmbiguousName.Code, "3ms" ],
         reportedIn main (compileImportingAll modules main) |> List.sortBy (fun (_, text) -> main.IndexOf text))
     let selecting = "import a\nimport b as (Millis)\ndef x = 500ms\n"
-    Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnitsNotChecked.Code, "500ms" ], reportedIn selecting (compileImportingAll modules selecting))
+    Assert.Empty(reportedIn selecting (compileImportingAll modules selecting))
     let own = "import a\nimport b\nunit ms: Time = 1othera\ndef x = 500ms\n"
-    Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnitsNotChecked.Code, "500ms" ], reportedIn own (compileImportingAll modules own))
+    Assert.Empty(reportedIn own (compileImportingAll modules own))

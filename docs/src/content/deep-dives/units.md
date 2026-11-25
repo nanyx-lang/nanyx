@@ -5,8 +5,8 @@ order: 22
 ---
 
 [Units and dimensions](../work-in-progress/units-and-dimensions) in Work in progress has the design. This page says what
-the compiler does with it today: it reads all of it, checks the declarations of dimensions and units, and reads
-dimensions in types, but it does not type a number with a unit yet.
+the compiler does with it today: it reads all of it, checks the declarations of dimensions and units, reads dimensions
+in types, and types numbers with units, but it does not type arithmetic on measured values yet.
 
 # Reading
 
@@ -57,5 +57,22 @@ imported one, and reports:
 An import brings in the units its module declares with `export unit` (`ModuleLinking.exportedUnits`), unqualified, since
 a literal can't be written with a qualifier, or only those it selects. Two imports that bring in different units of one
 name make it ambiguous (`InferState.AmbiguousUnits`), which is reported as `NYX0105` only where the name is written
-(`Units.unitNamed`), unless the module declares a unit of that name itself. A unit of a literal the module knows is reported as
-[`NYX0285`](../standard-tools/errors#nyx0285), until numbers with units are typed.
+(`Units.unitNamed`), unless the module declares a unit of that name itself.
+
+# Numbers with units
+
+`Infer` types `500ms` as a measured value of `ms`'s dimension, `TyMeasure([Time, 1], s)`, whose storage `s` is recorded as
+a number literal's type is (`NumericLiterals.typeOf`), so it is the number the code around it expects, as a plain
+literal's is. A constrained dimension's literal is of the dimension's storage. One nothing settles is of the number it is
+written as: `int` for `500ms`, `float` for `0.5s` (`NumericLiterals.defaultType`).
+
+Once every type is known, `NumericLiterals.check` works out each one's number of base units exactly, the written number
+times its unit's `Scale`, and reads the literal as that plain number from then on (`ReadAs`), so the backend sees
+`500000000` where `500ms` is written and lays the measured value out as its storage. In an integer storage the number
+must be whole, so `1.5ns`, and `1ps` where `ns` is the base, are errors that say how to store it as a `float`, and it
+must fit the storage, as a plain literal must. A plain literal where a measured value is expected is an error: a number
+with no unit is never a measured value. `dbg` writes a measured value as its dimension around its number of base units,
+`Time(500000000)`.
+
+A number with a unit beside a value of a generic storage, `t + 5ms` in a `[Num(a)] Time(a)` function, is read as `fromInt`
+of its base units as a plain literal is, with the arithmetic on measured values (#2799).

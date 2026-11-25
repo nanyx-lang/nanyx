@@ -30,7 +30,7 @@ let internal literalType literal =
     | IntLit _ -> primitiveType "int"
     | FloatLit _ -> primitiveType "float"
     | BoolLit _ -> primitiveType "bool"
-    // Not checked yet: reported where it is written (see `DiagnosticCodes.UnitsNotChecked`).
+    // A number with a unit is a measured value, which `Infer` types with its unit's dimension.
     | UnitLit _ -> Unifier.errorType
 
 let internal listType elementTy = Lists.ofType elementTy
