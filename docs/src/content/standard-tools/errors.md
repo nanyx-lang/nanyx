@@ -2599,24 +2599,6 @@ def initial: char = "Ab"  -- error NYX0284: A char is one Unicode scalar value, 
 
 To fix it, write one character, or use a `string` where the value is more than one.
 
-# NYX0285: Units of measure not checked yet
-
-A program writes a number with a unit, such as `500ms`. The compiler checks the declarations of
-[dimensions and units](../work-in-progress/units-and-dimensions) but does not type a number with a unit yet, so it
-can't compile a program that writes one.
-
-```nanyx
-dimension Time
-
-@baseUnit unit ns: Time
-unit ms: Time = 1_000_000ns
-
-def timeout = 500ms  -- error NYX0285: A number with a unit is read but not checked yet, ...
-```
-
-To fix it, write the number without its unit, as `500` milliseconds, until numbers with units are checked. A space
-between a number and a name, as in `100 ms`, makes them a number and a name again.
-
 # NYX0286: Dimension without a base unit
 
 A dimension has no base unit, the unit its values are stored in, or a unit is neither its dimension's base unit nor a

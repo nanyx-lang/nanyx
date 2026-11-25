@@ -7,13 +7,8 @@ open NyxCompiler.InferState
 /// `UnitSyntax`). A dimension is a type: a private nominal one, generic in the number that stores it, `Time(a)`, unless
 /// it is constrained to one, as `dimension Bytes(int)` is, so it is exported, imported and written as a type is. A
 /// unit is a name of a kind of its own, with its dimension and how many of the dimension's base units it is, exactly
-/// (`InferState.Units`). The checker does not type a number with a unit yet, so it reports each where it is written.
+/// (`InferState.Units`), which a number with the unit is scaled by (see `NumericLiterals.check`).
 module internal Units =
-    /// The error for a number with a unit, `500ms`, of a unit the module knows, written at `span`.
-    let private literalNotChecked (span: SourceSpan) : Diagnostic =
-        Diagnostics.at DiagnosticCodes.UnitsNotChecked span
-            "A number with a unit is read but not checked yet, so a program can't use one: units of measure are being built"
-
     /// The error for `unitName`, written at `span` in a literal or a unit's definition, when the module knows no unit of
     /// that name.
     let private unknownUnit (span: SourceSpan) (unitName: Identifier) (known: Map<string, UnitInfo>) : Diagnostic =
@@ -39,12 +34,13 @@ module internal Units =
         | None, Some info -> Ok info
         | None, None -> Error (unknownUnit span unitName state.Units)
 
-    /// The error for a number with the unit `unitName`, written at `span`: NYX0285 for a unit `state` knows, until such
-    /// numbers are typed, or the error saying it knows none, or more than one.
-    let literalError (state: InferState) (span: SourceSpan) (unitName: Identifier) : Diagnostic =
-        match unitNamed state span unitName with
-        | Ok _ -> literalNotChecked span
-        | Error error -> error
+    /// The storage the dimension `dimension` is constrained to, as `dimension Bytes(int)` is to `int`, if it is.
+    let constrainedStorage (state: InferState) (dimension: NominalId) : Ty option =
+        state.TypeDefs
+        |> Map.values
+        |> Seq.tryFind (fun info -> info.IsDimension && TypeDefInfo.nominalId info = dimension)
+        |> Option.filter (fun info -> info.Parameters.IsEmpty)
+        |> Option.map _.Underlying
 
     /// The parameter a dimension that is not constrained is generic in: the number that stores it.
     let private storageParameter = "a"

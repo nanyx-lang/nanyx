@@ -13,20 +13,23 @@ module internal NumericLiterals =
     let private defaultType (literal: Literal) =
         match literal with
         | FloatLit _ -> TyPrimitive "float"
+        // A number with a unit is stored as the number it is written as: `0.5s` in a `float`, `500ms` in an `int`.
+        | UnitLit(number, _) when number.Decimal -> TyPrimitive "float"
         | _ -> TyPrimitive "int"
 
     /// The type of `literal`, written at `span` (as the expression `node`, unless it is a pattern), and `state` with it
-    /// recorded: a variable of its own for a number, and the literal's type for any other.
+    /// recorded: a variable of its own for a number, and the literal's type for any other. For a number with a unit, it
+    /// is the type of its storage, which the measured value's type is of (see `Units.literalType`).
     let typeOf (state: InferState) (span: SourceSpan) (node: NodeId option) (literal: Literal) : Ty * InferState =
         match literal with
         | IntLit _
-        | FloatLit _ ->
+        | FloatLit _
+        | UnitLit _ ->
             let ty, next = freshVar state
             let recorded = { Type = ty; Value = literal; At = span; Node = node; Operator = None; Requires = None }
             ty, { next with NumericLiterals = recorded :: next.NumericLiterals; UnsettledLiterals = recorded :: next.UnsettledLiterals }
         | StringLit _
-        | BoolLit _
-        | UnitLit _ -> TypeResolution.literalType literal, state
+        | BoolLit _ -> TypeResolution.literalType literal, state
 
     /// Whether `ty` is a type that is known not to be a number. A type variable, an open record and a nominal type
     /// are left to unification, which reports them if they are not numbers; the error type is what failed to check, and
@@ -273,8 +276,49 @@ module internal NumericLiterals =
         { Diagnostics.at DiagnosticCodes.TypeMismatch span $"'{value}' is an integer literal, so it cannot be a '{tyText}': write '{value}.0'" with
             Fixes = [ { Title = $"Write `{value}.0`"; Edits = [ { Span = span; NewText = $"{value}.0" } ] } ] }
 
+    /// The error for the plain number literal `literal`, at `span`, where a value of the dimension `dimension` is
+    /// expected: a number with no unit is never a measured value.
+    let private withoutUnit (span: SourceSpan) (literal: Literal) (dimension: Dimension) : Diagnostic =
+        let written = match literal with IntLit value -> string value | FloatLit value -> string value | _ -> "it"
+        Diagnostics.at DiagnosticCodes.TypeMismatch span
+            $"'{written}' has no unit, so it is no '{Dimension.text dimension}': write it with a unit of '{Dimension.text dimension}', or `zero` for nothing of it"
+
+    /// How many base units of its dimension the number with a unit `number unitName` is, exactly.
+    let private inBaseUnits (state: InferState) (number: WrittenNumber) (unitName: Identifier) : Rational =
+        let scale = state.Units |> Map.tryFind unitName |> Option.map _.Scale |> Option.defaultValue Rational.one
+        Rational.multiply (Rational.ofWritten number) scale
+
+    /// What the number with a unit `number unitName`, at `span`, stored as `ty`, is at run time, the plain number of base
+    /// units it is, or why it can't be stored so: a fraction of a base unit is no integer, and one outside the
+    /// storage's range doesn't fit it.
+    let private storedAs (state: InferState) (span: SourceSpan) (number: WrittenNumber) (unitName: Identifier) (ty: Ty) : Result<Literal, Diagnostic> =
+        let value = inBaseUnits state number unitName
+        let baseUnit =
+            state.Units
+            |> Map.tryFind unitName
+            |> Option.bind (fun info -> state.Units |> Map.tryFindKey (fun _ other -> other.Dimension = info.Dimension && other.Scale = Rational.one))
+            |> Option.defaultValue "base unit"
+        let written = $"{WrittenNumber.text number}{unitName}"
+        match Unifier.unalias ty with
+        | TyPrimitive "int"
+        | SizedIntegerType _ when not (Rational.isWhole value) ->
+            let fix =
+                if number.Decimal then "store it as a `float`"
+                else $"write it as a decimal, `{WrittenNumber.text { number with Decimal = true; Digits = number.Digits * 10I; Exponent = number.Exponent - 1 }}{unitName}`, to store it as a `float`"
+            Error (
+                Diagnostics.at DiagnosticCodes.TypeMismatch span
+                    $"'{written}' is {Rational.text value} of a '{baseUnit}', which is no whole number of '{baseUnit}', so it can't be stored as '{Unifier.tyToString ty}': {fix}")
+        | TyPrimitive "int"
+        | SizedIntegerType _ ->
+            let integer = IntLit value.Numerator
+            match outOfRange { Type = ty; Value = integer; At = span; Node = None; Operator = None; Requires = None } ty with
+            | Some message -> Error (Diagnostics.at DiagnosticCodes.LiteralOutOfRange span $"'{written}' is {value.Numerator} '{baseUnit}': {message}")
+            | None -> Ok integer
+        | _ -> Ok (FloatLit (float value.Numerator / float value.Denominator))
+
     /// `state` with every literal settled, and each that cannot be of the type it has, as the constraints solve it, an
-    /// error. An integer literal where a floating-point type is expected is an error here, with a fix. One of any other
+    /// error. A number with a unit is stored as its number of base units, the plain literal it is read as from then on
+    /// (`ReadAs`). An integer literal where a floating-point type is expected is an error here, with a fix. One of any other
     /// type of another kind is constrained to its default type at the literal, so that the conflict is reported as any
     /// other is, with the module's constraints. One out of its type's range is an error here. An error here that is at
     /// an expression fails to check there, and the errors of the others, which are patterns, are given back.
@@ -290,6 +334,16 @@ module internal NumericLiterals =
         |> List.fold (fun (current: InferState, errors) literal ->
             let ty = Unifier.applySolved subst literal.Type
             match literal.Value, Unifier.unalias ty, outOfRange literal ty with
+            | UnitLit(number, unitName), (TyPrimitive ("int" | "float") | SizedNumberType _ as resolved), _ ->
+                match storedAs current literal.At number unitName resolved, literal.Node with
+                | Ok stored, Some node -> { current with ReadAs = current.ReadAs |> Map.add node (Expression.at literal.At (LiteralExpr stored)) }, errors
+                | Ok _, None -> current, errors
+                | Error error, _ -> report literal error (current, errors)
+            | UnitLit _, resolved, _ when Unifier.isError resolved -> current, errors
+            | UnitLit _, _, _ -> addConstraintAt literal.At literal.Type (defaultType literal.Value) current, errors
+            // Its storage is the literal's kind, so that what the measured value requires of it is found, and not reported too.
+            | (IntLit _ | FloatLit _), TyMeasure(dimension, storage), _ ->
+                report literal (withoutUnit literal.At literal.Value dimension) (addConstraintAt literal.At storage (defaultType literal.Value) current, errors)
             | IntLit value, TyPrimitive ("float" | "F32"), _ -> report literal (integerAsFloat literal.At value ty) (current, errors)
             | _ when not (ofItsKind literal ty) -> addConstraintAt literal.At literal.Type (defaultType literal.Value) current, errors
             | _, _, None -> current, errors
