@@ -69,3 +69,13 @@ let ``A function of 8,000 locals compiles and runs in time that grows with their
         let defs = [ for i in 1..n -> $"  def x{i} = x0 + 1" ] |> String.concat "\n"
         $"def run: int -> int = {{ x0 ->\n{defs}\n  x{n}\n}}\n\nprintln(run(0))\n"
     runsInLinearTime 8_000 source (fun _ -> "1\n")
+
+// A `memory` block of thousands of stores is one chain of that many links, which the inliner simplifies in each function
+// it is inlined into. A body is simplified until a pass changes nothing, and gone over no more once nothing is inlined
+// into it, so the chain compiles in time that grows with its length (#2408, #2579).
+[<Fact>]
+let ``A memory block of 4,000 stores compiles and runs in time that grows with their number`` () =
+    let source n =
+        let stores = String.replicate n "    x := x + 1\n"
+        $"def run: int -> int = {{ start ->\n  memory {{\n    mut x = start\n{stores}    x\n  }}\n}}\n\nprintln(run(0))\n"
+    runsInLinearTime 4_000 source (fun n -> $"{n}\n")

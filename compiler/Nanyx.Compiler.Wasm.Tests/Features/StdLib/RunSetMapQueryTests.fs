@@ -53,7 +53,7 @@ let ``Run - set and map any and all stop at the first element that settles them`
     v < 2
   }))"""
     runSource source
-    |> assertRan "any 1\nany 2\ntrue\nall 1\nall 2\nfalse\nany a\nany b\ntrue\nall a\nall b\nfalse\n"
+    |> assertRan "any 1\nany 2\ntrue\nall 1\nall 2\nfalse\nany b\ntrue\nall b\nfalse\n"
 
 [<Fact>]
 let ``Run - set filterMap keeps the some values, once each`` () =

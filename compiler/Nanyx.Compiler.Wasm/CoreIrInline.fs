@@ -378,14 +378,17 @@ let inlineCalls (start: string option) (exported: string list) (kept: Set<string
             let inliner = Inliner(current, cyclic, once, placed, prepare, exportedNames, f)
             let mutable body = f.Body
             let mutable round = 0
-            let mutable changed = true
-            while changed && round < rounds do
-                let simplified, didSimplify = CoreIrSimplify.simplify current { f with Body = body }
+            // Whether the body is settled (see `CoreIrSimplify.simplify`) and nothing was inlined into it since: another
+            // round would then simplify nothing and inline nothing, so it is gone over no more (#2579).
+            let mutable settled = false
+            while not settled && round < rounds do
+                let simplified, simplifiedSettled = CoreIrSimplify.simplify current { f with Body = body }
                 let next, didInline = inliner.Round simplified
                 body <- next
-                changed <- didSimplify || didInline
+                settled <- simplifiedSettled && not didInline
                 round <- round + 1
-            current.[name] <- { f with Body = fst (CoreIrSimplify.simplify current { f with Body = body }) }
+            let body = if settled then body else fst (CoreIrSimplify.simplify current { f with Body = body })
+            current.[name] <- { f with Body = body }
     // The functions `name` calls are inlined into first, in order, so that a long chain of calls is not gone down
     // recursively.
     and prepare (name: string) =

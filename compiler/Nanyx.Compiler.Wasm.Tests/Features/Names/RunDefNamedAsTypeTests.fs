@@ -25,7 +25,7 @@ println(map(4) + list(4) + string(4))
 println((empty \map.length) + map.length(none()))
 println(list.length([1, 2]) + string.length("abc"))
 """
-    |> assertRan "[1 => [1, 3], 0 => [2]]\n15\n0\n5\n"
+    |> assertRan "[0 => [2], 1 => [1, 3]]\n15\n0\n5\n"
 
 [<Theory>]
 [<InlineData(true)>]

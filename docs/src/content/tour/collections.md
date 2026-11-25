@@ -74,6 +74,8 @@ def lookup = ["a" => 1, "b" => 2]
 def unique: set(int) = [1, 2, 2, 3]
 ```
 
+A map gives its entries, and a set its elements, in an order of its own: `map.toList`, `for` and printing all walk them in the order of their hashes. It is the same for two maps with the same keys, however they were built, but it is unspecified, so sort for an order you can rely on: `map.toList(lookup) \list.sortBy { entry -> entry.0 }`.
+
 The functions on them are on the standard library's [lists](../stdlib/prelude-lists), [maps and sets](../stdlib/prelude-maps), [array](../stdlib/array), [stack](../stdlib/stack), [queue](../stdlib/queue) and [trie](../stdlib/trie) pages. A stack, a queue and a trie are immutable, as a list is: each operation that adds or takes away gives back a new one, and the old one still holds what it held.
 
 Each collection combines its elements into one value with `fold`, from a starting value, or with `reduce`, from its first element. An empty collection has no first element, so `reduce` gives `#some` of the result, or `#none` for an empty one. For a total, a list has `sum` and `product`, which give `0` and `1` for an empty list:

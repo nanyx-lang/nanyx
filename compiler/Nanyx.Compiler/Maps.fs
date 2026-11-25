@@ -10,6 +10,21 @@ module Maps =
     /// The function a call of a map is: `m(k)` is `map.get(m, k)`.
     let lookup = typeName + ".get"
 
+    /// The name of the type a map is held as, `__mapStore(k, v)`, which only the prelude writes.
+    let storeName = "__mapStore"
+
+    /// The type a map from `key` to `value` is held as: the list of its entries, each a tuple of a key and its value.
+    /// The shape is defined here, and every algorithm that builds or reads it is in the prelude, in
+    /// `stdlib/nanyx/prelude-maps.nyx`, which turns a map into its store and back through two intrinsics (see
+    /// `Intrinsics`): whoever changes one changes the other. The backend lays a map out as its store.
+    let storeOf (key: Ty) (value: Ty) =
+        let entry = TyRecord(Map.ofList [ "0", key; "1", value ], FieldOrder.none)
+        TyAlias(storeName, [ key; value ], Lists.ofType entry)
+
+    /// The function that gives a map's entries, each a key and its value, as a list: how the compiler reads a map's
+    /// entries, as a `for` loop and `dbg` do, so that only the prelude knows how a map is held.
+    let toList = typeName + ".toList"
+
     /// Whether `name` names the type.
     let isTypeName (name: string) = name = typeName
 

@@ -23,10 +23,26 @@ open questions are on [Maps and sets](../work-in-progress/maps-and-sets) in Work
   `Infer.fs`, which reads a call of an array as `array.at` the same way) and records it in `ReadAs`, and `ExpressionRewrites.writeAsRead` writes it as that call for the backend.
   A call of a field that holds a function, `statement.setInt(position, value)`, is read the same way, as a block that
   keeps the field's value in a local and calls it (`FieldCalls`, [#1513](https://github.com/nanyx-lang/nanyx/issues/1513)).
-- **Representation.** A map holds the list of its entries, each key once, in the order the keys were first added, and
-  a set the list of its elements. The prelude builds and reads them through four intrinsics,
-  `__nanyx_map_of_entries`, `__nanyx_map_entries`, `__nanyx_set_of_elements` and `__nanyx_set_elements`, which the
-  backend compiles to nothing: a `map(k, v)` is held as a `list((k, v))`, and a `set(a)` as a `list(a)`.
+- **Representation.** A map is held as its *store*, a `__mapStore(k, v)`, and a set as a `__setStore(a)`. These are
+  types only the prelude writes, and their `__` keeps them out of completion, hovers and the standard library's pages;
+  a map's type is always shown as `map(k, v)`. The shape of a store is defined once, by `Maps.storeOf` and
+  `Sets.storeOf` in `Nanyx.Compiler`, and every algorithm that builds or reads one is in the prelude,
+  `stdlib/nanyx/prelude-maps.nyx`: whoever changes one changes the other. The prelude turns a map into its store and
+  back through four intrinsics, `__nanyx_map_of_store`, `__nanyx_map_store`, `__nanyx_set_of_store` and
+  `__nanyx_set_store`, which the backend compiles to nothing, and the backend lays a map out as its store.
+- **The store** is, for now, the list of a map's entries, each key once, or of a set's elements, in the order of the
+  keys' hashes. Two hashes are ordered by their lowest five bits, then the five above those, and so on, as a walk of a
+  trie that reads a hash five bits at a time from its low end meets them; keys with the same hash are ordered by the
+  compiler's own order of their structure (`hashOrder` and `keyOrder` in `prelude-maps.nyx`), which the backend has
+  for every type a key can be (`CoreIrOrdering.fs`): tags by their numbers and then their payloads, and a recursive
+  type as what it is made of, though neither has an `Ord`, so `<` on them is still an error. A tag's number, and so
+  its hash too, is the program's own: the order is the same throughout a run, but not from one program to another,
+  and nothing may rely on it beyond a run. So two maps with the same keys hold them in the same order however they
+  were built. The order is not one a program can rely on, and the
+  docs call it unspecified.
+- **The compiler reads a map only through the prelude.** It reads a map's entries or a set's elements through the
+  prelude's `map.toList` and `set.toList` (`Maps.toList` and `Sets.toList`), which linking always keeps: a `for` loop
+  over a map walks the list `toList` gives (`Loops.fs`), and so does `dbg` (`CoreIrLowerDbg.fs`).
 - **`==` compares contents, in any order** ([#618](https://github.com/nanyx-lang/nanyx/issues/618)). The compiler's
   own comparison, which works by structure, would compare the lists underneath in order, so a map or a set, and any
   structure that holds one, is always compared by an `==` the compiler derives from its parts (`MapShape` and

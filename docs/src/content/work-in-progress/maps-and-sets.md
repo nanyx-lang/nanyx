@@ -22,10 +22,10 @@ need the maintainer's answer; the defaults the code takes until then are marked.
 
 # What is left: hash-based maps
 
-The list of entries is to become a persistent hash trie written in the prelude, behind the same intrinsics, so
-nothing outside the prelude changes. A trie is a recursive type, `#leaf(...) | #node(Trie(k, v), Trie(k, v))`, which a
-type alias can be. This waits on
-[open question 2](#open-questions), which decides the order a hash-based map gives its entries in.
+The list of entries is to become a persistent hash trie written in the prelude
+([#2642](https://github.com/nanyx-lang/nanyx/issues/2642)). The list already holds its entries in the order the trie
+will walk them, the order of their keys' hashes, which is unspecified
+([Representation](../deep-dives/maps-and-sets#how-it-works)), so the trie will not change it.
 
 # Open questions
 
@@ -35,16 +35,7 @@ These are the choices the docs leave open. The code takes the marked default unt
    - *(Default)* The later value wins, as in `map.fromList`, JavaScript, Python and F#.
    - An error, or a warning, when two keys are the same constant. Catches typos, but only for constant keys.
    - **Recommended:** the later value wins, plus a warning for two equal constant keys, added with the linters.
-2. **The order of a map's entries.** What `map.toList` and `for` give, and so what `==` and `hash` on maps see.
-   - *(Default, while maps hold a list)* The order the keys were first added, which a list gives for free.
-   - The order of the keys' hashes. Deterministic for a given set of keys whatever order they were added in, so
-     equal maps have one form, and `hash` on maps can be derived from structure, and `==` could compare in order
-     rather than by lookups. The order is meaningless to a reader, and changes if `hash` does.
-   - Insertion order kept by a hash map (Python's `dict`). Predictable, but a persistent version needs a second
-     index, and equal maps still differ in order.
-   - **Recommended:** the order of the keys' hashes once maps are hash tries, documented as unspecified, with
-     `map.toList \list.sortBy(...)` for a chosen order.
-3. **Is a map a function?** A map can be *called*, but it is not a function value: it cannot be passed where a
+2. **Is a map a function?** A map can be *called*, but it is not a function value: it cannot be passed where a
    function is expected, or annotated with a function type.
    - *(Default)* Not a function: write `{ k -> m(k) }` where one is needed.
    - A map is assignable to its lookup's function type: the type checker accepts a `map(k, v)` where a

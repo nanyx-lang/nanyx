@@ -197,5 +197,12 @@ index and one to read a byte at every place it tried. Give it a name and type in
 a WebAssembly body of the same name in `runtimeHelpers`, and list it, with the helpers it calls, in
 `helperDependencies` (the order of that list is the order helpers are emitted in, so add new ones at the end).
 
+An intrinsic can also stand for data. `float.fromString` reads a decimal of up to 19 significant digits with the
+Eisel–Lemire algorithm, written in Nanyx in `prelude-numbers.nyx`, which needs the top 128 bits of every power of five
+from 5^-342 to 5^308. `__nanyx_power_of_five` gives one 64-bit word of that table. The compiler works the table out
+with big integers (`Nanyx.Compiler.Wasm/PowersOfFive.fs`) and places it, 10,416 bytes, in the data of only the modules
+that call the intrinsic (`UsesPowersOfFive` in `CoreIrFacts`), after their other static data, with its address in a
+global. A program that never reads a float doesn't carry it.
+
 Format what you write before committing it: CI fails if any file under `stdlib/` is not formatted (see
 [AGENTS.md](https://github.com/nanyx-lang/nanyx/blob/main/AGENTS.md#nanyx-code)).

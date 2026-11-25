@@ -32,6 +32,18 @@ let variables (ty: Ty) : int list =
     | TyFunc(input, _, _) -> ofFunctions input |> List.distinct
     | _ -> []
 
+/// The variables among the contexts of any function in `ty`, or that a type generic in contexts carries: those a work
+/// variable can stand for, as it stands for contexts.
+let contextVariables (ty: Ty) : Set<int> =
+    let rec visit (found: Set<int>) (ty: Ty) : Set<int> =
+        let found =
+            match ty with
+            | TyFunc(_, _, contexts)
+            | TyContexts contexts -> contexts |> List.fold (fun (found: Set<int>) context -> match context with TyVar v -> found.Add v.Id | _ -> found) found
+            | _ -> found
+        Ty.fold visit found ty
+    visit Set.empty ty
+
 /// Whether the contexts `contexts`, what a work variable stands for, have a `memory` block's `Memory`.
 let holdsMemory (contexts: Ty) : bool =
     FunctionContexts.flatten [ contexts ]
