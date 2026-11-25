@@ -126,7 +126,7 @@ let ``A handler reads the time through the host's Clock`` () =
 @entry
 def main: [Clock] Request -> Response = { _ ->
   def start = ticks()
-  Response.text(200, "{now()} {ticks() >= start}")
+  Response.text(200, "{now() \since(Instant.epoch) // 1ms} {ticks() >= start}")
 }
 """
     let before = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()

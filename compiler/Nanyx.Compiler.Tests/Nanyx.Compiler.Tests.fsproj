@@ -41,6 +41,7 @@
     <Compile Include="Features\Units\MeasuredArithmeticTests.fs" />
     <Compile Include="Features\Units\MeasuredDisplayTests.fs" />
     <Compile Include="Features\Units\PreludeTimeTests.fs" />
+    <Compile Include="Features\Units\InstantTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />

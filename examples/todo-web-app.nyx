@@ -8,12 +8,11 @@ import nanyx/clock as (Clock)
 
 export type TodoId = int
 
--- `dateAdded` is milliseconds since 1970, as `Clock.now` gives it
 export type Todo = (
   id: TodoId
   description: string
   completed: bool
-  dateAdded: int
+  dateAdded: Instant
 )
 
 export type TodoError =

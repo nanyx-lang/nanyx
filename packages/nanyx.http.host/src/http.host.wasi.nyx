@@ -38,7 +38,7 @@ export def run
     use Random(bits = { _ -> wasiRandom.bits() })
 
     use Clock(
-      now = { _ -> clocks.timeOfDay() }
+      now = { _ -> Instant.epoch \plus(clocks.timeOfDay()) }
       ticks = { _ -> clocks.ticks() }
       sleep = { time -> clocks.sleepFor(wholeMilliseconds(time)) }
     )

@@ -40,7 +40,7 @@ let ``race gives what the first to finish gave, and a loser's sleep returns at o
 
 def started = ticks()
 println(fastest())
-println(ticks() - started < 30_000)"""
+println(ticks() - started < 30s)"""
 
 /// A server that holds its answer to `/slow` until the test is done, so a request to it ends only by being
 /// cancelled, and answers anything else at once.

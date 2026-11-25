@@ -113,6 +113,6 @@ let ``A script value that needs a context is the one its statements name, though
         """def start = ticks()
 def await = ticks() - start
 
-println(await >= 0)
+println(await >= 0ns)
 """
     runSource source |> assertRan "true\n"

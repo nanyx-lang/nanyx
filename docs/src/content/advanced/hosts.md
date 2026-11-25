@@ -53,7 +53,7 @@ The console host, `nanyx.cli.host`, runs command-line programs. It provides seve
 - [`Http`](../stdlib/client) makes HTTP requests, through the functions of the shipped package `nanyx.http` ([`http`](../stdlib/http)). Each call waits for its response.
 - [`Async`](../stdlib/async) lets a function wait. The calls of `nanyx.fs` and `nanyx.http` wait, so they require it, and so does every function that calls them.
 - [`Random`](../stdlib/random) gives random numbers, drawn from the operating system's random source, through the functions of `nanyx/random`. `random.seeded` gives the same numbers on every run instead.
-- [`Clock`](../stdlib/clock) gives the time of day, `now()`, in Unix milliseconds, and `ticks()`, milliseconds that never go backwards, for timing.
+- [`Clock`](../stdlib/clock) gives the time of day, `now()`, an `Instant`, and `ticks()`, a `Time(int)` that never goes backwards, for timing.
 
 The host has a _prelude_: a module whose exports every module of the program sees without importing them. The console host's brings in `Async`, `Clock`, `Console`, `Env`, `FileSystem`, `Http`, `Random`, `print`, `println`, `eprint` and `eprintln`, so a program uses them with no import:
 

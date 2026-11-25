@@ -22,14 +22,14 @@ export def systemBits: [HostRuntime] () -> int = { _ ->
   bits
 }
 
---| The time in milliseconds on WASI's clock `clock`: 0, the time of day, or 1, the monotonic clock,
-  which never goes backwards. `clock_time_get` gives nanoseconds.
-export def millisecondsOn: [HostRuntime] I32 -> int = { clock ->
+--| The time on WASI's clock `clock`, which `clock_time_get` gives in nanoseconds: 0, the time of
+  day, since the start of 1970, or 1, the monotonic clock, which never goes backwards.
+export def timeOn: [HostRuntime] I32 -> Time(int) = { clock ->
   -- WASI writes the time to an address that is a multiple of 8, which a block needn't start at.
   def block = allocate(16)
   def at = aligned8(block)
-  ignore(clockTimeGet(clock, 1_000_000, at))
+  ignore(clockTimeGet(clock, 1, at))
   def nanoseconds = readI64(at)
   free(block)
-  nanoseconds // 1_000_000
+  nanoseconds * 1ns
 }
