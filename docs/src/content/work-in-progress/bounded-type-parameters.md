@@ -50,8 +50,8 @@ function that mentions the type. Haskell's `data Num a => Length a` was like tha
 function's requirements from the generic types in its signature, as this page proposes.
 
 A value that hides its type and carries its instance instead, such as a list of things that can each be printed,
-is a different feature (an existential type) and not part of this proposal. A record of functions does that job
-today:
+is a different feature (an [existential type](./existential-types)) and not part of this proposal. A record of
+functions does that job today:
 
 ```nanyx fragment
 type Printable = (show: () -> string)
