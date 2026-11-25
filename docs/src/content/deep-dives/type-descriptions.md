@@ -6,8 +6,12 @@ order: 16
 
 A `match` on a `Type(a)` inspects the type it stands for, as [Inspecting a type](../tour/functions#inspecting-a-type)
 describes. This page gives the design behind type arguments and descriptions, and says how the compiler checks a match
-on one and what it compiles to. What is still planned is on
-[Type members and reflection](../work-in-progress/type-members-and-reflection) in Work in progress.
+on one and what it compiles to. What is still planned is in issues: a nominal type of
+the caller's own module through `Typed` ([#2382](https://github.com/nanyx-lang/nanyx/issues/2382)), a type's own
+instance of a library's context winning over its description
+([#2721](https://github.com/nanyx-lang/nanyx/issues/2721)), `dbg`, interpolation and `==` as library code over
+descriptions, decided for later ([#2000](https://github.com/nanyx-lang/nanyx/issues/2000)), and
+deserialisation-only constructors ([#2001](https://github.com/nanyx-lang/nanyx/issues/2001)).
 
 # Design
 

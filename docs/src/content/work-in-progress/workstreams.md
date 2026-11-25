@@ -28,13 +28,12 @@ the backlog:
 | Language server and editor | [Language server and editor](./language-server) | [`lsp`](https://github.com/nanyx-lang/nanyx/labels/lsp) |
 | Packaging | [Packaging](./packaging) | [`packaging`](https://github.com/nanyx-lang/nanyx/labels/packaging) |
 | Formatter | [Formatter](../deep-dives/formatter) | [`formatting`](https://github.com/nanyx-lang/nanyx/labels/formatting) |
-| Refactorings | [Refactorings](./refactorings) | [`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) |
+| Refactorings | [Refactorings](../deep-dives/refactorings) | [`refactoring`](https://github.com/nanyx-lang/nanyx/labels/refactoring) |
 | Code quality | — | [`code quality`](https://github.com/nanyx-lang/nanyx/labels/code%20quality) |
 
-The compilation workstream has pages of its own for the larger pieces of its design: [the parser](./parser),
-[deferred errors](./deferred-errors),
-[tail calls](./tail-calls), [memory management](./memory-management), [inlining](./inlining)
-and [lazy sequences](./lazy-sequences). How the standard library is built is in
+The compilation workstream has pages of its own for the larger pieces of its design:
+[deferred errors](./deferred-errors), [memory management](./memory-management) and
+[lazy sequences](./lazy-sequences). How the standard library is built is in
 [Standard library implementation](../deep-dives/standard-library-implementation), and how the CLI is built in
 [The `nanyx` command](../deep-dives/command-line); what the CLI does is on
 [The nanyx command](../standard-tools/command-line).
