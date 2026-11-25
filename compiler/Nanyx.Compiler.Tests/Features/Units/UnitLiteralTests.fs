@@ -69,8 +69,14 @@ let ``A number with a unit that doesn't fit its storage is NYX0229`` () =
 
 [<Fact>]
 let ``A number with no unit is never a measured value`` () =
-    let found = reported "def isLong: Time -> bool = { t -> true }\ndef x = isLong(0)"
-    Assert.Contains((DiagnosticCodes.TypeMismatch.Code, "0"), found)
+    // Only the mismatch: the storage of `isLong`'s generic `Time` is the literal's kind where the call looks for `Num`
+    // of it, so the context is found, not reported missing too (#2804).
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.TypeMismatch.Code, "0" ],
+        reported "def isLong: Time -> bool = { t -> true }\ndef x = isLong(0)")
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.TypeMismatch.Code, "0.5" ],
+        reported "def isLong: Time -> bool = { t -> true }\ndef run = { -> isLong(0.5) }")
     let _, message, _ =
         (Compiler.compile (withFinalNewline (dimensions + "def x: Time(int) = 0"))).Diagnostics
         |> List.map (fun diagnostic -> diagnostic.Code, diagnostic.Message, ())
