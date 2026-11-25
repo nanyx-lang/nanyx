@@ -9,21 +9,42 @@ open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 open Transpiler.Wasm.CoreIrLowerInput
 
+/// The type of the member `memberName` of `context`, a parameterised context applied to types, as its declaration
+/// writes it at those types. None for a context with no such member.
+let private memberTypeOf (layouts: ContextLayouts) (context: Ty) (memberName: string) : Ty option =
+    match context with
+    | TyApply(name, args) ->
+        layouts.Parameterised
+        |> Map.tryFind name
+        |> Option.bind (fun (parameters, members) ->
+            members
+            |> List.tryFind (fst >> (=) memberName)
+            |> Option.map (fun (_, declared) ->
+                let bindings = List.zip (List.truncate args.Length parameters) (List.truncate parameters.Length args) |> List.map (fun (v, ty) -> v.Id, ty) |> Map.ofList
+                substitute bindings declared))
+    | _ -> None
+
 /// Where the call at `node` through a function value finds its member of the key `key`, given the keys of the members
-/// in scope there: as the type checker found the context at the call, by the context's place among those the callee's
-/// type writes, at the call's types (`subst` applied, see `LowerInput.LocalCallees`). None for the member of a context
-/// without parameters, or of one the type checker found nothing for there, or found in scope by a key not in scope.
-let foundAt (input: LowerInput) (subst: Map<int, Ty>) (node: NodeId) (scopeKeys: Set<ContextMemberKey>) (key: ContextMemberKey) : ContextArgument option =
+/// in scope there, with the type the member is at: as the type checker found the context at the call, by the context's
+/// place among those the callee's type writes, at the call's types (`subst` applied, see `LowerInput.LocalCallees`).
+/// The type is needed to pass a generic function as the member, as the compiler's own `==` of `Eq(int)` is. None for
+/// the member of a context without parameters, or of one the type checker found nothing for there, or found in scope
+/// by a key not in scope.
+let foundAt (input: LowerInput) (subst: Map<int, Ty>) (node: NodeId) (scopeKeys: Set<ContextMemberKey>) (key: ContextMemberKey) : (ContextArgument * Ty option) option =
     match key, input.LocalCallees |> Map.tryFind node, input.CalleeTypes |> Map.tryFind node with
     | InstanceMember(instance, memberName), Some (contexts, lambdaTy), Some calleeTy ->
         let bindings = try bindScheme Map.empty lambdaTy (substitute subst calleeTy) with CannotLower _ -> Map.empty
         contexts
-        |> List.tryFindIndex (fun context -> typeKeyOfType (substitute bindings context) = Some instance)
-        |> Option.bind (fun index -> input.FoundMember node index memberName scopeKeys)
-        |> Option.bind (function
-            | Choice1Of2 inScope when scopeKeys.Contains inScope -> Some (MemberInScope inScope)
-            | Choice1Of2 _ -> None
-            | Choice2Of2 argument -> Some argument)
+        |> List.map (substitute bindings)
+        |> List.indexed
+        |> List.tryFind (fun (_, context) -> typeKeyOfType context = Some instance)
+        |> Option.bind (fun (index, context) ->
+            input.FoundMember node index memberName scopeKeys
+            |> Option.bind (function
+                | Choice1Of2 inScope when scopeKeys.Contains inScope -> Some (MemberInScope inScope)
+                | Choice1Of2 _ -> None
+                | Choice2Of2 argument -> Some argument)
+            |> Option.map (fun argument -> argument, memberTypeOf input.ContextLayouts context memberName))
     | _ -> None
 
 /// Each of `members`, those a lifted local function takes by key, of the parameterised contexts it requires, `contexts`

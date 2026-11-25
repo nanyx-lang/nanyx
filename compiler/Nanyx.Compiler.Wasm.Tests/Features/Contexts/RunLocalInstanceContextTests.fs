@@ -196,3 +196,21 @@ println(outer(3))
 println("{single(3)}")
 """
     runSource (normalized source) |> assertRan "12 ss\n9\n"
+
+[<Fact>]
+let ``Run - a local function that requires Eq, Ord or Hash is passed the compiler's own at a built-in type`` () =
+    // The compiler's own member is a generic function, passed at the member's type at the call (#2809).
+    let source = """type Obj = protected (n: int, junk: int)
+def Obj.`==` = { x: Obj, y: Obj -> x.n == y.n }
+@entry
+def main = {
+  def same: [Eq(t)] t, t -> bool = { a, b -> a == b }
+  println("{same(1, 1)} {same(1, 2)} {same("a", "a")} {same([1, 2], [1, 3])}")
+  println(same(Obj(n = 1, junk = 1), Obj(n = 1, junk = 2)))
+  def less: [Ord(t)] t, t -> bool = { a, b -> a < b }
+  println("{less(1, 2)} {less("b", "a")} {less([1], [1, 0])}")
+  def hashed: [Hash(t)] t -> bool = { a -> hash(a) == hash(a) }
+  println(hashed(3))
+}
+"""
+    runSource (normalized source) |> assertRan "true false true false\ntrue\ntrue false true\ntrue\n"
