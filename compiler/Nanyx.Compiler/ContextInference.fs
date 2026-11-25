@@ -35,13 +35,26 @@ module internal ContextInference =
             | TyMeasure(_, scope) -> collect scope
         collect ty |> List.distinctBy _.Id
 
-    /// A name for each type variable of `ty`, by its id: `a`, `b`, `c`, ..., in the order they appear, then `a1`, `b1`.
-    let varNames (ty: Ty) : Map<int, string> =
-        varsInOrder ty
+    /// The type variables of `ty` in the order `varsInOrder` gives them, then those in the arguments of its nominal
+    /// types, which that leaves out: the `a` of `Box(a)`, and the `d` of `[d] seq(b)`, whose contexts are an argument
+    /// of `Sequence`.
+    let rec varsWithNominalArgs (ty: Ty) : TyVar list =
+        let rec nominalArgs ty =
+            match ty with
+            | TyNominal(_, args, _, _) -> args
+            | _ -> Ty.children ty |> List.collect nominalArgs
+        varsInOrder ty @ (nominalArgs ty |> List.collect varsWithNominalArgs) |> List.distinctBy _.Id
+
+    /// A name for each of `vars`, by its id: `a`, `b`, `c`, ..., in order, then `a1`, `b1`.
+    let private namedInOrder (vars: TyVar list) : Map<int, string> =
+        vars
         |> List.mapi (fun index v ->
             let letter = string "abcdefghijklmnopqrstuvwxyz".[index % 26]
             v.Id, (if index < 26 then letter else $"{letter}{index / 26}"))
         |> Map.ofList
+
+    /// A name for each type variable of `ty`, by its id: `a`, `b`, `c`, ..., in the order they appear, then `a1`, `b1`.
+    let varNames (ty: Ty) : Map<int, string> = namedInOrder (varsInOrder ty)
 
     /// `ty` as an annotation writes it, with its variables named by `names`, a nominal type by `nominalName` of it and
     /// an alias by `aliasName` of the name it was defined under. `None` for a type an annotation cannot write: a type
@@ -60,12 +73,13 @@ module internal ContextInference =
             | TyVar v -> names |> Map.tryFind v.Id |> Option.map TypeVar
             | TyPrimitive "unit" -> Some TypeUnit
             | TyPrimitive "?error" -> None
-            // A nominal type's arguments are written when they have no variables in them, `Box(int)`: `varsInOrder`
-            // leaves out the variables of one, so `names` never names them.
+            // A nominal type's own arguments are written when `names` names each variable in them, `Box(int)` or
+            // `Box(a)`, and left out when it doesn't: `varsInOrder` leaves out the variables of one, so only `names`
+            // that `varsWithNominalArgs` gives names them. Its scope and the contexts it carries are not written.
             | TyNominal(nominal, args, _, _) ->
-                let args = args |> List.filter (function FunctionContexts.ScopedContext _ -> false | _ -> true)
-                if args.IsEmpty || not (args |> List.forall (TypeEnv.freeTyVars >> Set.isEmpty)) then Some (TypeName(nominalName nominal))
-                else all args |> Option.map (fun args -> TypeApply(nominalName nominal, args))
+                let args = args |> List.filter (function FunctionContexts.ScopedContext _ | FunctionContexts.Carried _ -> false | _ -> true)
+                if args.IsEmpty then Some (TypeName(nominalName nominal))
+                else all args |> Option.map (fun args -> TypeApply(nominalName nominal, args)) |> Option.orElse (Some (TypeName(nominalName nominal)))
             | TyPrimitive name -> Some (TypeName name)
             // A measured value of one dimension is written as the dimension applied to its storage, `Time(int)`.
             | TyMeasure([ id, 1 ], storage) -> typeExprOf names storage |> Option.map (fun storage -> TypeApply(nominalName id, [ storage ]))
@@ -117,8 +131,10 @@ module internal ContextInference =
     /// with the variables of `defTy` it is required at: the contexts, each applied to its variables, and the type
     /// without them. `None` when the type is one an annotation cannot write. A context's associated type is an argument
     /// after its own (see `AssociatedTypes`), which need not be in `defTy`: one that isn't is named after its variables.
+    /// A nominal type's arguments are written, `[Eq(a)] Box(a) -> bool`, so a call reads them as the def's variables,
+    /// not as the type's own parameters.
     let annotation (defTy: Ty) (contexts: (Identifier * TyVar list) list) : (TypeExpr list * TypeExpr) option =
-        let inType = varNames defTy
+        let inType = namedInOrder (varsWithNominalArgs defTy)
         let names =
             contexts
             |> List.collect snd

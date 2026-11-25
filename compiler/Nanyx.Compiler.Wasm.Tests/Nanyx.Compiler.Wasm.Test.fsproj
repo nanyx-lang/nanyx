@@ -101,6 +101,7 @@
     <Compile Include="Features\Docs\RunDocExampleSectionTests.fs" />
     <Compile Include="Features\Docs\StandardLibraryReferenceTests.fs" />
     <Compile Include="Features\Equality\RunEqualityTests.fs" />
+    <Compile Include="Features\Equality\RunImportedEqualityTests.fs" />
     <Compile Include="Features\Errors\RunErrorTests.fs" />
     <Compile Include="Features\Errors\ArithmeticErrorTests.fs" />
     <Compile Include="Features\Errors\CrashStackTests.fs" />

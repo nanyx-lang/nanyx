@@ -227,6 +227,13 @@ let internal freshNominalType (state: InferState) (info: TypeDefInfo) : Ty * Ty 
     let nominal = TyNominal(TypeDefInfo.nominalId info, args, underlying, info.IsPrivate)
     nominal, RecursiveNominals.underlying nominal, scoped, next
 
+/// The alias `name`, defined by `info`, applied to a new variable for each of its parameters: the type of a value its
+/// constructor makes. Its own parameters would make every value one type, and an imported alias's are numbered by the
+/// module it came from, so they can have the ids of this module's variables.
+let internal freshAliasType (state: InferState) (name: string) (info: TypeDefInfo) : Ty * InferState =
+    let argTys, next = freshVars info.Parameters state
+    TyAlias(name, argTys, Unifier.applyToParameters info.Parameters argTys info.Underlying), next
+
 /// The type the name `name`, defined by `info`, stands for written without arguments: the nominal type, or the alias.
 /// A generic one is applied to its own parameters.
 let internal namedType (state: InferState) (name: string) (info: TypeDefInfo) : Ty * InferState =

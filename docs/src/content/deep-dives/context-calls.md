@@ -267,7 +267,10 @@ Another of a function's contexts may name an associated type, as `ToString(elem)
 (`Contexts.ensureContextTypesDetermined`), and at a call the contexts are read with one variable for each name across
 them (`ContextInstances.contextArgTysAtCall`), so the `ToString` found is for the `elem` the `Iterable` fixed. The
 callee's signature is read there as its own module writes it, so a type of its module that an aliased import makes the
-caller write as `m.K` is still read by its name `K`.
+caller write as `m.K` is still read by its name `K`. For a def that doesn't write its type, it is the signature
+inference gives it (`ContextInference.annotation`), which writes a nominal type's arguments,
+`[Eq(a)] Obj(a), Obj(a) -> bool`: `Obj` alone would be read at the type's own parameters, which an imported type
+numbers by its own module, as the caller numbers its variables ([#2695](https://github.com/nanyx-lang/nanyx/issues/2695)).
 
 ## Type arguments
 

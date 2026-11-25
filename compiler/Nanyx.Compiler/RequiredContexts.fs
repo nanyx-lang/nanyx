@@ -4,15 +4,6 @@ module internal NyxCompiler.RequiredContexts
 
 open NyxCompiler.InferState
 
-/// The type variables of `ty` in the order `ContextInference.varsInOrder` gives them, then those in the arguments of its
-/// nominal types, which that leaves out: the `d` of `[d] seq(b)`, whose contexts are an argument of `Sequence`.
-let rec private variablesInOrder (ty: Ty) : TyVar list =
-    let rec nominalArgs ty =
-        match ty with
-        | TyNominal(_, args, _, _) -> args
-        | _ -> Ty.children ty |> List.collect nominalArgs
-    ContextInference.varsInOrder ty @ (nominalArgs ty |> List.collect variablesInOrder) |> List.distinctBy _.Id
-
 /// The contexts each of `topLevel`, the module's own top-level defs, and each local def that writes its contexts
 /// requires, written or inferred, by its symbol, as `TypedModule.ContextTypes` holds them once `subst` resolves them.
 /// A variable a written context names is the variable of the def's type with that name, as a call reads the context's
@@ -30,7 +21,7 @@ let ofDefs (state: InferState) (subst: Subst) (topLevel: Symbol list) : Map<Symb
         | Some contexts, Some defTy ->
             let inferred = state.InferredContextTypes |> Map.tryFind symbol.Id |> Option.defaultValue []
             let byName ty =
-                variablesInOrder ty
+                ContextInference.varsWithNominalArgs ty
                 |> List.choose (fun var ->
                     match var.Kind, var.Name with
                     | SignatureScope context, _ -> Some (ScopeOf context, var)
@@ -65,7 +56,7 @@ let ofImport (subst: Subst) (contextTypes: Map<SymbolId, Ty list>) (symbolTypes:
         | Some general ->
             let contexts = contextTypes |> Map.tryFind id |> Option.defaultValue []
             let resolved = TyApply("", Unifier.apply subst general :: (contexts |> List.map (Unifier.apply subst)))
-            let names = variablesInOrder resolved |> List.map (fun var -> var.Id, var.Name) |> Map.ofList
+            let names = ContextInference.varsWithNominalArgs resolved |> List.map (fun var -> var.Id, var.Name) |> Map.ofList
             let renumbered =
                 TypeEnv.freeTyVars resolved
                 |> Seq.mapi (fun index varId ->
