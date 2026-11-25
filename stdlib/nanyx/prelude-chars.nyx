@@ -53,6 +53,33 @@ export def char.isAsciiLetter: char -> bool = { c ->
   c >= "a" and c <= "z" or c >= "A" and c <= "Z"
 }
 
+--| Whether `c` is an ASCII upper-case letter, `A` to `Z`: `char.isAsciiUppercase("é")` is `false`.
+export def char.isAsciiUppercase: char -> bool = { c ->
+  c >= "A" and c <= "Z"
+}
+
+--| Whether `c` is an ASCII lower-case letter, `a` to `z`: `char.isAsciiLowercase("é")` is `false`.
+export def char.isAsciiLowercase: char -> bool = { c ->
+  c >= "a" and c <= "z"
+}
+
+--| Whether `c` is an ASCII letter or digit, `a` to `z`, `A` to `Z` or `0` to `9`.
+export def char.isAsciiAlphanumeric: char -> bool = { c ->
+  char.isAsciiLetter(c) or char.isDigit(c)
+}
+
+--| `c` upper-cased if it is an ASCII lower-case letter, else `c` as it is, as `string.uppercase` does
+  each char: `char.uppercase("q")` is `"Q"`, and `char.uppercase("é")` is `"é"`.
+export def char.uppercase: char -> char = { c ->
+  if char.isAsciiLowercase(c) then __nanyx_from_int(char.toInt(c) - 32) else c
+}
+
+--| `c` lower-cased if it is an ASCII upper-case letter, else `c` as it is, as `string.lowercase` does
+  each char: `char.lowercase("Q")` is `"q"`, and `char.lowercase("É")` is `"É"`.
+export def char.lowercase: char -> char = { c ->
+  if char.isAsciiUppercase(c) then __nanyx_from_int(char.toInt(c) + 32) else c
+}
+
 --| Whether `c` is a space, a tab, a line feed or a carriage return, the whitespace the string
   functions trim and split on.
 export def char.isWhitespace: char -> bool = { c ->

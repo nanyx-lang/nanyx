@@ -62,6 +62,48 @@ def char.isAsciiLetter: char -> bool
 
 Whether `c` is an ASCII letter, `a` to `z` or `A` to `Z`.
 
+## `char.isAsciiUppercase`
+
+```nanyx fragment
+def char.isAsciiUppercase: char -> bool
+```
+
+Whether `c` is an ASCII upper-case letter, `A` to `Z`: `char.isAsciiUppercase("é")` is `false`.
+
+## `char.isAsciiLowercase`
+
+```nanyx fragment
+def char.isAsciiLowercase: char -> bool
+```
+
+Whether `c` is an ASCII lower-case letter, `a` to `z`: `char.isAsciiLowercase("é")` is `false`.
+
+## `char.isAsciiAlphanumeric`
+
+```nanyx fragment
+def char.isAsciiAlphanumeric: char -> bool
+```
+
+Whether `c` is an ASCII letter or digit, `a` to `z`, `A` to `Z` or `0` to `9`.
+
+## `char.uppercase`
+
+```nanyx fragment
+def char.uppercase: char -> char
+```
+
+`c` upper-cased if it is an ASCII lower-case letter, else `c` as it is, as `string.uppercase` does
+each char: `char.uppercase("q")` is `"Q"`, and `char.uppercase("é")` is `"é"`.
+
+## `char.lowercase`
+
+```nanyx fragment
+def char.lowercase: char -> char
+```
+
+`c` lower-cased if it is an ASCII upper-case letter, else `c` as it is, as `string.lowercase` does
+each char: `char.lowercase("Q")` is `"q"`, and `char.lowercase("É")` is `"É"`.
+
 ## `char.isWhitespace`
 
 ```nanyx fragment
