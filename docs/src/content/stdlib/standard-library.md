@@ -26,8 +26,10 @@ The standard library is the modules under `nanyx/`. The [prelude](./prelude) is 
 - [math](./math) — numeric functions and constants (`nanyx/math`)
 - [async](./async) — `Async`, the context of the functions that can wait (`nanyx/async`)
 - [random](./random) — `Random`, random numbers from the host or from a seed (`nanyx/random`)
+- [clock](./clock) — `Clock`, the time of day from `now`, a timer from `ticks`, and `sleep` (`nanyx/clock`)
 - [host.runtime](./host-runtime) — the privileged layer a host is written on (`nanyx/host.runtime`)
 - [host.memory](./host-memory) — a host's access to linear memory, for the foreign functions it calls (`nanyx/host.memory`)
+- [host.async](./host-async) — a host's calls that wait on the host while the program's other tasks run (`nanyx/host.async`)
 
 # Shipped with the compiler
 
@@ -112,10 +114,8 @@ These exist today:
 - `MStack(a)` and `MList(a)` for a stack and a list changed in place, inside a `memory` block ([mstack](./mstack), [mlist](./mlist))
 - `MArray(a)` for a fixed-length array changed in place, inside a `memory` block ([marray](./marray))
 - `Slice(a)`, `MSlice(a)` and `StringSlice` for views of part of an array, a mutable array or a string, which share its storage ([slice](./slice), [mslice](./mslice), [text](./text#stringslice))
+- `Task(a)` for a computation started with `start!`, which runs while its starter does other things until it is awaited ([async](./async#task))
 
-These are planned, and not yet in the library:
-
-- `lookup(k, v)` for multi-value lookups
-- `stream(a)` for async streams, and `async(a)` for async computations
+Waiting is not a type but a context: a function that can wait requires [`Async`](./async). There is no stream type either: a stream is a `seq` whose steps require `Async` ([Streams: async sequences](../work-in-progress/concurrency-and-crash-boundaries#streams-async-sequences)).
 
 There is no `Option` type: any union containing `#some(a)` is [option-like](../advanced/option-like-types) by convention, and the [option helpers](./prelude-results#options) work on all of them.
