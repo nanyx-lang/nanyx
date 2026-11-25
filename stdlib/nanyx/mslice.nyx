@@ -114,7 +114,7 @@ export def MSlice.sortWith
     sortRuns(s, 0, order)
 
     if s.length > runLength then
-      def scratch = MArray.slice(MArray.fromList(MSlice.toList(s)), 0, s.length)
+      def scratch = MArray.slice(MArray.init(s.length, { index -> element(s, index) }), 0, s.length)
       mergeRuns(s, scratch, runLength, false, order)
     else ()
   }

@@ -8,7 +8,16 @@
   Each function is attached to `array`, so it is in scope wherever arrays are, without an import, and is called as
   `array.length(xs)`, or as `xs \length` when `xs` is known to be an array. `==` compares two arrays
   element by element, and an array is written as a list is, `[10, 20, 30]`.
+
+  The functions every ordered collection has are here with `list`'s names, argument order and
+  meaning: [`array.filter`], [`array.find`], [`array.sort`], [`array.zip`] and the rest. Each that
+  makes a new collection gives an array, read and written by index, with no list made on the way.
 module array
+
+import (
+  nanyx/marray
+  nanyx/mslice
+)
 
 --| An array of the elements of `xs`, in order.
 export def array.fromList: list(a) -> array(a) = { xs ->
@@ -116,3 +125,242 @@ def foldFrom: [c] array(a), int, b, ([c] b, a -> b) -> b = { xs, index, acc, ste
     then acc
     else foldFrom(xs, index + 1, step(acc, __nanyx_array_get(xs, index)), step)
 }
+
+--| Whether `xs` holds no elements.
+export def array.isEmpty: array(a) -> bool = { xs ->
+  __nanyx_array_length(xs) == 0
+}
+
+--| An array of the elements of `xs` that `keep` holds for, in order.
+export def array.filter: [c] array(a), ([c] a -> bool) -> array(a) = { xs, keep ->
+  -- Which elements are kept is held in an array of `bool`s, so that `keep` runs once on each and
+  -- the array given back is made at its length.
+  def kept = array.map(xs, keep)
+  keptFrom(xs, kept, __nanyx_array_new(countKept(kept, 0, 0)), 0, 0)
+}
+
+-- `count`, and one more for each `true` in `kept` from `index` on.
+def countKept: array(bool), int, int -> int = { kept, index, count ->
+  if index >= __nanyx_array_length(kept)
+    then count
+    else countKept(kept, index + 1, if __nanyx_array_get(kept, index) then count + 1 else count)
+}
+
+-- `made`, once each element of `xs` from `index` on that `kept` marks is written into it, the
+-- first at `at`.
+def keptFrom: array(a), array(bool), array(a), int, int -> array(a) = { xs, kept, made, index, at ->
+  if index >= __nanyx_array_length(xs)
+    then made
+    else if __nanyx_array_get(kept, index) then
+      __nanyx_array_write(made, at, __nanyx_array_get(xs, index))
+      keptFrom(xs, kept, made, index + 1, at + 1)
+    else keptFrom(xs, kept, made, index + 1, at)
+}
+
+--| An array of the values `f` gives as `#some`, in order, leaving out the elements it gives `#skip`
+  for: a `map` and a `filter` in one, which runs `f` once on each element.
+export def array.filterMap: [c] array(a), ([c] a -> #some(b) | #skip) -> array(b) = { xs, f ->
+  def results = array.map(xs, f)
+  someFrom(results, __nanyx_array_new(countSome(results, 0, 0)), 0, 0)
+}
+
+-- `count`, and one more for each `#some` in `results` from `index` on.
+def countSome: array(#some(b) | #skip), int, int -> int = { results, index, count ->
+  if index >= __nanyx_array_length(results)
+    then count
+    else countSome(
+      results
+      index + 1
+      if __nanyx_array_get(results, index) is #some(_) then count + 1 else count
+    )
+}
+
+-- `made`, once the value of each `#some` in `results` from `index` on is written into it, the
+-- first at `at`.
+def someFrom
+  : array(#some(b) | #skip), array(b), int, int -> array(b)
+  = { results, made, index, at ->
+    if index >= __nanyx_array_length(results) then made else
+      match __nanyx_array_get(results, index)
+        | #some(y) ->
+          __nanyx_array_write(made, at, y)
+          someFrom(results, made, index + 1, at + 1)
+        | #skip -> someFrom(results, made, index + 1, at)
+  }
+
+--| An array of the values `f` emits for each element in turn, in the order it emits them, as
+  [`list.select`] gives them: `f` calls [`Emit`]'s `emit` for each.
+export def array.select: [c] array(a), ([c, Emit(b)] a -> ()) -> array(b) = { xs, f ->
+  -- What `f` emits is written into a mutable array that doubles in length when it fills, and the
+  -- array given back is made at the number emitted.
+  memory {
+    mut buffer = MArray.fromList([])
+    mut count = 0
+
+    use Emit(
+      emit = { y ->
+        if count == MArray.length(buffer) then (buffer := grown(buffer, count, y)) else ()
+        ignore(MArray.set(buffer, count, y))
+        count := count + 1
+      }
+    ) in eachFrom(xs, 0, f)
+
+    array.init(
+      count
+      { index ->
+        match MArray.at(buffer, index)
+          | #some(y) -> y
+          | #notFound -> crash("array.select read past what was emitted")
+      }
+    )
+  }
+}
+
+-- `f` run on each element of `xs` from `index` on, in turn.
+def eachFrom: [c] array(a), int, ([c] a -> ()) -> () = { xs, index, f ->
+  if index < __nanyx_array_length(xs) then
+    f(__nanyx_array_get(xs, index))
+    eachFrom(xs, index + 1, f)
+  else ()
+}
+
+-- A new mutable array twice as long as `buffer`, which is full with `count` elements, holding them
+-- first and `filler` in each slot after them.
+def grown: [Memory] MArray(a), int, a -> MArray(a) = { buffer, count, filler ->
+  MArray.init(
+    (if count < 4 then 4 else count * 2)
+    { index ->
+      match MArray.at(buffer, index)
+        | #some(x) -> x
+        | #notFound -> filler
+    }
+  )
+}
+
+--| The first value `f` yields, running it on the elements in turn, or `#notFound` when it yields
+  none. A lambda with `yield` in it is a lazy sequence (see [`Yield`]), so this stops at the first
+  yield: `f` runs on no element after the one it yields for.
+export def array.selectOne
+  : [c, d] array(a), ([c] a -> [d] seq(b)) -> #some(b) | #notFound
+  = { xs, f ->
+    def selected = xs \array.toSeq \seq.flatMap(f)
+
+    match selected.next()
+      | #next(y, _) -> #some(y)
+      | #done -> #notFound
+  }
+
+-- The position of the first element of `xs` from `index` on that `matches` holds for.
+def findIndexFrom
+  : [c] array(a), int, ([c] a -> bool) -> #some(int) | #notFound
+  = { xs, index, matches ->
+    if index >= __nanyx_array_length(xs)
+      then #notFound
+      else if matches(__nanyx_array_get(xs, index))
+        then #some(index)
+        else findIndexFrom(xs, index + 1, matches)
+  }
+
+--| The first element `matches` holds for, or `#notFound`.
+export def array.find: [c] array(a), ([c] a -> bool) -> #some(a) | #notFound = { xs, matches ->
+  match findIndexFrom(xs, 0, matches)
+    | #some(index) -> #some(__nanyx_array_get(xs, index))
+    | #notFound -> #notFound
+}
+
+--| The position of the first element `matches` holds for, counting from 0, as [`array.at`] does,
+  or `#notFound`.
+export def array.findIndex
+  : [c] array(a), ([c] a -> bool) -> #some(int) | #notFound
+  = { xs, matches ->
+    findIndexFrom(xs, 0, matches)
+  }
+
+--| Whether `test` holds for any element (so `false` for an empty array).
+export def array.any: [c] array(a), ([c] a -> bool) -> bool = { xs, test ->
+  findIndexFrom(xs, 0, test) is #some(_)
+}
+
+--| Whether `test` holds for every element (so `true` for an empty array).
+export def array.all: [c] array(a), ([c] a -> bool) -> bool = { xs, test ->
+  findIndexFrom(xs, 0, { x -> not test(x) }) is #notFound
+}
+
+--| Whether an element of `xs` is equal to `x`. Elements are compared with `==`, by their structure.
+export def array.contains: [Eq(a)] array(a), a -> bool = { xs, x ->
+  array.any(xs, { y -> y == x })
+}
+
+--| An array of the elements of `xs`, last first.
+export def array.reverse: array(a) -> array(a) = { xs ->
+  def last = __nanyx_array_length(xs) - 1
+  array.init(last + 1, { index -> __nanyx_array_get(xs, last - index) })
+}
+
+--| An array of the elements of `xs` in the order `order` gives: `order(a, b)` says whether `a` comes
+  before `b` (`#less`), after it (`#greater`), or either way (`#equal`), as `compare` does. The sort
+  is stable: elements `order` finds equal keep their order. It is [`MArray.sortWith`]'s merge sort,
+  on a copy of the elements.
+export def array.sortWith
+  : [c] array(a), ([c] a, a -> #less | #equal | #greater) -> array(a)
+  = { xs, order ->
+    memory {
+      def sorted = MArray.fromArray(xs)
+      MArray.sortWith(sorted, order)
+      MArray.toArray(sorted)
+    }
+  }
+
+--| An array of the elements of `xs` in ascending order of `key`. The sort is stable: elements with
+  the same key keep their order.
+export def array.sortBy: [Ord(b), c] array(a), ([c] a -> b) -> array(a) = { xs, key ->
+  array.sortWith(xs, { x, y -> compare(key(x), key(y)) })
+}
+
+--| An array of the elements of `xs` in ascending order of their `Ord`. The sort is stable.
+export def array.sort: [Ord(a)] array(a) -> array(a) = { xs ->
+  array.sortWith(xs, compare)
+}
+
+-- `count` moved into the range from 0 to the length of `xs`.
+def clampedCount: array(a), int -> int = { xs, count ->
+  def length = __nanyx_array_length(xs)
+  if count < 0 then 0 else if count > length then length else count
+}
+
+--| An array of the first `count` elements of `xs` (all of them when there are fewer).
+export def array.take: array(a), int -> array(a) = { xs, count ->
+  array.init(clampedCount(xs, count), { index -> __nanyx_array_get(xs, index) })
+}
+
+--| An array of the elements of `xs` after the first `count`.
+export def array.skip: array(a), int -> array(a) = { xs, count ->
+  def start = clampedCount(xs, count)
+  array.init(__nanyx_array_length(xs) - start, { index -> __nanyx_array_get(xs, start + index) })
+}
+
+--| An array of pairs of the elements of `xs` and `ys` at the same position, as long as the shorter.
+export def array.zip: array(a), array(b) -> array((a, b)) = { xs, ys ->
+  array.init(
+    clampedCount(xs, __nanyx_array_length(ys))
+    { index -> (__nanyx_array_get(xs, index), __nanyx_array_get(ys, index)) }
+  )
+}
+
+--| An array of the running totals of a fold: `initial`, then each value [`array.fold`] passes along,
+  so the last is what the fold gives back, and it holds one more element than `xs`.
+export def array.scan: [c] array(a), b, ([c] b, a -> b) -> array(b) = { xs, initial, step ->
+  scanFrom(xs, __nanyx_array_new(__nanyx_array_length(xs) + 1), 0, initial, step)
+}
+
+-- `made`, a new array one longer than `xs`, once `state` is written at `index` and each value
+-- `step` makes of it and the elements of `xs` from `index` on after it.
+def scanFrom
+  : [c] array(a), array(b), int, b, ([c] b, a -> b) -> array(b)
+  = { xs, made, index, state, step ->
+    __nanyx_array_write(made, index, state)
+
+    if index < __nanyx_array_length(xs)
+      then scanFrom(xs, made, index + 1, step(state, __nanyx_array_get(xs, index)), step)
+      else made
+  }
