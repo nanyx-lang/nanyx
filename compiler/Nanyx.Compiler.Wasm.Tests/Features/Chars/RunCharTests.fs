@@ -53,6 +53,29 @@ def main = {
     |> assertRan "true false true false\ntrue false\n"
 
 [<Fact>]
+let ``Run - a char's case is read and changed for ASCII letters only`` () =
+    // #2704: each case function at both ends of each letter range, just outside them, a digit and a non-ASCII letter.
+    """@entry
+def main = {
+  def cs: list(char) = ["A", "Z", "a", "z", "@", "[", "`", "\{", "7", "é", "É"]
+  for cs
+    | c -> println("{c} {char.isAsciiUppercase(c)} {char.isAsciiLowercase(c)} {char.isAsciiAlphanumeric(c)} {char.uppercase(c)} {char.lowercase(c)}")
+}"""
+    |> runSource
+    |> assertRan
+        ("A true false true A a\n"
+         + "Z true false true Z z\n"
+         + "a false true true A a\n"
+         + "z false true true Z z\n"
+         + "@ false false false @ @\n"
+         + "[ false false false [ [\n"
+         + "` false false false ` `\n"
+         + "{ false false false { {\n"
+         + "7 false false true 7 7\n"
+         + "é false false false é é\n"
+         + "É false false false É É\n")
+
+[<Fact>]
 let ``Run - dbg writes a char as its string literal`` () =
     """@entry
 def main = {
