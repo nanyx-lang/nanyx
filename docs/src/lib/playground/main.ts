@@ -1,5 +1,5 @@
 // The playground page: loads the compiler built for the browser from `/playground/compiler/` as the page opens,
-// compiles a hello world at once so that the first Run is quick, and runs programs under the `nanyx.playground` host
+// compiles a hello world at once so that the first Run is quick, and runs programs under the playground host, `nanyx.playground.host`,
 // with its runner, in a web worker. What the page holds and how it starts is on the Playground page in Deep dives.
 
 import type { EditorView } from "@codemirror/view";
