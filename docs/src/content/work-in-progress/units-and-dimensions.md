@@ -83,7 +83,9 @@ units are erased after type checking, so a `Time(int)` costs what an `int` does,
 at each storage type it is called with, as one generic in a `[Num(a)]` is.
 
 A dimension's storage always has a `Num` instance. A function that names a dimension requires `Num` of its storage
-without writing it, so `list(Time) -> Time` below is checked as `[Num(a)] list(Time(a)) -> Time(a)`.
+without writing it, so `list(Time) -> Time` below is checked as `[Num(a)] list(Time(a)) -> Time(a)`. This is the
+rule for any type with a bound on its parameter, as `dimension Time` declares a `type [Num(a)] Time(a)`
+([Bounded type parameters](./bounded-type-parameters)).
 
 Choosing the base unit is choosing what the dimension's values can hold exactly. `Time`'s is `ns`, the smallest unit
 anyone writes, so a `Time(int)` holds every whole number of nanoseconds for about 292 years either side of zero, the
@@ -211,9 +213,10 @@ Not part of the first step, and not settled.
    storage of a dimension needs a context of its own. Until then `sleep` takes a `Time(int)`, which every literal of a
    whole number of nanoseconds, `0.5s` included, is when it is passed to it.
 2. **Constraining a dimension to a context.** `dimension Bytes(int)` names one type. An angle (`deg` is `pi / 180` of a
-   `rad`) has no unit that the others are whole multiples of, so it wants any type with fractions, `F32` or `float`,
-   which would need a constraint by context. Until then it is `dimension Angle(float)`. The spelling of an
-   irrational scale, as in `unit deg: Angle = (pi / 180)rad`, is open too.
+   `rad`) has no unit that the others are whole multiples of, so it wants any type with fractions, `F32` or `float`:
+   a storage whose `fraction` is itself. A [bound](./bounded-type-parameters) names contexts, and that is an equality
+   between types, not a context, so a bound can't say it either. Until something can, it is
+   `dimension Angle(float)`. The spelling of an irrational scale, as in `unit deg: Angle = (pi / 180)rad`, is open too.
 3. **Currencies.** A currency is not a fixed multiple of another, so `usd` and `eur` are not units of one `Money`
    dimension: each currency is a dimension, or the currency is a value.
 
