@@ -16,8 +16,8 @@ let private iterableInScope (env: TypeEnv) (current: InferState) (var: TyVar) =
         | _ -> false)
 
 /// `for xs, ys | arms`, at `expr`: the parser passes the iterables and a lambda of one element of each. Each iterable
-/// is anything `Iterable`, and the loop is unit. A `list(a)` and a `seq(a)` are walked as they are, a `map(k, v)` and
-/// a `set(a)` as the list their `toList` gives; anything else is read as the prelude's `__toSeq(xs)`, its sequence. A type nothing has settled is a list,
+/// is anything `Iterable`, and the loop is unit. A `list(a)`, a `seq(a)`, a `map(k, v)` and a `set(a)` are walked as
+/// they are; anything else is read as the prelude's `__toSeq(xs)`, its sequence. A type nothing has settled is a list,
 /// unless a signature around the loop requires `Iterable` of it. It stops when the shortest iterable does, so a range
 /// with no end, `0..`, is only walked in step with one that ends.
 let inferFor
@@ -38,17 +38,10 @@ let inferFor
             match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
             | Lists.ListType elementTy -> Ok ((elementTy, false), afterIterable)
             | Seqs.SeqType elementTy -> Ok ((elementTy, (match iterable.Kind with RangeSyntax.Call(_, None) -> true | _ -> false)), afterIterable)
-            // A map's elements are its entries, each a key and its value, and a set's its elements: the loop walks the
-            // list `toList` gives, so that only the prelude knows how a map or a set is held.
-            | (Maps.MapType _ | Sets.SetType _) as collection when (tryResolveAttachedFunction env collection "toList").IsSome ->
-                let toList = (tryResolveAttachedFunction env collection "toList").Value
-                inferAsCall (inferExpr env) current iterable toList [ Expression.from iterable iterable.Kind ]
-                |> Result.map (fun (typedList, next) ->
-                    match Unifier.unalias (resolveSoFar next typedList.Type) with
-                    | Lists.ListType elementTy -> (elementTy, false), next
-                    | _ ->
-                        let elementTy, next = freshVar next
-                        (elementTy, false), next)
+            // A map's elements are its entries, each a key and its value, and a set's its elements: the backend walks
+            // the store (see `StoreWalk`).
+            | Maps.MapType(key, value) -> Ok ((tupleRecordType [ key; value ], false), afterIterable)
+            | Sets.SetType element -> Ok ((element, false), afterIterable)
             // A type nothing has settled yet is a list, unless a signature requires `Iterable` of it.
             | TyVar var when not (iterableInScope afterIterable var) ->
                 let elementTy, next = freshVar afterIterable

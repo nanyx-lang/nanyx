@@ -78,6 +78,16 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   the functions that stop somewhere new, not in each one it is in, but it still returns through each of them and
   calls back into each, which a wait at the top doesn't
   ([#2561](https://github.com/nanyx-lang/nanyx/issues/2561)).
+- **Dropping a frame.** A stopped frame can be freed without being resumed, as a handler that never resumes, or a
+  sequence abandoned partway, will need ([#2426](https://github.com/nanyx-lang/nanyx/issues/2426)). With
+  `WasmOptions.FrameDrops`, each state machine has a drop entry, `<name>__drop`, beside its resume entry, and the module
+  has `__nanyx_frame_drop`, which takes a frame, finds its drop entry by the resume entry's table slot in its header,
+  and calls it. The drop entry drops the frame of the call it stopped in, then what the frame keeps at the state it
+  stopped in, then frees it. It drops each variable on the heap by its type's drop function, frees the block a reuse
+  token holds, and leaves alone what the function borrows (`CoreIrCounting.borrowedIn`), which the frame of the
+  function that owns it drops. A frame of the runtime's own, a yield's or a wait's, keeps only numbers, and is freed.
+  Nothing in the language drops a frame yet, so the option is off, and a program compiles as before; the tests in
+  `FrameDropTests.fs` stop a function and drop its frame instead of resuming it, with memory checks.
 - **Temporaries.** A value the emitter would compute where it is used, on the stack (see `CoreIrEmit`), can't be there
   when the function stops: a temporary whose value holds a split point, and those waiting to be used while it is
   computed, are kept in locals instead (`SplitPlan.StoredTemps`). Each is computed where it would have been used: after
@@ -178,7 +188,7 @@ Nothing starts it: like `Console`, the host provides it.
 
 - **The library.** `nanyx/async` declares them on six intrinsics (`Intrinsics.taskStart` and the others, in
   `Builtins.fs`), and `nanyx/host.async` a host's waits on a seventh, `Intrinsics.hostWait` (below). `TaskScope` is a scoped context, as `Memory` is, and `Task(a)` is a type in its scope,
-  `[TaskScope] protected (handle: I32)`. `Async.concurrent` supplies `TaskScope` to its block, as `memory` supplies `Memory`: it
+  `[TaskScope] protected (cell: () -> a)`, which holds the task's cell (below). `Async.concurrent` supplies `TaskScope` to its block, as `memory` supplies `Memory`: it
   opens a scope, runs the block, and waits for the scope's tasks before it gives back the block's result. `start`
   requires `TaskScope` and starts a task whose function runs `work` and keeps what it gives back as a function of
   nothing, `{ value }`, so that the scheduler can drop it whatever its type, and each `await` gets a reference of its own
@@ -213,8 +223,16 @@ Nothing starts it: like `Console`, the host provides it.
   inferred, `TaskCaptures.captureErrors` reports each place where a work variable stands for contexts with a `Memory`,
   at the call's argument.
 - **The scheduler** (`WasmScheduler`) runs an instance's tasks on its one stack, as state machines. A task is a block
-  of the function it runs, the frame it stopped in, its scope and its own innermost scope, the function that gives its
-  result, and the regions of the `memory` blocks it is in, which the scheduler swaps in when it runs it. The queue is
+  of the function it runs, the frame it stopped in, its scope and its own innermost scope, its cell, and the regions of
+  the `memory` blocks it is in, which the scheduler swaps in when it runs it. Its cell, which `taskStart` gives, is an
+  object with a closure's header, so a `Task` counts and drops it as it does a closure (nothing calls it): it holds
+  the function that gives the task's result once the task has given it back, and the task's block until the task has
+  finished. A scope holds only its tasks still running: when one finishes, the scheduler takes it out, counts it
+  (so `scopeWaitAny`, which `race` waits on, still sees it), and frees its block, while its cell lives on for as long
+  as a `Task` holds it. So a task can be awaited any number of times, and a scope that starts and awaits a task in
+  each turn of a loop holds the same memory however many turns it runs
+  ([#2666](https://github.com/nanyx-lang/nanyx/issues/2666)). `taskWait`, `taskDone` and `taskCancel` read the cell:
+  a task has finished when its cell no longer holds its block. The queue is
   first in, first out, so the order tasks run in is fixed: a task starts from the next time the code that started it
   waits. `taskWait` and `scopeExit` are split points that stop the running task while what they wait for hasn't
   finished, with a frame of their own whose resume entry looks again. Each task has a scope for the tasks it starts

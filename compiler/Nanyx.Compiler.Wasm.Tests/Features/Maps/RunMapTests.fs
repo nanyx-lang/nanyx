@@ -325,3 +325,60 @@ println(map.toList(left) \list.map { entry -> "{entry.0}={entry.1}" })
 println(map.length(left \map.remove(Key("z"))))
 """
     |> assertRan "true\ntrue\n#some(3)\n#notFound\n[z=3]\n0\n"
+
+/// A program whose functions build a map of `n` keys and walk it once or twice with `for`, for counting what a walk
+/// allocates (see `StoreWalk`).
+let private walking =
+    normalized """def built: int -> map(int, int) = { n -> (0..n - 1) \seq.fold(map.empty, { m, k -> map.insert(m, k, k) }) }
+
+def walked: map(int, int) -> int = { m ->
+  memory {
+    mut sum = 0
+    for m | (k, v) -> sum := sum + v
+    sum
+  }
+}
+
+def once: int -> int = { n -> walked(built(n)) }
+
+def twice: int -> int = { n ->
+  def m = built(n)
+  walked(m) + walked(m)
+}
+"""
+
+[<Fact>]
+let ``Run - a for loop over a map allocates nothing for its entries, however many there are`` () =
+    use program = instantiateWasm walking []
+    let extraPass (n: int) =
+        let one, sum = allocationsOf program "once" n
+        let two, doubled = allocationsOf program "twice" n
+        Assert.Equal(2 * sum, doubled)
+        two - one
+    // An extra pass makes the same few blocks, its memory block's, whatever the size: none for an entry or a node.
+    let small = extraPass 100
+    Assert.Equal(small, extraPass 10000)
+    Assert.InRange(small, 0, 2)
+
+[<Fact>]
+let ``Run - a for loop over a map walks every entry of a deep trie once, nests, and walks in step with a list`` () =
+    program
+        [ """def deep = (0..40) \seq.map { i -> (i * 32 * 32 * 32, i) } \seq.toList \map.fromList"""
+          """def total: map(int, int) -> int = { m ->
+  memory {
+    mut sum = 0
+    for m | (k, v) -> sum := sum + v
+    sum
+  }
+}""" ]
+        [ """println(total(deep))"""
+          """def pairs = memory {
+    mut count = 0
+    for deep | (a, _) ->
+      for deep | (b, _) -> count := count + 1
+    count
+  }"""
+          """println(pairs)"""
+          """for set.fromList([3, 4]), ["x", "y"] | n, s -> println(n + string.length(s))""" ]
+    |> runSource
+    |> assertRan "820\n1681\n4\n5\n"

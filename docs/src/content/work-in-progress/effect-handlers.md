@@ -265,7 +265,7 @@ stops again as soon as it is resumed could keep its block.
 | A `use` whose instance's type is settled after it finds its members | [#2550](https://github.com/nanyx-lang/nanyx/issues/2550) | done |
 | `Emit(a)`, and the builders pushing through it | [#2566](https://github.com/nanyx-lang/nanyx/issues/2566) | done |
 | A builder inside a `use` of `Emit` at another type finds its own handler | [#2570](https://github.com/nanyx-lang/nanyx/issues/2570) | done |
-| A frame can be dropped: a drop function for each state, beside its resume entry, from the types the emitter knows where it saves the variables | | proposed |
+| A frame can be dropped: a drop function for each state, beside its resume entry, from the types the emitter knows where it saves the variables | [#2426](https://github.com/nanyx-lang/nanyx/issues/2426) | Done, behind `WasmOptions.FrameDrops` until something drops a frame ([Dropping a frame](../deep-dives/async#how-tasks-are-compiled)) |
 | `@resumes(#once \| #many)`: split points for capturing members, a delimiter at each `use`, `k` given to the handler, each stop marked with the handler it is for, and the scoped-context rule | | proposed |
 | A frame can be copied, for `#many`: a copy function for each state, and a resume that copies only when the frames are shared | | proposed |
 | `seq` as a handler of `Yield`, and the `#yield` rewrite deleted | [#2426](https://github.com/nanyx-lang/nanyx/issues/2426), [#2427](https://github.com/nanyx-lang/nanyx/issues/2427) | Planning |
