@@ -23,9 +23,9 @@ let private library (dependency: string) (body: string) =
       "lib/lib.nyx", withFinalNewline body ]
 
 let private consoleLibrary =
-    library "nanyx.console.core" """export module lib
+    library "nanyx.cli" """export module lib
 
-import nanyx.console.core/console
+import nanyx.cli/console
 
 export def greet: [Console] () -> () = { -> println("hi") }"""
 

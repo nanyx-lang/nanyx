@@ -526,7 +526,7 @@ To fix it, make every package that depends on it give the same directory.
 
 # NYX0029: Version not shipped
 
-A manifest names a linter or host the compiler ships, such as `nanyx.lint` or `nanyx.console`, at a version other than
+A manifest names a linter or host the compiler ships, such as `nanyx.lint` or `nanyx.cli.host`, at a version other than
 the one it ships. The compiler ships each of them at its own version, and a manifest names them at it exactly.
 
 ```nanyx
@@ -566,7 +566,7 @@ def main = { () }
 (package = (name = "app", version = "0.1.0", sources = ["*.nyx"]))
 ```
 
-To fix it, name the host the program runs under in the manifest, `host = (package = "nanyx.console", version = "...")`
+To fix it, name the host the program runs under in the manifest, `host = (package = "nanyx.cli.host", version = "...")`
 at the compiler's version, which `nanyx new` writes, or remove the `@entry` if the package is a library.
 
 # NYX0032: Contexts joined with `&` or `+`
@@ -622,14 +622,14 @@ To fix it, write the manifest as a record:
 ```nanyx fragment
 (
   package = (name = "shop", version = "0.1.0")
-  host = (package = "nanyx.console", version = "...")
+  host = (package = "nanyx.cli.host", version = "...")
 )
 ```
 
 # NYX0035: Directive written in the old form
 
-A script's directive is a name and words: `::host nanyx.console`. A directive written as a manifest's dotted key with a
-TOML value, `::host.nanyx.console = "0.28.0"`, is an error.
+A script's directive is a name and words: `::host nanyx.cli.host`. A directive written as a manifest's dotted key with a
+TOML value, `::host.nanyx.cli.host = "0.28.0"`, is an error.
 
 ```nanyx
 ::formatter.lineWidth = 80  -- error NYX0035: Directives are lines of words now, not a manifest's key and a TOML value: write `::format lineWidth 80`
@@ -807,7 +807,7 @@ or an application whose files declare no `@entry`. No example can show it, since
 checking the package.
 
 To fix it, run an application, or add an `@entry` to one of its files and name the host it runs under in its manifest,
-as `host = (package = "nanyx.console", version = "...")`.
+as `host = (package = "nanyx.cli.host", version = "...")`.
 
 # NYX0046: Keyword member whose type doesn't fit its kind
 
@@ -1767,13 +1767,13 @@ def same: [Foo(_)] a -> a = { x -> x }  -- error NYX0236: The body of 'same' doe
 
 The definition marked `@entry` does not have the type its [host](../advanced/hosts) runs. The host is a
 function that takes the entry point, so the entry point must fit the type of its parameter. A command-line program runs
-under the console host, `nanyx.console/console.host`, whose entry point takes nothing and may require `Console`.
+under the console host, `nanyx.cli.host/cli.host`, whose entry point takes nothing and may require `Console`.
 
 ```nanyx
 module main
 
 @entry
-def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.console/console.host' ...
+def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.cli.host/cli.host' ...
 ```
 
 The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, and names each

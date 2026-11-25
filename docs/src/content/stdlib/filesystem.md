@@ -42,7 +42,7 @@ The file system, as a context a host provides.
 
 Code that reads or writes files declares `[Async, FileSystem]` and calls the functions of
 [`file`](file) and [`dir`](dir), which come from whichever `FileSystem` instance its caller
-supplies. The console host (`nanyx.console`) supplies one to the program's entry point, on WASI's
+supplies. The console host (`nanyx.cli.host`) supplies one to the program's entry point, on WASI's
 file functions, which sees the current directory and those `nanyx run --allow-dir` adds; a host
 that doesn't provide it guarantees that nothing in the program touches the file system. A library
 depends on `nanyx.fs` and imports `nanyx.fs/filesystem`.

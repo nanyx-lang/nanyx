@@ -10,9 +10,9 @@ import (
   nanyx/host.runtime
   nanyx/text
   abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, settled, takeString, writableEnd, writeAll)
-  nanyx.http.core/client as (HttpError)
-  nanyx.http.core/request as (Method, Request)
-  nanyx.http.core/response as (Response)
+  nanyx.http/client as (HttpError)
+  nanyx.http/request as (Method, Request)
+  nanyx.http/response as (Response)
   waits as (awaitCallAsync, settledAsync)
 )
 

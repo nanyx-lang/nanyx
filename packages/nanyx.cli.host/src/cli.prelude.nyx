@@ -1,0 +1,17 @@
+--| What every module of a program the console host runs sees without importing it: the terminal,
+  `Console`, with `print`, `println`, `eprint` and `eprintln`; the process, `Env`, with `args`,
+  `variable` and `exit`; the file system, `FileSystem`, with `Path` and `FsError`; outbound HTTP,
+  `Http`, with `Request`, `Method`, `Response` and `HttpError`; `Async`, which the calls that wait
+  require, with `start` and `await`, attached to it, which start a task and wait for it; `Random`, the source of random numbers; and `Clock`, the time.
+export module cli.prelude
+
+export nanyx.cli/console (Console, IoError, print, println, eprint, eprintln)
+export nanyx.cli/env (Env)
+export nanyx.fs/filesystem (FileSystem, FsError)
+export nanyx.fs/path (Path)
+export nanyx/async (Async)
+export nanyx/random (Random)
+export nanyx/clock (Clock)
+export nanyx.http/client (Http, HttpError)
+export nanyx.http/request (Request, Method)
+export nanyx.http/response (Response)

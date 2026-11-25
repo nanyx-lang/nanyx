@@ -32,7 +32,7 @@ backend emits for [tail calls](./tail-calls) (Safari has it from 18.2), and says
 `/playground/compiler/release.json`, which the docs build writes beside the compiler (below), for the release the page
 names at the right of the toolbar, linked to the release's notes on GitHub; when there is no such file, the site has no
 compiler, and the page says so. Then it imports `compiler.js` and the playground host's runner,
-`packages/nanyx.playground/runner/playground.js`, from beside it, loads the compiler, and compiles the default example
+`packages/nanyx.playground.host/runner/playground.js`, from beside it, loads the compiler, and compiles the default example
 at once: the first compile is most of the wait (see [the measurement](#the-measurement)), so the first Run is quick.
 "Loading the compiler…" shows in the toolbar, with Run disabled, until then. The compiler runs on the page's main
 thread; a program runs in a worker.
@@ -105,10 +105,10 @@ A block opens in the playground when it is runnable (`isRunnable`: fenced ` ```n
 `-- error` comment), is one file, and needs no host but the playground's. `needsAnotherHost` decides that from the
 block's source when the site is built: a block needs another host when it names one with `::host`; when it depends on a
 package from the index, `::dependency nanyx.json 0.4.0`, which the playground can't download; when it imports, or
-depends on, a module only the console host can run, such as `nanyx.fs`'s or `nanyx.console.core/env`; or when it uses,
+depends on, a module only the console host can run, such as `nanyx.fs`'s or `nanyx.cli/env`; or when it uses,
 outside a comment, a name only the console host's prelude brings in and doesn't declare it itself, such as `args`,
 `exit`, `FileSystem` or `Http` and the members of those contexts. Which names and modules those are is read from the two
-hosts' preludes, `packages/nanyx.console/src/console.prelude.nyx` and `packages/nanyx.playground/src/playground.prelude.nyx`,
+hosts' preludes, `packages/nanyx.cli.host/src/cli.prelude.nyx` and `packages/nanyx.playground.host/src/playground.prelude.nyx`,
 so a host that brings in more changes it. The [error reference](../standard-tools/errors)'s examples get no bar, as
 each shows its section's error, and nor do those in a standard library page's generated reference, which are its doc
 comments' and are checked where they are written. The page test runs every example that has a link under the playground host, so a block that

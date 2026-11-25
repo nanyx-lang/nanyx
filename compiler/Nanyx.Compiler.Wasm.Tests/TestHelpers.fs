@@ -411,10 +411,10 @@ let private nanyxOnPackageWith (dependencies: string) (files: (string * string) 
 let nanyxOnPackage (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
     nanyxOnPackageWith "[]" files arguments
 
-/// `nanyxOnPackageWith` an application that depends on the console host's interface package, `nanyx.console.core`, so
-/// that its files can import `nanyx.console.core/console`.
+/// `nanyxOnPackageWith` an application that depends on the console host's interface package, `nanyx.cli`, so
+/// that its files can import `nanyx.cli/console`.
 let nanyxOnPackageWithConsoleCore (files: (string * string) list) (arguments: string list) : RunOutcome * bool =
-    nanyxOnPackageWith $"[(package = \"nanyx.console.core\", version = \"{Toolchain.version}\")]" files arguments
+    nanyxOnPackageWith $"[(package = \"nanyx.cli\", version = \"{Toolchain.version}\")]" files arguments
 
 /// What `nanyx check` printed for a script holding `source`, saved as `main.nyx` in a directory of its own.
 let checkScript (source: string) =
@@ -714,7 +714,7 @@ def writeStdout: [HostRuntime] string -> () = { text ->
 /// `source` checked as the console host's file is (see `ShippedPackages`), so that it may require `HostRuntime`, and compiled
 /// with `options`; any diagnostic fails.
 let hostWatWith (options: WasmOptions) (source: string) =
-    let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "console.host.nyx")
+    let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "cli.host.nyx")
     match Compiler.compileFrom Linters.none (SourceFile consoleHostFile) (normalized source) with
     | { Typed = Some typed } as result when result.Diagnostics.IsEmpty -> transpileTypedModuleWithOptions options typed |> fst
     | result -> failwith $"""Compile error: {result.Diagnostics |> List.map _.Message |> String.concat "\n"}"""

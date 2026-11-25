@@ -116,7 +116,7 @@ def fdWrite: [HostRuntime] I32 -> I32
 
 dbg(fdWrite(1))
 """
-    let consoleHostFile = System.IO.Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "console.host.nyx")
+    let consoleHostFile = System.IO.Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "cli.host.nyx")
     let result = Compiler.compileFrom Linters.none (SourceFile consoleHostFile) source
     Assert.Empty(result.Diagnostics)
     match tryTranspileTypedModuleToWat result.Typed.Value with

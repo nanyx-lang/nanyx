@@ -6,9 +6,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 // A def can declare a context from a module imported under an alias (`[c.Console]`), and its callers supply it from
 // the ambient instance, whose members are in scope under the alias (#736). An application imports the console's
-// interface package, `nanyx.console.core`, once it lists it in its dependencies.
+// interface package, `nanyx.cli`, once it lists it in its dependencies.
 
-/// `source`, compiled as a file of an application that depends on `nanyx.console.core`, with no errors.
+/// `source`, compiled as a file of an application that depends on `nanyx.cli`, with no errors.
 let private compileClean (source: string) =
     let result = compileWithConsoleCore source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
@@ -16,7 +16,7 @@ let private compileClean (source: string) =
 [<Fact>]
 let ``A def that declares an aliased Console can be called from the entry point`` () =
     compileClean """module main
-import nanyx.console.core/console as c
+import nanyx.cli/console as c
 
 def g: [c.Console] () -> () = { c.println("5") }
 
@@ -38,7 +38,7 @@ def main = { g() }
 [<Fact>]
 let ``An aliased Console passes from one def that declares it to another`` () =
     compileClean """module main
-import nanyx.console.core/console as c
+import nanyx.cli/console as c
 
 def g: [c.Console] () -> () = {
   c.write("a")
@@ -58,7 +58,7 @@ def main = { h([1]) }
 [<Fact>]
 let ``A def that does not declare an aliased Console cannot call one that does`` () =
     let source = """module main
-import nanyx.console.core/console as c
+import nanyx.cli/console as c
 
 def g: [c.Console] () -> () = { c.println("5") }
 

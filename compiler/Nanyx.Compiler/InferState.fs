@@ -169,7 +169,7 @@ type InferState =
             AmbientMembers: Map<string, SymbolId * Identifier>;
             /// The ambient contexts an imported function requires that this module cannot name itself, by their
             /// names in `TypeDefs` (hidden ones): `Console`, required by a function of a module that imports
-            /// `nanyx.console.core/console`, in a module that neither imports it nor sees a host's prelude. Like any ambient context they are the top level's, and a
+            /// `nanyx.cli/console`, in a module that neither imports it nor sees a host's prelude. Like any ambient context they are the top level's, and a
             /// def has them only if it declares them or infers them.
             CarriedAmbientContexts: Set<Identifier>;
             /// The contexts an imported function requires that the module's host does not provide, by name, each with

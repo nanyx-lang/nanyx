@@ -31,7 +31,7 @@ let ``The directives example migrates to a package that runs, its directives in 
         $"""(
   package = (name = "greetings", version = "0.1.0", sources = ["**/*.nyx"])
   linters = [(package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (unusedBindings = #error)))]
-  host = (package = "nanyx.console", version = "{Toolchain.version}")
+  host = (package = "nanyx.cli.host", version = "{Toolchain.version}")
   formatter = (lineWidth = 80)
 )
 """,

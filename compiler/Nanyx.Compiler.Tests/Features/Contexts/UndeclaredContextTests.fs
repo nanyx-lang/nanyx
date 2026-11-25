@@ -156,7 +156,7 @@ export def greet: [Console] () -> () = { println("hi") }"""))
     result
 
 /// The undeclared-context diagnostics compiling `main` as a file of an application that depends on the console's
-/// interface package, `nanyx.console.core`.
+/// interface package, `nanyx.cli`.
 let private undeclaredContextsWithConsoleCore (main: string) =
     (compileWithConsoleCore main).Diagnostics
     |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.UndeclaredContext.Code)
@@ -175,7 +175,7 @@ let ``An imported function requires its contexts in a module that does not have 
 [<Fact>]
 let ``A context member imported under an alias still requires its context`` () =
     let main = withFinalNewline """module main
-import nanyx.console.core/console as c
+import nanyx.cli/console as c
 def g: () -> () = { c.write("hi") }
 @entry
 def main = { g() }"""
@@ -188,7 +188,7 @@ let ``An imported function's context needs nothing more where the module cannot 
 [<Fact>]
 let ``A def that declares an aliased context can use its members under the alias`` () =
     let main = withFinalNewline """module main
-import nanyx.console.core/console as c
+import nanyx.cli/console as c
 def g: [c.Console] () -> () = { c.println("hi") }
 @entry
 def main = { g() }"""

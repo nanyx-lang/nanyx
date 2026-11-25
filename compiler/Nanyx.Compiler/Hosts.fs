@@ -5,7 +5,7 @@ open Parser.Program
 /// The root module a host builds a WASI 0.3 component from, beside the root it runs core modules from, and the world it
 /// is written against (see the Components page of the docs).
 type HostComponent =
-    { /// The component root, which exports `run` as the core root does: `console.host.wasi`.
+    { /// The component root, which exports `run` as the core root does: `cli.host.wasi`.
       Root: string
       /// The world, as WIT names it: `wasi:cli/command@0.3.0`. Its WIT is the package in the host's `wit` directory, with
       /// the packages it uses under `wit/deps`.
@@ -22,9 +22,9 @@ type HostComponent =
 /// scope in every module of the program (see the Hosts page of the docs). The program's `@entry` is passed to the
 /// host's `run`, which is the module's start.
 type Host =
-    { /// The package a manifest's `host` names it by: `nanyx.console`.
+    { /// The package a manifest's `host` names it by: `nanyx.cli.host`.
       Package: string
-      /// The host's root module, which exports `run`: `console.host`.
+      /// The host's root module, which exports `run`: `cli.host`.
       Module: string
       /// The host's prelude, if it has one: a module of the package whose exports every module of the program sees
       /// without importing them, as `println` and `Console`.
@@ -38,10 +38,10 @@ type Host =
       /// component build sees it (see `asComponent`).
       Component: HostComponent option }
 
-    /// The host's root module as an import names it: `nanyx.console/console.host`.
+    /// The host's root module as an import names it: `nanyx.cli.host/cli.host`.
     member host.Import = $"{host.Package}/{host.Module}"
 
-    /// The host's prelude as an import names it, if it has one: `nanyx.console/console.prelude`.
+    /// The host's prelude as an import names it, if it has one: `nanyx.cli.host/cli.prelude`.
     member host.PreludeImport = host.Prelude |> Option.map (fun prelude -> $"{host.Package}/{prelude}")
 
     /// The host as a component build sees it, if it has a component root: its `run` is the component root's.
@@ -86,11 +86,11 @@ module Hosts =
 
     /// The package of the console host the compiler ships: what a script runs under, unless it names another, and what
     /// `nanyx new` names.
-    let consolePackage = "nanyx.console"
+    let consolePackage = "nanyx.cli.host"
 
     /// The package of the playground host the compiler ships, a stand-in for the console host in a web page: what a
     /// script runs under in the compiler built for the browser (`Nanyx.Browser`), unless it names another.
-    let playgroundPackage = "nanyx.playground"
+    let playgroundPackage = "nanyx.playground.host"
 
     /// The module of the foreign functions a component's core module defines itself for its host's component root,
     /// reserved for it: `argument` and `result`, through which a `wasi:http/service` component's root takes the request

@@ -31,11 +31,11 @@ The standard library is the modules under `nanyx/`. The [prelude](./prelude) is 
 
 # Shipped with the compiler
 
-The console host's interface package, `nanyx.console.core`, isn't part of the standard library, but the compiler
+The console host's interface package, `nanyx.cli`, isn't part of the standard library, but the compiler
 ships it, and the console host's prelude brings its names into every module of a program:
 
-- [console](./console) — reading from and writing to the terminal (`nanyx.console.core/console`)
-- [env](./env) — a program's arguments, environment variables and exit code (`nanyx.console.core/env`)
+- [console](./console) — reading from and writing to the terminal (`nanyx.cli/console`)
+- [env](./env) — a program's arguments, environment variables and exit code (`nanyx.cli/env`)
 
 The file system's interface package, `nanyx.fs`, is shipped too. A program names it with `::dependency nanyx.fs`, or
 in its manifest's `dependencies`, and imports its modules; the console host provides `FileSystem`:
@@ -45,16 +45,16 @@ in its manifest's `dependencies`, and imports its modules; the console host prov
 - [dir](./dir) — listing and making directories (`nanyx.fs/dir`)
 - [path](./path) — paths to files and directories (`nanyx.fs/path`)
 
-The HTTP client's interface package, `nanyx.http.core`, is shipped too, and named in the same way; the console host
+The HTTP client's interface package, `nanyx.http`, is shipped too, and named in the same way; the console host
 provides `Http`:
 
-- [client](./client) — the `Http` context and `HttpError` (`nanyx.http.core/client`)
-- [http](./http) — making requests (`nanyx.http.core/http`)
-- [request](./request) — `Request` and `Method` (`nanyx.http.core/request`)
-- [response](./response) — `Response` (`nanyx.http.core/response`)
-- [wire](./wire) — how the runtime's HTTP imports write requests and responses, for hosts (`nanyx.http.core/wire`)
+- [client](./client) — the `Http` context and `HttpError` (`nanyx.http/client`)
+- [http](./http) — making requests (`nanyx.http/http`)
+- [request](./request) — `Request` and `Method` (`nanyx.http/request`)
+- [response](./response) — `Response` (`nanyx.http/response`)
+- [wire](./wire) — how the runtime's HTTP imports write requests and responses, for hosts (`nanyx.http/wire`)
 
-The HTTP host, `nanyx.http`, serves a program whose entry point is a `Request -> Response` handler: see the
+The HTTP host, `nanyx.http.host`, serves a program whose entry point is a `Request -> Response` handler: see the
 [HTTP server cookbook](../cookbook/http-server).
 
 `nanyx.json`, for reading and writing JSON, is not shipped: it is published to the package index from

@@ -35,7 +35,7 @@ let ``A package in a directory is added by its path, on a line of its own, and t
 [<Fact>]
 let ``A dependency is added after the last one, laid out as the list is`` () =
     use directory = new TempDirectory()
-    let core = $"(package = \"nanyx.console.core\", version = \"{Toolchain.version}\")"
+    let core = $"(package = \"nanyx.cli\", version = \"{Toolchain.version}\")"
     let app = appWith directory $"(\n  package = (name = \"app\", version = \"0.1.0\")\n  {consoleHostEntry}\n  dependencies = [\n    {core}\n  ]\n)\n"
     Assert.Equal(0, (nanyxIn app [ "install"; "acme.util"; "--path"; "../util" ]).ExitCode)
     Assert.Contains($"  dependencies = [\n    {core}\n    (package = \"acme.util\", path = \"../util\")\n  ]\n", manifestOf app)
@@ -44,8 +44,8 @@ let ``A dependency is added after the last one, laid out as the list is`` () =
 let ``A package the compiler ships is added at the compiler's version`` () =
     use directory = new TempDirectory()
     let app = appWith directory plain
-    Assert.Equal(0, (nanyxIn app [ "install"; "nanyx.console.core" ]).ExitCode)
-    Assert.Contains($"dependencies = [(package = \"nanyx.console.core\", version = \"{Toolchain.version}\")]", manifestOf app)
+    Assert.Equal(0, (nanyxIn app [ "install"; "nanyx.cli" ]).ExitCode)
+    Assert.Contains($"dependencies = [(package = \"nanyx.cli\", version = \"{Toolchain.version}\")]", manifestOf app)
 
 /// A store whose cache and index are directories in `directory`, whose index lists acme.json 1.0.0 and 1.1.0, each with
 /// a public module `json` whose `version` says which it is.

@@ -270,7 +270,7 @@ def peek = Store(int).get
 [<Fact>]
 let ``Context members of an imported context are declared in its module`` () =
     let source = withFinalNewline """def hello: [Console] () -> () = { write("hi") }"""
-    let consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.console.core", "src", "console.nyx")
+    let consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.cli", "src", "console.nyx")
     let consoleSource = File.ReadAllText(consoleFile).Replace("\r\n", "\n")
     Assert.Equal(
         Some (ContextMember, consoleFile, offsetOf consoleSource "write:" 0 0),

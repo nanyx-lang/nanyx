@@ -4,7 +4,7 @@ description: Build a basic web server
 order: 3
 ---
 
-Build a basic web server: a program whose entry point answers HTTP requests, run under the HTTP host, `nanyx.http`.
+Build a basic web server: a program whose entry point answers HTTP requests, run under the HTTP host, `nanyx.http.host`.
 
 # Setup
 
@@ -18,7 +18,7 @@ Then name the HTTP host in the manifest, `my_server.nyxp`, in place of the conso
 ```nanyx fragment
 (
   package = (name = "my_server", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.http", version = "0.39.0", settings = (port = 3000))
+  host = (package = "nanyx.http.host", version = "0.39.0", settings = (port = 3000))
 )
 ```
 

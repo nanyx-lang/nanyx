@@ -5,7 +5,7 @@ open System.IO
 open Parser.Program.DataValues
 
 /// Packages that are hosts. A host package says so in its own manifest, in its `package`'s `host` field:
-/// `host = (root = "console.host", prelude = "console.prelude")` names its root module, which exports `run`, and the
+/// `host = (root = "cli.host", prelude = "cli.prelude")` names its root module, which exports `run`, and the
 /// module whose exports every module of a program it runs sees without importing them, if it has one, and
 /// `settings = (port = 3000)`, if it takes any, the settings a program may give it, with their defaults.
 /// `Manifest.check` checks the field; this reads it. A program names its host in its own manifest's `host` (see
@@ -20,7 +20,7 @@ module HostPackages =
     let preludeField = "prelude"
 
     /// The field of a host's declaration that names its component root and the world it is written against:
-    /// `component = (root = "console.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")`
+    /// `component = (root = "cli.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")`
     /// (see `HostComponent`).
     let componentField = "component"
 

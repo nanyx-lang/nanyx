@@ -20,7 +20,7 @@ let private wit = Path.Combine(NyxCompiler.ShippedPackages.directoryOf NyxCompil
 let private handlerOptions = { WasmOptions.Default with Component = Some HttpHandler }
 
 /// The HTTP host's WIT package, with which the tests wrap modules as components of `wasi:http/service`.
-let private httpWit = Path.Combine(NyxCompiler.ShippedPackages.directoryOf "nanyx.http", "wit")
+let private httpWit = Path.Combine(NyxCompiler.ShippedPackages.directoryOf "nanyx.http.host", "wit")
 
 let private service = "wasi:http/service@0.3.0"
 

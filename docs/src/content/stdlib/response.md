@@ -4,7 +4,7 @@ description: HTTP responses
 order: 15.8
 ---
 
-A `Response` is a record, in the HTTP interface package `nanyx.http.core` (see [client](./client)); the console host's
+A `Response` is a record, in the HTTP interface package `nanyx.http` (see [client](./client)); the console host's
 prelude brings it into every module of a program. Its headers are named in lower case, and `Response.header` finds
 one whatever case it is asked for in:
 

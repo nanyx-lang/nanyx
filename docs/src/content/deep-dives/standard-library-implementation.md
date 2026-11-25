@@ -76,15 +76,15 @@ Each standard-library module the file does not have is checked once per process,
 it, and every later compile reuses the result (`checkedStandardLibrary` in `Nanyx.Compiler/Library.fs`, keyed by the
 module and its source).
 
-The file has the modules of the shipped packages too: the console host's package, `nanyx.console`, and the packages it
-depends on, `nanyx.console.core`, `nanyx.fs` and `nanyx.http.core` ([#1637](https://github.com/nanyx-lang/nanyx/issues/1637)). The writer checks each as
+The file has the modules of the shipped packages too: the console host's package, `nanyx.cli.host`, and the packages it
+depends on, `nanyx.cli`, `nanyx.fs` and `nanyx.http` ([#1637](https://github.com/nanyx-lang/nanyx/issues/1637)). The writer checks each as
 a loose script's import of it does and writes what `checkedSourceFiles` keeps of it: the module, the modules it
 imports, and the text of every file its check read. Their files are beside the compiler (`ShippedPackages.directory`),
 so the file names a path there relative to that directory, and a path read back is in the reading compiler's
 (`BinaryData.write` and `read` take a function over each string). A compile takes such a module from the file when the
 file is in its build's host package or one that package depends on, so it resolves its imports as the writer's check
 did, and while every file the check read reads the same through the compile's reader; else it checks it as a user's
-module. Under `--timings`, `nanyx.console/src/console.prelude.nyx (cached)`. So a one-line `nanyx check`, even of
+module. Under `--timings`, `nanyx.cli.host/src/cli.prelude.nyx (cached)`. So a one-line `nanyx check`, even of
 `dbg("hello")`, which imports the host, checks nothing but the file itself.
 
 A user's own
@@ -112,7 +112,7 @@ comment and what fits no topic: `crash`, `ignore`, booleans and memory blocks.
 
 What each module holds is in the [Standard Library](../stdlib/standard-library) section, generated from the library's
 doc comments. `println`, `Console` and `Env` aren't in the standard library: they are in the console host's interface
-package, `nanyx.console.core`, which the compiler ships beside it, and the console host's prelude brings them into every
+package, `nanyx.cli`, which the compiler ships beside it, and the console host's prelude brings them into every
 module of a program (see [Hosts](../advanced/hosts#the-console-host)).
 
 # Its pages on the docs site
@@ -132,9 +132,9 @@ again (`Compiler.compileStandardLibraryModuleReporting`),
 and of each public module of the packages it ships beside it (`ShippedPackages`), not from a parse of its own (`StandardLibraryDocs` in `Nanyx.Compiler/StandardLibraryDocs.fs`), and a link in a doc
 comment, `` [`name`] ``, leads to the name's entry, on its page or another.
 
-A shipped package's public module, such as `nanyx.console.core`'s `console` and `env`, or `nanyx.fs`'s `file`, has a page in the same section,
+A shipped package's public module, such as `nanyx.cli`'s `console` and `env`, or `nanyx.fs`'s `file`, has a page in the same section,
 named for its file as a library file's is, and its reference is generated in the same way from the package's files in
-`packages/`. A host's modules (`nanyx.console`'s `console.host` and `console.prelude`) have none: a program doesn't
+`packages/`. A host's modules (`nanyx.cli.host`'s `cli.host` and `cli.prelude`) have none: a program doesn't
 import them.
 
 A published package's public module, such as `nanyx.json`'s `json`, has a page too, which pins the version its

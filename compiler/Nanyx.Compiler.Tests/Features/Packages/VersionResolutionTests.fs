@@ -145,7 +145,7 @@ let ``Resolution locks each package the build reaches, with its hash and depende
     use package =
         new TempPackage(
             indexAndApp
-                [ "acme.web", [ listed "1.0.0" [ "acme.core", "^2.1"; "nanyx.console.core", Toolchain.version ] "" ]
+                [ "acme.web", [ listed "1.0.0" [ "acme.core", "^2.1"; "nanyx.cli", Toolchain.version ] "" ]
                   "acme.core", [ listed "2.0.0" [] ""; listed "2.3.0" [] ""; listed "3.0.0" [] "" ] ]
                 [ """(package = "acme.web", version = "1.0")""" ]
         )

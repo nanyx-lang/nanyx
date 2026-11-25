@@ -71,9 +71,9 @@ standard error with the stack under it: each function it was in, with the file a
 first (see [Crash stacks](../deep-dives/crash-stacks)). It exits with 1.
 
 A package runs under the host its manifest's `host` names. A package without a `host` is a library, which can't be
-run. A script runs under the console host, `nanyx.console`, unless a `::host` directive names another.
+run. A script runs under the console host, `nanyx.cli.host`, unless a `::host` directive names another.
 
-A program whose host answers HTTP requests, as the HTTP host `nanyx.http` does, is served rather than run once: `run`
+A program whose host answers HTTP requests, as the HTTP host `nanyx.http.host` does, is served rather than run once: `run`
 listens on `http://localhost:<port>/`, the port the host's `port` setting gives (3000 by default), says so on standard
 error, and answers each request with a fresh instance of the program until Ctrl+C. A request whose handler stops the
 program is answered with a 500, and the reason is written to standard error. See the
@@ -81,7 +81,7 @@ program is answered with a 500, and the reason is written to standard error. See
 
 | Option | What it does |
 |--------|--------------|
-| `--host <host>` | Runs the package's `@entry` under another host, in place of its manifest's: a host package the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../acme.host`. A host the compiler doesn't ship, or a directory whose manifest doesn't declare a host, is an error. A script names its host with `::host`, so `--host` with a `.nyx` file is an error. |
+| `--host <host>` | Runs the package's `@entry` under another host, in place of its manifest's: a host package the compiler ships, `--host nanyx.cli.host`, or the directory of one, `--host ../acme.host`. A host the compiler doesn't ship, or a directory whose manifest doesn't declare a host, is an error. A script names its host with `::host`, so `--host` with a `.nyx` file is an error. |
 | `--allow-dir <directory>` | Lets the program read and write `<directory>`, and what is in it, as well as the current directory. The program reaches it by its absolute path: `nanyx run --allow-dir ../data tool.nyx`, run in `/home/ada/tool`, lets `tool.nyx` read `path.of("/home/ada/data/input.txt")`. A directory that isn't there is an error. |
 | `--check-memory` | Checks the program's memory as it runs: it stops with exit code 70 at a block freed twice or an object used after it was freed, and fails with exit code 1 if the program finishes with memory it never freed. |
 | `--memory` | Checks the program's memory as `--check-memory` does, and once the program stops, however it stops, writes a report to standard error (see below). |
@@ -278,7 +278,7 @@ differently.
 nanyx install acme.json                  # from the package index, at its newest version
 nanyx install acme.json --version 1.2    # from the package index, at 1.2 or a later version compatible with it
 nanyx install acme.util --path ../util   # the package in that directory
-nanyx install nanyx.console.core         # a package the compiler ships, at the compiler's version
+nanyx install nanyx.cli         # a package the compiler ships, at the compiler's version
 ```
 
 A package from the index is written at the versions `--version` accepts, or else at the newest version the index has,

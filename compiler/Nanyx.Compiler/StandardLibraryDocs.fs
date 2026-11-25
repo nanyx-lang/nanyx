@@ -26,7 +26,7 @@ let endMarker = "<!-- End of the generated reference. -->"
 
 /// The page of the library's file `file` (its resource name, as `nanyx/prelude-lists.nyx`, or the path of a file of a
 /// shipped package): its name without the package, the directory and the extension, with a `-` for each `.`, so
-/// `nanyx/host.runtime.nyx` is on `host-runtime`, and `packages/nanyx.console.core/src/env.nyx` on `env`.
+/// `nanyx/host.runtime.nyx` is on `host-runtime`, and `packages/nanyx.cli/src/env.nyx` on `env`.
 let pageOf (file: string) =
     Path.GetFileNameWithoutExtension(file).Replace('.', '-')
 

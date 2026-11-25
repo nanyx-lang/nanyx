@@ -12,23 +12,23 @@ progress.
 # How shipped packages are built
 
 - **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
-  package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.console`,
-  `packages/nanyx.console.core`, `packages/nanyx.fs`, `packages/nanyx.http.core`, `packages/nanyx.http`, and the
+  package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.cli.host`,
+  `packages/nanyx.cli`, `packages/nanyx.fs`, `packages/nanyx.http`, `packages/nanyx.http.host`, and the
   others in `packages/`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
   executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
   the compiler.
-- **The console host declares itself.** The compiler reads `nanyx.console`'s manifest (`HostPackages.tryShipped`)
+- **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest (`HostPackages.tryShipped`)
   rather than keeping a table of hosts; `HostPackages.console` is the host a script runs under. The program's package
   records the host's package (`PackageModules.HostPackage`; for a script or a module given as source,
   `ShippedPackages.tryModules`), and the program's modules import the host and its prelude through it, as do the
   host's own files (`PackageModules.resolveWithin`); it needs no `dependencies` entry. A host found by its path is read
   the same way, from its directory. `HostRuntime` goes to the host's file (`Hosts.mayRequireRuntime`, given the files
   that declare the host's module), and a statement in that file isn't a script's. A shipped package's file is named
-  after its package in messages, `nanyx.console/src/console.host.nyx`, wherever the compiler is installed
+  after its package in messages, `nanyx.cli.host/src/cli.host.nyx`, wherever the compiler is installed
   (`ShippedPackages.tryDisplay`).
-- **The interface package.** `nanyx.console` depends on `nanyx.console.core` by version: a dependency may name a
+- **The interface package.** `nanyx.cli.host` depends on `nanyx.cli` by version: a dependency may name a
   package the compiler ships at the compiler's version exactly (`NYX0029` otherwise), as a linter or host may, and
   `ShippedPackages.tryModules` reads a shipped package's public modules and the shipped packages it depends on. A file
   of the host's package, or of a package it depends on, sees no host, so the interface package doesn't import the

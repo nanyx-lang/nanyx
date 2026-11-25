@@ -57,9 +57,9 @@ let ``A request in a task race cancels gives #cancelled, so a timeout is a race 
     withSlowServer (fun url ->
         assertPrints
             "the request was cancelled\n#timedOut\n"
-            $"""::dependency nanyx.http.core
+            $"""::dependency nanyx.http
 
-import nanyx.http.core/http as http
+import nanyx.http/http as http
 
 def fetch: [Async, Console, Http] string -> #some(string) | #cancelled | #failed = {{ url ->
   match http.get(url)
@@ -81,9 +81,9 @@ let ``Cancelling a task cancels every task it started`` () =
     withSlowServer (fun url ->
         assertPrints
             "the child's request was cancelled\nquick\n"
-            $"""::dependency nanyx.http.core
+            $"""::dependency nanyx.http
 
-import nanyx.http.core/http as http
+import nanyx.http/http as http
 
 def child: [Async, Console, Http] string -> string = {{ url ->
   match http.get(url)

@@ -1,4 +1,4 @@
-/// The console host provides `Http`, from the shipped package `nanyx.http.core`, on the runtime's own import
+/// The console host provides `Http`, from the shipped package `nanyx.http`, on the runtime's own import
 /// `nanyx:http`, backed by .NET's `HttpClient` (#1785, see docs/src/content/deep-dives/hosts.md).
 module TranspilerWasmTests.Features.Hosts.HttpClient
 
@@ -11,11 +11,11 @@ open System.Threading
 open Xunit
 open TranspilerWasmTestHelpers
 
-/// The directives and imports of a script that uses `nanyx.http.core`.
+/// The directives and imports of a script that uses `nanyx.http`.
 let private header =
-    """::dependency nanyx.http.core
+    """::dependency nanyx.http
 
-import nanyx.http.core/http as http
+import nanyx.http/http as http
 
 """
 

@@ -435,7 +435,7 @@ type ImportedFile = { File: string; Name: string option }
 ///
 /// `AmbientMembers` holds the definition in `Module` that stands in for each member of an ambient context: of those in
 /// `AmbientContexts`, and of those carried in with the imported functions that require them, which the module cannot
-/// name (a module that imports a function requiring `Console` without importing `nanyx.console.core/console`, and that sees no host's prelude). The backend passes
+/// name (a module that imports a function requiring `Console` without importing `nanyx.cli/console`, and that sees no host's prelude). The backend passes
 /// these where nothing else supplies the context.
 ///
 /// `ImportedFiles` holds the module each of the module's imports brings in, by the import's symbol (see `ImportedFile`).

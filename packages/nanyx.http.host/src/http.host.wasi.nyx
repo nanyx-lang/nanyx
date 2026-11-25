@@ -1,0 +1,49 @@
+--| The HTTP host's component root: what `nanyx build` builds a program the host serves from, as a
+  component of `wasi:http/service@0.3.0`, which `wasmtime serve`, or any runtime that implements
+  the world, serves.
+
+  The component exports `wasi:http/handler`'s `handle`, which the compiler writes: it runs the
+  program, whose `run` answers the request `handle` was given, and returns the response, writing its
+  body as the host reads it. The host may give one instance of the component several requests, one
+  after another, and never two at once; the program runs afresh for each. `wasmtime serve
+  --max-instance-reuse-count 1` gives each request an instance of its own, as `nanyx run` does.
+
+  The host provides what [`http.host`] does: `Http`, on `wasi:http/client`, `Async`, `Random`, on
+  `wasi:random`, and `Clock`, on `wasi:clocks`. What the host library `nanyx.wasi` writes them on is
+  a call that waits where it is made, so the program stays synchronous.
+export module http.host.wasi
+
+import (
+  nanyx/async as (Async)
+  nanyx/clock as (Clock)
+  nanyx/host.runtime
+  nanyx/random as (Random)
+  nanyx.http/client as (Http)
+  nanyx.http/request as (Request)
+  nanyx.http/response as (Response)
+  nanyx.wasi/clocks as clocks
+  nanyx.wasi/http as (sendThroughWasi)
+  nanyx.wasi/http.service as (incoming, respond)
+  nanyx.wasi/random as wasiRandom
+)
+
+--| Answers the request `handle` was given with `answer`, the program's entry point, in an `Http`
+  that makes requests through `wasi:http/client`, a `Random` that draws from `wasi:random` and a
+  `Clock` that reads `wasi:clocks`. A request whose method `Request` has no case for is answered
+  with a 400.
+export def run
+  : [HostRuntime, Async] ([Async, Clock, Http, Random] Request -> Response) -> ()
+  = { answer ->
+    use Http(sendRequest = { request -> sendThroughWasi(request) })
+    use Random(bits = { _ -> wasiRandom.bits() })
+
+    use Clock(
+      now = { _ -> clocks.timeOfDay() }
+      ticks = { _ -> clocks.ticks() }
+      sleep = { ms -> clocks.sleepFor(ms) }
+    )
+
+    match incoming()
+      | #some(request) -> respond(answer(request))
+      | #unknownMethod -> respond(Response.text(400, "Bad Request"))
+  }

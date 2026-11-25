@@ -33,7 +33,7 @@ type DirectivePlace =
 
 /// What a directive says, read from its words. Each is one entry of a manifest.
 type DirectiveSetting =
-    /// `::host nanyx.console`: the host the script runs under.
+    /// `::host nanyx.cli.host`: the host the script runs under.
     | HostSetting of package: DirectiveWord * DirectivePlace
     /// `::dependency acme.util ../util`: a package the script imports from; or `::dependency retry
     /// github:acme/snippets/retry.nyx@<commit>`, a file from GitHub it imports as the module `retry`.
@@ -56,7 +56,7 @@ module Script =
         match name with
         | "host" -> $"`::host` takes a host and where it is found: write `::host {Hosts.consolePackage}`, or `::host acme.server ../server`"
         | "dependency" ->
-            "`::dependency` takes a package and where it is found, or a module name and a file on GitHub: write `::dependency acme.util ../util`, `::dependency nanyx.console.core` or `::dependency acme.web github:acme/web@<commit>`, or `::dependency retry github:acme/snippets/retry.nyx@<commit>`"
+            "`::dependency` takes a package and where it is found, or a module name and a file on GitHub: write `::dependency acme.util ../util`, `::dependency nanyx.cli` or `::dependency acme.web github:acme/web@<commit>`, or `::dependency retry github:acme/snippets/retry.nyx@<commit>`"
         | "linter" -> "`::linter` takes a linter: write `::linter nanyx.lint`"
         | "lint" -> "`::lint` takes a rule of the linter above it and a severity: write `::lint unusedBindings #error`"
         | _ -> "`::format` takes a setting and its value: write `::format lineWidth 100`"
@@ -101,7 +101,7 @@ module Script =
     let private oldString = "\"([^\"\\\\]*)\""
 
     /// The lines `text`, a directive written the old way, as a manifest's dotted key with a TOML value, is written as
-    /// now, if it can be read: `::host.nanyx.console = "0.28.0"` is `::host nanyx.console 0.28.0`. `linterAbove` says
+    /// now, if it can be read: `::host.nanyx.cli.host = "0.28.0"` is `::host nanyx.cli.host 0.28.0`. `linterAbove` says
     /// whether a linter is turned on above it already, so a rule's severity needs no `::linter` of its own.
     let private rewritten (linterAbove: bool) (text: string) : string option =
         let matching (pattern: string) = Regex.Match(text, $@"^::{pattern}\s*$")
