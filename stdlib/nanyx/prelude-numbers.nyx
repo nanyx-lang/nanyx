@@ -84,6 +84,12 @@ export context Num(a) = (
 --| The `int` that adds nothing.
 export def int.zero: int = 0
 
+--| The largest `int`, `9223372036854775807` (`2 ** 63 - 1`). Arithmetic that goes past it stops the program.
+export def int.maxValue: int = 9223372036854775807
+
+--| The smallest `int`, `-9223372036854775808` (`-(2 ** 63)`). Arithmetic that goes below it stops the program.
+export def int.minValue: int = -9223372036854775808
+
 --| `x` plus `y`.
 export def int.`+`: int, int -> int = { x, y ->
   x + y
