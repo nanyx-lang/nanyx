@@ -337,8 +337,9 @@ def float.pow: float, float -> float
 ```
 
 `x` to the power `y`, which need not be a whole number: `float.pow(2.0, 0.5)` is the square root
-of 2. A whole `y` is `x ** y`, exactly; any other is `e ** (y * ln(x))`, so a negative `x` gives
-NaN.
+of 2. A whole `y` is `x ** y`. Any other is `e ** (y * ln(x))`, within a unit in the last place of
+the exact power: `y * ln(x)` is worked out with twice a float's precision, so that `e ** ...` is
+given the bits a float can't hold. A negative `x` gives NaN.
 
 ## `float.fromString`
 
