@@ -285,22 +285,9 @@ def convertedEntries: [c] list((k, v)), ([c] k -> j), ([c] v -> w), list((j, w))
     rest
     convertKey
     convertValue
-    [convertedEntry(key, value, convertKey, convertValue), ...acc]
+    [(convertKey(key), convertValue(value)), ...acc]
   )
 }
-
---| The entry of `convertKey` of `key` and `convertValue` of `value`. The functions the compiler
-  calls a map through make no lambda, which would be numbered ahead of the program's own, so no arm
-  of theirs holds statements, which would make one. The calls are made before the entry, as `def`s,
-  because the backend can't yet inline them into its arguments (#2662): with that fixed, this can go.
-def convertedEntry
-  : [c] k, v, ([c] k -> j), ([c] v -> w) -> (j, w)
-  = { key, value, convertKey, convertValue ->
-    def convertedKey = convertKey(key)
-    def convertedValue = convertValue(value)
-
-    (convertedKey, convertedValue)
-  }
 
 --| `x` as it is.
 def unchanged: a -> a = { x -> x }
