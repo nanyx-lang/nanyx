@@ -46,6 +46,7 @@ let private lookupPrimitive (name: string) =
     | "bool"
     | "string"
     | "unit" -> Some (primitiveType name)
+    | _ when name = Chars.name -> Some Chars.ty
     | "undefined" -> Some Unifier.bottomType
     | _ when SizedNumber.isName name -> Some (primitiveType name)
     | _ -> None

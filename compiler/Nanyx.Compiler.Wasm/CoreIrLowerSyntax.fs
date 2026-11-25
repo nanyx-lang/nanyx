@@ -79,7 +79,7 @@ let rec deferredMessages (expr: Expression) : string list =
 let rec typeOfAnnotation (namedTypes: Map<string, Ty>) (typeExpr: TypeExpr) : Ty option =
     match typeExpr.Kind with
     | TypeName ("int" | "string" | "bool" | "float" | "unit" as name) -> Some (TyPrimitive name)
-    | TypeName name -> namedTypes |> Map.tryFind name |> Option.orElse (if SizedNumber.isName name then Some (TyPrimitive name) else None)
+    | TypeName name -> namedTypes |> Map.tryFind name |> Option.orElse (if SizedNumber.isName name || name = Chars.name then Some (TyPrimitive name) else None)
     | TypeUnit -> Some (TyPrimitive "unit")
     | TypeTuple [ single ] -> typeOfAnnotation namedTypes single
     | _ -> None

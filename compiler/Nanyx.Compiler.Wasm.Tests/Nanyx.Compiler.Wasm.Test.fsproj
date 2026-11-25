@@ -211,6 +211,7 @@
     <Compile Include="Features\Records\RunRecordSpreadTests.fs" />
     <Compile Include="Features\Records\RunFunctionFieldTests.fs" />
     <Compile Include="Features\Sets\RunSetTests.fs" />
+    <Compile Include="Features\Chars\RunCharTests.fs" />
     <Compile Include="Features\Arrays\RunArrayTests.fs" />
     <Compile Include="Features\Arrays\RunArrayCallTests.fs" />
     <Compile Include="Features\Arrays\ArrayAllocationTests.fs" />
