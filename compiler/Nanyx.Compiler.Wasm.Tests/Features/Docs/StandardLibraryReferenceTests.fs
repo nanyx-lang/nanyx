@@ -63,6 +63,26 @@ let ``A page that pins a version the index doesn't have, or a pin written wrong,
     | other -> Assert.Fail $"%A{other}"
 
 [<Fact>]
+let ``A page that pins a package that doesn't compile can't be written, and says why`` () =
+    use directory = new TempDirectory()
+    let store = storeIn directory
+    directory.Write "broken/broken.nyxp" "(package = (name = \"acme.broken\", version = \"1.0.0\"))\n"
+    directory.Write "broken/broken.nyx" "export module broken\n\nexport def answer: int = 42\n"
+    publishToIndex store (Path.Combine(directory.Path, "broken")) [] "" |> ignore
+    directory.Write "pages/broken.md" "---\ntitle: broken\npackage: acme.broken 1.0.0\n---\n\n# Reference\n"
+    let pages = Path.Combine(directory.Path, "pages")
+    // Packing checks a package, so it is published whole and then broken where it is unpacked, as a package that a
+    // later compiler rejects is.
+    StandardLibraryDocs.update store pages |> ignore
+    let unpacked = PackageStore.directoryOf store "acme.broken" (SemanticVersion.tryParse "1.0.0").Value
+    File.WriteAllText(Path.Combine(unpacked, "broken.nyx"), "export module broken\n\nexport def answer: int = \"forty-two\"\n")
+    match StandardLibraryDocs.update store pages |> List.filter (fun (path, _) -> Path.GetFileName path = "broken.md") with
+    | [ _, StandardLibraryDocs.Unwritable message ] ->
+        Assert.StartsWith("pins acme.broken 1.0.0, which can't be read: broken.nyx:3:", message)
+        Assert.Contains("error NYX0", message)
+    | other -> Assert.Fail $"%A{other}"
+
+[<Fact>]
 let ``A page of a published package's file has its reference from the version the page pins`` () =
     let page = File.ReadAllText(Path.Combine(docsContentDirectory, "stdlib", "encode.md"))
     Assert.Equal(Result.Ok(Some("nanyx.json", (SemanticVersion.tryParse "0.4.0").Value)), StandardLibraryDocs.pinOf page)
