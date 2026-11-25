@@ -15,7 +15,7 @@ export module http.host.wasi
 
 import (
   nanyx/async as (Async)
-  nanyx/clock as (Clock)
+  nanyx/clock as (Clock, wholeMilliseconds)
   nanyx/host.runtime
   nanyx/random as (Random)
   nanyx.http/client as (Http)
@@ -40,7 +40,7 @@ export def run
     use Clock(
       now = { _ -> clocks.timeOfDay() }
       ticks = { _ -> clocks.ticks() }
-      sleep = { ms -> clocks.sleepFor(ms) }
+      sleep = { time -> clocks.sleepFor(wholeMilliseconds(time)) }
     )
 
     match incoming()

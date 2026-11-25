@@ -14,7 +14,7 @@ export module playground.host
 
 import (
   nanyx/async as (Async)
-  nanyx/clock as (Clock)
+  nanyx/clock as (Clock, wholeMilliseconds)
   nanyx/host.async as (cancelled, waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
@@ -115,7 +115,7 @@ export def run: [HostRuntime, Async] ([Async, Clock, Console, Random] () -> a) -
   use Clock(
     now = { _ -> pageNow() }
     ticks = { _ -> pageTicks() }
-    sleep = { ms -> sleepUntil(pageTicks() + ms) }
+    sleep = { time -> sleepUntil(pageTicks() + wholeMilliseconds(time)) }
   )
 
   ignore(entry())

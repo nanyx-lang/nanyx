@@ -36,7 +36,7 @@ let private assertPrints (expected: string) (source: string) =
 let ``race gives what the first to finish gave, and a loser's sleep returns at once`` () =
     assertPrints
         "quick\ntrue\n"
-        """def fastest = { _ -> race([{ sleep(50); "quick" }, { sleep(60_000); "slow" }]) }
+        """def fastest = { _ -> race([{ sleep(50ms); "quick" }, { sleep(60s); "slow" }]) }
 
 def started = ticks()
 println(fastest())
@@ -71,7 +71,7 @@ def fetch: [Async, Console, Http] string -> #some(string) | #cancelled | #failed
 }}
 
 def limited: [Async, Clock, Console, Http] () -> #some(string) | #cancelled | #failed | #timedOut = {{ _ ->
-  race([{{ fetch("{url}/slow") }}, {{ sleep(50); #timedOut }}])
+  race([{{ fetch("{url}/slow") }}, {{ sleep(50ms); #timedOut }}])
 }}
 
 println(limited())""")
@@ -98,7 +98,7 @@ def parent = {{ url: string ->
   await(task)
 }}
 
-def raced = {{ _ -> race([{{ parent("{url}/slow") }}, {{ sleep(50); "quick" }}]) }}
+def raced = {{ _ -> race([{{ parent("{url}/slow") }}, {{ sleep(50ms); "quick" }}]) }}
 
 println(raced())""")
 
@@ -114,7 +114,7 @@ import (
 )
 
 def loser: [Async, Console, FileSystem, Clock] () -> string = { _ ->
-  sleep(60_000)
+  sleep(60s)
 
   match file.write(path.of("never.txt"), "written")
     | #cancelled -> println("the loser's write was cancelled")

@@ -47,22 +47,24 @@ def main = {
 [<Fact>]
 let ``Run - the console host's sleep waits at least as long as it is asked`` () =
     let source =
-        """def slept: [Async, Clock] int -> int = { ms ->
+        """def slept: [Async, Clock] Time(int) -> int = { time ->
   def before = ticks()
-  sleep(ms)
+  sleep(time)
   ticks() - before
 }
 
-println(slept(50) >= 50)
-println(slept(0) >= 0)
+println(slept(50ms) >= 50)
+println(slept(0.5s) >= 500)
+println(slept(500us) >= 1)
+println(slept(0ns) >= 0)
 """
-    runSource source |> assertRan "true\ntrue\n"
+    runSource source |> assertRan "true\ntrue\ntrue\ntrue\n"
 
 [<Fact>]
 let ``Run - another task runs while one sleeps`` () =
     let source =
         """def later: [Async, Clock, Console] string -> () = { text ->
-  sleep(100)
+  sleep(100ms)
   println(text)
 }
 
@@ -82,7 +84,7 @@ both()
 let ``Run - a use of Clock gives a sleep that takes no time`` () =
     let source =
         """def nap: [Async, Clock] () -> string = { _ ->
-  sleep(3_600_000)
+  sleep(1hr)
   "woke at {now()}"
 }
 

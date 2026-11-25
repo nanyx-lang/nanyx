@@ -115,7 +115,7 @@ let ``A unit's name is apart from values: a value of the same name changes nothi
 
 /// A module that exports `Time` and its units, but for `secret`.
 let private timeModule =
-    "module mod\nexport dimension Time\n@baseUnit export unit ns: Time\nexport unit us: Time = 1_000ns\nexport unit ms: Time = 1_000us\nunit secret: Time = 2ms\n"
+    "module mod\nexport dimension Time\n@baseUnit export unit ns: Time\nexport unit us: Time = 1_000ns\nexport unit ms: Time = 1_000us\nexport unit tick: Time = 10ns\nunit secret: Time = 2ms\n"
 
 [<Fact>]
 let ``An import brings in the units its module exports, aliased or not`` () =
@@ -127,9 +127,9 @@ let ``An import brings in the units its module exports, aliased or not`` () =
 
 [<Fact>]
 let ``An import that selects names brings in only the units it selects`` () =
-    let main = "import mod as (Time, ms)\ndef x = 500ms\ndef y = 2us\n"
+    let main = "import mod as (Time, ms)\ndef x = 500ms\ndef y = 2tick\n"
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.UnknownUnit.Code, "2us" ],
+        [ DiagnosticCodes.UnknownUnit.Code, "2tick" ],
         reportedIn main (compileImporting timeModule main))
 
 [<Fact>]

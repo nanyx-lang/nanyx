@@ -10,7 +10,8 @@ order: 2
 > checks the declarations of dimensions and units, reads dimensions in types, types numbers with units and the
 > arithmetic on them, and writes measured values as text, as [Dimensions in types](#dimensions-in-types),
 > [Literals](#literals), [Arithmetic](#arithmetic) and [Display](#display) say ([Units of measure](../deep-dives/units)
-> says how). `Instant` and the standard library's dimensions are still to come.
+> says how). The prelude declares `Time`, and `Clock`'s `sleep` takes one, as [Time in the standard
+> library](#time-in-the-standard-library) says. `Instant` and the standard library's other dimensions are still to come.
 
 Nanyx will check units of measure at compile time, so a length cannot be added to a time, and a call reads as what
 it means:
@@ -85,6 +86,19 @@ a `float` stores and an `int` cannot (see [Literals](#literals)).
 
 Months and years are not units, as their lengths vary; they belong to a calendar library over `Instant`. Byte units
 are decimal or binary by name: `KB` is `1_000B` and `KiB` is `1_024B`.
+
+# Time in the standard library
+
+The prelude declares `Time` and its units, `ns`, `us`, `ms`, `s`, `min`, `hr` and `d`, as above
+(`stdlib/nanyx/prelude-time.nyx`), so every module of every program sees them, on every host, as it sees `int`; a
+library writes `sleep(5s)` without importing anything. A unit is a name of its own kind, so the prelude's `ms` is no
+value, and a value named `ms` is still one. A module's own `dimension Time` or `unit s` is the one its name means there,
+and an import's unit replaces the prelude's of its name, as an import's value does.
+
+`Clock`'s `sleep` takes a `Time(int)`: `sleep(500ms)`, and `sleep(0.5s)`, which is a whole number of nanoseconds and so
+an `int` of them where a `Time(int)` is expected, while `sleep(500)` is an error. Each host waits for the time's whole
+milliseconds, rounded up, so a sleep waits at least as long as it is asked (`nanyx/clock`'s `wholeMilliseconds`). It
+takes a `Time(int)`, not any `Time`, until the first [open question](#open-questions) is settled.
 
 # Storage
 

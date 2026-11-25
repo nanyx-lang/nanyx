@@ -170,7 +170,7 @@ In Nanyx:
 def ticks: [Async] seq(int) = seq.unfold(1) { i ->
   if i > 3 then #done
   else
-    sleep(100)
+    sleep(100ms)
     #some(i, i + 1)
 }
 

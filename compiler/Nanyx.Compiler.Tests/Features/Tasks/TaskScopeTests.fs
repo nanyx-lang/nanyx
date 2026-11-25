@@ -143,13 +143,13 @@ let ``Racing functions that use a cell is an error`` () =
 def counts = { _ ->
   memory {
     mut total = 0
-    def winner = race([{ sleep(1); total := total + 1; "a" }, { sleep(1); total := total + 10; "b" }])
+    def winner = race([{ sleep(1ms); total := total + 1; "a" }, { sleep(1ms); total := total + 10; "b" }])
     "{winner} {total}"
   }
 }"""
     let code, _, at = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.TaskHoldsMemory.Code, code)
-    Assert.Equal("""[{ sleep(1); total := total + 1; "a" }, { sleep(1); total := total + 10; "b" }]""", at)
+    Assert.Equal("""[{ sleep(1ms); total := total + 1; "a" }, { sleep(1ms); total := total + 10; "b" }]""", at)
 
 [<Fact>]
 let ``A local def that passes on its function may start a task with one that holds nothing of a block`` () =

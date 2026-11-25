@@ -261,7 +261,7 @@ let ``A task that calls itself in tail position after a lambda it made waits fre
     // return probe stands between the two (#2591).
     let source =
         """def waitThen: [Async, Clock] int -> int = { x ->
-  sleep(1)
+  sleep(1ms)
   x + 1
 }
 

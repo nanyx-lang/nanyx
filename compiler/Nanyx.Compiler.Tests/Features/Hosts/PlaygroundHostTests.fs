@@ -106,7 +106,7 @@ let ``A program that starts tasks and sleeps compiles under the playground host,
         withFinalNewline """::host nanyx.playground.host
 
 def later: [Async, Clock, Console] string -> () = { text ->
-  sleep(100)
+  sleep(100ms)
   println(text)
 }
 
