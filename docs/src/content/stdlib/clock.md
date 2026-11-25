@@ -48,7 +48,7 @@ A `use` of `Clock` gives a function whatever time a test needs, and a sleep that
 import nanyx/clock as (Clock)
 
 def stamp: [Async, Clock] string -> string = { text ->
-  sleep(60_000)
+  sleep(1min)
   "{now()}: {text}"
 }
 
