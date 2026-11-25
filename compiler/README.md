@@ -75,8 +75,8 @@ dotnet test Nyx.Compiler.slnx --filter "Category!=Timing"
 and run them on their own, on a quiet machine, with `--filter "Category=Timing"`. A test times what it runs with
 `TestTiming.millisecondsOf` (`TestTiming.fs`, which each test project that times anything compiles), which fails unless
 the test is marked `[<Trait("Category", "Timing")>]`. Where a test can compare an amount of work instead of time, it
-does, as a WebAssembly program's fuel (`WasmProgram.Work`), which counts the instructions a call runs. Those are in no
-category.
+does: a WebAssembly program's fuel (`WasmProgram.Work`), which counts the instructions a call runs, or the type
+checker's full solves (`Solving.countingFullSolves`). Those are in no category.
 
 The playground host's runner is tested in headless Chromium, with Playwright (`npm install playwright` and
 `npx playwright install chromium` where they aren't installed):
