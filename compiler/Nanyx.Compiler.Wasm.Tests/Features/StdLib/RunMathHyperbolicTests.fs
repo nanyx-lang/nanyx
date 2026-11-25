@@ -7,11 +7,6 @@ open TranspilerWasmTestHelpers
 // #2392: `math.sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `hypot` and `cbrt`, written in Nanyx, within one unit in
 // the last place of the correctly rounded result.
 
-/// The calls `calls`, each a call in Nanyx and the correctly rounded value of it, run in one program: each value it prints
-/// must be within one unit in the last place of that value, or exactly it when that is NaN, zero or infinite.
-let private assertWithinUlp =
-    assertPrintsFloats (fun expected actual -> abs (actual - expected) <= Math.BitIncrement(abs expected) - abs expected)
-
 [<Fact>]
 let ``Run - nanyx/math sinh, cosh and tanh at 0, 1 and -1`` () =
     assertWithinUlp

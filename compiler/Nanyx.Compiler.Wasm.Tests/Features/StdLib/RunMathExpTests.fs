@@ -1,5 +1,7 @@
 module TranspilerWasmTests.Features.StdLib.RunMathExp
 
+open System
+open System.Globalization
 open Xunit
 open TranspilerWasmTestHelpers
 
@@ -64,3 +66,16 @@ println("{area(2.0)}")
 """
 
     runSource source |> assertRan "3.141592653589793 2.718281828459045\n12.566370614359172\n"
+
+/// `x`, a float of at most three decimals, as a Nanyx literal.
+let private literal (x: float) = x.ToString("F3", CultureInfo.InvariantCulture)
+
+[<Fact>]
+let ``Run - nanyx/math exp is within a unit in the last place of the correctly rounded result from -745.0 to 709.78`` () =
+    // #2536: at the ends of the range, past which it is infinity or 0.0, and at 300 points spread over it, each moved
+    // a little off a round number so that the sweep doesn't land only on whole numbers.
+    let ends = [ 709.44; 709.78; 709.79; -720.0; -745.0; -745.2; 0.0 ]
+    let spread = [ for k in 0..299 -> -745.0 + float k * (709.78 + 745.0) / 300.0 + 0.001 * float (k % 7) ]
+    (ends @ spread)
+    |> List.map (fun x -> literal x |> fun text -> $"math.exp({text})", Math.Exp(Double.Parse(text, CultureInfo.InvariantCulture)))
+    |> assertWithinUlp

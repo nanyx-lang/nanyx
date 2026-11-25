@@ -573,6 +573,11 @@ let assertPrintsFloats (close: float -> float -> bool) (calls: (string * float) 
             else close expected actual
         Assert.True(near, $"{call} is {line}, but should be {expected:R}")
 
+/// The calls `calls`, each a call in Nanyx and the correctly rounded value of it, run in one program: each value it prints
+/// must be within one unit in the last place of that value, or exactly it when that is NaN, zero or infinite.
+let assertWithinUlp (calls: (string * float) list) =
+    assertPrintsFloats (fun expected actual -> abs (actual - expected) <= Math.BitIncrement(abs expected) - abs expected) calls
+
 /// Asserts that `outcome` ran to its end, writing `expectedOutput` to stdout and `expectedDbg`, what its `dbg`s printed,
 /// to stderr.
 let assertRanWithDbg (expectedOutput: string) (expectedDbg: string) (outcome: RunOutcome) =
