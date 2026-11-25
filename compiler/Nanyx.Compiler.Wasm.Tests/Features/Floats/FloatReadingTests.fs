@@ -182,19 +182,27 @@ let ``Reading a decimal of 17 digits, or at either end of the range, takes less 
         let clock = Diagnostics.Stopwatch.StartNew()
         program.Call(name, 50000) |> ignore
         clock.Elapsed.TotalMilliseconds
-    // Each one's quickest run counts, and they are run again in turn until each holds or twenty rounds have run, so that
-    // load on the machine, which slows one run and not another, can't make the test fail (#2388). Before,
-    // 0.30000000000000004 took 5 times as long as 3.141592653589793, and the smallest normal float over 40 times.
-    let quickest = Collections.Generic.Dictionary<string, float>()
-    let note (name: string) (milliseconds: float) =
-        quickest.[name] <- (match quickest.TryGetValue name with | true, best -> min best milliseconds | _ -> milliseconds)
-    let holds (name: string) = quickest.[name] < 2.0 * quickest.["sixteen"]
+    // Each decimal is timed between two runs of the decimal of 16 digits, and compared with the mean of those two, so
+    // that load on the machine, which comes and goes, slows both sides of a comparison alike. Each one's best ratio
+    // counts, and they are compared again until each holds or twenty rounds have run (#2388): comparing each one's
+    // quickest run with the quickest of the 16 digits, which may have come at a quieter moment, missed under the full
+    // suite's load. Before #2560, 0.30000000000000004 took 5 times as long as 3.141592653589793, and the smallest normal
+    // float over 40 times.
+    let best = Collections.Generic.Dictionary<string, float * float * float>()
+    let note (name: string) (slow: float) (sixteen: float) =
+        let ratio = slow / sixteen
+        match best.TryGetValue name with
+        | true, (bestRatio, _, _) when bestRatio <= ratio -> ()
+        | _ -> best.[name] <- (ratio, slow, sixteen)
+    let holds (name: string) = let ratio, _, _ = best.[name] in ratio < 2.0
     let mutable round = 0
     while round < 20 && (round < 3 || not (slowBefore |> List.forall holds)) do
         for name in slowBefore do
-            note name (time name)
-            note "sixteen" (time "sixteen")
+            let before = time "sixteen"
+            let slow = time name
+            let after = time "sixteen"
+            note name slow ((before + after) / 2.0)
         round <- round + 1
-    let sixteen = quickest.["sixteen"]
     for name in slowBefore do
-        Assert.True(holds name, $"{name} took {quickest.[name]:F1} ms, against {sixteen:F1} ms for a decimal of 16 digits")
+        let ratio, slow, sixteen = best.[name]
+        Assert.True(holds name, $"{name} took {slow:F1} ms, {ratio:F2} times the {sixteen:F1} ms of a decimal of 16 digits beside it")
