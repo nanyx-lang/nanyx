@@ -107,7 +107,7 @@ jobs:
           nanyx() { dotnet run --project "$project" --no-build --configuration Release -- "$@"; }
           for manifest in ../examples/*/*.nyxp; do
             # A package under the HTTP host serves rather than prints: the next step checks it.
-            if grep -q '"nanyx.http"' "$manifest"; then continue; fi
+            if grep -q '"nanyx.http.host"' "$manifest"; then continue; fi
             package=$(dirname "$manifest")
             component="$RUNNER_TEMP/$(basename "$package").wasm"
             nanyx build "$package" --out "$component"
@@ -242,7 +242,7 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/compiler/dist"
           zip -qr "$GITHUB_WORKSPACE/compiler/dist/nanyx-browser.zip" . -x '*.br' -x '*.gz'
-          unzip -l "$GITHUB_WORKSPACE/compiler/dist/nanyx-browser.zip" packages/nanyx.playground/runner/playground.js compiler.js _framework/dotnet.js
+          unzip -l "$GITHUB_WORKSPACE/compiler/dist/nanyx-browser.zip" packages/nanyx.playground.host/runner/playground.js compiler.js _framework/dotnet.js
 
       - name: Test the playground page
         working-directory: docs

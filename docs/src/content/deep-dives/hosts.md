@@ -17,8 +17,8 @@ in progress.
   compiler keeps no table of hosts: `HostPackages.tryShipped` reads the manifest of one it ships, from its directory
   beside the compiler (`ShippedPackages`, see [Built-ins as packages](./shipped-packages#how-shipped-packages-are-built)), and
   `HostPackages.console` is the console host, which a loose script runs under unless it names another. The host is imported as
-  `nanyx.console/console.host` (`Host.Import`), and its prelude as `nanyx.console/console.prelude` (`Host.PreludeImport`).
-- **A package chooses its host.** `Manifest.check` reads the manifest's `host`, `(package = "nanyx.console", version
+  `nanyx.cli.host/cli.host` (`Host.Import`), and its prelude as `nanyx.cli.host/cli.prelude` (`Host.PreludeImport`).
+- **A package chooses its host.** `Manifest.check` reads the manifest's `host`, `(package = "nanyx.cli.host", version
   = "0.28.0")` or `(package = "acme.host", path = "../acme.host")`, into `Manifest.Host` (a `HostEntry`; none without a
   `host` field: a library, whose `@entry` `Attributes.applyAttributes` reports as `NYX0031`). A host the compiler
   doesn't ship, named without a path, is `NYX0023`, saying how to give its path; a host with both a path and a version
@@ -44,7 +44,7 @@ in progress.
   that the module's own imports win over. The contexts the prelude re-exports are those the host provides
   (`providesContexts` in `ImportMerging.fs`): importing the module that declares one, as the prelude does, binds the names
   of its members, so they are ambient (see below). An import that selects a context, as the prelude's
-  `export nanyx.console.core/console (Console, ...)` does, selects its members too.
+  `export nanyx.cli/console (Console, ...)` does, selects its members too.
 - **`@entry` calls the host's `run`.** `Attributes.applyAttributes` imports the host under an alias of its own
   (`__host`), so that it can't clash with the program's names, and appends `__host.run(main)` to the module as its
   start. The entry point passed to `run` is at the attribute's span, so a mismatch there is the entry not fitting the
@@ -88,7 +88,7 @@ in progress.
   lambda in any def does. Statements beside an `@entry` are a script entry too, run before the `@entry`'s. A value that needs a context in a module with no statements, which nothing would run, is an error
   at the value. A script carries only the members of the host's contexts that it calls, as an entry program does
   (see `Env` below).
-- **`Console` only comes from the host.** `nanyx.console.core/console` declares the context and `print`, `println`, `eprint` and
+- **`Console` only comes from the host.** `nanyx.cli/console` declares the context and `print`, `println`, `eprint` and
   `eprintln`, but no instance: the line reading lives in the console host alone. Importing a module whose contexts
   the host provides (those its prelude re-exports) binds the names of its plain contexts' members, `readLine` and the
   rest, each a symbol of its own (`ImportMerging.mergeImport`), so `Console` is still an ambient context: a script's
@@ -107,7 +107,7 @@ in progress.
   `InferState.UnprovidedContexts`, and a call to a function that requires it is `NYX0205`, naming the contexts and the
   host (`Contexts.ensureContextAvailable`, [#1811](https://github.com/nanyx-lang/nanyx/issues/1811)). `HostRuntime`,
   which only a host may require, is left out: it has an error of its own, `NYX0238`.
-- **`Env`** is declared in `nanyx.console.core/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, with
+- **`Env`** is declared in `nanyx.cli/env` (`args`, `variable`, `exit`), and `run` `use`s it beside `Console`, with
   `FileSystem`, `Http` (see below), `Random` and `Clock`, so its parameter is `[Async, Clock, Console, Env, FileSystem, Http, Random] () -> a`; an entry that requires fewer
   contexts fits. The host's prelude re-exports
   `Env`, so its members are ambient names in every module of the program. Its members are functions of the host's own
@@ -134,7 +134,7 @@ in progress.
   for what they do on their own (`readFile`, `writeFile`, `pathExists`, `listDirectory`, ...), since the prelude makes
   them ambient names. `listDirectory` gives names in any order, and `dir.list` sorts and joins them, so another host
   has less to do.
-- **The file system on WASI.** The console host writes `FileSystem` in `console.host.files.nyx`, a `@partial` fragment of its root module `console.host` (a host package's modules are assembled from their fragments as a program's are, `PartialModules.otherFragments` searching the host's package too), on WASI's
+- **The file system on WASI.** The console host writes `FileSystem` in `cli.host.files.nyx`, a `@partial` fragment of its root module `cli.host` (a host package's modules are assembled from their fragments as a program's are, `PartialModules.otherFragments` searching the host's package too), on WASI's
   `fd_prestat_get` and `fd_prestat_dir_name`, `path_open`, `fd_read`, `fd_pread`, `fd_write`, `fd_close`,
   `fd_filestat_get`, `fd_readdir`, `path_filestat_get`, `path_unlink_file` and `path_create_directory`. A path is
   found in the runtime's preopened directories: a relative one in the preopen named `.`, an absolute one in the
@@ -154,16 +154,16 @@ in progress.
   name, as one whose members the prelude stands in for is by theirs (`Contexts.isAmbientMemberless`): the program's top
   level has it, and supplies it to the start's call of `run` as the runtime supplies `HostRuntime`; an unannotated def
   that calls something requiring it infers it; and an annotated def that doesn't declare it is `NYX0211`. A memberless
-  context has nothing to pass at run time, so `Async` costs nothing in the generated code. `nanyx.http.core`'s
+  context has nothing to pass at run time, so `Async` costs nothing in the generated code. `nanyx.http`'s
   `sendRequest`, `Clock`'s `sleep` and `nanyx.fs`'s members, and the functions written on them, require it. A request
   and a sleep stop the task that waits while the program's other tasks run; a file's functions are blocking host
   calls, which hold the instance's thread. Each instance has a thread of its own: the console host has one instance,
   and the HTTP host runs each request's instance on a thread of its own (`WasmServer.serve`), so a handler that waits
   on an outbound request holds only its own (see [Async](./async)).
-- **`Http`** is declared in the shipped package `nanyx.http.core`, which the console host depends on; its prelude
+- **`Http`** is declared in the shipped package `nanyx.http`, which the console host depends on; its prelude
   re-exports `Http` and `HttpError`, with `Request`, `Method` and `Response`. Its one member, `sendRequest`, is written
   on the runtime's own import `nanyx:http`, not on WASI, which has no networking (see
-  [Foreign functions](./foreign-functions#whats-built)). `nanyx.http.core`'s module `wire` writes and reads requests
+  [Foreign functions](./foreign-functions#whats-built)). `nanyx.http`'s module `wire` writes and reads requests
   and responses as the runtime's imports pass them, so the console host and the HTTP host share it.
 - **`Random`** is declared in the standard library's `nanyx/random`, and both hosts' preludes re-export it. Each host
   writes its one member, `bits`, on WASI's `random_get`, which fills 8 bytes that `readI64` then reads: both call
@@ -178,7 +178,7 @@ in progress.
   `nanyx:async` for what is left of it until the monotonic clock has passed its deadline, so the program's other tasks
   run meanwhile. A sleep is a member, not a function of `nanyx/clock`, so that a test's `use Clock(...)` decides how
   long it takes, as it decides the time.
-- **The HTTP host.** `packages/nanyx.http` declares itself a host with `host = (root = "http.host", prelude =
+- **The HTTP host.** `packages/nanyx.http.host` declares itself a host with `host = (root = "http.host", prelude =
   "http.prelude", settings = (port = 3000))`. Its `run` takes the handler, `use`s an `Http` written on `nanyx:http` as
   the console host's is, takes the request from the runtime, calls the handler, and gives the runtime the response; a
   request the runtime wrote wrongly is answered with a 400 without calling the handler. The host imports the
@@ -188,8 +188,8 @@ in progress.
   exits without responding is answered with a 500, the reason goes to standard error, and the server carries on.
   `Request.path` takes the path from the whole URL the runtime passes. Its component root, `http.host.wasi`, which
   `nanyx build` builds a `wasi:http/service` component from, is on [Components](./components#the-http-hosts-component-root).
-- **The playground host.** `packages/nanyx.playground` declares itself a host with `host = (root = "playground.host",
-  prelude = "playground.prelude")`, and depends only on `nanyx.console.core`. Its `run` takes `[Async, Clock, Console, Random] () -> a`
+- **The playground host.** `packages/nanyx.playground.host` declares itself a host with `host = (root = "playground.host",
+  prelude = "playground.prelude")`, and depends only on `nanyx.cli`. Its `run` takes `[Async, Clock, Console, Random] () -> a`
   and `use`s a `Console`, a `Random` and a `Clock` written on imports of its own, `nanyx:playground` `write`,
   `writeError` (each given the address and byte length of the text in the module's memory), `randomBits` (64 bits, as
   an `i64`), `now` and `ticks` (milliseconds, as `i64`s), and `readLine` and `takeLine`, which a page implements, not
@@ -203,7 +203,7 @@ in progress.
   under it unchanged, and one that needs a context it doesn't provide is `NYX0205` naming it, by the check above
   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)). The runtime's own helpers still import WASI's `fd_write`
   and `proc_exit`, for a deferred error or crash, so whatever runs the module provides those two as well.
-- **The playground host's runner.** `packages/nanyx.playground/runner` is the JavaScript that runs a module compiled for
+- **The playground host's runner.** `packages/nanyx.playground.host/runner` is the JavaScript that runs a module compiled for
   the playground host; it isn't a source of the package (its `sources` are `src/**/*.nyx`), and the compiler built for
   the browser publishes it with the page. `playground.js`'s `run(wasm, { seed, onStdout, onStderr, onDbg, onRead })`
   starts `worker.js` in a web worker and gives `{ done, stop, input, closeInput }`: `stop` terminates the worker, and
@@ -298,8 +298,8 @@ without it.
 A library that only makes sense with a certain kind of host, such as middleware for the HTTP host, depends on what a
 host provides, its contexts and types, never on the host itself. So each host is two packages:
 
-- **An interface package** that declares the types and contexts: `nanyx.http.core` declares `Request`, `Response`
-  and `Http`; `nanyx.console.core` declares `Console` and `Env`. It has no code beyond those declarations and the
+- **An interface package** that declares the types and contexts: `nanyx.http` declares `Request`, `Response`
+  and `Http`; `nanyx.cli` declares `Console` and `Env`. It has no code beyond those declarations and the
   functions on them.
 - **The host** that implements it, its `run` built on [foreign functions](./foreign-functions). It depends on its
   interface package.

@@ -18,7 +18,7 @@ def main = { name: string -> println("Hello, {name}!") }
     let code, message, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, code)
     Assert.Equal(
-        """It doesn't fit the host 'nanyx.console/console.host'
+        """It doesn't fit the host 'nanyx.cli.host/cli.host'
   expected: [Async, Clock, Console, Env, FileSystem, Http, Random] () -> a
   found:    string -> ()""".ReplaceLineEndings "\n",
         message)
@@ -85,7 +85,7 @@ free(0)
 [<Fact>]
 let ``Calling a host's run outside a host is an error, as it requires HostRuntime`` () =
     let source =
-        """import nanyx.console/console.host as h
+        """import nanyx.cli.host/cli.host as h
 
 h.run({ () })
 """
@@ -96,7 +96,7 @@ h.run({ () })
 [<Fact>]
 let ``The console host, its interface package and nanyx/host.runtime call no compiler intrinsic`` () =
     Assert.DoesNotContain(Intrinsics.prefix, (StandardLibrary.tryLoadSource "host.runtime").Value)
-    for name in [ Hosts.consolePackage; "nanyx.console.core"; "nanyx.fs"; "nanyx.http.core" ] do
+    for name in [ Hosts.consolePackage; "nanyx.cli"; "nanyx.fs"; "nanyx.http" ] do
         for file in Directory.GetFiles(Path.Combine(ShippedPackages.directoryOf name, "src"), "*.nyx") do
             Assert.DoesNotContain(Intrinsics.prefix, File.ReadAllText file)
 

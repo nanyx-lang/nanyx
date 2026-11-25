@@ -103,26 +103,13 @@ A library for a kind of host depends on the host's interface package, never on t
 ([Interface packages](../deep-dives/hosts#interface-packages)). What is still to come:
 
 - **A terminal UI** needs raw keys, the terminal's size, cursor control and colour: a `Terminal` context, declared in
-  `nanyx.console.core`, which the console host provides and a browser host doesn't. The library is ordinary
+  `nanyx.cli`, which the console host provides and a browser host doesn't. The library is ordinary
   `[Terminal]` code, and a program whose host doesn't provide `Terminal` gets a compile error naming it at the
   library's call, as it does for `FileSystem`. A terminal's raw mode and size aren't in WASI, so the console host's
   `Terminal` would be built on imports the CLI's own runtime provides. A program using it then runs under
   `nanyx run`, but not under another WASI runtime, which is accurate: it needs that host.
 - **Which hosts a library works with**, shown by the package index with nothing written by its author: a package's
   `api.json` lists the contexts it requires, and a host lists those it provides.
-
-**Naming the pair.** Since an application names its host in its manifest more often than a library author names an
-interface, the host could take the shorter name:
-
-| | Host | Interface |
-|---|---|---|
-| Console | `nanyx.console` | `nanyx.console.core` |
-| HTTP | `nanyx.http` | `nanyx.http.core` |
-
-Rust's `futures` and `futures-core` follow this pattern. The alternative gives the interface the short name
-(`nanyx.http` for the types, `nanyx.http.host` for the server), as Rust's `http` crate (types) beside `hyper` (a
-server) does: a library author then writes the obvious name, and an application names the host it picked. This is an
-open question below.
 
 # The test runner is a host
 
@@ -159,11 +146,7 @@ provides. .NET's Generic Host, with `IHostedService`, takes the second approach.
 - **Host configuration typing.** The `settings` of the manifest's `host` are checked against the settings the host
   declares in its manifest, with their defaults: a misspelt key is an error, and so is a value of another kind than its
   default. Whether to check them against a record type the host exports, as Nanyx types are checked, is open.
-- **Naming a host and its interface.** Does the host take the short name (`nanyx.console`, with `nanyx.console.core` for
-  the interface), or the interface (`nanyx.http`, with `nanyx.http.host`)? See
-  [Libraries for a host](#libraries-for-a-host). The console's are `nanyx.console` and `nanyx.console.core` for now:
-  `Hosts.consolePackage` names the host, so that a rename is a small change.
 - **Host code in another language.** A browser host needs JavaScript beside the module. How does a host package carry
-  it, and how does the build write it out? The playground host ships its runner in `packages/nanyx.playground/runner`,
+  it, and how does the build write it out? The playground host ships its runner in `packages/nanyx.playground.host/runner`,
   outside its `sources`, which the compiler built for the browser publishes with the page; a general mechanism is open.
 - **Composing hosts.** Language-level, or a dedicated host? See [Composing hosts](#composing-hosts).

@@ -16,7 +16,7 @@ mkdir -p "$out"
 
 nanyx() { dotnet run --project "$here/../Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj" --no-build --configuration "${CONFIGURATION:-Release}" -- "$@"; }
 
-nanyx build "$here/shapes" --host nanyx.console --out "$out/shapes.wasm"
+nanyx build "$here/shapes" --host nanyx.cli.host --out "$out/shapes.wasm"
 
 # The interface blocks of two WIT files are the same.
 same_interfaces() {

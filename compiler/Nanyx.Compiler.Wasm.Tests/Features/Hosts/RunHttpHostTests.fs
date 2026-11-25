@@ -1,4 +1,4 @@
-/// The HTTP host, `nanyx.http`, whose entry is a `Request -> Response` handler: `nanyx run` serves it on the port of the
+/// The HTTP host, `nanyx.http.host`, whose entry is a `Request -> Response` handler: `nanyx run` serves it on the port of the
 /// host's `port` setting, answering each request with a fresh instance of the program (#1786, see
 /// docs/src/content/deep-dives/hosts.md).
 module TranspilerWasmTests.Features.Hosts.HttpHost
@@ -24,8 +24,8 @@ let private writePackage (directory: string) (port: int) (main: string) =
     let manifest =
         $"""(
   package = (name = "server", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.http", version = "{NyxCompiler.Toolchain.version}", settings = (port = {port}))
-  dependencies = [(package = "nanyx.http.core", version = "{NyxCompiler.Toolchain.version}")]
+  host = (package = "nanyx.http.host", version = "{NyxCompiler.Toolchain.version}", settings = (port = {port}))
+  dependencies = [(package = "nanyx.http", version = "{NyxCompiler.Toolchain.version}")]
 )
 """
     Directory.CreateDirectory(Path.Combine(directory, "src")) |> ignore
@@ -148,7 +148,7 @@ let ``A handler makes requests of its own, through Http`` () =
     let port = freePort ()
     writePackage directory.Path port $"""module main
 
-import nanyx.http.core/http as http
+import nanyx.http/http as http
 
 @entry
 def main: [Async, Http] Request -> Response = {{ request ->
@@ -178,14 +178,14 @@ def main: Request -> Response = { request ->
     assertDiagnostic "NYX0102" "Unknown function 'println'" "" "'println' is not in scope" (outcome.StandardOutput + outcome.StandardError)
 
 [<Theory>]
-[<InlineData("(colour = \"red\")", "NYX0021", "The host 'nanyx.http' takes no setting 'colour': it takes port")>]
+[<InlineData("(colour = \"red\")", "NYX0021", "The host 'nanyx.http.host' takes no setting 'colour': it takes port")>]
 [<InlineData("(port = \"3000\")", "NYX0023", "The host's setting 'port' is 3000 by default, so it can't be the string \"3000\"")>]
 let ``A setting the host doesn't take, or of another kind, is an error at the setting`` (settings: string) (code: string) (message: string) =
     use directory = new TempDirectory()
     let manifest =
         $"""(
   package = (name = "server", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.http", version = "{NyxCompiler.Toolchain.version}", settings = {settings})
+  host = (package = "nanyx.http.host", version = "{NyxCompiler.Toolchain.version}", settings = {settings})
 )
 """
     Directory.CreateDirectory(Path.Combine(directory.Path, "src")) |> ignore
@@ -219,7 +219,7 @@ let ``A request is answered while another's handler waits on a request of its ow
     let port = freePort ()
     writePackage directory.Path port $"""module main
 
-import nanyx.http.core/http as http
+import nanyx.http/http as http
 
 @entry
 def main = {{ request: Request ->

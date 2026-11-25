@@ -210,29 +210,28 @@ let ``Thousands of values held twice are shared when read back, in their part an
 
 // The build checks the packages the compiler ships too (#1637), so a loose script does not check the console host.
 
-let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.console.core", "src", "console.nyx")
+let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.cli", "src", "console.nyx")
 
 [<Fact>]
 let ``The checked library has the shipped packages' modules, with paths beside this compiler`` () =
     let shipped = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.build).Value.Shipped
     Assert.Equal<string list>(
-        [ "nanyx.console.core/src/console.nyx"
-          "nanyx.console.core/src/env.nyx"
-          // A module split across files is checked, and kept, under the first of them by name.
-          "nanyx.console/src/console.files.nyx"
-          "nanyx.console/src/console.host.files.nyx"
-          "nanyx.console/src/console.host.wasi.files.nyx"
-          "nanyx.console/src/console.prelude.nyx"
-          "nanyx.console/src/console.stdin.nyx"
+        [ "nanyx.cli.host/src/cli.files.nyx"
+          "nanyx.cli.host/src/cli.host.files.nyx"
+          "nanyx.cli.host/src/cli.host.wasi.files.nyx"
+          "nanyx.cli.host/src/cli.prelude.nyx"
+          "nanyx.cli.host/src/cli.stdin.nyx"
+          "nanyx.cli/src/console.nyx"
+          "nanyx.cli/src/env.nyx"
           "nanyx.fs/src/dir.nyx"
           "nanyx.fs/src/file.nyx"
           "nanyx.fs/src/filesystem.nyx"
           "nanyx.fs/src/path.nyx"
-          "nanyx.http.core/src/client.nyx"
-          "nanyx.http.core/src/http.nyx"
-          "nanyx.http.core/src/request.nyx"
-          "nanyx.http.core/src/response.nyx"
-          "nanyx.http.core/src/wire.nyx"
+          "nanyx.http/src/client.nyx"
+          "nanyx.http/src/http.nyx"
+          "nanyx.http/src/request.nyx"
+          "nanyx.http/src/response.nyx"
+          "nanyx.http/src/wire.nyx"
           "nanyx.wasi/src/abi.nyx"
           "nanyx.wasi/src/cli.nyx"
           "nanyx.wasi/src/clocks.nyx"
@@ -254,7 +253,7 @@ let ``A compile of a loose script takes the console host's modules from the chec
     Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
     Assert.Equal<string list>([ "start <source>" ], recording.Events |> Seq.filter (fun event -> event.StartsWith "start ") |> List.ofSeq)
     // The console host's module is kept under its first file by name (see the test above).
-    Assert.Contains($"""reused {Path.Combine(Path.GetDirectoryName consoleHostFile, "console.host.files.nyx")}""", recording.Events)
+    Assert.Contains($"""reused {Path.Combine(Path.GetDirectoryName consoleHostFile, "cli.host.files.nyx")}""", recording.Events)
 
 [<Fact>]
 let ``A shipped module whose files have changed is not taken from the checked library`` () =

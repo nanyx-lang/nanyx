@@ -84,7 +84,7 @@ internal static partial class CliCommands
     /// </summary>
     /// <param name="path">A .nyx file, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.cli.host, or the directory of one. A script names its host with a ::host directive.</param>
     [Consolo("check")]
     public static int Check(
         [Consolo("timings")] bool timings = false,
@@ -212,7 +212,7 @@ internal static partial class CliCommands
     /// <param name="checkMemory">Check the program's reference counting as it runs: stop at a block freed twice or an object used after it was freed, and fail if anything is left on the heap at the end.</param>
     /// <param name="memory">Check the program's memory as --check-memory does, and once it stops, write to stderr how many blocks it allocated and freed, how many objects it built in the block of one it gave up, how many bytes it allocated, the most it held at once, and how far the heap grew.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.cli.host, or the directory of one. A script names its host with a ::host directive.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     /// <param name="yieldAtEveryWait">Make every call that can wait stop once and be resumed: for working on the compiler, to run each way a function that waits has of stopping and carrying on.</param>
     /// <param name="allowDir">A directory the program may read and write besides the current directory, which it always may. A path outside them is #permissionDenied.</param>
@@ -301,7 +301,7 @@ internal static partial class CliCommands
     /// <param name="core">Write a core module, as nanyx run runs, rather than the WASI 0.3 component that a host with a component root otherwise has written.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred: the program is written, and reports one if it reaches it.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported, and how long the program took to emit. On a terminal, the tree is shown live while the compile runs.</param>
-    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.console, or the directory of one. A script names its host with a ::host directive.</param>
+    /// <param name="host">The host to run the package's @entry under, in place of its manifest's host: a host package the compiler ships, such as nanyx.cli.host, or the directory of one. A script names its host with a ::host directive.</param>
     /// <param name="noInline">Compile every call as a call, without inlining: for working on the compiler, to tell whether a misbehaving program is the inliner's doing.</param>
     /// <param name="locked">Refuse to change nanyx.lock: a manifest that asks for something it doesn't lock is an error, as CI wants. Without it, the build chooses versions again and updates nanyx.lock, as nanyx pull does.</param>
     [Consolo("build")]

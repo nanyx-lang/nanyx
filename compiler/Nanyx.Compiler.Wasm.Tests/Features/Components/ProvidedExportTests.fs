@@ -47,12 +47,12 @@ let ``An export that requires a context the host's root doesn't provide is NYX02
     let checkedPackage = nanyxIn time.Path [ "check" ]
     Assert.Equal(1, checkedPackage.ExitCode)
     Assert.Contains("NYX0237", checkedPackage.StandardOutput + checkedPackage.StandardError)
-    Assert.Contains("'later' requires 'Calendar', which the host 'nanyx.console/console.host' doesn't provide", checkedPackage.StandardOutput + checkedPackage.StandardError)
+    Assert.Contains("'later' requires 'Calendar', which the host 'nanyx.cli.host/cli.host' doesn't provide", checkedPackage.StandardOutput + checkedPackage.StandardError)
     Assert.Contains("stamp.nyx:5:1", checkedPackage.StandardOutput + checkedPackage.StandardError)
 
 [<Fact>]
 let ``An export that requires contexts under a host whose root has no provide is NYX0237 at the export`` () =
-    let host = $"host = (package = \"nanyx.http\", version = \"{Toolchain.version}\")"
+    let host = $"host = (package = \"nanyx.http.host\", version = \"{Toolchain.version}\")"
     use time = package host "module stamp\n\n@component\nexport def later: [Clock] int -> int = { delay -> delay + ticks() }\n"
     let checkedPackage = nanyxIn time.Path [ "check" ]
     let output = checkedPackage.StandardOutput + checkedPackage.StandardError

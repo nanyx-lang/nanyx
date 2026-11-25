@@ -117,6 +117,8 @@ module DiagnosticCodes =
     /// A warning, not an error: the build goes on.
     let UnlistedVersion = code 51 "Unlisted version" Severity.Warning
     let NeedsNewerCompiler = code 52 "Package that needs a newer compiler" Severity.Error
+    let HostNameConvention = code 53 "Host package not named for a host" Severity.Error
+    let RenamedPackage = code 54 "Shipped package named by its old name" Severity.Error
 
     // Resolving names.
     let UnknownIdentifier = code 101 "Unknown identifier" Severity.Error
@@ -236,7 +238,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; VersionConflict; DependencyNotLocked; PackageFileNotUtf8; KeywordsOutOfOrder; UnlistedVersion; NeedsNewerCompiler; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; VersionConflict; DependencyNotLocked; PackageFileNotUtf8; KeywordsOutOfOrder; UnlistedVersion; NeedsNewerCompiler; HostNameConvention; RenamedPackage; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField; UnknownPattern; AmbiguousPattern; ReExportClash
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers

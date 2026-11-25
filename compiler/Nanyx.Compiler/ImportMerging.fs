@@ -29,7 +29,7 @@ module internal ImportMerging =
           /// Whether a module declares contexts the module's host provides, which importing it makes ambient (see
           /// `providesContexts`).
           ProvidesContexts: ModuleOrigin -> bool
-          /// The module's host's root module as an import names it (`nanyx.console/console.host`), if it has a host.
+          /// The module's host's root module as an import names it (`nanyx.cli.host/cli.host`), if it has a host.
           HostImport: string option
           /// The members of the ambient contexts carried in with imported functions, with the definitions that stand in for them.
           CarriedAmbientMembers: AmbientMember list
@@ -48,7 +48,7 @@ module internal ImportMerging =
     let private preludeSources = System.Collections.Concurrent.ConcurrentDictionary<string, Set<string>>()
 
     /// Whether a module, by its origin, declares contexts that `host` provides: those its prelude re-exports from, as
-    /// the console host's re-exports `nanyx.console.core/console`'s `Console`. Importing one binds the names of its contexts' members,
+    /// the console host's re-exports `nanyx.cli/console`'s `Console`. Importing one binds the names of its contexts' members,
     /// so that the contexts are ambient. A module with no host, a library's, sees no context as a host's.
     let providesContexts (host: Host option) (hostModules: PackageModules option) : ModuleOrigin -> bool =
         let sources =

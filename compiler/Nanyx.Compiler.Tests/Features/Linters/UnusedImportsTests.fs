@@ -57,7 +57,7 @@ let ``An import used only through a name the module re-exports is not reported``
 
 [<Fact>]
 let ``An import used only in a type is not reported`` () =
-    let aliased = "module main\nimport nanyx.console.core/console as c\ndef e: c.IoError = #endOfInput\n"
+    let aliased = "module main\nimport nanyx.cli/console as c\ndef e: c.IoError = #endOfInput\n"
     Assert.Empty(
         (compileWithConsoleCoreUsing Linters.everyLinter aliased).Diagnostics
         |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports"))

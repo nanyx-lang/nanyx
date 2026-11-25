@@ -40,12 +40,12 @@ export function playgroundLink(/** @type {string} */ code) {
 const repository = (() => {
   for (let directory of [dirname(fileURLToPath(import.meta.url)), process.cwd()]) {
     for (;;) {
-      if (existsSync(join(directory, "packages", "nanyx.console"))) return directory;
+      if (existsSync(join(directory, "packages", "nanyx.cli.host"))) return directory;
       if (dirname(directory) === directory) break;
       directory = dirname(directory);
     }
   }
-  throw new Error("The repository's packages/nanyx.console wasn't found above the docs site.");
+  throw new Error("The repository's packages/nanyx.cli.host wasn't found above the docs site.");
 })();
 
 /** The source file of a module named as a prelude names it: `nanyx.fs/filesystem` or `nanyx/async`. */
@@ -96,7 +96,7 @@ function contextMembers(/** @type {string} */ module, /** @type {string} */ name
  * What only the console host gives a program, and the playground's host doesn't: the names its prelude brings in that
  * the playground's doesn't, with the members of the contexts among them (`args`, `exit`, `readFile`, ...) and the defs
  * attached to them (`start`, `await`); and what an
- * import of the modules they come from names: the module (`nanyx.console.core/env`) when the playground's prelude takes
+ * import of the modules they come from names: the module (`nanyx.cli/env`) when the playground's prelude takes
  * something else from its package, else the package (`nanyx.fs`).
  *
  * @type {{ names: Set<string>; imports: Set<string> } | null}
@@ -105,8 +105,8 @@ let consoleOnly = null;
 
 function consoleOnlyNames() {
   if (consoleOnly) return consoleOnly;
-  const console = preludeNames(join(repository, "packages", "nanyx.console", "src", "console.prelude.nyx"));
-  const playground = preludeNames(join(repository, "packages", "nanyx.playground", "src", "playground.prelude.nyx"));
+  const console = preludeNames(join(repository, "packages", "nanyx.cli.host", "src", "cli.prelude.nyx"));
+  const playground = preludeNames(join(repository, "packages", "nanyx.playground.host", "src", "playground.prelude.nyx"));
   const playgroundPackages = new Set([...playground.values()].map((module) => module.split("/")[0]));
   const names = new Set();
   const imports = new Set();
@@ -123,12 +123,12 @@ function consoleOnlyNames() {
 
 /**
  * Whether a program needs a host other than the playground's, which the playground can't run, so it gets no playground
- * link: whether it names a host with `::host` (but for `::host nanyx.playground`); or depends on a package from the
+ * link: whether it names a host with `::host` (but for `::host nanyx.playground.host`); or depends on a package from the
  * index, `::dependency nanyx.json 0.2.0`, which the playground can't download; or imports or depends on a module
  * that only the console host can run, such as `nanyx.fs`'s; or uses, outside a comment, a name that only the console
  * host's prelude brings in, such as `args`, `exit` or `FileSystem`, and that it doesn't declare itself. What the
- * console host brings in and the playground's doesn't is read from the two hosts' preludes (`packages/nanyx.console`
- * and `packages/nanyx.playground`).
+ * console host brings in and the playground's doesn't is read from the two hosts' preludes (`packages/nanyx.cli.host`
+ * and `packages/nanyx.playground.host`).
  *
  * @param {string} code
  */
@@ -137,7 +137,7 @@ export function needsAnotherHost(code) {
   const lines = code.replace(/\r\n/g, "\n").split("\n").map((line) => line.replace(/--.*$/, ""));
   for (const line of lines) {
     const host = /^::host\s+(\S+)/.exec(line);
-    if (host && host[1] !== "nanyx.playground") return true;
+    if (host && host[1] !== "nanyx.playground.host") return true;
     // A package from the index, which the playground can't download; the packages the compiler ships, it has.
     const dependency = /^::dependency\s+(\S+)\s+\d/.exec(line);
     if (dependency && !existsSync(join(repository, "packages", dependency[1]))) return true;

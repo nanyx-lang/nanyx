@@ -47,7 +47,7 @@ let ``A manifest is read with comments, its sources, public modules, formatter, 
   )
   dependencies = []
   formatter = (lineWidth = 100)
-  host = (package = "nanyx.console", version = "{Toolchain.version}")
+  host = (package = "nanyx.cli.host", version = "{Toolchain.version}")
 )
 """
     Assert.Equal("acme.demo", manifest.Name)
@@ -226,7 +226,7 @@ let ``A host's settings must be a record`` () =
 (
   package = (name = "demo", version = "0.1.0")
   dependencies = [(package = "acme.util", path = "../util")]
-  host = (package = "nanyx.http", version = "{Toolchain.version}", settings = 3000)
+  host = (package = "nanyx.http.host", version = "{Toolchain.version}", settings = 3000)
 )
 """
     )
@@ -237,13 +237,13 @@ let ``A linter or host must be named at the version the compiler ships, exactly`
         [ DiagnosticCodes.VersionNotShipped.Code,
           $"The compiler ships 'nanyx.lint' {Toolchain.version}, not 0.1.0: name a package the compiler ships at its version exactly"
           DiagnosticCodes.VersionNotShipped.Code,
-          $"The compiler ships 'nanyx.console' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly" ],
+          $"The compiler ships 'nanyx.cli.host' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly" ],
         errorsOf
             """
 (
   package = (name = "demo", version = "0.1.0")
   linters = [(package = "nanyx.lint", version = "0.1.0")]
-  host = (package = "nanyx.console", version = "99.0.0")
+  host = (package = "nanyx.cli.host", version = "99.0.0")
 )
 """
     )
@@ -251,13 +251,13 @@ let ``A linter or host must be named at the version the compiler ships, exactly`
 [<Fact>]
 let ``A dependency the compiler ships is named at its version, and found beside the compiler`` () =
     let manifest =
-        okOf $"""(package = (name = "demo", version = "0.1.0"), dependencies = [(package = "nanyx.console.core", version = "{Toolchain.version}")])"""
+        okOf $"""(package = (name = "demo", version = "0.1.0"), dependencies = [(package = "nanyx.cli", version = "{Toolchain.version}")])"""
     Assert.Equal<(string * DependencySource) list>(
-        [ "nanyx.console.core", Shipped ],
+        [ "nanyx.cli", Shipped ],
         manifest.Dependencies |> List.map (fun dependency -> dependency.Name, dependency.Source))
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.VersionNotShipped.Code,
-          $"The compiler ships 'nanyx.console.core' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly"
+          $"The compiler ships 'nanyx.cli' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly"
           DiagnosticCodes.InvalidManifestValue.Code,
           "The dependency 'acme.util' is found by its path, so it has no version: give one or the other" ],
         errorsOf
@@ -265,7 +265,7 @@ let ``A dependency the compiler ships is named at its version, and found beside 
 (
   package = (name = "demo", version = "0.1.0")
   dependencies = [
-    (package = "nanyx.console.core", version = "99.0.0")
+    (package = "nanyx.cli", version = "99.0.0")
     (package = "acme.util", path = "../util", version = "1.0.0")
   ]
 )

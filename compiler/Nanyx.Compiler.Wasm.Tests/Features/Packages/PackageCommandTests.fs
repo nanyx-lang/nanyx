@@ -42,7 +42,7 @@ let ``New - writes a formatted manifest naming the compiler's version for its li
         $"""(
   package = (name = "acme.demo", version = "0.1.0", sources = ["src/**/*.nyx"], nanyx = "{minor}")
   linters = [(package = "nanyx.lint", version = "{version}")]
-  host = (package = "nanyx.console", version = "{version}")
+  host = (package = "nanyx.cli.host", version = "{version}")
 )
 """
             .ReplaceLineEndings "\n",

@@ -14,7 +14,7 @@ Write a program in the editor and press **Run**, or Ctrl+Enter (⌘+Enter on a M
 and **Stop** takes Run's place while it runs, to end a program that doesn't finish. The page downloads the compiler,
 about 5.5 MB, when it opens, and says "Loading the compiler…" until it is ready.
 
-A program is a script, as `nanyx run` runs a single file, but under the playground's host, `nanyx.playground`, rather
+A program is a script, as `nanyx run` runs a single file, but under the playground's host, `nanyx.playground.host`, rather
 than the console's ([Hosts](../advanced/hosts)). It has `Console`, `Random`, `Clock` and `Async`, so a program can
 start [tasks](../advanced/async) and sleep, and nothing else, so a program that needs `FileSystem`, HTTP or `Env` is a
 compile error naming the host. A program can use the standard

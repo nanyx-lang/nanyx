@@ -136,6 +136,7 @@
     <Compile Include="BuiltinTypeNames.fs" />
     <Compile Include="TypeNames.fs" />
     <Compile Include="AssociatedTypes.fs" />
+    <Compile Include="RenamedPackages.fs" />
     <Compile Include="FileImports.fs" />
     <Compile Include="PackageModules.fs" />
     <Compile Include="PackageExports.fs" />

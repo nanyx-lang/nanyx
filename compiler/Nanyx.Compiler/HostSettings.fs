@@ -2,7 +2,7 @@ namespace NyxCompiler
 
 open Parser.Program.DataValues
 
-/// The settings a program gives its host, in its manifest's `host`: `host = (package = "nanyx.http", version = ...,
+/// The settings a program gives its host, in its manifest's `host`: `host = (package = "nanyx.http.host", version = ...,
 /// settings = (port = 8080))`. A host declares the settings it takes, each with its default (see `Host.Settings`), so a
 /// setting it doesn't take, or one of another kind than its default, is an error at the setting.
 module HostSettings =

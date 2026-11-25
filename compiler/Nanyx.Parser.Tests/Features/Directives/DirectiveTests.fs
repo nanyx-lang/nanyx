@@ -40,7 +40,7 @@ let ``A line written as directives were, a key and a TOML value, is in the old f
     Assert.True((directiveOf "::linters.default\n").IsOldForm)
     Assert.True((directiveOf "::formatter.lineWidth = 80\n").IsOldForm)
     Assert.True((directiveOf "::host = \"0.28.0\"\n").IsOldForm)
-    Assert.False((directiveOf "::host nanyx.console\n").IsOldForm)
+    Assert.False((directiveOf "::host nanyx.cli.host\n").IsOldForm)
 
 [<Fact>]
 let ``A line with nothing after its :: has no words`` () =

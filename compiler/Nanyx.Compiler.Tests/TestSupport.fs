@@ -47,7 +47,7 @@ let spanOf (diagnostic: Diagnostic) =
 let consoleHostEntry = $"host = (package = \"{Hosts.consolePackage}\", version = \"{Toolchain.version}\")"
 
 /// The console host's file, in the package the compiler ships (see `ShippedPackages`).
-let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "console.host.nyx")
+let consoleHostFile = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "cli.host.nyx")
 
 /// `source` checked as the console host's file is, so that it may require `HostRuntime`, with `linters`.
 let compileAsHost (linters: LinterOptions) (source: string) = Compiler.compileFrom linters (SourceFile consoleHostFile) source
@@ -84,11 +84,11 @@ type TempPackage(files: (string * string) list) =
         member _.Dispose() = try Directory.Delete(root, true) with _ -> ()
 
 /// The manifest of an application under the console host that depends on the console's interface package,
-/// `nanyx.console.core`, so that its files can import `nanyx.console.core/console` and `nanyx.console.core/env`.
+/// `nanyx.cli`, so that its files can import `nanyx.cli/console` and `nanyx.cli/env`.
 let consoleCoreApp =
     $"""(
   package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"])
-  dependencies = [(package = "nanyx.console.core", version = "{Toolchain.version}")]
+  dependencies = [(package = "nanyx.cli", version = "{Toolchain.version}")]
   {consoleHostEntry}
 )
 """

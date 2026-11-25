@@ -46,10 +46,17 @@ module FileImports =
                 Path.Combine(baseDir, relative + ".nyx")
         let fullPath =
             if Path.GetExtension rawPath = "" then rawPath + ".nyx" else rawPath
+        let renamed =
+            match item.Source with
+            | ModuleImport name -> RenamedPackages.inImport name
+            | PathImport _ -> None
         if File.Exists fullPath then
             Ok (Path.GetFullPath fullPath)
         else
-            Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span "There is no file at this path, which is read from the importing file's directory" |> Diagnostics.about rawPath)
+            match renamed, item.Source with
+            | Some message, ModuleImport name -> Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span message |> Diagnostics.about name)
+            | _ ->
+                Error (Diagnostics.at DiagnosticCodes.ImportNotFound item.Span "There is no file at this path, which is read from the importing file's directory" |> Diagnostics.about rawPath)
 
     /// The error for a file-path import with no alias, which would bring the file's exports in unqualified.
     let missingAlias (item: ImportItem) : Diagnostic option =

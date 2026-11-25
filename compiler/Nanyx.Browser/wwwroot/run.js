@@ -1,10 +1,10 @@
-// A page that compiles a program under the playground host (`nanyx.playground`, which the compiler built for the
+// A page that compiles a program under the playground host (`nanyx.playground.host`, which the compiler built for the
 // browser runs a script under) and runs it with the host's runner, in a web worker. What the program writes shows as it
 // writes it, and when it reads, an input line shows under it. `window.playground` is what the headless test
 // (`../playground-test.mjs`) calls.
 
 import { loadCompiler } from "./compiler.js";
-import { canReadInput, run } from "./packages/nanyx.playground/runner/playground.js";
+import { canReadInput, run } from "./packages/nanyx.playground.host/runner/playground.js";
 
 const compiler = await loadCompiler();
 

@@ -1,4 +1,4 @@
-/// The program's entry point runs through the console host's `run` (`nanyx.console/console.host`), which builds `Console` on `HostRuntime` (#1245,
+/// The program's entry point runs through the console host's `run` (`nanyx.cli.host/cli.host`), which builds `Console` on `HostRuntime` (#1245,
 /// see docs/src/content/deep-dives/hosts.md).
 module TranspilerWasmTests.Features.Hosts.ConsoleHost
 

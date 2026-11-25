@@ -32,7 +32,7 @@ let private onPackage (host: string) (source: string) (arguments: string list) =
 
 [<Fact>]
 let ``A package whose host is the console host runs under it`` () =
-    let outcome = onPackage $"""host = (package = "nanyx.console", version = "{Toolchain.version}")""" main [ "run" ]
+    let outcome = onPackage $"""host = (package = "nanyx.cli.host", version = "{Toolchain.version}")""" main [ "run" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal("hello\n", outcome.StandardOutput)
     Assert.Equal(0, outcome.ExitCode)
@@ -48,7 +48,7 @@ let ``A host the compiler doesn't ship, with no path, is an error saying how to 
 [<Fact>]
 let ``A host is found by its path`` () =
     let path = (ShippedPackages.directoryOf Hosts.consolePackage).Replace("\\", "/")
-    let outcome = onPackage $"""host = (package = "nanyx.console", path = "{path}")""" main [ "run" ]
+    let outcome = onPackage $"""host = (package = "nanyx.cli.host", path = "{path}")""" main [ "run" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal("hello\n", outcome.StandardOutput)
     Assert.Equal(0, outcome.ExitCode)
@@ -64,9 +64,9 @@ let ``A package whose manifest doesn't declare it a host is not one`` () =
 
 [<Fact>]
 let ``A setting for a host that takes none is an error at the setting`` () =
-    let outcome = onPackage $"""host = (package = "nanyx.console", version = "{Toolchain.version}", settings = (port = 3000))""" main [ "build" ]
+    let outcome = onPackage $"""host = (package = "nanyx.cli.host", version = "{Toolchain.version}", settings = (port = 3000))""" main [ "build" ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("app.nyxp:3:70: error NYX0021: The host 'nanyx.console' takes no settings", outcome.StandardError)
+    Assert.Contains("app.nyxp:3:71: error NYX0021: The host 'nanyx.cli.host' takes no settings", outcome.StandardError)
 
 [<Fact>]
 let ``A host without a package is an error`` () =
@@ -104,7 +104,7 @@ let ``--host on a script is a usage error: a script names its host with ::host``
     let outcome = nanyxIn directory.Path [ "run"; "--host"; Hosts.consolePackage; path ]
     Assert.Equal(2, outcome.ExitCode)
     Assert.Equal(
-        """`--host` chooses a package's host, and a script names its own with a `::host` directive, as `::host acme.server ../server`, or runs under 'nanyx.console' without one: leave out `--host`""",
+        """`--host` chooses a package's host, and a script names its own with a `::host` directive, as `::host acme.server ../server`, or runs under 'nanyx.cli.host' without one: leave out `--host`""",
         outcome.StandardError.Trim())
 
 [<Fact>]
@@ -112,7 +112,7 @@ let ``A script runs under the host its ::host finds by path`` () =
     use directory = new TempDirectory()
     let path = Path.Combine(directory.Path, "script.nyx")
     let host = (ShippedPackages.directoryOf Hosts.consolePackage).Replace("\\", "/")
-    File.WriteAllText(path, $"::host nanyx.console {host}\n\nprintln(\"hi\")\n")
+    File.WriteAllText(path, $"::host nanyx.cli.host {host}\n\nprintln(\"hi\")\n")
     let outcome = nanyxIn directory.Path [ "run"; path ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal("hi\n", outcome.StandardOutput.ReplaceLineEndings "\n")
@@ -141,7 +141,7 @@ let ``An entry that doesn't fit the package's host names the host, in the editor
     let manifest =
         $"""(
   package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.console", version = "{Toolchain.version}")
+  host = (package = "nanyx.cli.host", version = "{Toolchain.version}")
 )
 """
     File.WriteAllText(Path.Combine(root, "app.nyxp"), manifest)
@@ -156,4 +156,4 @@ def main = { x -> x + 1 }
     // The editor compiles a package's file as `Package.compileSourceWith` does.
     let result = Package.compileSourceWith Linters.none path source
     let mismatch = result.Diagnostics |> List.find (fun diagnostic -> diagnostic.Code = DiagnosticCodes.EntryDoesNotFitHost.Code)
-    Assert.StartsWith("It doesn't fit the host 'nanyx.console/console.host'", mismatch.Message)
+    Assert.StartsWith("It doesn't fit the host 'nanyx.cli.host/cli.host'", mismatch.Message)

@@ -50,20 +50,20 @@ let ``A library component's exports are called with no run, which it doesn't exp
 let ``A library component under a host with no world for libraries is an error that says so`` () =
     use hostDirectory = new TempDirectory()
     let hostManifest =
-        """(package = (name = "acme.bare", version = "0.1.0", host = (root = "bare.host", component = (root = "bare.host.wasi", world = "wasi:cli/command@0.3.0"))))"""
-    File.WriteAllText(Path.Combine(hostDirectory.Path, "acme.bare.nyxp"), hostManifest + "\n")
+        """(package = (name = "acme.bare.host", version = "0.1.0", host = (root = "bare.host", component = (root = "bare.host.wasi", world = "wasi:cli/command@0.3.0"))))"""
+    File.WriteAllText(Path.Combine(hostDirectory.Path, "acme.bare.host.nyxp"), hostManifest + "\n")
     let root (name: string) = $"export module {name}\n\nimport nanyx/host.runtime\n\nexport def run: [HostRuntime] (() -> a) -> () = {{ entry -> ignore(entry()) }}\n"
     File.WriteAllText(Path.Combine(hostDirectory.Path, "bare.host.nyx"), root "bare.host")
     File.WriteAllText(Path.Combine(hostDirectory.Path, "bare.host.wasi.nyx"), root "bare.host.wasi")
     use app = new TempDirectory()
     Directory.CreateDirectory(Path.Combine(app.Path, "src")) |> ignore
     let hostPath = hostDirectory.Path.Replace("\\", "/")
-    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "acme.bare", path = "{hostPath}"))"""
+    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "acme.bare.host", path = "{hostPath}"))"""
     File.WriteAllText(Path.Combine(app.Path, "app.nyxp"), manifest + "\n")
     File.WriteAllText(Path.Combine(app.Path, "src", "names.nyx"), "module names\n\n@component\nexport def twice: int -> int = { n -> n * 2 }\n")
     let built = nanyxIn app.Path [ "build"; "--release" ]
     Assert.Equal(1, built.ExitCode)
-    Assert.Contains("app has @component defs and no @entry, so it is a library component, but its host acme.bare has no world for libraries", built.StandardError)
+    Assert.Contains("app has @component defs and no @entry, so it is a library component, but its host acme.bare.host has no world for libraries", built.StandardError)
 
 [<Fact>]
 let ``A package with no @entry and no def marked @component is only checked`` () =

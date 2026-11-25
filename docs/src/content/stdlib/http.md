@@ -4,8 +4,8 @@ description: Making HTTP requests
 order: 15.6
 ---
 
-The functions of `nanyx.http.core/http` make HTTP requests, each requiring [`Http`](./client). Import the module under
-its own name, `import nanyx.http.core/http as http`, to call them as `http.get`, `http.post` and `http.send`. Each
+The functions of `nanyx.http/http` make HTTP requests, each requiring [`Http`](./client). Import the module under
+its own name, `import nanyx.http/http as http`, to call them as `http.get`, `http.post` and `http.send`. Each
 waits for the response, and gives it, or why there was none as an `HttpError`:
 
 ```nanyx fragment
@@ -32,7 +32,7 @@ match http.send(request with body = "Buy eggs")
 Making HTTP requests.
 
 Each function requires [`Http`](client), waits for the response, and gives it, or why there was
-none as an [`HttpError`](client). Import the module as `import nanyx.http.core/http as http` to
+none as an [`HttpError`](client). Import the module as `import nanyx.http/http as http` to
 call `http.get`, `http.post` and `http.send` by those names.
 
 ## `send`

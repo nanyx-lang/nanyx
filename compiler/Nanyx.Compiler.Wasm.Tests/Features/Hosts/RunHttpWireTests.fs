@@ -1,4 +1,4 @@
-/// How `nanyx.http.core/wire` reads the requests and responses the runtime's HTTP imports hand back (see
+/// How `nanyx.http/wire` reads the requests and responses the runtime's HTTP imports hand back (see
 /// docs/src/content/deep-dives/hosts.md).
 module TranspilerWasmTests.Features.Hosts.HttpWire
 
@@ -9,9 +9,9 @@ open TranspilerWasmTestHelpers
 
 /// A script that reads a response of `headers` headers and a body of `bodyBytes` bytes with `wire.readResponse`.
 let private readingResponse (headers: int) (bodyBytes: int) =
-    $"""::dependency nanyx.http.core
+    $"""::dependency nanyx.http
 
-import nanyx.http.core/wire as wire
+import nanyx.http/wire as wire
 
 def headerText: int, string -> string = {{ n, acc ->
   if n == 0 then acc else headerText(n - 1, "x-header-{{n}}\nvalue {{n}}\n{{acc}}")

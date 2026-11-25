@@ -114,7 +114,7 @@ The WIT directory is a WIT package, with the packages it uses under `deps/`, as 
 
 A host's manifest names its component root and the world it is written against beside its root, and the world a
 library component is built in, if it has one
-(`component = (root = "console.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")`), and
+(`component = (root = "cli.host.wasi", world = "nanyx:console/command", library = "nanyx:console/library")`), and
 keeps the worlds' WIT in its `wit` directory. `HostPackages` reads it into `Host.Component`.
 
 - **A component build swaps the root.** `nanyx build` takes the package as `Package.asComponent` gives it, whose host's
@@ -132,7 +132,7 @@ keeps the worlds' WIT in its `wit` directory. `HostPackages` reads it into `Host
 
 ## The console host's component root
 
-`console.host.wasi` provides `Console`, `Env`, `FileSystem`, `Http`, `Clock`, `Random` and `Async` on WASI 0.3 alone, in
+`cli.host.wasi` provides `Console`, `Env`, `FileSystem`, `Http`, `Clock`, `Random` and `Async` on WASI 0.3 alone, in
 the world `nanyx:console/command`, which the package's `wit/console.wit` declares: `wasi:cli/command@0.3.0` with
 `wasi:http/client@0.3.0`. wit-component imports only the interfaces the core module uses, so a program that makes no
 requests has no `wasi:http` import. It is Nanyx, on
@@ -145,7 +145,7 @@ requests has no `wasi:http` import. It is Nanyx, on
   WebAssembly and wit-component allow.
 - **Standard input** is one stream, which `wasi:cli/stdin`'s `read-via-stream` opens the first time the program reads:
   its result is a tuple, written to memory the host is given the address of. Each read fills the buffer in the host's
-  block from it. Taking lines and the rest of the input out of the buffer is `console.stdin`'s, shared with the core
+  block from it. Taking lines and the rest of the input out of the buffer is `cli.stdin`'s, shared with the core
   root, which fills the buffer with WASI preview 1's `fd_read`.
 - **Arguments and environment variables** are `list<string>` and `list<tuple<string, string>>`, returned in memory: an
   address and a count, each string an address and a length. The host allocates them with `cabi_realloc`, which is the
@@ -155,9 +155,9 @@ requests has no `wasi:http` import. It is Nanyx, on
   is `monotonic-clock`'s async `wait-for`, lowered with `[async-lower]`, whose subtask is waited on as a request's is
   ([below](#waiting-while-other-tasks-run)), so the program's other tasks run while it sleeps.
 - **Exiting** is `wasi:cli/exit`'s `exit-with-code`, which takes 0 to 255; any other code exits with 1.
-- **Files** are `wasi:filesystem`'s, in `console.host.wasi.files.nyx`, a `@partial` fragment of the root. The preopens
+- **Files** are `wasi:filesystem`'s, in `cli.host.wasi.files.nyx`, a `@partial` fragment of the root. The preopens
   come from `get-directories` once, and are kept in the host's block; a path is found in one as the core root finds it
-  in WASI preview 1's (`within`, in `console.files`, which both roots share, with `bytesAt`). A file is opened with
+  in WASI preview 1's (`within`, in `cli.files`, which both roots share, with `bytesAt`). A file is opened with
   `open-at`, read through `read-via-stream` from an offset, and written through `write-via-stream` or
   `append-via-stream`, which are `Output`s as stdout is, so `writeTo` writes a file too; its future's
   `result<_, error-code>` says whether the write went through. `stat`, `stat-at`, `create-directory-at`,

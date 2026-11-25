@@ -3,15 +3,5 @@
     name = "nanyx.http"
     version = "0.39.0"
     sources = ["src/**/*.nyx"]
-    host = (
-      root = "http.host"
-      prelude = "http.prelude"
-      settings = (port = 3000)
-      component = (root = "http.host.wasi", world = "wasi:http/service@0.3.0")
-    )
   )
-  dependencies = [
-    (package = "nanyx.http.core", version = "0.39.0")
-    (package = "nanyx.wasi", version = "0.39.0")
-  ]
 )

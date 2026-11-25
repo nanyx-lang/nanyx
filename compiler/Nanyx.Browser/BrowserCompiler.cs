@@ -50,7 +50,7 @@ public static partial class BrowserCompiler
 
     /// <summary>
     /// Compiles <paramref name="source"/> as <c>nanyx build</c> compiles a script, but under the playground host,
-    /// <c>nanyx.playground</c>, unless its <c>::host</c> names another; and gives a JSON object: <c>wasm</c>, the
+    /// <c>nanyx.playground.host</c>, unless its <c>::host</c> names another; and gives a JSON object: <c>wasm</c>, the
     /// binary in base 64 (absent when there are errors), <c>diagnostics</c>, and <c>checkMs</c>, <c>emitMs</c> and
     /// <c>assembleMs</c>, the times of parsing and checking, lowering to WebAssembly text, and assembling the binary.
     /// The module exports its start, as <c>__nanyx_start</c>, for the playground host's runner to call.

@@ -1,4 +1,4 @@
-/// The playground host, `nanyx.playground`, a stand-in for the console host in a web page, which provides `Console`,
+/// The playground host, `nanyx.playground.host`, a stand-in for the console host in a web page, which provides `Console`,
 /// `Random` and `Clock` and nothing else (#2150, see docs/src/content/deep-dives/hosts.md).
 module Nanyx.Compiler.Tests.Features.Hosts.PlaygroundHost
 
@@ -15,7 +15,7 @@ let private diagnosticsOf (source: string) =
 [<Fact>]
 let ``A console program that prints, draws random numbers and reads the clock compiles unchanged under the playground host, with the host's linters clean`` () =
     let source =
-        withFinalNewline """::host nanyx.playground
+        withFinalNewline """::host nanyx.playground.host
 
 import nanyx/random as random
 
@@ -30,10 +30,10 @@ def main = {
 [<Fact>]
 let ``An entry that requires Env doesn't fit the playground host, which says what it provides`` () =
     let source =
-        withFinalNewline """::host nanyx.playground
-::dependency nanyx.console.core
+        withFinalNewline """::host nanyx.playground.host
+::dependency nanyx.cli
 
-import nanyx.console.core/env as (Env)
+import nanyx.cli/env as (Env)
 
 @entry
 def main: [Console, Env] () -> () = { println("hi") }"""
@@ -41,7 +41,7 @@ def main: [Console, Env] () -> () = { println("hi") }"""
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, diagnostic.Code)
         Assert.StartsWith(
-            """It doesn't fit the host 'nanyx.playground/playground.host'
+            """It doesn't fit the host 'nanyx.playground.host/playground.host'
   expected: [Async, Clock, Console, Random] () -> a
 """.ReplaceLineEndings "\n",
             diagnostic.Message)
@@ -50,7 +50,7 @@ def main: [Console, Env] () -> () = { println("hi") }"""
 [<Fact>]
 let ``A program that uses FileSystem under the playground host is an error naming the host`` () =
     let source =
-        withFinalNewline """::host nanyx.playground
+        withFinalNewline """::host nanyx.playground.host
 ::dependency nanyx.fs
 
 import nanyx.fs/file as file
@@ -61,7 +61,7 @@ ignore(file.read(path.of("notes.txt")))"""
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
         Assert.Equal(
-            "'file.read' requires the context 'FileSystem', which the host 'nanyx.playground/playground.host' does not provide",
+            "'file.read' requires the context 'FileSystem', which the host 'nanyx.playground.host/playground.host' does not provide",
             diagnostic.Message)
         Assert.Equal(6, diagnostic.Span.Value.StartLine)
     | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
@@ -83,7 +83,7 @@ let ``A script with no directives runs under the playground host where it is the
 
 [<Fact>]
 let ``A script that names its host runs under it, whatever the default`` () =
-    Assert.Empty(underPlayground "::host nanyx.console\n\nprintln(args())\n")
+    Assert.Empty(underPlayground "::host nanyx.cli.host\n\nprintln(args())\n")
 
 [<Fact>]
 let ``A script with dependencies and no host runs under the default host`` () =
@@ -97,13 +97,13 @@ ignore(file.read(path.of("notes.txt")))"""
     match underPlayground source with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
-        Assert.EndsWith("which the host 'nanyx.playground/playground.host' does not provide", diagnostic.Message)
+        Assert.EndsWith("which the host 'nanyx.playground.host/playground.host' does not provide", diagnostic.Message)
     | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
 
 [<Fact>]
 let ``A program that starts tasks and sleeps compiles under the playground host, which provides Async`` () =
     let source =
-        withFinalNewline """::host nanyx.playground
+        withFinalNewline """::host nanyx.playground.host
 
 def later: [Async, Clock, Console] string -> () = { text ->
   sleep(100)

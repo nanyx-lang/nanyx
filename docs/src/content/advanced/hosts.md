@@ -6,7 +6,7 @@ order: 11
 
 A **host** is what runs a Nanyx program. It takes the program's entry point, loads the contexts the program may use, such as `Console`, and runs it. Every application names its host, and the compiler checks that the entry point fits it.
 
-A host is an ordinary Nanyx package. The compiler ships one, the console host `nanyx.console`, for command-line programs, and anyone can write another. Only a host can reach the world outside the program, through the foreign functions its embedder provides, so a library can do nothing the host's contexts don't allow.
+A host is an ordinary Nanyx package. The compiler ships one, the console host `nanyx.cli.host`, for command-line programs, and anyone can write another. Only a host can reach the world outside the program, through the foreign functions its embedder provides, so a library can do nothing the host's contexts don't allow.
 
 # Choosing a host
 
@@ -15,7 +15,7 @@ A package names its host in its manifest's `host` field. A host the compiler shi
 ```nanyx fragment
 (
   package = (name = "acme.tool", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.console", version = "0.39.0")
+  host = (package = "nanyx.cli.host", version = "0.39.0")
 )
 ```
 
@@ -23,7 +23,7 @@ Any other host is found by its directory, relative to the manifest, as a depende
 
 A package whose manifest names no host is a **library**. It can't be run, and an `@entry` in it is an error (`NYX0031`). See [Packages and projects](../tour/packages#entrypoints).
 
-[`nanyx run`, `nanyx build` and `nanyx check`](../standard-tools/command-line#running-and-checking-code) take `--host` to run a package under another host for one command: a host the compiler ships, `--host nanyx.console`, or the directory of one, `--host ../server`.
+[`nanyx run`, `nanyx build` and `nanyx check`](../standard-tools/command-line#running-and-checking-code) take `--host` to run a package under another host for one command: a host the compiler ships, `--host nanyx.cli.host`, or the directory of one, `--host ../server`.
 
 A single `.nyx` file runs under the console host unless a `::host` directive at its top names another, in the same words a manifest would use (see [Directives](../getting-started/files-and-projects#directives)):
 
@@ -36,7 +36,7 @@ A single `.nyx` file runs under the console host unless a `::host` directive at 
 The entry point is passed to the host's `run` function, so it must have the type `run` takes. Under the console host that is a function with no parameters, which may require `Async`, `Clock`, `Console`, `Env`, `FileSystem`, `Http` and `Random`. An entry point of another shape is an error at its `@entry` that names the host and both types:
 
 ```text
-main.nyx:3:1: error NYX0237: The entry point 'main' doesn't fit the host 'nanyx.console/console.host'
+main.nyx:3:1: error NYX0237: The entry point 'main' doesn't fit the host 'nanyx.cli.host/cli.host'
   expected: [Async, Clock, Console, Env, FileSystem, Http, Random] () -> a
   found:    int -> int
 ```
@@ -45,13 +45,13 @@ A script's statements are its entry point, and run under its host in the same wa
 
 # The console host
 
-The console host, `nanyx.console`, runs command-line programs. It provides seven contexts:
+The console host, `nanyx.cli.host`, runs command-line programs. It provides seven contexts:
 
 - [`Console`](../stdlib/console) reads standard input and writes standard output and standard error.
 - [`Env`](../stdlib/env) gives the program's command-line arguments (`args`) and environment variables (`variable`), and ends it with an exit code (`exit`).
 - [`FileSystem`](../stdlib/filesystem) reads and writes files, through the functions of the shipped package `nanyx.fs` ([`file`](../stdlib/file), [`dir`](../stdlib/dir) and [`path`](../stdlib/path)). `nanyx run` lets a program reach the current directory and, with [`--allow-dir`](../standard-tools/command-line#nanyx-run), one other; a path outside them is `#permissionDenied`.
-- [`Http`](../stdlib/client) makes HTTP requests, through the functions of the shipped package `nanyx.http.core` ([`http`](../stdlib/http)). Each call waits for its response.
-- [`Async`](../stdlib/async) lets a function wait. The calls of `nanyx.fs` and `nanyx.http.core` wait, so they require it, and so does every function that calls them.
+- [`Http`](../stdlib/client) makes HTTP requests, through the functions of the shipped package `nanyx.http` ([`http`](../stdlib/http)). Each call waits for its response.
+- [`Async`](../stdlib/async) lets a function wait. The calls of `nanyx.fs` and `nanyx.http` wait, so they require it, and so does every function that calls them.
 - [`Random`](../stdlib/random) gives random numbers, drawn from the operating system's random source, through the functions of `nanyx/random`. `random.seeded` gives the same numbers on every run instead.
 - [`Clock`](../stdlib/clock) gives the time of day, `now()`, in Unix milliseconds, and `ticks()`, milliseconds that never go backwards, for timing.
 
@@ -65,19 +65,19 @@ match args()
 
 `nanyx run greet.nyx Ada` prints `Hello, Ada!`; with no arguments, it prints `Hello, whoever you are!`. Arguments for the program go after the file or package.
 
-`Console` and `Env` are declared in a separate package, `nanyx.console.core`, which the compiler ships too. A library has no host, so it sees no host's prelude: it lists `nanyx.console.core` in its dependencies, at the compiler's version, and imports what it uses:
+`Console` and `Env` are declared in a separate package, `nanyx.cli`, which the compiler ships too. A library has no host, so it sees no host's prelude: it lists `nanyx.cli` in its dependencies, at the compiler's version, and imports what it uses:
 
 ```nanyx fragment
 (
   package = (name = "acme.report", version = "0.1.0")
-  dependencies = [(package = "nanyx.console.core", version = "0.39.0")]
+  dependencies = [(package = "nanyx.cli", version = "0.39.0")]
 )
 ```
 
 ```nanyx fragment
 export module greetings
 
-import nanyx.console.core/console as (Console, println)
+import nanyx.cli/console as (Console, println)
 
 export def greet: [Console] string -> () = { name ->
   println("Hello, {name}!")
@@ -92,7 +92,7 @@ An application that depends on the library calls `greet` from its entry point, w
 `wasmtime run` (46 or later), or any runtime that implements WASI 0.3, runs as it is: `wasmtime run out/greet.wasm Ada`.
 `nanyx run` runs the program as it always has, and `nanyx build --core` writes a core module, as before.
 
-A component is built from the host's _component root_, `console.host.wasi`, which provides everything the console host
+A component is built from the host's _component root_, `cli.host.wasi`, which provides everything the console host
 does, on WASI 0.3. Its world is `nanyx:console/command`, which is `wasi:cli/command@0.3.0` with
 `wasi:http/client@0.3.0`, and a component imports only what the program uses:
 
@@ -103,7 +103,7 @@ does, on WASI 0.3. Its world is `nanyx:console/command`, which is `wasi:cli/comm
 
 # The HTTP host
 
-The HTTP host, `nanyx.http`, serves a program whose entry point is a request handler, a `Request -> Response`
+The HTTP host, `nanyx.http.host`, serves a program whose entry point is a request handler, a `Request -> Response`
 function. It provides `Http`, for requests the handler makes itself, with `Async`, so that the handler can wait on
 them, `Random` and `Clock`, and neither `Console` nor `FileSystem`. While one handler waits, the host answers other requests. Each
 request is answered by a fresh instance of the program, so nothing is shared between requests, and a handler that
@@ -118,7 +118,7 @@ def main: Request -> Response = { request ->
 }
 ```
 
-A package names it as its host with the port to serve on, `host = (package = "nanyx.http", version = "0.39.0",
+A package names it as its host with the port to serve on, `host = (package = "nanyx.http.host", version = "0.39.0",
 settings = (port = 8080))`, and `nanyx run` serves it there, on 3000 when no port is given. A host declares the
 settings it takes, each with its default, so a setting it doesn't take is an error at the setting. See the
 [HTTP server cookbook](../cookbook/http-server).
@@ -145,19 +145,19 @@ A component is built from the host's component root, `http.host.wasi`, which pro
 
 # The playground host
 
-The playground host, `nanyx.playground`, runs a console program in a web page, as the [playground](../standard-tools/playground)
-does. It stands in for the console host: it provides the same `Console`, from `nanyx.console.core`, whose output goes
+The playground host, `nanyx.playground.host`, runs a console program in a web page, as the [playground](../standard-tools/playground)
+does. It stands in for the console host: it provides the same `Console`, from `nanyx.cli`, whose output goes
 to the page, `Random`, drawn from a generator the page seeds, `Clock`, the browser's time, and `Async`, so that a
 program can start [tasks](./async) and sleep, so a program that needs only those compiles under it unchanged. It
 provides nothing else, no `Env`, `FileSystem` or `Http`, so a program that needs one of them is an error naming the
 host:
 
 ```
-error NYX0205: 'file.read' requires the context 'FileSystem', which the host 'nanyx.playground/playground.host' does not provide
+error NYX0205: 'file.read' requires the context 'FileSystem', which the host 'nanyx.playground.host/playground.host' does not provide
 ```
 
 The compiler built for the browser runs a script under it unless the script's `::host` names another; elsewhere a
-script runs under it with `::host nanyx.playground`. The package ships the JavaScript that runs such a program in a web
+script runs under it with `::host nanyx.playground.host`. The package ships the JavaScript that runs such a program in a web
 worker and passes what it prints, and what its `dbg`s print, to the page. Reading a line waits for a line typed in the
 page, and gives `#endOfInput` once the input has ended.
 
@@ -187,13 +187,19 @@ A host is a package whose manifest says it is one, in its `package`'s `host` fie
 ```nanyx fragment
 (
   package = (
-    name = "acme.shout"
+    name = "acme.shout.host"
     version = "0.1.0"
     sources = ["src/**/*.nyx"]
     host = (root = "shout.host", prelude = "shout.prelude")
   )
 )
 ```
+
+A host's name ends in `.host`, and only a host's does: the library a host runs programs against, which declares the
+contexts it provides, takes the short name, and the host is that name with `.host` after it, as `nanyx.cli` and
+`nanyx.cli.host` are. A program names its host once, in its manifest, while a library names the short name wherever it
+imports the library, so the short name goes to the library. A package that declares a `host` under another name, or is
+named `.host` and declares none, is an error at its name ([`NYX0053`](../standard-tools/errors#nyx0053)).
 
 Naming a package as a host when its manifest doesn't declare it one is an error.
 
@@ -352,12 +358,12 @@ A program that depends on a host library can import it, but can't call what requ
 
 The compiler ships the packages every program needs beside itself, in a `packages` directory next to the `nanyx` executable, so a program builds and runs with nothing downloaded:
 
-- `nanyx.console`, the console host;
-- `nanyx.console.core`, its interface package, which declares `Console` and `Env`;
+- `nanyx.cli.host`, the console host;
+- `nanyx.cli`, its interface package, which declares `Console` and `Env`;
 - `nanyx.fs`, the interface package of the file system, which declares `FileSystem`, `Path` and the functions on them;
-- `nanyx.http.core`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
-- `nanyx.http`, the HTTP host;
+- `nanyx.http`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
+- `nanyx.http.host`, the HTTP host;
 - `nanyx.wasi`, the [host library](#host-libraries) the console and HTTP hosts are written on: WASI's random source and clocks, the runtime's `nanyx:http`, and the component model's canonical ABI and WASI 0.3 interfaces their component roots use;
-- `nanyx.playground`, the playground host, which runs a console program in a web page.
+- `nanyx.playground.host`, the playground host, which runs a console program in a web page.
 
-A manifest or a directive names a package the compiler ships at the compiler's version exactly; any other version is an error that names the one shipped (`NYX0029`). In a `::host` or `::dependency` directive it needs no version at all: `::dependency nanyx.console.core`. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.
+A manifest or a directive names a package the compiler ships at the compiler's version exactly; any other version is an error that names the one shipped (`NYX0029`). In a `::host` or `::dependency` directive it needs no version at all: `::dependency nanyx.cli`. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.
