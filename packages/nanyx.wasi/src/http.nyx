@@ -230,14 +230,14 @@ def appendAll: [HostRuntime] I32, list((string, string)) -> #ok | HttpError = {
     if failed then #other("the header '{name}' can't be sent") else appendAll(fields, rest)
 }
 
---| `request-options` that wait `timeout` milliseconds to connect and for the first byte of the
-  response. A host that doesn't support a timeout leaves it out.
-def optionsOf: [HostRuntime] int -> I32 = { timeout ->
+--| `request-options` that wait `timeout` to connect and for the first byte of the response, in
+  nanoseconds, as WASI takes it. A host that doesn't support a timeout leaves it out.
+def optionsOf: [HostRuntime] Time(int) -> I32 = { timeout ->
   def options = newRequestOptions()
   def block = allocate(24)
-  setConnectTimeout(options, 1, timeout * 1_000_000, block)
+  setConnectTimeout(options, 1, timeout // 1ns, block)
   if readByte(block) != 0 and readByte(block + 4) == 2 then freeOptionalString(block + 8) else ()
-  setFirstByteTimeout(options, 1, timeout * 1_000_000, block)
+  setFirstByteTimeout(options, 1, timeout // 1ns, block)
   if readByte(block) != 0 and readByte(block + 4) == 2 then freeOptionalString(block + 8) else ()
   free(block)
   options

@@ -98,7 +98,8 @@ and an import's unit replaces the prelude's of its name, as an import's value do
 `Clock`'s `sleep` takes a `Time(int)`: `sleep(500ms)`, and `sleep(0.5s)`, which is a whole number of nanoseconds and so
 an `int` of them where a `Time(int)` is expected, while `sleep(500)` is an error. Each host waits for the time's whole
 milliseconds, rounded up, so a sleep waits at least as long as it is asked (`nanyx/clock`'s `wholeMilliseconds`). It
-takes a `Time(int)`, not any `Time`, until the first [open question](#open-questions) is settled.
+takes a `Time(int)`, not any `Time`, until the first [open question](#open-questions) is settled. `nanyx.http`'s `Request.timeout` is a `Time(int)` too, `30s` unless a request says otherwise: the runtime's
+`nanyx:http` import is sent its whole milliseconds, rounded up, and WASI's `request-options` its nanoseconds.
 
 # Storage
 
