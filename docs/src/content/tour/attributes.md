@@ -125,7 +125,7 @@ An `@allow` that suppresses nothing is itself reported, by the official linter's
 
 ## `@baseUnit`
 
-Marks a unit declaration as the base unit of its dimension: its smallest unit, which every other unit of the dimension is a whole multiple of. A base unit is never defined in terms of other units.
+Marks a unit declaration as the base unit of its dimension: the unit its values are stored in, which the dimension's other units are defined in terms of, in the end. It need not be the smallest. A base unit is never defined in terms of other units.
 
 ```nanyx fragment
 @baseUnit unit ns: Time
