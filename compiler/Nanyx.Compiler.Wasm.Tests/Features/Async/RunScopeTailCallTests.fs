@@ -118,3 +118,56 @@ let ``A task that crashes, started in a turn of a loop, ends the program`` () =
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains("the task of turn 2 failed", outcome.StandardError)
     Assert.DoesNotContain("returned", outcome.StandardOutput)
+
+[<Fact>]
+let ``A def that writes no type, starts a task in each turn and calls itself last is a loop`` () =
+    // It ran out of stack at about 8,000 turns before (#2665).
+    normalized
+        """def work = { n, acc ->
+  if n == 0 then acc else work(n - 1, acc + await(start! n))
+}
+
+@entry
+def main = {
+  println(work(100_000, 0))
+}
+"""
+    |> runSource
+    |> assertRan "5000050000\n"
+
+[<Fact>]
+let ``Two defs that write no type, start tasks and call each other last are a loop`` () =
+    normalized
+        """def ping = { n, acc ->
+  if n == 0 then acc else pong(n - 1, acc + await(start! n))
+}
+
+def pong = { n, acc ->
+  if n == 0 then acc else ping(n - 1, acc + await(start! 2 * n))
+}
+
+@entry
+def main = {
+  println(ping(100_000, 0))
+}
+"""
+    |> runSource
+    |> assertRan "7500050000\n"
+
+[<Fact>]
+let ``A def that writes no type and calls itself last requires the contexts its body uses`` () =
+    // Its body runs in a def of its own, whose contexts the def that opens the scope requires too (#2665).
+    normalized
+        """def countdown = { n ->
+  start! println("task {n}")
+  if n == 1 then println("last turn") else countdown(n - 1)
+}
+
+@entry
+def main = {
+  countdown(3)
+  println("returned")
+}
+"""
+    |> runSource
+    |> assertRan "last turn\ntask 3\ntask 2\ntask 1\nreturned\n"
