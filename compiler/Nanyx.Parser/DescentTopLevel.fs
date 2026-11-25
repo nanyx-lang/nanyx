@@ -225,6 +225,51 @@ let private columnAt (source: string) (offset: int) =
     let lineStart = if offset = 0 then 0 else source.LastIndexOf('\n', offset - 1) + 1
     offset - lineStart, source.Substring(lineStart, offset - lineStart).Trim() = ""
 
+/// Whether a dimension's or a unit's declaration starts at the cursor: `dimension` or `unit`, after `export` if it is
+/// exported, with a name after it on its line. The words are not reserved, so anywhere else they are names.
+let private unitDeclarationAhead (c: Cursor) =
+    let wordAt = if c.IsKeyword "export" then 1 else 0
+    match c.At wordAt, c.At(wordAt + 1) with
+    | Code word, Code declared ->
+        let text = c.Text word
+        word.Kind = Name && (text = UnitSyntax.dimensionKeyword || text = UnitSyntax.unitKeyword) && declared.Kind = Name
+        && not (c.Source.AsSpan(word.End, declared.Start - word.End).Contains '\n')
+    | _ -> false
+
+/// `dimension Time`, `dimension Bytes(int)`, `unit ns: Time` or `unit ms: Time = 1_000us`, after `export` if it is
+/// exported (see `UnitSyntax`).
+let private unitDeclaration (c: Cursor) (start: int) : TopLevelItem list =
+    let isExport = c.IsKeyword "export"
+    if isExport then c.Take() |> ignore
+    let word = c.Text(c.Expect Name)
+    let declared, nameSpan = identifierWithSpan c
+    let kind =
+        if word = UnitSyntax.dimensionKeyword then
+            let storage =
+                if c.Is LeftParen && c.OnSameLine then
+                    c.Take() |> ignore
+                    let storage = DescentTypes.typeExpr c
+                    c.Expect RightParen |> ignore
+                    Some storage
+                else None
+            DimensionDecl(isExport, declared, storage)
+        else
+            c.Expect Colon |> ignore
+            let dimension, _ = identifierWithSpan c
+            let multiple =
+                if c.Is Equals then
+                    c.Take() |> ignore
+                    if not (c.Is Number) then c.Fail "a number with a unit, such as `1_000us`"
+                    let literalStart = c.Start
+                    match DescentLiterals.literal c with
+                    | UnitLit _ as literal, span -> Some(Expression.at span (LiteralExpr literal))
+                    | _ -> c.Report literalStart "A unit is a number of another unit, with no space between the number and the unit, as in `unit ms: Time = 1_000us`"
+                else None
+            UnitDecl(isExport, declared, dimension, multiple)
+    if not (lineEnds c) then c.Fail "the end of the line"
+    c.NoteDocumentable start nameSpan.Start
+    [ TopLevelItem.at (c.SpanFrom start) kind ]
+
 /// A module's item, as the items it stands for: one, or the defs a destructuring def desugars into. In a module block
 /// (`inBlock`) there is no module declaration, pattern or destructuring def.
 let rec private items (c: Cursor) (inBlock: bool) : TopLevelItem list =
@@ -267,9 +312,15 @@ and private moduleItem (c: Cursor) (start: int) (inBlock: bool) : TopLevelItem l
             while going do
                 let index = c.Index
                 skipLayout c
+                // An attribute's item may be on its line, as in `@baseUnit unit ns: Time`.
+                let afterAttribute =
+                    match blockItems[blockItems.Count - 1].Kind with
+                    | Attribute _ -> c.Index = index && c.Token.IsSome && not (c.Is EndOfFile) && c.OnSameLine
+                    | _ -> false
                 let atItem =
-                    c.Token.IsSome && not (c.Is EndOfFile) && not c.OnSameLine
-                    && columnAt c.Source c.Start = (column, true)
+                    afterAttribute
+                    || c.Token.IsSome && not (c.Is EndOfFile) && not c.OnSameLine
+                       && columnAt c.Source c.Start = (column, true)
                 if atItem then blockItems.AddRange(items c true)
                 else
                     c.Index <- index
@@ -310,6 +361,7 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
     match c.Attempt(fun () -> if c.IsKeyword "export" then reExport () else raise NoMatch) with
     | Some kind -> single kind
     | None ->
+    if unitDeclarationAhead c then unitDeclaration c start else
     // A `use` at the top level is a mistake, but `use ... in`, an expression.
     if c.IsKeyword "use" then
         match c.Attempt(fun () -> DescentControl.statementValue c) with

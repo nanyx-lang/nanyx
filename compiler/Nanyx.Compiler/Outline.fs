@@ -134,7 +134,9 @@ let rec private topLevelItems (source: string) (declared: DeclaredNames) (items:
         | Import _
         | ReExport _
         | Expr _
-        | Attribute _ -> None)
+        | Attribute _
+        | DimensionDecl _
+        | UnitDecl _ -> None)
 
 /// `items` with those inside a `module name =` block (each block's name and text, as the parser found them) moved
 /// into an item for the block. The parser lifts a block's defs to the top level, under qualified names, so the

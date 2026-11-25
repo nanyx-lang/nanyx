@@ -434,7 +434,9 @@ module internal CustomPatterns =
             | ModuleDecl _
             | Import _
             | ReExport _
-            | Attribute _ -> item
+            | Attribute _
+            | DimensionDecl _
+            | UnitDecl _ -> item
         let rewritten = List.map inItem items
         rewritten, List.ofSeq errors
     /// `inferErrors`, the type checker's errors, without its unknown name for each `_` that `patternErrors` reports

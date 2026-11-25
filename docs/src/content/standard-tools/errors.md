@@ -2590,7 +2590,20 @@ def initial: char = "Ab"  -- error NYX0284: A char is one Unicode scalar value, 
 
 To fix it, write one character, or use a `string` where the value is more than one.
 
-# NYX0285: Negative power of a type whose fraction is another
+# NYX0285: Units of measure not checked yet
+
+A program declares a dimension or a unit, or writes a number with a unit, such as `500ms`. The compiler reads
+[units of measure](../work-in-progress/units-and-dimensions) but does not check them yet, so it can't compile a
+program that uses them.
+
+```nanyx
+def timeout = 500ms  -- error NYX0285: A number with a unit is read but not checked yet, ...
+```
+
+To fix it, write the number without its unit, as `500` milliseconds, until units are checked. A space between a number
+and a name, as in `100 ms`, makes them a number and a name again.
+
+# NYX0292: Negative power of a type whose fraction is another
 
 `x ** -n` is written on a value of a type whose `/` gives another type, its `fraction`
 ([Num(a)](../advanced/contexts#numa)). A negative power is `1 / x ** n`, which is a `fraction`, while `**` gives a value
@@ -2610,7 +2623,7 @@ def Count.`%`: Count, Count -> Count = { a, b -> Count(n = a.n % b.n) }
 def Count.fromInt: int -> Count = { n -> Count(n = n) }
 def Count.isInteger: bool = false
 
-def half = Count(n = 2) ** -1  -- error NYX0285: A negative power of a 'Count' is '1 / x ** n', a 'float', ...
+def half = Count(n = 2) ** -1  -- error NYX0292: A negative power of a 'Count' is '1 / x ** n', a 'float', ...
 ```
 
 To fix it, write the fraction as a division, `Count.fromInt(1) / x ** 1`, whose type is the `fraction`. A negative exponent that is

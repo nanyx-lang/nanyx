@@ -7,7 +7,16 @@ order: 10
 The [playground](/playground) is a page of the docs site where you write Nanyx, run it and share it, with the compiler
 running in the page. How to use it is on [Playground](../standard-tools/playground) in Standard tools; the host its
 programs run under, its runner and how a program reads input are on [Hosts](./hosts). This page says how the page is
-built. What is still planned is on [Playground](../work-in-progress/playground) in Work in progress.
+built. What is still planned is tracked as issues: diagnostics as you type and a WebAssembly text pane
+([#2154](https://github.com/nanyx-lang/nanyx/issues/2154)), running up to the first deferred error and a trap's stack
+([#2747](https://github.com/nanyx-lang/nanyx/issues/2747)), hover types and inlay hints
+([#2756](https://github.com/nanyx-lang/nanyx/issues/2756)), more examples
+([#2762](https://github.com/nanyx-lang/nanyx/issues/2762)), phones
+([#2765](https://github.com/nanyx-lang/nanyx/issues/2765)), and the open questions of files and HTTP
+([#2759](https://github.com/nanyx-lang/nanyx/issues/2759)), compiler versions
+([#2769](https://github.com/nanyx-lang/nanyx/issues/2769)), packages
+([#2772](https://github.com/nanyx-lang/nanyx/issues/2772)) and long programs
+([#2774](https://github.com/nanyx-lang/nanyx/issues/2774)).
 
 # The page
 
@@ -35,7 +44,7 @@ compiler, and the page says so. Then it imports `compiler.js` and the playground
 `packages/nanyx.playground.host/runner/playground.js`, from beside it, loads the compiler, and compiles the default example
 at once: the first compile is most of the wait (see [the measurement](#the-measurement)), so the first Run is quick.
 "Loading the compiler…" shows in the toolbar, with Run disabled, until then. The compiler runs on the page's main
-thread; a program runs in a worker.
+thread ([#2750](https://github.com/nanyx-lang/nanyx/issues/2750) moves it to a worker); a program runs in a worker.
 
 **The page's route is cross-origin isolated** (`Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` in
 `docs/vercel.json`), so that a program can read input ([Hosts](./hosts)). The headers come with the page's own
@@ -223,8 +232,8 @@ soon as the compiler is ready (see [The page](#the-page)), while you read it or 
 - **No `wasm-tools`.** The build needs only the .NET SDK. Without the `wasm-tools` workload the compiler runs under the
   runtime's interpreter, and the runtime isn't relinked to drop what the compiler doesn't use.
 
-Trimming the compiler's assemblies and ahead-of-time compilation are on
-[Playground](../work-in-progress/playground#making-it-faster) in Work in progress.
+Measuring trimming the compiler's assemblies and ahead-of-time compilation is
+[#2753](https://github.com/nanyx-lang/nanyx/issues/2753).
 - **Globalization.** The compiler runs with invariant globalization, so no culture data is downloaded.
 
 **Reproducing it.** From `compiler/`, with the .NET 10 SDK:

@@ -431,6 +431,7 @@ module PatternSpace =
         | LiteralCase (FloatLit value) -> string value
         | LiteralCase (IntLit value) -> string value
         | LiteralCase (BoolLit value) -> show (BoolCase value)
+        | LiteralCase (UnitLit(number, unitName)) -> WrittenNumber.text number + unitName
         | RecordCase fields when fields |> List.mapi (fun index (name, _) -> name = string index) |> List.forall id ->
             $"({items (List.map snd fields)})"
         | RecordCase fields ->

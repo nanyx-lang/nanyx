@@ -724,7 +724,7 @@ println("{-7.5 // 2.0} {-7.5 % 2.0}") -- -4.0 0.5
 
 A negative number still splits into a whole part and a remainder that is not negative, so `i % length` wraps an index into a range, `-1` to the last. On `float` and `F32`, `//` is the floor of the quotient, as a float, and `%` follows it, as Python's do. On an integer type, `x // 0` and `x % 0` stop the program.
 
-`isInteger` is `true` for an integer type and `false` for `float` and `F32`: `x ** -n` asks it, since a negative power of an integer isn't one. It stops the program on an integer type, and says to write `1 / x ** n`, which gives the fraction. A type of your own whose `fraction` is another type, as when its `/` gives a `float`, has no negative power: `x ** -1` on one is an error ([NYX0285](../standard-tools/errors#nyx0285)), or stops the program where the exponent isn't a literal.
+`isInteger` is `true` for an integer type and `false` for `float` and `F32`: `x ** -n` asks it, since a negative power of an integer isn't one. It stops the program on an integer type, and says to write `1 / x ** n`, which gives the fraction. A type of your own whose `fraction` is another type, as when its `/` gives a `float`, has no negative power: `x ** -1` on one is an error ([NYX0292](../standard-tools/errors#nyx0292)), or stops the program where the exponent isn't a literal.
 
 In a function that requires `Num(a)`, an integer literal beside a value of type `a` is `fromInt` of it, so `2` in `x * 2` is an `a`. A decimal literal there is an error, since `a` may be an integer type.
 

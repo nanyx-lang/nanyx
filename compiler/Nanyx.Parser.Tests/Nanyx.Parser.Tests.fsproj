@@ -78,6 +78,7 @@
     <Compile Include="Features\Types\AssociatedTypeTests.fs" />
     <Compile Include="Features\Types\TypeArgumentTests.fs" />
     <Compile Include="Features\Types\NestedTypeTests.fs" />
+    <Compile Include="Features\Units\UnitTests.fs" />
     <Compile Include="Features\Workflows\WorkflowArgumentTests.fs" />
   </ItemGroup>
 

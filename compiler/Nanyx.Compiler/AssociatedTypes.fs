@@ -340,7 +340,9 @@ module internal AssociatedTypes =
             | ModuleDecl _
             | Import _
             | ReExport _
-            | Attribute _ -> topLevel
+            | Attribute _
+            | DimensionDecl _
+            | UnitDecl _ -> topLevel
 
         let rewritten = module' |> List.map item
         rewritten, errors |> Seq.distinctBy (fun error -> error.Span, error.Message) |> List.ofSeq

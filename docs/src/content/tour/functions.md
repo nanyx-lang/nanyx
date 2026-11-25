@@ -333,7 +333,7 @@ println(dict("Hello")) -- #some(Bonjour)
 println(dict("Hola")) -- #notFound
 ```
 
-A map is not a function value yet: where a function is wanted, pass `{ word -> dict(word) }` (see [Maps and sets](../work-in-progress/maps-and-sets#open-questions)).
+A map is not a function value: where a function is wanted, pass `{ word -> dict(word) }`. Whether a map should be accepted there is [#2763](https://github.com/nanyx-lang/nanyx/issues/2763).
 
 # Higher-order functions
 

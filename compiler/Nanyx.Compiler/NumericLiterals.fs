@@ -25,7 +25,8 @@ module internal NumericLiterals =
             let recorded = { Type = ty; Value = literal; At = span; Node = node; Operator = None; Requires = None }
             ty, { next with NumericLiterals = recorded :: next.NumericLiterals; UnsettledLiterals = recorded :: next.UnsettledLiterals }
         | StringLit _
-        | BoolLit _ -> TypeResolution.literalType literal, state
+        | BoolLit _
+        | UnitLit _ -> TypeResolution.literalType literal, state
 
     /// Whether `ty` is a type that is known not to be a number. A type variable, an open record and a nominal type
     /// are left to unification, which reports them if they are not numbers; the error type is what failed to check, and

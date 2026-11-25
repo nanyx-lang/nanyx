@@ -7,7 +7,11 @@ order: 6
 This page says how the inliner of the WebAssembly backend works (`CoreIrInline.fs` and `CoreIrSimplify.fs`). What it
 means for users, and the `proc` block it compiles to a nested match, are in
 [Inlining](../meta/compiler-optimisations#inlining). It builds on [context calls](./context-calls). What is still
-planned or open is on [Inlining](../work-in-progress/inlining) in Work in progress.
+planned or open is in issues: lowering only what a program reaches
+([#1848](https://github.com/nanyx-lang/nanyx/issues/1848)), tuning the size limits
+([#2726](https://github.com/nanyx-lang/nanyx/issues/2726)), inlining across modules
+([#2727](https://github.com/nanyx-lang/nanyx/issues/2727)) and an inline attribute
+([#2728](https://github.com/nanyx-lang/nanyx/issues/2728)).
 
 # How a workflow block compiles away
 

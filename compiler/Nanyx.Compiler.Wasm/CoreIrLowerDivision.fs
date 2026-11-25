@@ -15,7 +15,7 @@ let fractional (bindTemp: Expr -> (Atom -> Expr) -> Expr) (atoms: Atom list) (ty
 /// a call, if it is `__pow`'s conversion of the `fraction` that `1 / x ** n` gives to the type `x` has, for `x ** -n`,
 /// that has no such value: on an integer type, which never takes that branch, as `__pow` stops the program first, or on
 /// a type whose `fraction` is another, whose negative power stops the program where it is reached. The type checker
-/// reports such a power where the exponent is a literal (NYX0285).
+/// reports such a power where the exponent is a literal (NYX0292).
 let negativePower (name: string) (argTys: IrType list) (ty: IrType) : Expr option =
     match argTys with
     | [ _ ] when name = Intrinsics.toFloat && IrType.isNumber ty && not (IrType.isFloat ty) ->

@@ -4,7 +4,7 @@ description: Maps from keys to values, and sets of values each held once
 order: 8
 ---
 
-Functions on `map(k, v)` and `set(a)`, and `list.groupBy`, which gives a map. They are [attached definitions](../advanced/attached-definitions) on `map` and `set`, so `m \insert(k, v)` resolves to `map.insert` when `m` is a map, and are in the [prelude](prelude), so no import is needed. Maps and sets are immutable: every function gives back a new one. For now a map keeps its entries in the order their keys were first added, a set its elements in the order they were first added, and a lookup takes time in proportion to the size (see [Maps and sets](../work-in-progress/maps-and-sets)).
+Functions on `map(k, v)` and `set(a)`, and `list.groupBy`, which gives a map. They are [attached definitions](../advanced/attached-definitions) on `map` and `set`, so `m \insert(k, v)` resolves to `map.insert` when `m` is a map, and are in the [prelude](prelude), so no import is needed. Maps and sets are immutable: every function gives back a new one. How they are built is in [Maps and sets](../deep-dives/maps-and-sets) in the Deep dives section.
 
 # Maps
 
@@ -23,7 +23,7 @@ A literal whose items are all `key => value` is a `map(k, v)`. A key written twi
 
 A map's keys need an [`Eq`](../advanced/contexts#eqa) and a [`Hash`](../advanced/contexts#hasha) of their type, so every function that looks one up requires `[Eq(k), Hash(k)]`. Numbers, strings, tags, records, tuples and lists can all be keys, and so can a nominal type that attaches its own `==` and `hash`; a type that holds a function cannot, and nor can a nominal type that attaches `==` without `hash`. When the keys are tags of different names, write the key type, as in `def lights: map(#red | #green, string) = ...`: inference does not yet join the tags of separate keys. Two maps are `==` when they hold the same keys, each with an equal value, whatever order the keys were added in; the values are compared by their own `Eq`. Maps cannot be ordered with `<`, or be keys themselves, yet.
 
-A map can be printed and interpolated when its keys and values can: it is written as its literal is, its entries in the order its keys were first added, each key and value by its own [`ToString`](prelude-contexts#tostring). The empty map is written `[=>]`.
+A map can be printed and interpolated when its keys and values can: it is written as its literal is, its entries in the order of their keys' hashes, each key and value by its own [`ToString`](prelude-contexts#tostring). The empty map is written `[=>]`.
 
 ```nanyx fragment
 "{["tea" => 3, "cake" => 1]}"   -- "[tea => 3, cake => 1]"

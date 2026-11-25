@@ -5,9 +5,20 @@ order: 11
 ---
 
 The packages the compiler ships, the console host among them, are described for users in
-[Hosts](../advanced/hosts#packages-the-compiler-ships). This page says how they are built and found. What is left,
-the official linter as a package, is on [Built-ins as packages](../work-in-progress/built-ins-as-packages) in Work in
-progress.
+[Hosts](../advanced/hosts#packages-the-compiler-ships). This page says how they are built and found, and why the
+official ones are ordinary packages. What is left is in issues: the official linter as a package
+([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), shipped packages as index packages that come
+pre-downloaded ([#2699](https://github.com/nanyx-lang/nanyx/issues/2699)), and whether parts of the standard library
+become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
+
+# Why the official ones are ordinary packages
+
+- **What's special can't be replaced.** A team that wants different lint rules, or a host for a different platform,
+  should be able to write one that works exactly as the official one does. If the official ones use privileges no
+  package has, the public contract for linters and hosts is never really tested.
+- **Nanyx should be enough to write Nanyx's tools.** A linter written in Nanyx exercises the language, the standard
+  library and the [semantic model](../work-in-progress/linters#what-a-linter-sees) that every other linter will use.
+- **The compiler gets smaller.** Its job becomes running linter packages and hosts, not containing them.
 
 # How shipped packages are built
 

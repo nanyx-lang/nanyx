@@ -87,11 +87,8 @@ The [HTTP host](../advanced/hosts#the-http-host) is built: its entry is a `Reque
   ```
 
   The host takes the handler alone until a program needs `init`.
-- **Streamed bodies.** A body is a `string`. Streaming wants a lazy body, which depends on
-  [lazy sequences](./lazy-sequences).
-- **Serving on WASI.** The HTTP host has no component root yet. Its component root would be in the `wasi:http/service`
-  world, exporting `wasi:http/handler`, so that `wasmtime serve` and other `wasi:http` hosts can run a handler. The
-  plan is on [Components](./components).
+- **Streamed bodies.** A body is a `string`. Streaming wants a lazy body, such as a
+  [lazy sequence](../deep-dives/lazy-sequences).
 - **Serving more widely**: a server bound to other addresses than `localhost`.
 
 Routing, middleware and templates are libraries, not part of the host: a router is a function from routes to a
@@ -138,14 +135,15 @@ provides. .NET's Generic Host, with `IHostedService`, takes the second approach.
 1. **The browser host**: `init`, `update` and `view`, with `Dom`, `Clock` and `Log`, and the JavaScript it ships
    beside the module. The [Nim demo](./nim-demo) is its first user.
 2. **The test host**, with [Testing](./testing).
-3. **The HTTP host on WASI**: its component root in the `wasi:http/service` world ([Components](./components)), and
-   the rest of [Serving HTTP](#serving-http).
+3. **The rest of [Serving HTTP](#serving-http).** The HTTP host's component root, exporting `wasi:http/handler`, is
+   built ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)).
 
 # Open questions
 
 - **Host configuration typing.** The `settings` of the manifest's `host` are checked against the settings the host
   declares in its manifest, with their defaults: a misspelt key is an error, and so is a value of another kind than its
-  default. Whether to check them against a record type the host exports, as Nanyx types are checked, is open.
+  default. Whether to check them against a record type the host exports, as Nanyx types are checked, is open
+  ([#2746](https://github.com/nanyx-lang/nanyx/issues/2746)).
 - **Host code in another language.** A browser host needs JavaScript beside the module. How does a host package carry
   it, and how does the build write it out? The playground host ships its runner in `packages/nanyx.playground.host/runner`,
   outside its `sources`, which the compiler built for the browser publishes with the page; a general mechanism is open.

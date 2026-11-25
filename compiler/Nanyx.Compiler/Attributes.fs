@@ -452,6 +452,9 @@ module Attributes =
                             |> Diagnostics.about $"@{name}")
                     | _ -> keywordKindError name attribute.Span argument
                 loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ Option.toList error @ errors)
+            // `@baseUnit` marks a dimension's base unit, which the unit's declaration, after it, is checked with.
+            | Kind (Attribute(name, None)) as attribute :: (Kind (UnitDecl _) as unit) :: rest when name = UnitSyntax.baseUnitAttribute ->
+                loop rest (unit :: attribute :: acc) entries externs errors
             | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute && name <> componentAttribute && name <> componentImportAttribute ->
                 let error =
                     Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span

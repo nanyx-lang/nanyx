@@ -147,7 +147,9 @@ module internal BuiltinTypeNames =
             | ModuleDecl _
             | Import _
             | ReExport _
-            | Attribute _ -> topLevel
+            | Attribute _
+            | DimensionDecl _
+            | UnitDecl _ -> topLevel
 
         let replaced = module' |> List.map item
         // `Int.toString` is reported both as the member access and as the identifier it reads.

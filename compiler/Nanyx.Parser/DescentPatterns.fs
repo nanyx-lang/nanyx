@@ -58,6 +58,9 @@ let private literalOrRangePattern (c: Cursor) =
     | None ->
         if c.Is StringStart then c.GiveUp "a string with holes in a pattern"
         let literal, _ = literal c
+        match literal with
+        | UnitLit _ -> c.Report start "A number with a unit is not a pattern yet: compare the value in a guard instead, as in `| == 0ms ->`"
+        | _ -> ()
         Pattern.at (c.SpanFrom start) (LiteralPattern literal)
 
 /// `, ...` after the elements of a tuple pattern, which leaves the value's other fields out: whether it is there.

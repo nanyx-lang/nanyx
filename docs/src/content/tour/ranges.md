@@ -55,11 +55,8 @@ for points | p -> println("({p.x}, {p.y})")
 
 A range of a type with no `succ` is an error that says so: `Enumerable` is missing, as any context a call needs is.
 
-A range of characters, `'a'..'z'`, waits on a character type, which Nanyx doesn't have yet:
-
-```nanyx skip=#2196
-def aToZ = 'a'..'z'
-```
+A range of characters waits on `char` having a `succ`
+([#2731](https://github.com/nanyx-lang/nanyx/issues/2731)): today it is an error that `Enumerable` is missing.
 
 # Implementing ranges
 

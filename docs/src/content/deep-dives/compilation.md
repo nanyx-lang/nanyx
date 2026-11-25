@@ -102,6 +102,11 @@ pass is `DeferredErrors.deferErrors`, and the backend lowers what it leaves to a
   (`Solving.solveLeavingUnknown`). The expressions where a conflict was found are otherwise typed by their other
   constraints, and the deferral pass replaces the outermost expression at the conflict's span.
 
+What is still open is in issues: whether to defer errors in type definitions, imports and syntax
+([#2766](https://github.com/nanyx-lang/nanyx/issues/2766)), whether blame should follow annotations
+([#2768](https://github.com/nanyx-lang/nanyx/issues/2768)), and tests of a generic def with a deferred error used at
+several types ([#2771](https://github.com/nanyx-lang/nanyx/issues/2771)).
+
 # The binary format
 
 `nanyx build` and `nanyx wasm` write `.wasm`; `--wat` writes the text instead, and `nanyx run` runs the text on

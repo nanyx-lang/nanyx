@@ -28,8 +28,8 @@ Decided by the maintainer as the design ([#107](https://github.com/nanyx-lang/na
 written here:
 
 - Linters are Nanyx packages, compiled to WebAssembly and run at compile time on the embedded Wasmtime engine
-  the compiler already ships. The official linter becomes one too ([Built-ins as packages](./built-ins-as-packages),
-  [#1343](https://github.com/nanyx-lang/nanyx/issues/1343)).
+  the compiler already ships. The official linter becomes one too ([#1343](https://github.com/nanyx-lang/nanyx/issues/1343),
+  [Shipped packages](../deep-dives/shipped-packages#why-the-official-ones-are-ordinary-packages)).
 - They see what the compiler knows about a module through query functions (type of a node, symbol of a reference,
   references to a symbol, children of a node) rather than a serialized copy of the whole tree. Queries keep the
   compiler's internal representation free to change, and avoid copying large trees across the WebAssembly boundary.
@@ -38,7 +38,9 @@ written here:
 - A linter may see the whole package, not only one module, for rules such as "exported but never used". The
   official linter sees one module today, so its `unconstructibleType` reports an exported nominal type that another
   module of the same package gives out, where `@allow` has to cover it.
-- A package names its linters in its manifest's `linters` field ([The package manifest](./package-manifest)).
+- A package names its linters in its manifest's `linters` field
+  ([Packages and projects](../tour/packages#package-manifests)). Whether a linter's `settings` are checked against a
+  record type it exports is [#2746](https://github.com/nanyx-lang/nanyx/issues/2746).
 
 # Code with errors
 

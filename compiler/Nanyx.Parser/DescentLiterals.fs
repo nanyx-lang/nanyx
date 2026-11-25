@@ -23,10 +23,9 @@ let private isInteger (text: string) =
     let lower = text.ToLowerInvariant()
     lower.StartsWith "0x" || lower.StartsWith "0o" || lower.StartsWith "0b" || not (text.Contains '.' || lower.Contains 'e')
 
-/// Reports the first run of digits and `_`s in `token`, a number, whose `_` isn't between two digits: the whole number's
-/// digits, then its fraction's, then its exponent's.
-let private reportBadGroups (c: Cursor) (token: Token) =
-    let text = c.Text token
+/// Reports the first run of digits and `_`s in `text`, a number written at `start`, whose `_` isn't between two digits:
+/// the whole number's digits, then its fraction's, then its exponent's.
+let private reportBadGroups (c: Cursor) (start: int) (text: string) =
     let groups =
         let runAt (offset: int) =
             let mutable finish = offset
@@ -41,8 +40,11 @@ let private reportBadGroups (c: Cursor) (token: Token) =
             | e -> [ runAt (if e + 1 < text.Length && (text[e + 1] = '+' || text[e + 1] = '-') then e + 2 else e + 1) ]
         whole :: fraction @ exponent
     match groups |> List.tryFind (fun (_, digits) -> digits <> "" && not (wellGrouped digits)) with
-    | Some(offset, digits) -> c.Report (token.Start + offset) $"A `_` in a number goes between two digits: '{digits}' is not a number"
+    | Some(offset, digits) -> c.Report (start + offset) $"A `_` in a number goes between two digits: '{digits}' is not a number"
     | None -> ()
+
+/// Whether `token`, a number, has a unit written straight after it, as `500ms` has.
+let private hasUnit (c: Cursor) (token: Token) = Lexer.numberEnd c.Source token.Start < token.End
 
 /// An integer, with its sign if one is written straight before it.
 let intLiteral (c: Cursor) : Literal * SourceSpan =
@@ -51,7 +53,7 @@ let intLiteral (c: Cursor) : Literal * SourceSpan =
     let signText = sign c
     let token = c.Expect Number
     let text = c.Text token
-    if not (isInteger text) then
+    if not (isInteger text) || hasUnit c token then
         c.Index <- mark
         raise NoMatch
     // A single `.` after the digits makes it a float, `1.`, which `literal` reads.
@@ -68,7 +70,7 @@ let intLiteral (c: Cursor) : Literal * SourceSpan =
                 with _ -> c.GiveUp "a hexadecimal, octal or binary number too large for 64 bits"
             bigint (if signText = "-" then -magnitude else magnitude)
         else
-            reportBadGroups c token
+            reportBadGroups c token.Start text
             Numerics.BigInteger.Parse(signText + text.Replace("_", ""), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture)
     IntLit value, c.SpanFrom start
 
@@ -79,7 +81,7 @@ let private floatLiteral (c: Cursor) : Literal * SourceSpan =
     let token = c.Expect Number
     let text = c.Text token
     let lower = text.ToLowerInvariant()
-    if lower.StartsWith "0x" || lower.StartsWith "0o" || lower.StartsWith "0b" then raise NoMatch
+    if lower.StartsWith "0x" || lower.StartsWith "0o" || lower.StartsWith "0b" || hasUnit c token then raise NoMatch
     let written =
         if isInteger text then
             // `1.`: the lexer reads the `.` apart, since no digit follows it.
@@ -97,8 +99,36 @@ let private floatLiteral (c: Cursor) : Literal * SourceSpan =
         elif not (text.Contains '.') then c.GiveUp "a number with an exponent and no fraction"
         else text
     let parts = written.Split([| '.'; 'e'; 'E'; '+'; '-' |])
-    if parts |> Array.exists (fun part -> part <> "" && not (wellGrouped part)) then reportBadGroups c token
+    if parts |> Array.exists (fun part -> part <> "" && not (wellGrouped part)) then reportBadGroups c token.Start text
     FloatLit(Double.Parse(signText + written.Replace("_", ""), CultureInfo.InvariantCulture)), c.SpanFrom start
+
+/// A number with a unit written straight after it, `500ms`, `0.5s` or `1.5e3ms`, with its sign if one is written straight
+/// before it: the number exactly as written, and the unit (see `UnitSyntax`).
+let private unitLiteral (c: Cursor) : Literal * SourceSpan =
+    let start = c.Start
+    let signText = sign c
+    let token = c.Expect Number
+    if not (hasUnit c token) then raise NoMatch
+    let numberEnd = Lexer.numberEnd c.Source token.Start
+    let text = c.Source.Substring(token.Start, numberEnd - token.Start)
+    reportBadGroups c token.Start text
+    // As in a float, an exponent comes after a fraction: `1.5e3ms`, not `1e3ms`.
+    if text.IndexOfAny [| 'e'; 'E' |] >= 0 && not (text.Contains '.') then c.GiveUp "a number with an exponent and no fraction"
+    let plain = text.Replace("_", "")
+    let mantissa, exponent =
+        match plain.IndexOfAny [| 'e'; 'E' |] with
+        | -1 -> plain, 0
+        | e ->
+            match Int32.TryParse(plain.Substring(e + 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) with
+            | true, value -> plain.Substring(0, e), value
+            | false, _ -> c.Report token.Start $"The exponent of '{text}' is too large"
+    let fractionDigits = match mantissa.IndexOf '.' with -1 -> 0 | dot -> mantissa.Length - dot - 1
+    let digits = Numerics.BigInteger.Parse(mantissa.Replace(".", ""), CultureInfo.InvariantCulture)
+    let number =
+        { Digits = (if signText = "-" then -digits else digits)
+          Exponent = exponent - fractionDigits
+          Decimal = text.IndexOfAny [| '.'; 'e'; 'E' |] >= 0 }
+    UnitLit(number, c.Source.Substring(numberEnd, token.End - numberEnd)), c.SpanFrom start
 
 /// A string with no holes, double-quoted with its escapes decoded, or single-quoted and raw.
 let stringLiteral (c: Cursor) : Literal * SourceSpan =
@@ -114,9 +144,12 @@ let stringLiteral (c: Cursor) : Literal * SourceSpan =
             | None -> reportBadEscape c (token.Start + 1) inner
     StringLit value, c.SpanOf token
 
-/// A literal: an integer, a float, `true` or `false`, or a string with no holes.
+/// A literal: an integer, a float, a number with a unit, `true` or `false`, or a string with no holes.
 let literal (c: Cursor) : Literal * SourceSpan =
     match c.Attempt(fun () -> intLiteral c) with
+    | Some literal -> literal
+    | None ->
+    match c.Attempt(fun () -> unitLiteral c) with
     | Some literal -> literal
     | None ->
         match c.Attempt(fun () -> floatLiteral c) with

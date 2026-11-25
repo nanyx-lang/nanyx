@@ -98,11 +98,11 @@ release within a day.
 
 ## macOS (Homebrew)
 
-**Coming soon.** There is no Homebrew tap yet. See [Distribution](../work-in-progress/distribution) for the plan.
+**Coming soon.** There is no Homebrew tap yet ([#2733](https://github.com/nanyx-lang/nanyx/issues/2733)).
 
 ## Linux (apt)
 
-**Coming soon.** There is no apt repository yet. See [Distribution](../work-in-progress/distribution) for the plan.
+**Coming soon.** There is no apt repository yet ([#2734](https://github.com/nanyx-lang/nanyx/issues/2734)).
 
 # Verify installation
 

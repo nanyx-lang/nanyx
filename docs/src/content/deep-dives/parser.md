@@ -6,13 +6,16 @@ order: 12
 
 The parser (`compiler/Nanyx.Parser`) reads a file in three steps: a lexer turns the text into tokens, a layout pass
 makes the block structure that indentation gives them explicit, and a hand-written recursive-descent parser reads the
-tokens into the syntax tree (`Ast.fs`). [The parser](../work-in-progress/parser) in Work in progress says what is still
-open.
+tokens into the syntax tree (`Ast.fs`). What is still open is in issues:
+recovering inside an item ([#2729](https://github.com/nanyx-lang/nanyx/issues/2729)) and whether a concrete syntax
+tree is needed ([#2730](https://github.com/nanyx-lang/nanyx/issues/2730)).
 
 - **The lexer** (`Lexer.fs`): text in, tokens out, each with its offsets and its leading and trailing trivia, lossless
   whatever the text. A string with holes is a `StringStart`, the hole's tokens, a `StringMiddle` between holes and a
   `StringEnd`. Operators come from `Operators.binaryOperators`, and keywords from `Keywords.reserved`, the one list of
-  reserved words, so a keyword is never read as part of a longer name.
+  reserved words, so a keyword is never read as part of a longer name. A number with a unit straight after it, `500ms`
+  or `1.5e3ms`, is one `Number` token, and `Lexer.numberEnd` says where its number ends; a hexadecimal, octal or
+  binary number takes no unit, so a letter after one is an error.
 - **The layout pass** (`Layout.fs`): the lexer's tokens in, the same tokens out with `Indent`, `Newline` and `Dedent`
   among them, each at the offset of the code token after it, by the rules below. The parser never measures
   indentation itself.
@@ -23,7 +26,8 @@ open.
   names nodes declare, where documentable constructs start, `module name =` blocks, comments from the lexer's trivia,
   and string texts. The files read, in order: types, with a field's default and a `where` constraint read as
   expressions; literals, with a `+` or `-` written straight before a number as its sign and `1.` as a float, though the
-  lexer reads both apart; patterns, with a guard's lambda and a custom pattern's arguments read as expressions;
+  lexer reads both apart, and a number with a unit as a `UnitLit` that keeps the number exactly, as digits and a power
+  of ten (`WrittenNumber`), and whether it was written whole or as a decimal; patterns, with a guard's lambda and a custom pattern's arguments read as expressions;
   expressions, with the binary operators and ranges read by precedence climbing over `binaryOperators`, either going
   on after an operator at the end of a line (`Crossing`) or, for a statement, not (`Inline`), and `value is pattern`
   read there as an operator too (`isOperator`), made a match whose arm is `true` and whose wildcard arm, made up at the
@@ -37,7 +41,8 @@ open.
   the `else` branch is written once, and a `while` whose condition binds names stays a `while`, which the compiler
   checks and compiles as the loop `IsSyntax.whileAsIf` makes of it, whose condition is that `if`, with the body in its
   `then` branch; and the top level, with its directives blanked
-  (`Directives.fs`). The files before `DescentControl.fs` read lambdas, expressions, arms and what starts with a keyword
+  (`Directives.fs`), where `dimension` and `unit`, which are not reserved, begin a declaration only at the start of an
+  item with a name after them on its line (`UnitSyntax`), so anywhere else they are names. The files before `DescentControl.fs` read lambdas, expressions, arms and what starts with a keyword
   through forward references (`DescentCursor.Forward`), which `DescentTopLevel.fill` fills before anything is read.
   `Api.runModuleParser` reads a whole file (`DescentTopLevel.tryReadModuleWithState`), and `parseTypeSignature`, which
   `nanyx search` reads a query's type with, reads a type alone (`DescentTypes.readTypeSignature`).

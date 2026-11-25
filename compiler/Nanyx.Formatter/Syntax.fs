@@ -156,6 +156,8 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             match i.Kind with
             | ModuleDecl _ -> i.Kind
             | Attribute(n, argument) -> Attribute(n, Option.map expr argument)
+            | DimensionDecl(isExport, n, storage) -> DimensionDecl(isExport, n, Option.map typeExpr storage)
+            | UnitDecl(isExport, n, dimension, multiple) -> UnitDecl(isExport, n, dimension, Option.map expr multiple)
             | ModuleBlock(n, items) -> ModuleBlock(n, items' items)
             | Def(ValueDef(isExport, n, t, value)) -> Def(ValueDef(isExport, name n, Option.map typeExpr t, expr value))
             | Def(TypeDef(n, modifiers, parameters, body)) -> Def(TypeDef(typeDef (n, modifiers, parameters, body)))
