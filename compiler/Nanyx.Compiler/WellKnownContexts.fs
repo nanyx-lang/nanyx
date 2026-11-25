@@ -165,8 +165,9 @@ module internal WellKnownContexts =
 
     /// `Hash`: every type that has the compiler's own `Eq` has the compiler's own `Hash`, which hashes by structure, so
     /// that values equal by their structure have the same hash. A private type has only the `hash` it attaches. It has no operators. A type that attaches its own `==`
-    /// must attach `hash` too. A map or a set has none yet: hashing the list of its entries would give equal maps
-    /// different hashes. Nor has an array yet, nor a box, which has no `Eq`.
+    /// must attach `hash` too. A map and a set have the compiler's own, which hashes its store, one trie for one set of
+    /// keys (see `Maps.storeOf`), or one derived from their keys' and values' own. An array has none yet, nor a box,
+    /// which has no `Eq`.
     let hashing =
         { Context = "Hash"
           Member = "hash"
@@ -175,8 +176,6 @@ module internal WellKnownContexts =
           Lacks =
             lacking "hash" (function
                 | TyFunc _ -> Some ("a function", "functions")
-                | Maps.MapType _ -> Some ("a map", "maps")
-                | Sets.SetType _ -> Some ("a set", "sets")
                 | Arrays.ArrayType _ -> Some ("an array", "arrays")
                 | Boxes.BoxType _ -> mutableReference
                 | MutableArrays.MutableArrayType _ -> Some ("a mutable array", "mutable arrays")

@@ -60,7 +60,7 @@ let canHoldMutable (ty: IrType) =
         | IrBox -> true
         // The type itself again, which holds what its body holds.
         | IrRecursive body -> holds body
-        | IrSelf
+        | IrSelf _
         | IrInt
         | IrSized _
         | IrBool

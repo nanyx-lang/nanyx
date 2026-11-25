@@ -1303,6 +1303,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeOf = tyOf
           Complex = this.Complex
           Branch = this.Branch
+          Callee = callee
           Request = fun name lowering -> request (SpecKey.plain name []) Map.empty lowering
           Reader = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Reader
           Convert = (CoreIrLowerMembers.boxTools this.MemberTools emptyScope).Convert }
@@ -1408,6 +1409,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | CaseGetting(unionType, caseName) -> CoreIrLowerTypeMatch.caseGettingFunction this.TypeMatchTools functionName unionType caseName
         | Canonicalising collection -> CoreIrLowerTypeMatch.canonicalisingFunction this.TypeMatchTools functionName collection
         | Decanonicalising collection -> CoreIrLowerBuild.decanonicalisingFunction this.TypeMatchTools functionName collection
+        | CanonicalisingValue ty -> CoreIrLowerTypeMatch.canonicalisingValueFunction this.TypeMatchTools functionName ty
+        | DecanonicalisingValue ty -> CoreIrLowerBuild.decanonicalisingValueFunction this.TypeMatchTools functionName ty
         | MakingRecord recordType -> CoreIrLowerBuild.makingFunction this.TypeMatchTools functionName recordType
         | CaseBuilding(unionType, caseName) -> CoreIrLowerBuild.caseBuildingFunction this.TypeMatchTools functionName unionType caseName
         | Building buildTy -> CoreIrLowerBuild.buildingFunction this.TypeMatchTools functionName buildTy
@@ -1512,6 +1515,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | CaseGetting _
         | Canonicalising _
         | Decanonicalising _
+        | CanonicalisingValue _
+        | DecanonicalisingValue _
         | MakingRecord _
         | CaseBuilding _
         | Building _

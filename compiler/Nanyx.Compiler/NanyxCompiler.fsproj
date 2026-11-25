@@ -28,9 +28,9 @@
     <Compile Include="Unifier.fs" />
     <Compile Include="Solving.fs" />
     <Compile Include="Lists.fs" />
+    <Compile Include="Arrays.fs" />
     <Compile Include="Maps.fs" />
     <Compile Include="Sets.fs" />
-    <Compile Include="Arrays.fs" />
     <Compile Include="Boxes.fs" />
     <Compile Include="TypeValues.fs" />
     <Compile Include="TaskWork.fs" />

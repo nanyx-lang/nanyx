@@ -47,8 +47,10 @@ type IrType =
     /// (`type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))`): the type is its body, with each `IrSelf` in it the whole
     /// type again. Code that reads what the type is made of reads `IrType.unfold` of it.
     | IrRecursive of IrType
-    /// In the body of an `IrRecursive`, and not inside another one there, the `IrRecursive` itself.
-    | IrSelf
+    /// In the body of an `IrRecursive`, an `IrRecursive` around it: `IrSelf 0` the innermost, `IrSelf 1` the one around
+    /// that, and so on, as a type that holds a map of itself, `type Json = ... | #object(map(string, Json))`, holds
+    /// `Json` inside the map's store, itself recursive (see `Maps.storeOf`).
+    | IrSelf of int
     /// A 32-bit word that is no value of the program's: a function's slot in the table, which a closure block holds
     /// first, a cursor along a list's cells, or the block a reuse token holds.
     | IrWord
@@ -380,13 +382,15 @@ exception InternalError of string
 let internalError message : 'a = raise (InternalError message)
 
 module IrType =
-    /// What a recursive type is made of: its body, with each `IrSelf` that stands for it the type itself. Any other
-    /// type as it is.
+    /// What a recursive type is made of: its body, with each `IrSelf` that stands for it the type itself, so that what
+    /// is inside a recursive type in it refers to the type by itself and not by an `IrSelf`. Any other type as it is.
     let unfold (ty: IrType) : IrType =
-        let rec replace inner =
+        let rec replaceAt (depth: int) inner =
+            let replace = replaceAt depth
             match inner with
-            | IrSelf -> ty
-            | IrRecursive _ -> inner
+            | IrSelf index when index = depth -> ty
+            | IrSelf _ -> inner
+            | IrRecursive body -> IrRecursive(replaceAt (depth + 1) body)
             | IrTags tags -> IrTags(tags |> List.map (fun (name, payload) -> name, Option.map replace payload))
             | IrRecord fields -> IrRecord(fields |> List.map (fun (name, fieldTy) -> name, replace fieldTy))
             | IrList element -> IrList(replace element)
@@ -404,7 +408,7 @@ module IrType =
             | IrBox
             | IrWord -> inner
         match ty with
-        | IrRecursive body -> replace body
+        | IrRecursive body -> replaceAt 0 body
         | _ -> ty
 
     /// Whether a value of `ty` is a floating-point number: a float or an `F32`.
@@ -467,7 +471,7 @@ module IrType =
         | IrError -> true
         // A type holds itself only in the payload of a tag.
         | IrRecursive _
-        | IrSelf -> true
+        | IrSelf _ -> true
         | IrRecord fields -> fields |> List.exists (snd >> holdsUnordered)
         | IrList element -> holdsUnordered element
         | IrInt
@@ -508,7 +512,8 @@ module IrType =
             let keys = (if waits then [ "Async" ] else []) @ (members |> List.map (fst >> ContextMemberKey.text)) |> String.concat ", "
             $"([{keys}] {show input} -> {show output})"
         | IrRecursive body -> $"rec self. {show body}"
-        | IrSelf -> "self"
+        | IrSelf 0 -> "self"
+        | IrSelf index -> $"self{index}"
 
     /// The type as part of a WebAssembly name, such as `list_string` in `id__list_string`.
     let rec mangle (ty: IrType) =
