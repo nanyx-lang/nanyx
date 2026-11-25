@@ -127,6 +127,21 @@ module Solving =
                 | false, _ -> walk (constraint :: newer) rest
         walk [] constraints
 
+    /// How many lists `unifyDetailed` solved from the start, where `countingFullSolves` asks for it.
+    let private fullSolves = System.Threading.AsyncLocal<int ref option>()
+
+    /// Runs `action`, giving what it gives and how many lists of constraints it solved from the start, rather than on
+    /// top of one solved before (see `unifyDetailed`), on its own thread and those it starts: for the tests that check
+    /// a module is solved a def at a time.
+    let countingFullSolves (action: unit -> 'T) : 'T * int =
+        let count = ref 0
+        fullSolves.Value <- Some count
+        try
+            let result = action ()
+            result, count.Value
+        finally
+            fullSolves.Value <- None
+
     /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`). The type checker adds
     /// constraints only at the front of the list it holds, and looks types up against it again and again as it goes.
     /// So when the list ends in one solved lately that agreed, only the constraints in front of it are solved, on top
@@ -144,6 +159,7 @@ module Solving =
         | true, known -> known.Result
         | false, _ ->
             let fromStart () =
+                fullSolves.Value |> Option.iter (fun count -> count.Value <- count.Value + 1)
                 unifyFrom empty 0 constraints |> Result.map (fun (subst, nextRestId, order) -> subst, nextRestId, extensionOf subst order)
             // A made-up rest variable a constraint names, taken from what an earlier solve gave, names nothing when
             // the whole list is solved (see `isMadeUpRest`), but would name what it was solved to on top of that solve.
@@ -249,6 +265,9 @@ module Solving =
     /// rather than the whole list from the start each time: an error in the module would otherwise have every later
     /// question solve all of the module again, twice (#2449). Where that list kept all its constraints, they are
     /// `constraints` itself, which is given as it is, so that the checkpoints in it are still found (see `checkpoint`).
+    /// A checkpoint reached before any such list is given as it is too: it agrees, so a constraint set aside in a list
+    /// older than it, while a def was being checked, no longer is, and the lists after it are solved on top of it
+    /// rather than on that older list's copy of the constraints it kept, which has no checkpoint in it (#2709).
     let private solvedSoFar (constraints: ConstraintSet) : SoFar =
         let given = soFarLists.Value
         match given.TryGetValue constraints with
@@ -256,6 +275,9 @@ module Solving =
         | false, _ ->
             let rec walk (newer: ConstraintSet) (remaining: ConstraintSet) =
                 match given.TryGetValue remaining with
+                // A checkpoint agrees, all of it: what was set aside in it, or in a list older than it, while a def
+                // was being checked, no longer is, so the whole list is solved, on top of it.
+                | _ when checkpoints.TryGetValue remaining |> fst -> constraints, []
                 | true, known when obj.ReferenceEquals(known.Kept, remaining) -> constraints, known.Failures
                 | true, known -> List.rev newer @ known.Kept, known.Failures
                 | false, _ ->
