@@ -138,7 +138,7 @@ let private usesAround (syntax: Module) (offset: int) : (Expression * SourceSpan
 
 /// The symbol `expr` refers to, if it is a name or a call of one.
 let internal referenced (typed: TypedModule) (expr: Expression) : Symbol option =
-    typed.References |> Map.tryFind expr.Id |> Option.bind (fun id -> typed.Symbols |> Map.tryFind id)
+    WrittenReferences.symbolOf typed expr.Id
 
 /// The symbol of the context `context` is, whose doc comment describes it.
 let private contextSymbol (typed: TypedModule) (context: Ty) : Symbol option =

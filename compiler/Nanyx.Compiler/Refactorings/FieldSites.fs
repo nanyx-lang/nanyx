@@ -66,7 +66,7 @@ let private declaredAt (typed: TypedModule) (holder: NodeId) (declarer: Declarer
 /// The type definition the name `node` is written with refers to, with its symbol: `N` in `N(x = 4)`, `Log` in
 /// `use Log(...)`, `Sum(int)` in `use Sum(int)(...)`.
 let private typeDefinitionAt (typed: TypedModule) (node: NodeId) =
-    typed.References
+    WrittenReferences.ofModule typed
     |> Map.tryFind node
     |> Option.bind typed.Symbols.TryFind
     |> Option.filter (fun symbol -> symbol.Kind = TypeDefinition)

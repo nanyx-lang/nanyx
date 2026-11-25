@@ -577,3 +577,10 @@ def mapOpt: Option(a), (a -> b) -> Option(b) = {
     let source = source.ReplaceLineEndings "\n"
     Assert.Equal(Some "def mapOpt: Option(a), (a -> b) -> Option(b)", hoverType source (offsetOf source "mapOpt" 0 0))
     Assert.Equal(Some "x: a", hoverType source (offsetOf source "x)," 0 0))
+
+[<Fact>]
+let ``A call last of a def that starts tasks shows the def as written`` () =
+    // The call is of the def that runs its body in its caller's scope (see `TaskScopes`), which requires the scope
+    // of tasks too: the call shows the def it is written as calling.
+    for source in [ "import nanyx/async as (Async, Task)\n\ndef work: [Async] int, int -> int = { n, acc ->\n  if n == 0 then acc else work(n - 1, acc + await(start! n))\n}\n"; "import nanyx/async as (Async, Task)\n\ndef work = { n, acc ->\n  if n == 0 then acc else work(n - 1, acc + await(start! n))\n}\n" ] do
+        Assert.Equal(Some "def work: [Async] int, int -> int", hoverType source (offsetOf source "work(n" 0 0))
