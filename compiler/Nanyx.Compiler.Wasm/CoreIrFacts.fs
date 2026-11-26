@@ -125,7 +125,10 @@ let collect (functions: Function list) : ModuleFacts =
             strings.Add site.Prefix
             atom text
             usesDbgHelpers.Value <- true
-        | Crash messages -> strings.AddRange messages
+        | Crash messages ->
+            strings.AddRange messages
+            // What `Helpers.crashed` is given: the messages as one.
+            strings.Add(String.concat "" messages)
         // A local's name is written beside its text, from the data segment.
         | Probe(_, locals) ->
             usesProbes.Value <- true

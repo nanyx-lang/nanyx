@@ -12,6 +12,7 @@
     <Compile Include="HttpImport.fs" />
     <Compile Include="SpanTable.fs" />
     <Compile Include="Probing.fs" />
+    <Compile Include="CrashImport.fs" />
     <Compile Include="Profiling.fs" />
     <Compile Include="Runner.fs" />
     <Compile Include="Serving.fs" />

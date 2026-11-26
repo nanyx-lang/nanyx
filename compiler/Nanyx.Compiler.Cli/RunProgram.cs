@@ -24,7 +24,7 @@ internal static partial class CliCommands
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
         var errors = shell.Error;
         // A profiled run is of the code without probes, as a release build runs it.
-        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, profile is null, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait, frameDrops: false);
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, profile is null, crashToRuntime: true, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait, frameDrops: false);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;

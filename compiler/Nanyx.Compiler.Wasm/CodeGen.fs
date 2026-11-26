@@ -80,6 +80,11 @@ type WasmOptions =
       /// to a file, which another WebAssembly runtime may run. They need `Places`, to say where each probe is. A `dbg`
       /// in such a module gives what it prints to the runtime's `nanyx:debug` `dbg` too (see `EmitContext.DbgToRuntime`).
       Probes: bool
+      /// Report a crash's message to the runtime's `nanyx:crash` `report` before the trap that ends the program (see
+      /// `CrashReport`), so that the runtime has it as data: what the command line sets for the programs it runs itself.
+      /// A module written to a file, a component, or a page's has no such import, and writes the message to stderr alone,
+      /// as every module does.
+      CrashToRuntime: bool
       /// Give what a `dbg` prints to the embedder's `nanyx:debug` `dbg` first, as a module with `Probes` does, but with
       /// no probes: what a page that runs the program imports, so that `dbg` is kept apart from what the program writes
       /// to stderr (see `EmitContext.DbgToRuntime`).
@@ -112,12 +117,31 @@ type WasmOptions =
           SourceRoot = None
           Places = false
           Probes = false
+          CrashToRuntime = false
           DbgToEmbedder = false
           ExportStart = false
           Component = None
           ComponentExports = []
           YieldAtEveryWait = false
           FrameDrops = false }
+
+/// What a module the runtime runs reports a crash through (see `WasmOptions.CrashToRuntime`): the runtime's `nanyx:crash`
+/// `report`, given the address and the length of the message's bytes, which `Helpers.crashed` calls before it traps.
+module CrashReport =
+    let report: Extern =
+        { Module = "nanyx:crash"; Name = "report"; Parameters = [ ExternValue.I32; ExternValue.I32 ]; Result = None }
+
+    /// `Helpers.crashed`, reporting the message.
+    let crashed =
+        let report = CoreIrEmitImports.importName report
+        [ $"  (func ${Helpers.crashed} (param $message i32)"
+          "    local.get $message"
+          "    local.get $message"
+          $"    call ${Helpers.stringLength}"
+          $"    call ${report}"
+          "    unreachable"
+          "  )" ]
+        |> String.concat "\n"
 
 /// The names a module compiled with `CheckMemory` exports.
 module CheckedExports =
@@ -915,6 +939,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         |> List.map (fun func -> func.Name, (func.Params |> List.map _.Type, func.Result))
         |> Map.ofList
 
+    // The files of the standard library's that the markers name, as they name them (see `CoreIrEmit.libraryMarker`).
+    let libraryFiles = System.Collections.Generic.SortedSet<string>()
+
     // How many probes the module has numbered (see `EmitContext.ProbeId`).
     let probes = ref 0
 
@@ -952,7 +979,13 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           Signature = fun name -> signatures |> Map.tryFind name
           HostState = hostStateAddress
           CheckMemory = options.CheckMemory
-          ShownFile = if options.Places then Some(CoreIr.shownFile options.SourceRoot) else None
+          ShownFile =
+            if options.Places then
+                Some(fun file ->
+                    let shown = CoreIr.shownFile options.SourceRoot file
+                    if CoreIrEmit.isLibraryFile file then libraryFiles.Add shown |> ignore
+                    shown)
+            else None
           TakesOver = fun name index -> CoreIrCounting.parameterUse ownership name index = Owned
           ProbeId = fun () -> (probes.Value <- probes.Value + 1; probes.Value)
           DbgToRuntime = options.Probes || options.DbgToEmbedder
@@ -1112,6 +1145,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
         raise (BackendFailure(match span with Some span -> Diagnostics.at DiagnosticCodes.ComponentImportOutsideComponent span message | None -> Diagnostics.general DiagnosticCodes.ComponentImportOutsideComponent message))
     | _ -> ()
     let importFunctions = ComponentImports.functions exportContext componentImports
+    // A crash reports its message to the runtime that runs the module, which reads its length (see `CrashReport`).
+    let reportsCrashes = options.CrashToRuntime && options.Component.IsNone && usedHelpers.Contains Helpers.crashed
+    if reportsCrashes then usedHelpers.Add Helpers.stringLength |> ignore
     let usedHelperSet = closeHelpers Set.empty (usedHelpers |> Seq.toList)
     // Ending a region calls what drops each of its objects' contents through the function table (see `WasmRegions`).
     if usedHelperSet.Contains WasmRegions.Names.regionExit then
@@ -1125,7 +1161,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // `CoreIrEmitImports.importName`), so the module declares it once.
     let runtimeImports =
         [ if moduleUsesIoHelpers then CoreIrEmitImports.wasiFdWrite
-          if usedHelperSet.Contains Helpers.procExit || options.Component.IsSome then CoreIrEmitImports.wasiProcExit ]
+          if usedHelperSet.Contains Helpers.procExit || options.Component.IsSome then CoreIrEmitImports.wasiProcExit
+          if reportsCrashes then CrashReport.report ]
     // The foreign functions a component's core module defines itself (see `ComponentAbi.externs`).
     let definedExterns = options.Component |> Option.map ComponentAbi.externs |> Option.defaultValue []
     let isComponentImport (declared: Extern) = componentImports |> List.exists (fst >> (=) declared)
@@ -1150,6 +1187,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc || usedHelperSet.Contains Helpers.free
     let renderedHelpers =
         let helpers = if options.CheckMemory then checkedRuntimeHelpers heapBase else runtimeHelpers heapBase
+        let helpers = if reportsCrashes then helpers |> Map.add Helpers.crashed CrashReport.crashed else helpers
         [ yield!
               helperDependencies
               |> List.map fst
@@ -1272,7 +1310,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               if not (String.IsNullOrWhiteSpace support.Hashes) then support.Hashes
               if not (String.IsNullOrWhiteSpace support.Arrays) then support.Arrays
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
-              if not (String.IsNullOrWhiteSpace startDirective) then startDirective ]
+              if not (String.IsNullOrWhiteSpace startDirective) then startDirective
+              if libraryFiles.Count > 0 then libraryFiles |> Seq.map CoreIrEmit.libraryMarker |> String.concat "\n" ]
         let body = String.concat "\n\n" parts
         $"(module\n{body}\n)", report
 

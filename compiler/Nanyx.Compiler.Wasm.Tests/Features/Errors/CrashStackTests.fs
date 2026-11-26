@@ -6,6 +6,7 @@ open System
 open System.IO
 open Xunit
 open TranspilerWasmTestHelpers
+open Transpiler.Wasm.CodeGen
 
 /// A program that crashes three calls deep, under the top level.
 let private threeDeep =
@@ -68,10 +69,59 @@ let ``A release build keeps the table, so its crash prints the same stack`` () =
     let input = Path.Combine(directory.Path, "input.txt")
     File.WriteAllText(input, "")
     match Nanyx.Runtime.WasmRunner.runBinary (Nanyx.Runtime.Redirected(input, output, error, [])) [ "main" ] [] (File.ReadAllBytes program) with
-    | Error(Nanyx.Runtime.Crashed stack) ->
+    | Error(Nanyx.Runtime.Crashed(_, _, stack)) ->
         let printed = Text.Encoding.UTF8.GetString(error.ToArray()) + (stack |> List.map (fun frame -> $"  {frame}\n") |> String.concat "")
         Assert.Equal(threeDeepStack, withCrashAt printed)
     | other -> Assert.Fail $"%A{other}"
+
+/// `source` run as the command line runs a program, reporting a crash's message to the runtime (see
+/// `WasmOptions.CrashToRuntime`), and what it wrote to stderr.
+let private runReporting (source: string) =
+    let options = { WasmOptions.Default with Places = true; CrashToRuntime = true }
+    let wasm = Transpiler.Wasm.WasmBinary.assemble (transpileWatWith options (normalized source))
+    use directory = new TempDirectory()
+    let input = Path.Combine(directory.Path, "input.txt")
+    File.WriteAllText(input, "")
+    use output = new MemoryStream()
+    use error = new MemoryStream()
+    let result = Nanyx.Runtime.WasmRunner.runBinary (Nanyx.Runtime.Redirected(input, output, error, [])) [ "main" ] [] wasm
+    result, Text.Encoding.UTF8.GetString(error.ToArray())
+
+[<Fact>]
+let ``A crash reports its message to the runtime as data, and writes it to stderr as before`` () =
+    match runReporting threeDeep with
+    | Error(Nanyx.Runtime.Crashed(message, place, stack)), written ->
+        Assert.Equal(Some "too big: 5", message)
+        // Where the program called `crash`, not where `crash` is in the standard library: a source compiled on its own
+        // is in a file with no name.
+        Assert.Equal(Some("", 2), place)
+        Assert.Equal("crash: too big: 5\n", written.ReplaceLineEndings "\n")
+        Assert.Equal<string list>([ "crash"; "inner"; "middle"; "outer"; "<top level>" ], stack |> List.map _.Name)
+    | other -> Assert.Fail $"%A{other}"
+
+[<Fact>]
+let ``A failed orCrash is placed where the program called it, past the standard library's frames`` () =
+    let source =
+        "def find = { n: int ->\n  def found: #some(int) | #none = #none\n  found \\orCrash(\"no {n}\")\n}\n\nprintln(find(3))\n"
+    match runReporting source with
+    | Error(Nanyx.Runtime.Crashed(message, place, _)), _ ->
+        Assert.Equal(Some "no 3", message)
+        Assert.Equal(Some("", 3), place)
+    | other -> Assert.Fail $"%A{other}"
+
+[<Fact>]
+let ``An error deferred to run time reports its message to the runtime`` () =
+    match runReporting "def broken = { n: int ->\n  n + \"x\"\n}\n\nprintln(broken(1))\n" with
+    | Error(Nanyx.Runtime.Crashed(Some message, place, _)), written ->
+        Assert.Equal(Some("", 2), place)
+        Assert.Contains("NYX", message)
+        Assert.Equal(written, message)
+    | other -> Assert.Fail $"%A{other}"
+
+[<Fact>]
+let ``A module written to a file imports nothing to report a crash through`` () =
+    let wat = transpileWatWith { WasmOptions.Default with Places = true } (normalized threeDeep)
+    Assert.DoesNotContain("nanyx:crash", wat)
 
 [<Fact>]
 let ``An error deferred to run time prints the stack where it is reached`` () =

@@ -81,6 +81,16 @@ let placeMarker (shownFile: string -> string) (place: Place) =
         | None -> here
     $";;@ {frames place}"
 
+/// The marker that says the places in the file a place marker names `shown` are in the standard library (see
+/// `WatSyntax.Library`), so that a crash's report names the program's code that called it: a line comment among the
+/// module's fields, `;;@lib prelude.nyx`.
+let libraryMarker (shown: string) = $"  ;;@lib {shown}"
+
+/// Whether `file`, a place's, is a file of the standard library's, which is named by its module (`nanyx/prelude.nyx`)
+/// rather than by a path.
+let isLibraryFile (file: string) =
+    file.StartsWith NyxCompiler.StandardLibrary.importPrefix && not (System.IO.Path.IsPathRooted file)
+
 /// The marker that says the function it starts was defined at `place`, the file and line of its definition: a line
 /// comment, `;;@def main.nyx:3`, that `WasmBinary` writes into the module's table of places (see `WatSyntax.Defined`).
 let definitionMarker (shownFile: string -> string) (place: Place) = $";;@def {shownFile place.File}:{place.Line}"
@@ -630,10 +640,12 @@ type private FunctionEmitter(context: EmitContext) =
         | FloatConstant value -> $"f64.const {wasmFloatConst value}"
         | Probe(kind, locals) -> join "\n    " [ this.Probe expr kind locals (fun _ -> false); "i32.const 0" ]
         | Crash messages ->
-            // Writes each message to stderr and traps in `Helpers.crashed`, so the runtime reports the stack. `unreachable`
-            // after it, which is never reached, lets the code stand wherever a value is expected.
+            // Writes each message to stderr and traps in `Helpers.crashed`, given them all as one, so the runtime reports
+            // them and the stack. `unreachable` after it, which is never reached, lets the code stand wherever a value is
+            // expected.
             let writes = messages |> List.map (fun message -> $"i32.const {context.StringOffset message}\n    call ${helper Helpers.writeStderr}")
-            writes @ [ $"call ${helper Helpers.crashed}"; "unreachable" ] |> String.concat "\n    "
+            let all = context.StringOffset(String.concat "" messages)
+            writes @ [ $"i32.const {all}"; $"call ${helper Helpers.crashed}"; "unreachable" ] |> String.concat "\n    "
         | ForEach loop -> this.ForLoop loop (fun atom -> atoms [ atom ])
         | While loop -> this.WhileLoop loop
         | Call(name, args) ->
@@ -754,7 +766,8 @@ type private FunctionEmitter(context: EmitContext) =
         | CallRuntime(name, [ text ], _) when name = Intrinsics.stringAddress -> atoms [ text ]
         | CallRuntime(name, _, _) when name = Intrinsics.hostState -> touching $"i32.const {context.HostState}"
         // Never returns: `unreachable` lets the call stand wherever a value of any type is expected.
-        | CallRuntime(name, _, _) when name = Intrinsics.crashed -> $"call ${helper Helpers.crashed}\n    unreachable"
+        | CallRuntime(name, [ message ], _) when name = Intrinsics.crashed ->
+            join "\n    " [ atoms [ message ]; $"call ${helper Helpers.crashed}"; "unreachable" ]
         | CallRuntime(name, [ text ], _) when name = Intrinsics.keepAlive -> join "\n    " [ atoms [ text ]; "drop"; "i32.const 0" ]
         | CallRuntime(name, [ text ], _) when name = Intrinsics.stringByteLength ->
             join "\n    " [ atoms [ text ]; $"call ${helper Helpers.stringLength}" ]

@@ -15,7 +15,7 @@ export def crash: string -> undefined = { message ->
   __nanyx_write_stderr("crash: ")
   __nanyx_write_stderr(message)
   __nanyx_write_stderr(__nanyx_string_from_byte(10))
-  __nanyx_crashed()
+  __nanyx_crashed(message)
 }
 
 --| The value in `#some(v)`, or, for anything else, stops the program with `message` as [`crash`] does.

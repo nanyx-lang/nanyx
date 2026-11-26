@@ -21,8 +21,11 @@ type RunError =
     /// The program trapped or failed to instantiate: why, and the stack where it trapped, innermost first.
     | Trapped of message: string * stack: Frame list
     /// The program crashed, or reached an error deferred to run time: it wrote why to stderr, and stopped with the stack
-    /// given here, innermost first.
-    | Crashed of stack: Frame list
+    /// given here, innermost first. The message is what it wrote, when it reported it to the runtime too (see
+    /// `CrashImport`), as a module the command line runs does. The place is the file and line of the program's own
+    /// code it crashed in: the innermost frame of the stack outside the standard library, so that a `crash` or an
+    /// `orCrash` is placed where the program called it.
+    | Crashed of message: string option * place: (string * int) option * stack: Frame list
     /// The program asked for more memory than there is: its allocator trapped because a new block would end past
     /// 4 GB, or because the host would not grow its memory.
     | OutOfMemory
@@ -174,13 +177,16 @@ module WasmRunner =
     /// fault (see `ArithmeticFault`), each of the last two in the innermost function on the stack that the source names.
     /// A function of the runtime's that threw, such as one of `HttpImport`'s, is a bug in the runtime, not the program:
     /// its exception is given whole, with its .NET stack, which the trap's message alone would lose.
-    let internal trapped (table: SpanTable option) (ex: WasmtimeException) =
+    let internal trapped (table: SpanTable option) (reported: string option) (ex: WasmtimeException) =
         match ex with
         | _ when not (isNull ex.InnerException) -> Trapped(ex.InnerException.ToString(), [])
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some allocator ->
             OutOfMemory
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some crashed ->
-            Crashed(stackOf table trap)
+            let stack = stackOf table trap
+            let isLibrary (file: string) = table |> Option.exists (fun table -> SpanTable.isLibrary table file)
+            let place = stack |> List.tryPick (fun frame -> frame.Place |> Option.filter (fst >> isLibrary >> not))
+            Crashed(reported, place, stack)
         | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick FunctionNames.source)
         | :? TrapException as trap ->
             match arithmeticFault trap with
@@ -255,6 +261,8 @@ module WasmRunner =
             HttpImport.define linker waits
             Probing.define linker (spanTable program) listener
             Probing.defineDbg linker (fun _ -> false)
+            let reported = ref None
+            CrashImport.define linker reported
             configure store
             let mutable instantiated = None
             let outcome =
@@ -273,7 +281,7 @@ module WasmRunner =
                 with
                 | :? WasmtimeException as ex when exitedCleanly ex -> Ok (read None)
                 | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error (Exited ex.ExitCode.Value)
-                | :? WasmtimeException as ex -> Error(trapped (spanTable program) ex)
+                | :? WasmtimeException as ex -> Error(trapped (spanTable program) reported.Value ex)
             // The profile is of the whole run, however it ended.
             match profiled, profiler with
             | Some give, Some profiler -> give (profiler.Finish() |> Result.map (ProfilePlaces.withDefinitions (spanTable program)))

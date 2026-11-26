@@ -78,6 +78,8 @@ module WasmServer =
                     CallerAction<int, int>(fun caller address length ->
                         response.Value <- Some((caller.GetMemory "memory").GetSpan(int64 address, length).ToArray())))
                 Probing.define linker table None
+                let reported = ref None
+                CrashImport.define linker reported
                 // What the handler's `dbg` prints goes to the server's log, with the request, and never into the response.
                 Probing.defineDbg linker (fun hit ->
                     report $"dbg ({what}): {hit}"
@@ -90,9 +92,12 @@ module WasmServer =
                 | :? WasmtimeException as ex when WasmRunner.exitedCleanly ex -> Ok()
                 | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Error $"it exited with code {ex.ExitCode.Value}"
                 | :? WasmtimeException as ex ->
-                    match WasmRunner.trapped table ex with
+                    match WasmRunner.trapped table reported.Value ex with
                     | Trapped(message, stack) -> Error(message + WasmRunner.stackText stack)
-                    | Crashed stack -> Error("it crashed" + WasmRunner.stackText stack)
+                    | Crashed(message, place, stack) ->
+                        let at = place |> Option.map (fun (file, line) -> $" at {file}:{line}") |> Option.defaultValue ""
+                        let why = message |> Option.map (fun message -> $": {message}") |> Option.defaultValue ""
+                        Error($"it crashed{at}{why}" + WasmRunner.stackText stack)
                     | OutOfMemory -> Error "it ran out of memory"
                     | StackOverflow _ -> Error "it ran out of stack"
                     | ArithmeticError(fault, functionName, stack) -> Error(WasmRunner.describeFault fault functionName + WasmRunner.stackText stack)
