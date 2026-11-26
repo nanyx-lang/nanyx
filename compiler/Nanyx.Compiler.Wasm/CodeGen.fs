@@ -918,9 +918,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // How many probes the module has numbered (see `EmitContext.ProbeId`).
     let probes = ref 0
 
-    // A component's `run` is lifted with the callback ABI, so its start function can stop, and is a state machine when
+    // A component's entry is lifted with the callback ABI, so its start function can stop, and is a state machine when
     // it calls one (see `ComponentCallback`); any other start function runs them to the end.
-    let startCanStop = options.Component = Some CliRun
+    let startCanStop = options.Component = Some CliRun || options.Component = Some HttpHandler
     // The functions that can stop and carry on later (see `TaskLowering`). The getter of a cached value runs the
     // function that builds it to the end, so it is the function that builds it that can be a state machine.
     let machines =
@@ -1006,7 +1006,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 usedHelpers.Add helper |> ignore
             functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
             let waiterType = indirectTypeName [ "i32"; "i32" ] "i32"
-            let entry = ComponentCallback.functions func.Name (resumeType func.Result) waiterType (CoreIrCachedValues.teardown cachedValues)
+            let entryKind = options.Component |> Option.defaultValue CliRun
+            let entry = ComponentCallback.functions entryKind func.Name (resumeType func.Result) waiterType (CoreIrCachedValues.teardown cachedValues)
             emitted.Text, entry
         | Some func ->
             // A module with probes asks the runtime whether it is probing before anything else runs.

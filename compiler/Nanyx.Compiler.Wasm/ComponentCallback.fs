@@ -1,10 +1,12 @@
-/// `wasi:cli/run`'s `run`, lifted with the component model's callback ABI, for a program whose start function can stop
-/// (#2240, see "The entry" on the Components page of the Deep dives). The start function is then a state machine (see
-/// `TaskLowering`), and its task, the main task, is one the scheduler runs as it runs the others (`WasmScheduler`):
+/// A component's entry, `wasi:cli/run`'s `run` or `wasi:http/handler`'s `handle`, lifted with the component model's
+/// callback ABI, for a program whose start function can stop (#2240, see "Running with the callback ABI" on the
+/// Components page of the Deep dives). The start function is then a state machine (see `TaskLowering`), and its task,
+/// the main task, is one the scheduler runs as it runs the others (`WasmScheduler`):
 ///
-/// - `run` calls the start function. If it finishes, `run` tears the program's cached values down, gives `ok` with
-///   `task.return`, and returns EXIT. If it stops, its frame goes to the main task, which goes on the queue, and the
-///   scheduler runs (`Names.drive`).
+/// - The entry calls the start function. If it finishes, the entry tears the program's cached values down and gives
+///   its result: `run` gives `ok` with `task.return`, and `handle` the response, whose body it then writes
+///   (`ComponentAbi.handleFinish`); then it returns EXIT. If the start function stops, its frame goes to the main task,
+///   which goes on the queue, and the scheduler runs (`Names.drive`).
 /// - The scheduler runs the tasks in turn, as `WasmScheduler.Names.runOthers` does, resuming the main task's frame when
 ///   its turn comes, until the start function finishes. When every task waits on the host, it makes the host's wait,
 ///   as `runOthers` does, but with `ComponentAbi.Callback.atTop` set, so the component root's wait on its shared
@@ -25,30 +27,46 @@ open Transpiler.Wasm.WasmAllocator
 /// The names of the functions and globals.
 module Names =
     /// Runs the tasks until the start function finishes, or every task waits on the host.
-    let drive = "$__nanyx_cli_drive"
+    let drive = "$__nanyx_component_drive"
     /// Gives the frame the main task stopped in to it, and puts it on the queue.
-    let stopped = "$__nanyx_cli_stopped"
+    let stopped = "$__nanyx_component_stopped"
     /// The main task, whose frame is the start function's.
-    let main = "$__nanyx_cli_main"
+    let main = "$__nanyx_component_main"
     /// The host's wait the scheduler made last, which the callback makes again with the event.
-    let waiter = "$__nanyx_cli_waiter"
+    let waiter = "$__nanyx_component_waiter"
 
 /// The canonical ABI's codes: what the callback returns to wait on a set (with the set above the low 4 bits), and the
 /// event that cancels the task.
 let private wait = 2
 let private taskCancelled = 6
 
-/// `run`, its callback and the scheduler they run, for the start function `start`, a state machine whose resume entry
-/// has the indirect type `startResume`, and whose cached values `teardown` tears down. A host's wait is a function value
-/// of the indirect type `waiterType`.
-let functions (start: string) (startResume: string) (waiterType: string) (teardown: string list) =
+/// The entry `entry`, its callback and the scheduler they run, for the start function `start`, a state machine whose
+/// resume entry has the indirect type `startResume`, and whose cached values `teardown` tears down. A host's wait is a
+/// function value of the indirect type `waiterType`.
+let functions (entry: ComponentEntry) (start: string) (startResume: string) (waiterType: string) (teardown: string list) =
     let scheduler (name: string) = "$" + name
+    // The entry's header, what it does before the start function, and the locals what it does after needs.
+    let header, callback, before, locals =
+        match entry with
+        | HttpHandler ->
+            $"(func $__nanyx_http_handle (export \"{ComponentAbi.handleExport}\") (param $request i32) (result i32) {ComponentAbi.handleLocals}",
+            ComponentAbi.handleCallback,
+            ComponentAbi.handleBegin,
+            " " + ComponentAbi.handleLocals
+        | CliRun
+        | Library -> $"(func $__nanyx_cli_run (export \"{ComponentAbi.runExport}\") (result i32)", ComponentAbi.runCallback, [], ""
+    // What the entry does once the start function has finished, leaving EXIT to return.
     let finish =
-        [ yield! teardown |> List.map (fun line -> "  " + line)
-          "  i32.const 0"
-          $"  call {ComponentAbi.runTaskReturn}"
-          // EXIT: the task is done.
-          "  i32.const 0" ]
+        [ yield! teardown
+          match entry with
+          | HttpHandler -> yield! ComponentAbi.handleFinish
+          | CliRun
+          | Library ->
+              "i32.const 0"
+              $"call {ComponentAbi.runTaskReturn}"
+              // EXIT: the task is done.
+              "i32.const 0" ]
+        |> List.map (fun line -> "  " + line)
     lines
         [ $"(global {Names.main} (mut i32) (i32.const 0))"
           $"(global {Names.waiter} (mut i32) (i32.const 0))"
@@ -65,7 +83,7 @@ let functions (start: string) (startResume: string) (waiterType: string) (teardo
           $"  global.get {Names.main}"
           $"  call {scheduler WasmScheduler.Names.enqueue}"
           ")"
-          $"(func {Names.drive} (result i32) (local $t i32) (local $f i32)"
+          $"(func {Names.drive} (result i32) (local $t i32) (local $f i32){locals}"
           "  loop $each"
           // The host's wait, if the idle tasks make it, is the one the callback makes again.
           $"  global.get {scheduler WasmScheduler.Names.hostWaiter}"
@@ -121,7 +139,8 @@ let functions (start: string) (startResume: string) (waiterType: string) (teardo
           "  end"
           "  unreachable"
           ")"
-          $"(func $__nanyx_cli_run (export \"{ComponentAbi.runExport}\") (result i32)"
+          header
+          yield! before |> List.map (fun line -> "  " + line)
           $"  call ${start}"
           "  drop"
           $"  global.get {scheduler TaskLowering.Names.suspending}"
@@ -132,7 +151,7 @@ let functions (start: string) (startResume: string) (waiterType: string) (teardo
           "  end"
           yield! finish
           ")"
-          $"(func $__nanyx_cli_callback (export \"{ComponentAbi.runCallback}\") (param $event i32) (param $first i32) (param $second i32) (result i32) (local $w i32)"
+          $"(func $__nanyx_component_callback (export \"{callback}\") (param $event i32) (param $first i32) (param $second i32) (result i32) (local $w i32)"
           "  local.get $event"
           $"  i32.const {taskCancelled}"
           "  i32.eq"

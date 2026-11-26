@@ -55,7 +55,7 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   waits for a task or for a scope's tasks (below), or calls a function that is a state machine itself (`CoreIrSplitPoints.stateMachines`, over the module once it is counted).
   Each such call is a split point, numbered from 1 in the order the code is written, so the states inside any
   expression are a range. The start function and the getter of a cached value run state machines without being one
-  (below), except that a component's start function, under `run` lifted with the callback ABI, is a state machine
+  (below), except that a component's start function, under an entry lifted with the callback ABI, is a state machine
   ([Components](./components#running-with-the-callback-abi)). A function that can't stop is compiled as before.
 - **Stopping.** A call that stops sets `__nanyx_suspending`, leaves its frame in `__nanyx_suspended`, and returns a value
   no one reads. After each split point the caller checks the flag. When it is set, the caller copies the variables it
