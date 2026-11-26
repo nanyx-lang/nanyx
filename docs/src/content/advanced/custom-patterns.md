@@ -14,11 +14,37 @@ fix that writes it in lower case.
 The function body contains the logic for matching and extracting values, and returns one of the tags in the pattern's
 signature. As with tags elsewhere in the language, they can carry payloads, which are then bound in the match arm.
 
+# Where a pattern is declared
+
+A pattern is declared wherever a `def` can be: at the top level of a file, in a module block, or in a function's
+block. One in a function's block is local to it, as a local def is: it is in scope from its declaration to the end of
+the block, so the block's matches, and the lambdas defined after it, can use its tags. It can use what a local def can,
+such as the function's parameters and a type the block declares.
+
+```nanyx
+def classify = { input ->
+  pattern string -> #Empty | #Short | #Long = { s ->
+    if s == "" then #Empty else if string.length(s) < 5 then #Short else #Long
+  }
+
+  match input
+    | #Empty -> "empty"
+    | #Short -> "short"
+    | #Long -> "long"
+}
+
+println(classify(""))
+println(classify("custom patterns"))
+```
+
+A local pattern hides another that returns the same tags, as a local def hides another of its name.
+
 # Sharing patterns
 
-A pattern is a top-level declaration, like a `def`. `export pattern ...` shares it, and importing its module brings
-it into scope. Two patterns in scope that return the same tag are an error, as two imports of the same name are,
-since a match couldn't tell which one to run ([`NYX0119`](../standard-tools/errors#nyx0119)).
+`export pattern ...` shares a pattern from its module, or from its module block, and importing the module brings it
+into scope. A pattern in a function's block is local to it, so it can't be exported. Two patterns in scope that return
+the same tag are an error, as two imports of the same name are, since a match couldn't tell which one to run
+([`NYX0119`](../standard-tools/errors#nyx0119)).
 
 # Patterns are pure
 

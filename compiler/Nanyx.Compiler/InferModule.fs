@@ -187,7 +187,26 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         blockImports state.ModuleBlocks module'
         |> List.map (fun blockImport -> { blockImport with Names = blockAliases state.ModuleBlocks module' importedBy blockImport |> Map.ofList })
     errors <- errors @ (blockImported |> List.collect (unexportedBlockSelections state.ModuleBlocks module' importedBy))
-    let aliases = blockImported |> List.fold (fun acc blockImport -> Map.fold (fun acc alias qualified -> Map.add alias qualified acc) acc blockImport.Names) Map.empty
+    // In a file that declares a module, a block's definitions and types can be named without the file's module in front
+    // too (`coins.penny` for `money.coins.penny`), as a script's are.
+    let fileModule =
+        module'
+        |> List.tryPick (function
+            | Kind (ModuleDecl(_, name)) as item when not (state.ModuleBlocks |> List.exists (fun (_, block) -> block.Start = item.Span.Start)) -> Some name
+            | _ -> None)
+    let blockShortNames =
+        match fileModule with
+        | Some fileName when not state.ModuleBlocks.IsEmpty ->
+            module'
+            |> List.choose (fun item ->
+                match item.Kind with
+                | Def (ValueDef(_, name, _, _))
+                | Def (TypeDef(name, _, _, _)) when name.StartsWith(fileName + ".") && (blockAround state.ModuleBlocks item.Span).IsSome ->
+                    Some (name.Substring(fileName.Length + 1), name)
+                | _ -> None)
+            |> Map.ofList
+        | _ -> Map.empty
+    let aliases = blockImported |> List.fold (fun acc blockImport -> Map.fold (fun acc alias qualified -> Map.add alias qualified acc) acc blockImport.Names) blockShortNames
     state <- { state with BlockImports = blockImported; BlockAliases = aliases }
     // A name that stands for another file's definition, which a block re-exports, is bound to it as the import is.
     env <-

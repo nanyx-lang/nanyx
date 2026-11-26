@@ -726,7 +726,7 @@ module Compiler =
                         | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
                         | _ -> true)
                     |> ModuleLinking.distinctDefinitions
-                    |> ModuleLinking.reachedItems instances own (merged.ComponentExports |> List.map _.Definition)
+                    |> ModuleLinking.reachedItems instances own ((merged.ComponentExports |> List.map _.Definition) @ (merged.Tests |> List.map _.Definition))
                 // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
                 // alias), each meaning the definition the environment settled on (an explicit import's over
                 // the prelude's), less the names the module declares at the top level itself.
