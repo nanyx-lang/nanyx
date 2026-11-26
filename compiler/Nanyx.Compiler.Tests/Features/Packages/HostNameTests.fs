@@ -67,10 +67,11 @@ let ``A script's directives and --host name a shipped package by its new name`` 
     Assert.Equal<(string * string) list>(
         [ renamed, "'nanyx.http.core' is now 'nanyx.http'" ],
         diagnosticsOf "::install nanyx.http.core\n\nprintln(1)")
-    // `--host` reads a shipped host by its name.
-    match HostPackages.tryShipped "nanyx.console" with
-    | Result.Error message -> Assert.Equal("The host 'nanyx.console' is now 'nanyx.cli.host'", message)
-    | Result.Ok _ -> Assert.Fail "Expected the old name to be refused"
+    // `--host` names a host by its name, as a manifest does.
+    use package = new TempPackage([ "app/app.nyxp", "(package = (name = \"app\", version = \"0.1.0\"))\n"; "app/main.nyx", "export module main\n" ])
+    let store = SeededPackages.user ()
+    let app = okOf (Package.findIn store (package.Path "app"))
+    Assert.Equal(Result.Error "The host 'nanyx.console' is now 'nanyx.cli.host'", Package.withHost store (package.Path "app") "nanyx.console" app |> Result.map ignore)
 
 [<Fact>]
 let ``An import of a renamed package's module by its old name gives the import by its new one`` () =

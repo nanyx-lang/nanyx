@@ -14,9 +14,10 @@ in progress.
 - **A host declares itself.** A host package's manifest has `host = (root = "...", prelude = "...")` in its `package`
   (`Manifest.checkHostDeclaration` checks it, `HostPackages.ofManifest` reads it into `Manifest.Declares`). `Host`
   (`Hosts.fs`) is what the compiler knows of one: its package, its root module, its prelude and its directory. The
-  compiler keeps no table of hosts: `HostPackages.tryShipped` reads the manifest of one it ships, from its directory
-  beside the compiler (`ShippedPackages`, see [Built-ins as packages](./shipped-packages#how-shipped-packages-are-built)), and
-  `HostPackages.console` is the console host, which a loose script runs under unless it names another. The host is imported as
+  compiler keeps no table of hosts: a host is a package like any other, found by its version from the package index,
+  the version the compiler ships among them, or by its path, and read from its manifest
+  ([Shipped packages](./shipped-packages#how-shipped-packages-are-built)). `HostPackages.console` is the console host, read
+  from the compiler's own copy, which a loose script runs under unless it names another. The host is imported as
   `nanyx.cli.host/cli.host` (`Host.Import`), and its prelude as `nanyx.cli.host/cli.prelude` (`Host.PreludeImport`).
 - **A package chooses its host.** `Manifest.check` reads the manifest's `host`, `(package = "nanyx.cli.host", version
   = "0.28.0")` or `(package = "acme.host", path = "../acme.host")`, into `Manifest.Host` (a `HostEntry`; none without a

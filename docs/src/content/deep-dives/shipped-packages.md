@@ -6,10 +6,11 @@ order: 11
 
 The packages the compiler ships, the console host among them, are described for users in
 [Hosts](../advanced/hosts#packages-the-compiler-ships). This page says how they are built and found, and why the
-official ones are ordinary packages. What is left is in issues: the official linter as a package
-([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), shipped packages as index packages that come
-pre-downloaded ([#2699](https://github.com/nanyx-lang/nanyx/issues/2699)), and whether parts of the standard library
-become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
+official ones are ordinary packages: packages from the package index that come seeded with the compiler
+([#2699](https://github.com/nanyx-lang/nanyx/issues/2699)). What is left is in issues: the official linter as a package
+([#1343](https://github.com/nanyx-lang/nanyx/issues/1343)), a host from the index that declares the runtime interfaces
+it imports ([#2632](https://github.com/nanyx-lang/nanyx/issues/2632)), and whether parts of the standard library become
+packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
 
 # Why the official ones are ordinary packages
 
@@ -68,8 +69,9 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   (`Resolution.requirementIn`). Without it, a program under the seeded `nanyx.cli.host` 0.44.1 would lock a `nanyx.cli`
   0.44.2 from the index, whose `nanyx` accepts the compiler, and meet two `Console`s. A package that no shipped host
   runs, such as a library checked alone, takes the newest version its requirements accept.
-- **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest (`HostPackages.tryShipped`)
-  rather than keeping a table of hosts; `HostPackages.console` is the host a script runs under. The program's package
+- **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest, as it reads any host's, rather
+  than keeping a table of hosts; `HostPackages.console`, read from the compiler's own copy, is the host a loose file runs
+  under. The program's package
   records the host's package (`PackageModules.HostPackage`; for a script or a module given as source,
   `ShippedPackages.tryModules`), and the program's modules import the host and its prelude through it, as do the
   host's own files (`PackageModules.resolveWithin`); it needs no `dependencies` entry. A host found by its path is read
@@ -88,7 +90,7 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   `.host` (`Hosts.nameSuffix`); the manifest checker reports a host named otherwise, or a library named so, at its name
   (`NYX0053`, `Manifest.checkHostName`). The shipped packages renamed to this ([#2697](https://github.com/nanyx-lang/nanyx/issues/2697))
   are known by their old names (`RenamedPackages`): a manifest's `host` or `dependencies`, a script's directives, or
-  `--host` (through `HostPackages.tryShipped`) that names one is `NYX0054`, which gives the new name, and an import of
+  `--host` (through `Package.withHost`) that names one is `NYX0054`, which gives the new name, and an import of
   one of its modules by the old name is `NYX0003` with the import by the new one (`RenamedPackages.inImport`). `nanyx.http`,
   the HTTP host's old name and the library's new one, is one only where a host is named.
 - **No host means a library.** `Manifest.Host` and `PackageModules.Host` are options. A package file under no host gets

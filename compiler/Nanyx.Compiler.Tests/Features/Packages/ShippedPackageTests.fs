@@ -58,18 +58,15 @@ let ``The HTTP interface package is shipped beside the compiler, with no depende
 
 [<Fact>]
 let ``The HTTP host is shipped beside the compiler, and takes a port, 3000 by default`` () =
-    match HostPackages.tryShipped "nanyx.http.host" with
-    | Ok host ->
-        Assert.Equal(("http.host", Some "http.prelude"), (host.Module, host.Prelude))
-        Assert.Equal(3000, HostSettings.port (Some host) None)
-    | Error message -> failwith message
+    let host = (manifestOf "nanyx.http.host").Declares.Value
+    Assert.Equal(("http.host", Some "http.prelude"), (host.Module, host.Prelude))
+    Assert.Equal(3000, HostSettings.port (Some host) None)
     Assert.Equal<string list>([ "nanyx.http"; "nanyx.wasi" ], (manifestOf "nanyx.http.host").Dependencies |> List.map _.Name)
 
 [<Fact>]
 let ``The playground host is shipped beside the compiler, and depends only on the console's interface package`` () =
-    match HostPackages.tryShipped "nanyx.playground.host" with
-    | Ok host -> Assert.Equal(("playground.host", Some "playground.prelude"), (host.Module, host.Prelude))
-    | Error message -> failwith message
+    let host = (manifestOf "nanyx.playground.host").Declares.Value
+    Assert.Equal(("playground.host", Some "playground.prelude"), (host.Module, host.Prelude))
     let manifest = manifestOf "nanyx.playground.host"
     Assert.Equal(("nanyx.playground.host", Toolchain.version), (manifest.Name, manifest.Version))
     Assert.Equal<string list>([ "nanyx.cli" ], manifest.Dependencies |> List.map _.Name)
