@@ -766,7 +766,13 @@ module Compiler =
                                 |> List.map (fun (name, _) ->
                                     { Module = moduleName
                                       Name = name
-                                      Definition = if calledThroughProvide.Contains name then Hosts.providedExportName name else name })
+                                      Definition = if calledThroughProvide.Contains name then Hosts.providedExportName name else name
+                                      Waits =
+                                        calledThroughProvide.Contains name
+                                        && ownTopLevel
+                                           |> List.tryFind (fun symbol -> symbol.Name = name)
+                                           |> Option.bind (fun symbol -> contextTypes |> Map.tryFind symbol.Id)
+                                           |> Option.exists ComponentInterface.requiresAsync })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.

@@ -181,7 +181,7 @@ module InterpolationHoles =
         (count: int)
         : Result<ContextInstance option list * InferState, Diagnostic list> =
         let ty = List.head argTys
-        let error message = [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about ctxName ]
+        let error message = [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about (WrittenContexts.missingText state ctxName argTys) ]
         if (TypeEnv.freeTyVars ty).IsEmpty then Error (error (noInstance ty))
         else
             let def, annotatedDef =
@@ -233,10 +233,10 @@ module InterpolationHoles =
                     match argTys with
                     | [ ty ] ->
                         let ty = withAssociatedNames state ty
-                        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (undeclared state ty annotatedDef) |> Diagnostics.about pending.Context |> addToStringFix state ty annotatedDef ]
+                        Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (undeclared state ty annotatedDef) |> Diagnostics.about (WrittenContexts.missingText state pending.Context [ ty ]) |> addToStringFix state ty annotatedDef ]
                     | _ -> Error pending.Errors
                 | None when argTys |> List.forall (Unifier.unalias >> function TyVar _ -> true | _ -> false) -> Ok (InstanceBuiltIn, state)
-                | None -> Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (noInstance (List.head argTys)) |> Diagnostics.about pending.Context ]
+                | None -> Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers pending.Span (noInstance (List.head argTys)) |> Diagnostics.about (WrittenContexts.missingText state pending.Context argTys) ]
         match found with
         | Ok (instance, next) -> Ok (Some instance, next)
         | Error errors -> Ok (None, { state with FailedExprs = (pending.Call, errors) :: state.FailedExprs })

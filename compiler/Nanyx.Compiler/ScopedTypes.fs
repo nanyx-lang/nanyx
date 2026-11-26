@@ -23,5 +23,5 @@ let made (env: TypeEnv) (state: InferState) (name: Identifier) (info: TypeDefInf
 /// `name` is called, at `call` written at `span`.
 let requireContext (env: TypeEnv) (state: InferState) (call: Expression) (name: Identifier) (info: TypeDefInfo) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     match info.ScopedBy with
-    | Some context -> Contexts.ensureContextAvailable (Some call.Id) true env state name [ TypeExpr.synthetic (TypeName context) ] span
+    | Some context -> Contexts.ensureContextAvailable (Some call.Id) true env state name [ TypeExpr.synthetic (TypeName context) ] None span
     | None -> Ok state

@@ -19,7 +19,8 @@ let internal inferMatch
     (inferLambdaWithExpected: TypeEnv -> InferState -> Expression -> (Identifier * TypeExpr option) list -> Expression -> Ty option -> Ty option -> Result<TypedExpr * InferState, Diagnostic list>)
     (env: TypeEnv) (state: InferState) (expr: Expression) (scrutinees: Expression list) (arms: MatchArm list) : Result<TypedExpr * InferState, Diagnostic list> =
     let scrutineesInferred = inferAll env state scrutinees
-    // Each arm has a pattern for each value matched (`desugar` has made a lone `else` one per value).
+    // Each arm has a pattern for each value matched (`desugar` has made a lone `else` or `_` one per value, and a match
+    // with an arm of one pattern for all the values one on their tuple, see `PatternSpace.ofMatch`).
     let wrongPatternCounts =
         let count n noun = if n = 1 then $"1 {noun}" else $"{n} {noun}s"
         arms
@@ -37,7 +38,7 @@ let internal inferMatch
                     Diagnostics.at
                         DiagnosticCodes.WrongPatternCount
                         span
-                        $"This arm has {written}, but the match is on {values}: an arm needs a pattern for each value, or a lone `else` for anything else"))
+                        $"This arm has {written}, but the match is on {values}: an arm needs a pattern for each value, or one pattern for all of them"))
     match scrutineesInferred with
     | Error scrutineeErrors -> Error scrutineeErrors
     | Ok ([ scrutinee ], afterScrutinee) when (match resolveSoFar afterScrutinee scrutinee.Type with TypeValues.TypeValueType _ -> true | _ -> false) ->

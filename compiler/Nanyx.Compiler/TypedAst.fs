@@ -404,7 +404,9 @@ type ComponentExport =
       /// Its name in that module.
       Name: string
       /// The name the program knows it by: its own in its module, or the one an import inlines it under.
-      Definition: string }
+      Definition: string
+      /// Whether it can wait: the type written for it requires `Async`. It is then an `async func`.
+      Waits: bool }
 
 /// A member of an ambient context (one the runtime supplies, as the host's prelude's definitions are its `Console`) and the
 /// top-level definition that stands in for it (see `TypedModule.AmbientMembers`).

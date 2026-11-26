@@ -250,7 +250,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match contextRequirementsOf env state name with
                 | Some contexts ->
                     let parameterized = contexts |> List.filter (isParameterizedContext state)
-                    ensureContextAvailable None false env state name parameterized expr.Span
+                    ensureContextAvailable None false env state name parameterized None expr.Span
                 | None -> Ok state
                 |> Result.bind (fun current ->
                     if inferredAmbient.IsSome then Ok current

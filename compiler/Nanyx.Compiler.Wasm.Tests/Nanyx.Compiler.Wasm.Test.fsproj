@@ -97,6 +97,7 @@
     <Compile Include="Features\Components\ComponentExportTests.fs" />
     <Compile Include="Features\Components\ComponentImportTests.fs" />
     <Compile Include="Features\Components\ProvidedExportTests.fs" />
+    <Compile Include="Features\Components\AsyncExportTests.fs" />
     <Compile Include="Features\Components\ComponentCancellationTests.fs" />
     <Compile Include="Features\Components\ComponentWaitTests.fs" />
     <Compile Include="Features\Components\ComponentCallbackTests.fs" />
