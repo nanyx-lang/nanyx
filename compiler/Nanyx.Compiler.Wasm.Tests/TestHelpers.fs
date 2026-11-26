@@ -828,3 +828,119 @@ let instantiateCoreWith (implement: Wasmtime.FunctionImport -> Wasmtime.Function
 
 /// The core module `wat`, of a component, instantiated on Wasmtime with each of its imports a function that traps.
 let instantiateCore (wat: string) = instantiateCoreWith (fun _ -> None) wat
+
+/// The core module of the component `nanyx build` writes for a console program whose `main.nyx` is `main`.
+let consoleComponentCore (main: string) =
+    use directory = new TempDirectory()
+    Directory.CreateDirectory(Path.Combine(directory.Path, "src")) |> ignore
+    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), {consoleHostEntry})"""
+    File.WriteAllText(Path.Combine(directory.Path, "app.nyxp"), manifest + "\n")
+    File.WriteAllText(Path.Combine(directory.Path, "src", "main.nyx"), main)
+    let built = nanyxIn directory.Path [ "build"; "--release"; "--wat" ]
+    Assert.Equal("", built.StandardError)
+    Assert.Equal(0, built.ExitCode)
+    File.ReadAllText(Path.Combine(directory.Path, "out", "app.wat"))
+
+/// A host of a console component's `run`, of `wasi:clocks/monotonic-clock` and of the waitable built-ins, on a clock
+/// that moves only when the module waits, which traps where the canonical ABI does. A wait for a set takes the subtask
+/// in it whose time comes first, and moves the clock to that time. It runs `run` as a host runs one lifted with the
+/// callback ABI (`Run`): while `run` or its callback returns WAIT, it gives the callback the next event of the set.
+type FakeClockHost() =
+    // The canonical ABI's codes: a subtask's states, the events, and what a callback returns.
+    let started = 1
+    let returned = 2
+    let cancelledBeforeReturned = 4
+    let subtaskEvent = 1
+    let exit = 0
+    let wait = 2
+    let mutable now = 0L
+    let mutable nextHandle = 1
+    let deadlines = Collections.Generic.Dictionary<int, int64>()
+    let joined = Collections.Generic.Dictionary<int, int>()
+    let delivered = Collections.Generic.HashSet<int>()
+
+    let handle () =
+        let made = nextHandle
+        nextHandle <- nextHandle + 1
+        made
+
+    /// The next event of the set `set`: the subtask in it whose time comes first, whose return it delivers.
+    let nextEvent (set: int) =
+        let ready =
+            deadlines
+            |> Seq.filter (fun pair -> (match joined.TryGetValue pair.Key with | true, joinedTo -> joinedTo = set | _ -> false) && not (delivered.Contains pair.Key))
+            |> Seq.sortBy (fun pair -> pair.Value)
+            |> Seq.tryHead
+        match ready with
+        | None -> failwith "a wait on a set with nothing to wait for"
+        | Some pair ->
+            now <- max now pair.Value
+            delivered.Add pair.Key |> ignore
+            pair.Key
+
+    /// The durations, in nanoseconds, of each `wait-for`, by the subtask it started.
+    member val Waits = Collections.Generic.Dictionary<int, int64>()
+    /// The subtasks cancelled, and those dropped.
+    member val Cancelled = Collections.Generic.List<int>()
+    member val Dropped = Collections.Generic.List<int>()
+    /// How many times the module blocked in `[waitable-set-wait]`, rather than returning WAIT.
+    member val BlockingWaits = 0 with get, set
+    /// What `run` gave with `task.return`, if it has.
+    member val Returned: int option = None with get, set
+    /// How many times `run` returned WAIT, or its callback did.
+    member val Waited = 0 with get, set
+    member _.Now = now
+
+    member host.Implement(import: Wasmtime.FunctionImport) : Wasmtime.Function.UntypedCallbackDelegate option =
+        match import.ModuleName, import.Name with
+        | "wasi:clocks/monotonic-clock@0.3.0", "now" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ _ results -> results.[0] <- Wasmtime.ValueBox.op_Implicit now))
+        | "wasi:clocks/monotonic-clock@0.3.0", "[async-lower]wait-for" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments results ->
+                let subtask = handle ()
+                let duration = arguments.[0].AsInt64()
+                host.Waits.[subtask] <- duration
+                deadlines.[subtask] <- now + duration
+                results.[0] <- Wasmtime.ValueBox.op_Implicit ((subtask <<< 4) ||| started)))
+        | "$root", "[waitable-set-new]" -> Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ _ results -> results.[0] <- Wasmtime.ValueBox.op_Implicit (handle ())))
+        | "$root", "[waitable-join]" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ ->
+                let waitable = arguments.[0].AsInt32()
+                match arguments.[1].AsInt32() with
+                | 0 -> joined.Remove waitable |> ignore
+                | set -> joined.[waitable] <- set))
+        | "$root", "[waitable-set-wait]" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun caller arguments results ->
+                host.BlockingWaits <- host.BlockingWaits + 1
+                let subtask = nextEvent (arguments.[0].AsInt32())
+                let memory = caller.GetMemory("memory")
+                let address = int64 (arguments.[1].AsInt32())
+                memory.WriteInt32(address, subtask)
+                memory.WriteInt32(address + 4L, returned)
+                results.[0] <- Wasmtime.ValueBox.op_Implicit subtaskEvent))
+        | "$root", "[subtask-cancel]" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments results ->
+                let subtask = arguments.[0].AsInt32()
+                if joined.ContainsKey subtask then failwith $"subtask {subtask} cancelled while in a waitable set"
+                if delivered.Contains subtask then failwith $"subtask {subtask} cancelled after its return was delivered"
+                host.Cancelled.Add subtask
+                delivered.Add subtask |> ignore
+                results.[0] <- Wasmtime.ValueBox.op_Implicit cancelledBeforeReturned))
+        | "$root", "[subtask-drop]" -> Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ -> host.Dropped.Add(arguments.[0].AsInt32())))
+        | "[export]wasi:cli/run@0.3.0", "[task-return]run" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ ->
+                if host.Returned.IsSome then failwith "task.return called twice"
+                host.Returned <- Some(arguments.[0].AsInt32())))
+        | _ -> None
+
+    /// Runs `run` of `instance` to its end, as a host does one lifted with the callback ABI; `cancelAfter` waits in, it
+    /// gives the callback TASK_CANCELLED rather than the set's next event.
+    member host.Run(instance: Wasmtime.Instance, ?cancelAfter: int) =
+        let callback = instance.GetFunction<int, int, int, int>("[callback][async-lift]wasi:cli/run@0.3.0#run")
+        let mutable code = instance.GetFunction<int>("[async-lift]wasi:cli/run@0.3.0#run").Invoke()
+        while code &&& 0xF = wait do
+            host.Waited <- host.Waited + 1
+            code <-
+                if cancelAfter = Some host.Waited then callback.Invoke(6, 0, 0)
+                else callback.Invoke(subtaskEvent, nextEvent (code >>> 4), returned)
+        Assert.Equal(exit, code)
