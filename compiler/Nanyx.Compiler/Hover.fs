@@ -178,9 +178,14 @@ let private writtenAt (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModu
         Signatures.typesWithContexts typed.TypeDefs names (rename ty) (List.map rename contexts) (List.map rename others)
     (symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten), othersWritten
 
-/// The hover for what `hoveredAt` found (see `typeAt`).
+/// The hover for what `hoveredAt` found (see `typeAt`). A measured value's says what units make values of its
+/// dimension (see `DimensionHover`).
 let private hoverOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (ty: Ty, symbol: Symbol option, span: SourceSpan) : HoverInfo =
-    { Type = fst (writtenAt names rename typed symbol ty []); Span = span; Note = None }
+    let note =
+        match Unifier.unalias ty with
+        | TyMeasure([ dimension, 1 ], _) -> DimensionHover.unitsNote typed dimension
+        | _ -> None
+    { Type = fst (writtenAt names rename typed symbol ty []); Span = span; Note = note }
 
 /// The hover for the expression at `offset` in the compiled root module: the type of the narrowest expression
 /// there that has one, or of the function itself on a call's function name or an operator, where it is
@@ -196,6 +201,44 @@ let private hoverOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule
 let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.map (hoverOf names id typed)
+    | _ -> None
+
+/// The hover on a unit or a dimension at `offset` in the compiled root module (see `DimensionHover`): the unit of a number
+/// with a unit, `ms` in `500ms`, a dimension's name in a type, `Time` in `Time(int)`, a `unit` declaration, or a
+/// `dimension` declaration. `None` when none is there.
+let unitAt (result: CompileResult) (offset: int) : HoverInfo option =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        let hover (span: SourceSpan) (written: string, note: string option) = { Type = written; Span = span; Note = note }
+        let dimensionNamed (name: Identifier) = typed.TypeDefs |> Map.tryFind name |> Option.filter _.IsDimension
+        let literal =
+            expressionsAt offset syntax
+            |> List.tryPick (fun expr ->
+                match expr.Kind with
+                | LiteralExpr(UnitLit(_, unitName)) when offset >= expr.Span.End - unitName.Length ->
+                    typed.Units
+                    |> Map.tryFind unitName
+                    |> Option.map (fun info -> hover { expr.Span with Start = expr.Span.End - unitName.Length } (DimensionHover.ofUnit typed info))
+                | _ -> None)
+        let rec items (module': Module) = module' |> List.collect (fun item -> match item.Kind with ModuleBlock(_, inner) -> items inner | _ -> [ item ])
+        let declaration () =
+            items syntax
+            |> List.filter (fun item -> contains offset item.Span)
+            |> List.tryPick (fun item ->
+                match item.Kind with
+                | UnitDecl(_, name, _, _) -> typed.Units |> Map.tryFind name |> Option.map (DimensionHover.ofUnit typed >> hover item.Span)
+                | DimensionDecl(_, name, _, _) -> dimensionNamed name |> Option.map (DimensionHover.ofDimension typed >> hover item.Span)
+                | _ -> None)
+        let inType () =
+            typeExprsAt offset syntax
+            |> List.tryPick (fun typeExpr ->
+                match typeExpr.Kind with
+                | TypeName name
+                | TypeApply(name, _) when contains offset { typeExpr.Span with End = typeExpr.Span.Start + name.Length } ->
+                    dimensionNamed name
+                    |> Option.map (DimensionHover.ofDimension typed >> hover { typeExpr.Span with End = typeExpr.Span.Start + name.Length })
+                | _ -> None)
+        literal |> Option.orElseWith inType |> Option.orElseWith declaration
     | _ -> None
 
 /// A module a hover is on: the file it is read from, as its spans name it (see `ImportedFile`), the name it is shown

@@ -16,7 +16,10 @@ namespace Nanyx.LanguageServer.Handlers;
 /// that compile, nor in a document that has never been typed (see <see cref="OpenDocument.LastGood"/>). Below the
 /// type comes the doc comment of the name there, if it has one, as Markdown (see <see cref="NyxCompiler.Documentation.Reader"/>).
 /// On a module's name, in the document's <c>module</c> line, an import or an alias that qualifies a name, it shows
-/// <c>module name</c> and the module's doc comment.
+/// <c>module name</c> and the module's doc comment. On a dimension, in a type or its own declaration, it shows the
+/// dimension's declaration and the units that make values of it, from the smallest to the largest; so does a measured
+/// value's type. On the unit of a number with a unit, <c>ms</c> in <c>500ms</c>, or a unit's declaration, it shows the
+/// unit's declaration, how many of its dimension's base units it is, and the dimension's units.
 /// </summary>
 public sealed class HoverHandler : HoverHandlerBase
 {
@@ -48,8 +51,10 @@ public sealed class HoverHandler : HoverHandlerBase
             return ModuleHover(request, document, lastGood, offset, module);
         }
 
-        // A type's name, in an annotation inside a block say, is about the type, not the block around it.
-        var info = Definition.typeDefinitionAt(_settings.TypeNotation, lastGood.FileName, compiled, offset)
+        // A unit, or a dimension's or unit's declaration, shows the units of its dimension. A type's name, in an
+        // annotation inside a block say, is about the type, not the block around it.
+        var info = CompilerHover.unitAt(compiled, offset)
+            ?? Definition.typeDefinitionAt(_settings.TypeNotation, lastGood.FileName, compiled, offset)
             ?? CompilerHover.typeAt(_settings.TypeNotation, compiled, offset);
         if (info is null || document.FromLastGood(info.Value.Span.Start, info.Value.Span.End) is not { } span)
         {

@@ -155,3 +155,12 @@ within one dimension or by a number.
 A value of a derived dimension is written by its derived `toString` in its parts' base units, joined by `*` and `/`
 with no spaces (`StructuralInstances`, from `Units.seenOf`): `100.0m / 9.58s` is `1.0438413361169103e-8m/ns`, and a
 module that can't write a part's base unit writes it as `dbg` does, `Length / Time(1.04e-8)`.
+
+# Hover
+
+`DimensionHover` writes what an editor shows on a dimension or a unit, and `Hover.unitAt` finds one at a position: the
+unit of a number with a unit, a dimension's name in a type, and a `dimension` or `unit` declaration. A dimension shows its
+declaration and the units of it the module can write, `typed.Units`, from the smallest to the largest, each as it is
+declared, `ms = 1_000us`, with the multiple `UnitInfo.Multiple` keeps, and a value written in one of them; a unit shows its
+declaration and how many base units it is. A measured value's own hover, `def timeout: Time(int)`, ends with its
+dimension's units too (`Hover.hoverOf`).

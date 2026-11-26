@@ -296,7 +296,8 @@ module internal Units =
                   Dimension = dimension
                   Scale = found |> Map.tryFind unit.Name |> Option.defaultValue Rational.one
                   Home = state.Home
-                  IsExport = unit.IsExport })
+                  IsExport = unit.IsExport
+                  Multiple = unit.Multiple |> Option.map (fun (number, target, _) -> number, target) })
         let units = own |> List.fold (fun acc (name, info) -> acc |> Map.add name info) state.Units
         let errors = storageErrors hasNum state items @ dimensionErrors @ duplicates @ baseUnitErrors state items resolved @ scaleErrors
         // A unit of the module's own is the one its name means, though two imports bring in others of the name.

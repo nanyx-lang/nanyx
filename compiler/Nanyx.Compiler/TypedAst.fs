@@ -386,7 +386,10 @@ type UnitInfo =
       Dimension: NominalId
       Scale: Rational
       Home: ModuleOrigin
-      IsExport: bool }
+      IsExport: bool
+      /// The multiple of another unit it is declared as, the number and the unit, `1_000us`, or none for its
+      /// dimension's base unit.
+      Multiple: (WrittenNumber * string) option }
 
 module UnitInfo =
     /// Whether `info` is its dimension's base unit, the one its values are stored in.
