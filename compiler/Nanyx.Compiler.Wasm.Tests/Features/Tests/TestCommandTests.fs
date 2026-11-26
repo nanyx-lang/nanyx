@@ -66,3 +66,11 @@ let ``nanyx test refuses a seed that isn't a whole number`` () =
     let outcome = testing [ "--seed"; "seven" ] [ "src/geometry.nyx", geometry ]
     Assert.Equal(2, outcome.ExitCode)
     Assert.Contains("--seed is a whole number", outcome.StandardError)
+
+[<Fact>]
+let ``nanyx test runs a script's tests, not its statements`` () =
+    use directory = new TempDirectory()
+    directory.Write "maths.nyx" "def double: int -> int = { n -> n * 2 }\n\nprintln(\"the script runs\")\n\n@test\ndef `doubles` = {\n  print(\"doubling\")\n  assert(double(2) == 4)\n}\n"
+    let outcome = nanyxIn directory.Path [ "test"; "maths.nyx" ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal("Running 1 test in maths.nyx\n\nPASS maths.doubles\n\n1 passed\n", outcome.StandardOutput.ReplaceLineEndings "\n")

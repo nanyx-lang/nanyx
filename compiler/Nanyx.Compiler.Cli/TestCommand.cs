@@ -8,15 +8,15 @@ using System.Text.RegularExpressions;
 using Transpiler.Wasm;
 
 /// <summary>
-/// <c>nanyx test</c>: builds a package's tests as a test build, under the test host, and runs each in an instance of
-/// its own (see <see cref="WasmTester"/>), reporting each as it ends.
+/// <c>nanyx test</c>: builds the tests of a package or a script as a test build, under the test host, and runs each in
+/// an instance of its own (see <see cref="WasmTester"/>), reporting each as it ends.
 /// </summary>
 internal static partial class CliCommands
 {
     /// <summary>
-    /// Run a package's tests, the defs marked @test, beside its code and in the files its manifest's tests field selects.
+    /// Run the tests of a package, the defs marked @test, beside its code and in the files its manifest's tests field selects, or of a script, whose top-level statements are not run.
     /// </summary>
-    /// <param name="path">The package's directory or .nyxp manifest; none means the package the current directory is in.</param>
+    /// <param name="path">A .nyx script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="filter">Run only the tests whose full name, as geometry.`adds points`, contains this text.</param>
     /// <param name="seed">The seed of each test's Random, as random.seeded takes one. Without it, a seed is chosen at random, and printed when a test fails, so that a run can be repeated.</param>
     /// <param name="timeout">How many seconds a test may run before it is stopped, and fails; 10 by default.</param>
@@ -64,49 +64,84 @@ internal static partial class CliCommands
             limit = TimeSpan.FromSeconds(seconds);
         }
 
+        string name;
+        string? packageRoot;
+        FSharpList<Diagnostic> diagnostics;
+        bool deferred;
+        FSharpOption<CompileResult> root;
         if (single is not null && !IsPackagePath(shell, single))
         {
-            shell.Error.WriteLine($"error: '{single}' is not a package: `nanyx test` runs a package's tests, so give its directory or its manifest");
-            return UsageError;
-        }
+            if (!File.Exists(shell.FullPath(single)))
+            {
+                shell.Error.WriteLine($"There is no file or directory '{single}'");
+                return UsageError;
+            }
 
-        if (!TryUpdateLockfile(shell, single, frozen: false, out var failed) || !TryFindPackage(shell, single, out var package, out failed))
+            if (!TryPullScript(shell, single))
+            {
+                return 1;
+            }
+
+            name = shell.DisplayPath(shell.FullPath(single));
+            packageRoot = null;
+            using var progress = CompileProgress.Start(shell.Error, $"{name} tests", shell.DisplayPath, timings);
+            var built = Script.testBuild(shell.Packages, progress.Listener, shell.FullPath(single), File.ReadAllText(shell.FullPath(single)));
+            progress.Finish();
+            if (built.IsError)
+            {
+                PrintDiagnostics(shell, built.ErrorValue, shell.Error);
+                return 1;
+            }
+
+            var (script, scriptRoot) = built.ResultValue;
+            root = scriptRoot;
+            diagnostics = root is null ? script.Diagnostics : root.Value.Diagnostics;
+            deferred = ErrorsDeferred(root is null ? script : root.Value);
+        }
+        else
         {
-            return failed;
+            if (!TryUpdateLockfile(shell, single, frozen: false, out var failed) || !TryFindPackage(shell, single, out var package, out failed))
+            {
+                return failed;
+            }
+
+            var built = PackageModule.testBuild(shell.Packages, package);
+            if (built.IsError)
+            {
+                shell.Error.WriteLine($"error: the test host can't be read: {built.ErrorValue}");
+                return 1;
+            }
+
+            name = package.Manifest.Name;
+            packageRoot = package.Manifest.Root;
+            using var progress = CompileProgress.Start(shell.Error, $"{name} tests", shell.DisplayPath, timings);
+            var build = built.ResultValue;
+            root = PackageModule.testResult(build);
+            progress.Finish();
+            diagnostics = root is null ? build.Diagnostics : ListModule.Distinct(ListModule.Append(build.Diagnostics, root.Value.Diagnostics));
+            deferred = ErrorsDeferred(build);
         }
 
-        var built = PackageModule.testBuild(shell.Packages, package);
-        if (built.IsError)
-        {
-            shell.Error.WriteLine($"error: the test host can't be read: {built.ErrorValue}");
-            return 1;
-        }
-
-        using var progress = CompileProgress.Start(shell.Error, $"{package.Manifest.Name} tests", shell.DisplayPath, timings);
-        var build = built.ResultValue;
-        var root = PackageModule.testResult(build);
-        progress.Finish();
-        var diagnostics = root is null ? build.Diagnostics : ListModule.Distinct(ListModule.Append(build.Diagnostics, root.Value.Diagnostics));
         PrintDiagnostics(shell, WorthStoppingFor(diagnostics), shell.Error);
-        if (HasErrors(diagnostics) && (release || !ErrorsDeferred(build) || root is { Value.Typed: null }))
+        if (HasErrors(diagnostics) && (release || !deferred || root is { Value.Typed: null }))
         {
             return 1;
         }
 
         if (root is null)
         {
-            shell.Out.WriteLine($"{package.Manifest.Name} has no tests: mark a def @test to make it one");
+            shell.Out.WriteLine($"{name} has no tests: mark a def @test to make it one");
             return 0;
         }
 
         // As nanyx run compiles a program, with probes for a debug build's stacks; the test build gives its dbgs and
         // crashes to the runtime itself (see TestBuild.assemble).
-        var options = new CodeGen.WasmOptions(false, true, release, SourceRoot(package.Manifest.Root), true, !release, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false);
+        var options = new CodeGen.WasmOptions(false, true, release, SourceRoot(packageRoot), true, !release, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false);
         var wasm = TestBuild.assemble(options, root.Value.Typed.Value);
         var chosenSeed = givenSeed ?? Random.Shared.NextInt64();
         var tests = TestTable.read(wasm);
         var selected = tests.Where(test => filter is null || Shown(test).Contains(filter, StringComparison.Ordinal)).ToList();
-        shell.Out.WriteLine($"Running {Count(selected.Count, "test")} in {package.Manifest.Name}{WithDeferred(HasErrors(diagnostics), diagnostics)}");
+        shell.Out.WriteLine($"Running {Count(selected.Count, "test")} in {name}{WithDeferred(HasErrors(diagnostics), diagnostics)}");
         shell.Out.WriteLine();
         var passed = 0;
         var runs = WasmTester.run(
