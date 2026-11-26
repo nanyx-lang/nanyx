@@ -11,6 +11,35 @@ def byPoint = [(x = 1, y = 2) => [1], (x = 3, y = 4) => []]"""
     Assert.Equal<string list>([ "map(string, int)"; "map((x: int, y: int), list(int))" ], typesOf source [ "m"; "byPoint" ])
 
 [<Fact>]
+let ``A map literal's values of different tags are joined, as a list literal's are`` () =
+    // An entry is checked against `__map`'s `(k, v)`, a tuple of variables, so the values are joined rather than the first
+    // fixing what `v` is (#2882).
+    let source =
+        withFinalNewline """def m = ["k" => #s("a"), "v" => #n(1.0)]
+def made = { r: float -> ["kind" => #s("a"), "radius" => #n(r)] }
+def fromList = map.fromList([("k", #s("a")), ("v", #n(1.0))])"""
+    Assert.Equal<string list>(
+        [ "map(string, #s(string) | #n(float))"; "float -> map(string, #s(string) | #n(float))"; "map(string, #s(string) | #n(float))" ],
+        typesOf source [ "m"; "made"; "fromList" ])
+
+[<Fact>]
+let ``Map literals of a recursive union's tags in two branches check`` () =
+    let source =
+        withFinalNewline """type J = #s(string) | #n(float) | #o(map(string, J))
+
+type Shape = #circle(float) | #rect(float, float)
+
+def g: float, bool -> J = { r, b ->
+  if b then #o(["kind" => #s("a"), "radius" => #n(r)]) else #o(["kind" => #s("b"), "width" => #n(r)])
+}
+
+def encode: Shape -> J = {
+  | #circle(r) -> #o(["kind" => #s("circle"), "radius" => #n(r)])
+  | #rect(w, h) -> #o(["kind" => #s("rect"), "width" => #n(w), "height" => #n(h)])
+}"""
+    Assert.Empty((Compiler.compile source).Diagnostics)
+
+[<Fact>]
 let ``map(k, v) and Map(k, v) are the same type`` () =
     let source =
         normalized """def m: map(string, int) = ["a" => 1]
