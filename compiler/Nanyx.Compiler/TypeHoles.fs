@@ -7,8 +7,8 @@ open NyxCompiler.InferState
 /// a fresh variable of no name (see `typeExprToTy`), unified with whatever the value makes it. Unlike a named variable
 /// it is not rigid, and an annotation with one is pre-bound as an unannotated def is, so the def is generalised just as
 /// it would be without the annotation: `def id: _ -> _ = { x -> x }` is `a -> a`, and `_ -> _` alone is not `a -> a`.
-/// A `_` a context is applied to, as in `[Foo(_)]`, is written as what the value made it once the def is checked (see
-/// `DefAnnotations.settleContextHoles`).
+/// A `_` a context is applied to, as in `[Foo(_)]`, is written as what the value made it once the def is checked, and so
+/// is one elsewhere that the value made a variable the annotation names (see `DefAnnotations.settleHoles`).
 module internal TypeHoles =
     /// Whether `typeExpr` leaves any part of itself to inference.
     let hasHoles (typeExpr: TypeExpr) = not (TypeExpr.holes typeExpr).IsEmpty

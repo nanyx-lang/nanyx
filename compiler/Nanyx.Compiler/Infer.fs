@@ -308,7 +308,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         |> Result.bind (fun (typed, next) ->
             match Unifier.unalias (resolveSoFar next typed.Type) with
             | TyMeasure(_, storage) -> Ok (mkTypedExpr expr storage None None None, next)
-            | other -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch value.Span $"'{name}' takes a measured value, not a '{Unifier.tyToString other}'" ])
+            | other -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch value.Span $"'{name}' takes a measured value, not a '{Unifier.tyToStringIn state.TypeDefs other}'" ])
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->
         let expectedInput, expectedReturn =
@@ -968,12 +968,13 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 finalState
                                 |> recordSymbolType symbol declaredTy
                                 |> recordAnnotated symbol expectedDeclaredOpt.IsSome
-                            // Each `_` the def's contexts are applied to is the type its value made it.
+                            // Each `_` the def's contexts are applied to is the type its value made it, and so is one
+                            // elsewhere in its type that the value made a variable the type names.
                             let typeOpt =
-                                match DefAnnotations.settleContextHoles finalState name typeOpt with
+                                match DefAnnotations.settleHoles finalState name typeOpt with
                                 | Ok settled when settled <> typeOpt ->
-                                    let contexts = (fst (extractDefContexts settled value)).Value
-                                    current <- registerLocalContextRequirement (recordWrittenType name settled current) symbol name contexts declaredTypeExprOpt
+                                    let contexts, settledTypeExprOpt = extractDefContexts settled value
+                                    current <- registerLocalContextRequirement (recordWrittenType name settled current) symbol name contexts.Value settledTypeExprOpt
                                     settled
                                 | Ok _ -> typeOpt
                                 | Error err ->

@@ -99,11 +99,11 @@ let misfit (env: TypeEnv) (state: InferState) (lookup: Lookup) (hasArguments: bo
         |> Option.filter (fun takes -> Solving.unify [ lookup.PipedType, takes, Assignable, SourceSpan.none ] |> Result.isError)
         |> Option.map (fun takes ->
             let name = lookup.Written
-            let piped = Unifier.tyToString lookup.PipedType
+            let piped = Unifier.tyToStringIn state.TypeDefs lookup.PipedType
             // A qualified name (`s \string.isEmpty`) names its function, and is never an attached name.
             let message =
-                if name.Contains "." then $"'{name}' takes '{Unifier.tyToString takes}', not '{piped}'"
-                else $"'{piped}' has no attached '{name}', and the function '{name}' in scope takes '{Unifier.tyToString takes}', not '{piped}'"
+                if name.Contains "." then $"'{name}' takes '{Unifier.tyToStringIn state.TypeDefs takes}', not '{piped}'"
+                else $"'{piped}' has no attached '{name}', and the function '{name}' in scope takes '{Unifier.tyToStringIn state.TypeDefs takes}', not '{piped}'"
             Diagnostics.at DiagnosticCodes.TypeMismatch lookup.At message)
     | _ -> None
 
@@ -123,7 +123,7 @@ let private ambiguous (env: TypeEnv) (state: InferState) (lookup: Lookup) : Diag
     | Some (symbol, candidates), Some scheme when scheme.Symbol = Some symbol ->
         let modules = candidates |> List.map (fun candidate -> $"'{candidate.Substring(0, candidate.Length - called.Length - 1)}'")
         Some (Diagnostics.at DiagnosticCodes.AmbiguousAttachedFunction lookup.At
-                $"For a '{Unifier.tyToString lookup.PipedType}', it is '{called}', which is defined in {Diagnostics.listed modules}: import all but one of them with `as`"
+                $"For a '{Unifier.tyToStringIn state.TypeDefs lookup.PipedType}', it is '{called}', which is defined in {Diagnostics.listed modules}: import all but one of them with `as`"
               |> Diagnostics.about lookup.Written)
     | _ -> None
 

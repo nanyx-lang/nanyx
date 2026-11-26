@@ -199,5 +199,5 @@ match http.get(url)
 
 Cancelling a task cancels every task it started, and every task those started, so a cancelled task finishes promptly,
 and `await` never reports cancellation: the task being awaited was started by the one awaiting it, and is cancelled
-with it. Today `race` is what cancels a task. A program built as a component finishes a request, or a sleep, that was
-already under way when its task was cancelled, before it gives back `#cancelled`, or returns.
+with it. Today `race` is what cancels a task. A request or a sleep under way when its task is cancelled stops then, in a
+program built as a component as under `nanyx run`.

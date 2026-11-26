@@ -1,0 +1,7 @@
+-- A package whose race's loser is cancelled while it sleeps: `nanyx run` and the component `nanyx build` writes, run
+-- under Wasmtime, print the same lines, which they do only if cancelling the loser stops its sleep.
+(
+  package = (name = "racers", version = "0.1.0", sources = ["src/**/*.nyx"])
+  host = (package = "nanyx.cli.host", version = "0.45.0")
+  formatter = (lineWidth = 100)
+)

@@ -360,3 +360,21 @@ def firstOr = { items, fallback -> headOr(items, fallback) }
     let types = TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type) |> Map.ofList
     Assert.Equal("[Iter(c, elem = string)] c -> string", types.["joinAll"])
     Assert.Equal("[Iter(a, elem = b)] a, b -> b", types.["firstOr"])
+
+// Messages made while the constraints are solved wrote a context's associated types positionally, `Iter(c, elem)`,
+// where hover writes them as a signature does (#2108).
+[<Fact>]
+let ``A message made while solving writes a context's associated types as a signature does`` () =
+    let source =
+        withIter
+            """
+def runPure: (Bag -> int) -> int = { g -> 1 }
+
+def pass: ([Iter(c, elem = string)] c -> int) -> int = { f -> runPure(f) }
+"""
+    let code, message, _ = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+    Assert.Equal(
+        "'[Iter(c, elem = string)] c -> int' is given where 'Bag -> int' is expected, which does not require the context 'Iter(c, elem = string)': write the contexts it may require on the type expected, as a context's member does in `log: [Console] string -> ()`, or a context variable for any, as in `[c] a -> b`",
+        message
+    )
