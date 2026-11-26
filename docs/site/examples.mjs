@@ -211,7 +211,6 @@ export const exampleGroups = [
         slug: "whisper-decoding",
         title: "Speech model decoding loop",
         description: "A greedy decoder as a pure step function and a sampling loop over immutable state.",
-        skip: 2906,
       },
       {
         file: "shop.nyx",

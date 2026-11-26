@@ -1,5 +1,6 @@
 /// Runs the examples in examples/, and checks what each prints. Every example is run here, or listed in `notRun` with
-/// why it isn't.
+/// why it isn't. Each is run as `nanyx run` runs it, and compiled as `nanyx wasm` and the playground compile it, without
+/// debug probes, which leaves the core IR with temporaries where a probe would read a local (#2906).
 module TranspilerWasmTests.Features.Examples.Run
 
 open System.IO
@@ -306,6 +307,17 @@ let ``Running an example prints what it should`` (example: string) =
     Assert.True((outcome.ExitCode = 0), $"Expected exit code 0, got {outcome.ExitCode}. stderr:\n{outcome.StandardError}")
     Assert.Equal(prints[example].ReplaceLineEndings "\n", outcome.StandardOutput.ReplaceLineEndings "\n")
     Assert.Equal("", outcome.StandardError)
+
+[<Theory>]
+[<MemberData(nameof examplesRun)>]
+let ``Compiled by nanyx wasm, without debug probes, an example prints what it should`` (example: string) =
+    use directory = new TempDirectory()
+    let wat = Path.Combine(directory.Path, "example.wat")
+    let compiled = nanyxIn examplesDirectory [ "wasm"; example; "--wat"; "-o"; wat ]
+    Assert.True((compiled.ExitCode = 0), $"nanyx wasm {example} failed:\n{compiled.StandardError}")
+    match runHost [ example ] (File.ReadAllText wat) with
+    | Ok printed -> Assert.Equal(prints[example].ReplaceLineEndings "\n", printed.ReplaceLineEndings "\n")
+    | Error error -> failwith $"{example} didn't run: %A{error}"
 
 [<Fact>]
 let ``Every example is run, or listed as not run with the reason`` () =
