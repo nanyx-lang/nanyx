@@ -72,6 +72,14 @@ let ``The playground host is shipped beside the compiler, and depends only on th
     Assert.Equal<string list>([ "nanyx.cli" ], manifest.Dependencies |> List.map _.Name)
 
 [<Fact>]
+let ``The test host is shipped beside the compiler, and depends only on the console's interface package`` () =
+    let host = (manifestOf Hosts.testPackage).Declares.Value
+    Assert.Equal(("test.host", Some "test.prelude"), (host.Module, host.Prelude))
+    let manifest = manifestOf Hosts.testPackage
+    Assert.Equal((Hosts.testPackage, Toolchain.version), (manifest.Name, manifest.Version))
+    Assert.Equal<string list>([ "nanyx.cli" ], manifest.Dependencies |> List.map _.Name)
+
+[<Fact>]
 let ``A library uses Console by depending on the console's interface package and importing it`` () =
     let library (dependencies: string) =
         [ "acme.greet.nyxp",
@@ -121,4 +129,4 @@ let ``Every shipped package is published from this repository, at the compiler's
                 else NewPackage.nanyxOf Toolchain.version
             name, Toolchain.version, Some "nanyx-lang/nanyx", Some nanyx)
     Assert.Equal<(string * string * string option * string option) list>(expected, manifests)
-    Assert.Equal(7, manifests.Length)
+    Assert.Equal(8, manifests.Length)

@@ -5,9 +5,7 @@ open Parser.Program
 /// The checks on a module's tests, the defs marked `@test` (see `Attributes.testAttribute`): what a test is, what code
 /// may refer to one, and which contexts it may require.
 module TestChecks =
-    /// The contexts the test host provides a test, by name. None yet: the test host (#2931) provides `Console` and
-    /// `Random`, so this is the one place that changes then.
-    let hostContexts: Set<string> = Set.empty
+    let private hostContexts = Set.ofList Hosts.testContexts
 
     /// The name a context of a def's requirements is written by: `Console`, `Async`.
     let private contextName (context: Ty) =
@@ -61,12 +59,13 @@ module TestChecks =
                     Diagnostics.at DiagnosticCodes.TestContextNotProvided span
                         $"The test '{name}' requires the context '{context}', which the test host does not provide: load an instance of it, such as a fake, with `use` in the test"
                     |> Diagnostics.about name))
-        // The code that isn't a test: the top-level expressions, and the defs not marked `@test`, a block's among them.
+        // The code that isn't a test: the top-level expressions, and the defs not marked `@test`, a block's among them,
+        // but the dispatcher a test build gives the module to run them (see `Attributes.testDispatcher`).
         let rec notTests (items: TopLevelItem list) =
             items
             |> List.collect (fun item ->
                 match item.Kind with
-                | Def (ValueDef(_, name, _, _)) when testNames.Contains name -> []
+                | Def (ValueDef(_, name, _, _)) when testNames.Contains name || name = Attributes.testDispatcher -> []
                 | Def _
                 | Expr _ -> [ item ]
                 | ModuleBlock(_, inner) -> notTests inner

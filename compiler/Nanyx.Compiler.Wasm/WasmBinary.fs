@@ -994,8 +994,8 @@ let assemble (wat: string) : byte array =
 /// The name of the custom section a test build lists its tests in (see `withTests`).
 let testTableName = "nanyx.tests"
 
-/// `wasm`, a test build's module, with the custom section `testTableName` after its others, listing `tests` in the order
-/// the module exports them, each `test#<index>`: a vector of each test's module, name, file, line and column, the
+/// `wasm`, a test build's module, with the custom section `testTableName` after its others, listing `tests` at the
+/// indexes its entry point runs them at (see `NyxCompiler.Package.testRootSource`): a vector of each test's module, name, file, line and column, the
 /// strings as names are written and the numbers as unsigned LEB128s. The runtime reads it to find a test by its index or
 /// its name, and to say where it is (see `Nanyx.Runtime.TestTable`).
 let withTests (tests: (string * string * string * int * int) list) (wasm: byte array) : byte array =

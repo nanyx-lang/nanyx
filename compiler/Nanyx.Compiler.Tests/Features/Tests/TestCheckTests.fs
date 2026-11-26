@@ -30,9 +30,14 @@ let ``Code that isn't a test referring to one is NYX0311 at the reference`` () =
 
 [<Fact>]
 let ``A test that requires a context the test host doesn't provide is NYX0312`` () =
-    let code, message, _ = onlyDiagnostic "@test\ndef `prints` = {\n  println(\"hi\")\n}\n"
+    let code, message, _ = onlyDiagnostic "@test\ndef `reads the arguments` = {\n  assert(args() == [])\n}\n"
     Assert.Equal(DiagnosticCodes.TestContextNotProvided.Code, code)
-    Assert.StartsWith("The test 'prints' requires the context 'Console', which the test host does not provide", message)
+    Assert.StartsWith("The test 'reads the arguments' requires the context 'Env', which the test host does not provide", message)
+
+[<Fact>]
+let ``A test may require Console and Random, which the test host provides`` () =
+    let typed = compileClean "import nanyx/random as random\n\n@test\ndef `prints a roll` = {\n  println(\"{random.below(6)}\")\n}\n"
+    Assert.Equal(1, typed.Tests.Length)
 
 [<Fact>]
 let ``@test takes no argument`` () =
