@@ -17,11 +17,15 @@ open Transpiler.Wasm.CoreIrLowerTypes
 /// Whether a value of `given` must be converted to be a value of `expected`: somewhere in it, one of them has a value
 /// boxed where the other does not. Types that differ only in the tags of their unions, or in a function's context
 /// members, hold their values alike: a function's members are `CoreIrLowerMembers.coerce`'s to adapt.
-let rec needsConversion (given: IrType) (expected: IrType) : bool =
+/// A recursive type, as a map's store is, is looked into once: inside itself, it holds what it holds already.
+let rec private needsConversionSeen (seen: Set<IrType * IrType>) (given: IrType) (expected: IrType) : bool =
+    let needsConversion = needsConversionSeen seen
     match given, expected with
     | _ when given = expected -> false
     | IrBox, _
     | _, IrBox -> true
+    | IrRecursive _, IrRecursive _ ->
+        not (seen.Contains((given, expected))) && needsConversionSeen (seen.Add((given, expected))) (IrType.unfold given) (IrType.unfold expected)
     | IrTags givenTags, IrTags expectedTags ->
         givenTags
         |> List.exists (fun (name, payload) ->
@@ -36,6 +40,9 @@ let rec needsConversion (given: IrType) (expected: IrType) : bool =
         needsConversion expectedInput givenInput || needsConversion givenOutput expectedOutput
     | _ -> false
 
+/// Whether a value of `given` must be converted to be a value of `expected` (see above).
+let needsConversion (given: IrType) (expected: IrType) : bool = needsConversionSeen Set.empty given expected
+
 /// Whether a value of `ty` holds a box, or a function of `ty` takes or returns one.
 let rec holdsBox (ty: IrType) : bool =
     match ty with
@@ -44,6 +51,7 @@ let rec holdsBox (ty: IrType) : bool =
     | IrRecord fields -> fields |> List.exists (snd >> holdsBox)
     | IrList element
     | IrArray element -> holdsBox element
+    | IrRecursive body -> holdsBox body
     | IrFunction(input, output, _, _) -> holdsBox input || holdsBox output
     | _ -> false
 
@@ -57,6 +65,9 @@ type BoxTools =
       /// The function that converts a list of values of the first type to one of the second (see
       /// `listConverterFunction`), by its name in WebAssembly text.
       ListConverter: IrType -> IrType -> string
+      /// The function that converts a value of the first recursive type to one of the second, as a map's store with
+      /// its keys boxed to one with them as they are (see `recursiveConverterFunction`), by its name in WebAssembly text.
+      RecursiveConverter: IrType -> IrType -> string
       /// Converts a part of a value: a function through an adapter, anything else by `convert`. What it passes on is
       /// never a temporary, so code that stores can come before it is used.
       Convert: Atom -> IrType -> (Atom -> Expr) -> Expr }
@@ -112,6 +123,9 @@ let rec convert (tools: BoxTools) (atom: Atom) (expected: IrType) (k: Atom -> Ex
     | IrList givenElement, IrList expectedElement ->
         // A new list of the elements, each converted.
         bindLocal tools "__converted" (Expr.make (Call(tools.ListConverter givenElement expectedElement, [ atom ])) expected) (AVar >> k)
+    | IrRecursive _, IrRecursive _ ->
+        // What it is made of, converted, by a function that calls itself where the type holds itself (#2881).
+        bindLocal tools "__converted" (Expr.make (Call(tools.RecursiveConverter given expected, [ atom ])) expected) (AVar >> k)
     | IrArray givenElement, IrArray expectedElement ->
         // A new array of the elements, each converted as a list's are.
         let call name args ty = Expr.make (CallRuntime(name, args, true)) ty
@@ -142,6 +156,23 @@ let listConverterFunction (tools: BoxTools) (newVar: string -> VarKind -> IrType
       Params = [ list ]
       Result = converted
       Body = Expr.make (Match([ list ], arms)) converted
+      Place = None }
+
+/// The function `functionName` that converts a value of `given`, a recursive type, to a value of `expected`: what it is
+/// made of, converted (see `convert`), where a part that is the type itself is converted by this function again. A map's
+/// store is one, so a map with its keys boxed, as a field's `get` gives it (see `CoreIrLowerTypeMatch`), is one with its
+/// keys as they are, and back.
+let recursiveConverterFunction (tools: BoxTools) (newVar: string -> VarKind -> IrType -> Var) (functionName: string) (given: IrType) (expected: IrType) : Function =
+    let value = newVar "__value" Param given
+    let body =
+        bindLocal tools "__unfolded" (Expr.make (Atom(AVar value)) (IrType.unfold given)) (fun unfolded ->
+            tools.Convert (AVar unfolded) (IrType.unfold expected) (fun converted -> Expr.make (Atom converted) expected))
+    { Name = functionName
+      Source = functionName
+      TypeArguments = []
+      Params = [ value ]
+      Result = expected
+      Body = body
       Place = None }
 
 /// The function `functionName` a box of a value of `ty` is a closure over: it takes the box, which holds the value

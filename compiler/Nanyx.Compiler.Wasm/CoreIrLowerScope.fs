@@ -30,6 +30,8 @@ type internal Lowering =
     /// As the function that converts a list of values of the first type to one of the second, element by element (see
     /// `CoreIrLowerBoxes`).
     | ListConverting of IrType * IrType
+    /// As the function that converts a value of the first recursive type to one of the second (see `CoreIrLowerBoxes`).
+    | RecursiveConverting of IrType * IrType
     /// As the function a stand-in for a context member of this type is a closure over (see
     /// `CoreIrLowerInstances.neverCalled`).
     | StandingIn of IrType

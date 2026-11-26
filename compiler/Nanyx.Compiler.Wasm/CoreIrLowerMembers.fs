@@ -167,6 +167,9 @@ and boxTools (tools: MemberTools) (scope: Scope) : CoreIrLowerBoxes.BoxTools =
       ListConverter =
         fun given expected ->
             tools.Request (SpecKey.plain $"__convert_list_{IrType.mangle given}_to_{IrType.mangle expected}" []) (tools.Subst ()) (ListConverting(given, expected))
+      RecursiveConverter =
+        fun given expected ->
+            tools.Request (SpecKey.plain $"__convert_rec_{IrType.mangle given}_to_{IrType.mangle expected}" []) (tools.Subst ()) (RecursiveConverting(given, expected))
       Convert = fun atom ty k -> coerce tools scope atom ty (fun atom -> tools.Settle (Expr.make (Atom atom) (atomType atom)) k) }
 
 /// The member of each of `members` (a key and the type the member is wanted at): where the type checker found its
