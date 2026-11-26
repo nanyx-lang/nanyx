@@ -32,6 +32,10 @@ type internal Lowering =
     | ListConverting of IrType * IrType
     /// As the function that converts a value of the first recursive type to one of the second (see `CoreIrLowerBoxes`).
     | RecursiveConverting of IrType * IrType
+    /// As the function a call of a definition past its cap on specialisations calls (see
+    /// `CoreIrLowerModule.boxedInstead`): of the third type, it calls the definition's specialisation of this name, of
+    /// the second type, with its type arguments' values boxed, converting its arguments and its result.
+    | BoxedCalling of string * IrType * IrType
     /// As the function a stand-in for a context member of this type is a closure over (see
     /// `CoreIrLowerInstances.neverCalled`).
     | StandingIn of IrType

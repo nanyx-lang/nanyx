@@ -250,7 +250,12 @@ them, with each node's type from `ExprTypes` and the type of the function at eac
 definition whose type is concrete is lowered as it is. A call to a generic definition binds the definition's type
 variables to the types at the call, and asks for the specialisation at those type arguments (`id__int`,
 `id__string`), which is lowered in turn with the variables replaced. Each specialisation is lowered once, however
-many calls ask for it, and a definition can have at most 32 (polymorphic recursion would otherwise never end).
+many calls ask for it. A definition has at most 64 at the types it is called at (`maxSpecialisations`), since
+polymorphic recursion would otherwise never end: a call past them goes through one more, with each type argument's
+values boxed (`IrBox`), by a function at the call's own types that converts its arguments and its result to and from
+boxes (`CoreIrLowerModule.boxedInstead`, `CoreIrLowerLifted.boxedCalling`). A call that is specialised on known context
+members or described types, or on what a context variable stands for, can't go that way, and past the cap is still
+`NYX0301`.
 A type variable that nothing constrains (the element of `[]`) is `unit`: nothing can make or inspect a value of such a
 type. The rest of an open union that no use closes adds no tags.
 A definition that reads fields of any record that has them is specialised per record layout, so each specialisation

@@ -1307,6 +1307,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | ValueAdapting(givenTy, expectedTy) -> CoreIrLowerMembers.valueAdapter this.MemberTools emptyScope functionName givenTy expectedTy
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
+        | BoxedCalling(boxed, boxedTy, expectedTy) -> CoreIrLowerLifted.boxedCalling this.LiftedTools functionName boxed boxedTy expectedTy
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
         | RecursiveConverting(given, expected) -> CoreIrLowerBoxes.recursiveConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
         | Printing printer -> CoreIrLowerDbg.printerFunction printerTools callee functionName printer
@@ -1414,6 +1415,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | ValueAdapting _ -> internalError "a value's adapter lowered as a definition"
         | BoxReading _ -> internalError "a box's function lowered as a definition"
         | StandingIn _ -> internalError "a stand-in lowered as a definition"
+        | BoxedCalling _ -> internalError "a call through a boxed specialisation lowered as a definition"
         | ListConverting _ -> internalError "a list's conversion lowered as a definition"
         | RecursiveConverting _ -> internalError "a recursive type's conversion lowered as a definition"
         | Printing _ -> internalError "a printer lowered as a definition"

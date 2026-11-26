@@ -13,12 +13,43 @@ open Transpiler.Wasm.CoreIrLowerKnown
 open Transpiler.Wasm.CoreIrLowerScope
 open Transpiler.Wasm.CoreIrLower
 
-/// The most specialisations one definition may have: a definition that calls itself at ever bigger types
-/// (polymorphic recursion) would otherwise have no end of them. A valid program can need many, though: a list function
-/// such as `reverseOnto`, which `list.map` and `list.reverse` call, is specialised at every element type the program
-/// maps or reverses, and nanyx.json's tests reach more than 32 of them. 64 leaves room for that and still stops a
-/// runaway definition soon. Past the cap, the definition should be compiled once more at boxed types instead (#2890).
+/// The most specialisations one definition has at the types it is called at: a definition that calls itself at ever
+/// bigger types (polymorphic recursion) would otherwise have no end of them. A call past the cap goes through one more,
+/// with its type arguments' values boxed (see `boxedInstead`), which is slower, since each call converts its arguments
+/// and result; so the cap leaves room for a list function, such as `reverseOnto`, which `list.map` and `list.reverse`
+/// call, to be specialised at each of the many element types a program has.
 let private maxSpecialisations = 64
+
+/// What a call that asks for the specialisation `key`, at `bindings`, one more than the cap allows, calls instead: the
+/// definition's specialisation with each of its type arguments' values boxed (`IrBox`), which there is only one of,
+/// through a function at the call's own types that converts its arguments and its result (`BoxedCalling`). It is the
+/// boxed specialisation's key, its bindings, and its type and the call's, each with the members of the contexts the
+/// definition declares, which a call passes after its values. None for a call that can't go that way: one to a
+/// specialisation on known members, described types or context variables, or of a definition that isn't a function,
+/// takes a tuple where the boxed specialisation takes one value, or declares a context member whose type isn't known.
+let private boxedInstead (input: LowerInput) (key: SpecKey) (bindings: Map<int, Ty>) (lowering: Lowering) =
+    match lowering, input.DefinitionTypes |> Map.tryFind key.Definition with
+    | AsDefined, Some scheme when key.Known.IsEmpty && key.Described.IsEmpty ->
+        let typeVars = freeVars scheme |> List.distinct |> List.sort
+        let boxedBindings = typeVars |> List.fold (fun acc id -> acc |> Map.add id boxedTy) bindings
+        let toIrType = toIrTypeIn input.ContextLayouts
+        let declared = input.ContextParameters |> Map.tryFind key.Definition |> Option.map fst |> Option.defaultValue []
+        let membersAt (bindings: Map<int, Ty>) =
+            declared |> List.map (fun parameter -> parameter.Type |> Option.map (fun ty -> parameter.Key, toIrType (substitute bindings ty)))
+        let withMembers (members: (ContextMemberKey * IrType) option list) (ty: IrType) =
+            match ty with
+            | IrFunction(input, output, [], canWait) when members |> List.forall Option.isSome ->
+                Some(IrFunction(input, output, List.choose id members, canWait))
+            | _ -> None
+        let expected = toIrType (substitute bindings scheme) |> withMembers (membersAt bindings)
+        let boxed = toIrType (substitute boxedBindings scheme) |> withMembers (membersAt boxedBindings)
+        match expected, boxed with
+        | Some(IrFunction(input, _, _, _) as expected), Some(IrFunction(boxedInput, _, _, _) as boxed) when
+            key.TypeArguments.Length = typeVars.Length && (valuesOf input).Length = (valuesOf boxedInput).Length
+            ->
+            Some({ key with TypeArguments = typeVars |> List.map (fun _ -> IrBox) }, boxedBindings, boxed, expected)
+        | _ -> None
+    | _ -> None
 
 /// A WebAssembly name for a specialisation, such as `id__int`: its definition's name, then its type arguments, then
 /// `__known` if it is specialised on known context members (see `CoreIrLowerKnown`).
@@ -52,23 +83,34 @@ let lowerModule (input: LowerInput) (finish: Function -> 'T) : Lowered<'T> =
     let lowerOne (key: SpecKey) (subst: Map<int, Ty>) (how: Lowering) (functionName: string) =
         // Where the expression being lowered is, once the lowering is made.
         let currentSpan = ref (fun () -> None)
-        let request (specKey: SpecKey) (bindings: Map<int, Ty>) (lowering: Lowering) =
+        // A request past the cap goes through the boxed specialisation, which is asked for with no cap.
+        let rec requestWith (capped: bool) (specKey: SpecKey) (bindings: Map<int, Ty>) (lowering: Lowering) =
             match names.TryGetValue specKey with
             | true, existing -> existing
             | _ ->
                 let defName = specKey.Definition
                 let count = match counts.TryGetValue defName with | true, n -> n | _ -> 0
-                if count >= maxSpecialisations then cannot $"more than {maxSpecialisations} specialisations of '{defName}'"
-                counts.[defName] <- count + 1
-                // A lifted function of a definition that is not generic keeps its own name.
-                let candidate =
-                    if specKey.TypeArguments.IsEmpty && specKey.Known.IsEmpty then sanitizeIdentifier defName
-                    else
-                        specialisationNames.Fresh(specialisationName specKey)
-                names.[specKey] <- candidate
-                requestedAt.[specKey] <- currentSpan.Value () |> Option.orElse (requestSpan key)
-                pending.Enqueue((specKey, bindings, lowering))
-                candidate
+                if capped && count >= maxSpecialisations then
+                    match boxedInstead input specKey bindings lowering with
+                    // The boxed specialisation itself, which the body of another one can ask for, is lowered as it is.
+                    | Some(boxedKey, boxedBindings, _, _) when boxedKey = specKey -> requestWith false boxedKey boxedBindings AsDefined
+                    | Some(boxedKey, boxedBindings, boxedTy, expectedTy) ->
+                        let boxed = requestWith false boxedKey boxedBindings AsDefined
+                        let through = SpecKey.plain $"__boxed_{boxed}_{IrType.mangle expectedTy}" []
+                        requestWith false through Map.empty (BoxedCalling(boxed, boxedTy, expectedTy))
+                    | None -> cannot $"more than {maxSpecialisations} specialisations of '{defName}'"
+                else
+                    counts.[defName] <- count + 1
+                    // A lifted function of a definition that is not generic keeps its own name.
+                    let candidate =
+                        if specKey.TypeArguments.IsEmpty && specKey.Known.IsEmpty then sanitizeIdentifier defName
+                        else
+                            specialisationNames.Fresh(specialisationName specKey)
+                    names.[specKey] <- candidate
+                    requestedAt.[specKey] <- currentSpan.Value () |> Option.orElse (requestSpan key)
+                    pending.Enqueue((specKey, bindings, lowering))
+                    candidate
+        let request = requestWith true
         order.Add key
         let lowering = FunctionLowering(input, definitions, subst, key, request)
         currentSpan.Value <- fun () -> lowering.CurrentSpan
