@@ -190,6 +190,16 @@ def map.fold: [c] map(k, v), b, ([c] (b, k, v) -> b) -> b
 
 `step` applied to `acc` and each key and value of `m` in turn, in the order of [`map.toList`](#maptolist).
 
+## `map.foldWhile`
+
+```nanyx fragment
+def map.foldWhile: [c] map(k, v), b, ([c] (b, k, v) -> #continue(b) | #stop(b)) -> b
+```
+
+[`map.fold`](#mapfold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next key and
+value, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
+or after the last entry. `step` isn't called again after a `#stop`.
+
 ## `map.reduce`
 
 ```nanyx fragment
@@ -376,6 +386,16 @@ def set.fold: [c] set(a), b, ([c] (b, a) -> b) -> b
 ```
 
 `step` applied to `acc` and each element of `s` in turn, in the order of [`set.toList`](#settolist).
+
+## `set.foldWhile`
+
+```nanyx fragment
+def set.foldWhile: [c] set(a), b, ([c] (b, a) -> #continue(b) | #stop(b)) -> b
+```
+
+[`set.fold`](#setfold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next
+element, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
+or after the last element. `step` isn't called again after a `#stop`.
 
 ## `set.reduce`
 

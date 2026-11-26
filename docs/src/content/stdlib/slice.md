@@ -124,6 +124,25 @@ The elements of `s` combined with `f`, in order, starting from the first: a slic
 reduced with `{ * }` is `#some(120)`, and an empty slice, having no first element, gives `#none`.
 To start from another value, use [`Slice.fold`](#slicefold).
 
+## `Slice.foldBack`
+
+```nanyx fragment
+def Slice.foldBack: [c] Slice(a), b, ([c] (b, a) -> b) -> b
+```
+
+[`Slice.fold`](#slicefold) from the last element to the first, without copying: a slice of `"a"`, `"b"` and
+`"c"` folded back with `{ acc, x -> acc ++ x }` from `""` is `"cba"`.
+
+## `Slice.foldWhile`
+
+```nanyx fragment
+def Slice.foldWhile: [c] Slice(a), b, ([c] (b, a) -> #continue(b) | #stop(b)) -> b
+```
+
+[`Slice.fold`](#slicefold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next
+element, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
+or after the last element. `step` isn't called again after a `#stop`.
+
 ## `Slice.toSeq`
 
 ```nanyx fragment
