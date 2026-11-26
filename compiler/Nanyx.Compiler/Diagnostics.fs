@@ -307,6 +307,13 @@ module Diagnostics =
     /// `diagnostic` with `subject` as the name its headline shows: "Missing context 'Console'".
     let about (subject: string) (diagnostic: Diagnostic) = { diagnostic with Subject = Some subject }
 
+    /// The syntax error `error` is (NYX0001), whose headline names the token the parser found, if it found one.
+    let ofParseError (error: ParseError) =
+        let diagnostic = at DiagnosticCodes.SyntaxError error.Span error.Message
+        match error.Found with
+        | Some found -> about found diagnostic
+        | None -> diagnostic
+
     /// What the editor and the terminal show first: the title, then the subject, if there is one, in single quotes.
     let headline (diagnostic: Diagnostic) =
         match diagnostic.Subject with

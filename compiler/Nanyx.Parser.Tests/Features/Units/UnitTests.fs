@@ -123,12 +123,12 @@ let ``A declaration spans its line`` () =
 let ``A unit is a multiple of a unit literal`` () =
     Assert.Equal(("A unit is a number of another unit, with no space between the number and the unit, as in `unit ms: Time = 1_000us`", "1_000 us"),
                  parseErrorOf "unit ms: Time = 1_000 us")
-    Assert.Equal(("Expected a number with a unit, such as `1_000us`, found `us`", "us"), parseErrorOf "unit ms: Time = us")
+    Assert.Equal(("Expected a number with a unit, such as `1_000us`", "us"), parseErrorOf "unit ms: Time = us")
 
 [<Fact>]
 let ``A declaration ends its line`` () =
-    Assert.Equal(("Expected the end of the line, found `Length`", "Length"), parseErrorOf "dimension Time Length")
-    Assert.Equal(("Expected `:`, found `Time`", "Time"), parseErrorOf "unit ms Time")
+    Assert.Equal(("Expected the end of the line", "Length"), parseErrorOf "dimension Time Length")
+    Assert.Equal(("Expected `:`", "Time"), parseErrorOf "unit ms Time")
 
 [<Fact>]
 let ``dimension and unit are names anywhere but at the start of a declaration`` () =

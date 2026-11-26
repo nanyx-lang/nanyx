@@ -110,5 +110,5 @@ let ``a pattern tag with two groups takes its arguments, then its payload`` () =
 let ``a lower-case tag never takes arguments`` () =
     // `#split(",")` is read as a tag with a payload, so its second group is where an arm's `->` belongs.
     let reported, text = parseErrorOf "def f = { | #split(\",\")(a, b) -> 1 }"
-    Assert.Equal("Expected `,` or `->`, found `(`", reported)
+    Assert.Equal("Expected `,` or `->`", reported)
     Assert.Equal("(a, b) -> 1 }", text)

@@ -13,7 +13,7 @@ module Compiler =
         source.Replace("\r\n", "\n").Replace("\r", "\n")
 
     /// The diagnostic for a failed parse.
-    let syntaxError (error: ParseError) = Diagnostics.at DiagnosticCodes.SyntaxError error.Span error.Message
+    let syntaxError (error: ParseError) = Diagnostics.ofParseError error
 
     /// The diagnostics for the parse of `source`, the file `filePath`, failing with `error`: each character that looks
     /// like one Nanyx reads and isn't that it fails at, and then the syntax error it fails with next, if any (see

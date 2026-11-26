@@ -343,7 +343,7 @@ and internal nameAndType (c: Cursor) : Identifier * SourceSpan * TypeExpr option
         parts.Add(fst (name c))
     if first.IsNone then
         match c.Token with
-        | Some token -> c.Report token.Start $"Expected a name after `def`, found {describeToken c.Source token}"
+        | Some token -> c.ReportFound token "Expected a name after `def`"
         | None -> raise NoMatch
     let nameSpan = c.SpanFrom start
     // A def with nothing after its name on the line is a declaration with no type, which the type checker reports.

@@ -463,7 +463,7 @@ let private directiveAfterCode (source: string) (error: ParseError) =
     let start = error.Span.Start
     let atLineStart = start = 0 || (start <= source.Length && source[start - 1] = '\n')
     if atLineStart && String.CompareOrdinal(source, start, "::", 0, 2) = 0 then
-        { error with Message = "A directive (a `::` line) must come before the first line of code" }
+        { error with Message = "A directive (a `::` line) must come before the first line of code"; Found = None }
     else error
 
 /// The items of `source`, the text of the file at `file`, and what is kept beside them (`ParseState`), or its first

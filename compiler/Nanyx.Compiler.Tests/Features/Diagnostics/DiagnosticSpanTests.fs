@@ -118,7 +118,7 @@ let ``A parse error's message leaves out the file however long its path is`` () 
         Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
         Assert.DoesNotContain("a-rather-long", diagnostic.Message)
         Assert.DoesNotContain("Ln:", diagnostic.Message)
-        Assert.Equal("Expected a name after `def`, found `=`", diagnostic.Message))
+        Assert.Equal("Expected a name after `def`", diagnostic.Message))
 
 [<Fact>]
 let ``An unknown standard library module is reported at the import`` () =
