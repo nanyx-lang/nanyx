@@ -71,9 +71,9 @@ as one in the prelude, isn't shown there, only in a run's output.
 `BrowserCompiler.Compile` gives beside the module, in the output's place, until it is pressed again. While it is shown
 it follows the code, half a second after each change; code that doesn't compile shows its diagnostics there instead.
 
-Both need a compiler that has `Check`, which 0.47.0 and the releases before it haven't: the worker says whether the
-compiler it loaded has it (`canCheck`), and with one that hasn't the page shows neither, and behaves as it did before
-them. So they go live on the site when `playgroundRelease` moves past 0.47.0, to the first release that has `Check`.
+Both need a compiler that has `Check`, which 0.48.0 is the first release to have: the worker says whether the compiler
+it loaded has it (`canCheck`), and with one that hasn't, such as 0.47.0, the page shows neither, and behaves as it did
+before them.
 
 **Running.** Run compiles the editor's code (`compileAndRun`) with `BrowserCompiler.Compile` (through `compiler.js`); when it gives a
 module, the runner's `run` runs it with a `Random` seeded from `crypto.getRandomValues`, and Stop, which takes Run's
@@ -296,7 +296,7 @@ downloads it from the release named by `playgroundRelease` in `docs/site/playgro
 named, and unpacks it into `public/playground/compiler`, so the site serves the compiler at `/playground/compiler/`;
 `compiler.js` fetches its files from beside itself, so it works from there. Moving the playground on to a newer
 release is changing that line, after the release is published: a build that names a release without the asset fails.
-It names the latest release, 0.47.0. A release is due whenever the tour uses something the named release can't compile: the page test's run of every example fails until one is out and named here. When it is `null`, the build unpacks nothing and the page says its
+It names the latest release, 0.48.0. A release is due whenever the tour uses something the named release can't compile: the page test's run of every example fails until one is out and named here. When it is `null`, the build unpacks nothing and the page says its
 compiler isn't on the site. To build the site with a compiler you built
 yourself, set `NANYX_BROWSER_ZIP` to its zip.
 
