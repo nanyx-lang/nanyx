@@ -2,7 +2,7 @@
 // own whose keywords are the TextMate grammar's (`extension/syntaxes/nanyx.tmLanguage.json`), coloured as the docs'
 // code blocks are, in the site's light and dark themes.
 
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, StreamLanguage, bracketMatching, indentUnit, syntaxHighlighting } from "@codemirror/language";
@@ -107,6 +107,9 @@ const theme = EditorView.theme({
   ".cm-cursor": { borderLeftColor: "hsl(var(--foreground))" },
 });
 
+/** Whether an editor's code can be changed (see `setReadOnly`). */
+const editable = new Compartment();
+
 /**
  * An editor in `parent` holding `code`. `onRun` is called on Ctrl+Enter (⌘+Enter on a Mac), and `onChange` with the
  * code after each change. `numbered` gives it line numbers, as the playground has and a tour example hasn't.
@@ -140,6 +143,7 @@ export function createEditor(
           ...historyKeymap,
         ]),
         nanyx(),
+        editable.of([]),
         syntaxHighlighting(highlighting),
         theme,
         EditorView.contentAttributes.of({ "aria-label": "Code" }),
@@ -154,4 +158,9 @@ export function createEditor(
 /** Replaces the editor's code with `code`, as one change that Undo takes back. */
 export function setCode(view: EditorView, code: string) {
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: code }, selection: { anchor: 0 } });
+}
+
+/** Makes the editor's code read-only, as an example the playground can't run is shown, or editable again. */
+export function setReadOnly(view: EditorView, readOnly: boolean) {
+  view.dispatch({ effects: editable.reconfigure(readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []) });
 }

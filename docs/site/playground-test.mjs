@@ -2,8 +2,9 @@
 // cross-origin isolated (`vercel.json`), opens `/playground` in headless Chromium, and checks that the page loads the
 // compiler, runs hello world, gives a program its input, keeps each run's output, runs tasks that take turns where one
 // sleeps, and opens share links and the
-// tour's links without running them; and that every example in its menu, the tour's runnable ones, and every example
-// that an "Open in the playground" link on another page opens, runs under the playground host; and that a tour page loads the compiler only on an example's first Run, runs an example where it is,
+// tour's links without running them; and that every example in its menu that it can run, the tour's runnable ones and
+// those in the repository's `examples` directory, and every example that an "Open in the playground" link on another
+// page opens, runs under the playground host, and that the menu's others open read-only, saying why; and that a tour page loads the compiler only on an example's first Run, runs an example where it is,
 // edits and runs it again, and opens it in the playground as edited; and that an example that only declares things gets
 // only its playground link. From `docs/`, with a compiler built for the browser:
 //
@@ -207,7 +208,11 @@ const otherPagesExamples = () => {
       })),
     );
 };
-const helloWorld = JSON.parse(readFileSync(join(dist, "playground.html"), "utf8").match(/<script id="playground-data" type="application\/json">(.*?)<\/script>/s)[1]).defaultExample.code;
+/** What the playground page holds: its examples, by group, and the one it starts with. */
+const playgroundData = JSON.parse(readFileSync(join(dist, "playground.html"), "utf8").match(/<script id="playground-data" type="application\/json">(.*?)<\/script>/s)[1]);
+const helloWorld = playgroundData.defaultExample.code;
+/** The examples in the menu: the tour's, and those in the repository's `examples` directory. */
+const menuExamples = playgroundData.groups.flatMap((group) => group.examples);
 
 const tests = [
   ["the page loads the compiler and starts with the tour's hello world", async () => {
@@ -288,17 +293,40 @@ const tests = [
     assert.equal(await page.evaluate(() => crossOriginIsolated), true);
     assert.equal(await editorText(), helloWorld.trimEnd());
   }],
-  ["every example in the menu runs under the playground host", async () => {
+  ["every example in the menu that the playground can run runs under the playground host", async () => {
     await ready();
     const options = await page.locator("[data-examples] option").evaluateAll((all) => all.map((o) => o.value).filter((v) => v));
-    assert.ok(options.length > 100, `the menu has ${options.length} examples`);
-    const failed = await onPages(options, async (target, id) => {
+    assert.deepEqual(options, menuExamples.map((example) => example.id));
+    const runnable = menuExamples.filter((example) => !example.readOnly).map((example) => example.id);
+    assert.ok(runnable.length > 100, `the menu has ${runnable.length} examples to run`);
+    assert.ok(runnable.includes("example-nim"), "the menu runs the Nim demo's program, examples/Nim.nyx");
+    const failed = await onPages(runnable, async (target, id) => {
       await target.selectOption("[data-examples]", id);
-      await runOn(target);
+      await runToTheEndOn(target);
       const problems = await target.locator(".pg-run").last().locator(".pg-diagnostic, .pg-stderr, .pg-end").allInnerTexts();
       return problems.length > 0 ? `${id}: ${problems.join(" ").trim()}` : undefined;
     });
     assert.deepEqual(failed, []);
+  }],
+  ["an example the playground can't run opens read-only, saying why in Run's place", async () => {
+    const readOnly = menuExamples.filter((example) => example.readOnly);
+    assert.ok(readOnly.length > 0, "the menu has examples the playground can't run");
+    await page.goto(`${origin}/playground`);
+    await ready();
+    for (const example of readOnly) {
+      await page.selectOption("[data-examples]", example.id);
+      assert.equal(await page.locator("[data-read-only]").innerText(), example.readOnly, example.id);
+      assert.equal(await page.locator("[data-run]").isHidden(), true, `${example.id} has no Run`);
+      assert.equal(await page.locator(".cm-content").getAttribute("contenteditable"), "false", `${example.id} is read-only`);
+      // The editor draws only the lines in view, so a long example's text is the start of its code.
+      const shown = await editorText();
+      assert.ok(shown.length > 0 && example.code.startsWith(shown), `${example.id} shows its code`);
+    }
+    // An example it can run gives Run back, and its code can be edited.
+    await page.selectOption("[data-examples]", "example-nim");
+    await idle();
+    assert.equal(await page.locator("[data-read-only]").isHidden(), true);
+    assert.equal(await page.locator(".cm-content").getAttribute("contenteditable"), "true");
   }],
   ["every runnable example on every other page opens and runs under the playground host", async () => {
     await page.goto(`${origin}/playground`);

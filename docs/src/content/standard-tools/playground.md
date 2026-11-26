@@ -42,7 +42,12 @@ empties the pane.
 # Examples
 
 The **Examples** menu holds every example in the [language tour](../tour/variables) that is a whole program, grouped by
-its page. Choosing one replaces the editor's code, after asking if you have changed it.
+its page, and after them the programs in the repository's `examples` directory, grouped as the
+[Examples](../examples/all-examples) section groups them, the Nim demo's game among them, and its packages. Choosing one
+replaces the editor's code, after asking if you have changed it. An example the playground can't run is marked
+"read-only" in the menu, and opens as code to read, with why it can't run in Run's place: it runs under another host,
+uses what only the [console host](../advanced/hosts) gives a program, such as files or its arguments, depends on a
+package from the index, or is a package of several files.
 
 Every example on the docs' pages that is a whole program, the tour's and the others', has **Open in the playground**
 under it, which opens it here, as edited; one that prints something can also be run where it is, with **Run**: click

@@ -10,6 +10,7 @@ import {
   allExamples,
   exampleGroups,
 } from "../site/examples.mjs";
+import { shareFragment, whyNotInPlayground } from "../site/playground-examples.mjs";
 
 const EXAMPLES_SECTION = "examples";
 
@@ -60,7 +61,7 @@ async function loadExamples({ store, renderMarkdown, logger }: LoaderContext) {
   for (const example of examples) {
     const filePath = path.join(EXAMPLES_DIR, example.file);
     const source = (await fs.readFile(filePath, "utf8")).replace(/\r\n/g, "\n").trimEnd();
-    const body = exampleMarkdown(example.file, source);
+    const body = exampleMarkdown(example.file, source, example.skip);
     store.set({
       id: `${EXAMPLES_SECTION}/${example.slug}`,
       data: { title: example.title, description: example.description, order: example.order },
@@ -72,13 +73,24 @@ async function loadExamples({ store, renderMarkdown, logger }: LoaderContext) {
   logger.info(`Generated ${examples.length} example pages`);
 }
 
-function exampleMarkdown(file: string, source: string): string {
+/**
+ * An example's page: its source, where it lives in the repository, and, when the playground can run it, a link that
+ * opens it there, as its Examples menu does; or else why it can't, `skip` naming the issue for one the compiler gets
+ * wrong there.
+ */
+function exampleMarkdown(file: string, source: string, skip?: number): string {
+  const why = skip
+    ? `the compiler gets it wrong there yet ([#${skip}](https://github.com/nanyx-lang/nanyx/issues/${skip})).`
+    : whyNotInPlayground(source);
+  const playground = why
+    ? `The [playground](/playground) shows it, but can't run it: ${why.replace(/^It /, "it ")}`
+    : `[Open it in the playground](/playground#${shareFragment(source + "\n")}).`;
   return [
     "```nanyx",
     source,
     "```",
     "",
-    `This program lives in the repository as [examples/${file}](${EXAMPLES_SOURCE_URL}/${file}).`,
+    `This program lives in the repository as [examples/${file}](${EXAMPLES_SOURCE_URL}/${file}). ${playground}`,
     "",
   ].join("\n");
 }
