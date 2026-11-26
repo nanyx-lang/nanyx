@@ -133,3 +133,17 @@ def took: Time(int) = now() \since(start)
 println(took >= 0ns)
 """
     runSource source |> assertRan "true\n"
+
+[<Fact>]
+let ``Run - an instant's Unix time is its time since 1970, and a unit divides it into a number`` () =
+    runSource
+        """match Instant.fromIsoString("2026-11-26T09:00:00.25Z")
+  | #some(at) ->
+    def unix = at \toUnixTime
+    println(unix // 1ms)
+    println(unix // 1s)
+    println(Instant.epoch \toUnixTime)
+    println((Instant.epoch \minus(1s)) \toUnixTime // 1ms)
+  | _ -> println("not ISO")
+"""
+    |> assertRan "1795683600250\n1795683600\n0ns\n-1000\n"

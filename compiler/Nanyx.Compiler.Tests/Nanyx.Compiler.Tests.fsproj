@@ -47,6 +47,7 @@
     <Compile Include="Features\Units\InstantTests.fs" />
     <Compile Include="Features\Units\DerivedDimensionTests.fs" />
     <Compile Include="Features\Units\DerivedUnitTests.fs" />
+    <Compile Include="Features\Units\AttachedMeasuredOperatorTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />

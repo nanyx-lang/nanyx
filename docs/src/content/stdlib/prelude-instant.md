@@ -72,6 +72,16 @@ def Instant.minus: Instant, Time(int) -> Instant
 
 The instant `time` before `i`: `now() \minus(1d)`.
 
+## `Instant.toUnixTime`
+
+```nanyx fragment
+def Instant.toUnixTime: Instant -> Time(int)
+```
+
+The time from [`Instant.epoch`](#instantepoch), the start of 1970, UTC, to `at`: its Unix time. Divide it by a
+unit for a number of them, as an API that takes Unix time wants: `now() \toUnixTime // 1ms` is
+the milliseconds since 1970, and `// 1s` the seconds.
+
 ## `Instant.toIsoString`
 
 ```nanyx fragment

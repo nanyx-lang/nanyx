@@ -68,8 +68,8 @@ module Resolution =
             |> List.filter (fst >> ShippedPackages.isShipped >> not)
             |> List.map (fun (name, written) -> name, requirementOf written)
         let needsNewer =
-            match indexed.Nanyx |> Option.bind VersionRequirement.tryParse, running with
-            | Some oldest, Some running when oldest.Minimum > running -> Some(NeedsCompiler(indexed.Nanyx.Value, Toolchain.version))
+            match indexed.Nanyx |> Option.bind CompilerRequirement.tryParse, running with
+            | Some requirement, Some running when not (CompilerRequirement.accepts requirement running) -> Some(NeedsCompiler(requirement, Toolchain.version))
             | _ -> None
         let unusable =
             if not indexed.Available then Some Unavailable

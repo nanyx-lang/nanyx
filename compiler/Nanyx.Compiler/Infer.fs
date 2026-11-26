@@ -590,9 +590,18 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
                     let at = opSpan |> Option.defaultValue expr.Span
                     Error [ OperatorCalls.undefinedSpare (MemoryCells.isCell env constrained) op at left (resolveSoFar nextState leftExpr.Type) ]
                 | _ -> Ok (mkTypedExpr expr leftExpr.Type None None None, constrained)
+            // An operator attached to the left operand's type, a type of its own, is called whatever the operands
+            // are, as `` Stamp.`+`: Stamp, Time(int) -> Stamp `` is for `s + 3s` (#2873). A number type's is not: on one,
+            // the operator is the built-in one, so `2 * 3s` is read as `MeasuredArithmetic` says.
+            let attachesOperator (op: string) =
+                match Unifier.unalias (resolveSoFar nextState leftExpr.Type) with
+                | SizedNumberType _ -> false
+                | TyNominal _ as own -> (tryResolveAttachedFunction env own op).IsSome
+                | _ -> false
             // An arithmetic operator on a measured value is the operator on its storage, whose result has the dimension
             // the table says (see `MeasuredArithmetic`).
             match expr.Kind with
+            | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op && attachesOperator op -> operatorOn leftExpr rightExpr nextState
             | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op ->
                 match MeasuredArithmetic.read nextState expr op leftExpr.Type rightExpr.Type with
                 | Some (Ok reading) ->

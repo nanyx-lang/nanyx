@@ -3,7 +3,7 @@
     name = "nanyx.http.host"
     version = "0.43.0"
     repository = "nanyx-lang/nanyx"
-    nanyx = "0.43"
+    nanyx = "=0.43.0"
     sources = ["src/**/*.nyx"]
     host = (
       root = "http.host"

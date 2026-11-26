@@ -87,7 +87,10 @@ with no unit is never a measured value. `dbg` writes a measured value as its dim
 
 # Arithmetic
 
-`MeasuredArithmetic.read` types an arithmetic operator with a measured operand as the operator on the storages, which is
+An operator attached to the left operand's type, a type of its own that is no number, is called whatever its operands
+are, as any attached operator is (see `OperatorCalls`): `` Stamp.`+`: Stamp, Time(int) -> Stamp `` is what `s + 3s` calls,
+and `Infer` asks for it before the units rule. Otherwise, `MeasuredArithmetic.read` types an arithmetic operator with a
+measured operand as the operator on the storages, which is
 what it is at run time, and gives the result its dimension as the table in [Arithmetic](../advanced/units-of-measure#arithmetic) says: `Infer`
 types the operator on operands of the storages' types, through the storage's own `+` (built in for a number type, the
 instance's member for a generic storage), and wraps the result. So `t / 2` on a `Time(a)` is a `Time` of what `/`
