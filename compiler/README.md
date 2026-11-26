@@ -107,7 +107,8 @@ publishes a self-contained `nanyx` executable for each supported platform as a w
 On a pull request it does only the work the change can affect: everything when the pull request
 touches the compiler, the standard library, the examples or any other `.nyx` file; the tests
 without the Wasm tests when it touches only the docs' content (a formatter test reads the docs'
-code blocks); and nothing otherwise.
+code blocks); and nothing otherwise. Each job caches the NuGet packages it restores, keyed on the OS and the
+projects' files, so a run restores from scratch only after a package reference changes.
 
 To cut a release, bump `<Version>` in `Directory.Build.props` and merge. The packages the compiler ships
 are named at that version, and a manifest names them at it exactly, so update the `version` of the
