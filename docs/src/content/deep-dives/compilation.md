@@ -63,7 +63,10 @@ again, twice, and a package with an error in it take minutes to check
 ([#2449](https://github.com/nanyx-lang/nanyx/issues/2449)). What agreed is a copy of the list, with no checkpoint in it,
 so a checkpoint reached first counts ahead of it: a constraint set aside while a def was being checked, as one is in the
 prelude's `proc`, no longer is once the def agrees, and the defs after it are solved on top of their checkpoints rather
-than from the start ([#2709](https://github.com/nanyx-lang/nanyx/issues/2709)).
+than from the start ([#2709](https://github.com/nanyx-lang/nanyx/issues/2709)). A def's list that still has a failure
+in it when the def is checked, after a type error, is no checkpoint; the constraints of it that agree are, instead
+(`Solving.checkpoint`), and the lists after it reach them through what `solvedSoFar` kept, so a type error doesn't have
+each later def solved from the start ([#2848](https://github.com/nanyx-lang/nanyx/issues/2848)).
 
 Solved on top of an earlier solution, a variable can stand for another that stands for another in turn: an else-if
 joins each branch to the next, so each branch's variable stands for the one before it. `Unifier.unifyFrom` follows such

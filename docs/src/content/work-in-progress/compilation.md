@@ -45,8 +45,7 @@ Out of scope here, with their own workstreams:
   ([#2729](https://github.com/nanyx-lang/nanyx/issues/2729)).
 - **Some defs are solved afresh.** A list of constraints is solved on top of the last one solved, or of a checkpoint,
   when that can't change the result ([Solving constraints](../deep-dives/compilation#solving-constraints)). Defs that
-  share a variable (mutual recursion, a use before the def is checked) and a module with a type error solve afresh,
-  newest first.
+  share a variable (mutual recursion, a use before the def is checked) solve afresh, newest first.
 
 # Goals
 
