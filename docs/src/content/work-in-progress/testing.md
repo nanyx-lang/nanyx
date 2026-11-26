@@ -130,8 +130,8 @@ error NYX0312: Context the test host doesn't provide
   = The test 'loads the defaults when there is no config file' requires the context 'FileSystem', which the test host does not provide: load an instance of it, such as a fake, with `use` in the test
 ```
 
-The check is built, with an empty set of provided contexts until the test host provides `Console` and `Random`
-([#2931](https://github.com/nanyx-lang/nanyx/issues/2931)); `@test(#io)` adds its advice to the message.
+The check is built, with the test host's `Console` and `Random`; `@test(#io)`
+([#2935](https://github.com/nanyx-lang/nanyx/issues/2935)) adds its advice to the message.
 
 So a unit test never touches the file system, the clock or the environment unless it says so, and the compiler checks that. This is the check [Hosts](./hosts#the-test-runner-is-a-host) wants: the same program runs under a test host with no IO.
 
@@ -174,7 +174,7 @@ It exits with 0 if every test passes and 1 if any fails, or if the tests could n
 
 ## One instance per test
 
-A crash ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a module that exports each test as a function, and creates a fresh instance of that module for each test, as `nanyx run` creates one for each request a program under the HTTP host answers. The test host's root learns which test it runs through the runtime's `nanyx:test`, and the crash report the runtime gets from a failed instance is what the runner prints. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each.
+A crash ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a test build whose entry point runs the test at the index it is given, and creates a fresh instance of that module for each test, as `nanyx run` creates one for each request a program under the HTTP host answers. The test host's `run` asks the runtime's `nanyx:test` which index to run and calls the entry point with it, so the host, not the runtime, calls the test, under the contexts it provides. The crash report the runtime gets from a failed instance is what the runner prints. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each. The test build and the host are built: see [Test builds](../deep-dives/test-builds#running-one).
 
 A test that runs for longer than a time limit fails, with a message that says so; `--timeout` sets the limit.
 

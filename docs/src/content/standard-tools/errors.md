@@ -2875,13 +2875,14 @@ To fix it, move what the test and the other code share into a def that isn't mar
 
 # NYX0312: Context the test host doesn't provide
 
-A test requires a context that the test host doesn't provide it. A test runs under the test host, so it may require
-only the contexts that host provides; any other it must provide itself.
+A test requires a context that the test host doesn't provide it. A test runs under the test host, which provides
+`Console` and `Random` only, so any other context a test requires it must provide itself, even one its program's own
+host provides.
 
 ```nanyx
 @test
-def greets = {  -- error NYX0312: The test 'greets' requires the context 'Console', which the test host does not provide: ...
-  println("hello")
+def readsArguments = {  -- error NYX0312: The test 'readsArguments' requires the context 'Env', which the test host does not provide: ...
+  assert(args() == [])
 }
 ```
 

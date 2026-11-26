@@ -101,9 +101,6 @@ type WasmOptions =
       /// The functions a component's core module exports for the program's definitions marked `@component`, each with
       /// the name it exports it under (see `ComponentExports`). Only with `Component`.
       ComponentExports: (string * ComponentFunction) list
-      /// The tests of a test build (see `TypedModule.Tests`), whose functions the module exports, each as `testExport`
-      /// of its index, though nothing calls them: the runtime calls one to run that test.
-      Tests: Test list
       /// Make each call of a function value that can wait stop once and be resumed before it is made (see
       /// `TaskLowering`), so that a test runs every state machine's way of stopping and carrying on.
       YieldAtEveryWait: bool
@@ -125,12 +122,8 @@ type WasmOptions =
           ExportStart = false
           Component = None
           ComponentExports = []
-          Tests = []
           YieldAtEveryWait = false
           FrameDrops = false }
-
-/// The name a test build's module exports the test at `index` among `WasmOptions.Tests` under.
-let testExport (index: int) = $"test#{index}"
 
 /// What a module the runtime runs reports a crash through (see `WasmOptions.CrashToRuntime`): the runtime's `nanyx:crash`
 /// `report`, given the address and the length of the message's bytes, which `Helpers.crashed` calls before it traps.
@@ -905,16 +898,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | None -> CoreIr.internalError $"no function for the component's export '{func.Export.Definition}'")
         |> Map.ofList
 
-    // The functions of a test build's tests, which nothing calls but the runtime, in order (see `WasmOptions.Tests`).
-    let testTargets =
-        options.Tests
-        |> List.map (fun test ->
-            match lowered.Roots |> Map.tryFind test.Definition with
-            | Some (target, _) -> target.Name
-            | None -> CoreIr.internalError $"no function for the test '{test.Definition}'")
-
     let definitionFunctions, startFunction, owningEntries, ownership =
-        optimised options cachedNames ((exportTargets |> Map.values |> List.ofSeq) @ testTargets) definitionFunctions startFunction
+        optimised options cachedNames (exportTargets |> Map.values |> List.ofSeq) definitionFunctions startFunction
 
     // The tags, strings and dbg forms of exactly the functions emitted below.
     let facts = CoreIrFacts.collect (definitionFunctions @ Option.toList startFunction)
@@ -1333,8 +1318,6 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               if not (String.IsNullOrWhiteSpace support.Arrays) then support.Arrays
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
               if not (String.IsNullOrWhiteSpace startDirective) then startDirective
-              for index, target in List.indexed testTargets do
-                  $"""  (export "{testExport index}" (func ${target}))"""
               if libraryFiles.Count > 0 then libraryFiles |> Seq.map CoreIrEmit.libraryMarker |> String.concat "\n" ]
         let body = String.concat "\n\n" parts
         $"(module\n{body}\n)", report
