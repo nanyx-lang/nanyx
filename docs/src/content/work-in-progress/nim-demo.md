@@ -31,9 +31,9 @@ which the [playground host](../advanced/hosts#the-playground-host) provides.
 
 # The demo
 
-**In the playground** (a console program): the example as it is, as one of the playground's examples. You edit
-a strategy, press Run and see who wins, the game tree and the scoreboard. The playground's Examples menu holds only
-the tour's examples, so this needs examples from elsewhere in it ([#2762](https://github.com/nanyx-lang/nanyx/issues/2762)).
+**In the playground** (a console program): the example as it is, `examples/Nim.nyx`, which is in the playground's
+Examples menu under "Examples: Contexts and effects", as every program in the repository's `examples` directory is. You
+edit a strategy, press Run and see who wins, the game tree and the scoreboard.
 
 **In a page of its own** (a browser app): `nanyx.dev/demos/nim`.
 
@@ -70,9 +70,8 @@ the playground host from a seed the page gives it; the browser host would provid
 
 # Plan
 
-1. **Nim in the playground**, as one of its examples.
-2. **The page version**, on the browser host: the menus, human moves, the "Check moves" switch and the scoreboard.
-3. **The game tree view**, and the source pane with its playground link.
+1. **The page version**, on the browser host: the menus, human moves, the "Check moves" switch and the scoreboard.
+2. **The game tree view**, and the source pane with its playground link.
 
 # Open questions
 
