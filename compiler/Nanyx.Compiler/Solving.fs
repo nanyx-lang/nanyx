@@ -142,6 +142,25 @@ module Solving =
         finally
             fullSolves.Value <- None
 
+    /// How many constraints `unifyDetailed` solved, where `countingSolvedConstraints` asks for it.
+    let private solvedConstraints = System.Threading.AsyncLocal<int ref option>()
+
+    /// Runs `action`, giving what it gives and how many constraints it solved, counting each time one is solved, on its
+    /// own thread and those it starts: the type checker's work, for the tests that check it grows with the program.
+    let countingSolvedConstraints (action: unit -> 'T) : 'T * int =
+        let count = ref 0
+        solvedConstraints.Value <- Some count
+        try
+            let result = action ()
+            result, count.Value
+        finally
+            solvedConstraints.Value <- None
+
+    /// `Unifier.unifyFrom`, counted for `countingSolvedConstraints`.
+    let private unifyFrom subst restId (constraints: ConstraintSet) =
+        solvedConstraints.Value |> Option.iter (fun count -> count.Value <- count.Value + constraints.Length)
+        unifyFrom subst restId constraints
+
     /// Solves `constraints`, or gives the first that cannot be satisfied (see `Mismatch`). The type checker adds
     /// constraints only at the front of the list it holds, and looks types up against it again and again as it goes.
     /// So when the list ends in one solved lately that agreed, only the constraints in front of it are solved, on top

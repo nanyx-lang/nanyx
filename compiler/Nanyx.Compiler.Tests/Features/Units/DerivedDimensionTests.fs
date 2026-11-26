@@ -62,6 +62,18 @@ let ``Two parts of a derived dimension stored differently are NYX0295`` () =
         only "def f: Length(a) / Time(float) -> int = { _ -> 1 }")
     Assert.Equal(DiagnosticCodes.DerivedDimensionStorages.Code, fst (only "dimension Speed = Length(float) / Time"))
 
+// A storage was told apart from another by how it is written, and one that names an associated type was written as its
+// node's id, so two parts written `Num(a).fraction` were two storages, `#183` and `#187` (#2879).
+[<Fact>]
+let ``Parts stored as an associated type share it, and NYX0295 writes one as it is written`` () =
+    Assert.Equal<string list>(
+        [ "Length(a), Time(a) -> Length(fraction) / Time(fraction)" ],
+        typesIn "def speed: Length(a), Time(a) -> Length(Num(a).fraction) / Time(Num(a).fraction) = { d, t -> d / t }" [ "speed" ])
+    Assert.Equal(
+        (DiagnosticCodes.DerivedDimensionStorages.Code,
+         "The parts of 'Length / Time' are stored as 'a' and as 'Num(a).fraction', and a derived dimension's parts share one storage: write it on every part, or on none"),
+        only "def f: Length(a) / Time(Num(a).fraction) -> int = { _ -> 1 }")
+
 [<Fact>]
 let ``A part of a derived dimension that is no dimension is NYX0296`` () =
     Assert.Equal(
