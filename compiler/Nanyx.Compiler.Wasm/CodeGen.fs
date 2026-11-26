@@ -982,7 +982,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           ShownFile =
             if options.Places then
                 Some(fun file ->
-                    let shown = CoreIr.shownFile options.SourceRoot file
+                    let shown = PackageModules.shownFile options.SourceRoot file
                     if CoreIrEmit.isLibraryFile file then libraryFiles.Add shown |> ignore
                     shown)
             else None

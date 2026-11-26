@@ -74,3 +74,10 @@ let ``nanyx test runs a script's tests, not its statements`` () =
     let outcome = nanyxIn directory.Path [ "test"; "maths.nyx" ]
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("Running 1 test in maths.nyx\n\nPASS maths.doubles\n\n1 passed\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``nanyx test shows a failed assert's place as its stack does, from the package's root`` () =
+    // Not by the file's full path, which would show the machine's directories (#2969).
+    let outcome = testing [] [ "src/geometry.nyx", geometry ]
+    let output = outcome.StandardOutput.ReplaceLineEndings "\n"
+    Assert.Contains("\n  src/geometry.nyx:13:3: assert(double(3) == 5)\n    double(3) = 6\n    geometry_halves (src/geometry.nyx:13)\n", output)

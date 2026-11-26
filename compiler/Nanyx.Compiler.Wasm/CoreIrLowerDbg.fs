@@ -17,7 +17,7 @@ open Transpiler.Wasm.CoreIrLowerTypes
 
 /// Where a `dbg` at `span` is written, in a debug build that names files from `root` (see `DbgBuild`).
 let site (root: string option) (span: Parser.Program.SourceSpan) : DbgSite =
-    { File = shownFile root span.File; Line = span.StartLine + 1; Column = span.StartColumn + 1 }
+    { File = PackageModules.shownFile root span.File; Line = span.StartLine + 1; Column = span.StartColumn + 1 }
 
 /// A function that writes values as text.
 type Printer =

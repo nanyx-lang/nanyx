@@ -153,15 +153,13 @@ let holeWrite (kind: HoleKind) (valueCode: string) =
 let measureAndWrite (lengthCode: string) (writeCode: string) =
     $"i32.const 0\n    local.set $__interp_len\n    {lengthCode}\n    local.get $__interp_len\n    call ${Helpers.stringAlloc}\n    local.tee $__interp_base\n    local.set $__interp_cursor\n    {writeCode}\n    local.get $__interp_base"
 
-/// What a debug build writes when it reaches the hole at `span` that has no known type, because of an error deferred to
-/// run time, and the hole did not stop the program itself: the location as a deferred error's, then why.
-let private unknownValueMessage (verb: string) (span: SourceSpan) =
-    let location =
-        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
-        else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
-    $"{location}error: the value {verb} here has no known type, because of an error deferred from compile time\n"
+/// What a debug build that names its files from `root` writes when it reaches the hole at `span` that has no known type,
+/// because of an error deferred to run time, and the hole did not stop the program itself: the place as a deferred
+/// error's (see `PackageModules.placeOf`), then why.
+let private unknownValueMessage (verb: string) (root: string option) (span: SourceSpan) =
+    $"{NyxCompiler.PackageModules.placeOf root span}error: the value {verb} here has no known type, because of an error deferred from compile time\n"
 
-let unknownHoleMessage (span: SourceSpan) = unknownValueMessage "interpolated" span
+let unknownHoleMessage (root: string option) (span: SourceSpan) = unknownValueMessage "interpolated" root span
 
 /// What a debug build writes when it matches on the value at `span`, which has no known type for the same reason.
-let unknownScrutineeMessage (span: SourceSpan) = unknownValueMessage "matched" span
+let unknownScrutineeMessage (root: string option) (span: SourceSpan) = unknownValueMessage "matched" root span

@@ -1,6 +1,6 @@
--- Part of the console host, cli.host.nyx and this file: its file system, which the
+-- Part of `preview1.system`, preview1.system.nyx and this file: the file system, which the
 -- FileSystem it provides is written on.
-@partial export module cli.host
+@partial export module preview1.system
 
 -- The file system ---------------------------------------------------------------------------------
 
@@ -44,7 +44,7 @@ def pathFilestatGet: [HostRuntime] I32, I32, I32, I32, I32 -> I32
 def pathUnlinkFile: [HostRuntime] I32, I32, I32 -> I32
 
 @extern("wasi_snapshot_preview1", "path_create_directory")
-def pathCreateDirectory: [HostRuntime] I32, I32, I32 -> I32
+export def pathCreateDirectory: [HostRuntime] I32, I32, I32 -> I32
 
 --| The `FsError` a WASI error number stands for.
 def errorOf: I32 -> FsError = { errno ->
@@ -105,7 +105,7 @@ def openAt
 --| Calls `action` with the preopen `at` is in and the path relative to it, which it passes to WASI
   as an address and a length, and gives what it gives: `#ok` for 0, and the `FsError` of any other
   WASI error number.
-def atPath
+export def atPath
   : [HostRuntime] Path, ([HostRuntime] I32, I32, I32 -> I32) -> #ok | FsError
   = { at, action ->
     match located(at)
@@ -180,7 +180,7 @@ def readSized
 
 --| What `contents` makes of the bytes of the file at `at`, given their address and how many there
   are.
-def readWith
+export def readWith
   : [HostRuntime] Path, ([HostRuntime] I32, I32 -> a) -> #some(a) | FsError
   = { at, contents ->
     match openAt(at, 0, 2, 0)
@@ -222,25 +222,27 @@ def readChunk: [HostRuntime] I32, int, I32 -> #some(string) | FsError = { fd, of
 --| Up to `length` bytes of the file at `at`, from byte `offset` on, or an error for an `offset` past
   its end: the file is opened, read and closed again, so nothing is left open between one chunk and
   the next.
-def chunkAt: [HostRuntime] Path, int, int -> #some(string) | FsError = { at, offset, length ->
-  match int.toI32(length)
-    | #outOfRange -> #other("a chunk that large can't be read at once")
-    | #some(size) ->
-      match openAt(at, 0, 6, 0)
-        | #some(fd) ->
-          def result = match described(fd)
-            | #some(kind, fileSize) ->
-              if kind == directoryKind
-                then #isDirectory
-                else if offset > fileSize then
-                  #other("it is shorter than it was: it ends at byte {fileSize}, before {offset}")
-                else readChunk(fd, offset, size)
-            | e -> e
+export def chunkAt
+  : [HostRuntime] Path, int, int -> #some(string) | FsError
+  = { at, offset, length ->
+    match int.toI32(length)
+      | #outOfRange -> #other("a chunk that large can't be read at once")
+      | #some(size) ->
+        match openAt(at, 0, 6, 0)
+          | #some(fd) ->
+            def result = match described(fd)
+              | #some(kind, fileSize) ->
+                if kind == directoryKind
+                  then #isDirectory
+                  else if offset > fileSize then
+                    #other("it is shorter than it was: it ends at byte {fileSize}, before {offset}")
+                  else readChunk(fd, offset, size)
+              | e -> e
 
-          ignore(fdClose(fd))
-          result
-        | e -> e
-}
+            ignore(fdClose(fd))
+            result
+          | e -> e
+  }
 
 --| Writes the `size` bytes at `buffer` to the file `fd`, after the `done` it has written.
 def writeFrom: [HostRuntime] I32, I32, I32, I32 -> #ok | FsError = { fd, buffer, size, done ->
@@ -254,7 +256,7 @@ def writeFrom: [HostRuntime] I32, I32, I32, I32 -> #ok | FsError = { fd, buffer,
 
 --| Writes `text` to the file at `at`, which it opens with the WASI open flags `openFlags` and
   descriptor flags `descriptorFlags`.
-def writeWith
+export def writeWith
   : [HostRuntime] Path, string, I32, I32 -> #ok | FsError
   = { at, text, openFlags, descriptorFlags ->
     match openAt(at, openFlags, 64, descriptorFlags)
@@ -296,7 +298,7 @@ def namesIn
   }
 
 --| The names of what the directory at `at` holds.
-def namesAt: [HostRuntime] Path -> #some(list(string)) | FsError = { at ->
+export def namesAt: [HostRuntime] Path -> #some(list(string)) | FsError = { at ->
   match openAt(at, 2, 16386, 0)
     | #some(fd) ->
       def buffer = allocate(listingSize)
@@ -326,14 +328,14 @@ def kindAt: [HostRuntime] Path -> #some(I32) | FsError = { at ->
 }
 
 --| Whether there is anything at `at` that the program may reach.
-def existsAt: [HostRuntime] Path -> bool = { at ->
+export def existsAt: [HostRuntime] Path -> bool = { at ->
   match kindAt(at)
     | #some(_) -> true
     | _ -> false
 }
 
 --| Deletes the file at `at`: a directory is `#isDirectory`, whatever the system says.
-def deleteAt: [HostRuntime] Path -> #ok | FsError = { at ->
+export def deleteAt: [HostRuntime] Path -> #ok | FsError = { at ->
   match kindAt(at)
     | #some(kind) ->
       if kind == directoryKind

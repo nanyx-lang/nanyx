@@ -273,32 +273,34 @@ jobs:
           path: compiler/dist/nanyx-browser.zip
           if-no-files-found: error
 
-  # Runs alongside the tests, not after them: only a release has to wait for both.
-  publish:
-    name: Publish (${{ matrix.rid }})
+  # The compiler's version, and whether it is new: a version with no compiler/<version> tag yet. A push to main with a new
+  # version releases it, and a branch run with one is a release PR's. The release's notes are the version's section of
+  # the docs site's changelog, with its links made absolute so they work on GitHub. They are checked whenever the
+  # version is new, so a version bump without its write-up fails before it is merged rather than at the release.
+  version:
+    name: Version
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        rid: [win-x64, linux-x64, linux-arm64, osx-x64, osx-arm64]
     outputs:
       version: ${{ steps.version.outputs.version }}
+      new: ${{ steps.version.outputs.new }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Read the compiler version
+      - name: Read the compiler version, and whether it is released
         id: version
-        run: echo "version=$(dotnet msbuild Nanyx.Compiler.Cli/NanyxCompiler.Cli.csproj -getProperty:Version)" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/compiler/$version" > /dev/null || status=$?
+          case $status in
+            0) echo "compiler/$version is released."; echo "new=false" >> "$GITHUB_OUTPUT" ;;
+            2) echo "compiler/$version is not released yet."; echo "new=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Could not read the tags (git ls-remote exited with $status)"; exit 1 ;;
+          esac
 
-      # The release's notes are the version's section of the docs site's changelog, with its links made absolute so
-      # they work on GitHub. Checked on every run, so a version bump without its write-up fails before it is merged
-      # rather than at the release.
       - name: Take the release notes from the changelog
-        if: matrix.rid == 'linux-x64'
+        if: steps.version.outputs.new == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           CHANGELOG: ../docs/src/content/overview/changelog.md
@@ -316,11 +318,30 @@ jobs:
           cat notes/release-notes.md
 
       - uses: actions/upload-artifact@v4
-        if: matrix.rid == 'linux-x64'
+        if: steps.version.outputs.new == 'true'
         with:
           name: release-notes
           path: compiler/notes/release-notes.md
           if-no-files-found: error
+
+  # The release's binaries, one per platform: on a push to main, which releases a new version, and on a branch run only
+  # with a new version, a release PR's, so that what the release would fail on fails before it is merged.
+  # Runs alongside the tests, not after them: only a release has to wait for both.
+  publish:
+    name: Publish (${{ matrix.rid }})
+    needs: version
+    if: github.event_name == 'push' || needs.version.outputs.new == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
 
       # One self-contained, single-file executable per platform, so users need no .NET runtime.
       - name: Publish
@@ -362,7 +383,7 @@ jobs:
       - name: Pack the shipped packages
         if: matrix.rid == 'linux-x64'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           mkdir -p dist/packages
           for package in ../packages/*/; do
@@ -385,7 +406,7 @@ jobs:
       - name: Package
         id: package
         run: |
-          name="nanyx-${{ steps.version.outputs.version }}-${{ matrix.rid }}"
+          name="nanyx-${{ needs.version.outputs.version }}-${{ matrix.rid }}"
           mkdir -p dist
           case "${{ matrix.rid }}" in
             win-*)
@@ -410,7 +431,7 @@ jobs:
   # package index's sync records from the release, unless that tag already exists. Nothing is rebuilt for a release.
   release:
     name: Release
-    needs: [test, wasm-test, browser-test, publish]
+    needs: [test, wasm-test, browser-test, version, publish]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -420,7 +441,7 @@ jobs:
       group: compiler-release
       cancel-in-progress: false
     env:
-      TAG: compiler/${{ needs.publish.outputs.version }}
+      TAG: compiler/${{ needs.version.outputs.version }}
     defaults:
       run:
         working-directory: .
@@ -456,6 +477,6 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
-          name: Compiler ${{ needs.publish.outputs.version }}
+          name: Compiler ${{ needs.version.outputs.version }}
           files: dist/*
           body_path: notes/release-notes.md
