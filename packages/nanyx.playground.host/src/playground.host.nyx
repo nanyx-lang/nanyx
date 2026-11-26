@@ -113,8 +113,8 @@ export def run: [HostRuntime, Async] ([Async, Clock, Console, Random] () -> a) -
   use Random(bits = { _ -> randomBits() })
 
   use Clock(
-    now = { _ -> pageNow() }
-    ticks = { _ -> pageTicks() }
+    now = { _ -> Instant.epoch \plus(pageNow() * 1ms) }
+    ticks = { _ -> pageTicks() * 1ms }
     sleep = { time -> sleepUntil(pageTicks() + wholeMilliseconds(time)) }
   )
 

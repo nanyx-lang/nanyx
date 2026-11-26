@@ -170,13 +170,13 @@ in progress.
   `systemBits` in the host library `nanyx.wasi` (`nanyx.wasi/preview1`), which their packages depend on.
   `random.seeded` is the library's own `Random`, SplitMix64 over a `mut` cell, so a test host, when there is one, can
   give its tests a fixed seed by running each under it.
-- **`Clock`** is declared in the standard library's `nanyx/clock`, with `now`, Unix milliseconds, `ticks`,
-  milliseconds from a start the host chooses that never go backwards, and `sleep`, which takes a `Time(int)` and requires
+- **`Clock`** is declared in the standard library's `nanyx/clock`, with `now`, an `Instant`, `ticks`, a `Time(int)`
+  since a start the host chooses that never goes backwards, and `sleep`, which takes a `Time(int)` and requires
   `Async`; both hosts' preludes re-export it. Each host writes `now` and `ticks` on WASI's `clock_time_get`, `now` on the realtime clock (0)
-  and `ticks` on the monotonic one (1), each giving nanoseconds in 8 bytes of the host's state that `readI64` reads and
-  the host divides by a million. `sleep` is `nanyx.wasi/runtime`'s `sleepOnRuntime`, given the time's whole milliseconds,
-  rounded up (`nanyx/clock`'s `wholeMilliseconds`), which waits on the runtime's
-  `nanyx:async` for what is left of it until the monotonic clock has passed its deadline, so the program's other tasks
+  and `ticks` on the monotonic one (1), each giving nanoseconds in 8 bytes of the host's state that `readI64` reads,
+  which `nanyx.wasi/preview1`'s `timeOn` makes a `Time(int)` and `now` adds to `Instant.epoch`. `sleep` is `nanyx.wasi/runtime`'s `sleepOnRuntime`, which waits on the runtime's
+  `nanyx:async` for what is left of it, in whole milliseconds rounded up (`nanyx/clock`'s `wholeMilliseconds`), until
+  the monotonic clock has passed its deadline, so the program's other tasks
   run meanwhile. A sleep is a member, not a function of `nanyx/clock`, so that a test's `use Clock(...)` decides how
   long it takes, as it decides the time.
 - **The HTTP host.** `packages/nanyx.http.host` declares itself a host with `host = (root = "http.host", prelude =

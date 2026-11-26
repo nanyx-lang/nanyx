@@ -27,7 +27,7 @@ let private clockLoop =
 
 @entry
 def main = {
-  println(loopWith({ x -> if x < 0 then now() else x + 1 }, 1000, 0))
+  println(loopWith({ x -> if x < 0 then ticks() // 1ms else x + 1 }, 1000, 0))
 }
 """
 
@@ -46,8 +46,8 @@ let ``list.map and list.fold with a lambda that requires Clock count none of its
 
 @entry
 def main = {
-  def doubled = nums(1000, []) \list.map { x -> if x < 0 then now() else x * 2 }
-  println(doubled \list.fold(0, { acc, x -> if x < 0 then now() else acc + x }))
+  def doubled = nums(1000, []) \list.map { x -> if x < 0 then ticks() // 1ms else x * 2 }
+  println(doubled \list.fold(0, { acc, x -> if x < 0 then ticks() // 1ms else acc + x }))
 }
 """
     let wat = transpileWat source
@@ -59,7 +59,7 @@ def main = {
 let ``A lambda that keeps a context member takes a reference of its own to it`` () =
     // `adder` makes a closure that captures `now`, which outlives the call that made it.
     normalized
-        """def adder: [Clock] int -> ([Clock] int -> int) = { x -> { y -> if y < 0 then now() + x + y else x + y } }
+        """def adder: [Clock] int -> ([Clock] int -> int) = { x -> { y -> if y < 0 then ticks() // 1ms + x + y else x + y } }
 
 def apply: [c] ([c] int -> ([c] int -> int)), int, int -> int = { make, x, y ->
   def made = make(x)
@@ -71,7 +71,7 @@ def main = {
   def add = adder(5)
   println(add(10))
   println(apply(adder, 1, 2))
-  println(apply({ x -> { y -> if y < 0 then now() else x * y } }, 3, 4))
+  println(apply({ x -> { y -> if y < 0 then ticks() // 1ms else x * y } }, 3, 4))
 }
 """
     |> runSource

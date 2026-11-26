@@ -29,7 +29,7 @@ def split: [Async] int, int -> int = { n, acc ->
 def timed: [Async, Clock] ([Async] () -> int) -> int = { run ->
   def before = ticks()
   run()
-  ticks() - before
+  (ticks() - before) // 1ms
 }
 
 def quickest: [Async, Clock] ([Async] () -> int), int, int -> int = { run, times, best ->

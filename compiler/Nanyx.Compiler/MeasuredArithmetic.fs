@@ -48,8 +48,18 @@ module internal MeasuredArithmetic =
         let measure dimension (result: Ty) = TyMeasure(dimension, result)
         let twoDimensions (l: Dimension) (r: Dimension) =
             error expr $"`{op}` takes two values of one dimension, and '{Dimension.text l}' and '{Dimension.text r}' are two"
-        let noUnit (dimension: Dimension) =
-            error expr $"`{op}` takes two values of one dimension, and a number with no unit is of none, so it can't be beside a '{Dimension.text dimension}': give the number a unit of '{Dimension.text dimension}'"
+        // The other operand is a number with no unit, which a unit would make one of the dimension, or a value of another
+        // type, which nothing does.
+        let noUnit (dimension: Dimension) (other: Ty) =
+            let isNumber =
+                isLiteral state other
+                || (match Unifier.unalias (resolveSoFar state other) with
+                    | TyPrimitive name -> name = "int" || name = "float" || SizedNumber.isName name
+                    | _ -> false)
+            if isNumber then
+                error expr $"`{op}` takes two values of one dimension, and a number with no unit is of none, so it can't be beside a '{Dimension.text dimension}': give the number a unit of '{Dimension.text dimension}'"
+            else
+                error expr $"`{op}` takes two values of one dimension, and a value of '{Unifier.tyToString (resolveSoFar state other)}' is not a '{Dimension.text dimension}'"
         match measured state leftTy, measured state rightTy with
         | None, None -> None
         | left, right ->
@@ -63,8 +73,8 @@ module internal MeasuredArithmetic =
                 Ok { Left = storage; Right = storage; Result = measure dimension }
             | ("+" | "-" | "%"), None, Some (dimension, storage) when not (isLiteral state leftTy) && (match resolveSoFar state leftTy with TyVar _ -> true | _ -> false) ->
                 Ok { Left = storage; Right = storage; Result = measure dimension }
-            | ("+" | "-" | "%"), Some (dimension, _), None -> noUnit dimension
-            | ("+" | "-" | "%"), None, Some (dimension, _) -> noUnit dimension
+            | ("+" | "-" | "%"), Some (dimension, _), None -> noUnit dimension rightTy
+            | ("+" | "-" | "%"), None, Some (dimension, _) -> noUnit dimension leftTy
             // A measured value scaled by a number of its storage, on either side.
             | "*", Some (dimension, storage), None -> Ok { Left = storage; Right = rightTy; Result = measure dimension }
             | "*", None, Some (dimension, storage) -> Ok { Left = leftTy; Right = storage; Result = measure dimension }

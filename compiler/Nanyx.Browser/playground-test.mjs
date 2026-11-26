@@ -65,7 +65,7 @@ const tests = [
     assert.notEqual((await playground(source, 7)).stdout, result.stdout);
   }],
   ["Clock reads the browser's time", async (playground) => {
-    const result = await playground("println(now() > 1_700_000_000_000)\ndef start = ticks()\nprintln(ticks() >= start)\n");
+    const result = await playground("println(now() \\since(Instant.epoch) > 1_700_000_000s)\ndef start = ticks()\nprintln(ticks() >= start)\n");
     assert.deepEqual(result.diagnostics, []);
     assert.equal(result.stdout, "true\ntrue\n");
   }],

@@ -23,7 +23,7 @@ import nanyx/random as random
 def main = {
   println("Hello, world!")
   eprintln(random.between(1, 6))
-  println(now() + ticks())
+  println("{now()} {ticks()}")
 }"""
     Assert.Empty(diagnosticsOf source)
 
@@ -74,7 +74,7 @@ let private underPlayground (source: string) =
 
 [<Fact>]
 let ``A script with no directives runs under the playground host where it is the default`` () =
-    Assert.Empty(underPlayground "println(bits())\nprintln(now() + ticks())\n")
+    Assert.Empty(underPlayground "println(bits())\nprintln(\"{now()} {ticks()}\")\n")
     match underPlayground "println(args())\n" with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)

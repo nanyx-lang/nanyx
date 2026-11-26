@@ -105,9 +105,9 @@ alice -> 10
 bob -> 0
 """
           "oo-class.nyx",
-          """chain [leaf for challenge, root], generated at 1000
-chain [leaf for challenge, root], generated at 1000
-chain [leaf for challenge, root], generated at 90000
+          """chain [leaf for challenge, root], generated at 1970-01-01T00:00:01Z
+chain [leaf for challenge, root], generated at 1970-01-01T00:00:01Z
+chain [leaf for challenge, root], generated at 1970-01-01T00:01:30Z
 attestation failed
 """
           "pairing.nyx",
