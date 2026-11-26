@@ -68,9 +68,21 @@ module SeededPackages =
         if Result.isError result then packedOnce.TryRemove key |> ignore
         result
 
+    /// How many times this process has written each seeded index, by its directory: the work seeding does, packing the
+    /// packages, which a cache seeded already saves.
+    let private written = System.Collections.Concurrent.ConcurrentDictionary<string, int>()
+
+    /// How many times this process has written the seeded index of `store` (see `written`).
+    let internal timesWritten (store: PackageStore) =
+        match written.TryGetValue(PackageStore.shippedIndex store) with
+        | true, times -> times
+        | false, _ -> 0
+
     /// Writes the index of the packages the compiler ships to `directory`, which must not exist yet, laid out as the
-    /// package index is: its `config.json`, an index file for each, and each one's `.nyxpkg` under `archives`.
+    /// package index is: its `config.json`, an index file for each, and each one's `.nyxpkg` under `archives`. It is
+    /// written, and so counted, for the index of `store`.
     let private writeIndex (store: PackageStore) (directory: string) : Result<unit, string list> =
+        written.AddOrUpdate(PackageStore.shippedIndex store, 1, fun _ times -> times + 1) |> ignore
         packed store
         |> Result.map (fun packages ->
             File.WriteAllText(Path.Combine(Directory.CreateDirectory(directory).FullName, "config.json"), $$"""{ "format": {{PackageIndex.format}}, "index": "index/" }""" + "\n")
@@ -158,6 +170,12 @@ module SeededPackages =
         let result = seeded.GetOrAdd(key, fun _ -> lazy (seedOnce store)).Value
         if Result.isError result then seeded.TryRemove key |> ignore
         result
+
+    /// Forgets which stores this process has seeded and the packages it has packed, so that the next seed reads the cache
+    /// as a new process does.
+    let internal forgetSeeding () =
+        seeded.Clear()
+        packedOnce.Clear()
 
     /// The user's store (`PackageStore.user`), which seeds the packages the compiler ships with `seed`.
     let user () : PackageStore = PackageStore.user seed

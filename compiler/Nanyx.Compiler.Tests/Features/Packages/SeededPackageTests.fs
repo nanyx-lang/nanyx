@@ -106,3 +106,16 @@ let ``A store that can't be seeded can't list a package, and says why`` () =
     use package = new TempPackage([])
     let store = { storeOf package with Seed = fun _ -> Result.Error [ "the cache is read-only" ] }
     Assert.Equal(Result.Error "the cache is read-only", PackageIndex.listing store "acme.web" |> Result.map ignore)
+
+[<Fact>]
+let ``A process that finds a cache seeded for this compiler packs nothing`` () =
+    use package = new TempPackage([])
+    okOf (SeededPackages.seed (storeOf package)) |> ignore
+    Assert.Equal(1, SeededPackages.timesWritten (storeOf package))
+    // A new process, with a store of its own over the same cache, as every `nanyx` run after the first is: it would
+    // pack the packages only to write the index, which it finds written.
+    SeededPackages.forgetSeeding ()
+    let index = okOf (SeededPackages.seed (storeOf package))
+    Assert.Equal(1, SeededPackages.timesWritten (storeOf package))
+    Assert.Equal(PackageStore.shippedIndex (storeOf package), index)
+    Assert.Equal<string list>([ Toolchain.version ], fst (listedIn (storeOf package) "nanyx.cli") |> List.map fst)
