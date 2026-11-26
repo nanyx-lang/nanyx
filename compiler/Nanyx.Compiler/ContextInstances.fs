@@ -362,9 +362,9 @@ let private derivedEquality
         match derived with
         | Some derived -> Some (Ok derived)
         | None when isHash && readsParts ->
-            Some (Error (WellKnownContexts.error wellKnown.Context span (WellKnownContexts.noInstanceAtCall wellKnown calleeName ty "its parts' own hash cannot be read where the caller chooses more of its tags")))
+            Some (Error (WellKnownContexts.error wellKnown.Context ty span (WellKnownContexts.noInstanceAtCall wellKnown calleeName ty "its parts' own hash cannot be read where the caller chooses more of its tags")))
         | None when not (TypeEnv.freeTyVars ty).IsEmpty && StructuralInstances.holdsCollection ty ->
-            Some (Error (WellKnownContexts.error wellKnown.Context span (EqualityOperators.collectionAtGenericCall calleeName ty)))
+            Some (Error (WellKnownContexts.error wellKnown.Context ty span (EqualityOperators.collectionAtGenericCall calleeName ty)))
         | None -> None
 
 /// The instance in scope in `env` of `ctxName` of the type variable `var`, as a derived instance is passed it.
@@ -389,7 +389,7 @@ let private derivedInstance
     derivableType env ctxName argTys
     |> Option.bind (fun ty -> StructuralInstances.instance rigid (partInstanceIn env state ctxName) instanceOf (InterpolationHoles.isHole calleeName) call span ctxName ty state)
     |> Option.map (Result.mapError (fun failure ->
-        let missingContext message = Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about ctxName
+        let missingContext message = Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about (WrittenContexts.missingText state ctxName argTys)
         match failure with
         | StructuralInstances.NoInstanceOf missing when InterpolationHoles.isHole calleeName ->
             [ missingContext (InterpolationHoles.undeclared state (TyVar missing) annotatedDef) |> InterpolationHoles.addToStringFix state (TyVar missing) annotatedDef ]
@@ -463,29 +463,11 @@ let private recordAssociatedArguments (state: InferState) (call: NodeId) (ctxNam
 
 /// The names of the associated types of the context `ctxName` and the arguments it is applied to for them, of `argTys`:
 /// the arguments after those an instance is chosen by (see `AssociatedTypes`).
-let private associatedArguments (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (string * Ty) list =
-    match state.TypeDefs |> Map.tryFind ctxName with
-    | Some info when not info.AssociatedTypes.IsEmpty && argTys.Length = info.Parameters.Length ->
-        List.zip info.AssociatedTypes (List.skip (argTys.Length - info.AssociatedTypes.Length) argTys)
-    | _ -> []
-
-/// The instance of `ctxName` at `argTys` as a message writes it: `Iter(Bag)`, and an associated type something fixes
-/// by name, `Iter(Bag, elem = string)`.
-let private instanceText (state: InferState) (ctxName: Identifier) (argTys: Ty list) =
-    let associated = associatedArguments state ctxName argTys
-    let positional = argTys |> List.truncate (argTys.Length - associated.Length) |> List.map (resolveSoFar state >> Unifier.tyToString)
-    let named =
-        associated
-        |> List.map (fun (name, ty) -> name, resolveSoFar state ty)
-        |> List.filter (snd >> TypeEnv.freeTyVars >> Set.isEmpty)
-        |> List.map (fun (name, ty) -> $"{name} = {Unifier.tyToStringIn state.TypeDefs ty}")
-    $"""{ctxName}({String.concat ", " (positional @ named)})"""
-
 /// The associated types of the context `ctxName` that an instance at `argTys` in `env` leaves unfixed, by name: each
 /// whose argument has a type variable that neither the arguments it is chosen by have nor the instances in scope, as a
 /// signature's `elem` is. `madeUp` keeps only a variable no signature names, as a `use`'s `_` is.
 let private unfixedAssociated (env: TypeEnv) (state: InferState) (madeUp: bool) (ctxName: Identifier) (argTys: Ty list) : string list =
-    match associatedArguments state ctxName argTys with
+    match WrittenContexts.associatedArguments state ctxName argTys with
     | [] -> []
     | associated ->
         let chosenBy = argTys |> List.truncate (argTys.Length - associated.Length) |> List.map (resolveSoFar state)
@@ -504,16 +486,16 @@ let private unfixedError (state: InferState) (inUse: bool) (ctxName: Identifier)
     let types = if names.Length = 1 then "type" else "types"
     let fix =
         if inUse then
-            let positional = argTys |> List.truncate (argTys.Length - (associatedArguments state ctxName argTys).Length) |> List.map (resolveSoFar state >> Unifier.tyToString)
+            let positional = argTys |> List.truncate (argTys.Length - (WrittenContexts.associatedArguments state ctxName argTys).Length) |> List.map (resolveSoFar state >> Unifier.tyToString)
             $"""fix it by name, as in `use {ctxName}({String.concat ", " (positional @ [ $"{names.Head} = ..." ])})(...)`"""
         else $"declare it, as in `type {forType}.{names.Head} = ...`"
     Diagnostics.at DiagnosticCodes.UnfixedAssociatedType span
-        $"The instance '{instanceText state ctxName argTys}' leaves its associated {types} {Diagnostics.listed quoted} unfixed: no member's type says what it is, so {fix}"
+        $"The instance '{WrittenContexts.instanceText state ctxName argTys}' leaves its associated {types} {Diagnostics.listed quoted} unfixed: no member's type says what it is, so {fix}"
 
 /// `state` with each associated type of the instance of `ctxName` at `argTys` for the type `attachTo` that the type
 /// declares with an attached alias, `type Bag.elem = int`, fixed as it says.
 let private withAttachedAssociated (state: InferState) (attachTo: string) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) =
-    associatedArguments state ctxName argTys
+    WrittenContexts.associatedArguments state ctxName argTys
     |> List.fold (fun current (name, ty) ->
         match current.TypeDefs |> Map.tryFind $"{attachTo}.{name}" with
         | Some info when info.Parameters.IsEmpty && not info.IsContext -> addConstraintAt span ty info.Underlying current
@@ -523,7 +505,7 @@ let private withAttachedAssociated (state: InferState) (attachTo: string) (ctxNa
 /// `definitionTy`, would fix the associated type among `opened` it disagrees on as, where its other members fixed it
 /// otherwise: the associated type's name, what they fixed it as, and what the definition would.
 let private fixedTwoWays (state: InferState) (ctxName: Identifier) (argTys: Ty list) (opened: Set<string>) (memberName: string) (definitionTy: Ty) (span: SourceSpan) =
-    let associated = associatedArguments state ctxName argTys
+    let associated = WrittenContexts.associatedArguments state ctxName argTys
     let chosen = argTys.Length - associated.Length
     let fresh, current =
         associated
@@ -549,9 +531,9 @@ let private fixedTwoWays (state: InferState) (ctxName: Identifier) (argTys: Ty l
 /// type's parts is. The context's associated types are what the definitions' types fix them as, and what an alias
 /// attached to the type, `type Bag.elem = int`, says; one they leave open is an error, as is one they fix two ways.
 let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeName: Identifier) (ctxName: Identifier) (argTys: Ty list) (span: SourceSpan) : Result<ContextInstance * InferState, Diagnostic list> =
-    let ctxText = instanceText state ctxName argTys
+    let ctxText = WrittenContexts.instanceText state ctxName argTys
     let requirer = InterpolationHoles.requirer calleeName argTys
-    let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about ctxName ]
+    let fail message = Error [ Diagnostics.at DiagnosticCodes.MissingContextMembers span message |> Diagnostics.about ctxText ]
     match argTys, contextMemberTypes state ctxName argTys with
     | forType :: _, Some members ->
         // The name a definition for the type is attached under: `Point`, `Money`, `int`.
@@ -578,7 +560,7 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
                         match fixedTwoWays next ctxName argTys opened memberName definitionTy span with
                         | Some (name, earlier, own) ->
                             Error [ Diagnostics.at DiagnosticCodes.AssociatedTypeFixedTwice span
-                                        $"The instance '{instanceText state ctxName argTys}' fixes its associated type '{name}' two ways: '{definition}' makes it '{Unifier.tyToStringIn state.TypeDefs own}', where it is already '{Unifier.tyToStringIn state.TypeDefs earlier}'" ]
+                                        $"The instance '{WrittenContexts.instanceText state ctxName argTys}' fixes its associated type '{name}' two ways: '{definition}' makes it '{Unifier.tyToStringIn state.TypeDefs own}', where it is already '{Unifier.tyToStringIn state.TypeDefs earlier}'" ]
                         | None ->
                             fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToStringIn state.TypeDefs (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToStringIn state.TypeDefs (resolveSoFar next memberTy)}'"))
                 (Ok ([], withAttachedAssociated state attachTo ctxName argTys span))
@@ -686,7 +668,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     // unannotated def once the def is inferred, and anywhere else once the module is, such as where
                     // only the type a def writes settles it (`def u: Point = apply(des, "ab")`).
                     | None, _ when reference && not settled ->
-                        match ensureContextAvailable (Some call.Id) true env current name [ ctx ] calleeSpan, current.ContextScope with
+                        match ensureContextAvailable (Some call.Id) true env current name [ ctx ] (Some (WrittenContexts.missingText current ctxName argTys)) calleeSpan, current.ContextScope with
                         | Ok _, _ -> Ok (found @ [ None ], current)
                         | Error errors, scope when not (snd (Solving.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span)) ->
                             let def, annotatedDef =
@@ -733,7 +715,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                 |> List.truncate 1
                                 |> List.map (fun var ->
                                     Diagnostics.at DiagnosticCodes.MissingContextMembers calleeSpan (InterpolationHoles.undeclaredPart current name argTys.Head (TyVar var) annotatedDef)
-                                    |> Diagnostics.about ctxName
+                                    |> Diagnostics.about (WrittenContexts.missingText current ctxName argTys)
                                     |> InterpolationHoles.addToStringFix current (TyVar var) annotatedDef)
                             let pending =
                                 { Def = def; Call = call.Id; Callee = name; Index = found.Length; Count = contexts.Length
@@ -766,7 +748,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         let available =
                             match otherInstanceInScope env current ctxName argTys with
                             | Some other when not settled -> Error [ unsettledBesideOther name ctxName other calleeSpan ]
-                            | _ -> ensureContextAvailable (Some call.Id) true env current name [ ctx ] calleeSpan
+                            | _ -> ensureContextAvailable (Some call.Id) true env current name [ ctx ] (Some (WrittenContexts.missingText current ctxName argTys)) calleeSpan
                         let argumentFailed = lazy (Solving.failsWithin call.Span current.Constraints)
                         match available, current.ContextScope with
                         | Ok next, _ -> Ok (found @ [ None ], next)
@@ -1040,7 +1022,7 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
             match wellKnownInstanceAtCall env pending.Context argTys hasInstance with
             | Some (_, WellKnownContexts.Open _) -> Some (Error pending.Errors)
             | Some (wellKnown, WellKnownContexts.NoInstance reason) ->
-                Some (Error (WellKnownContexts.error wellKnown.Context pending.Span (WellKnownContexts.noInstanceAtCall wellKnown pending.Callee (List.head argTys) reason)))
+                Some (Error (WellKnownContexts.error wellKnown.Context (List.head argTys) pending.Span (WellKnownContexts.noInstanceAtCall wellKnown pending.Callee (List.head argTys) reason)))
             | Some (wellKnown, WellKnownContexts.BuiltIn) ->
                 match derivedEquality scopeEnv current rigid instanceOf wellKnown WellKnownContexts.BuiltIn pending.Callee pending.Call pending.Span (List.head argTys) with
                 | Some derived -> Some (derived |> Result.map (fun (instance, next) -> Some instance, next))
@@ -1085,7 +1067,7 @@ let internal checkComparisonsAt (env: TypeEnv) (state: InferState) (call: Expres
                     let hasInstance ty = (instanceInScope env current ctxName [ ty ]).IsSome
                     match wellKnownInstanceAtCall env ctxName [ ty ] hasInstance with
                     | Some (wellKnown, _) when wellKnown.Context = EqualityOperators.context && StructuralInstances.holdsCollection ty ->
-                        Error (WellKnownContexts.error wellKnown.Context calleeSpan (EqualityOperators.collectionPassedNothing name ty))
+                        Error (WellKnownContexts.error wellKnown.Context ty calleeSpan (EqualityOperators.collectionPassedNothing name ty))
                     | Some (wellKnown, instance) -> WellKnownContexts.checkLocalCall wellKnown env current call name calleeSpan ty instance
                     | None -> Ok current)) result) (Ok state)
     | _ -> Ok state
