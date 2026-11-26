@@ -298,13 +298,13 @@ let ``A lone else in a match on several values matches whatever they all are`` (
 [<Fact>]
 let ``An arm with a pattern count other than the values' is an error at the arm`` () =
     // It used to throw from inside type checking instead.
-    let tooFew = "def f: int, int -> int = { x, y ->\n  match x, y\n    | 0, 0 -> 1\n    | _ -> 2\n}\n"
+    let tooFew = "def f: int, int, int -> int = { x, y, z ->\n  match x, y, z\n    | 0, 0, 0 -> 1\n    | a, b -> 2\n}\n"
     let diagnostic = Assert.Single((Compiler.compile tooFew).Diagnostics)
     Assert.Equal(DiagnosticCodes.WrongPatternCount.Code, diagnostic.Code)
     Assert.Equal(
-        "This arm has 1 pattern, but the match is on 2 values: an arm needs a pattern for each value, or a lone `else` for anything else",
+        "This arm has 2 patterns, but the match is on 3 values: an arm needs a pattern for each value, or one pattern for all of them",
         diagnostic.Message)
-    Assert.Equal("_", textAt tooFew diagnostic.Span.Value)
+    Assert.Equal("a, b", textAt tooFew diagnostic.Span.Value)
     let tooMany = "def f: int, int -> int = { x, y ->\n  match x, y\n    | 1, 2, 3 -> 1\n    | else -> 2\n}\n"
     let diagnostic = Assert.Single((Compiler.compile tooMany).Diagnostics)
     Assert.Equal(DiagnosticCodes.WrongPatternCount.Code, diagnostic.Code)

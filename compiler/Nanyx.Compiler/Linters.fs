@@ -248,12 +248,20 @@ module UnreachableArms =
             match expr.Kind with
             | Match(values, arms) ->
                 let types = values |> List.map (fun value -> model.Types |> Map.tryFind value.Id)
-                // A lone `else` matches whatever every value is, as `desugar` has it for the compiler.
-                let indexed = arms |> List.mapi (fun index (patterns, body) -> index, PatternSpace.ofArm values.Length patterns, body)
+                // A lone `else` or `_` matches whatever every value is, as `desugar` has it for the compiler, and so
+                // does any other lone pattern that matches every tuple of them. An arm with another lone pattern is
+                // matched against the tuple, whose type isn't recorded, so its match isn't looked at.
+                let rowOf (patterns: Pattern list) =
+                    match PatternSpace.ofArm values.Length patterns with
+                    | [ pattern ] when values.Length > 1 && PatternSpace.isCatchAll pattern ->
+                        List.replicate values.Length (Pattern.at pattern.Span WildcardPattern)
+                    | row -> row
+                let indexed = arms |> List.mapi (fun index (patterns, body) -> index, rowOf patterns, body)
                 let spanOf (patterns: Pattern list) = SourceSpan.between (List.head patterns).Span (List.last patterns).Span
+                let comparable = indexed |> List.forall (fun (_, patterns, _) -> patterns.Length = values.Length)
                 indexed
                 |> List.choose (fun (index, patterns, body) ->
-                    if index = 0 || patterns.IsEmpty || isMadeUp arms index then
+                    if not comparable || index = 0 || patterns.IsEmpty || isMadeUp arms index then
                         None
                     else
                         let earlier = indexed |> List.take index |> List.map (fun (i, others, _) -> i, others)

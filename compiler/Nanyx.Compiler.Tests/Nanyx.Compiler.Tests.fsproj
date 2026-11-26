@@ -192,6 +192,7 @@
     <Compile Include="Features\Memory\MArrayTests.fs" />
     <Compile Include="Features\Memory\EscapeTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
+    <Compile Include="Features\Matches\MatchValuesTests.fs" />
     <Compile Include="Features\Matches\MissingArmFixTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />
