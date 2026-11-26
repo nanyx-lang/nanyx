@@ -24,7 +24,7 @@
     call $fd_write
     drop
   )
-  (func $__nanyx_crashed
+  (func $__nanyx_crashed (param $message i32)
     unreachable
   )
 
@@ -112,6 +112,7 @@
       (then
         i32.const 264
     call $__nanyx_write_stderr
+    i32.const 264
     call $__nanyx_crashed
     unreachable
       )

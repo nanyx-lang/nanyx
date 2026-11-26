@@ -178,8 +178,8 @@ module Intrinsics =
     /// Ends the program with an exit code. It never returns, so its result is `undefined`.
     let exit = prefix + "exit"
 
-    /// Ends the program once it has written why it crashed, with a trap the runtime reports the stack of. It never
-    /// returns, so its result is `undefined`.
+    /// Ends the program once it has written why it crashed, with a trap the runtime reports the stack of, given the
+    /// message, which the runtime reads as data. It never returns, so its result is `undefined`.
     let crashed = prefix + "crashed"
 
     /// A host's access to linear memory (see `nanyx/host.memory`), at addresses that are `I32`s. A new block of a number
@@ -252,7 +252,7 @@ module Intrinsics =
     let all : (string * TypeScheme) list =
         [ writeStderr, TypeEnv.mono (TyFunc(stringTy, unitTy, []))
           exit, TypeEnv.mono (TyFunc(intTy, Unifier.bottomType, []))
-          crashed, TypeEnv.mono (TyFunc(unitTy, Unifier.bottomType, []))
+          crashed, TypeEnv.mono (TyFunc(TyPrimitive "string", Unifier.bottomType, []))
           memoryAllocate, TypeEnv.mono (TyFunc(i32Ty, i32Ty, []))
           memoryFree, TypeEnv.mono (TyFunc(i32Ty, unitTy, []))
           memoryReadByte, TypeEnv.mono (TyFunc(i32Ty, i32Ty, []))

@@ -26,6 +26,9 @@ type SExpr =
     /// A definition's marker, `;;@def main.nyx:3`, first in a function's body (see `CoreIrEmit.definitionMarker`): the
     /// function was defined on this line of this file. To WebAssembly it is a comment.
     | Defined of file: string * line: int
+    /// A file of the standard library's, `;;@lib prelude.nyx`, among the module's fields: the places in it are the
+    /// library's, not the program's (see `CoreIrEmit.libraryMarker`). To WebAssembly it is a comment.
+    | Library of file: string
 
 /// WebAssembly text that is not well formed: what is wrong, and the offset into the text where it was found.
 exception WatSyntaxError of message: string * offset: int
@@ -114,6 +117,7 @@ let read (text: string) : SExpr list =
                     | _ -> raise (WatSyntaxError("a place marker that is not ;;@ file:line", start))
                 // A function's name, after `entry`, may hold spaces, as one in backticks does.
                 match written.Split(' ', 4) with
+                | _ when written.StartsWith "lib " -> items.Add(Library(written.Substring("lib ".Length).Trim()))
                 | _ when written.StartsWith "def " ->
                     let file, line = place (written.Substring "def ".Length)
                     items.Add(Defined(file, line))
