@@ -106,14 +106,15 @@ module GitHubApi =
 
     let private text (name: string) (node: JsonNode) = string node.[name]
 
-    /// Whether the account `client` is signed in as can push to `repository`, which creating a release on it needs; or
-    /// why that can't be found out.
-    let canPush (client: GitHubClient) (repository: GitHubRepository) : Result<bool, string> =
+    /// Whether the account `client` is signed in as can push to `repository`, which creating a release on it needs: none
+    /// when GitHub doesn't say, as for a GitHub Actions `GITHUB_TOKEN`, whose answer has no `permissions`; or why the
+    /// repository can't be read.
+    let canPush (client: GitHubClient) (repository: GitHubRepository) : Result<bool option, string> =
         get client $"Reading {repository}" $"{api}/repos/{repository}"
         |> Result.map (fun found ->
             match found.["permissions"] with
-            | :? JsonObject as permissions when permissions.ContainsKey "push" -> permissions.["push"].GetValue<bool>()
-            | _ -> false)
+            | :? JsonObject as permissions when permissions.ContainsKey "push" -> Some(permissions.["push"].GetValue<bool>())
+            | _ -> None)
 
     /// Where a pull request to the index's repository comes from: a branch of the index's repository itself, for an
     /// account that can push to it, or else of the account's fork of it.
@@ -140,12 +141,13 @@ module GitHubApi =
         look forkWaits
 
     /// Where the account `client` is signed in as opens its pull requests to the index's repository from (see
-    /// `IndexRoute`), with its fork made, if it needs one, and there to push to; or why it can't open them. `sleep`
-    /// waits for a fork GitHub is still making, given a number of seconds.
+    /// `IndexRoute`), with its fork made, if it needs one, and there to push to; or why it can't open them. An account
+    /// GitHub doesn't say can push there goes through a fork. `sleep` waits for a fork GitHub is still making, given a
+    /// number of seconds.
     let indexRoute (client: GitHubClient) (sleep: int -> unit) : Result<IndexRoute, string> =
         canPush client indexRepository
         |> Result.bind (fun push ->
-            if push then
+            if push = Some true then
                 Result.Ok InIndex
             else
                 post client $"Forking {indexRepository}" [ 202 ] $"{api}/repos/{indexRepository}/forks" (JsonObject())
@@ -198,7 +200,14 @@ module GitHubApi =
         | Result.Error error -> Result.Error error
         | Result.Ok(Some existing) -> resume client repository tag assetName asset existing
         | Result.Ok None ->
-            post client $"Creating the release {tag} of {repository}" [ 201 ] $"{api}/repos/{repository}/releases" release
+            client { Method = "POST"; Url = $"{api}/repos/{repository}/releases"; Body = json release; ContentType = None }
+            |> Result.bind (fun response ->
+                answered $"Creating the release {tag} of {repository}" [ 201 ] response
+                |> Result.mapError (fun error ->
+                    if response.Status = 403 || response.Status = 404 then
+                        $"{error}. The token can't create releases on {repository}: give it write access to the repository's contents (in a GitHub Actions workflow, `permissions: contents: write`)"
+                    else
+                        error))
             |> Result.bind (fun created -> upload client repository tag created assetName asset |> Result.map (fun _ -> Released(text "html_url" created)))
 
     /// The text of the file at `path` on the default branch of the index's repository, with its blob's SHA; none if there
