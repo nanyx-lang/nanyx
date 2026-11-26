@@ -31,7 +31,8 @@ module UnusedBindings =
         | TopLevelValue
         | ImportedModule
         | TypeDefinition
-        | ContextMember -> rename
+        | ContextMember
+        | UnitOfMeasure -> rename
 
     let private messageFor (symbol: Symbol) =
         match symbol.Kind with
@@ -41,7 +42,8 @@ module UnusedBindings =
         | TopLevelValue
         | ImportedModule
         | TypeDefinition
-        | ContextMember -> "It is never used"
+        | ContextMember
+        | UnitOfMeasure -> "It is never used"
 
     let lint (model: SemanticModel) : Report list =
         let referenced = model.References |> Map.values |> Set.ofSeq
@@ -65,7 +67,8 @@ module UnusedBindings =
             | TopLevelValue
             | ImportedModule
             | TypeDefinition
-            | ContextMember -> false)
+            | ContextMember
+            | UnitOfMeasure -> false)
         |> Seq.filter (fun symbol -> not (symbol.Name.StartsWith "_") && not (referenced.Contains symbol.Id))
         |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
         |> Seq.map (fun symbol ->
@@ -391,6 +394,7 @@ module UnusedPrivateDefinitions =
         match symbol.Kind with
         | TypeDefinition -> "The type is never used"
         | ContextMember -> "The context's member is never used"
+        | UnitOfMeasure -> "The unit is never used"
         | TopLevelValue
         | LocalValue
         | Parameter
@@ -447,7 +451,9 @@ module UnusedPrivateDefinitions =
             | LocalValue
             | Parameter
             | PatternVariable
-            | ImportedModule -> false)
+            | ImportedModule
+            // A unit's `unit` line is no definition this rule removes (see `definitionsOf`).
+            | UnitOfMeasure -> false)
         |> Seq.choose (fun symbol -> definitionOf symbol |> Option.map (fun definition -> symbol, definition))
         |> Seq.filter (fun (symbol, definition) ->
             not (isUsed symbol definition)
@@ -819,7 +825,8 @@ module ShadowedPreludeNames =
                 | PatternVariable -> symbol.Declaration.File = model.File && not (SourceSpan.isNone symbol.Declaration)
                 | ImportedModule
                 | TypeDefinition
-                | ContextMember -> false)
+                | ContextMember
+                | UnitOfMeasure -> false)
             |> Seq.filter (fun symbol -> preludeNames.Contains symbol.Name)
             |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
             |> Seq.map (fun symbol ->

@@ -124,6 +124,10 @@ let private typeSignature (typed: TypedModule) (symbol: Symbol) (info: TypeDefIn
 
 /// The compile of the standard-library module `moduleName`, as an import of it checks it: from the checked library (see
 /// `Compiler.compileStandardLibraryModuleReporting`).
+/// Whether `symbol` of `typed` is a dimension's, which its `dimension` line documents (see `unitEntries`).
+let private isDimension (typed: TypedModule) (symbol: Symbol) =
+    Definition.typeDefinitionOf typed symbol |> Option.exists _.IsDimension
+
 let internal compile (moduleName: string) : CompileResult =
     Compiler.compileStandardLibraryModuleReporting CompileListener.none moduleName
 
@@ -141,7 +145,9 @@ and internal exportsIn (files: string list) (typed: TypedModule) (docOf: Symbol 
         symbol.IsExported
         && (symbol.Kind = TopLevelValue || symbol.Kind = TypeDefinition)
         && files.Contains symbol.Declaration.File
-        && not (ReservedNames.isHidden symbol))
+        && not (ReservedNames.isHidden symbol)
+        // A dimension is written as its `dimension` line declares it (see `unitEntries`), not as the type it is.
+        && not (isDimension typed symbol))
     |> Seq.sortBy (fun symbol -> symbol.Declaration.File, symbol.Declaration.Start)
     |> Seq.map (fun symbol ->
         let export =
@@ -197,7 +203,7 @@ let private unitEntries (file: string) (docOf: SourceSpan -> string option) : En
                     |> Option.map (snd >> List.map (fun attribute -> $"@{attribute} ") >> String.concat "")
                     |> Option.defaultValue ""
                 let multiple = multiple |> Option.map (fun multiple -> $" = {textOf multiple.Span}") |> Option.defaultValue ""
-                entry $"{attributes}{UnitSyntax.unitKeyword} {name}: {dimension}{multiple}" item name
+                entry $"{attributes}{UnitSyntax.unitKeyword} {name}: {textOf dimension.Span}{multiple}" item name
             | _ -> None)
     | _ -> []
 
@@ -408,7 +414,9 @@ let private nominalTypes (compiled: Documented list) : string =
             let files = Set.ofList documented.Files
             typed.Symbols
             |> Map.values
-            |> Seq.filter (fun symbol -> symbol.IsExported && symbol.Kind = TypeDefinition && files.Contains symbol.Declaration.File && not (ReservedNames.isHidden symbol))
+            |> Seq.filter (fun symbol ->
+                symbol.IsExported && symbol.Kind = TypeDefinition && files.Contains symbol.Declaration.File && not (ReservedNames.isHidden symbol)
+                && not (isDimension typed symbol))
             |> Seq.choose (fun symbol ->
                 Definition.typeDefinitionOf typed symbol
                 |> Option.filter _.IsNominal

@@ -8,10 +8,12 @@ let private contains (offset: int) (span: SourceSpan) =
     not (SourceSpan.isNone span) && span.Start <= offset && offset < span.End
 
 /// The span of the name a referring expression is written with: a call's or pipe's function name (not its
-/// arguments), an operator (not its operands), a qualified context member's name after the context and its dot, or
-/// all of an identifier or qualified name.
+/// arguments), an operator (not its operands), a qualified context member's name after the context and its dot, a
+/// number's unit (`km` in `2km`), or all of an identifier or qualified name.
 let internal nameSpan (expr: Expression) =
     match expr.Kind with
+    | LiteralExpr(UnitLit(_, unitName)) ->
+        Some { expr.Span with Start = expr.Span.End - unitName.Length; StartColumn = expr.Span.StartColumn + expr.Span.End - unitName.Length - expr.Span.Start }
     | FunctionCall(_, nameSpan, _)
     | BinaryOp(_, nameSpan, _, _)
     | Pipe(_, _, nameSpan, _) -> nameSpan

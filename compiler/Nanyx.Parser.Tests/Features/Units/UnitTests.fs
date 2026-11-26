@@ -93,9 +93,9 @@ let ``A dimension is declared, constrained to one storage type or not`` () =
 let ``A unit is declared as a multiple of another unit, or as the unit the others are defined from, marked on its line`` () =
     match parseModule "@baseUnit unit ns: Time\nunit us: Time = 1_000ns\nexport unit mm: Length = 0.001m" with
     | Result.Ok [ Kind (Attribute("baseUnit", None))
-                  Kind (UnitDecl(false, "ns", "Time", None))
-                  Kind (UnitDecl(false, "us", "Time", Some (Kind (LiteralExpr(UnitLit(whole, "ns"))))))
-                  Kind (UnitDecl(true, "mm", "Length", Some (Kind (LiteralExpr(UnitLit(fraction, "m")))))) ] ->
+                  Kind (UnitDecl(false, "ns", Kind (TypeName "Time"), None))
+                  Kind (UnitDecl(false, "us", Kind (TypeName "Time"), Some (Kind (LiteralExpr(UnitLit(whole, "ns"))))))
+                  Kind (UnitDecl(true, "mm", Kind (TypeName "Length"), Some (Kind (LiteralExpr(UnitLit(fraction, "m")))))) ] ->
         Assert.Equal(number 1000L 0 false, whole)
         Assert.Equal(number 1L -3 true, fraction)
     | other -> failwith $"Unexpected parse result: %A{other}"
@@ -105,18 +105,18 @@ let ``A unit can be marked @storageUnit and @baseUnit on its line`` () =
     match parseModule "@storageUnit @baseUnit unit ns: Time\n@baseUnit unit s: Time = 1_000_000_000ns" with
     | Result.Ok [ Kind (Attribute("storageUnit", None))
                   Kind (Attribute("baseUnit", None))
-                  Kind (UnitDecl(false, "ns", "Time", None))
+                  Kind (UnitDecl(false, "ns", Kind (TypeName "Time"), None))
                   Kind (Attribute("baseUnit", None))
-                  Kind (UnitDecl(false, "s", "Time", Some _)) ] -> ()
+                  Kind (UnitDecl(false, "s", Kind (TypeName "Time"), Some _)) ] -> ()
     | other -> failwith $"Unexpected parse result: %A{other}"
 
 [<Fact>]
 let ``A unit of a derived dimension is numbers of units multiplied and divided, read from the left`` () =
     let source = "unit kmh: Speed = 1km / 1hr\nunit accel: Acceleration = 1m / 1s / 1s\nunit area: Area = 1m * 1m"
     match parseModule source with
-    | Result.Ok [ Kind (UnitDecl(false, "kmh", "Speed", Some (Kind (BinaryOp("/", _, Kind (LiteralExpr(UnitLit(_, "km"))), Kind (LiteralExpr(UnitLit(_, "hr"))))))))
-                  Kind (UnitDecl(false, "accel", "Acceleration", Some (Kind (BinaryOp("/", _, Kind (BinaryOp("/", _, _, _)), Kind (LiteralExpr(UnitLit(_, "s"))))))))
-                  Kind (UnitDecl(false, "area", "Area", Some (Kind (BinaryOp("*", _, _, _))))) as area ] ->
+    | Result.Ok [ Kind (UnitDecl(false, "kmh", Kind (TypeName "Speed"), Some (Kind (BinaryOp("/", _, Kind (LiteralExpr(UnitLit(_, "km"))), Kind (LiteralExpr(UnitLit(_, "hr"))))))))
+                  Kind (UnitDecl(false, "accel", Kind (TypeName "Acceleration"), Some (Kind (BinaryOp("/", _, Kind (BinaryOp("/", _, _, _)), Kind (LiteralExpr(UnitLit(_, "s"))))))))
+                  Kind (UnitDecl(false, "area", Kind (TypeName "Area"), Some (Kind (BinaryOp("*", _, _, _))))) as area ] ->
         Assert.Equal("unit area: Area = 1m * 1m", textOf source area.Span)
     | other -> failwith $"Unexpected parse result: %A{other}"
 
@@ -169,8 +169,8 @@ let ``A module block declares dimensions and units as the top level does`` () =
     | Result.Ok [ Kind (ModuleDecl(false, "m"))
                   Kind (DimensionDecl(true, "Time", None, None))
                   Kind (Attribute("baseUnit", None))
-                  Kind (UnitDecl(false, "ns", "Time", None))
-                  Kind (UnitDecl(false, "us", "Time", Some _)) ] -> ()
+                  Kind (UnitDecl(false, "ns", Kind (TypeName "Time"), None))
+                  Kind (UnitDecl(false, "us", Kind (TypeName "Time"), Some _)) ] -> ()
     | other -> failwith $"Unexpected parse result: %A{other}"
 
 [<Fact>]

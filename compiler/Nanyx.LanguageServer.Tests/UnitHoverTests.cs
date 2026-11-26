@@ -14,6 +14,10 @@ public sealed class UnitHoverTests : LanguageServerTestBase
     private const string TimeUnits =
         "Units: `ns` (storage), `us = 1_000ns`, `ms = 1_000us`, `s = 1_000ms` (display), `min = 60s`, `hr = 60min`, `d = 24hr`\n\nWrite a value as `500ms`.";
 
+    /// <summary>The doc comment of the prelude's <c>Time</c>, which a hover on it ends with.</summary>
+    private const string TimeDoc =
+        "How long something takes: a duration, stored in nanoseconds in any number type, so `500ms` is\na `Time(int)` of 500,000,000 and `0.5s` a `Time(float)`, and written in seconds when no other\nunit fits, so zero is `0s`. A point in time is not one.";
+
     [Fact]
     public async Task A_dimension_in_a_type_lists_its_units_from_the_smallest()
     {
@@ -22,7 +26,8 @@ public sealed class UnitHoverTests : LanguageServerTestBase
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
         var hover = await HoverAt(uri, 0, 13);
-        Assert.Equal($"```nanyx\ndimension Time\n```\n\n{TimeUnits}", hover?.Contents.MarkupContent?.Value);
+        // Then its doc comment, as a hover on any name ends with its own.
+        Assert.Equal($"```nanyx\ndimension Time\n```\n\n{TimeUnits}\n\n---\n\n{TimeDoc}", hover?.Contents.MarkupContent?.Value);
         Assert.Equal(new Range(0, 12, 0, 16), hover?.Range);
     }
 
@@ -46,7 +51,7 @@ public sealed class UnitHoverTests : LanguageServerTestBase
 
         var unit = await HoverAt(uri, 0, 18);
         Assert.Equal(
-            $"```nanyx\nunit ms: Time = 1_000us\n```\n\nA unit of `Time`: `1_000_000ns`.\n\n{TimeUnits}",
+            $"```nanyx\nunit ms: Time = 1_000us\n```\n\nA unit of `Time`: `1_000_000ns`.\n\n{TimeUnits}\n\n---\n\nA millisecond, 1,000 microseconds.",
             unit?.Contents.MarkupContent?.Value);
         Assert.Equal(new Range(0, 17, 0, 19), unit?.Range);
 

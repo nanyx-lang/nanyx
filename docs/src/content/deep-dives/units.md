@@ -216,3 +216,18 @@ value written in one of them, marking the default storage and display units, `ns
 `s = 1_000ms (display)`; a unit shows its declaration, with the attributes that mark it, and how many default storage
 units it is. A measured value's own hover, `def timeout: Time(int)`, ends with its
 dimension's units too (`Hover.hoverOf`).
+
+# Definitions, references and renames
+
+A dimension and a unit have symbols, so an editor's go to definition, find references and rename find them as they do any
+name (`Definition`, `Refactorings.Rename`). The parser declares the name a `dimension` or `unit` line writes by the line's
+item (`MeasureDeclaration`), and `Units.markDimensions` and `Units.declare` make the symbols from it: a dimension's is a
+`TypeDefinition`, kept in its `TypeDefInfo.Symbol` as a type's is, and a unit's a `UnitOfMeasure`, kept in
+`UnitInfo.Symbol`. Neither has a scope. An import brings in the symbols of the units it brings in, as it does a type's.
+
+A type that names a dimension refers to it, and so do the dimension a `unit` line names, which the parser reads as a
+`TypeName`, and each dimension a derived one names, which keeps its node when it is read as a type
+(`Units.storedAs`). A number written with a unit refers to the unit (`recordUnitReference`), the unit's own part of it,
+`km` in `2km`, being where the name is written (`Definition.nameSpan`), and so does each number in another unit's
+definition. A unit is renamed in every number written with it, to a name a number can be written with: one that starts
+with a letter, but not `e` or `E` and a digit, which write an exponent, and that is no unit in scope already.

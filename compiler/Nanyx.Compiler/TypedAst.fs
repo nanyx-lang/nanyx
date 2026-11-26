@@ -28,6 +28,9 @@ type SymbolKind =
     /// A member of a context, declared in the context's definition. A name in a def that requires the context, or
     /// a qualified `Context.member`, refers to it.
     | ContextMember
+    /// A unit of measure, declared by a `unit` line. A number written with it, `2km`, refers to it, and so does one in
+    /// another unit's definition.
+    | UnitOfMeasure
 
 /// A property a built-in type has, read with a dot as a record's field is: `s.length`. A dot on a value reads only
 /// these and a record's fields, never a definition attached to the value's type; that is a pipe's.
@@ -403,7 +406,9 @@ type UnitInfo =
       Marks: UnitMark list
       /// Whether it is its dimension's default display unit: the one `@baseUnit` marks, or, if none is marked, its
       /// default storage unit.
-      IsDisplay: bool }
+      IsDisplay: bool
+      /// The symbol of its name, which a number written with it refers to (see `UnitOfMeasure`).
+      Symbol: SymbolId option }
 
 module UnitInfo =
     /// Whether `info` is its dimension's default storage unit, the one its values are stored as a number of.
