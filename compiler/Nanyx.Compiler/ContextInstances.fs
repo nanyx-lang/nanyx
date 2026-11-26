@@ -640,9 +640,10 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     let signature = contextSignatureOf env current name
                     let before = shared.Value
                     let argTys, argTysAsRead, read, current = contextArgTysAtCall current before signature scheme.Type calleeTy args
-                    // A number literal nothing has settled yet is of its default type here (see `NumericLiterals`).
+                    // A number literal nothing has settled yet is of its default type here (see `NumericLiterals`), and so
+                    // is one a pending `/` divides, whose fraction the argument may be (see `Fractions.settleIn`).
                     let argTys, argTysAsRead, read, current =
-                        match NumericLiterals.settleIn argTys current with
+                        match Fractions.settleIn argTys current with
                         | Some literalsSettled -> contextArgTysAtCall literalsSettled before signature scheme.Type calleeTy args
                         | None -> argTys, argTysAsRead, read, current
                     shared.Value <- read

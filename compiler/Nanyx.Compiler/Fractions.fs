@@ -57,3 +57,18 @@ module internal Fractions =
                 match onOne with
                 | first :: others -> others |> List.fold (fun next other -> addConstraintAt other.At other.ResultTy first.ResultTy next) current
                 | [] -> current) settled
+
+    /// `state` with each number literal in `tys` of its default type (see `NumericLiterals.settleIn`), and so with each
+    /// literal of the operands of a pending `/` that gives a variable in `tys`, which is then settled as far as that
+    /// lets it (see `settle`): `println(1s / 1ms)` finds `ToString` of the `float` the literals' `int` divides to.
+    /// `None` when there is nothing to settle.
+    let settleIn (tys: Ty list) (state: InferState) : InferState option =
+        let inTys = tys |> List.map (resolveSoFar state >> TypeEnv.freeTyVars) |> Set.unionMany
+        let operands =
+            state.PendingFractions
+            |> List.filter (fun pending ->
+                match resolveSoFar state pending.ResultTy with
+                | TyVar v -> inTys.Contains v.Id
+                | _ -> false)
+            |> List.map _.OperandTy
+        NumericLiterals.settleIn (tys @ operands) state |> Option.map (fun settled -> if operands.IsEmpty then settled else settle settled)

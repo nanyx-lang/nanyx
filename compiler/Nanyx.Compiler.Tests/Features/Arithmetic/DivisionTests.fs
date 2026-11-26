@@ -133,3 +133,9 @@ let ``A negative power of a type whose fraction is another is an error at the op
         onlyDiagnostic source)
     // A power that is not negative, and the fraction written as a division, are fine.
     compileClean (normalized (count + "def cube = Count(n = 2) ** 3\ndef half = Count.fromInt(1) / Count(n = 2) ** 1\n")) |> ignore
+
+[<Fact>]
+let ``A division of literals is found ToString where it is passed straight to a call`` () =
+    // The literals' type, and so the fraction it divides to, was still open where `println` looked for `ToString` of
+    // it, so a call found none, though a def or a hole around the same division settled it.
+    Assert.Empty((Compiler.compile (normalized "println(7 / 2)\nprintln(1s / 1ms)\nprintln(-1 / 4)\n")).Diagnostics)
