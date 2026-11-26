@@ -55,11 +55,14 @@ in progress.
   call [foreign functions](./foreign-functions) and use `nanyx/host.memory`. With no members, a function that requires
   it is passed nothing, and the type checker treats it as available wherever it is required, so `Hosts.runtimeErrors`
   reports `NYX0238` in any module but one of the build host's own package or of a host library it depends on (`isHost`
-  in `Library.checkModule`, `PackageModules.HostLibrary`),
-  `nanyx/host.runtime` and `nanyx/host.memory`, by what each call calls: at
+  in `Library.checkModule`, `PackageModules.HostLibrary`), `nanyx/host.runtime` and `nanyx/host.memory`, by what each
+  call calls: at
   each top-level def that requires it, as its written contexts say or a call in it does, other than a foreign function,
   which any module may declare, and at each call at the top level that requires it, other than the call of `run` that
   `@entry` makes. A module that calls a host's `run` itself needs `HostRuntime` for it, so that is an error too.
+  A host checked or packed on its own is the build's host for this (`PackageModules.DeclaresHost`), and a host library
+  checked or packed on its own may require it too, so `nanyx check` and `nanyx pack` accept either as a build under
+  the host does.
 - **Where the entry's `Console` comes from.** Every entry is passed the members of the `Console` that `run` `use`s, so
   it reads and writes through the host. An entry that doesn't write its type, which is most programs, infers `Console`
   as an ambient context, because the host's prelude brings `Console`'s names in. A def that infers an ambient context takes its
