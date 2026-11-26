@@ -211,6 +211,7 @@
     <Compile Include="Features\Packages\PathDependencyTests.fs" />
     <Compile Include="Features\Packages\SemanticVersioningTests.fs" />
     <Compile Include="Features\Packages\ShippedPackageTests.fs" />
+    <Compile Include="Features\Packages\SeededPackageTests.fs" />
     <Compile Include="Features\Packages\VersionResolutionTests.fs" />
     <Compile Include="Features\Scripts\ScriptTests.fs" />
     <Compile Include="Features\Scripts\ScriptPackageTests.fs" />

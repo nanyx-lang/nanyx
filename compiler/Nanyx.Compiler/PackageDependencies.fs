@@ -99,7 +99,7 @@ module PackageDependencies =
                     Some
                         { Lockfile = resolved.Lockfile
                           Lines = changes lockfile resolved.Lockfile
-                          Warnings = resolved.Unlisted |> List.map (fun (name, version) -> Resolution.lockedUnlisted name version) }
+                          Warnings = (resolved.Unlisted |> List.map (fun (name, version) -> Resolution.lockedUnlisted name version)) @ resolved.Warnings }
                 )
             | Result.Error(Conflict diagnostic) -> Result.Error(NoVersions diagnostic)
             | Result.Error(IndexUnreadable message) -> Result.Error(LockErrors [ message ])
