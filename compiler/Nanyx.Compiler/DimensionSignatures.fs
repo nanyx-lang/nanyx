@@ -41,13 +41,9 @@ module internal DimensionSignatures =
         | TypeQuotient(left, right) -> partsOf left @ partsOf right
         | _ -> [ derived ]
 
-    /// A storage as it is written, to tell two apart: `a` and `float` are two, and `a` and `a` one.
-    let rec private writtenStorage (storage: TypeExpr) : string =
-        match storage.Kind with
-        | TypeVar name
-        | TypeName name -> name
-        | TypeApply(name, args) -> $"""{name}({args |> List.map writtenStorage |> String.concat ", "})"""
-        | _ -> $"#{storage.Id}"
+    /// A storage as it is written, to tell two apart: `a` and `float` are two, and `a` and `a` one, as are
+    /// `Num(a).fraction` and `Num(a).fraction`.
+    let private writtenStorage (storage: TypeExpr) : string = SyntaxTree.typeText storage
 
     /// A derived dimension as a message writes it, its parts without their storages: `Length / (Time * Time)`.
     let rec private writtenDimension (derived: TypeExpr) : string =

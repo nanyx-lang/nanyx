@@ -38,3 +38,21 @@ dbg(v)
               "1000.0"
               "Length / Time(1.0438413361169103e-8)"
               "" ])
+
+// The parts of the result's type both name the storage's fraction, which was read as two storages (#2879).
+[<Fact>]
+let ``Run - a quotient whose parts are stored as a storage's fraction`` () =
+    let source =
+        """dimension Distance
+
+@baseUnit unit cm: Distance
+
+dimension Time
+
+@baseUnit unit s: Time
+
+def speed: Distance(a), Time(a) -> Distance(Num(a).fraction) / Time(Num(a).fraction) = { d, t -> d / t }
+
+println(speed(100cm, 2s))
+"""
+    runSource source |> assertRan "50.0cm/s\n"

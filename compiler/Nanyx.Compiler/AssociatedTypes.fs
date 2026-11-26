@@ -44,21 +44,9 @@ module internal AssociatedTypes =
         | TypeNamedArgument _ -> true
         | _ -> false
 
-    /// `t` as a message writes it, for a type variable's name: a name and the arguments it is applied to.
-    let rec private text (t: TypeExpr) : string =
-        match t.Kind with
-        | TypeName name
-        | TypeVar name -> name
-        | TypeApply(name, args) -> $"""{name}({args |> List.map text |> String.concat ", "})"""
-        | TypeNamedArgument(name, value) -> $"{name} = {text value}"
-        | TypeAssociated(context, name) -> $"{text context}.{name}"
-        | TypeHole -> "_"
-        | TypeUnit -> "()"
-        | _ -> "…"
-
     /// `context` as a message writes it, with its positional arguments: `Iter(c)`.
     let private written (context: Identifier) (args: TypeExpr list) =
-        if args.IsEmpty then context else text (TypeExpr.synthetic (TypeApply(context, args)))
+        if args.IsEmpty then context else SyntaxTree.typeText (TypeExpr.synthetic (TypeApply(context, args)))
 
     /// The associated types of the context declared with `fields`, each with its default if it is written with one.
     let private declaredIn (fields: TypeRecordField list) =
@@ -135,7 +123,7 @@ module internal AssociatedTypes =
 
         // What `ctx.name`, written at `t`, stands for: the associated type `name` of the context `ctx` in `scope`.
         let qualified (scope: InScope list) (t: TypeExpr) (ctx: TypeExpr) (name: Identifier) : TypeExpr =
-            let ownName = { t with Kind = TypeVar (text t) }
+            let ownName = { t with Kind = TypeVar (SyntaxTree.typeText t) }
             match contextOf ctx with
             | Some (context, args) ->
                 match scope |> List.tryFind (fun entry -> entry.Context = context && entry.Arguments = args), shapes |> Map.tryFind context with
