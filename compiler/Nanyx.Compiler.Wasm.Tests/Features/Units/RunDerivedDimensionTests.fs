@@ -76,3 +76,25 @@ def speed: Distance(a), Time(a) -> Distance(Num(a).fraction) / Time(Num(a).fract
 println(speed(100cm, 2s))
 """
     runSource source |> assertRan "50.0cm/s\n"
+
+// The dimensions a function is passed written without their storage share one, so a quotient of them, its result left
+// to the body, is of that storage's fraction (#2918, #2879).
+[<Fact>]
+let ``Run - a quotient of dimensions written without their storage`` () =
+    let source =
+        """dimension Distance
+
+@baseUnit unit cm: Distance
+
+dimension Time
+
+@baseUnit unit s: Time
+
+def speed: Distance, Time -> _ = { d, t -> d / t }
+
+def pace: Distance, Time -> Distance / Time = { d, t -> d / t }
+
+println(speed(100cm, 2s))
+println(pace(100.0cm, 4.0s))
+"""
+    runSource source |> assertRan "50.0cm/s\n25.0cm/s\n"

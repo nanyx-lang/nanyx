@@ -2,11 +2,13 @@ namespace NyxCompiler
 
 open Parser.Program
 
-/// The signatures that name dimensions (see `Units`). A dimension written without its storage, `Time`, is of a storage
-/// of its own, and `Time(a)` of the storage `a`, so `def overlap: Time, Time -> bool` is read as
-/// `[Num(a), Num(b)] Time(a), Time(b) -> bool`: a signature that names a dimension requires `Num` of its storage
-/// without writing it. A storage nothing a call passes fixes, one written only in the result, is an error, as is a
-/// storage written for a dimension constrained to one, `Bytes(a)`.
+/// The signatures that name dimensions (see `Units`). `Time(a)` is a `Time` of the storage `a`. The dimensions a
+/// function is passed written without their storage share one, the signature's implicit storage, so
+/// `def overlap: Time, Time -> bool` is read as `[Num(a)] Time(a), Time(a) -> bool`: a signature that names a dimension
+/// requires `Num` of its storage without writing it. One in its result, or in a value's type, is of a storage the def's
+/// value settles, as a `_` written there is: `def total: list(Time) -> Time` is `[Num(a)] list(Time(a)) -> Time(_)`.
+/// A function with no value, an `@extern`, has nothing to settle it, so a storage nothing a call passes fixes, one
+/// only its result names, is an error, as is a storage written for a dimension constrained to one, `Bytes(a)`.
 module internal DimensionSignatures =
     /// A storage variable a signature has, for a dimension it names: the variable's name, the dimension's, and where
     /// the dimension is written.
@@ -80,14 +82,38 @@ module internal DimensionSignatures =
             | TypeApply(partName, _) -> Some (notADimension part partName)
             | _ -> Some (notADimension part "this"))
 
-    /// `typeExpr` with each dimension written without its storage given a storage variable of its own, the storage
-    /// variables of the dimensions it names, and the errors in them: a storage written for a constrained dimension.
-    /// The parts of a derived dimension share one storage: the one written on its parts, or one of its own.
-    let private withStorages (dimensions: Map<Identifier, bool>) (typeExpr: TypeExpr) : TypeExpr * Storage list * Diagnostic list =
+    /// Where a dimension written without its storage is in a signature, which says what its storage is.
+    type private Position =
+        /// What a function is passed, or a context's argument: the storage all of them there share, the signature's
+        /// one implicit storage.
+        | Input
+        /// What a function gives, or a value's type, where the def has a value to infer it from: `_`, inferred as a `_`
+        /// written there is (see `TypeHoles`).
+        | InferredResult
+        /// What a function with no value gives, an `@extern` or a component's import: a storage of its own, which no
+        /// parameter fixes (NYX0293).
+        | ResultOfNoValue
+
+    /// `typeExpr` with each dimension written without its storage given one, the storage variables of the dimensions it
+    /// names, and the errors in them: a storage written for a constrained dimension. Those written without one where the
+    /// function is passed them share one storage variable, apart from any the signature writes; in its result, each is
+    /// a `_` the def's value settles, or, for a def with no value (`hasValue`), a storage variable of its own. The parts
+    /// of a derived dimension share one storage: the one written on its parts, or the one its position gives.
+    let private withStorages (dimensions: Map<Identifier, bool>) (hasValue: bool) (typeExpr: TypeExpr) : TypeExpr * Storage list * Diagnostic list =
         let names = (freshNames (Set.ofList (TypeResolution.annotationVarNames typeExpr))).GetEnumerator()
+        let fresh () =
+            names.MoveNext() |> ignore
+            names.Current
+        let implicitInput = lazy (fresh ())
         let storages = ResizeArray<Storage>()
         let errors = ResizeArray<Diagnostic>()
-        let rec derived (t: TypeExpr) : TypeExpr =
+        // The storage a dimension written without one has at `position`, written at `span`.
+        let unwritten (position: Position) (span: SourceSpan) =
+            match position with
+            | Input -> TypeExpr.at span (TypeVar implicitInput.Value)
+            | InferredResult -> TypeExpr.at span TypeHole
+            | ResultOfNoValue -> TypeExpr.at span (TypeVar (fresh ()))
+        let rec derived (position: Position) (t: TypeExpr) : TypeExpr =
             let parts = partsOf t
             let written =
                 parts
@@ -116,12 +142,11 @@ module internal DimensionSignatures =
             let shared =
                 match written with
                 | storage :: _ -> storage
-                | [] ->
-                    names.MoveNext() |> ignore
-                    TypeExpr.at t.Span (TypeVar names.Current)
+                | [] -> unwritten position t.Span
             match shared.Kind with
             | TypeVar variable -> storages.Add { Variable = variable; Dimension = writtenDimension t; Span = t.Span }
             | _ -> ()
+            // A `_` the parts share is one: each `_` written is a type of its own.
             let rec apply (part: TypeExpr) =
                 match part.Kind with
                 | TypeProduct _
@@ -129,15 +154,16 @@ module internal DimensionSignatures =
                 | TypeName name when dimensions.TryFind name = Some true -> TypeExpr.at part.Span (TypeApply(name, [ shared ]))
                 | _ -> part
             apply t
-        and rewrite (t: TypeExpr) : TypeExpr =
+        and rewrite (position: Position) (t: TypeExpr) : TypeExpr =
             match t.Kind with
             | TypeProduct _
-            | TypeQuotient _ -> derived t
+            | TypeQuotient _ -> derived position t
             | TypeName name when dimensions.TryFind name = Some true ->
-                names.MoveNext() |> ignore
-                let variable = names.Current
-                storages.Add { Variable = variable; Dimension = name; Span = t.Span }
-                TypeExpr.at t.Span (TypeApply(name, [ TypeExpr.at t.Span (TypeVar variable) ]))
+                let storage = unwritten position t.Span
+                match storage.Kind with
+                | TypeVar variable -> storages.Add { Variable = variable; Dimension = name; Span = t.Span }
+                | _ -> ()
+                TypeExpr.at t.Span (TypeApply(name, [ storage ]))
             | TypeApply(name, args) when dimensions.ContainsKey name ->
                 match dimensions[name], args with
                 | false, _ ->
@@ -149,9 +175,17 @@ module internal DimensionSignatures =
                 | true, [ { Kind = TypeVar variable } ] ->
                     storages.Add { Variable = variable; Dimension = name; Span = t.Span }
                     t
-                | _ -> TypeExpr.mapChildren rewrite t
-            | _ -> TypeExpr.mapChildren rewrite t
-        let rewritten = rewrite typeExpr
+                | _ -> TypeExpr.mapChildren (rewrite position) t
+            | _ -> TypeExpr.mapChildren (rewrite position) t
+        let result = if hasValue then InferredResult else ResultOfNoValue
+        let rec signature (t: TypeExpr) : TypeExpr =
+            match t.Kind with
+            | TypeWithContext(contexts, inner) -> { t with Kind = TypeWithContext(List.map (rewrite Input) contexts, signature inner) }
+            | TypeFunc(parameters, returned) ->
+                let parameters = rewrite Input parameters
+                { t with Kind = TypeFunc(parameters, rewrite result returned) }
+            | _ -> rewrite result t
+        let rewritten = signature typeExpr
         rewritten, List.ofSeq storages, List.ofSeq errors
 
     /// Whether `context` is `Num` of the variable `variable`.
@@ -161,8 +195,8 @@ module internal DimensionSignatures =
         | _ -> false
 
     /// The signature `typeExpr` as it is read (see the module's comment), and the errors in it.
-    let signature (dimensions: Map<Identifier, bool>) (typeExpr: TypeExpr) : TypeExpr * Diagnostic list =
-        let rewritten, storages, errors = withStorages dimensions typeExpr
+    let signature (dimensions: Map<Identifier, bool>) (hasValue: bool) (typeExpr: TypeExpr) : TypeExpr * Diagnostic list =
+        let rewritten, storages, errors = withStorages dimensions hasValue typeExpr
         if storages.IsEmpty then
             rewritten, errors
         else
@@ -203,10 +237,17 @@ module internal DimensionSignatures =
     let ofModule (typeDefs: Map<string, TypeDefInfo>) (module': TopLevelItem list) : TopLevelItem list * Diagnostic list =
         let dimensions = dimensionsIn typeDefs module'
         let errors = ResizeArray<Diagnostic>()
-        let read (typeOpt: TypeExpr option) =
+        // A foreign function's value is a call to its import, which says nothing of what it gives.
+        let hasValue (value: Expression) =
+            match value.Kind with
+            | ExternSyntax.Bodiless
+            | ExternSyntax.Import _
+            | ComponentImportSyntax.Import _ -> false
+            | _ -> true
+        let read (typeOpt: TypeExpr option) (value: Expression) =
             typeOpt
             |> Option.map (fun typeExpr ->
-                let read, found = signature dimensions typeExpr
+                let read, found = signature dimensions (hasValue value) typeExpr
                 errors.AddRange found
                 read)
         let rec inValue (expr: Expression) : Expression =
@@ -217,13 +258,13 @@ module internal DimensionSignatures =
                     statements
                     |> List.map (fun statement ->
                         match statement.Kind with
-                        | DefStatement(isExport, name, typeOpt, value) -> { statement with Kind = DefStatement(isExport, name, read typeOpt, value) }
+                        | DefStatement(isExport, name, typeOpt, value) -> { statement with Kind = DefStatement(isExport, name, read typeOpt value, value) }
                         | _ -> statement)
                 { inner with Kind = Block statements }
             | _ -> inner
         let rec inItem (item: TopLevelItem) : TopLevelItem =
             match item.Kind with
-            | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, read typeOpt, inValue value)) }
+            | Def (ValueDef(isExport, name, typeOpt, value)) -> { item with Kind = Def (ValueDef(isExport, name, read typeOpt value, inValue value)) }
             | Expr value -> { item with Kind = Expr (inValue value) }
             | ModuleBlock(name, items) -> { item with Kind = ModuleBlock(name, List.map inItem items) }
             | _ -> item
