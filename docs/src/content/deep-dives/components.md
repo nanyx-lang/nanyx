@@ -70,26 +70,30 @@ lifted async, with the callback ABI (`[async-lift]` and `[callback][async-lift]`
 `task.return` before it is done:
 
 1. It raises backpressure (`[backpressure-inc]`), so that the host gives the instance no other request until it is
-   done, and runs the program's start function, which answers the request through the component root's `run`.
+   done, and runs the program's start function, which answers the request through the component root's `run`. While
+   every task waits on the host, it returns to the host, as `run` does
+   ([Running with the callback ABI](#running-with-the-callback-abi)).
 2. The root takes the request's handle from `argument`, and gives `result` the response it made, the writable ends of
    its body's `stream<u8>` and its trailers' future, and the address and length of the body, which `result` copies.
    `argument` and `result` are foreign functions of `nanyx:component` (`Hosts.componentModule`), which the module
    defines itself (`ComponentAbi.externs`) rather than imports; only a host's package, or a host library it depends on,
    may declare one (`NYX0276`).
-3. `handle` returns the response with `[task-return]handle`, then writes the body's copy to its stream, waiting while
-   a write blocks, as `fd_write` does, and drops it; writes `ok(none)` to the trailers' future and drops it; frees the
-   copy; lowers backpressure; and returns EXIT.
+3. Once the start function has finished, `handle` returns the response with `[task-return]handle`, then writes the
+   body's copy to its stream, waiting while a write blocks, as `fd_write` does, and drops it; writes `ok(none)` to the
+   trailers' future and drops it; frees the copy; lowers backpressure; and returns EXIT (`ComponentAbi.handleFinish`).
+   The program has finished by then, and backpressure keeps other requests out, so nothing else could run while a
+   write blocks.
 
-The program runs synchronously, as `run` did before it was lifted with a callback: a call it waits on is waited on where
-it is made, and the callback is only called if the host cancels the task, which traps. The start function runs afresh
-for each request an instance is given: it sets the program's cached values up and tears them down again, so nothing the
-program computes is kept from one request to the next.
+The start function runs afresh for each request an instance is given: it sets the program's cached values up and tears
+them down again, so nothing the program computes is kept from one request to the next.
 
 ## Running with the callback ABI
 
-Under `CliRun`, the start function is a state machine when it calls one (`CoreIrSplitPoints.stateMachines`, given no start
+Under `CliRun` and `HttpHandler`, the start function is a state machine when it calls one (`CoreIrSplitPoints.stateMachines`, given no start
 function to leave out), and its task, the main task, is one the scheduler runs as it runs the others
-(`ComponentCallback`). A program whose start function never stops is run, given `ok` and done with EXIT at once.
+(`ComponentCallback`). A program whose start function never stops is run, gives its result and is done with EXIT at once.
+What follows is `run`'s; `handle` does the same, with what it does before and after the start function
+([The handler](#the-handler)).
 
 1. `run` calls the start function. When it stops, its frame goes to the main task, which goes on the queue, and the
    scheduler runs the tasks in turn, as `runOthers` does, resuming the start function's frame when the main task's turn
@@ -155,7 +159,9 @@ keeps the worlds' WIT in its `wit` directory. `HostPackages` reads it into `Host
   entry point that requires a context neither provides is the same error, `NYX0237`, naming it, in either build.
 - **CI runs them.** The Compiler workflow builds each package in `examples/` as a component, runs it under
   `wasmtime run`, and checks that it prints what `nanyx run` does. A package under the HTTP host, `hello.server`, is
-  served by `wasmtime serve` instead, and checked with requests in turn, which one instance answers.
+  served by `wasmtime serve` instead, and checked with requests in turn, which one instance answers. Its `/race`
+  races a 20 ms sleep against a minute's, and must answer within 10 seconds, which it does only if `handle` returns to
+  the host while both wait and the loser's sleep is cancelled.
 
 ## The console host's component root
 

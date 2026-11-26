@@ -829,19 +829,26 @@ let instantiateCoreWith (implement: Wasmtime.FunctionImport -> Wasmtime.Function
 /// The core module `wat`, of a component, instantiated on Wasmtime with each of its imports a function that traps.
 let instantiateCore (wat: string) = instantiateCoreWith (fun _ -> None) wat
 
-/// The core module of the component `nanyx build` writes for a console program whose `main.nyx` is `main`, which may
-/// import `nanyx.http`.
-let consoleComponentCore (main: string) =
+/// The core module of the component `nanyx build` writes for a program under the host of the manifest entry `hostEntry`
+/// whose `main.nyx` is `main`, which may import `nanyx.http`.
+let private componentCore (hostEntry: string) (main: string) =
     use directory = new TempDirectory()
     Directory.CreateDirectory(Path.Combine(directory.Path, "src")) |> ignore
     let dependencies = $"""[(package = "nanyx.http", version = "{Toolchain.version}")]"""
-    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), dependencies = {dependencies}, {consoleHostEntry})"""
+    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), dependencies = {dependencies}, {hostEntry})"""
     File.WriteAllText(Path.Combine(directory.Path, "app.nyxp"), manifest + "\n")
     File.WriteAllText(Path.Combine(directory.Path, "src", "main.nyx"), main)
     let built = nanyxIn directory.Path [ "build"; "--release"; "--wat" ]
     Assert.Equal("", built.StandardError)
     Assert.Equal(0, built.ExitCode)
     File.ReadAllText(Path.Combine(directory.Path, "out", "app.wat"))
+
+/// The core module of the component `nanyx build` writes for a console program whose `main.nyx` is `main`.
+let consoleComponentCore (main: string) = componentCore consoleHostEntry main
+
+/// The core module of the component `nanyx build` writes for a handler under the HTTP host whose `main.nyx` is `main`.
+let httpComponentCore (main: string) =
+    componentCore $"host = (package = \"nanyx.http.host\", version = \"{Toolchain.version}\")" main
 
 /// What a fake host's waitable gives when its time comes: the event's code and its value.
 type private FakeWaitable = { Deadline: int64; Event: int; Value: int }
@@ -851,7 +858,8 @@ type private FakeWaitable = { Deadline: int64; Event: int; Value: int }
 /// every request with an error 100 ms after it is sent. Its clock moves only when the module waits: a wait for a set
 /// takes the waitable in it whose time comes first, and moves the clock to that time. It traps where the canonical
 /// ABI does. It runs `run` as a host runs one lifted with the callback ABI (`Run`): while `run` or its callback returns
-/// WAIT, it gives the callback the next event of the set.
+/// WAIT, it gives the callback the next event of the set. For a handler (`Handle`), it gives `handle` a `GET` of `/` with
+/// no headers and no body, and keeps the body of the response it returns.
 type FakeWasiHost() =
     // The canonical ABI's codes: a subtask's states, the events, and what an async built-in gives when it blocks.
     let started = 1
@@ -922,6 +930,9 @@ type FakeWasiHost() =
     member val Returned: int option = None with get, set
     /// How many times `run` returned WAIT, or its callback did.
     member val Waited = 0 with get, set
+    /// The response `handle` returned, if it has, and its body, as written.
+    member val Response: int option = None with get, set
+    member val ResponseBody = Text.StringBuilder()
     member _.Now = now
 
     member host.Implement(import: Wasmtime.FunctionImport) : Wasmtime.Function.UntypedCallbackDelegate option =
@@ -963,6 +974,12 @@ type FakeWasiHost() =
                 delivered.Add subtask |> ignore
                 results.[0] <- Wasmtime.ValueBox.op_Implicit cancelledBeforeReturned))
         | "$root", "[subtask-drop]" -> Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ -> host.Dropped.Add(arguments.[0].AsInt32())))
+        | "[export]wasi:http/handler@0.3.0", "[task-return]handle" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ ->
+                if host.Response.IsSome then failwith "task.return called twice"
+                Assert.Equal(0, arguments.[0].AsInt32())
+                host.Response <- Some(arguments.[1].AsInt32())))
+        | "$root", ("[backpressure-inc]" | "[backpressure-dec]") -> Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ _ _ -> ()))
         | "[export]wasi:cli/run@0.3.0", "[task-return]run" ->
             Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ ->
                 if host.Returned.IsSome then failwith "task.return called twice"
@@ -980,7 +997,34 @@ type FakeWasiHost() =
                 | "[method]request-options.set-connect-timeout"
                 | "[method]request-options.set-first-byte-timeout" -> memory.WriteInt32(int64 (arguments.[3].AsInt32()), 0)
                 | "[stream-new-0][static]request.new"
-                | "[future-new-1][static]request.new" -> results.[0] <- Wasmtime.ValueBox.op_Implicit (ends ())
+                | "[future-new-1][static]request.new"
+                | "[stream-new-0][static]response.new"
+                | "[future-new-1][static]response.new"
+                | "[future-new-0][static]request.consume-body" -> results.[0] <- Wasmtime.ValueBox.op_Implicit (ends ())
+                // The request `handle` is given: a `GET` (case 0), with no scheme, authority or path, which are options.
+                | "[method]request.get-method"
+                | "[method]request.get-scheme"
+                | "[method]request.get-authority"
+                | "[method]request.get-path-with-query" -> memory.WriteInt32(int64 (arguments.[1].AsInt32()), 0)
+                | "[method]request.get-headers" -> results.[0] <- Wasmtime.ValueBox.op_Implicit (handle ())
+                | "[method]fields.copy-all" ->
+                    // An empty list, in a block of the module's, which it frees.
+                    let block = caller.GetFunction("cabi_realloc").Invoke(0, 0, 4, 8) :?> int
+                    let at = int64 (arguments.[1].AsInt32())
+                    memory.WriteInt32(at, block)
+                    memory.WriteInt32(at + 4L, 0)
+                | "[static]request.consume-body"
+                | "[static]response.new" ->
+                    let made = int64 (arguments.[arguments.Length - 1].AsInt32())
+                    memory.WriteInt32(made, handle ())
+                    memory.WriteInt32(made + 4L, handle ())
+                // The request's body has ended: DROPPED, 1, with nothing read.
+                | "[async-lower][stream-read-1][static]request.consume-body" -> results.[0] <- Wasmtime.ValueBox.op_Implicit 1
+                | "[async-lower][stream-write-0][static]response.new" ->
+                    let length = arguments.[2].AsInt32()
+                    let address = int64 (arguments.[1].AsInt32())
+                    host.ResponseBody.Append(Text.Encoding.UTF8.GetString(Array.init length (fun index -> memory.ReadByte(address + int64 index)))) |> ignore
+                    results.[0] <- Wasmtime.ValueBox.op_Implicit (length <<< 4)
                 | "[static]request.new" ->
                     let made = int64 (arguments.[6].AsInt32())
                     memory.WriteInt32(made, handle ())
@@ -1015,3 +1059,16 @@ type FakeWasiHost() =
                     callback.Invoke(ready.Event, waitable, ready.Value)
         Assert.Equal(exit, code)
         Assert.Equal(Some 0, host.Returned)
+
+    /// Runs `handle` of `instance` to its end, as a host does one lifted with the callback ABI, with a request of its
+    /// own, and checks that it returned a response.
+    member host.Handle(instance: Wasmtime.Instance) =
+        let callback = instance.GetFunction<int, int, int, int>("[callback][async-lift]wasi:http/handler@0.3.0#handle")
+        let mutable code = instance.GetFunction<int, int>("[async-lift]wasi:http/handler@0.3.0#handle").Invoke(handle ())
+        while code &&& 0xF = wait do
+            host.Waited <- host.Waited + 1
+            let waitable, ready = nextEvent (code >>> 4)
+            host.Delivered.Add waitable
+            code <- callback.Invoke(ready.Event, waitable, ready.Value)
+        Assert.Equal(exit, code)
+        Assert.True(host.Response.IsSome, "handle returned no response")

@@ -1,15 +1,28 @@
 module main
 
 --| Answers `/` with a welcome, `/hello/<name>` with a greeting, a `POST` to `/echo` with its body,
-  and anything else with a 404.
+  `/race` with the winner of a race, and anything else with a 404.
 @entry
-def main: Request -> Response = { request ->
+def main: [Async, Clock] Request -> Response = { request ->
   def path = Request.path(request)
 
   match (request.method, path)
     | (#get, "/") -> Response.text(200, "Welcome!")
     | (#post, "/echo") -> Response.text(200, request.body)
+    | (#get, "/race") -> Response.text(200, "{winner()} wins")
     | (#get, { p -> string.startsWith(p, "/hello/") }) ->
       Response.text(200, "Hello, {string.skip(path, 7)}!")
     | _ -> Response.text(404, "Not Found")
+}
+
+--| The winner of a race between two sleepers: the hare, who sleeps for 20 ms, while the tortoise,
+  who would sleep for a minute, is cancelled when the hare wakes.
+def winner: [Async, Clock] () -> string = { _ ->
+  race([{ after("the hare", 20ms) }, { after("the tortoise", 60s) }])
+}
+
+--| Sleeps for `time`, then gives `name`.
+def after: [Async, Clock] string, Time(int) -> string = { name, time ->
+  sleep(time)
+  name
 }

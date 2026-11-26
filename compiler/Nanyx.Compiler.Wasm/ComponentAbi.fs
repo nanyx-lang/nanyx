@@ -493,62 +493,72 @@ let private writeNoTrailersFunction =
           $"  call ${Helpers.free}"
           ")" ]
 
-/// `handle`, lifted async with a callback (see `HttpHandler`). It takes the request, runs the program's start function,
-/// `start`, if it has one, which answers it through `argument` and `result`, and returns the response; then, while the
-/// host reads it, writes its body, waiting as each write blocks, and its trailers. Backpressure keeps the host from
-/// giving the instance another request until then, and the start function runs afresh for each one.
-///
-/// The program runs synchronously, as it does under `CliRun`: it waits for what it imports where it calls it. So the
-/// callback is only ever called if the host cancels the task, and traps.
+/// The name of `handle`'s callback, which the host calls with each event while `handle` waits.
+let handleCallback = $"[callback]{handleExport}"
+
+/// What `handle` does before it runs the program: raises backpressure, so that the host gives the instance no other
+/// request until it is done, and keeps the request, `$request`, for `argument`.
+let handleBegin =
+    [ $"call {Handler.backpressureInc}"
+      "local.get $request"
+      $"global.set {HandlerState.request}"
+      "i32.const -1"
+      $"global.set {HandlerState.response}" ]
+
+/// What `handle` does once the program has answered: returns the response, then, while the host reads it, writes its
+/// body, waiting as each write blocks, and its trailers, and lowers backpressure. It leaves EXIT, 0, for `handle` to
+/// return. It needs the locals `$writer`, `$bytes`, `$length` and `$status`.
+let handleFinish =
+    [ // A component root always answers: one that doesn't is a bug in its host.
+      $"global.get {HandlerState.response}"
+      "i32.const -1"
+      "i32.eq"
+      "if"
+      "  unreachable"
+      "end"
+      "i32.const 0"
+      $"global.get {HandlerState.response}"
+      "i32.const 0"
+      "i64.const 0"
+      "i32.const 0"
+      "i32.const 0"
+      "i32.const 0"
+      "i32.const 0"
+      $"call {Handler.taskReturn}"
+      $"global.get {HandlerState.body}"
+      "local.set $writer"
+      $"global.get {HandlerState.bytes}"
+      "local.set $bytes"
+      $"global.get {HandlerState.length}"
+      "local.set $length"
+      yield! writeAllLines $"call {Handler.bodyWrite}" |> List.map (fun line -> line.Substring 2)
+      "local.get $writer"
+      $"call {Handler.bodyDropWritable}"
+      $"global.get {HandlerState.bytes}"
+      $"call ${Helpers.free}"
+      $"global.get {HandlerState.trailers}"
+      "call $__nanyx_http_write_no_trailers"
+      $"call {Handler.backpressureDec}"
+      // EXIT: the task is done.
+      "i32.const 0" ]
+
+/// The locals `handleFinish` needs.
+let handleLocals = "(local $writer i32) (local $bytes i32) (local $length i32) (local $status i32)"
+
+/// `handle`, lifted async with a callback (see `HttpHandler`), for a program whose start function, `start`, if it has
+/// one, never stops (see `ComponentCallback` for one that does): it runs the start function, which answers the request
+/// through `argument` and `result`, and then returns the response and writes its body (`handleFinish`). The callback is
+/// never called.
 let private handleFunctions (start: string option) =
     lines
-        [ $"(func $__nanyx_http_handle (export \"{handleExport}\") (param $request i32) (result i32)"
-          "  (local $writer i32)"
-          "  (local $bytes i32)"
-          "  (local $length i32)"
-          "  (local $status i32)"
-          $"  call {Handler.backpressureInc}"
-          "  local.get $request"
-          $"  global.set {HandlerState.request}"
-          "  i32.const -1"
-          $"  global.set {HandlerState.response}"
+        [ $"(func $__nanyx_http_handle (export \"{handleExport}\") (param $request i32) (result i32) {handleLocals}"
+          yield! handleBegin |> List.map (fun line -> "  " + line)
           match start with
           | Some name -> $"  call ${name}"
           | None -> ()
-          // A component root always answers: one that doesn't is a bug in its host.
-          $"  global.get {HandlerState.response}"
-          "  i32.const -1"
-          "  i32.eq"
-          "  if"
-          "    unreachable"
-          "  end"
-          "  i32.const 0"
-          $"  global.get {HandlerState.response}"
-          "  i32.const 0"
-          "  i64.const 0"
-          "  i32.const 0"
-          "  i32.const 0"
-          "  i32.const 0"
-          "  i32.const 0"
-          $"  call {Handler.taskReturn}"
-          $"  global.get {HandlerState.body}"
-          "  local.set $writer"
-          $"  global.get {HandlerState.bytes}"
-          "  local.set $bytes"
-          $"  global.get {HandlerState.length}"
-          "  local.set $length"
-          yield! writeAllLines $"call {Handler.bodyWrite}"
-          "  local.get $writer"
-          $"  call {Handler.bodyDropWritable}"
-          $"  global.get {HandlerState.bytes}"
-          $"  call ${Helpers.free}"
-          $"  global.get {HandlerState.trailers}"
-          "  call $__nanyx_http_write_no_trailers"
-          $"  call {Handler.backpressureDec}"
-          // EXIT: the task is done.
-          "  i32.const 0"
+          yield! handleFinish |> List.map (fun line -> "  " + line)
           ")"
-          $"(func $__nanyx_http_callback (export \"[callback]{handleExport}\") (param $event i32) (param $handle i32) (param $code i32) (result i32)"
+          $"(func $__nanyx_http_callback (export \"{handleCallback}\") (param $event i32) (param $handle i32) (param $code i32) (result i32)"
           "  unreachable"
           ")" ]
 
