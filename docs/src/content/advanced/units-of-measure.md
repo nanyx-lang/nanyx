@@ -52,8 +52,8 @@ println(walk)
 println(5mm)
 println(2KiB)
 println(50.5KB)
--- 2350m
--- 5mm
+-- 2.35km
+-- 5.0mm
 -- 2KiB
 -- 50500B
 ```
@@ -109,7 +109,7 @@ println(t)
 println(u)
 println(v == t)
 println(w)
--- 500ms
+-- 500.0ms
 -- 500ms
 -- true
 -- 500ms
@@ -231,7 +231,7 @@ def sprint = speed(100.0m, 9.58s)
 println(sprint * 9.58s)
 println(2.0m * 3.0m)
 println(1.0km / 1.0m)
--- 100m
+-- 100.0m
 -- 6.0m*m
 -- 1000.0
 ```
@@ -254,8 +254,8 @@ A number with one is a value of the dimension, `90.0kmh`, stored as its number o
 That is seldom a whole number, a kilometre an hour being 1/3_600_000_000 of a metre a nanosecond, so write it with a
 decimal point to store it as a `float`: `90kmh` in an `int` is an error that says so.
 
-A value prints in the largest of the dimension's units it is a whole number of, as a `Time` does, and in its parts'
-default storage units, joined by `*` and `/`, when none fits:
+A value prints in one of the dimension's own units, chosen as for a `Time` (see [Printing](#printing)), and in its parts'
+default storage units, joined by `*` and `/`, when there are none, or an `int` is a whole number of none:
 
 ```nanyx
 dimension Length
@@ -271,31 +271,37 @@ def cruise = 90.0kmh
 println(cruise)
 println(36.0km / 0.5hr)
 println(cruise + 100.0m / 1.0hr)
--- 90kmh
--- 72kmh
--- 2.5027777777777776e-8m/ns
+-- 90.0kmh
+-- 72.0kmh
+-- 90.1kmh
 ```
 
-With `unit mps: Speed = 1m / 1s` seen too, `90.0kmh` prints as `25mps`, the larger unit. A `float` that arithmetic has
-left within a millionth of a millionth of a whole number of a unit counts as that whole number: `90.0kmh + 10.0mps`
-prints `35mps`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an error
+With `unit mps: Speed = 1m / 1s` seen too, `90.0kmh` prints as `25.0mps`, the larger unit. A `float` that arithmetic
+has left within a millionth of a millionth of a whole number of a unit counts as that whole number: `90.0kmh + 10.0mps`
+prints `35.0mps`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an error
 ([NYX0298](../standard-tools/errors#nyx0298)).
 
 # Printing
 
-A measured value prints in the largest unit in which it is a whole number, and in the default storage unit otherwise.
-Zero prints in the default display unit, which is `s` for a `Time`:
+A measured value prints in a unit chosen by its storage:
+
+- **An `int`** prints in the largest unit it is a whole number of, the only units it is exact in, and in the default
+  storage unit when it is a whole number of no other: `1500ms`, `2min`.
+- **A `float` or `F32`** prints in the largest unit its magnitude is at least 1 of, `1.5s`, `16.5ms`, `-1.5s`, and in
+  the smallest unit when it is under 1 of every unit: `0.25ns`. It is written as a `float` is, so a whole number keeps
+  its decimal point, as `println(2.0)` writes `2.0`: `120.0s` prints `2.0min`.
+- **Zero** prints in the default display unit, which is `s` for a `Time`: `0s`, `0.0s`.
 
 ```nanyx
-println("{1.5s} {120s} {16.5ms} {0.25ns} {0s}")
+println("{1500ms} {120s} {1.5s} {16.5ms} {120.0s} {0.25ns} {0s} {0.0s}")
 println([1s, 2min, 3hr])
--- 1500ms 2min 16500us 0.25ns 0s
+-- 1500ms 2min 1.5s 16.5ms 2.0min 0.25ns 0s 0.0s
 -- [1s, 2min, 3hr]
 ```
 
 Only the units the printing module can write are tried: its own, and those it imports. A generic `Time(a)` is printed
-in the default storage unit, `1500000000ns`, and needs `ToString(a)`; a function that wants the largest unit takes a
-`Time(int)`. A value of a derived dimension that none of its own units fits is written in its parts' default storage
+in the default storage unit, `1500000000ns`, and needs `ToString(a)`, as choosing a unit needs a comparison; a function
+that wants a unit chosen takes a `Time(int)` or a `Time(float)`. A value of a derived dimension that none of its own units fits is written in its parts' default storage
 units. `dbg` writes a measured value as its dimension around its number of default storage units,
 `Time(1500000000)`.
 

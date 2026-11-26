@@ -1,5 +1,6 @@
 /// Units of a derived dimension at run time (#2858): a number with one is its number of the parts' base units, and a
-/// value of the dimension is written in the largest of its units the module sees that it is a whole number of.
+/// value of the dimension stored as a `float` is written in the largest of its units the module sees that its magnitude is
+/// at least 1 of.
 module TranspilerWasmTests.Features.Units.RunDerivedUnit
 
 open System.IO
@@ -29,11 +30,10 @@ println(36.0km / 0.5hr)
 println(100.0m / 9.58s)
 println(fast / 1.0kmh)
 """
-    // 90.1 kilometres an hour, and a speed that is no whole number of them, are written in the parts' base units.
-    runSource (normalized source) |> assertRan "90kmh\n2.5027777777777776e-8m/ns\n72kmh\n1.0438413361169103e-8m/ns\n90.0\n"
+    runSource (normalized source) |> assertRan "90.0kmh\n90.1kmh\n72.0kmh\n37.57828810020877kmh\n90.0\n"
 
 [<Fact>]
-let ``Run - the largest unit a speed is a whole number of is the one it is written in`` () =
+let ``Run - the largest unit a speed is at least 1 of is the one it is written in`` () =
     let source =
         speed
         + """unit kmh: Speed = 1km / 1hr
@@ -44,8 +44,8 @@ println(1.0kmh)
 println(90.0kmh + 10.0mps)
 """
     // A metre a second is the larger unit: 90 kilometres an hour is 25 of them, and a sum of the two, worked out with
-    // floats that round, is written in it as well.
-    runSource (normalized source) |> assertRan "25mps\n1kmh\n35mps\n"
+    // floats that round, is written in it as well. One kilometre an hour is under 1 of them.
+    runSource (normalized source) |> assertRan "25.0mps\n1.0kmh\n35.0mps\n"
 
 [<Fact>]
 let ``Run - a derived dimension's units imported from another module write its values`` () =
@@ -71,4 +71,4 @@ println(60.0mph)
     File.WriteAllText(Path.Combine(directory.Path, "speeds.nyx"), normalized lib)
     let mainPath = Path.Combine(directory.Path, "main.nyx")
     File.WriteAllText(mainPath, normalized main)
-    runFile mainPath |> assertRan "90kmh\n60mph\n"
+    runFile mainPath |> assertRan "55.92340730136006mph\n60.0mph\n"

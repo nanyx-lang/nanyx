@@ -147,12 +147,13 @@ For an `int` storage, or a sized integer that converts to one, the definition ca
 `__measuredIntToString` with the number, the units' names and their scales, the default display unit's name, and the
 text to write around a number of default storage units: it writes the number in the first unit it is a whole number
 of, `2min` for `120s`, zero in the default display unit, `0s`, and a number no unit fits in the default storage unit. A
-`float` or `F32` storage calls `__measuredFloatToString`, which writes a whole number of a unit without its decimal
-point, `1500ms` for `1.5s`, zero as `0.0s`, and a number of default storage units as a float is, `1.5ns`. A derived
+`float` or `F32` storage calls `__measuredFloatToString`, which writes the number in the first unit its magnitude is at
+least 1 of, `1.5s`, `2.0min` for `120.0s`, and in the last, the smallest, when it is under 1 of every unit, `0.25ns`,
+as a float is written, and zero as `0.0s`. A derived
 dimension has no default display unit, so its zero is written in its parts' default storage units. A number
 within a millionth of a millionth of a whole one, relatively, counts as that whole one, as float arithmetic rounds: a unit
 of a derived dimension is seldom a whole number of its default storage units, so `90.0kmh + 10.0mps` is `3.4999999999999996e-8` of
-a metre a nanosecond, and is written `35mps`. Any other
+a metre a nanosecond, and is written `35.0mps`. Any other
 storage, a type variable's among them, is written in the default storage unit through its own `ToString`, so the
 definition for a `Time(a)` requires `ToString(a)`. A module that can't write its dimension's default storage unit writes
 a number of default storage units as `dbg` does, `Time(1500000000)`.
@@ -199,8 +200,8 @@ default storage units; `90kmh` in an `int` is no whole number of them, an error 
 within one dimension or by a number.
 
 A value of a derived dimension is written by its derived `toString` as one of a dimension is (see [Printing](#printing)),
-in the largest of the dimension's units the module sees that it is a whole number of (`Units.seenOf`), imported ones
-among them: `90.0kmh` is `90kmh`, or `25mps` where `unit mps: Speed = 1m / 1s` is seen too. A value no unit fits, and one
+in one of the dimension's units the module sees (`Units.seenOf`), imported ones among them, chosen as for a dimension:
+`90.0kmh` is `90.0kmh`, or `25.0mps` where `unit mps: Speed = 1m / 1s` is seen too. An `int` no unit fits, and a value
 of a derived dimension with no units, is written in its parts' default storage units, joined by `*` and `/` with no
 spaces: `100.0m / 9.58s` is `1.0438413361169103e-8m/ns`. A module that can't write a part's default storage unit writes
 it as `dbg` does,
