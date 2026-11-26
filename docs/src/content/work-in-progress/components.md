@@ -246,7 +246,9 @@ the format is settled, with wit-component's output to test it.
 - **After [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)'s state machines**, an `Async` entry is lifted
   `[async-lift]` with the scheduler as its `[callback][async-lift]`.
   - A call that waits becomes an `[async-lower]` import, or an async `stream.read` or `stream.write`, whose subtask the
-    task joins to the instance's waitable set.
+    task joins to the instance's waitable set. This is built for every wait in a function that requires `Async`
+    ([Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)); `Console`'s and
+    `FileSystem`'s functions don't, so theirs still block.
   - When every task is waiting, the scheduler returns WAIT. When the callback gets an event, the scheduler resumes the
     task that was waiting on it.
   - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), which
@@ -268,6 +270,10 @@ the format is settled, with wit-component's output to test it.
   [A program's own exports](../deep-dives/components#a-programs-own-exports). The HTTP host's component roots have no
   `provide` yet, so under that host an export that requires a context is `NYX0237`.
 
+- **`Console` and `FileSystem` in a component wait by blocking** (settled 2026-11-26). Their functions don't require
+  `Async`, so a write to stdout, a read of stdin and a file's calls block the instance, as they block its thread on the
+  core root. Letting them run while other tasks do waits for async streams
+  ([Concurrency and crash boundaries](./concurrency-and-crash-boundaries)).
 - **Requests at once in one instance.** An instance serves one request at a time, and others in turn. Whether requests
   may interleave in one instance, and so share its memory and crashes, once the callback ABI lets them, belongs with
   tasks and processes on [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#3-tasks-and-processes).
