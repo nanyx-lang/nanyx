@@ -252,7 +252,12 @@ let private unitDeclaration (c: Cursor) (start: int) : TopLevelItem list =
                     c.Expect RightParen |> ignore
                     Some storage
                 else None
-            DimensionDecl(isExport, declared, storage)
+            let derived =
+                if storage.IsNone && c.Is Equals && c.OnSameLine then
+                    c.Take() |> ignore
+                    Some (DescentTypes.typeExpr c)
+                else None
+            DimensionDecl(isExport, declared, storage, derived)
         else
             c.Expect Colon |> ignore
             let dimension, _ = identifierWithSpan c
@@ -471,6 +476,7 @@ let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem
                 Declared = c.Declared
                 DocumentableStarts = c.DocumentableStarts
                 StringTexts = c.StringTexts
+                TokensRead = c.TokensRead
                 Comments = c.Comments
                 ModuleBlocks = c.ModuleBlocks }
         Ok(List.ofSeq all, state)
@@ -544,6 +550,7 @@ let readModuleRecovering (file: string) (source: string) : TopLevelItem list * P
             Declared = c.Declared
             DocumentableStarts = c.DocumentableStarts
             StringTexts = c.StringTexts
+            TokensRead = c.TokensRead
             Comments = c.Comments
             ModuleBlocks = c.ModuleBlocks }
     List.ofSeq all, state, errors |> Seq.sortBy _.Span.Start |> List.ofSeq

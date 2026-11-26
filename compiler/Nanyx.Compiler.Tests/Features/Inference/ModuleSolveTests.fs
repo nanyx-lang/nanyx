@@ -58,17 +58,16 @@ let private pipeDefs (from: int) (count: int) =
 [<Fact>]
 let ``A failure early in a module leaves the defs after it solved on top of what agrees, not afresh`` () =
     // Each type looked up after a failure solved the whole module again, twice, so checking took time in proportion to
-    // the square of the module's size, and minutes for a package's (#2449). What the failure adds to the lists solved
-    // from the start grows by at most two for each def after it, where each type it looked up was two: the list a def
-    // ends with has the failure in it, so it is no checkpoint, and the next def's is solved from the start about once
-    // (#2848).
+    // the square of the module's size, and minutes for a package's (#2449). Then each def after it was still solved from
+    // the start once, as the list a def ended with had the failure in it, and so was no checkpoint; now the constraints
+    // of it that agree are (#2848). What the failure adds to the lists solved from the start is the same however many
+    // defs follow it.
     let failing count = moduleOf ([ "def first: int = \"one\"" ] @ pipeDefs 1 count)
     let passing count = moduleOf ([ "def first: int = 1" ] @ pipeDefs 1 count)
     Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' vs 'int'", "\"one\""), onlyDiagnostic (failing 20))
     let fullSolves (source: string) = snd (Solving.countingFullSolves (fun () -> Compiler.compile source))
     let addedBefore count = fullSolves (failing count) - fullSolves (passing count)
-    let atTwenty, atEighty = addedBefore 20, addedBefore 80
-    Assert.True(atEighty <= atTwenty + 2 * 60, $"the failure added {atEighty} full solves before 80 defs, and {atTwenty} before 20")
+    Assert.Equal(addedBefore 20, addedBefore 80)
 
 /// A copy of the prelude's `proc` (`stdlib/nanyx/prelude-results.nyx`), as `prc`: checking it sets a constraint of the
 /// call in its `for` member aside for a while, though the def agrees once it is checked.
@@ -114,3 +113,16 @@ let ``A constraint set aside while a def is checked leaves the defs after it sol
         count
     let addedBefore count = fullSolves (procLike @ pipeDefs 1 count) - fullSolves (pipeDefs 1 count)
     Assert.Equal(addedBefore 10, addedBefore 40)
+
+[<Fact>]
+let ``A call passed a division whose storages don't agree adds no full solve for the defs after it that another error doesn't`` () : unit =
+    // The call finds no instance for the type the division leaves open, and looks for the division's failure among the
+    // constraints solved so far, not by solving them afresh (#2852).
+    let fullSolves (first: string) count =
+        let result, solves = Solving.countingFullSolves (fun () -> Compiler.compile (moduleOf ([ first ] @ pipeDefs 1 count)))
+        Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], result.Diagnostics |> List.map _.Code)
+        solves
+    let addedBefore count =
+        fullSolves "def first: [Console] () -> () = { () -> println(1.5s / 1ms) }" count
+        - fullSolves "def first: int = \"one\"" count
+    Assert.Equal(addedBefore 20, addedBefore 80)

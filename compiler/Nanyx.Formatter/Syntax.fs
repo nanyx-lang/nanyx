@@ -116,6 +116,8 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             | TypeOpenRecord(fields, row) -> TypeOpenRecord(List.map typeField fields, row)
             | TypeApply(n, args) -> TypeApply(n, List.map typeExpr args)
             | TypeFunc(a, b) -> TypeFunc(typeExpr a, typeExpr b)
+            | TypeProduct(a, b) -> TypeProduct(typeExpr a, typeExpr b)
+            | TypeQuotient(a, b) -> TypeQuotient(typeExpr a, typeExpr b)
             | TypeTag(n, payload) -> TypeTag(n, Option.map typeExpr payload)
             | TypeUnion items -> TypeUnion(List.map typeExpr items)
             | TypeIntersection items -> TypeIntersection(List.map typeExpr items)
@@ -156,7 +158,7 @@ let normalize (items: TopLevelItem list) : TopLevelItem list =
             match i.Kind with
             | ModuleDecl _ -> i.Kind
             | Attribute(n, argument) -> Attribute(n, Option.map expr argument)
-            | DimensionDecl(isExport, n, storage) -> DimensionDecl(isExport, n, Option.map typeExpr storage)
+            | DimensionDecl(isExport, n, storage, derived) -> DimensionDecl(isExport, n, Option.map typeExpr storage, Option.map typeExpr derived)
             | UnitDecl(isExport, n, dimension, multiple) -> UnitDecl(isExport, n, dimension, Option.map expr multiple)
             | ModuleBlock(n, items) -> ModuleBlock(n, items' items)
             | Def(ValueDef(isExport, n, t, value)) -> Def(ValueDef(isExport, name n, Option.map typeExpr t, expr value))

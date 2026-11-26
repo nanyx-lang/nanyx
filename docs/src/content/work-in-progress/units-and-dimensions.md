@@ -4,23 +4,20 @@ description: "Compile-time units for numbers"
 order: 2
 ---
 
-> **Status: step 1 built; step 2 open.** Dimensions of one kind, their units, numbers with units, the arithmetic on
-> them, printing, `Time` and `Instant` are built, and [Units of measure](../advanced/units-of-measure) describes them
-> ([Units of measure](../deep-dives/units) in Deep dives says how the compiler does it). This page keeps what is still
-> to come: derived dimensions, below, and the [open questions](#open-questions).
+> **Status: step 1 and derived dimensions built; dimension variables and exponents open.** Dimensions, their units,
+> numbers with units, the arithmetic on them, derived dimensions written with `*` and `/`, printing, `Time` and `Instant`
+> are built, and [Units of measure](../advanced/units-of-measure) describes them ([Units of
+> measure](../deep-dives/units) in Deep dives says how the compiler does it). This page keeps what is still open: the
+> rest of [Step 2](#step-2-derived-dimensions), and the [open questions](#open-questions).
 
 # Step 2: derived dimensions
 
-Not part of the first step, and not settled.
+Derived dimensions written with `*` and `/` are built: [Derived dimensions](../advanced/units-of-measure#derived-dimensions)
+describes them, and [Units of measure](../deep-dives/units#derived-dimensions) in Deep dives says how. Two choices were
+made for them: a storage is written on each part, `Length(float) / Time(float)`, since a part is already a type the
+parser reads and a type printed that way reads back as the same type; and a derived dimension has no units of its own
+and prints in its parts' base units, the simpler choice (units of derived dimensions are #2858). What is still open:
 
-- **Derived dimensions.** `Length / Time` is a dimension, and `dimension Speed = Length / Time` names it, generic in
-  its storage as its parts are: `Speed(a)`. The compiler stores a dimension as sorted base dimensions with integer
-  exponents, so `Length / Time` and `Length * Time^-1` are the same dimension, and `*` and `/` add and subtract
-  exponents: `100m / 9.58s` is a `Speed(float)`. Both sides share a storage, so a `Length(float)` divided by a
-  `Time(int)` converts one first.
-- **Integer storage.** `/` across two dimensions gives the `fraction` storage, so `50MB / 1s` is a `float`-stored
-  `Bytes / Time`, not `0` bytes per nanosecond. `//` is only between values of one dimension or by a plain number, so
-  a derived dimension is never truncated.
 - **Dimension variables.** `def square: d -> d^2` (spelling open) needs unification that solves equations such as
   `d * d = Length^2`. This is the largest piece of the work; Kennedy's "Types for Units-of-Measure" gives an algorithm
   that fits a Hindley–Milner checker. `Time(a)` already means a `Time` stored as `a`, so a dimension variable needs a

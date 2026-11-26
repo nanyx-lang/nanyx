@@ -6,8 +6,10 @@ open NyxCompiler.InferState
 /// Arithmetic on measured values (see `Units`): the table "Arithmetic" on the docs' Units of measure page. The
 /// compiler types each operator on a measured value as the operator on its storage, which is what it is at run time,
 /// and gives the result its dimension where the table says: `t + u` and `t * 2` are `Time(a)`, `t / 2` is
-/// `Time(fraction)` and `t / u` a `fraction`. Operands of two dimensions, a measured value and a number with no unit
-/// where both are measured, and a product or quotient of two dimensions, which is step 2's, are errors.
+/// `Time(fraction)` and `t / u` a `fraction`. A product or quotient of two dimensions is of their derived dimension,
+/// `d / t` a `Length / Time` (see `Dimension.multiply`), and a quotient's storage is the fraction. A sum of two
+/// dimensions, a measured value and a number with no unit where both are measured, and a `//` that would round a
+/// derived dimension are errors.
 module internal MeasuredArithmetic =
     /// An operator on measured values as the operator on their storages: the types its operands are read at, and the
     /// type the storages' operator's result makes the result.
@@ -34,7 +36,7 @@ module internal MeasuredArithmetic =
     /// The error for a power, at `at`, of a value of the dimension `dimension`.
     let powerError (at: SourceSpan) (dimension: Dimension) : Diagnostic =
         Diagnostics.at DiagnosticCodes.TypeMismatch at
-            $"A power of a '{Dimension.text dimension}' would be of a derived dimension, which a later step of units of measure adds: multiply the number it is in a unit by itself instead"
+            $"A power of a '{Dimension.text dimension}' has no syntax yet: multiply it by itself, as `t * t` does, for a '{Dimension.text (Dimension.multiply dimension dimension)}'"
 
     let private error (expr: Expression) (message: string) =
         let at = match expr.Kind with BinaryOp(_, Some opSpan, _, _) -> opSpan | _ -> expr.Span
@@ -79,11 +81,17 @@ module internal MeasuredArithmetic =
             // Divided by a number: `/` gives a measured value of the storage's fraction, `//` one of the storage.
             | ("/" | "//"), Some (dimension, storage), None -> Ok { Left = storage; Right = rightTy; Result = measure dimension }
             // Divided by one of its own dimension: how many of the one are in the other, a plain number.
-            | ("/" | "//"), Some (l, ls), Some (r, rs) when l = r -> Ok { Left = ls; Right = rs; Result = id }
-            | ("*" | "/" | "//"), Some (l, _), Some (r, _) ->
-                error expr $"'{Dimension.text l}' {op} '{Dimension.text r}' would be a derived dimension, which a later step of units of measure adds: divide by a value of '{Dimension.text l}' to read it as a number"
-            | ("/" | "//"), None, Some (dimension, _) ->
-                error expr $"A number divided by a '{Dimension.text dimension}' would be a derived dimension, which a later step of units of measure adds"
+            | "//", Some (l, ls), Some (r, rs) when l = r -> Ok { Left = ls; Right = rs; Result = id }
+            // A product or quotient of two dimensions, or of a number by one, is of their derived dimension: `d / t` is a
+            // `Length / Time`. Both operands share a storage, and a quotient is of its fraction, so that `50MB / 1s` is
+            // not rounded to a whole number of bytes a nanosecond.
+            | "*", Some (l, ls), Some (r, rs) -> Ok { Left = ls; Right = rs; Result = Dimension.measured (Dimension.multiply l r) }
+            | "/", Some (l, ls), Some (r, rs) -> Ok { Left = ls; Right = rs; Result = Dimension.measured (Dimension.divide l r) }
+            | "/", None, Some (dimension, storage) -> Ok { Left = storage; Right = storage; Result = Dimension.measured (Dimension.divide [] dimension) }
+            | "//", Some (l, _), Some (r, _) ->
+                error expr $"`//` rounds only between two values of one dimension, or by a number, and '{Dimension.text l}' // '{Dimension.text r}' would round a '{Dimension.text (Dimension.divide l r)}': divide with `/`"
+            | "//", None, Some (dimension, _) ->
+                error expr $"`//` rounds only between two values of one dimension, or by a number, and a number // '{Dimension.text dimension}' would round a '{Dimension.text (Dimension.divide [] dimension)}': divide with `/`"
             | _ ->
                 let dimension = left |> Option.orElse right |> Option.map (fst >> Dimension.text) |> Option.defaultValue "dimension"
                 error expr ($"'{op}' is not defined on a '{dimension}': a measured value has " + "`+`, `-`, `*`, `/`, `//` and `%`"))

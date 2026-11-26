@@ -2752,6 +2752,54 @@ def size: Bytes(a) -> Bytes = { b -> b }  -- error NYX0294: 'Bytes' is constrain
 
 To fix it, write the dimension alone: `Bytes -> Bytes`.
 
+# NYX0295: Parts of a derived dimension stored differently
+
+The parts of a derived dimension, `Length / Time`, are written with two storages. A value of a derived dimension is one
+number, so its parts share one storage. A dimension that names a derived one, `dimension Speed = Length / Time`, is
+generic in its storage as its parts are, so its parts are written without one.
+
+```nanyx
+dimension Length
+
+@baseUnit unit m: Length
+
+def speed: Length(a) / Time(float) -> int = { _ -> 1 }  -- error NYX0295: The parts of 'Length / Time' are stored as 'a' and as 'float', ...
+```
+
+To fix it, write one storage on every part, `Length(float) / Time(float)`, or on none, `Length / Time`.
+
+# NYX0296: Part of a derived dimension that is no dimension
+
+A derived dimension multiplies or divides a type that is no dimension. Only dimensions are multiplied and divided in a
+type: a number with no unit is a plain number, not a dimension.
+
+```nanyx
+dimension Length
+
+@baseUnit unit m: Length
+
+def f: Length / int -> int = { _ -> 1 }  -- error NYX0296: 'int' is no dimension, ...
+```
+
+To fix it, write dimensions on both sides of `*` and `/`, or leave the plain number out of the type.
+
+# NYX0297: Unit of a derived dimension
+
+A unit is declared on a derived dimension. A derived dimension has no units of its own: a value of it is written in its
+parts' units, as `100m / 9.58s` is, and printed in their base units.
+
+```nanyx
+dimension Length
+
+@baseUnit unit m: Length
+
+dimension Speed = Length / Time
+
+unit kph: Speed = 1m  -- error NYX0297: 'Speed' is a derived dimension, which has no units of its own: ...
+```
+
+To fix it, write a value of it as a quotient of its parts' units: `1km / 1hr`.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it

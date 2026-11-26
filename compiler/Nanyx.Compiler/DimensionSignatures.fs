@@ -21,7 +21,7 @@ module internal DimensionSignatures =
         let imported = typeDefs |> Map.filter (fun _ info -> info.IsDimension) |> Map.map (fun _ info -> not info.Parameters.IsEmpty)
         module'
         |> List.choose (function
-            | Kind (DimensionDecl(_, name, storage)) -> Some (name, storage.IsNone)
+            | Kind (DimensionDecl(_, name, storage, _)) -> Some (name, storage.IsNone)
             | _ -> None)
         |> List.fold (fun acc (name, generic) -> acc |> Map.add name generic) imported
 
@@ -34,14 +34,104 @@ module internal DimensionSignatures =
             if index < 26 then letter else $"{letter}{index / 26}")
         |> Seq.filter (written.Contains >> not)
 
+    /// The types a derived dimension, `Length / Time`, multiplies and divides: those that are no product or quotient.
+    let rec private partsOf (derived: TypeExpr) : TypeExpr list =
+        match derived.Kind with
+        | TypeProduct(left, right)
+        | TypeQuotient(left, right) -> partsOf left @ partsOf right
+        | _ -> [ derived ]
+
+    /// A storage as it is written, to tell two apart: `a` and `float` are two, and `a` and `a` one.
+    let rec private writtenStorage (storage: TypeExpr) : string =
+        match storage.Kind with
+        | TypeVar name
+        | TypeName name -> name
+        | TypeApply(name, args) -> $"""{name}({args |> List.map writtenStorage |> String.concat ", "})"""
+        | _ -> $"#{storage.Id}"
+
+    /// A derived dimension as a message writes it, its parts without their storages: `Length / (Time * Time)`.
+    let rec private writtenDimension (derived: TypeExpr) : string =
+        let right (part: TypeExpr) =
+            match part.Kind with
+            | TypeProduct _
+            | TypeQuotient _ -> $"({writtenDimension part})"
+            | _ -> writtenDimension part
+        match derived.Kind with
+        | TypeProduct(left, part) -> $"{writtenDimension left} {UnitSyntax.times} {right part}"
+        | TypeQuotient(left, part) -> $"{writtenDimension left} {UnitSyntax.over} {right part}"
+        | TypeName name
+        | TypeApply(name, _) -> name
+        | _ -> "?"
+
+    /// The error for `part` of a derived dimension that is no dimension.
+    let private notADimension (part: TypeExpr) (name: string) =
+        Diagnostics.at DiagnosticCodes.NotADimension part.Span
+            $"'{name}' is no dimension, and a derived dimension multiplies and divides dimensions, as `Length / Time` does"
+
+    /// The errors in what the declaration of a derived dimension, `dimension Speed = Length / Time`, names: a part that
+    /// is no dimension, and a storage written on one, since the dimension is generic in its storage as its parts are.
+    let private declarationErrors (dimensions: Map<Identifier, bool>) (name: Identifier) (derived: TypeExpr) : Diagnostic list =
+        partsOf derived
+        |> List.choose (fun part ->
+            match part.Kind with
+            | TypeName partName when dimensions.ContainsKey partName -> None
+            | TypeApply(partName, _) when dimensions.ContainsKey partName ->
+                Some (
+                    Diagnostics.at DiagnosticCodes.DerivedDimensionStorages part.Span
+                        $"'{name}' is generic in its storage, as its parts are, so they are written without one: write `{Names.written partName}`, and `{Names.written name}(float)` where a value of it is"
+                    |> Diagnostics.about name)
+            | TypeName partName
+            | TypeApply(partName, _) -> Some (notADimension part partName)
+            | _ -> Some (notADimension part "this"))
+
     /// `typeExpr` with each dimension written without its storage given a storage variable of its own, the storage
     /// variables of the dimensions it names, and the errors in them: a storage written for a constrained dimension.
+    /// The parts of a derived dimension share one storage: the one written on its parts, or one of its own.
     let private withStorages (dimensions: Map<Identifier, bool>) (typeExpr: TypeExpr) : TypeExpr * Storage list * Diagnostic list =
         let names = (freshNames (Set.ofList (TypeResolution.annotationVarNames typeExpr))).GetEnumerator()
         let storages = ResizeArray<Storage>()
         let errors = ResizeArray<Diagnostic>()
-        let rec rewrite (t: TypeExpr) : TypeExpr =
+        let rec derived (t: TypeExpr) : TypeExpr =
+            let parts = partsOf t
+            let written =
+                parts
+                |> List.choose (fun part ->
+                    match part.Kind with
+                    | TypeApply(name, [ storage ]) when dimensions.TryFind name = Some true -> Some storage
+                    | _ -> None)
+            for part in parts do
+                match part.Kind with
+                | TypeName name
+                | TypeApply(name, _) when dimensions.ContainsKey name -> ()
+                | TypeName name
+                | TypeApply(name, _) -> errors.Add(notADimension part name)
+                | _ -> errors.Add(notADimension part "this")
+            match written |> List.distinctBy writtenStorage with
+            | first :: second :: _ ->
+                errors.Add(
+                    Diagnostics.at DiagnosticCodes.DerivedDimensionStorages t.Span
+                        $"The parts of '{writtenDimension t}' are stored as '{writtenStorage first}' and as '{writtenStorage second}', and a derived dimension's parts share one storage: write it on every part, or on none")
+            | _ -> ()
+            let shared =
+                match written with
+                | storage :: _ -> storage
+                | [] ->
+                    names.MoveNext() |> ignore
+                    TypeExpr.at t.Span (TypeVar names.Current)
+            match shared.Kind with
+            | TypeVar variable -> storages.Add { Variable = variable; Dimension = writtenDimension t; Span = t.Span }
+            | _ -> ()
+            let rec apply (part: TypeExpr) =
+                match part.Kind with
+                | TypeProduct _
+                | TypeQuotient _ -> TypeExpr.mapChildren apply part
+                | TypeName name when dimensions.TryFind name = Some true -> TypeExpr.at part.Span (TypeApply(name, [ shared ]))
+                | _ -> part
+            apply t
+        and rewrite (t: TypeExpr) : TypeExpr =
             match t.Kind with
+            | TypeProduct _
+            | TypeQuotient _ -> derived t
             | TypeName name when dimensions.TryFind name = Some true ->
                 names.MoveNext() |> ignore
                 let variable = names.Current
@@ -137,4 +227,8 @@ module internal DimensionSignatures =
             | ModuleBlock(name, items) -> { item with Kind = ModuleBlock(name, List.map inItem items) }
             | _ -> item
         let rewritten = List.map inItem module'
+        for item in module' do
+            match item.Kind with
+            | DimensionDecl(_, name, _, Some derived) -> errors.AddRange(declarationErrors dimensions name derived)
+            | _ -> ()
         rewritten, List.ofSeq errors

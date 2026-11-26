@@ -640,9 +640,10 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                     let signature = contextSignatureOf env current name
                     let before = shared.Value
                     let argTys, argTysAsRead, read, current = contextArgTysAtCall current before signature scheme.Type calleeTy args
-                    // A number literal nothing has settled yet is of its default type here (see `NumericLiterals`).
+                    // A number literal nothing has settled yet is of its default type here (see `NumericLiterals`), and so
+                    // is one a pending `/` divides, whose fraction the argument may be (see `Fractions.settleIn`).
                     let argTys, argTysAsRead, read, current =
-                        match NumericLiterals.settleIn argTys current with
+                        match Fractions.settleIn argTys current with
                         | Some literalsSettled -> contextArgTysAtCall literalsSettled before signature scheme.Type calleeTy args
                         | None -> argTys, argTysAsRead, read, current
                     shared.Value <- read
@@ -766,6 +767,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                             match otherInstanceInScope env current ctxName argTys with
                             | Some other when not settled -> Error [ unsettledBesideOther name ctxName other calleeSpan ]
                             | _ -> ensureContextAvailable (Some call.Id) true env current name [ ctx ] calleeSpan
+                        let argumentFailed = lazy (Solving.failsWithin call.Span current.Constraints)
                         match available, current.ContextScope with
                         | Ok next, _ -> Ok (found @ [ None ], next)
                         // In an unannotated def, a type the call leaves open may be settled by the rest of the body,
@@ -781,7 +783,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         // do not fit the callee are the error instead (see `inferExpr`).
                         | Error errors, scope when
                             argTys |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not)
-                            && not (snd (Solving.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span)) ->
+                            && not argumentFailed.Value ->
                             let annotatedDef =
                                 match scope with
                                 | DefScope(defName, _) -> Some defName
@@ -795,6 +797,13 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                 { current with
                                     PendingContextInstances = pending :: current.PendingContextInstances
                                     HoleScopes = current.HoleScopes |> Map.add call.Id (env, annotatedDef) })
+                        // Where an argument failed to check, as `1.5s / 1ms` does, its storages a `float` and an `int`,
+                        // that is the error, reported where it is: the context of a type it left unsettled is not (#2852).
+                        // A `for` loop's `__toSeq(xs)` is left to fail: `inferExpr` reads it as the call it stands for (see `PipeTargets`).
+                        | Error _, _ when
+                            name <> ForSyntax.toSeq
+                            && argumentFailed.Value ->
+                            Ok (found @ [ None ], current)
                         | Error errors, _ -> Error errors
                 | _ -> Ok (found @ [ None ], current))) (Ok ([], state))
         |> Result.map (fun (found, current) ->

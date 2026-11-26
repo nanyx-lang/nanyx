@@ -186,9 +186,10 @@ let private unitEntries (file: string) (docOf: SourceSpan -> string option) : En
         |> List.mapi (fun index item -> (if index = 0 then None else Some items[index - 1]), item)
         |> List.choose (fun (before, item) ->
             match item.Kind with
-            | DimensionDecl(true, name, storage) ->
+            | DimensionDecl(true, name, storage, derived) ->
                 let storage = storage |> Option.map (fun storage -> $"({textOf storage.Span})") |> Option.defaultValue ""
-                entry $"{UnitSyntax.dimensionKeyword} {name}{storage}" item name
+                let derived = derived |> Option.map (fun derived -> $" = {textOf derived.Span}") |> Option.defaultValue ""
+                entry $"{UnitSyntax.dimensionKeyword} {name}{storage}{derived}" item name
             | UnitDecl(true, name, dimension, multiple) ->
                 let baseUnit =
                     match before with

@@ -107,7 +107,7 @@ module DocComments =
         // A dimension or a unit, whose name is where its declaration noted it (see `noteDocumentable`).
         let rec unitDeclarations (item: TopLevelItem) =
             match item.Kind with
-            | DimensionDecl(_, name, _)
+            | DimensionDecl(_, name, _, _)
             | UnitDecl(_, name, _, _) ->
                 documentableStarts
                 |> Map.tryFind item.Span.Start

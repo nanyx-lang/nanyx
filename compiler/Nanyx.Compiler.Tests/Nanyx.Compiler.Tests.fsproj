@@ -24,6 +24,7 @@
     <Compile Include="Features\Arithmetic\NumberConversionTests.fs" />
     <Compile Include="Features\Arithmetic\OperandsSettledLaterTests.fs" />
     <Compile Include="Features\Arithmetic\OperatorCheckTimeTests.fs" />
+    <Compile Include="Features\Arithmetic\OwnTypeOperatorTests.fs" />
     <Compile Include="Features\Attached\AttachedTests.fs" />
     <Compile Include="Features\Attached\AttachedExtensionTests.fs" />
     <Compile Include="Features\Attached\BuiltinTypeNameTests.fs" />
@@ -44,6 +45,7 @@
     <Compile Include="Features\Units\MeasuredDisplayTests.fs" />
     <Compile Include="Features\Units\PreludeTimeTests.fs" />
     <Compile Include="Features\Units\InstantTests.fs" />
+    <Compile Include="Features\Units\DerivedDimensionTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />

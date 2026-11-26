@@ -392,9 +392,27 @@ and internal typePostfix (c: Cursor) =
     noOptionalMarker c "A type can't be marked optional with `?`: write a value that may be absent as `#some(T) | #none`"
     atom
 
+/// A type, or a derived dimension: types joined by `*` and `/` on one line, read from the left, so `Length / Time / Time`
+/// is `Length` divided by `Time` twice (see `UnitSyntax`).
+and private typeDimension (c: Cursor) =
+    let start = c.Start
+    let next () =
+        let isTimes = c.Is(Operator, UnitSyntax.times)
+        if not (isTimes || c.Is(Operator, UnitSyntax.over)) || not c.OnSameLine then raise NoMatch
+        c.Take() |> ignore
+        isTimes, typePostfix c
+    let mutable result = typePostfix c
+    let mutable going = true
+    while going do
+        match c.Attempt next with
+        | Some(isTimes, right) ->
+            result <- TypeExpr.at (c.SpanFrom start) (if isTimes then TypeProduct(result, right) else TypeQuotient(result, right))
+        | None -> going <- false
+    result
+
 and private typeIntersection (c: Cursor) =
     let start = c.Start
-    sepBy1 c (fun () -> typePostfix c) (fun () -> if not (across c Ampersand None) then raise NoMatch else c.Take() |> ignore)
+    sepBy1 c (fun () -> typeDimension c) (fun () -> if not (across c Ampersand None) then raise NoMatch else c.Take() |> ignore)
     |> singleOrCombined c start TypeIntersection
 
 /// A `|`, before a union's first type or between two. A doc comment before it documents the type after it.

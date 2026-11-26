@@ -73,11 +73,10 @@ let ``A number with no unit is no operand of a sum of measured values`` () =
     Assert.Contains("a number with no unit is of none", message)
 
 [<Fact>]
-let ``A product, quotient or power that would be a derived dimension is an error`` () =
-    for source in [ "def x = 1ms * 2ms"; "def x = 2 / 1ms"; "def x = 1ms ** 2" ] do
-        let code, message = only source
-        Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-        Assert.Contains("derived dimension", message)
+let ``A power of a measured value is an error that says to multiply it by itself`` () =
+    let code, message = only "def x = 1ms ** 2"
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Contains("multiply it by itself", message)
 
 [<Fact>]
 let ``Beside a generic storage, a number with a unit that is no whole number of base units is an error`` () =

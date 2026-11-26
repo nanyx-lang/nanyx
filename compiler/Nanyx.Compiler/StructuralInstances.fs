@@ -268,16 +268,21 @@ module internal StructuralInstances =
     /// of base units in the largest of `units` it is a whole number of, by a prelude function, where the storage is an
     /// `int` or a `float`, or a type that converts to one. Zero, a value no unit fits and a value of any other storage,
     /// one of a type variable's, are written in the base unit, through the storage's own `ToString`, or as `dbg` writes
-    /// them, `Time(500)`, if the module sees no base unit.
+    /// them, `Time(500)`, if the module sees no base unit. A value of a derived dimension, which has no units of its own,
+    /// is written in its parts' base units, `units`, multiplied and divided: `10.4m/ns`.
     let private measuredText (span: SourceSpan) (dimension: Dimension) (storage: Ty) (units: UnitInfo list) (value: Expression) : Expression =
         let expr = Expression.at span
         let call (callee: Identifier) (args: Expression list) = expr (FunctionCall(callee, None, args))
         let text (s: string) = expr (LiteralExpr (StringLit s))
         let stored = call Units.storageIntrinsic [ value ]
+        let baseOf (id: NominalId) = units |> List.tryFind (fun info -> UnitInfo.isBase info && info.Dimension = id)
         let before, after =
             match units |> List.tryFind UnitInfo.isBase with
-            | Some baseUnit -> "", baseUnit.Name
-            | None -> $"{Dimension.text dimension}(", ")"
+            | Some _ when Dimension.isDerived dimension && dimension |> List.forall (fst >> baseOf >> Option.isSome) ->
+                "", Dimension.writtenWith (fun id -> (baseOf id).Value.Name) "*" "/" dimension
+            | Some baseUnit when not (Dimension.isDerived dimension) -> "", baseUnit.Name
+            | _ -> $"{Dimension.text dimension}(", ")"
+        let units = if Dimension.isDerived dimension then [] else units
         let inUnits (helper: Identifier) (number: Expression) (scales: (UnitInfo * Expression) list) =
             call helper [
                 number
@@ -520,6 +525,10 @@ module internal StructuralInstances =
             let shape =
                 match shape with
                 | MeasureShape([ dimension, 1 ], storage, _) -> MeasureShape([ dimension, 1 ], storage, Units.seenOf state dimension)
+                // A derived dimension has no units of its own: it is written in the base units of its parts.
+                | MeasureShape(dimension, storage, _) ->
+                    let bases = dimension |> List.collect (fst >> Units.seenOf state) |> List.filter UnitInfo.isBase
+                    MeasureShape(dimension, storage, bases)
                 | _ -> shape
             let names = ContextInference.varNames ty
             let state = namingUnseen names ty state

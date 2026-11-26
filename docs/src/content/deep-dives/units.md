@@ -7,8 +7,9 @@ order: 22
 [Units of measure](../advanced/units-of-measure) describes the language, and [Units and
 dimensions](../work-in-progress/units-and-dimensions) in Work in progress what is still open. This page says what
 the compiler does with it today: it reads all of it, checks the declarations of dimensions and units, reads dimensions
-in types, types numbers with units, types arithmetic on measured values, of one dimension each, and writes them as text:
-derived dimensions, `Length/Time`, are a later step.
+in types, types numbers with units, types arithmetic on measured values, writes them as text, and reads derived
+dimensions, `Length / Time`, written with `*` and `/`. Dimension variables and a spelling for exponents are a later
+step.
 
 # Reading
 
@@ -25,7 +26,7 @@ A dimension is registered as the private nominal type it is (`Units.withDimensio
 int`. Its `TypeDefInfo` is marked `IsDimension`, so it is exported, imported, aliased and selected as any type is.
 
 A value of a dimension is a measured value, `TyMeasure`: its dimension, a list of base dimensions each with its
-exponent (step 2's `Length/Time` is one of the same kind), and its storage. `Time(int)` in a type is
+exponent, `Length / Time` as `[Length, 1; Time, -1]` (see [Derived dimensions](#derived-dimensions)), and its storage. `Time(int)` in a type is
 `TyMeasure([Time, 1], int)`, `Bytes` is of the storage it is constrained to, and two measured values are of one type when
 their dimensions are one and their storages are. The backend lays one out as its storage.
 
@@ -88,9 +89,11 @@ what it is at run time, and gives the result its dimension as the table in [Arit
 types the operator on operands of the storages' types, through the storage's own `+` (built in for a number type, the
 instance's member for a generic storage), and wraps the result. So `t / 2` on a `Time(a)` is a `Time` of what `/`
 gives on an `a`, its `fraction`, and `t / u` that `fraction` itself; the backend compiles the storage's operator on the
-measured values, which are their storages. Prefix `-` is read the same way (`OperatorCalls.inferNegation`). Two
-dimensions, a number with no unit beside a measured value in a sum, a difference or a remainder, and a product,
-quotient or power that would be of a derived dimension are errors that say so.
+measured values, which are their storages. Prefix `-` is read the same way (`OperatorCalls.inferNegation`). A product
+or quotient of two measured values, or a number divided by one, is of their derived dimension (see [Derived
+dimensions](#derived-dimensions)). Two dimensions, a number with no unit beside a measured value in a sum, a difference
+or a remainder, a `//` that would round a derived dimension, and a power, which has no syntax yet, are errors that say
+so.
 
 Beside a value of a generic storage, a number with a unit is its number of base units as the storage's `fromInt`, or
 `zero`, and a plain number that scales a measured value is read as beside its storage
@@ -118,3 +121,37 @@ of a unit without its decimal point, `1500ms` for `1.5s`, and a number of base u
 storage, a type variable's among them, is written in the base unit through its own `ToString`, so the definition for a
 `Time(a)` requires `ToString(a)`. A module that can't write its dimension's base unit writes a number of base units as
 `dbg` does, `Time(1500000000)`.
+
+# Derived dimensions
+
+A derived dimension is written in a type as dimensions joined by `*` and `/`, with brackets: `Length / Time`,
+`Time * Time`, `Length / (Time * Time)`. The parser reads them between a type and an intersection (`typeDimension` in
+`DescentTypes`), from the left, on one line, as `TypeProduct` and `TypeQuotient`, so `Length / Time / Time` divides by
+`Time` twice. A storage is written on each part, `Length(float) / Time(float)`, as a part is any type, so nothing new is
+read for it; the type printer writes one so (`TypePrinting`), and `ContextInference` writes one in an annotation the same
+way.
+
+`TypeResolution` reads a product or quotient as the measured value of the product or quotient of its sides'
+dimensions (`Dimension.multiply`, `Dimension.divide`), which add or take off exponents and keep the base dimensions in
+order, each once, with none whose exponent is zero: `Length * Time / Time` is `Length`, and a dimension of nothing is a
+plain number (`Dimension.measured`). Two measured values are of one type when their dimension lists and storages are one,
+so `Speed(float)` and `Length(float) / Time(float)` are one type.
+
+The parts share one storage. `DimensionSignatures` gives the bare parts of a derived dimension in a signature the
+storage written on another part, or one variable of their own, so `Length / Time` is `Length(a) / Time(a)`. Two
+storages written on its parts are [`NYX0295`](../standard-tools/errors#nyx0295), and a part that is no dimension,
+`Length / int`, is [`NYX0296`](../standard-tools/errors#nyx0296).
+
+`dimension Speed = Length / Time` names a derived dimension. `Units.withDimensionsAsTypes` registers it as the alias it
+is, `type Speed(a) = Length(a) / Time(a)`, generic in its storage as its parts are, and `InferModule` registers it again
+once the module's dimensions are marked, so its parts are read as dimensions. `TypeResolution` reads `Speed(float)` as
+what it names, with no alias around it, and a storage written on a part of its declaration is `NYX0295`. A derived
+dimension has no units of its own: a unit declared on one is [`NYX0297`](../standard-tools/errors#nyx0297).
+
+`MeasuredArithmetic.read` types `*` on two measured values as the storage's `*`, of the product of their dimensions, and
+`/` as the storage's `/`, of their quotient, at the storage's fraction, so `100m / 3s` is not rounded. `//` rounds only
+within one dimension or by a number.
+
+A value of a derived dimension is written by its derived `toString` in its parts' base units, joined by `*` and `/`
+with no spaces (`StructuralInstances`, from `Units.seenOf`): `100.0m / 9.58s` is `1.0438413361169103e-8m/ns`, and a
+module that can't write a part's base unit writes it as `dbg` does, `Length / Time(1.04e-8)`.
