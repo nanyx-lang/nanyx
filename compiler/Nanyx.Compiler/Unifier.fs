@@ -83,9 +83,13 @@ module Unifier =
     let tyToString (ty: Ty) : string = TypePrinting.tyToString ty
 
     /// `ty` as `tyToString` writes it, with a union that holds all the tags of a union alias of `typeDefs` written with
-    /// its name (see `TypePrinting.withUnionAliases`): how a diagnostic writes the types it names.
+    /// its name (see `TypePrinting.withUnionAliases`), and a context's associated types written as a signature writes
+    /// them, `Iter(c, elem = string)`: how a diagnostic writes the types it names.
     let tyToStringIn (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : string =
-        TypePrinting.printTy (TypePrinting.printingFor "..." (fun _ -> []) (TypePrinting.unionAliasesIn typeDefs) ty) true ty
+        TypePrinting.printTy
+            (TypePrinting.printingFor "..." (TypePrinting.associatedIn typeDefs) (TypePrinting.unionAliasesIn typeDefs) ty)
+            true
+            ty
 
     open TypePrinting
 
