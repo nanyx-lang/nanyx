@@ -1,5 +1,5 @@
-/// `Instant`, a point in time (#2626): it is moved and measured with named functions, not operators, and `Clock`
-/// gives one.
+/// `Instant`, a point in time (#2626): it is moved by a time and measured from another, with `+` and `-` or by name
+/// (#2874), and `Clock` gives one.
 module Nanyx.Compiler.Tests.Features.Instant
 
 open Xunit
@@ -20,10 +20,16 @@ let ``An instant is moved by a time and measured from another`` () =
         [ "a"; "b"; "c" ] |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name]))
 
 [<Fact>]
-let ``A time added to or taken from an instant with an operator names what Instant attaches for the two`` () =
-    for op in [ "+"; "-" ] do
-        Assert.Equal(
-            (DiagnosticCodes.TypeMismatch.Code,
-             $"'Instant' has no `{op}`: it attaches `minus` and `plus` for these operands, as in `x \\minus(y)` or `x \\plus(y)`",
-             $"a {op} 5s"),
-            onlyDiagnostic (withFinalNewline $"def f = {{ a: Instant -> a {op} 5s }}"))
+let ``The time between two instants is their difference, and a time added to one moves it`` () =
+    let source = "def took: [Clock] Instant -> Time(int) = { start -> now() - start }\ndef a = Instant.epoch + 5s\ndef c = a - Instant.epoch"
+    let result = Compiler.compile (withFinalNewline source)
+    Assert.Empty(result.Diagnostics)
+    Assert.Equal<string list>(
+        [ "Instant -> Time(int)"; "Instant"; "Time(int)" ],
+        [ "took"; "a"; "c" ] |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name]))
+
+[<Fact>]
+let ``A time taken from an instant is by name, as its - is the time between two`` () =
+    Assert.Equal(
+        (DiagnosticCodes.TypeMismatch.Code, "'Time(int)' vs 'Instant'", "a - 5s"),
+        onlyDiagnostic (withFinalNewline "def f = { a: Instant -> a - 5s }"))

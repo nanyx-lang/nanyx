@@ -303,21 +303,23 @@ An HTTP request's `timeout` is a `Time(int)` too: `Request.of(#get, url) with ti
 # Instant
 
 `Instant` is a point in time: an `int` of nanoseconds since the start of 1970, UTC. `Clock`'s `now()` gives one. An
-instant is moved and measured with times, by functions attached to it, and written and read as ISO 8601 writes it (see
-[prelude: instant](../stdlib/prelude-instant)):
+instant is moved and measured with times, by the operators and functions attached to it, and written and read as ISO
+8601 writes it (see [prelude: instant](../stdlib/prelude-instant)):
 
 | Expression | Type |
 |---|---|
 | `i \since(j)` | `Time(int)`: the time from `j` to `i`, exactly |
-| `i \plus(t)`, `i \minus(t)` | `Instant`, for a `Time(int)` `t` |
+| `i - j` | `Time(int)`: the same, as an operator |
+| `i \plus(t)`, `i + t` | `Instant`: `i` moved on by a `Time(int)` `t` |
+| `i \minus(t)` | `Instant`: `i` moved back by `t` |
 | `Instant.epoch` | `Instant`: the start of 1970 |
 
 ```nanyx
 match Instant.fromIsoString("2026-11-25T19:20:57.25+01:00")
   | #some(start) ->
-    def later = start \plus(90s)
+    def later = start + 90s
     println(start)
-    println(later \since(start))
+    println(later - start)
     println(later \Instant.toIsoDate)
   | _ -> println("not ISO 8601")
 
@@ -326,5 +328,7 @@ match Instant.fromIsoString("2026-11-25T19:20:57.25+01:00")
 -- 2026-11-25
 ```
 
-An instant prints as its UTC date and time, with a fraction of a second only when it isn't whole. `-` and `+` don't
-apply to instants: a time is between two instants, and two instants aren't added, so the functions say which is meant.
+An instant prints as its UTC date and time, with a fraction of a second only when it isn't whole. `-` between two
+instants is the time between them, so an instant is moved back by name, `i \minus(t)`: a type attaches one `-`, and
+`i - 5s` is an error. `5s + i`, with the time on the left, is one too, as the operator is the one its left operand's type
+has.

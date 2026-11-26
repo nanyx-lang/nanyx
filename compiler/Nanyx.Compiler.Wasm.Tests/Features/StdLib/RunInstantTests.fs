@@ -135,6 +135,21 @@ println(took >= 0ns)
     runSource source |> assertRan "true\n"
 
 [<Fact>]
+let ``Run - an instant's - is the time between two, and + moves one by a time, as since and plus do`` () =
+    let source =
+        """def start = Instant.epoch
+def later = start + 90s
+println(later)
+println(later - start)
+println(start - later)
+println(later \since(start) == later - start)
+println(later \plus(1s) == later + 1s)
+println(later \minus(30s))
+"""
+    runSource (normalized source)
+    |> assertRan "1970-01-01T00:01:30Z\n90s\n-90s\ntrue\ntrue\n1970-01-01T00:01:00Z\n"
+
+[<Fact>]
 let ``Run - an instant's Unix time is its time since 1970, and a unit divides it into a number`` () =
     runSource
         """match Instant.fromIsoString("2026-11-26T09:00:00.25Z")

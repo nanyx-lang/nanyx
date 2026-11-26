@@ -34,9 +34,10 @@ type Instant = private int
 
 A point in time: a number of nanoseconds since the start of 1970, UTC (Unix time), which
 reaches about 292 years either side of it. `Clock`'s `now` gives one. The time between two is
-[`Instant.since`](#instantsince), exactly, and [`Instant.plus`](#instantplus) and [`Instant.minus`](#instantminus) move one by a time:
-`now() \since(start)`, `now() \plus(5s)`. It is written as ISO 8601 writes it, in UTC: `"{i}"` is
-`2026-11-25T18:20:57Z`.
+their difference, exactly, and a time added to one moves it: `now() - start` and `now() + 5s`.
+[`Instant.since`](#instantsince), [`Instant.plus`](#instantplus) and [`Instant.minus`](#instantminus) are the same by name, and `minus` moves
+one back, `now() \minus(5s)`, which `-` doesn't, as it is the time between two. It is written as
+ISO 8601 writes it, in UTC: `"{i}"` is `2026-11-25T18:20:57Z`.
 
 ## `Instant.epoch`
 
@@ -54,7 +55,7 @@ def Instant.since: Instant, Instant -> Time(int)
 ```
 
 The time from `earlier` to `i`, exactly: `now() \since(start)` is how long has passed since
-`start`. It is negative if `earlier` is after `i`.
+`start`. It is negative if `earlier` is after `i`. It is [`Instant.-`](#instant-) by name.
 
 ## `Instant.plus`
 
@@ -62,7 +63,7 @@ The time from `earlier` to `i`, exactly: `now() \since(start)` is how long has p
 def Instant.plus: Instant, Time(int) -> Instant
 ```
 
-The instant `time` after `i`: `now() \plus(5s)`.
+The instant `time` after `i`: `now() \plus(5s)`. It is [`Instant.+`](#instant-1) by name.
 
 ## `Instant.minus`
 
@@ -70,7 +71,24 @@ The instant `time` after `i`: `now() \plus(5s)`.
 def Instant.minus: Instant, Time(int) -> Instant
 ```
 
-The instant `time` before `i`: `now() \minus(1d)`.
+The instant `time` before `i`: `now() \minus(1d)`. `-` is the time between two instants, so
+moving one back is by name only.
+
+## `` Instant.`-` ``
+
+```nanyx fragment
+def Instant.`-`: Instant, Instant -> Time(int)
+```
+
+The time from `earlier` to `i`, exactly, as [`Instant.since`](#instantsince) gives it: `now() - start`.
+
+## `` Instant.`+` ``
+
+```nanyx fragment
+def Instant.`+`: Instant, Time(int) -> Instant
+```
+
+The instant `time` after `i`, as [`Instant.plus`](#instantplus) gives it: `now() + 5s`.
 
 ## `Instant.toUnixTime`
 
