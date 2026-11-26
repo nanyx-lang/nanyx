@@ -93,11 +93,15 @@ def `scales points` = {
 ```
 
 ```text
-FAIL geometry.`scales points`  src/geometry.nyx:18:3
+FAIL geometry.`scales points`  src/geometry.nyx:18
   src/geometry.nyx:18:3: assert(scale(p, 2) == Point(x = 2, y = 4))
     scale(p, 2) = (x = 2, y = 5)
     p = (x = 1, y = 2)
 ```
+
+The place after the test's name is the file and line of the program's code that crashed, from the crash's report
+([Crash stacks](../deep-dives/crash-stacks#the-crash-report)); a column there needs the caller's location, which is
+later ([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)). The message under it, `assert`'s own, has the column.
 
 `assert` is built in, like `dbg`, because only the compiler has what that message needs: the source text of the expression, and a printer for the type of each value in it. For a comparison it prints each side that is not written out in full, then each name the expression reads, but one bound inside it. That is why there is no `assertEqual` or `assertContains`: `assert(xs \contains(3))` already prints `xs`. It prints values the way [`dbg`](../stdlib/console#dbg) does, ignoring any `ToString` the type has.
 
@@ -153,11 +157,11 @@ nanyx test [path] [--filter text] [--release]
 Running 3 tests in geometry, with 1 deferred error
 
 PASS geometry.`adds points`
-FAIL geometry.`scales points`  src/geometry.nyx:18:3
+FAIL geometry.`scales points`  src/geometry.nyx:18
   assert(scale(p, 2) == Point(x = 2, y = 4))
     scale(p, 2) = (x = 2, y = 5)
     p = (x = 1, y = 2)
-FAIL geometry.`parses a point`  src/geometry.nyx:24:14
+FAIL geometry.`parses a point`  src/geometry.nyx:24
   src/geometry.nyx:24:14: error NYX0201: Type mismatch: 'string' is not a number, so it cannot be used with + (deferred from compile time)
 
 1 passed, 2 failed

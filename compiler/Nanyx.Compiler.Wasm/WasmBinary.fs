@@ -14,7 +14,7 @@ open System.Globalization
 open System.Text
 open Transpiler.Wasm.WatSyntax
 
-/// The name of the custom section that holds the table of places. It holds five vectors, written as in the rest of the module.
+/// The name of the custom section that holds the table of places. It holds six vectors, written as in the rest of the module.
 /// The names of files and functions, numbered from 1. The frames, numbered from 1, each a function's name (0 for the
 /// function the code is in), a file's name, a line, and the frame of the call it was inlined at (0 for none), which
 /// comes before it: a place is its innermost frame, and the frames of the calls it was inlined through follow from it.
@@ -22,7 +22,9 @@ open Transpiler.Wasm.WatSyntax
 /// module) and its place, the number of its innermost frame. And each debug probe (see `CoreIrProbes`), in order of
 /// its number: the number, its kind (see `probeKindCode`), for an entry the function's name (else 0), and its place. And each
 /// function with a definition marker (`;;@def main.nyx:3`), in order: its name, as the name section gives it, and the
-/// frame of its definition, which has no function's name. A function's code starts a stretch of place 0, none, so
+/// frame of its definition, which has no function's name. And the files of the standard library's, each by its name's
+/// number (see `WatSyntax.Library`), so that a crash's report can name the program's code that called it. A function's
+/// code starts a stretch of place 0, none, so
 /// that the code before its first marker has none. Each number is an unsigned LEB128. The runtime reads it to name the
 /// file and line of each frame of a trap, and of each function in a profile (see `Nanyx.Runtime.SpanTable`).
 let spanTableName = "nanyx.spans"
@@ -343,6 +345,8 @@ type private Assembler(fields: SExpr list) =
     let elements = ResizeArray<int * SExpr list * SExpr list>()
     let data = ResizeArray<int * SExpr list * byte array>()
     let mutable start: int option = None
+    // The files of the standard library's (see `WatSyntax.Library`).
+    let libraryFiles = ResizeArray<string>()
     // The names of the functions, by index, for the name section.
     let functionNamesByIndex = SortedDictionary<int, string>()
     let mutable importedFunctions = 0
@@ -402,8 +406,13 @@ type private Assembler(fields: SExpr list) =
             | _ -> false
         for field in fields |> List.filter isImport do
             this.Import field
-        for field in fields |> List.filter (isImport >> not) do
+        let isLibrary (field: SExpr) = match field with Library _ -> true | _ -> false
+        for field in fields |> List.filter (fun field -> not (isImport field) && not (isLibrary field)) do
             this.Define field
+        for field in fields do
+            match field with
+            | Library file -> libraryFiles.Add file
+            | _ -> ()
         for field in fields do
             match field with
             | List [ Atom "start"; Atom reference ] -> start <- Some(Assembler.Resolve(functionNames, reference, "function"))
@@ -549,6 +558,7 @@ type private Assembler(fields: SExpr list) =
     member _.GlobalNames = globalNames
     member _.Imports = imports
     member _.Functions = functions
+    member _.LibraryFiles = libraryFiles
     member _.Globals = globals
     member _.Memories = memories
     member _.Tables = tables
@@ -696,6 +706,7 @@ type private CodeWriter
                     rest
                 // A function's definition is read by `assemble`.
                 | Defined _ :: rest -> rest
+                | Library _ :: _ -> fail "a standard library's file among instructions"
                 | Text _ :: _ -> fail "a string among instructions"
                 | [] -> []
 
@@ -974,5 +985,8 @@ let assemble (wat: string) : byte array =
             vector table defined (fun out (functionName, place) ->
                 unsigned out (uint64 functionName)
                 unsigned out (uint64 place))
+            // The files of the standard library's that frames name.
+            let library = assembler.LibraryFiles |> Seq.choose (fun file -> match strings.TryGetValue file with | true, number -> Some number | _ -> None) |> List.ofSeq
+            vector table library (fun out number -> unsigned out (uint64 number))
             section out 0uy table
         out.ToArray()
