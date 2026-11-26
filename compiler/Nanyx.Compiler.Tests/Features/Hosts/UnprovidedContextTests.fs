@@ -43,7 +43,7 @@ export def greet: [Async, FileSystem] () -> () = { -> ignore(file.append(path.of
 let private compileScriptWith (files: (string * string) list) (source: string) =
     use package = new TempPackage(("main.nyx", source) :: quietHost @ files)
     let path = package.Path "main.nyx"
-    (Script.compileSource path source).Diagnostics
+    (Script.compileSourceIn (SeededPackages.user ()) path source).Diagnostics
 
 /// Each caller of `greet`, with the line of its call, counted from 0.
 let private callers =

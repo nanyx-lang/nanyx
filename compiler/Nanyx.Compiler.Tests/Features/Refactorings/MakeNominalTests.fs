@@ -132,7 +132,7 @@ let private madeIn (title: string) (main: string) =
     use package = new TempPackage([ "app.nyxp", manifest; "src/emails.nyx", emails; "src/main.nyx", main ])
     let path = Path.GetFullPath(package.Path "src/emails.nyx")
     let compile (readFile: string -> string) =
-        (Package.compilePackageReading readFile path).Value
+        (Package.compilePackageReading (SeededPackages.user ()) readFile path).Value
         |> List.map (fun (file, result) -> { Rename.Path = Path.GetFullPath file; Rename.Source = readFile file; Rename.Result = result })
     let files = compile File.ReadAllText
     for file in files do

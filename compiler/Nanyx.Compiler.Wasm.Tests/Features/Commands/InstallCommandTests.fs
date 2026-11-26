@@ -50,7 +50,7 @@ let ``A package the compiler ships is added at the compiler's version`` () =
 /// A store whose cache and index are directories in `directory`, whose index lists acme.json 1.0.0 and 1.1.0, each with
 /// a public module `json` whose `version` says which it is.
 let private indexWithJson (directory: TempDirectory) =
-    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported }
+    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported; Seed = SeededPackages.seed }
     for version in [ "1.0.0"; "1.1.0" ] do
         directory.Write $"json-{version}/json.nyxp" $"(package = (name = \"acme.json\", version = \"{version}\"))\n"
         directory.Write $"json-{version}/json.nyx" $"export module json\n\nexport def version = \"{version}\"\n"

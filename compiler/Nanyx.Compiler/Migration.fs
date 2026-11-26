@@ -276,10 +276,10 @@ module Migration =
     /// Reads and parses the script at `path`, or says why it can't be migrated: it doesn't parse, or a directive is
     /// wrong. What a directive names that can't be had yet, a package to download or a directory that isn't there, is
     /// written to the manifest all the same, to be reported when the package is built.
-    let private readScript (root: string) (path: string) : Result<Script, string list> =
+    let private readScript (store: PackageStore) (root: string) (path: string) : Result<Script, string list> =
         let source = Manifest.normalized (File.ReadAllText path)
         let refused = [ DiagnosticCodes.InvalidDirective; DiagnosticCodes.OldFormDirective; DiagnosticCodes.LintWithoutLinter ] |> List.map _.Code
-        let wrong = (Script.read path source).Diagnostics |> List.filter (fun problem -> List.contains problem.Code refused)
+        let wrong = (Script.readFrom store path source).Diagnostics |> List.filter (fun problem -> List.contains problem.Code refused)
         match wrong, parseModuleFileWithNames path source with
         | [], Result.Ok (syntax, _, moduleBlocks) ->
             Result.Ok { Path = path; Source = source; Directives = Directives.read path source; Syntax = syntax; ModuleBlocks = moduleBlocks }
@@ -288,8 +288,8 @@ module Migration =
 
     /// The values of the entry script at `path` that need a context, so run in its entry point, and whether its last
     /// statement gives `()`, as checking it finds them. A script that doesn't check moves only its statements.
-    let private entryOf (script: Script) : Set<string> * bool =
-        let result = Script.compileSource script.Path script.Source
+    let private entryOf (store: PackageStore) (script: Script) : Set<string> * bool =
+        let result = Script.compileSourceIn store script.Path script.Source
         match result.Typed, result.Syntax with
         | Some typed, Some syntax ->
             // The compile parsed the file itself, so its nodes are its own.
@@ -304,8 +304,8 @@ module Migration =
     /// What migrating `target`, a script or a directory of scripts, makes, for the package called `name` (or the
     /// directory's name), with the compiler's release `toolVersion`; or why it can't: the directory is a package already,
     /// a name the manifest refuses, two scripts with top-level statements, a file that doesn't parse, a directive that is
-    /// wrong, or two that disagree. Nothing is written.
-    let migrate (toolVersion: string) (target: string) (name: string option) : Result<Migration, string list> =
+    /// wrong, or two that disagree. Nothing is written. What the scripts' directives name is found in `store`.
+    let migrate (store: PackageStore) (toolVersion: string) (target: string) (name: string option) : Result<Migration, string list> =
         scriptsIn target
         |> Result.bind (fun (root, paths) ->
             let existing = Manifest.manifestsIn root
@@ -318,7 +318,7 @@ module Migration =
                 | None ->
                     Result.Error [ $"""The directory's name '{packageName}' is not a package name, which must be {Manifest.nameRule}: give one with `--name`""" ]
             else
-                let read = paths |> List.map (readScript root)
+                let read = paths |> List.map (readScript store root)
                 match read |> List.collect (function Result.Error errors -> errors | Result.Ok _ -> []) with
                 | _ :: _ as errors -> Result.Error errors
                 | [] ->
@@ -345,7 +345,7 @@ module Migration =
                                 let files =
                                     scripts
                                     |> List.map (fun script ->
-                                        let entry = if isEntry script then Some (entryOf script) else None
+                                        let entry = if isEntry script then Some (entryOf store script) else None
                                         script.Path, rewrite exports moduleMap entry script)
                                 let sources = if paths.Length = 1 && File.Exists(Path.GetFullPath target) then [ PackageModules.relativePath root paths.Head ] else [ "**/*.nyx" ]
                                 let downloads =

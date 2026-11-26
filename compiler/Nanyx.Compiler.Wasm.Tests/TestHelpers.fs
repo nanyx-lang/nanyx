@@ -136,7 +136,7 @@ let private packagesForTests =
          let store =
              { Cache = Path.Combine(directory, "cache")
                Index = Path.Combine(directory, "index")
-               GitHub = GitHub.cached (Path.Combine(directory, "cache")) }
+               GitHub = GitHub.cached (Path.Combine(directory, "cache")); Seed = SeededPackages.seed }
          Directory.CreateDirectory(Path.Combine(store.Index, "artifacts")) |> ignore
          Directory.CreateDirectory(Path.Combine(store.Index, "index", "nanyx")) |> ignore
          File.WriteAllText(Path.Combine(store.Index, "config.json"), """{ "format": 1, "index": "index/" }""")
@@ -380,7 +380,7 @@ let reportedMemory (measure: string) (outcome: RunOutcome) : int64 =
 
 /// A store whose cache and index are directories in `directory`, which can't fetch from GitHub.
 let storeIn (directory: TempDirectory) : NyxCompiler.PackageStore =
-    { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = NyxCompiler.GitHub.unsupported }
+    { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = NyxCompiler.GitHub.unsupported; Seed = SeededPackages.seed }
 
 /// The library acme.core at `version`, whose `answer` is `answer`, in a directory of its own, `core-<version>` in
 /// `directory`, published to the index of `store` with `fields` in its index entry (see `publishToIndex`).

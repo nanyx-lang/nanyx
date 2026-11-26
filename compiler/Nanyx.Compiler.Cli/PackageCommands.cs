@@ -27,7 +27,7 @@ internal static partial class CliCommands
             return UsageError;
         }
 
-        var migrated = MigrationModule.migrate(Toolchain.version, shell.FullPath(single ?? "."), name is null ? FSharpOption<string>.None : FSharpOption<string>.Some(name));
+        var migrated = MigrationModule.migrate(shell.Packages, Toolchain.version, shell.FullPath(single ?? "."), name is null ? FSharpOption<string>.None : FSharpOption<string>.Some(name));
         if (migrated.IsError)
         {
             foreach (var error in migrated.ErrorValue)

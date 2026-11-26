@@ -291,9 +291,6 @@ module Package =
             lookupFor store manifest
             |> Result.bind (fun lookup -> ofManifestIn lookup (reachedFrom manifest) [] manifest |> Result.mapError (List.map describe)))
 
-    /// `ofManifestFrom` the user's store.
-    let ofManifest (manifestPath: string) : Result<Package, string list> = ofManifestFrom (PackageStore.user ()) manifestPath
-
     /// A compile of nothing, with no diagnostics: what the compile of a file that can't be compiled has, with its errors.
     let private notCompiled : CompileResult =
         { Phase = Parsed
@@ -332,12 +329,10 @@ module Package =
                 exportErrors manifest (sources manifest) @ dependencyErrors
         { notCompiled with Diagnostics = diagnostics }
 
-    /// `compileManifestFrom` the user's store.
-    let compileManifest (path: string) (text: string) : CompileResult = compileManifestFrom (PackageStore.user ()) path text
-
     /// `package` run under the host `name` names in place of its manifest's, as `--host` chooses: a directory, relative to
-    /// `directory`, that holds a host's package, or the name of a host the compiler ships. An error says why it isn't one.
-    let withHost (directory: string) (name: string) (package: Package) : Result<Package, string> =
+    /// `directory`, that holds a host's package, or the name of a host the compiler ships, found in `store`. An error says
+    /// why it isn't one.
+    let withHost (store: PackageStore) (directory: string) (name: string) (package: Package) : Result<Package, string> =
         let full = Path.GetFullPath(name, directory)
         let entry =
             if Directory.Exists full then
@@ -345,7 +340,7 @@ module Package =
                 { Package = packageName; Path = Some full; Span = SourceSpan.none; Settings = [] }
             else
                 { Package = name; Path = None; Span = SourceSpan.none; Settings = [] }
-        match hostIn { Store = PackageStore.user (); Locked = Lockfile.empty } (Reached()) (Some entry) with
+        match hostIn { Store = store; Locked = Lockfile.empty } (Reached()) (Some entry) with
         | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
         | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
 
@@ -362,9 +357,6 @@ module Package =
             | Result.Error message -> Result.Error [ message ]
         else
             Result.Error [ $"'{path}' is neither a directory nor a {Manifest.extension} manifest" ]
-
-    /// `findIn` the user's store.
-    let find (path: string) : Result<Package, string list> = findIn (PackageStore.user ()) path
 
     /// The linter options for a file: those of the package manifest it is under, if it has one that reads.
     let lintersFor (filePath: string) : LinterOptions option =
@@ -397,11 +389,22 @@ module Package =
             DeclaresHost = package.Manifest.Declares.IsSome }
         |> PackageModules.withReferenced package.ReferencedFiles
 
+    /// The name of the package the file at `filePath` is a source file of, if it is in one whose manifest reads.
+    let nameFor (filePath: string) : string option =
+        let filePath = Path.GetFullPath filePath
+        let directory = Path.GetDirectoryName filePath
+        match if Directory.Exists directory then Manifest.tryFind directory else Result.Ok None with
+        | Result.Ok(Some manifestPath) ->
+            match Manifest.read manifestPath with
+            | Result.Ok manifest when selects manifest filePath -> Some manifest.Name
+            | _ -> None
+        | _ -> None
+
     /// The modules of the package the file at `filePath` is a source file of, if it is one, with those of the packages
-    /// it depends on, if they read; none for a file in no package. A file the manifest selects that is not on disk yet
+    /// it depends on, found in `store`, if they read; none for a file in no package. A file the manifest selects that is not on disk yet
     /// (an editor's new buffer) is one of them. The manifest's problems are the error if it does not read: which files
     /// it selects can't be known, and the file can't be checked as a script without blaming its package imports.
-    let modulesFor (filePath: string) : Result<PackageModules option, Diagnostic list> =
+    let modulesFor (store: PackageStore) (filePath: string) : Result<PackageModules option, Diagnostic list> =
         let filePath = Path.GetFullPath filePath
         let directory = Path.GetDirectoryName filePath
         match if Directory.Exists directory then Manifest.tryFind directory else Result.Ok None with
@@ -410,7 +413,6 @@ module Package =
             | Result.Error problems -> Result.Error problems
             | Result.Ok manifest when selects manifest filePath ->
                 let reached = reachedFrom manifest
-                let store = PackageStore.user ()
                 let lookup = lookupFor store manifest |> Result.defaultValue { Store = store; Locked = Lockfile.empty }
                 let dependencies =
                     match dependenciesIn lookup reached [ manifest.Path, manifest.Name ] manifest.Dependencies with
@@ -514,9 +516,10 @@ module Package =
     /// the linters `options` gives: as a source file of the package it is in, if it is in one, or else on its own.
     /// Each module's check is reported to `listener`, and each other source file it needs is read by `readFile`, given
     /// the file's full path: an editor passes one that reads the text of a file it has open from its buffer. A file
-    /// under a manifest that does not read is not compiled: the manifest's problems are its errors.
-    let compileSourceReading (listener: CompileListener) (readFile: string -> string) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        match modulesFor filePath with
+    /// under a manifest that does not read is not compiled: the manifest's problems are its errors. The packages it depends
+    /// on are found in `store`.
+    let compileSourceReading (store: PackageStore) (listener: CompileListener) (readFile: string -> string) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        match modulesFor store filePath with
         | Result.Ok (Some modules) -> compileIn listener readFile modules options filePath source
         | Result.Ok None -> Compiler.compileFromReporting listener readFile options (SourceFile (Path.GetFullPath filePath)) source
         | Result.Error problems -> { notCompiled with Diagnostics = problems }
@@ -526,8 +529,8 @@ module Package =
     /// reads them; what an editor searches for the uses of a name. The module each file declares is read from its text
     /// too, so a renamed `module` line is the name its imports find. `None` for a file in no package, or under a
     /// manifest that does not read.
-    let compilePackageReading (readFile: string -> string) (filePath: string) : (string * CompileResult) list option =
-        match modulesFor filePath with
+    let compilePackageReading (store: PackageStore) (readFile: string -> string) (filePath: string) : (string * CompileResult) list option =
+        match modulesFor store filePath with
         | Result.Ok (Some modules) ->
             let modules = PackageModules.reading readFile modules
             let sources = modules.Files |> List.map (fun file -> file, readFile file)
@@ -536,18 +539,18 @@ module Package =
 
     /// The full path of every source file of the package the file at `filePath` is a source file of, as
     /// `compilePackageReading` compiles them, without compiling them. `None` as for `compilePackageReading`.
-    let sourceFilesOf (filePath: string) : string list option =
-        match modulesFor filePath with
+    let sourceFilesOf (store: PackageStore) (filePath: string) : string list option =
+        match modulesFor store filePath with
         | Result.Ok (Some modules) -> Some (modules.Files |> List.map Path.GetFullPath)
         | _ -> None
 
     /// `compileSourceReading`, with the other source files read from disk.
-    let compileSourceReporting (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        compileSourceReading listener File.ReadAllText options filePath source
+    let compileSourceReporting (store: PackageStore) (listener: CompileListener) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        compileSourceReading store listener File.ReadAllText options filePath source
 
     /// `compileSourceReporting`, telling nobody.
-    let compileSourceWith (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
-        compileSourceReporting CompileListener.none options filePath source
+    let compileSourceWith (store: PackageStore) (options: LinterOptions) (filePath: string) (source: string) : CompileResult =
+        compileSourceReporting store CompileListener.none options filePath source
 
     /// Checks every source file of `package`, running the linters its manifest turns on over each. `listener` is told
     /// each file's full path as its compile starts, in the order the files are compiled, and each module's check as it

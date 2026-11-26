@@ -60,7 +60,7 @@ let ``A host named by its old name gives its new one`` () =
 [<Fact>]
 let ``A script's directives and --host name a shipped package by its new name`` () =
     let diagnosticsOf (source: string) =
-        (Script.read "" (withFinalNewline source)).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, diagnostic.Message)
+        (Script.readFrom (SeededPackages.user ()) "" (withFinalNewline source)).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, diagnostic.Message)
     Assert.Equal<(string * string) list>(
         [ renamed, "The host 'nanyx.console' is now 'nanyx.cli.host'" ],
         diagnosticsOf "::host nanyx.console\n\nprintln(1)")

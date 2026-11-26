@@ -41,7 +41,7 @@ let private package () =
 let private compileMain (package: TempPackage) (readFile: string -> string) =
     let main = package.Path "src/main.nyx"
     let recording = Recording()
-    let result = Package.compileSourceReading recording readFile Linters.none main (File.ReadAllText main)
+    let result = Package.compileSourceReading (SeededPackages.user ()) recording readFile Linters.none main (File.ReadAllText main)
     Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
     let others = recording.Events |> List.filter (fun event -> event.Contains package.Root && not (event.Contains "main.nyx"))
     others |> List.map (fun event -> event.Replace(Path.GetFullPath(package.Root), "").Replace('\\', '/')), result

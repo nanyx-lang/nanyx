@@ -39,8 +39,9 @@ module SeededPackages =
         file.["versions"] <- JsonArray(version)
         file.ToJsonString options + "\n"
 
-    /// Each package the compiler ships, packed, with its manifest; or why one can't be.
-    let private packed (store: PackageStore) : Result<(Manifest * byte array) list, string list> =
+    /// Each package the compiler ships, packed, with its manifest; or why one can't be. They depend only on the packages
+    /// the compiler ships, so they pack the same whatever `store` reads them through.
+    let private packWith (store: PackageStore) : Result<(Manifest * byte array) list, string list> =
         ShippedPackages.names ()
         |> List.map (fun name ->
             Package.findIn store (ShippedPackages.directoryOf name)
@@ -56,6 +57,16 @@ module SeededPackages =
                 | Result.Error errors, Result.Ok _ -> Result.Error errors
                 | Result.Error errors, Result.Error more -> Result.Error(errors @ more))
             (Result.Ok [])
+
+    /// The packages the compiler ships, packed (see `packWith`), once a process: they are the same for every store, so a
+    /// process that seeds several, as the tests do, packs them once. One that can't be packed is tried again.
+    let private packedOnce = System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Result<(Manifest * byte array) list, string list>>>()
+
+    let private packed (store: PackageStore) : Result<(Manifest * byte array) list, string list> =
+        let key = ShippedPackages.fingerprint.Value
+        let result = packedOnce.GetOrAdd(key, fun _ -> lazy (packWith store)).Value
+        if Result.isError result then packedOnce.TryRemove key |> ignore
+        result
 
     /// Writes the index of the packages the compiler ships to `directory`, which must not exist yet, laid out as the
     /// package index is: its `config.json`, an index file for each, and each one's `.nyxpkg` under `archives`.
@@ -97,11 +108,8 @@ module SeededPackages =
                 Result.Error
                     $"The package cache holds a '{name}' {version}, in '{directory}', that isn't the one this compiler ships: its {named} differ. A package in the cache is never changed, so delete that directory, and the next build puts this compiler's copy there"
 
-    /// Seeds the packages the compiler ships into `store`, if it hasn't yet: packs each into the index of its own in the
-    /// store's cache (`PackageStore.shippedIndex`), which another process seeding at the same time can't see half made,
-    /// and unpacks into the cache each that it doesn't hold. Gives the index's directory; or why a package can't be
-    /// seeded: it doesn't pack, or the cache holds another copy of its version.
-    let seed (store: PackageStore) : Result<string, string list> =
+    /// `seed`, done now: the index written, if it isn't, and each package unpacked into the cache, if it isn't.
+    let private seedOnce (store: PackageStore) : Result<string, string list> =
         let target = PackageStore.shippedIndex store
         let written =
             if Directory.Exists target then
@@ -136,3 +144,25 @@ module SeededPackages =
             match unpackedAll with
             | [] -> Result.Ok target
             | errors -> Result.Error errors)
+
+    /// The stores this process has seeded, by the index each was seeded into.
+    let private seeded = System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Result<string, string list>>>()
+
+    /// Seeds the packages the compiler ships into `store`, if it hasn't yet: packs each into the index of its own in the
+    /// store's cache (`PackageStore.shippedIndex`), which another process seeding at the same time can't see half made,
+    /// and unpacks into the cache each that it doesn't hold. Gives the index's directory; or why a package can't be
+    /// seeded: it doesn't pack, or the cache holds another copy of its version. A store is seeded once a process, and
+    /// one that couldn't be is tried again the next time.
+    let seed (store: PackageStore) : Result<string, string list> =
+        let key = PackageStore.shippedIndex store
+        let result = seeded.GetOrAdd(key, fun _ -> lazy (seedOnce store)).Value
+        if Result.isError result then seeded.TryRemove key |> ignore
+        result
+
+    /// The user's store (`PackageStore.user`), which seeds the packages the compiler ships with `seed`.
+    let user () : PackageStore = PackageStore.user seed
+
+    /// A store whose cache is `cache` and whose index is `index`, which fetches from GitHub with `github` and seeds the
+    /// packages the compiler ships with `seed`.
+    let store (cache: string) (index: string) (github: GitHubFetcher) : PackageStore =
+        { Cache = cache; Index = index; GitHub = github; Seed = seed }

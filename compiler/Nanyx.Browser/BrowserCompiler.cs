@@ -37,9 +37,9 @@ public static partial class BrowserCompiler
 
     /// <summary>
     /// Where the packages a script's directives name are found: none but those the compiler ships, since a page
-    /// downloads no others.
+    /// downloads no others, seeded as any store is.
     /// </summary>
-    private static readonly PackageStore Store = new("/playground/cache", "/playground/index", GitHub.unsupported);
+    private static readonly PackageStore Store = SeededPackages.store("/playground/cache", "/playground/index", GitHub.unsupported);
 
     /// <summary>
     /// How a page's program is compiled: its start exported, so that the runner calls it once it can read the module's

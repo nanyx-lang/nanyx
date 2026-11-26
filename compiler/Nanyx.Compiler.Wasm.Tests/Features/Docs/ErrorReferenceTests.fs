@@ -101,9 +101,9 @@ let private errorsOf (code: string) =
     let name, text = List.head files
     if name.EndsWith Manifest.extension then
         // Nothing is asked of GitHub: an example's references are made up.
-        (Package.compileManifestFrom { PackageStore.user () with GitHub = GitHub.unsupported } (Path.Combine(directory.Path, name)) text).Diagnostics
+        (Package.compileManifestFrom { SeededPackages.user () with GitHub = GitHub.unsupported } (Path.Combine(directory.Path, name)) text).Diagnostics
     else
-        let result = Script.compileSource (Path.Combine(directory.Path, name)) text
+        let result = Script.compileSourceIn (SeededPackages.user ()) (Path.Combine(directory.Path, name)) text
         let errors = result.Diagnostics |> List.filter Diagnostics.isError
         let warnings = result.Diagnostics |> List.filter (fun diagnostic -> (DiagnosticCodes.referenceUrl diagnostic.Code).IsSome)
         match errors, result.Typed with

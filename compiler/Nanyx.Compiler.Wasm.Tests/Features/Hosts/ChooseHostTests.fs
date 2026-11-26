@@ -154,6 +154,6 @@ def main = { x -> x + 1 }
 """
     File.WriteAllText(path, source)
     // The editor compiles a package's file as `Package.compileSourceWith` does.
-    let result = Package.compileSourceWith Linters.none path source
+    let result = Package.compileSourceWith (SeededPackages.user ()) Linters.none path source
     let mismatch = result.Diagnostics |> List.find (fun diagnostic -> diagnostic.Code = DiagnosticCodes.EntryDoesNotFitHost.Code)
     Assert.StartsWith("It doesn't fit the host 'nanyx.cli.host/cli.host'", mismatch.Message)

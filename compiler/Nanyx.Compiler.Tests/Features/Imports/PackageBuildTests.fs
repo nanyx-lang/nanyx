@@ -31,7 +31,7 @@ let ``A package build checks each module once, however many of its files import 
         [ "app.nyxp", manifest; "src/shared.nyx", shared; "src/a.nyx", user "a"; "src/b.nyx", user "b"; "src/c.nyx", user "c" ]
     use package = new TempPackage(files |> List.map (fun (path, text) -> path, text.ReplaceLineEndings "\n"))
     let build =
-        match Package.find package.Root with
+        match Package.findIn (SeededPackages.user ()) package.Root with
         | Result.Ok found -> Package.build found
         | Result.Error errors -> failwith (String.concat "\n" errors)
     Assert.Empty build.Diagnostics

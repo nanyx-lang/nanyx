@@ -15,13 +15,13 @@ let private unusedBinding = withFinalNewline """export def main: [Console] () ->
 
 /// `source` compiled as a script with no package around it, in a new directory under the temporary directory.
 let private compile (source: string) =
-    withTempDir (fun directory -> Script.compileSource (Path.Combine(directory, "script.nyx")) source)
+    withTempDir (fun directory -> Script.compileSourceIn (SeededPackages.user ()) (Path.Combine(directory, "script.nyx")) source)
 
 let private codesOf (result: CompileResult) = result.Diagnostics |> List.map _.Code
 
 [<Fact>]
 let ``Without directives a script runs no linters, as a manifest without linters does`` () =
-    let directives = Script.read "" unusedBinding
+    let directives = Script.readFrom (SeededPackages.user ()) "" unusedBinding
     Assert.Equal(None, directives.Linters)
     Assert.Empty(directives.Diagnostics)
     Assert.Empty((compile unusedBinding).Diagnostics)
@@ -30,7 +30,7 @@ let ``Without directives a script runs no linters, as a manifest without linters
 
 [<Fact>]
 let ``A ::linter directive turns the linter on, as its entry in a manifest's linters does`` () =
-    let directives = Script.read "" (withFinalNewline """::linter nanyx.lint
+    let directives = Script.readFrom (SeededPackages.user ()) "" (withFinalNewline """::linter nanyx.lint
 
 println("hi")""")
     Assert.Empty(directives.Diagnostics)
@@ -39,7 +39,7 @@ println("hi")""")
 
 [<Fact>]
 let ``A ::linter at the compiler's version is the linter the compiler ships`` () =
-    let directives = Script.read "" $"::linter nanyx.lint {Toolchain.version}\n"
+    let directives = Script.readFrom (SeededPackages.user ()) "" $"::linter nanyx.lint {Toolchain.version}\n"
     Assert.Empty(directives.Diagnostics)
     Assert.Equal<string list>([ "default" ], directives.Linters.Value.Linters |> List.map _.Name)
 
@@ -63,7 +63,7 @@ let ``Each ::lint line is for the nearest ::linter above it`` () =
         |> List.choose (function _, Result.Ok (LintSetting(linter, rule, _)) -> Some (rule.Text, linter.Text) | _ -> None)
     Assert.Equal<(string * string) list>([ "unusedBindings", "nanyx.lint"; "noTodo", "acme.lint" ], linters)
     // The second linter is not one the compiler has, so it is the manifest's error, at its name.
-    let directives = Script.read "" source
+    let directives = Script.readFrom (SeededPackages.user ()) "" source
     let diagnostic = Assert.Single(directives.Diagnostics)
     Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, diagnostic.Code)
     Assert.Equal("acme.lint", source.Substring(diagnostic.Span.Value.Start, diagnostic.Span.Value.End - diagnostic.Span.Value.Start))
@@ -72,7 +72,7 @@ let ``Each ::lint line is for the nearest ::linter above it`` () =
 [<Fact>]
 let ``A #! line, comments and blank lines can come among the directives`` () =
     let source = "#!/usr/bin/env nanyx run\n-- Says hello.\n::linter nanyx.lint\n::lint unusedBindings #error\n\n::format lineWidth 80\n" + unusedBinding
-    let directives = Script.read "" source
+    let directives = Script.readFrom (SeededPackages.user ()) "" source
     Assert.Empty(directives.Diagnostics)
     Assert.Equal(Some(Some Severity.Error), directives.Linters.Value.Severities |> Map.tryFind "default/unusedBindings")
     Assert.Equal<string list>([ "default/unusedBindings" ], codesOf (compile source))
@@ -97,7 +97,7 @@ let ``A script names a package it uses with ::install, at a version, by its name
 /// The one error the directives at the top of `source` have, with the text it is at.
 let private directiveError (source: string) =
     let source = "-- A script.\n" + source + "\n"
-    let diagnostic = (Script.read "" source).Diagnostics |> List.head
+    let diagnostic = (Script.readFrom (SeededPackages.user ()) "" source).Diagnostics |> List.head
     let span = diagnostic.Span.Value
     diagnostic, source.Substring(span.Start, span.End - span.Start)
 
@@ -126,7 +126,7 @@ let ``A directive written wrong is an error at the word it is about`` (directive
 [<Fact>]
 let ``A ::lint with no ::linter above it is an error whose fix turns on the official linter`` () =
     let source = "-- A script.\n::lint unusedBindings #error\n::linter nanyx.lint\n"
-    let diagnostic = Assert.Single((Script.read "" source).Diagnostics)
+    let diagnostic = Assert.Single((Script.readFrom (SeededPackages.user ()) "" source).Diagnostics)
     Assert.Equal(DiagnosticCodes.LintWithoutLinter.Code, diagnostic.Code)
     Assert.Equal(1, diagnostic.Span.Value.StartLine)
     let fix = Assert.Single(diagnostic.Fixes)
@@ -142,25 +142,25 @@ let ``A ::lint with no ::linter above it is an error whose fix turns on the offi
 [<InlineData("::dependencies.acme.json = \"1.2.0\"", "::install acme.json 1.2.0")>]
 let ``A directive in the old form is an error whose fix writes it as it is written now`` (old: string, now: string) =
     let source = "-- A script.\n" + old + "\n"
-    let diagnostic = Assert.Single((Script.read "" source).Diagnostics)
+    let diagnostic = Assert.Single((Script.readFrom (SeededPackages.user ()) "" source).Diagnostics)
     Assert.Equal(DiagnosticCodes.OldFormDirective.Code, diagnostic.Code)
     Assert.Equal("-- A script.\n" + now + "\n", applyFix source (Assert.Single(diagnostic.Fixes)))
 
 [<Fact>]
 let ``The fix for a directive in the old form keeps a comment after it`` () =
     let source = "::formatter.lineWidth = 80  -- narrow\n"
-    let diagnostic = Assert.Single((Script.read "" source).Diagnostics)
+    let diagnostic = Assert.Single((Script.readFrom (SeededPackages.user ()) "" source).Diagnostics)
     Assert.Equal("::format lineWidth 80  -- narrow\n", applyFix source (Assert.Single(diagnostic.Fixes)))
 
 [<Fact>]
 let ``A rule in the old form under a linter needs no ::linter of its own`` () =
     let source = "::linter nanyx.lint\n::linters.default.unusedBindings = \"off\"\n"
-    let diagnostic = Assert.Single((Script.read "" source).Diagnostics)
+    let diagnostic = Assert.Single((Script.readFrom (SeededPackages.user ()) "" source).Diagnostics)
     Assert.Equal("::linter nanyx.lint\n::lint unusedBindings #off\n", applyFix source (Assert.Single(diagnostic.Fixes)))
 
 [<Fact>]
 let ``A directive in the old form that can't be read has no fix`` () =
-    let diagnostic = Assert.Single((Script.read "" "::linters.default.unusedBindings = error\n").Diagnostics)
+    let diagnostic = Assert.Single((Script.readFrom (SeededPackages.user ()) "" "::linters.default.unusedBindings = error\n").Diagnostics)
     Assert.Equal(DiagnosticCodes.OldFormDirective.Code, diagnostic.Code)
     Assert.Empty(diagnostic.Fixes)
 
@@ -186,16 +186,16 @@ let ``A directive in a file of a package is an error saying to use the manifest`
         File.WriteAllText(manifest, $"""(package = (name = "demo", version = "0.1.0"), {consoleHostEntry})""")
         let main = Path.Combine(root, "main.nyx")
         File.WriteAllText(main, "::linter nanyx.lint\nmodule main\n\n" + unusedBinding)
-        let directives = Script.read main (File.ReadAllText main)
+        let directives = Script.readFrom (SeededPackages.user ()) main (File.ReadAllText main)
         Assert.Equal(None, directives.Linters)
         let diagnostic = Assert.Single(directives.Diagnostics)
         Assert.Equal(DiagnosticCodes.DirectiveInPackage.Code, diagnostic.Code)
         Assert.Contains(manifest, diagnostic.Message)
-        let build = Package.build (match Package.find root with Result.Ok package -> package | Result.Error e -> failwith (String.concat "\n" e))
+        let build = Package.build (match Package.findIn (SeededPackages.user ()) root with Result.Ok package -> package | Result.Error e -> failwith (String.concat "\n" e))
         Assert.Equal<string list>([ DiagnosticCodes.DirectiveInPackage.Code ], build.Diagnostics |> List.map _.Code))
 
 [<Fact>]
 let ``The example script runs cleanly`` () =
-    let result = Script.compileFile (Path.Combine(repositoryRoot, "examples", "directives.nyx"))
+    let result = Script.compileFileIn (SeededPackages.user ()) (Path.Combine(repositoryRoot, "examples", "directives.nyx"))
     Assert.Empty(result.Diagnostics)
     Assert.True(result.Typed.IsSome)

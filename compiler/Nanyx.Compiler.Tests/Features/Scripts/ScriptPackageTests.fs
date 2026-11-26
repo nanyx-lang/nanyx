@@ -163,7 +163,7 @@ let ``The editor compiles a script in the build its directives make`` () =
 import acme.util/strings
 
 println(shout("hi"))"""
-    let directives = Script.read path source
+    let directives = Script.readFrom (SeededPackages.user ()) path source
     Assert.True(directives.Build.IsSome)
-    let result = Script.compileSourceReading CompileListener.none File.ReadAllText directives Linters.none path source
+    let result = Script.compileSourceReading (SeededPackages.user ()) CompileListener.none File.ReadAllText directives Linters.none path source
     Assert.Empty(result.Diagnostics)

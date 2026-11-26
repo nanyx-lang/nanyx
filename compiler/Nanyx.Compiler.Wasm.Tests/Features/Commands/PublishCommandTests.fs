@@ -106,7 +106,7 @@ let private shoutAndWhisper = shout + "\nexport def whisper = { (s: string) -> s
 
 /// A store whose index is an empty directory in `directory`, or, with `published`, lists acme.util as it is in `util`.
 let private storeIn (directory: TempDirectory) (published: bool) =
-    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported }
+    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported; Seed = SeededPackages.seed }
     directory.Write "index/config.json" """{ "format": 1, "index": "index/" }"""
     if published then publishToIndex store (Path.Combine(directory.Path, "util")) [] "" |> ignore
     store

@@ -97,7 +97,7 @@ let consoleCoreApp =
 /// `consoleCoreApp`.
 let compileWithConsoleCoreUsing (linters: LinterOptions) (source: string) =
     use package = new TempPackage([ "app.nyxp", consoleCoreApp; "src/main.nyx", source ])
-    Package.compileSourceWith linters (package.Path "src/main.nyx") source
+    Package.compileSourceWith (SeededPackages.user ()) linters (package.Path "src/main.nyx") source
 
 /// `source`, a module, compiled as the file `src/main.nyx` of an application whose manifest is `consoleCoreApp`.
 let compileWithConsoleCore (source: string) = compileWithConsoleCoreUsing Linters.none source
@@ -149,10 +149,10 @@ let errorsOf (result: Result<'T, 'Errors>) =
     | Result.Error errors -> errors
     | Result.Ok _ -> failwith "Expected errors"
 
-/// The store of a package under test: its cache and index are its `cache` and `index` directories, and it can't fetch
-/// from GitHub.
+/// The store of a package under test: its cache and index are its `cache` and `index` directories, it can't fetch
+/// from GitHub, and it seeds the packages the compiler ships as any store does.
 let storeOf (package: TempPackage) : PackageStore =
-    { Cache = package.Path "cache"; Index = package.Path "index"; GitHub = GitHub.unsupported }
+    SeededPackages.store (package.Path "cache") (package.Path "index") GitHub.unsupported
 
 /// What `nanyx pull` does for the package whose manifest is at `manifestPath`, from `store`, with a conflict's
 /// explanation as its error.

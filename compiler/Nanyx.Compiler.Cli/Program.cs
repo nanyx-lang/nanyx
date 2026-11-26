@@ -31,8 +31,9 @@ enum Target
 /// </summary>
 internal sealed record Shell(string Directory, TextWriter Out, TextWriter Error, ProgramIo Io)
 {
-    /// <summary>The package cache, the index and GitHub, as a build reads them: the user's (see <c>PackageStore.user</c>).</summary>
-    public PackageStore Packages { get; init; } = PackageStoreModule.user();
+    /// <summary>The package cache, the index and GitHub, as a build reads them, with the packages the compiler ships
+    /// seeded: the user's (see <c>SeededPackages.user</c>).</summary>
+    public PackageStore Packages { get; init; } = SeededPackages.user();
 
     /// <summary>What <c>nanyx publish</c> and <c>nanyx unlist</c> send requests to GitHub with: none for GitHub itself,
     /// signed in with <c>GITHUB_TOKEN</c> or the GitHub CLI's login (see <c>GitHubApi.token</c>); the Wasm tests give a
@@ -651,7 +652,7 @@ internal static partial class CliCommands
             return true;
         }
 
-        var chosen = PackageModule.withHost(shell.Directory, host, package);
+        var chosen = PackageModule.withHost(shell.Packages, shell.Directory, host, package);
         if (chosen.IsError)
         {
             shell.Error.WriteLine($"--host: {chosen.ErrorValue}");
@@ -1104,7 +1105,7 @@ internal static partial class CliCommands
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(shell, deferred, result.Diagnostics);
-        return RunProgram(shell, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait);
+        return RunProgram(shell, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.Packages, shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait);
     }
 
     /// <summary>

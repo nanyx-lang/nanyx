@@ -10,7 +10,7 @@ open TranspilerWasmTestHelpers
 /// A store whose index, in `directory`, lists the package in `util` as it is now, packed by `nanyx pack`.
 let private published (directory: TempDirectory) =
     let index = Path.Combine(directory.Path, "index")
-    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = index; GitHub = GitHub.unsupported }
+    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = index; GitHub = GitHub.unsupported; Seed = SeededPackages.seed }
     let packed = nanyxInStore store directory.Path [ "pack"; "util"; "--out"; Path.Combine(index, "artifacts") ]
     Assert.Equal(0, packed.ExitCode)
     let hash = packed.StandardOutput.ReplaceLineEndings("\n").Split('\n') |> Array.find (fun line -> line.StartsWith "sha256 ") |> fun line -> line.Substring 7
@@ -42,7 +42,7 @@ let ``With no version published, the version stays`` () =
     directory.Write "util/util.nyxp" "(package = (name = \"acme.util\", version = \"0.1.0\"))\n"
     directory.Write "util/strings.nyx" "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n"
     directory.Write "index/config.json" """{ "format": 1, "index": "index/" }"""
-    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported }
+    let store = { Cache = Path.Combine(directory.Path, "cache"); Index = Path.Combine(directory.Path, "index"); GitHub = GitHub.unsupported; Seed = SeededPackages.seed }
     let outcome = nanyxInStore store (Path.Combine(directory.Path, "util")) [ "bump" ]
     Assert.Equal("acme.util has no version published before 0.1.0, so there is nothing to compare: its version stays 0.1.0\n", outcome.StandardOutput.ReplaceLineEndings "\n")
     Assert.Equal(0, outcome.ExitCode)

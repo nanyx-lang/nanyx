@@ -20,7 +20,7 @@ let ``A build reports each module's check as it starts and ends, inside its impo
             [ "demo.nyxp", manifest
               "src/main.nyx", "module main\n\nimport util\n\n@entry\ndef main = {\n  println(\"{one}\")\n}\n"
               "src/util.nyx", "module util\n\nexport def one = 1\n" ])
-    let found = okOf (Package.find package.Root)
+    let found = okOf (Package.findIn (SeededPackages.user ()) package.Root)
     let main, util = Path.GetFullPath(package.Path "src/main.nyx"), Path.GetFullPath(package.Path "src/util.nyx")
     let recording = Recording()
     let build = Package.buildReporting recording found
@@ -36,7 +36,7 @@ let ``A script's compile reports its own module, with any standard-library check
         let file = Path.Combine(dir, "script.nyx")
         File.WriteAllText(file, "@entry\ndef main = {\n  println(\"hi\")\n}\n")
         let recording = Recording()
-        let result = Script.compileFileReporting recording file
+        let result = Script.compileFileReportingIn (SeededPackages.user ()) recording file
         Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
         let events = recording.Events
         Assert.Equal($"start {Path.GetFullPath file}", List.head events)
@@ -64,7 +64,7 @@ let ``A build's timings are a tree of its files' checks, with a module imported 
               "src/a.nyx", "module a\n\nimport c\n\nexport def one = zero + 1\n"
               "src/b.nyx", "module b\n\nimport c\n\nexport def two = zero + 2\n"
               "src/c.nyx", "module c\n\nexport def zero = 0\n" ])
-    let found = okOf (Package.find package.Root)
+    let found = okOf (Package.findIn (SeededPackages.user ()) package.Root)
     let timings = CompileTimings()
     let build = Package.buildReporting timings found
     Assert.Empty(build.Diagnostics)
