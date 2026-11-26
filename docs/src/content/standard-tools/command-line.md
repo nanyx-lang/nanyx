@@ -161,6 +161,47 @@ accepts the version locked), `nanyx build` and `nanyx run` choose versions again
 (`-o`). With `--wat` it writes WebAssembly text, `file.wat`, instead. Like `build`, it is a debug build unless you pass
 `--release`.
 
+## `nanyx test`
+
+`nanyx test` runs the tests of a package, the defs marked [`@test`](../tour/attributes#test) beside its code and in the
+files its manifest's [`tests`](../tour/packages#test-files) selects, or of a script, whose top-level statements it
+doesn't run. It builds them once, under the test host, and runs each test in a fresh instance of the build, so a test
+that crashes fails alone, and reports each as it ends:
+
+```text
+Running 3 tests in geometry
+
+PASS geometry.`adds points`
+FAIL geometry.`scales points`  src/geometry.nyx:18:1
+  src/geometry.nyx:20:3: assert(scale(p, 2) == Point(x = 2, y = 4))
+    scale(p, 2) = (x = 2, y = 5)
+    p = (x = 1, y = 2)
+    geometry_scales-20-points (src/geometry.nyx:20)
+  Output:
+    scaling (x = 1, y = 2)
+PASS geometry.`moves points`
+
+2 passed, 1 failed
+Seed 4812: run them again with the same random numbers with --seed 4812
+```
+
+A test passes if it finishes, and fails if it crashes, as an `assert` that doesn't hold does, or runs for longer than
+its time limit. A failure shows why, with the stack, and what the test printed, which a test that passes doesn't show.
+A test's `Random` is seeded, so a test that draws random numbers draws the same ones when it is run with the same seed.
+A test may require only `Console` and `Random`, which the test host provides (`NYX0312`).
+
+`nanyx test` exits with 0 when every test passes, and 1 when one fails or the tests can't be built. A type or name
+error in a module with tests, or in a module one imports, stops the build, and no test runs, as an error in a module a
+program imports stops `nanyx run` ([#2967](https://github.com/nanyx-lang/nanyx/issues/2967)).
+
+| Option | What it does |
+|--------|--------------|
+| `--filter <text>` | Runs only the tests whose full name, as `` geometry.`adds points` ``, contains the text. |
+| `--seed <number>` | Seeds each test's `Random` with the number. Without it, the seed is chosen at random, and printed when a test fails. |
+| `--timeout <seconds>` | How long a test may run before it is stopped, and fails: 10 seconds by default. |
+| `--release` | Refuses any error, and compiles the tests as a release build does. |
+| `--timings` | As for `run`. |
+
 ## Exit codes
 
 Every command exits with the same codes:
@@ -250,7 +291,7 @@ See [Formatter](./formatter) for the style, the settings and what happens to a f
 `nanyx new acme.demo` makes a package in a new directory, named for the last part of the package's name, `demo`,
 unless you give another: `nanyx new acme.demo tools/demo`. The directory must be new or empty. The package has a
 manifest, `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, the
-compiler's minor version as the oldest the package builds with, `nanyx = "0.48"`, and `src/main.nyx`, whose `@entry` prints "Hello, World!". A package's name is lower case, with words separated by dots.
+compiler's minor version as the oldest the package builds with, `nanyx = "0.49"`, and `src/main.nyx`, whose `@entry` prints "Hello, World!". A package's name is lower case, with words separated by dots.
 
 ## `nanyx migrate`
 

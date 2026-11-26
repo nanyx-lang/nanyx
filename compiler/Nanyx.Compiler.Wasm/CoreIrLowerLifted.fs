@@ -197,6 +197,18 @@ let private adapting (tools: LiftedTools) (functionName: string) (fromMember: Co
             | _ when givenValueTys.Length = values.Length -> tools.CoerceAll scope arguments givenValueTys call
             | [ IrBox ], [] -> tools.CoerceAll scope [ AUnit ] givenValueTys call
             | [], [ IrBox ] -> call []
+            // A function that takes a tuple's elements, called as one that takes one boxed value, the tuple: as a
+            // builder's `for` calls the body of a loop over a map, whose items are its entries (#2683).
+            | _ :: _ :: _, [ IrBox ] ->
+                let tupleTy = IrRecord(givenValueTys |> List.mapi (fun index ty -> string index, ty))
+                tools.CoerceAll scope arguments [ tupleTy ] (fun converted ->
+                    tools.BindLocal "__tuple" (Expr.make (Atom converted.Head) tupleTy) (fun tuple ->
+                        let rec elements (index: int) (acc: Atom list) =
+                            if index = givenValueTys.Length then call (List.rev acc)
+                            else
+                                tools.BindLocal "__element" (Expr.make (Field(tuple, index)) givenValueTys[index]) (fun element ->
+                                    elements (index + 1) (element :: acc))
+                        elements 0 []))
             | _ -> call arguments
         | (key, ty) :: rest ->
             // The members wait in locals while arguments are converted to or from boxes, which stores.

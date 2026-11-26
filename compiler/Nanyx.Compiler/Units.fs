@@ -223,7 +223,7 @@ module internal Units =
             |> List.collect (fun (unit, dimension) ->
                 match unit.Multiple, dimension with
                 | _ when Dimension.isDerived dimension && not unit.Marks.IsEmpty ->
-                    [ fromParts unit "whose values are stored in its parts' default storage units, so it has no default storage or display unit of its own" ]
+                    [ fromParts unit "whose values are stored in its parts' default storage units and displayed in their default display units, so it has no default storage or display unit of its own" ]
                 | None, _ when Dimension.isDerived dimension -> [ fromParts unit "whose units are multiples of its parts' default storage units" ]
                 | multiple, [ id, 1 ] when id.Home <> state.Home ->
                     let marked =

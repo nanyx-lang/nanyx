@@ -446,9 +446,13 @@ module Package =
                 directive.Span
                 $"{name} is a directive for a script, but this file is in a package: say it in the package's manifest, '{manifestPath}'")
 
+    /// The name of the file a test build's root is compiled as, in the package's directory or the script's: no file of
+    /// theirs.
+    let testRootFile = "__tests.nyx"
+
     /// The full path of the root a test build of the package `manifest` describes is compiled as (see `testResult`): no
     /// file of the package's, but compiled as if it were in its directory.
-    let testRootIn (manifest: Manifest) = Path.Combine(manifest.Root, "__tests.nyx")
+    let testRootIn (manifest: Manifest) = Path.Combine(manifest.Root, testRootFile)
 
     /// The modules of `package`, by the names its source files declare, with those of the packages it depends on and
     /// of its host's package.
@@ -679,11 +683,12 @@ module Package =
             | _ -> None)
         |> List.distinctBy fst
 
-    /// The source of the root a test build is compiled from: a module that imports each of `modules`, each with how many
-    /// tests it has, and whose `@entry` runs the test at the index the test host gives it, counting through each
-    /// module's tests in turn, by calling its `Attributes.testDispatcher`.
+    /// The source of the root a test build is compiled from: a module that imports each of `modules`, each as an import
+    /// writes it, a module's name or a file's path in quotes, with how many tests it has, and whose `@entry` runs the test
+    /// at the index the test host gives it, counting through each module's tests in turn, by calling its
+    /// `Attributes.testDispatcher`.
     let testRootSource (modules: (string * int) list) =
-        let imports = modules |> List.mapi (fun index (name, _) -> $"import {name} as __test{index}\n") |> String.concat ""
+        let imports = modules |> List.mapi (fun index (imported, _) -> $"import {imported} as __test{index}\n") |> String.concat ""
         let starts = modules |> List.scan (fun start (_, count) -> start + count) 0
         let arms =
             modules

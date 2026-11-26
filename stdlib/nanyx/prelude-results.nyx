@@ -18,8 +18,9 @@ export context Proc = (
   return: a -> #some(a) | r
   --| The value of a block that ends without `return`.
   zero: #some() | r
-  --| Runs a loop whose body uses a keyword (see `procFor`).
-  for: [d] (list(x), ([d] x, ([d] () -> #some(y) | s) -> #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s
+  --| Runs a loop whose body uses a keyword (see `procFor`): the body gives back `#__nextItem` to go
+    on to the next item.
+  for: [d] (list(x), ([d] x -> #__nextItem | #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s
 )
 
 --| The result workflow: inside `proc { ... }`, `try x` continues with the payload of `#some`, and
@@ -64,17 +65,18 @@ export def proc: [c] ([Proc, c] () -> #some(b) | r) -> #some(b) | r = { block ->
   ) in block()
 }
 
---| The loop of `proc`: `body` is given each item of `items` and the rest of the loop, which it
-  calls to go on to the next item; after the last item comes `rest`.
+--| The loop of `proc`: `body` is given each item of `items` in turn, and gives back `#__nextItem`
+  to go on to the next, or what ends the block, a failure or a `return`'s value; after the last
+  item comes `rest`. Each body's call returns before the next item's, so the loop runs in
+  constant stack however many items it walks.
 def procFor
-  : [c]
-    list(a),
-    ([c] a, ([c] () -> #some(b) | r) -> #some(b) | r),
-    ([c] () -> #some(b) | r)
-    -> #some(b) | r
+  : [c] list(a), ([c] a -> #__nextItem | #some(b) | r), ([c] () -> #some(b) | r) -> #some(b) | r
   = {
     | [], _, rest -> rest()
-    | [item, ...others], body, rest -> body(item, { procFor(others, body, rest) })
+    | [item, ...others], body, rest ->
+      match body(item)
+        | #__nextItem -> procFor(others, body, rest)
+        | ended -> ended
   }
 
 -- Options ---------------------------------------------------------------------------------------

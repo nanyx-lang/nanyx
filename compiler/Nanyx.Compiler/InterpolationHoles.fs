@@ -42,6 +42,11 @@ module InterpolationHoles =
     let measuredIntFunction = "__measuredIntToString"
     let measuredFloatFunction = "__measuredFloatToString"
 
+    /// The prelude function the derived `toString` of a value of a derived dimension stored as an `int` calls, with its
+    /// number of its parts' default storage units, the name of its parts' default display units, how many of the one
+    /// the other is, as a numerator and a denominator, and what is written around a number of default storage units.
+    let measuredRatioFunction = "__measuredRatioToString"
+
     /// Whether a call to `calleeName` is a hole's.
     let isHole (calleeName: Identifier) = calleeName = holeFunction
 

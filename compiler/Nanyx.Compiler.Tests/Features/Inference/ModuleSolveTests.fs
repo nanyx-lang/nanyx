@@ -76,7 +76,7 @@ let private procLike =
       "  try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r"
       "  return: a -> #some(a) | r"
       "  zero: #some() | r"
-      "  for: [d] (list(x), ([d] x, ([d] () -> #some(y) | s) -> #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s"
+      "  for: [d] (list(x), ([d] x -> #__nextItem | #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s"
       ")"
       ""
       "def prc: [c] ([Prc, c] () -> #some(b) | r) -> #some(b) | r = { block ->"
@@ -92,14 +92,13 @@ let private procLike =
       "}"
       ""
       "def prcFor"
-      "  : [c]"
-      "    list(a),"
-      "    ([c] a, ([c] () -> #some(b) | r) -> #some(b) | r),"
-      "    ([c] () -> #some(b) | r)"
-      "    -> #some(b) | r"
+      "  : [c] list(a), ([c] a -> #__nextItem | #some(b) | r), ([c] () -> #some(b) | r) -> #some(b) | r"
       "  = {"
       "    | [], _, rest -> rest()"
-      "    | [item, ...others], body, rest -> body(item, { prcFor(others, body, rest) })"
+      "    | [item, ...others], body, rest ->"
+      "      match body(item)"
+      "        | #__nextItem -> prcFor(others, body, rest)"
+      "        | ended -> ended"
       "  }" ]
 
 [<Fact>]

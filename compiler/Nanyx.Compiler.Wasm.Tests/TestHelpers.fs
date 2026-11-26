@@ -239,6 +239,18 @@ let private command (arguments: string list) : Shell -> int =
             | "--name" :: name :: path -> name, path
             | path -> null, path
         fun shell -> CliCommands.MigrateIn(shell, name, Array.ofList path)
+    | "test" :: rest ->
+        // Each `--<name> <value>` among `named` before any `--`, and the arguments without them.
+        let rec valued (named: string list) (found: Map<string, string>) (kept: string list) (rest: string list) =
+            match rest with
+            | "--" :: _ -> found, List.rev kept @ rest
+            | name :: value :: rest when List.contains name named -> valued named (Map.add name value found) kept rest
+            | argument :: rest -> valued named found (argument :: kept) rest
+            | [] -> found, List.rev kept
+        let given, rest = valued [ "--filter"; "--seed"; "--timeout" ] Map.empty [] rest
+        let value name = given |> Map.tryFind name |> Option.toObj
+        let _, release, timings, _, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings)
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)
@@ -1100,3 +1112,35 @@ type FakeWasiHost() =
             host.Delivered.Add waitable
             code <- callback.Invoke(ready.Event, waitable, ready.Value)
         Assert.Equal(exit, code)
+
+/// The library package `tested`, whose manifest's `tests` selects `tests` when it isn't empty, with `files`, by their
+/// paths relative to its directory, written to a new directory.
+let testedPackage (tests: string) (files: (string * string) list) =
+    let directory = new TempDirectory()
+    let testsField = if tests = "" then "" else $", tests = [\"{tests}\"]"
+    directory.Write "tested.nyxp" ($"""(package = (name = "tested", version = "0.1.0", sources = ["src/**/*.nyx"]{testsField}))""" + "\n")
+    for path, text in files do
+        directory.Write path text
+    directory
+
+/// The test build of the package in `directory` (see `testedPackage`), under the test host, as `nanyx test` builds it: a
+/// debug build, its places named from the package's directory, in the binary format; and the errors its build reported,
+/// which it defers to the tests that reach them.
+let testBuildOf (directory: TempDirectory) : byte array * Diagnostic list =
+    let store = testStore ()
+    match Package.ofManifestFrom store (Path.Combine(directory.Path, "tested.nyxp")) with
+    | Ok found ->
+        let build = Package.testBuild store found |> Result.defaultWith failwith
+        let root = (Package.testResult build).Value
+        let typed = root.Typed |> Option.defaultWith (fun () -> failwith $"%A{build.Diagnostics @ root.Diagnostics}")
+        let options = { WasmOptions.Default with Places = true; SourceRoot = Some directory.Path }
+        Transpiler.Wasm.TestBuild.assemble options typed,
+        build.Diagnostics @ root.Diagnostics |> List.filter NyxCompiler.Diagnostics.isError |> List.distinct
+    | Error problems -> failwith $"%A{problems}"
+
+/// Each test of the test build `wasm`, by its full name, run as `nanyx test` runs it, with `seed` and a time limit of
+/// `timeout`.
+let runTestsOf (wasm: byte array) (seed: int64) (timeout: TimeSpan) : Map<string, Nanyx.Runtime.TestRun> =
+    match Nanyx.Runtime.WasmTester.run wasm (fun _ -> true) seed timeout ignore with
+    | Ok runs -> runs |> List.map (fun run -> run.Test.FullName, run) |> Map.ofList
+    | Error error -> failwith $"%A{error}"

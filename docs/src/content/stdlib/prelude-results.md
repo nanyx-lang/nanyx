@@ -49,7 +49,7 @@ context Proc = (
   try: [c] #some(a) | r, ([c] a -> #some(b) | r) -> #some(b) | r
   return: a -> #some(a) | r
   zero: #some() | r
-  for: [d] list(x), ([d] (x, ([d] () -> #some(y) | s)) -> #some(y) | s), ([d] () -> #some(y) | s) -> #some(y) | s
+  for: [d] list(x), ([d] x -> #__nextItem | #some(y) | s), ([d] () -> #some(y) | s) -> #some(y) | s
 )
 ```
 
@@ -61,7 +61,8 @@ The context of the result workflow, which `proc` runs its block under: a `try`, 
   the rest of the block.
 - `return`: Wraps the value in `#some`.
 - `zero`: The value of a block that ends without `return`.
-- `for`: Runs a loop whose body uses a keyword (see `procFor`).
+- `for`: Runs a loop whose body uses a keyword (see `procFor`): the body gives back `#__nextItem` to go
+  on to the next item.
 
 ## `proc`
 

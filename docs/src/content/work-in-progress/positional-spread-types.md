@@ -73,8 +73,9 @@ the time a value is built, its shape is known.
 A function whose type spreads a type variable, as `(a, ...t)` does, can't be compiled once for every `t`: the layout
 of the record it builds depends on `t`'s shape. So the backend always compiles such a function at each concrete shape
 it is used at, and never at boxed types. This is a rule about a kind of type, not about any one function. It is the
-same specialisation that [#2683](https://github.com/nanyx-lang/nanyx/issues/2683) found missing for builder members,
-so the work could serve both.
+same specialisation builder members lack, which made a `for` loop keep a frame per item until its body gave back a tag
+instead of calling the rest of the loop ([#2683](https://github.com/nanyx-lang/nanyx/issues/2683)), so the work could
+serve both.
 
 ## `concurrent` as a prelude builder
 
@@ -115,7 +116,8 @@ Positional spread is not only for `concurrent`. It also types:
   error messages that say what shape was expected. The checker, the printer and the language server must all show a
   solved spread as a plain tuple.
 - **The backend** must guarantee specialisation for every function whose type spreads a type variable. Today, builder
-  members are compiled at boxed types ([#2683](https://github.com/nanyx-lang/nanyx/issues/2683)).
+  members are compiled at boxed types, and convert what they are given and give back
+  ([#2683](https://github.com/nanyx-lang/nanyx/issues/2683)).
 - **Building** `(a, ...t)` copies `t`'s fields into a new record, so a chain of `n` spreads copies about `n²/2` fields.
   That is nothing for a handful of tasks, but it is not free for a long chain.
 
