@@ -17,15 +17,19 @@ export module cli.host
 import (
   nanyx/async as (Async)
   nanyx/clock as (Clock)
+  nanyx/host.async as (cancelled)
+  nanyx/host.memory
   nanyx/host.runtime
   nanyx/random as (Random)
   nanyx.cli/console as (Console)
   nanyx.cli/env as (Env)
   nanyx.fs/filesystem as (FileSystem)
   nanyx.http/client as (Http)
+  nanyx.wasi/files as (bytesAt)
   nanyx.wasi/preview1 as (timeOn, systemBits)
-  nanyx.wasi/preview1.system as system
+  nanyx.wasi/preview1.system as (arguments, atPath, chunkAt, deleteAt, environmentVariable, existsAt, exitProcess, fill, namesAt, pathCreateDirectory, readWith, writeTo, writeWith)
   nanyx.wasi/runtime as (sendThroughRuntime, sleepOnRuntime)
+  nanyx.wasi/stdin as (readLineAfter, readToEndAfter)
 )
 
 --| Calls `f` with a `Console` that reads and writes the standard streams, an `Env` that reads what
@@ -37,6 +41,47 @@ import (
 export def provide
   : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> a
   = { f ->
+    use Console(
+      write = { text -> writeTo(1, text) }
+      writeError = { text -> writeTo(2, text) }
+      readLine = { _ -> readLineAfter(fill, []) }
+      readToEnd = { _ -> #some(readToEndAfter(fill, [])) }
+      flush = { _ -> () }
+    )
+
+    use Env(
+      args = { _ -> arguments() }
+      variable = { name -> environmentVariable(name) }
+      exit = { code -> exitProcess(code) }
+    )
+
+    use FileSystem(
+      readFile = { at -> if cancelled()
+          then #cancelled
+          else readWith(at, { address, count -> stringAt(address, count) })
+      }
+      readFileBytes = { at -> if cancelled()
+          then #cancelled
+          else readWith(at, { address, count -> bytesAt(address, count) })
+      }
+      readFileChunk = { at, offset, length -> if cancelled()
+          then #cancelled
+          else chunkAt(at, offset, length)
+      }
+      writeFile = { at, text -> if cancelled() then #cancelled else writeWith(at, text, 9, 0) }
+      appendFile = { at, text -> if cancelled() then #cancelled else writeWith(at, text, 1, 1) }
+      pathExists = { at -> if cancelled() then false else existsAt(at) }
+      deleteFile = { at -> if cancelled() then #cancelled else deleteAt(at) }
+      listDirectory = { at -> if cancelled() then #cancelled else namesAt(at) }
+      createDirectory = { at ->
+        if cancelled() then #cancelled else
+          atPath(
+            at
+            { directory, address, length -> pathCreateDirectory(directory, address, length) }
+          )
+      }
+    )
+
     use Http(sendRequest = { request -> sendThroughRuntime(request) })
     use Random(bits = { _ -> systemBits() })
 
@@ -46,7 +91,7 @@ export def provide
       sleep = { time -> sleepOnRuntime(time) }
     )
 
-    system.provide(f)
+    f()
   }
 
 --| Runs `entry`, the program's entry point, in the contexts [`provide`] provides. What `entry`

@@ -1,7 +1,8 @@
 --| The console's system on WASI preview 1, which the console host's core root provides: a
   `Console` that reads and writes the standard streams, an `Env` that reads what the program was
   started with, and a `FileSystem` that reads and writes the directories the runtime opened for it.
-  A host that runs programs on WASI preview 1 provides them with [`provide`].
+  A host that runs programs on WASI preview 1 writes them on these functions, as the console host's
+  `provide` does.
 @partial export module preview1.system
 
 import (
@@ -47,7 +48,7 @@ def procExit: [HostRuntime] I32 -> ()
 -- read; and from 64 to the end of the block, the buffer standard input is read into (see `cli.stdin`).
 
 --| Writes `text` to the file descriptor `fd`, as it is.
-def writeTo: [HostRuntime] I32, string -> () = { fd, text ->
+export def writeTo: [HostRuntime] I32, string -> () = { fd, text ->
   writeI32(stateAt(12), addressOf(text))
   writeI32(stateAt(16), byteLength(text))
   ignore(fdWrite(fd, stateAt(12), 1, stateAt(20)))
@@ -56,7 +57,7 @@ def writeTo: [HostRuntime] I32, string -> () = { fd, text ->
 
 --| How many bytes of standard input are left in the buffer, read into it when none are; 0 when the
   input has ended, or cannot be read.
-def fill: [HostRuntime] () -> I32 = { _ ->
+export def fill: [HostRuntime] () -> I32 = { _ ->
   def start = readI32(stateAt(4))
   def end = readI32(stateAt(8))
 
@@ -113,72 +114,24 @@ def variableIn: list(string), string -> #some(string) | #notSet = {
 }
 
 --| The program's command-line arguments, after its name.
-def arguments: [HostRuntime] () -> list(string) = { _ ->
+export def arguments: [HostRuntime] () -> list(string) = { _ ->
   match entriesOf(argsSizesGet, argsGet)
     | [] -> []
     | [_, ...rest] -> rest
 }
 
 --| The value of the environment variable `name`, or `#notSet` when it has none.
-def environmentVariable: [HostRuntime] string -> #some(string) | #notSet = { name ->
+export def environmentVariable: [HostRuntime] string -> #some(string) | #notSet = { name ->
   variableIn(entriesOf(environSizesGet, environGet), name ++ "=")
 }
 
 --| Ends the program with the exit code `code`, or 1 for a code that doesn't fit an `I32`. WASI's
   `proc_exit` never returns: the call after it only gives the function its type.
-def exitProcess: [HostRuntime] int -> undefined = { code ->
+export def exitProcess: [HostRuntime] int -> undefined = { code ->
   def exitCode = match int.toI32(code)
     | #some(fits) -> fits
     | #outOfRange -> 1
 
   procExit(exitCode)
   exitProcess(code)
-}
-
---| Calls `f` with a `Console` that reads and writes the standard streams, an `Env` that reads what
-  the program was started with, and a `FileSystem` that reads and writes the directories the
-  runtime opened for it, and gives back what `f` returns.
-export def provide: [c, HostRuntime, Async] ([c, Console, Env, FileSystem] () -> a) -> a = { f ->
-  use Console(
-    write = { text -> writeTo(1, text) }
-    writeError = { text -> writeTo(2, text) }
-    readLine = { _ -> readLineAfter(fill, []) }
-    readToEnd = { _ -> #some(readToEndAfter(fill, [])) }
-    flush = { _ -> () }
-  )
-
-  use Env(
-    args = { _ -> arguments() }
-    variable = { name -> environmentVariable(name) }
-    exit = { code -> exitProcess(code) }
-  )
-
-  use FileSystem(
-    readFile = { at -> if cancelled()
-        then #cancelled
-        else readWith(at, { address, count -> stringAt(address, count) })
-    }
-    readFileBytes = { at -> if cancelled()
-        then #cancelled
-        else readWith(at, { address, count -> bytesAt(address, count) })
-    }
-    readFileChunk = { at, offset, length -> if cancelled()
-        then #cancelled
-        else chunkAt(at, offset, length)
-    }
-    writeFile = { at, text -> if cancelled() then #cancelled else writeWith(at, text, 9, 0) }
-    appendFile = { at, text -> if cancelled() then #cancelled else writeWith(at, text, 1, 1) }
-    pathExists = { at -> if cancelled() then false else existsAt(at) }
-    deleteFile = { at -> if cancelled() then #cancelled else deleteAt(at) }
-    listDirectory = { at -> if cancelled() then #cancelled else namesAt(at) }
-    createDirectory = { at ->
-      if cancelled() then #cancelled else
-        atPath(
-          at
-          { directory, address, length -> pathCreateDirectory(directory, address, length) }
-        )
-    }
-  )
-
-  f()
 }
