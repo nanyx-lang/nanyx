@@ -119,19 +119,22 @@ is the zero of any dimension. A number with a unit is not a pattern: compare wit
 
 # Dimensions in types
 
-A dimension written without its storage, as `Time`, is a `Time` of any storage, and each one written so is of a storage
-of its own. Writing the storage, as `Time(a)`, says two share one:
+A dimension is written with its storage, as `Time(a)` or `Time(float)`, or without it, as `Time`. Those a function is
+passed that are written without one share one storage, and those in its result are of whatever storage its body makes
+them, as a [`_`](../tour/type-inference-and-annotations#partial-annotations) there is:
 
 ```nanyx fragment
 def isLong: Time -> bool  -- [Num(a)] Time(a) -> bool
-def overlap: Time, Time -> bool  -- [Num(a), Num(b)] Time(a), Time(b) -> bool
-def total: list(Time(a)) -> Time(a)
+def overlap: Time, Time -> bool  -- [Num(a)] Time(a), Time(a) -> bool
+def total: list(Time) -> Time  -- [Num(a)] list(Time(a)) -> Time(a), from its body
 ```
 
-A signature that names a dimension requires `Num` of its storage without writing it. A storage that only the result
-names is an error, since nothing a call passes says what it is ([NYX0293](../standard-tools/errors#nyx0293)): write
-`list(Time(a)) -> Time(a)`, not `list(Time) -> Time`. A constrained dimension is written without a storage, `Bytes`,
-since it has only one ([NYX0294](../standard-tools/errors#nyx0294)).
+So `overlap(1s, 2.0s)` is an error: `1s` is stored as an `int` and `2.0s` as a `float`. Writing the storages says
+otherwise: `Time(a), Time(b)` takes two, and in `Distance(a), Time` the bare `Time` has a storage of its own, apart from
+`a`. A signature that names a dimension requires `Num` of its storage without writing it. A function with no body to say
+what its result is, as an [`@extern`](../tour/attributes#extern) has, writes a storage its parameters fix, or a number
+type, in its result ([NYX0293](../standard-tools/errors#nyx0293)). A constrained dimension is written without a storage,
+`Bytes`, since it has only one ([NYX0294](../standard-tools/errors#nyx0294)).
 
 # Arithmetic
 

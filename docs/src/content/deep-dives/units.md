@@ -31,10 +31,14 @@ exponent, `Length / Time` as `[Length, 1; Time, -1]` (see [Derived dimensions](#
 their dimensions are one and their storages are. The backend lays one out as its storage.
 
 `DimensionSignatures` reads each def's signature, top-level or local, before a context's associated types are written
-out (see `AssociatedTypes`): a dimension written without its storage, `Time`, is given a storage variable of its own,
-named by the first letters the signature doesn't write, and each storage variable requires `Num`, so
-`def overlap: Time, Time -> bool` is read as `[Num(a), Num(b)] Time(a), Time(b) -> bool`. A storage that is not the type
-of a parameter is [`NYX0293`](../standard-tools/errors#nyx0293), and a storage written for a constrained dimension,
+out (see `AssociatedTypes`). Where a dimension written without its storage, `Time`, is in the signature says what its
+storage is (`Position`): those in the function's parameters, or in its contexts, share one storage variable, the
+signature's implicit storage, named by the first letter the signature doesn't write; those in its result, or in a
+value's type, are given a `_`, which the def's value settles as it does any `_` (see `DefAnnotations.settleHoles`); and
+in the result of a def with no value, an `@extern` or a component's import, each is given a storage variable of its own.
+Each storage variable requires `Num`, so `def overlap: Time, Time -> bool` is read as `[Num(a)] Time(a), Time(a) ->
+bool`, and `def total: list(Time) -> Time` as `[Num(a)] list(Time(a)) -> Time(_)`. A storage variable that is not the
+type of a parameter is [`NYX0293`](../standard-tools/errors#nyx0293), and a storage written for a constrained dimension,
 `Bytes(a)`, is [`NYX0294`](../standard-tools/errors#nyx0294).
 
 # Units

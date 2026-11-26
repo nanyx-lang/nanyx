@@ -2739,20 +2739,21 @@ not a literal stops the program when it runs.
 
 # NYX0293: Dimension's storage that no parameter fixes
 
-A signature names a dimension whose storage, the number type that holds its values, is not the type of a parameter, so
-nothing a call passes says what it is. A dimension written without its storage, as `Time`, is of a storage of its own
-([Units of measure](../advanced/units-of-measure#dimensions-in-types)).
+A signature names a dimension whose storage, the number type that holds its values, is a type variable that no
+parameter's type has, so nothing a call passes says what it is. A dimension written without its storage in a function's
+result is of the storage its body makes it ([Units of measure](../advanced/units-of-measure#dimensions-in-types)), but a
+foreign function, declared with `@extern`, has no body to say.
 
 ```nanyx
 dimension Time
 
 @baseUnit unit ns: Time
 
-def average: list(Time) -> Time = { ts -> average(ts) }  -- error NYX0293: The number that stores 'Time' here is not the type of a parameter, ...
+def make: int -> Time(a) = { n -> make(n) }  -- error NYX0293: The number that stores 'Time' here is not the type of a parameter, ...
 ```
 
-To fix it, write the storage as a parameter's, as in `list(Time(a)) -> Time(a)`, or write a storage, as in
-`Time(int)`.
+To fix it, write the storage as a parameter's, as in `Time(a) -> Time(a)`, write a storage, as in `Time(int)`, or, in
+a function with a body, leave it out, as in `int -> Time`.
 
 # NYX0294: Storage written for a constrained dimension
 
