@@ -58,7 +58,7 @@ def Vector.`+` = { a, b -> Vector(x = a.x + b.x, y = a.y + b.y) }
 def c = a + b   -- resolves to Vector.`+` because `a` is a Vector
 ```
 
-The operator is found by the type of its left operand, exactly as any other attached function is resolved by the type of its first argument.
+The operator is found by the type of its left operand, exactly as any other attached function is resolved by the type of its first argument. On a type of your own that attaches none, such as a `type Money = private int`, `a - b` is an error that says `Money` has no `-` and how to give it one. Where the type attaches functions that take the operands instead, the error names them: `now() - start` on two instants points to `now() \since(start)`.
 
 `-x` negates: it binds tighter than every infix operator, so `-x * y` is `(-x) * y`, and it is written against its operand. `-5` is a literal. On an `int` or a `float` it is the built-in negation (`-0.0` is negative zero); on any other type it is that type's `negate`, the member of `Sub`. In a [shorthand lambda](../tour/functions#shorthand-lambdas), a leading `-` is still the infix operator, so `{ - x }` is `{ n -> n - x }`, and `{ -x }` is an error, as `n -x` would be.
 
