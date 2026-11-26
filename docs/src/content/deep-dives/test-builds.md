@@ -75,3 +75,19 @@ ends only that instance.
 `TestBuild.assemble` compiles the root, then `WasmBinary.withTests` adds a custom section, `nanyx.tests`, that lists
 each test at its index: its module, its name, and its file, line and column, each from 1, the file named as a crash's
 place names it. The runtime reads it with `TestTable.read`, to choose tests by name and to say where each is.
+
+# The runner
+
+`WasmTester.run`, in the runtime, runs the tests of a test build. It compiles the module once, with Wasmtime's epoch
+interruption, then runs each test it is asked for, one at a time, in a store and an instance of its own, so a test that
+crashes fails alone and no state leaks from one test to the next. It gives each test's `TestRun`:
+
+- its outcome: `Passed`, `Failed` with the `RunError` the instance stopped with, or `TimedOut` once it has run for
+  longer than its time limit, 10 seconds unless it is given another (`WasmTester.defaultTimeout`), after which a timer
+  moves the engine's epoch on and the store is interrupted;
+- what it printed through `nanyx:test` and each `dbg` it reached, in the order it wrote them: a test build is compiled
+  with `DbgToEmbedder`, so a `dbg` goes to the runtime rather than to standard error;
+- what it wrote to its standard error itself.
+
+A test build is compiled with `CrashToRuntime`, so a crash, an `assert` that doesn't hold among them, comes with its
+message, as well as its place and stack (see [Crash stacks](./crash-stacks)).
