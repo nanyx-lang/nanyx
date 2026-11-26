@@ -122,9 +122,14 @@ let internal read
 /// value made it, as `a` in `[Foo(_)] a, a -> a` whose body calls `Foo`'s members with `a`s: a call reads a context's
 /// arguments from the annotation, so each `_` must stand for a type the annotation can write, with the variables it
 /// names. One the value left as a variable of its own, or made a type an annotation cannot write, is an error at the `_`.
-let internal settleContextHoles (state: InferState) (name: Identifier) (typeOpt: TypeExpr option) : Result<TypeExpr option, Diagnostic list> =
+///
+/// A `_` in the rest of the signature that the value made a type of the variables the signature names is written as that
+/// type too, as the result `_` of `[Num(a)] a, a -> _` over `{ x, y -> x / y }` is `fraction`, `Num(a).fraction`: a call
+/// reads the annotation again, and so ties those variables, which an instance of a context may fix, to what the call
+/// gives (#2879). Any other `_` there stays as it is.
+let internal settleHoles (state: InferState) (name: Identifier) (typeOpt: TypeExpr option) : Result<TypeExpr option, Diagnostic list> =
     match typeOpt with
-    | Some ({ Kind = TypeWithContext(contexts, inner) } as annotation) when contexts |> List.exists TypeHoles.hasHoles ->
+    | Some ({ Kind = TypeWithContext(contexts, inner) } as annotation) when contexts |> List.exists TypeHoles.hasHoles || TypeHoles.hasHoles inner ->
         let names =
             state.TypeVars
             |> Map.toList
@@ -134,11 +139,12 @@ let internal settleContextHoles (state: InferState) (name: Identifier) (typeOpt:
                 | TyVar resolved -> Some (resolved.Id, varName)
                 | _ -> None)
             |> Map.ofList
+        let resolvedHole (hole: TypeExpr) = state.ExprTypes |> Map.tryFind hole.Id |> Option.map (resolveSoFar state)
         let holes =
             contexts
             |> List.collect TypeExpr.holes
             |> List.map (fun hole ->
-                let written = state.ExprTypes |> Map.tryFind hole.Id |> Option.bind (resolveSoFar state >> ContextInference.typeExprOf names)
+                let written = resolvedHole hole |> Option.bind (ContextInference.typeExprOf names)
                 hole, written |> Option.map (fun written -> { written with Span = hole.Span }))
         let errors =
             holes
@@ -147,12 +153,19 @@ let internal settleContextHoles (state: InferState) (name: Identifier) (typeOpt:
                     Some (Diagnostics.at DiagnosticCodes.UndeterminedContextType hole.Span
                               $"The body of '{name}' does not make this '_' a type its parameters or result name, so no call can supply the context: write the type in place of '_'")
                 | _, Some _ -> None)
-        let settled = holes |> List.choose (fun (hole, written) -> written |> Option.map (fun e -> hole.Id, e)) |> Map.ofList
+        let named =
+            TypeExpr.holes inner
+            |> List.choose (fun hole ->
+                match resolvedHole hole with
+                | Some ty when not (TypeEnv.freeTyVars ty).IsEmpty ->
+                    ContextInference.typeExprOf names ty |> Option.map (fun written -> hole.Id, { written with Span = hole.Span })
+                | _ -> None)
+        let settled = (holes |> List.choose (fun (hole, written) -> written |> Option.map (fun e -> hole.Id, e))) @ named |> Map.ofList
         let rec settle (typeExpr: TypeExpr) =
             match settled |> Map.tryFind typeExpr.Id with
             | Some written -> written
             | None -> TypeExpr.mapChildren settle typeExpr
-        if errors.IsEmpty then Ok (Some { annotation with Kind = TypeWithContext(List.map settle contexts, inner) })
+        if errors.IsEmpty then Ok (Some { annotation with Kind = TypeWithContext(List.map settle contexts, settle inner) })
         else Error errors
     | _ -> Ok typeOpt
 

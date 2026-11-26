@@ -107,6 +107,23 @@ def unused: [Foo(_)] a -> a = { x -> x }"""
     Assert.Equal(DiagnosticCodes.UndeterminedContextType.Code, code)
     Assert.Equal("_", text)
 
+// A call reads a def's annotation again, and read again, a hole is the def's own type: the result of `half` was its own
+// `fraction` at every call, which no instance of `Num` fixed (#2879).
+[<Fact>]
+let ``A hole the value makes an associated type is that type at each call`` () =
+    let source =
+        normalized """def half: [Num(a)] a, a -> _ = { x, y -> x / y }
+
+def h = half(1, 2)
+
+def local: int -> float = { n ->
+  def halve: [Num(b)] b, b -> _ = { x, y -> x / y }
+  halve(n, 2)
+}"""
+    let types = definedTypes source
+    Assert.Equal("a, a -> fraction", Unifier.tyToString types.["half"])
+    Assert.Equal("float", Unifier.tyToString types.["h"])
+
 [<Fact>]
 let ``A hole cannot be used in a type definition`` () =
     let result = Compiler.compile "type Names = list(_)"
