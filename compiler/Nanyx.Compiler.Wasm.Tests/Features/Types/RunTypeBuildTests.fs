@@ -60,7 +60,7 @@ show(zeroOf(type Reading))
 [<Fact>]
 let ``Run - a generic decoder reads JSON into any record, union, list and built-in type`` () =
     let source =
-        """::install nanyx.json 0.4.2
+        """::install nanyx.json 0.5.0
 
 import nanyx.json/json as json
 
@@ -87,7 +87,7 @@ def decodeAt: json.Json, Type(a) -> #some(a) | #error(string) = { j, t ->
       match j
         | #object(members) ->
           r.build { f ->
-            match map.get(members, f.name)
+            match json.member(members, f.name)
               | #some(v) -> decodeAt(v, f.type)
               | _ -> #error("missing {f.name}")
           }
@@ -95,10 +95,10 @@ def decodeAt: json.Json, Type(a) -> #some(a) | #error(string) = { j, t ->
     | #union(u) ->
       match j
         | #object(o) ->
-          match map.get(o, "tag")
+          match json.member(o, "tag")
             | #some(#string(tag)) ->
               def payload =
-                match map.get(o, "value")
+                match json.member(o, "value")
                   | #some(v) -> v
                   | _ -> #null
               def unknown: #some(a) | #error(string) = #error("unknown tag {tag}")
@@ -131,7 +131,7 @@ type Role = #admin | #member(int)
 
 type User = (name: string, age: int, roles: list(Role), active: bool)
 
-def object: list((string, json.Json)) -> json.Json = { members -> #object(map.fromList(members)) }
+def object: list((string, json.Json)) -> json.Json = { members -> #object(members) }
 
 def show = { result ->
   match result

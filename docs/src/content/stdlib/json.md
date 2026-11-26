@@ -2,13 +2,13 @@
 title: json
 description: Reading and writing JSON
 order: 15.5
-package: nanyx.json 0.4.2
+package: nanyx.json 0.5.0
 ---
 
 `nanyx.json` isn't part of the standard library: it is a package published to the
 [package index](https://github.com/nanyx-lang/packages) from [nanyx-lang/json](https://github.com/nanyx-lang/json). An
-application lists it in its manifest's `dependencies`, `(package = "nanyx.json", version = "0.2")`, which
-`nanyx install nanyx.json` adds, and a script names the version it uses in a `::install nanyx.json 0.4.2` line. Import
+application lists it in its manifest's `dependencies`, `(package = "nanyx.json", version = "0.5")`, which
+`nanyx install nanyx.json` adds, and a script names the version it uses in a `::install nanyx.json 0.5.0` line. Import
 `nanyx.json/json` under a name, `as json`, as these examples do: its `print` would otherwise clash with the console's.
 It is pure, so it needs no context.
 
@@ -18,7 +18,7 @@ write or read one another way, build a [decoder](json-typed) or an [encoder](enc
 underneath them, which `json.parse` reads and `json.print` writes:
 
 ```nanyx
-::install nanyx.json 0.4.2
+::install nanyx.json 0.5.0
 
 import nanyx.json/json as json
 
@@ -28,33 +28,33 @@ match json.parse(text)
   | #some(value) -> println(json.print(value))
   | #invalidJson(e) -> println("Not JSON: {e.message}")
 
--- {"name":"Ada","languages":["English","French"],"born":1815}
+-- {"name":"Ada","born":1815,"languages":["English","French"]}
 ```
 
-A `Json` value is a tag union, so it is built and taken apart as any other is: an object is a `map(string, Json)`, and
-an array a `list(Json)`.
+A `Json` value is a tag union, so it is built and taken apart as any other is: an object is a `list((string, Json))`,
+its members in the order they are written, and an array a `list(Json)`.
 
 ```nanyx
-::install nanyx.json 0.4.2
+::install nanyx.json 0.5.0
 
 import nanyx.json/json as json
 
-def point = #object(["x" => #number(1.5), "y" => #number(-2.0)])
+def point = #object([("x", #number(1.5)), ("y", #number(-2.0))])
 
 println(json.print(point))
 
 -- {"x":1.5,"y":-2}
 ```
 
-For now an object's keys come out in an unspecified order: an object is a map, and a map gives its keys in the order
-of their hashes, so `print` writes them in that order, not the order they were written in or read. Two objects with
-the same members in another order are still `==`.
+An object keeps its members in the order they are written: `parse` reads them so, and `print` writes them so.
+`json.member(members, key)` looks one up, giving `#some` of its value or `#notFound`. Two objects are `==` when they have
+the same members in the same order.
 
 When the text isn't JSON, `parse` gives `#invalidJson`, which says where, by byte and by line and column, and what it
 found there. `json.describe` writes it as a message:
 
 ```nanyx
-::install nanyx.json 0.4.2
+::install nanyx.json 0.5.0
 
 import nanyx.json/json as json
 
@@ -72,7 +72,7 @@ match json.parse('{"a" 1}')
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.4.2, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.5.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 JSON text, read into a [`Json`](#json) value and written back out.
 
@@ -84,14 +84,15 @@ element and member on a line of its own.
 the type, with no encoder or decoder written for it: `json.decode(type User, text)`. To
 write or read a type another way, build an `Encoder` or a `Decoder` from smaller ones, and
 run it with [`encodeWith`](json-typed#encodewith) or [`decodeWith`](json-typed#decodewith). A program names
-`nanyx.json` in its manifest's `dependencies`, or a script in a `::dependency` line, and imports
+`nanyx.json` in its manifest's `dependencies`, or a script in an `::install` line, and imports
 it as `import nanyx.json/json as json`, to call `json.parse(text)` as the docs do.
 
-An object is a `map(string, Json)`, so `print` and `encode` write its keys, and a record's
-fields, in the order the map gives them. With a compiler whose maps keep their keys in the order
-they were added, that is the order the text or the record writes them; once maps give their keys
-in the order of their hashes, it is unspecified. A key written twice holds the value written
-last.
+An object is a list of its members, each a key and a value, in the order they are written, so
+[`parse`](#parse) and [`print`](#print) keep the order of an object's keys, and [`encode`](json-reflection#encode) writes a record's
+fields in the order its type declares them. A key written twice in the text is read once, where
+it is first written, with the value written last, as `{"a": 1, "b": 2, "a": 3}` is
+`{"a": 3, "b": 2}`. Two objects are `==` when they have the same members in the same order. A
+`map` of values is written in the map's order, which is its keys' hashes'.
 
 Text is UTF-8, as strings are, and a string's escapes are read as JSON writes them: `\"`, `\\`,
 `\/`, `\b`, `\f`, `\n`, `\r`, `\t` and `\uXXXX`, with a character past U+FFFF written as two
@@ -104,11 +105,11 @@ its size. Only nesting takes stack: an array in an array in an array, and so on.
 ## `Json`
 
 ```nanyx fragment
-type Json = #null | #bool(bool) | #number(float) | #string(string) | #array(list(self)) | #object(map(string, self))
+type Json = #null | #bool(bool) | #number(float) | #string(string) | #array(list(self)) | #object(list((string, self)))
 ```
 
 A JSON value: `null`, a boolean, a number, a string, an array of values, or an object, whose
-members are values each named by a string.
+members are values each named by a string, in the order they are written.
 
 ## `JsonError`
 
@@ -119,6 +120,15 @@ type JsonError = #invalidJson(position: int, line: int, column: int, message: st
 Why [`parse`](#parse) read no value: `#invalidJson`, with where the text stops being JSON and what it
 found there. `position` is the byte the problem is at, counting from 0, and `line` and `column`
 say where that byte is, each counting from 1, with `column` counting characters.
+
+## `member`
+
+```nanyx fragment
+def member: list((string, Json)), string -> #some(Json) | #notFound
+```
+
+The value of the member `key` of an object's `members`, the first of that name, or `#notFound`:
+`json.member(person, "name")` for the object `#object(person)`.
 
 ## `parse`
 
@@ -140,7 +150,7 @@ def print: Json -> string
 `value` as JSON text, written compactly, with no whitespace: the array of `#number(1.0)` and
 `#string("two")` is `[1,"two"]`. A number with no fraction is written without one, as `1`, and
 NaN and infinity, which JSON has no way to write, as `null`. An object's members are written in
-its map's order. What `print` writes, [`parse`](#parse) reads back as the same value.
+their order. What `print` writes, [`parse`](#parse) reads back as the same value.
 
 ## `printPretty`
 

@@ -144,7 +144,7 @@ println(zeros((n = 3, s = "x", xs = [true], b = false), type (n: int, s: string,
 [<Fact>]
 let ``Run - a generic encoder writes JSON for any record, union, list and built-in type`` () =
     let source =
-        """::install nanyx.json 0.4.2
+        """::install nanyx.json 0.5.0
 
 import nanyx.json/json as json
 
@@ -155,13 +155,13 @@ def encodeAt: a, Type(a) -> json.Json = { value, t ->
     | #string -> #string(value)
     | #bool -> #bool(value)
     | #list(elem) -> #array(value \list.map { x -> encodeAt(x, elem) })
-    | #record(r) -> #object(r.fields \list.map { f -> (f.name, encodeAt(f.get(value), f.type)) } \map.fromList)
+    | #record(r) -> #object(r.fields \list.map { f -> (f.name, encodeAt(f.get(value), f.type)) })
     | #union(u) ->
         def nothing: json.Json = #null
         u.cases
           \list.fold(nothing, { found, c ->
             match c.get(value)
-              | #some(payload) -> #object(map.fromList([("tag", #string(c.name)), ("value", encodeAt(payload, c.type))]))
+              | #some(payload) -> #object([("tag", #string(c.name)), ("value", encodeAt(payload, c.type))])
               | #none -> found
           })
     | else -> #null
@@ -175,7 +175,7 @@ println(json.print(encodeAt(User(name = "Ada", age = 36, roles = [#admin, #membe
 """
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan
-        """{"name":"Ada","active":true,"age":36,"roles":[{"value":null,"tag":"admin"},{"value":2,"tag":"member"}]}
+        """{"name":"Ada","age":36,"roles":[{"tag":"admin","value":null},{"tag":"member","value":2}],"active":true}
 """
 
 let private naming =

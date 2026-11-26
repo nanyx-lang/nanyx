@@ -2,7 +2,7 @@
 title: json, reflection
 description: Writing and reading any type as JSON, with no encoder or decoder written for it
 order: 15.55
-package: nanyx.json 0.4.2
+package: nanyx.json 0.5.0
 ---
 
 `json.encode` writes a value of any type as JSON text, and `json.decode` reads text into the type it is given, by
@@ -14,7 +14,7 @@ A record is an object, a tag with no payload its name, a tag with one an object 
 `#none` is left out:
 
 ```nanyx
-::install nanyx.json 0.4.2
+::install nanyx.json 0.5.0
 
 import nanyx.json/json as json
 
@@ -43,18 +43,18 @@ match json.decode(type Drawing, plan)
   | #some(read) -> println("{read.title} by {read.author}")
   | failure -> println(json.describe(failure))
 
--- {"title":"Sketch","shapes":["point",{"circle":1.5},{"rect":{"height":1,"width":2}}]}
+-- {"title":"Sketch","shapes":["point",{"circle":1.5},{"rect":{"width":2,"height":1}}]}
 -- Plan by #some(Ada)
 ```
 
-A record is written as an object, and for now its fields come out in an unspecified order, as an object's keys do (see
-[json](json)), not the order the type writes them in.
+A record is written as an object, its fields in the order the type writes them, since an object keeps its members in
+order (see [json](json)).
 
 A failure is a tag of its own, which `json.describe` writes: `#invalidJson` for text that isn't JSON, `#doesNotFit` for
 a value that doesn't fit the type, and `#cannotEncode` for a part of a value that JSON can't hold, each with where:
 
 ```nanyx
-::install nanyx.json 0.4.2
+::install nanyx.json 0.5.0
 
 import nanyx.json/json as json
 
@@ -93,7 +93,7 @@ module that calls it ([#2382](https://github.com/nanyx-lang/nanyx/issues/2382)),
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.4.2, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.5.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 ## `encode`
 
@@ -125,7 +125,7 @@ def encodeValue: [Typed(a)] a -> #some(Json) | #cannotEncode(path: list(PathStep
 
 `value` as a `Json` value, with no encoder written for it, written by walking its type as
 [`encode`](#encode) writes it: `json.encodeValue((name = "Ada", tags = ["x"]))` is
-`#some(#object(["name" => #string("Ada"), "tags" => #array([#string("x")])]))`. For a value to
+`#some(#object([("name", #string("Ada")), ("tags", #array([#string("x")]))]))`. For a value to
 put in a larger `Json` value, or to print with [`printPretty`](json#printpretty). A function and a nominal type
 can't be written: they are an `EncodeError`, with the path to them.
 

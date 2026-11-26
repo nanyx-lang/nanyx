@@ -2,7 +2,7 @@
 title: encode
 description: Writing types of your own as JSON
 order: 15.7
-package: nanyx.json 0.4.2
+package: nanyx.json 0.5.0
 ---
 
 `json.encode(value)` writes a value of any type as JSON text with nothing written for it, by walking its type: see
@@ -15,7 +15,7 @@ Here a shape is written with its kind in a member of its own, as the decoders pa
 writes a tag as an object of one member:
 
 ```nanyx
-::install nanyx.json 0.4.2
+::install nanyx.json 0.5.0
 
 import (
   nanyx.json/encode as encode
@@ -27,8 +27,8 @@ type Shape = #circle(float) | #square(float)
 type Drawing = (title: string, shapes: list(Shape))
 
 def shape: json.Encoder(Shape) = {
-  | #circle(r) -> #object(["kind" => #string("circle"), "radius" => encode.float(r)])
-  | #square(s) -> #object(["kind" => #string("square"), "side" => encode.float(s)])
+  | #circle(r) -> #object([("kind", #string("circle")), ("radius", encode.float(r))])
+  | #square(s) -> #object([("kind", #string("square")), ("side", encode.float(s))])
 }
 
 def drawing: json.Encoder(Drawing) = encode.object(
@@ -49,7 +49,7 @@ println(json.encodeWith(sketch, drawing))
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.4.2, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.5.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 Encoders: a value of a type of your own written as JSON, the other way from `json`'s decoders.
 

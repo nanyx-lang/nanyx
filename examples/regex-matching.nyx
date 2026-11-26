@@ -1,4 +1,4 @@
-::install nanyx.regex 0.1.1
+::install nanyx.regex 0.1.2
 
 module contactInformation
 
