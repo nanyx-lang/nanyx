@@ -183,7 +183,7 @@ let private writtenAt (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModu
 let private hoverOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (ty: Ty, symbol: Symbol option, span: SourceSpan) : HoverInfo =
     let note =
         match Unifier.unalias ty with
-        | TyMeasure([ dimension, 1 ], _) -> DimensionHover.unitsNote typed dimension
+        | TyMeasure(dimension, _) -> DimensionHover.unitsNote typed dimension
         | _ -> None
     { Type = fst (writtenAt names rename typed symbol ty []); Span = span; Note = note }
 

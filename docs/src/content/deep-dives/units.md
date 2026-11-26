@@ -40,11 +40,11 @@ of a parameter is [`NYX0293`](../standard-tools/errors#nyx0293), and a storage w
 # Units
 
 A unit is a name of a kind of its own, in `InferState.Units`, apart from values and types, so `500ms` means the unit `ms`
-whatever value `ms` names. Each unit's `UnitInfo` has its dimension's identity, its module, whether it is exported, and its
-`Scale`: how many of its dimension's base units it is, as an exact fraction (`Rational`), so that `mm` is `1/1000` of an
-`m` and whether a literal is a whole number of base units can be decided. `Units.declare` works out each scale from the
-unit's definition, the multiple times the scale of the unit it is a multiple of, which is one of the module's own or an
-imported one, and reports:
+whatever value `ms` names. Each unit's `UnitInfo` has its dimension, a `Dimension` (see [Derived
+dimensions](#derived-dimensions)), its module, whether it is exported, and its `Scale`: how many of its dimension's base
+units it is, as an exact fraction (`Rational`), so that `mm` is `1/1000` of an `m` and whether a literal is a whole number
+of base units can be decided. `Units.declare` works out each scale from the unit's definition, the multiple times the
+scale of the unit it is a multiple of, which is one of the module's own or an imported one, and reports:
 
 - a dimension of the module's with no `@baseUnit` unit, and a unit that is neither a base unit nor a multiple
   ([`NYX0286`](../standard-tools/errors#nyx0286));
@@ -55,6 +55,8 @@ imported one, and reports:
 - a constrained dimension stored in a type with no `Num` instance, which `ContextInstances.hasInstance` looks for as a
   call does ([`NYX0290`](../standard-tools/errors#nyx0290));
 - a unit nothing declares, in a definition or in a literal ([`NYX0291`](../standard-tools/errors#nyx0291));
+- a unit of a derived dimension with no definition, or marked `@baseUnit` ([`NYX0297`](../standard-tools/errors#nyx0297));
+- a unit defined as nothing, `0ms`, or divided by nothing ([`NYX0298`](../standard-tools/errors#nyx0298));
 - a unit of a name that is no dimension (`NYX0109`), and a unit declared twice (`NYX0113`).
 
 An import brings in the units its module declares with `export unit` (`ModuleLinking.exportedUnits`), unqualified, since
@@ -69,7 +71,8 @@ import's unit replaces the prelude's of its name rather than making it ambiguous
 
 # Numbers with units
 
-`Infer` types `500ms` as a measured value of `ms`'s dimension, `TyMeasure([Time, 1], s)`, whose storage `s` is recorded as
+`Infer` types `500ms` as a measured value of `ms`'s dimension, `TyMeasure([Time, 1], s)`, and `90.0kmh` one of
+`[Length, 1; Time, -1]`, whose storage `s` is recorded as
 a number literal's type is (`NumericLiterals.typeOf`), so it is the number the code around it expects, as a plain
 literal's is. A constrained dimension's literal is of the dimension's storage. One nothing settles is of the number it is
 written as: `int` for `500ms`, `float` for `0.5s` (`NumericLiterals.defaultType`).
@@ -117,7 +120,10 @@ For an `int` storage, or a sized integer that converts to one, the definition ca
 `__measuredIntToString` with the number, the units' names and their scales, and the text to write around a number of
 base units: it writes the number in the first unit it is a whole number of, `2min` for `120s`, and zero, and a number
 no unit fits, in the base unit. A `float` or `F32` storage calls `__measuredFloatToString`, which writes a whole number
-of a unit without its decimal point, `1500ms` for `1.5s`, and a number of base units as a float is, `1.5ns`. Any other
+of a unit without its decimal point, `1500ms` for `1.5s`, and a number of base units as a float is, `1.5ns`. A number
+within a millionth of a millionth of a whole one, relatively, counts as that whole one, as float arithmetic rounds: a unit
+of a derived dimension is seldom a whole number of its base units, so `90.0kmh + 10.0mps` is `3.4999999999999996e-8` of
+a metre a nanosecond, and is written `35mps`. Any other
 storage, a type variable's among them, is written in the base unit through its own `ToString`, so the definition for a
 `Time(a)` requires `ToString(a)`. A module that can't write its dimension's base unit writes a number of base units as
 `dbg` does, `Time(1500000000)`.
@@ -145,22 +151,35 @@ storages written on its parts are [`NYX0295`](../standard-tools/errors#nyx0295),
 `dimension Speed = Length / Time` names a derived dimension. `Units.withDimensionsAsTypes` registers it as the alias it
 is, `type Speed(a) = Length(a) / Time(a)`, generic in its storage as its parts are, and `InferModule` registers it again
 once the module's dimensions are marked, so its parts are read as dimensions. `TypeResolution` reads `Speed(float)` as
-what it names, with no alias around it, and a storage written on a part of its declaration is `NYX0295`. A derived
-dimension has no units of its own: a unit declared on one is [`NYX0297`](../standard-tools/errors#nyx0297).
+what it names, with no alias around it, and a storage written on a part of its declaration is `NYX0295`.
+
+A derived dimension has units of its own, each defined from its parts' units, multiplied and divided:
+`unit kmh: Speed = 1km / 1hr`. The parser reads the definition as unit literals joined by `*` and `/` on one line, from
+the left, as `BinaryOp`s (`DescentTopLevel`). It has no base unit of its own, as its values are stored in its parts'
+base units, so a unit of one that is marked `@baseUnit`, or not defined, is [`NYX0297`](../standard-tools/errors#nyx0297).
+`Units.scales` measures the definition, giving each literal its unit's dimension and the written number times its scale,
+and multiplying and dividing them as the definition does: `1km / 1hr` is of `Length / Time`, and is 1_000 metres over
+3_600_000_000_000 nanoseconds, so a kilometre an hour is `1/3600000000` of a metre a nanosecond. A definition of
+another dimension than the unit's is [`NYX0289`](../standard-tools/errors#nyx0289). A unit of a derived dimension is
+a literal's unit as another is, so `90.0kmh` is `Length(float) / Time(float)`, stored as its number of the parts' base
+units; `90kmh` in an `int` is no whole number of them, an error that names them, `m/ns`.
 
 `MeasuredArithmetic.read` types `*` on two measured values as the storage's `*`, of the product of their dimensions, and
 `/` as the storage's `/`, of their quotient, at the storage's fraction, so `100m / 3s` is not rounded. `//` rounds only
 within one dimension or by a number.
 
-A value of a derived dimension is written by its derived `toString` in its parts' base units, joined by `*` and `/`
-with no spaces (`StructuralInstances`, from `Units.seenOf`): `100.0m / 9.58s` is `1.0438413361169103e-8m/ns`, and a
-module that can't write a part's base unit writes it as `dbg` does, `Length / Time(1.04e-8)`.
+A value of a derived dimension is written by its derived `toString` as one of a dimension is (see [Printing](#printing)),
+in the largest of the dimension's units the module sees that it is a whole number of (`Units.seenOf`), imported ones
+among them: `90.0kmh` is `90kmh`, or `25mps` where `unit mps: Speed = 1m / 1s` is seen too. A value no unit fits, and one
+of a derived dimension with no units, is written in its parts' base units, joined by `*` and `/` with no spaces:
+`100.0m / 9.58s` is `1.0438413361169103e-8m/ns`. A module that can't write a part's base unit writes it as `dbg` does,
+`Length / Time(1.04e-8)`.
 
 # Hover
 
 `DimensionHover` writes what an editor shows on a dimension or a unit, and `Hover.unitAt` finds one at a position: the
-unit of a number with a unit, a dimension's name in a type, and a `dimension` or `unit` declaration. A dimension shows its
-declaration and the units of it the module can write, `typed.Units`, from the smallest to the largest, each as it is
-declared, `ms = 1_000us`, with the multiple `UnitInfo.Multiple` keeps, and a value written in one of them; a unit shows its
-declaration and how many base units it is. A measured value's own hover, `def timeout: Time(int)`, ends with its
+unit of a number with a unit, a dimension's name in a type, and a `dimension` or `unit` declaration. A dimension, plain or
+derived, shows its declaration and the units of it the module can write, `typed.Units`, from the smallest to the
+largest, each as it is declared, `ms = 1_000us` or `kmh = 1km / 1hr`, with the multiple `UnitInfo.Multiple` keeps, and a
+value written in one of them; a unit shows its declaration and how many base units it is. A measured value's own hover, `def timeout: Time(int)`, ends with its
 dimension's units too (`Hover.hoverOf`).

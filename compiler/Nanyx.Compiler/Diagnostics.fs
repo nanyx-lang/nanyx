@@ -235,7 +235,8 @@ module DiagnosticCodes =
     let ConstrainedDimensionStorage = code 294 "Storage written for a constrained dimension" Severity.Error
     let DerivedDimensionStorages = code 295 "Parts of a derived dimension stored differently" Severity.Error
     let NotADimension = code 296 "Part of a derived dimension that is no dimension" Severity.Error
-    let UnitOfDerivedDimension = code 297 "Unit of a derived dimension" Severity.Error
+    let UnitOfDerivedDimension = code 297 "Unit of a derived dimension that its parts' units don't define" Severity.Error
+    let UnitWorthNothing = code 298 "Unit worth nothing" Severity.Error
 
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
@@ -269,7 +270,7 @@ module DiagnosticCodes =
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
           DimensionWithoutBaseUnit; MisplacedBaseUnit; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
-          NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension
+          NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

@@ -70,11 +70,11 @@ let ``A part of a derived dimension that is no dimension is NYX0296`` () =
     Assert.Equal(DiagnosticCodes.NotADimension.Code, fst (only "dimension Speed = Length / string"))
 
 [<Fact>]
-let ``A unit of a derived dimension is NYX0297`` () =
-    Assert.Equal(
-        (DiagnosticCodes.UnitOfDerivedDimension.Code,
-         "'Speed' is a derived dimension, which has no units of its own: a value of it is written in its parts' units, as `100m / 9.58s` is"),
-        only "dimension Speed = Length / Time\nunit kph: Speed = 1m")
+let ``A part that is no dimension beside a constrained dimension is NYX0296 alone`` () =
+    let code, message, at = onlyDiagnostic (withFinalNewline "dimension Mass(float)\n@baseUnit unit kg: Mass\ndef f: Mass / int -> int = { _ -> 1 }")
+    Assert.Equal(DiagnosticCodes.NotADimension.Code, code)
+    Assert.Equal("'int' is no dimension, and a derived dimension multiplies and divides dimensions, as `Length / Time` does", message)
+    Assert.Equal("int", at)
 
 [<Fact>]
 let ``// across two dimensions, and a power, say how to write them`` () =

@@ -101,6 +101,16 @@ let ``A unit is declared as a multiple of another unit, or as the base unit, mar
     | other -> failwith $"Unexpected parse result: %A{other}"
 
 [<Fact>]
+let ``A unit of a derived dimension is numbers of units multiplied and divided, read from the left`` () =
+    let source = "unit kmh: Speed = 1km / 1hr\nunit accel: Acceleration = 1m / 1s / 1s\nunit area: Area = 1m * 1m"
+    match parseModule source with
+    | Result.Ok [ Kind (UnitDecl(false, "kmh", "Speed", Some (Kind (BinaryOp("/", _, Kind (LiteralExpr(UnitLit(_, "km"))), Kind (LiteralExpr(UnitLit(_, "hr"))))))))
+                  Kind (UnitDecl(false, "accel", "Acceleration", Some (Kind (BinaryOp("/", _, Kind (BinaryOp("/", _, _, _)), Kind (LiteralExpr(UnitLit(_, "s"))))))))
+                  Kind (UnitDecl(false, "area", "Area", Some (Kind (BinaryOp("*", _, _, _))))) as area ] ->
+        Assert.Equal("unit area: Area = 1m * 1m", textOf source area.Span)
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
 let ``A declaration spans its line`` () =
     let source = "unit us: Time = 1_000ns\ndimension Bytes(int)"
     match parseModule source with

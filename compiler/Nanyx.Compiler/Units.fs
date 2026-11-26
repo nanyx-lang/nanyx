@@ -7,7 +7,9 @@ open NyxCompiler.InferState
 /// `UnitSyntax`). A dimension is a type: a private nominal one, generic in the number that stores it, `Time(a)`, unless
 /// it is constrained to one, as `dimension Bytes(int)` is, so it is exported, imported and written as a type is. A
 /// unit is a name of a kind of its own, with its dimension and how many of the dimension's base units it is, exactly
-/// (`InferState.Units`), which a number with the unit is scaled by (see `NumericLiterals.check`).
+/// (`InferState.Units`), which a number with the unit is scaled by (see `NumericLiterals.check`). A unit of a derived
+/// dimension, `unit kmh: Speed = 1km / 1hr`, is defined from its parts' units, and is how many of their base units it
+/// is, multiplied and divided as the dimension's parts are: a kilometre an hour is 1/3_600_000_000 of a metre a nanosecond.
 module internal Units =
     /// The error for `unitName`, written at `span` in a literal or a unit's definition, when the module knows no unit of
     /// that name.
@@ -21,7 +23,7 @@ module internal Units =
 
     /// The error for `unitName`, written at `span`, when two of the module's imports bring in a unit of that name.
     let private ambiguousUnit (span: SourceSpan) (unitName: Identifier) (each: UnitInfo list) : Diagnostic =
-        let dimensions = each |> List.map (fun info -> $"'{info.Dimension.Name}'") |> List.distinct
+        let dimensions = each |> List.map (fun info -> $"'{Dimension.text info.Dimension}'") |> List.distinct
         let ofWhat = if dimensions.Length > 1 then $" (of {Diagnostics.listed dimensions})" else ""
         Diagnostics.at DiagnosticCodes.AmbiguousName span
             $"Two imports bring in a unit '{unitName}'{ofWhat}: import it from only one of them, selecting the names the other's import brings in, as `import time as (Time, s)`"
@@ -39,22 +41,27 @@ module internal Units =
     /// of it, in any module, as the storage of its argument.
     let storageIntrinsic = "__nanyx_measured_storage"
 
-    /// The units of the dimension `dimension` that `state`'s module can write, its own and those it imports by a name no
-    /// other unit it imports has, the largest first.
-    let seenOf (state: InferState) (dimension: NominalId) : UnitInfo list =
+    /// The units of the dimension `dimension`, plain or derived, that `state`'s module can write, its own and those it
+    /// imports by a name no other unit it imports has, the largest first.
+    let seenOf (state: InferState) (dimension: Dimension) : UnitInfo list =
         state.Units
         |> Map.toList
         |> List.filter (fun (name, info) -> info.Dimension = dimension && not (state.AmbiguousUnits.ContainsKey name))
         |> List.map snd
         |> List.sortWith (fun a b -> compare (b.Scale.Numerator * a.Scale.Denominator) (a.Scale.Numerator * b.Scale.Denominator))
 
-    /// The storage the dimension `dimension` is constrained to, as `dimension Bytes(int)` is to `int`, if it is.
-    let constrainedStorage (state: InferState) (dimension: NominalId) : Ty option =
-        state.TypeDefs
-        |> Map.values
-        |> Seq.tryFind (fun info -> info.IsDimension && TypeDefInfo.nominalId info = dimension)
-        |> Option.filter (fun info -> info.Parameters.IsEmpty)
-        |> Option.map _.Underlying
+    /// The storage the dimension `dimension` is constrained to, as `dimension Bytes(int)` is to `int`, if it is. A derived
+    /// dimension is constrained by its parts' types, which a number with one of its units is checked against as a value
+    /// of it.
+    let constrainedStorage (state: InferState) (dimension: Dimension) : Ty option =
+        match dimension with
+        | [ id, 1 ] ->
+            state.TypeDefs
+            |> Map.values
+            |> Seq.tryFind (fun info -> info.IsDimension && TypeDefInfo.nominalId info = id)
+            |> Option.filter (fun info -> info.Parameters.IsEmpty)
+            |> Option.map _.Underlying
+        | _ -> None
 
     /// The prelude's contexts every dimension has an instance of: its storage's, since a measured value is its storage
     /// at run time. It has no `Num`: `Num`'s `*` takes two values of one type, and a `Time` times a `Time` is no `Time`.
@@ -115,15 +122,15 @@ module internal Units =
                     | Some info when info.Home = state.Home -> typeDefs |> Map.add name { info with IsDimension = true }
                     | _ -> typeDefs) state.TypeDefs }
 
-    /// A unit's declaration as the module writes it: its item, name and dimension, whether `@baseUnit` marks it, and the
-    /// multiple of another unit it is defined as, with where that is written.
+    /// A unit's declaration as the module writes it: its item, name and dimension, whether `@baseUnit` marks it, and what
+    /// it is defined as: a number of another unit, `1_000us`, or numbers of units multiplied and divided, `1km / 1hr`.
     type private Declared =
         { Item: TopLevelItem
           Name: Identifier
           IsExport: bool
           DimensionName: Identifier
           IsBase: bool
-          Multiple: (WrittenNumber * Identifier * SourceSpan) option }
+          Multiple: Expression option }
 
     let private declaredUnits (items: TopLevelItem list) : Declared list =
         let previous = None :: (items |> List.map Some) |> List.take items.Length
@@ -137,23 +144,21 @@ module internal Units =
                       IsExport = isExport
                       DimensionName = dimension
                       IsBase = before |> Option.exists (fun before -> UnitSyntax.isBaseUnitDeclaration before item)
-                      Multiple =
-                        multiple
-                        |> Option.bind (fun value ->
-                            match value.Kind with
-                            | LiteralExpr(UnitLit(number, target)) -> Some (number, target, value.Span)
-                            | _ -> None) }
+                      Multiple = multiple }
             | _ -> None)
 
-    /// The dimension `name` names, written at `span`, or the error saying it names none.
-    let private dimensionNamed (state: InferState) (name: Identifier) (span: SourceSpan) : Result<NominalId, Diagnostic> =
+    /// The dimension the type definition `info` declares: the dimension itself, or, for a derived dimension, what it
+    /// names, `Length / Time` for `Speed`. None for any other type.
+    let private dimensionOf (info: TypeDefInfo) : Dimension option =
+        match info.IsDimension, info.IsNominal, Unifier.unalias info.Underlying with
+        | true, true, _ -> Some (Dimension.ofBase (TypeDefInfo.nominalId info))
+        | true, false, TyMeasure(dimension, _) -> Some dimension
+        | _ -> None
+
+    /// The dimension `name` names, written at `span`, plain or derived, or the error saying it names none.
+    let private dimensionNamed (state: InferState) (name: Identifier) (span: SourceSpan) : Result<Dimension, Diagnostic> =
         match state.TypeDefs |> Map.tryFind name with
-        | Some info when info.IsDimension && info.IsNominal -> Ok (TypeDefInfo.nominalId info)
-        | Some info when info.IsDimension ->
-            Error (
-                Diagnostics.at DiagnosticCodes.UnitOfDerivedDimension span
-                    $"'{name}' is a derived dimension, which has no units of its own: a value of it is written in its parts' units, as `100m / 9.58s` is"
-                |> Diagnostics.about name)
+        | Some info when (dimensionOf info).IsSome -> Ok (dimensionOf info).Value
         | Some _ ->
             Error (Diagnostics.at DiagnosticCodes.UnknownType span $"'{name}' is a type, not a dimension: a unit belongs to a dimension, declared as `dimension {Names.written name}`" |> Diagnostics.about name)
         | None ->
@@ -174,23 +179,32 @@ module internal Units =
 
     /// The errors in the base units of the units `declared`, by their dimensions, and the dimensions `items` declare:
     /// each of the module's own dimensions has one `@baseUnit`, a base unit is no multiple of another and is declared
-    /// with its dimension, and any other unit is a multiple.
-    let private baseUnitErrors (state: InferState) (items: TopLevelItem list) (declared: (Declared * NominalId) list) : Diagnostic list =
+    /// with its dimension, and any other unit is a multiple. A derived dimension has no base unit of its own, as its
+    /// values are stored in its parts' base units: each of its units is defined from its parts' units.
+    let private baseUnitErrors (state: InferState) (items: TopLevelItem list) (declared: (Declared * Dimension) list) : Diagnostic list =
+        let fromParts (unit: Declared) (why: string) =
+            Diagnostics.at DiagnosticCodes.UnitOfDerivedDimension unit.Item.Span
+                $"'{unit.DimensionName}' is a derived dimension, {why}: define '{unit.Name}' from its parts' units, as in `unit kmh: Speed = 1km / 1hr`"
+            |> Diagnostics.about unit.Name
         let perUnit =
             declared
             |> List.choose (fun (unit, dimension) ->
-                match unit.IsBase, unit.Multiple with
-                | true, Some(_, _, span) ->
+                match unit.IsBase, unit.Multiple, dimension with
+                | true, _, _ when Dimension.isDerived dimension ->
+                    Some (fromParts unit "whose values are stored in its parts' base units, so it has no base unit of its own")
+                | false, None, _ when Dimension.isDerived dimension ->
+                    Some (fromParts unit "whose units are multiples of its parts' base units")
+                | true, Some value, _ ->
                     Some (
-                        Diagnostics.at DiagnosticCodes.MisplacedBaseUnit span
+                        Diagnostics.at DiagnosticCodes.MisplacedBaseUnit value.Span
                             $"'{unit.Name}' is the base unit of '{unit.DimensionName}', which the others are multiples of, so it is no multiple itself: remove `@baseUnit`, or the `=` and what follows it"
                         |> Diagnostics.about unit.Name)
-                | true, None when dimension.Home <> state.Home ->
+                | true, None, [ id, 1 ] when id.Home <> state.Home ->
                     Some (
                         Diagnostics.at DiagnosticCodes.MisplacedBaseUnit unit.Item.Span
                             $"'{unit.DimensionName}' is declared in another module, which declares its base unit: a unit of it declared here is a multiple of another unit, as `unit ms: Time = 1_000us` is"
                         |> Diagnostics.about unit.Name)
-                | false, None ->
+                | false, None, _ ->
                     Some (
                         Diagnostics.at DiagnosticCodes.DimensionWithoutBaseUnit unit.Item.Span
                             $"'{unit.Name}' is no multiple of another unit, so it would be the base unit of '{unit.DimensionName}': mark it `@baseUnit`, or define it as a multiple of another unit, as `unit ms: Time = 1_000us` is"
@@ -202,7 +216,7 @@ module internal Units =
                 match state.TypeDefs |> Map.tryFind name with
                 | Some info when info.IsDimension && info.IsNominal && info.Home = state.Home ->
                     let id = TypeDefInfo.nominalId info
-                    match declared |> List.filter (fun (unit, dimension) -> dimension = id && unit.IsBase) with
+                    match declared |> List.filter (fun (unit, dimension) -> dimension = Dimension.ofBase id && unit.IsBase) with
                     | [] ->
                         [ Diagnostics.at DiagnosticCodes.DimensionWithoutBaseUnit item.Span
                               $"'{name}' has no base unit, the unit its values are stored in: declare one, marked `@baseUnit`, as in `@baseUnit unit ns: Time`"
@@ -216,11 +230,39 @@ module internal Units =
                 | _ -> [])
         perUnit @ perDimension
 
+    /// `value`, what a unit is defined as, as written, with each number written by `number`: `1_000us`, `1km / 1hr`.
+    let rec internal writtenWith (number: WrittenNumber -> string) (value: Expression) : string =
+        match value.Kind with
+        | LiteralExpr(UnitLit(written, unitName)) -> number written + unitName
+        | BinaryOp(op, _, left, right) -> $"{writtenWith number left} {op} {writtenWith number right}"
+        | _ -> "it"
+
+    let private written = writtenWith WrittenNumber.text
+
+    /// The error for `unit`, a unit of `dimension`, defined as `value`, a value of `found`, another dimension.
+    let private ofAnotherDimension (unit: Declared) (dimension: Dimension) (value: Expression) (found: Dimension) : Diagnostic =
+        let message =
+            match value.Kind with
+            | LiteralExpr(UnitLit(_, target)) when not (Dimension.isDerived dimension) ->
+                $"'{unit.Name}' is a unit of '{unit.DimensionName}', but '{target}' is a unit of '{Dimension.text found}': define it as a multiple of a unit of '{unit.DimensionName}'"
+            | _ ->
+                let named = if Dimension.text dimension = unit.DimensionName then "" else $", which is '{Dimension.text dimension}'"
+                $"'{unit.Name}' is a unit of '{unit.DimensionName}'{named}, but `{written value}` is a '{Dimension.text found}': define it from units of '{Dimension.text dimension}'"
+        Diagnostics.at DiagnosticCodes.UnitOfAnotherDimension value.Span message |> Diagnostics.about unit.Name
+
+    /// The error for `unit`, defined as `value`, whose part `nothing` is worth nothing: no multiple of it is a unit, and a
+    /// unit divided by it is none either.
+    let private worthNothing (unit: Declared) (nothing: Expression) : Diagnostic =
+        Diagnostics.at DiagnosticCodes.UnitWorthNothing nothing.Span
+            $"`{written nothing}` is nothing, so '{unit.Name}' would be no quantity at all: define it from a number of units that isn't zero"
+        |> Diagnostics.about unit.Name
+
     /// The scale of each unit `declared`, by name, which the units `known` beside them are known by, with the errors in
-    /// their definitions: a unit defined as a multiple of one in another dimension, of one there is none of, or of
-    /// itself, through others or not. A unit whose scale is not found is at the scale 1, so its literals are not also
-    /// reported.
-    let private scales (state: InferState) (declared: (Declared * NominalId) list) : Map<string, Rational> * Diagnostic list =
+    /// their definitions: a unit defined as a multiple of one in another dimension, of one there is none of, of
+    /// itself, through others or not, or of nothing. A unit of a derived dimension is defined from its parts' units, and
+    /// its scale is theirs, multiplied and divided as they are: `1km / 1hr` is 1_000 metres over 3_600_000_000_000
+    /// nanoseconds. A unit whose scale is not found is at the scale 1, so its literals are not also reported.
+    let private scales (state: InferState) (declared: (Declared * Dimension) list) : Map<string, Rational> * Diagnostic list =
         let own = declared |> List.map (fun (unit, dimension) -> unit.Name, (unit, dimension)) |> Map.ofList
         let mutable found: Map<string, Rational> = Map.empty
         let errors = ResizeArray<Diagnostic>()
@@ -241,29 +283,46 @@ module internal Units =
                         match unit.IsBase, unit.Multiple with
                         | true, _
                         | false, None -> Some Rational.one
-                        | false, Some(number, target, span) ->
-                            let targetDimension =
-                                match own |> Map.tryFind target with
-                                | Some (_, targetDimension) -> Ok targetDimension
-                                | None -> unitNamed state span target |> Result.map _.Dimension
-                            match targetDimension with
-                            | Error error ->
-                                errors.Add error
+                        | false, Some value ->
+                            match measure (name :: visiting) unit value with
+                            | Some (valueDimension, _) when valueDimension <> dimension ->
+                                errors.Add(ofAnotherDimension unit dimension value valueDimension)
                                 None
-                            | Ok targetDimension when targetDimension <> dimension ->
-                                errors.Add(
-                                    Diagnostics.at DiagnosticCodes.UnitOfAnotherDimension span
-                                        $"'{unit.Name}' is a unit of '{unit.DimensionName}', but '{target}' is a unit of '{targetDimension.Name}': define it as a multiple of a unit of '{unit.DimensionName}'"
-                                    |> Diagnostics.about unit.Name)
+                            | Some (_, scale) when scale.Numerator.IsZero ->
+                                errors.Add(worthNothing unit value)
                                 None
-                            | Ok _ ->
-                                let targetScale =
-                                    if own.ContainsKey target then scaleOf (name :: visiting) target
-                                    else state.Units |> Map.tryFind target |> Option.map _.Scale
-                                targetScale |> Option.map (Rational.multiply (Rational.ofWritten number))
+                            | measured -> measured |> Option.map snd
                     scale |> Option.iter (fun scale -> found <- found |> Map.add name scale)
                     scale
             | None, None -> None
+        // The dimension and scale of `value`, part of `unit`'s definition: a number of a unit, or a product or quotient
+        // of two such.
+        and measure (visiting: string list) (unit: Declared) (value: Expression) : (Dimension * Rational) option =
+            match value.Kind with
+            | LiteralExpr(UnitLit(number, target)) ->
+                let targetDimension =
+                    match own |> Map.tryFind target with
+                    | Some (_, targetDimension) -> Ok targetDimension
+                    | None -> unitNamed state value.Span target |> Result.map _.Dimension
+                match targetDimension with
+                | Error error ->
+                    errors.Add error
+                    None
+                | Ok targetDimension ->
+                    let targetScale =
+                        if own.ContainsKey target then scaleOf visiting target
+                        else state.Units |> Map.tryFind target |> Option.map _.Scale
+                    targetScale |> Option.map (fun scale -> targetDimension, Rational.multiply (Rational.ofWritten number) scale)
+            | BinaryOp(op, _, left, right) ->
+                match measure visiting unit left, measure visiting unit right with
+                | Some (leftDimension, leftScale), Some (rightDimension, rightScale) ->
+                    if op = UnitSyntax.times then Some (Dimension.multiply leftDimension rightDimension, Rational.multiply leftScale rightScale)
+                    elif rightScale.Numerator.IsZero then
+                        errors.Add(worthNothing unit right)
+                        None
+                    else Some (Dimension.divide leftDimension rightDimension, Rational.divide leftScale rightScale)
+                | _ -> None
+            | _ -> None
         for name in own.Keys do
             scaleOf [] name |> ignore
         found, List.ofSeq errors
@@ -297,7 +356,7 @@ module internal Units =
                   Scale = found |> Map.tryFind unit.Name |> Option.defaultValue Rational.one
                   Home = state.Home
                   IsExport = unit.IsExport
-                  Multiple = unit.Multiple |> Option.map (fun (number, target, _) -> number, target) })
+                  Multiple = unit.Multiple })
         let units = own |> List.fold (fun acc (name, info) -> acc |> Map.add name info) state.Units
         let errors = storageErrors hasNum state items @ dimensionErrors @ duplicates @ baseUnitErrors state items resolved @ scaleErrors
         // A unit of the module's own is the one its name means, though two imports bring in others of the name.

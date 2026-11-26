@@ -1,7 +1,7 @@
 (
   package = (
     name = "nanyx.http.host"
-    version = "0.41.0"
+    version = "0.42.0"
     sources = ["src/**/*.nyx"]
     host = (
       root = "http.host"
@@ -11,7 +11,7 @@
     )
   )
   dependencies = [
-    (package = "nanyx.http", version = "0.41.0")
-    (package = "nanyx.wasi", version = "0.41.0")
+    (package = "nanyx.http", version = "0.42.0")
+    (package = "nanyx.wasi", version = "0.42.0")
   ]
 )

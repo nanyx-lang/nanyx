@@ -222,10 +222,48 @@ println(1.0km / 1.0m)
 -- 1000.0
 ```
 
-A derived dimension has no units of its own: a value of one is written in its parts' units, `1km / 1hr`, and printed in
-their base units, joined by `*` and `/`. Two storages on its parts, a part that is no dimension, and a unit declared on
-one are errors ([NYX0295](../standard-tools/errors#nyx0295), [NYX0296](../standard-tools/errors#nyx0296),
-[NYX0297](../standard-tools/errors#nyx0297)).
+Two storages on its parts, and a part that is no dimension, are errors
+([NYX0295](../standard-tools/errors#nyx0295), [NYX0296](../standard-tools/errors#nyx0296)).
+
+## Units of a derived dimension
+
+A derived dimension's units are defined from its parts' units, multiplied and divided, on one line and read from the
+left: `unit kmh: Speed = 1km / 1hr`, or `unit g: Acceleration = 9.80665m / 1s / 1s`. It has no base unit of its own,
+since its values are stored in its parts' base units, so a unit of one marked `@baseUnit`, or not defined, is an error
+([NYX0297](../standard-tools/errors#nyx0297)), as is a definition of another dimension
+([NYX0289](../standard-tools/errors#nyx0289)). A unit can be defined from another of the dimension's units, its own or
+imported: `unit mph: Speed = 1.609344kmh`.
+
+A number with one is a value of the dimension, `90.0kmh`, stored as its number of the parts' base units, as `500ms` is.
+That is seldom a whole number, a kilometre an hour being 1/3_600_000_000 of a metre a nanosecond, so write it with a
+decimal point to store it as a `float`: `90kmh` in an `int` is an error that says so.
+
+A value prints in the largest of the dimension's units it is a whole number of, as a `Time` does, and in its parts' base
+units, joined by `*` and `/`, when none fits:
+
+```nanyx
+dimension Length
+
+@baseUnit unit m: Length
+unit km: Length = 1_000m
+
+dimension Speed = Length / Time
+
+unit kmh: Speed = 1km / 1hr
+
+def cruise = 90.0kmh
+println(cruise)
+println(36.0km / 0.5hr)
+println(cruise + 100.0m / 1.0hr)
+-- 90kmh
+-- 72kmh
+-- 2.5027777777777776e-8m/ns
+```
+
+With `unit mps: Speed = 1m / 1s` seen too, `90.0kmh` prints as `25mps`, the larger unit. A `float` that arithmetic has
+left within a millionth of a millionth of a whole number of a unit counts as that whole number: `90.0kmh + 10.0mps`
+prints `35mps`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an error
+([NYX0298](../standard-tools/errors#nyx0298)).
 
 # Printing
 

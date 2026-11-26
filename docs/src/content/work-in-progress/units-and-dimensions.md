@@ -13,10 +13,12 @@ order: 2
 # Step 2: derived dimensions
 
 Derived dimensions written with `*` and `/` are built: [Derived dimensions](../advanced/units-of-measure#derived-dimensions)
-describes them, and [Units of measure](../deep-dives/units#derived-dimensions) in Deep dives says how. Two choices were
-made for them: a storage is written on each part, `Length(float) / Time(float)`, since a part is already a type the
-parser reads and a type printed that way reads back as the same type; and a derived dimension has no units of its own
-and prints in its parts' base units, the simpler choice (units of derived dimensions are #2858). What is still open:
+describes them, and [Units of measure](../deep-dives/units#derived-dimensions) in Deep dives says how. A storage is
+written on each part, `Length(float) / Time(float)`, since a part is already a type the parser reads and a type printed
+that way reads back as the same type. A derived dimension has units of its own, defined from its parts' units,
+`unit kmh: Speed = 1km / 1hr`, and a value of one prints in the largest of them it is a whole number of, or in its
+parts' base units when none fits ([Units of a derived
+dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). What is still open:
 
 - **Dimension variables.** `def square: d -> d^2` (spelling open) needs unification that solves equations such as
   `d * d = Length^2`. This is the largest piece of the work; Kennedy's "Types for Units-of-Measure" gives an algorithm

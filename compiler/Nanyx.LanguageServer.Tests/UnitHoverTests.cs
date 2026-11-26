@@ -91,22 +91,38 @@ public sealed class UnitHoverTests : LanguageServerTestBase
     }
 
     [Fact]
-    public async Task A_derived_dimension_says_it_has_no_units_of_its_own()
+    public async Task A_derived_dimension_lists_its_units_and_a_unit_of_one_its_declaration()
     {
         var uri = DocumentUri.FromFileSystemPath(TempPath("hover-derived-dimension.nyx"));
         Open(uri, """
             dimension Length
 
             @baseUnit unit m: Length
+            unit km: Length = 1_000m
 
             dimension Speed = Length / Time
+
+            unit kmh: Speed = 1km / 1hr
+            unit mps: Speed = 1m / 1s
+
+            dimension Acceleration = Length / (Time * Time)
 
             """);
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        var hover = await HoverAt(uri, 4, 12);
+        const string speedUnits = "Units: `kmh = 1km / 1hr`, `mps = 1m / 1s`\n\nWrite a value as `500kmh`.";
+        var speed = await HoverAt(uri, 5, 12);
+        Assert.Equal($"```nanyx\ndimension Speed = Length / Time\n```\n\n{speedUnits}", speed?.Contents.MarkupContent?.Value);
+
+        var unit = await HoverAt(uri, 7, 6);
         Assert.Equal(
-            "```nanyx\ndimension Speed = Length / Time\n```\n\nA derived dimension has no units of its own: write a value of it in its parts' units, as `1km / 1hr`.",
-            hover?.Contents.MarkupContent?.Value);
+            $"```nanyx\nunit kmh: Length / Time = 1km / 1hr\n```\n\nA unit of `Length / Time`.\n\n{speedUnits}",
+            unit?.Contents.MarkupContent?.Value);
+
+        // One with no units of its own says how to write a value of it.
+        var acceleration = await HoverAt(uri, 10, 12);
+        Assert.Equal(
+            "```nanyx\ndimension Acceleration = Length / (Time * Time)\n```\n\nIt has no units here: write a value of it from its parts' units, as `100m / 9.58s`, or declare one, as `unit kmh: Speed = 1km / 1hr`.",
+            acceleration?.Contents.MarkupContent?.Value);
     }
 }

@@ -63,3 +63,9 @@ let ``A derived dimension is written with spaces around * and /, and brackets on
               "def f: Length(a) / Time(a), Length / Time / Time -> Length * Length = { a, b ->"
               "  a * a"
               "}" ])
+
+[<Fact>]
+let ``A unit of a derived dimension is written with spaces around * and /`` () =
+    formatsTo
+        (String.concat "\n" [ "unit kmh: Speed = 1km / 1hr"; ""; "unit accel: Acceleration = 1m / 1s / 1s"; ""; "unit area: Area = 1m * 1m" ])
+        (String.concat "\n" [ "unit kmh: Speed = 1km/1hr"; ""; "unit accel: Acceleration = 1m /1s/ 1s"; ""; "unit area: Area = 1m*1m" ])
