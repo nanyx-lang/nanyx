@@ -3,7 +3,11 @@
 // compiler ships, as `package-files.txt`, which the build writes, lists them. It fetches them from its own directory, wherever
 // the page that loads it is, as the docs site's playground loads it from `/playground/compiler/`.
 
-/** The compiler, ready: `compile(source)` gives `{ wasm, diagnostics, checkMs, emitMs, assembleMs }`, `wasm` the bytes. */
+/**
+ * The compiler, ready: `compile(source)` gives `{ wasm, diagnostics, checkMs, emitMs, assembleMs, wat }`, `wasm` the
+ * bytes and `wat` the WebAssembly text; `check(source)` gives the diagnostics an editor shows as the code is typed, each
+ * `{ code, headline, body, error, from, to }`, `from` and `to` where it is in `source`, or null for one elsewhere.
+ */
 export async function loadCompiler({ library = true } = {}) {
   const { dotnet } = await import("./_framework/dotnet.js");
   const runtime = await dotnet.create();
@@ -17,6 +21,9 @@ export async function loadCompiler({ library = true } = {}) {
     compile(source) {
       const outcome = JSON.parse(exports.BrowserCompiler.Compile(source));
       return { ...outcome, wasm: outcome.wasm ? Uint8Array.from(atob(outcome.wasm), (c) => c.charCodeAt(0)) : null };
+    },
+    check(source) {
+      return JSON.parse(exports.BrowserCompiler.Check(source)).diagnostics;
     },
   };
 }

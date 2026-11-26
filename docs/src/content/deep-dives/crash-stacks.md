@@ -62,8 +62,31 @@ function names the frames fall back on are in the name section. Across the examp
 
 `nanyx run` runs the module as `WasmBinary` assembled it, so that Wasmtime's frames are at the offsets the table
 gives. A crash, or a deferred error, writes its message to stderr and then traps in `__nanyx_crashed` (the prelude's
-`crash` calls the `__nanyx_crashed` intrinsic, and a deferred error's code calls the helper itself), rather than
-exiting, so Wasmtime keeps the frames. `WasmRunner.trapped` reads the table (`SpanTable`), finds each frame's place by
-its module offset, expands a frame of inlined code into a frame for each call it was inlined through, and gives
-`RunError.Crashed` with the stack, or the stack with the trap's own error. The command line prints it under the
-message and exits with 1, and a served program's request that fails reports it with the 500.
+`crash` calls the `__nanyx_crashed` intrinsic with its message, and a deferred error's code calls the helper itself
+with its messages as one), rather than exiting, so Wasmtime keeps the frames. `WasmRunner.trapped` reads the table
+(`SpanTable`), finds each frame's place by its module offset, expands a frame of inlined code into a frame for each
+call it was inlined through, and gives `RunError.Crashed` with the stack, or the stack with the trap's own error. The
+command line prints it under the message and exits with 1, and a served program's request that fails reports it with
+the 500.
+
+## The crash report
+
+`RunError.Crashed` is a report as data ([#2933](https://github.com/nanyx-lang/nanyx/issues/2933)), for whatever runs
+the program to act on without reading it back out of stderr: the message, the place, and the stack.
+
+- **The message** reaches the runtime through an import. With `WasmOptions.CrashToRuntime`, `__nanyx_crashed` calls
+  `nanyx:crash`'s `report` with the address and length of the message's bytes before it traps (`CodeGen.CrashReport`),
+  and the runtime keeps it (`CrashImport`), reading it through the caller's memory, so a crash in the start function,
+  while the module is being instantiated, reports it too. The command line sets the option for what it runs itself:
+  `nanyx run`, and a served program's instances (`RunProgram`). A module `nanyx build` or `nanyx wasm` writes, a
+  component, and the playground's have no such import, and the report's message is then none. Every module still
+  writes the message to stderr itself, so what a crash prints is the same with the option or without.
+- **The place** is the file and line of the program's own code it crashed in: the innermost frame of the stack outside
+  the standard library. So a `crash` or an `orCrash` is placed at the line that called it, not in the prelude. The
+  table knows which files are the library's: the code generator writes a `;;@lib prelude.nyx` marker among the
+  module's fields for each library file a marker names (`CoreIrEmit.libraryMarker`, for a place whose file is a
+  library module's, `nanyx/prelude.nyx`), and `WasmBinary` writes their names' numbers as the table's last vector. A
+  place has no column yet ([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)).
+
+A served program's 500 is logged with the place and the message: `it crashed at src/main.nyx:5: no such page`, then the
+stack.

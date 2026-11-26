@@ -102,6 +102,21 @@ def main: Request -> Response = { request ->
     Assert.Contains("error: the program stopped while answering GET /divide", outcome.StandardError)
 
 [<Fact>]
+let ``A handler that crashes answers with a 500, and the server's log says where it crashed and why`` () =
+    use directory = new TempDirectory()
+    let port = freePort ()
+    writePackage directory.Path port """module main
+
+@entry
+def main: Request -> Response = { request ->
+  if Request.path(request) == "/crash" then crash("no such page") else Response.text(200, "ok")
+}
+"""
+    let outcome = serving directory.Path port (fun client -> Assert.Equal((500, "Internal Server Error"), get client "/crash"))
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Contains("it crashed at src/main.nyx:5: no such page", outcome.StandardError.ReplaceLineEndings "\n")
+
+[<Fact>]
 let ``What a handler's dbg prints goes to the server's log with its request, not into the response (#2058)`` () =
     use directory = new TempDirectory()
     let port = freePort ()

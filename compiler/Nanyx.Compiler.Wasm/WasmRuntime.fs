@@ -114,7 +114,8 @@ module Helpers =
     let writeStderr = NyxCompiler.Intrinsics.writeStderr
     let exit = NyxCompiler.Intrinsics.exit
     /// Ends the program once a crash or an error deferred to run time has written why: a trap in a function of this
-    /// name, which the runtime knows, so that it reports the stack under what was written rather than the trap.
+    /// name, which the runtime knows, so that it reports the stack under what was written rather than the trap. It is
+    /// given the message, which a module the runtime runs reports to it first (see `WasmOptions.CrashToRuntime`).
     let crashed = NyxCompiler.Intrinsics.crashed
     let stringLength = NyxCompiler.Intrinsics.stringLength
     let stringByteAt = NyxCompiler.Intrinsics.stringByteAt
@@ -995,7 +996,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
             ")" ]
       Helpers.crashed,
       lines
-          [ $"(func ${Helpers.crashed}"
+          [ $"(func ${Helpers.crashed} (param $message i32)"
             "  unreachable"
             ")" ]
       // An int as a float: `f64.convert_i64_s` rounds to the nearest float, and is exact up to 2^53.

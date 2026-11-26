@@ -239,6 +239,7 @@
     <Compile Include="Features\Collections\RunCollectionLiteralTests.fs" />
     <Compile Include="Features\Collections\RunCollectionSpreadTests.fs" />
     <Compile Include="Features\Collections\RunTableLiteralTests.fs" />
+    <Compile Include="Features\Collections\RunFoldTests.fs" />
     <Compile Include="Features\Collections\CollectionLiteralAllocationTests.fs" />
     <Compile Include="Features\StdLib\RunIgnoreTests.fs" />
     <Compile Include="Features\StdLib\RunOptionResultTests.fs" />

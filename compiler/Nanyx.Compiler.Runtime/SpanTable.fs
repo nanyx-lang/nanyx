@@ -77,7 +77,9 @@ type SpanTable =
         { Starts: int array
           Places: InlinedFrame list array
           Probes: Collections.Generic.Dictionary<int, Probe>
-          Definitions: Collections.Generic.Dictionary<string, string * int> }
+          Definitions: Collections.Generic.Dictionary<string, string * int>
+          /// The files of the standard library's, as the frames name them.
+          Library: Set<string> }
 
 module SpanTable =
     /// The name of the custom section that holds the table.
@@ -169,8 +171,13 @@ module SpanTable =
                         match frames.[number () - 1] with
                         | (_, file, line) :: _ -> definitions.[functionName] <- (file, line)
                         | [] -> ()
-                { Starts = entries |> Array.map fst; Places = entries |> Array.map snd; Probes = probes; Definitions = definitions })
+                let library =
+                    if at < finish then Set.ofList [ for _ in 1 .. number () -> strings.[number () - 1] ] else Set.empty
+                { Starts = entries |> Array.map fst; Places = entries |> Array.map snd; Probes = probes; Definitions = definitions; Library = library })
         with :? IndexOutOfRangeException -> None
+
+    /// Whether `file`, as a frame names it, is a file of the standard library's.
+    let isLibrary (table: SpanTable) (file: string) = table.Library.Contains file
 
     /// The probe of the number `id`, if the module has one.
     let probe (table: SpanTable) (id: int) =

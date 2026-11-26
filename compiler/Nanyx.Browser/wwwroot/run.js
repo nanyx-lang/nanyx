@@ -51,7 +51,15 @@ async function runWithInput(source, text) {
   });
 }
 
-window.playground = { canReadInput, compileAndRun: (source, seed) => compileAndRun(source, { seed }), runAndStopAfter, runWithInput };
+window.playground = {
+  canReadInput,
+  compileAndRun: (source, seed) => compileAndRun(source, { seed }),
+  runAndStopAfter,
+  runWithInput,
+  // What the compiler gives an editor: the WebAssembly text of `source`, and the diagnostics it shows as it is typed.
+  wat: (source) => compiler.compile(source).wat ?? null,
+  check: (source) => compiler.check(source),
+};
 
 const out = document.getElementById("out");
 const runButton = document.getElementById("run");
