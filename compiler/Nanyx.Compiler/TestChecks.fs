@@ -15,15 +15,15 @@ module TestChecks =
         | TyApply(name, _) -> Some name
         | _ -> None
 
-    /// Whether `ty`, a test's, is a test's: `()`, the value of a block, or a function of no arguments that gives `()`.
+    /// Whether `ty`, a test's, is a test's: `()`, the value of a block, or a function of no arguments that gives `()`, or
+    /// never gives a value, as one that crashes doesn't. A type that holds an error is left to that error.
     let private isTestType (ty: Ty) =
-        match Unifier.unalias ty with
-        | TyPrimitive "unit" -> true
-        | TyFunc(input, output, _) ->
-            match Unifier.unalias input, Unifier.unalias output with
-            | TyPrimitive "unit", TyPrimitive "unit" -> true
-            | _ -> false
-        | _ -> false
+        let isResult (ty: Ty) = ty = TyPrimitive "unit" || ty = Unifier.bottomType
+        Unifier.holdsError ty
+        || match Unifier.unalias ty with
+           | TyPrimitive "unit" -> true
+           | TyFunc(input, output, _) -> Unifier.unalias input = TyPrimitive "unit" && isResult (Unifier.unalias output)
+           | _ -> false
 
     /// The errors about the module's tests, `tests`, each by name with where it is written: a test whose type `typeOf`
     /// gives is not a test's (`NYX0310`); one that requires a context, as `contextsOf` gives them, that the test host
