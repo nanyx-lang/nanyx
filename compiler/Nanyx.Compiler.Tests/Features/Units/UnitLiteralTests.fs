@@ -90,3 +90,9 @@ let ``A guard compares with a number with a unit`` () =
 [<Fact>]
 let ``dimension and unit are names a program can still use`` () =
     Assert.Empty((Compiler.compile "def unit = 1\ndef dimension = 2\ndef sum = unit + dimension\n").Diagnostics)
+
+[<Fact>]
+let ``A division of two storages that don't agree is the error where it is passed to a call, not the call's context`` () =
+    // The `/` was left unsettled, so `println` reported that `ToString` of it is missing, and not the mismatch (#2852).
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5s / 1ms" ], reported "println(1.5s / 1ms)")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5 / 1" ], reported "println(1.5 / 1)")
