@@ -23,7 +23,8 @@ let ``A block's free names are the names it uses and does not bind, in the order
     Assert.Equal<string list>([ "first"; "second"; "third" ], SyntaxTree.freeNames run)
 
 // Each statement's names were added to all the names before them, so a block of n statements took n² time: lambda
-// lifting spent 5 of the 5.4 seconds it took on a memory block of 16,000 stores there (#2408).
-[<Fact; Trait("Category", "Timing")>]
-let ``A block's free names are found in time that grows with its length`` () =
-    takesLinearTime 16_000 (storing >> runOf) (SyntaxTree.freeNames >> ignore)
+// lifting spent 5 of the 5.4 seconds it took on a memory block of 16,000 stores there (#2408). That copied the names
+// before each statement again, so it is counted in what the walk allocates.
+[<Fact>]
+let ``A block's free names are found in work that grows with its length`` () =
+    allocatesLinearly 4_000 (storing >> runOf) (SyntaxTree.freeNames >> ignore)

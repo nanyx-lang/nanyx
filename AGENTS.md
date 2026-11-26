@@ -116,8 +116,9 @@ those files workable. Problems with the code's structure are tracked as GitHub i
 - **Check which error.** An error test asserts the diagnostic's code, or the message it expects. A test
   that only asserts "some error was reported" also passes when an unrelated error breaks the program.
 - **Count work rather than time it.** A test that compares costs compares an amount of work where it can: a
-  WebAssembly program's fuel (`WasmProgram.Work`), the type checker's full solves (`Solving.countingFullSolves`), or
-  the tokens the parser reads (`ParseState.TokensRead`).
+  WebAssembly program's fuel (`WasmProgram.Work`), the type checker's full solves (`Solving.countingFullSolves`), the
+  tokens the parser reads (`ParseState.TokensRead`), or, for a function with no count of its own, what it allocates
+  (`TestSupport.allocatesLinearly`).
   One that has to time something does it with `TestTiming.millisecondsOf` and is marked
   `[<Trait("Category", "Timing")>]`, which a local run may leave out with `--filter "Category!=Timing"` and CI runs
   ([compiler/README.md](compiler/README.md#running-tests)).
