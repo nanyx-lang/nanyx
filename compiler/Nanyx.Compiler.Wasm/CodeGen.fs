@@ -998,17 +998,17 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let renderedCachedGlobals = cachedValues |> List.collect CoreIrCachedValues.globals |> String.concat "\n"
 
-    let renderedStartFunction, startDirective =
+    // The start function, and how the module runs it: the start directive or the component entry that runs it, or,
+    // for an entry lifted with the callback ABI whose start function can stop, the entry (see `ComponentCallback`).
+    let renderedStartFunction, startDirective, startEntries =
         match startFunction with
         | Some func when machines.Contains func.Name ->
             let emitted = CoreIrEmit.emitFunction context func None
             for helper in emitted.Helpers do
                 usedHelpers.Add helper |> ignore
             functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
-            let waiterType = indirectTypeName [ "i32"; "i32" ] "i32"
             let entryKind = options.Component |> Option.defaultValue CliRun
-            let entry = ComponentCallback.functions entryKind func.Name (resumeType func.Result) waiterType (CoreIrCachedValues.teardown cachedValues)
-            emitted.Text, entry
+            emitted.Text, "", [ ComponentCallback.startEntry entryKind func.Name (resumeType func.Result) (CoreIrCachedValues.teardown cachedValues) ]
         | Some func ->
             // A module with probes asks the runtime whether it is probing before anything else runs.
             let before =
@@ -1023,8 +1023,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 | None when options.CheckMemory || options.ExportStart ->
                     $"""  (export "{CheckedExports.start}" (func ${CoreIrLowerInput.startFunctionName}))"""
                 | None -> $"  (start ${CoreIrLowerInput.startFunctionName})"
-            emitted.Text, directive
-        | None -> "", (options.Component |> Option.map (fun entry -> ComponentAbi.entryFunction entry None) |> Option.defaultValue "")
+            emitted.Text, directive, []
+        | None -> "", (options.Component |> Option.map (fun entry -> ComponentAbi.entryFunction entry None) |> Option.defaultValue ""), []
 
     // The runtime's part of the state machines (see `TaskLowering`).
     // and the scheduler (see `WasmScheduler`), which a module that starts tasks, or runs a state machine to the end, has.
@@ -1094,7 +1094,12 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               RecordLayout = context.RecordLayoutId
               UseHelper = usedHelpers.Add >> ignore }
         ComponentExports.functions exportContext options.ComponentExports target, exportContext
-    let exportFunctions, exportContext = exportFunctions
+    let (synchronousExports, exportEntries, exportReturns), exportContext = exportFunctions
+    // The entries lifted with the callback ABI that can wait, and the scheduler they run (see `ComponentCallback`).
+    let callbackFunctions =
+        match startEntries @ exportEntries with
+        | [] -> ""
+        | entries -> ComponentCallback.functions entries (indirectTypeName [ "i32"; "i32" ] "i32")
     // The functions a component imports for the program's definitions that the program calls, each with the function
     // a call of it calls, which the module defines (see `ComponentImports`). Outside a component, nothing can call one.
     let componentImports =
@@ -1158,7 +1163,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
           match options.Component with
           | Some entry ->
               yield ComponentAbi.functions entry CoreIrEmitImports.importName
-              yield exportFunctions
+              yield synchronousExports
+              yield callbackFunctions
               yield importFunctions
           | None -> ()
           if checksMemory then
@@ -1173,6 +1179,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             [ match options.Component with
               | Some entry ->
                   ComponentAbi.imports entry
+                  yield! exportReturns
                   if not componentImports.IsEmpty then ComponentImports.declarations componentImports
               | None -> yield! runtimeImports |> List.map CoreIrEmitImports.importDeclaration
 

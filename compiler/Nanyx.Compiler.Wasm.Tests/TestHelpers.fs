@@ -930,6 +930,10 @@ type FakeWasiHost() =
     member val Returned: int option = None with get, set
     /// How many times `run` returned WAIT, or its callback did.
     member val Waited = 0 with get, set
+    /// The values each export's `task.return` was given, by the export's name, `[task-return]` and its function's.
+    member val TaskReturns = Collections.Generic.Dictionary<string, Wasmtime.ValueBox list>()
+    /// The text of each `task.return` given a string, as an address and a length, read when it was called.
+    member val TaskReturnTexts = Collections.Generic.Dictionary<string, string>()
     /// The response `handle` returned, if it has, and its body, as written.
     member val Response: int option = None with get, set
     member val ResponseBody = Text.StringBuilder()
@@ -980,6 +984,18 @@ type FakeWasiHost() =
                 Assert.Equal(0, arguments.[0].AsInt32())
                 host.Response <- Some(arguments.[1].AsInt32())))
         | "$root", ("[backpressure-inc]" | "[backpressure-dec]") -> Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ _ _ -> ()))
+        | interfaceName, name when interfaceName.StartsWith "[export]" && interfaceName <> "[export]wasi:cli/run@0.3.0" && interfaceName <> "[export]wasi:http/handler@0.3.0" && name.StartsWith "[task-return]" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun caller arguments _ ->
+                if host.TaskReturns.ContainsKey name then failwith $"{name} called twice"
+                if arguments.Length = 2 then
+                    let memory = caller.GetMemory("memory")
+                    let address = int64 (arguments.[0].AsInt32())
+                    let length = arguments.[1].AsInt32()
+                    host.TaskReturnTexts.[name] <- Text.Encoding.UTF8.GetString(Array.init length (fun index -> memory.ReadByte(address + int64 index)))
+                let given = ResizeArray<Wasmtime.ValueBox>()
+                for index in 0 .. arguments.Length - 1 do
+                    given.Add arguments.[index]
+                host.TaskReturns.[name] <- List.ofSeq given))
         | "[export]wasi:cli/run@0.3.0", "[task-return]run" ->
             Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ ->
                 if host.Returned.IsSome then failwith "task.return called twice"
@@ -1072,3 +1088,15 @@ type FakeWasiHost() =
             code <- callback.Invoke(ready.Event, waitable, ready.Value)
         Assert.Equal(exit, code)
         Assert.True(host.Response.IsSome, "handle returned no response")
+
+    /// Calls the export `name` of `instance`, lifted with the callback ABI, with `arguments`, to its end, as a host
+    /// does: while it or its callback returns WAIT, it gives the callback the next event of the set.
+    member host.Call(instance: Wasmtime.Instance, name: string, [<ParamArray>] arguments: Wasmtime.ValueBox array) =
+        let callback = instance.GetFunction<int, int, int, int>($"[callback][async-lift]{name}")
+        let mutable code = instance.GetFunction($"[async-lift]{name}").Invoke(arguments) :?> int
+        while code &&& 0xF = wait do
+            host.Waited <- host.Waited + 1
+            let waitable, ready = nextEvent (code >>> 4)
+            host.Delivered.Add waitable
+            code <- callback.Invoke(ready.Event, waitable, ready.Value)
+        Assert.Equal(exit, code)

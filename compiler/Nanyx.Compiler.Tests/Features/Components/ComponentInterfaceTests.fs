@@ -80,7 +80,7 @@ let ``A package's WIT package is named from its manifest's name and version`` (n
 
 [<Fact>]
 let ``An export's core name is its interface's and its own, as wit-component expects`` () =
-    let export = { Module = "geo.shapes"; Name = "areaOf"; Definition = "areaOf" }
+    let export = { Module = "geo.shapes"; Name = "areaOf"; Definition = "areaOf"; Waits = false }
     Assert.Equal("acme:shapes/geo-shapes@0.1.0#area-of", ComponentInterface.exportName "acme:shapes@0.1.0" export)
 
 [<Theory>]

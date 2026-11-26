@@ -29,3 +29,9 @@ export def shift: list(Point), float -> list(Point) = { points, by ->
 export def announce: [Console] string -> () = { what ->
   println("shapes " ++ what)
 }
+
+@component
+export def later: [Async, Clock] int -> int = { ms ->
+  sleep(ms * 1ms)
+  ms
+}

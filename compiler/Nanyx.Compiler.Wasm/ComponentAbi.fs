@@ -86,26 +86,26 @@ let private streamImports (stream: Stream) =
       import "[async-lower][future-read-1]write-via-stream" "future_read" " (param i32 i32) (result i32)"
       import "[future-drop-readable-1]write-via-stream" "future_drop_readable" " (param i32)" ]
 
+/// The backpressure built-ins: while it is raised, the host starts no other task in the instance, so that an entry lifted
+/// with the callback ABI runs alone (see `ComponentCallback`).
+let backpressureInc = "$__nanyx_backpressure_inc"
+let backpressureDec = "$__nanyx_backpressure_dec"
+
 /// The functions the handler's imports are called by in the module.
 module private Handler =
-    let backpressureInc = "$__nanyx_http_backpressure_inc"
-    let backpressureDec = "$__nanyx_http_backpressure_dec"
     let taskReturn = "$__nanyx_http_task_return"
     let bodyWrite = "$__nanyx_http_body_write"
     let bodyDropWritable = "$__nanyx_http_body_drop_writable"
     let trailersWrite = "$__nanyx_http_trailers_write"
     let trailersDropWritable = "$__nanyx_http_trailers_drop_writable"
 
-/// The imports `HttpHandler` needs: backpressure, so that the host gives the instance one request at a time,
-/// `handle`'s `task.return`, and the writes to the response's body and trailers, a `stream<u8>` and a
+/// The imports `HttpHandler` needs: `handle`'s `task.return`, and the writes to the response's body and trailers, a `stream<u8>` and a
 /// `future<result<option<trailers>, error-code>>`, the types 0 and 1 of `response.new`. `task.return` takes
 /// `result<response, error-code>` flattened: its case, then the response's handle or the error's case, then the rest of
 /// the error, which the module never gives.
 let private handlerImports =
     let types = $"wasi:http/types@{wasiVersion}"
-    [ $"""  (import "$root" "[backpressure-inc]" (func {Handler.backpressureInc}))"""
-      $"""  (import "$root" "[backpressure-dec]" (func {Handler.backpressureDec}))"""
-      $"""  (import "[export]{handlerInterface}" "[task-return]handle" (func {Handler.taskReturn} (param i32 i32 i32 i64 i32 i32 i32 i32)))"""
+    [ $"""  (import "[export]{handlerInterface}" "[task-return]handle" (func {Handler.taskReturn} (param i32 i32 i32 i64 i32 i32 i32 i32)))"""
       $"""  (import "{types}" "[async-lower][stream-write-0][static]response.new" (func {Handler.bodyWrite} (param i32 i32 i32) (result i32)))"""
       $"""  (import "{types}" "[stream-drop-writable-0][static]response.new" (func {Handler.bodyDropWritable} (param i32)))"""
       $"""  (import "{types}" "[async-lower][future-write-1][static]response.new" (func {Handler.trailersWrite} (param i32 i32) (result i32)))"""
@@ -121,6 +121,8 @@ let imports (entry: ComponentEntry) =
           $"""  (import "[export]{runInterface}" "[task-return]run" (func {runTaskReturn} (param i32)))"""
       | Library -> $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
       | HttpHandler -> yield! handlerImports
+      $"""  (import "$root" "[backpressure-inc]" (func {backpressureInc}))"""
+      $"""  (import "$root" "[backpressure-dec]" (func {backpressureDec}))"""
       $"""  (import "$root" "[waitable-set-new]" (func {Waitables.setNew} (result i32)))"""
       $"""  (import "$root" "[waitable-join]" (func {Waitables.join} (param i32 i32)))"""
       $"""  (import "$root" "[waitable-set-wait]" (func {Waitables.setWait} (param i32 i32) (result i32)))"""
@@ -496,17 +498,16 @@ let private writeNoTrailersFunction =
 /// The name of `handle`'s callback, which the host calls with each event while `handle` waits.
 let handleCallback = $"[callback]{handleExport}"
 
-/// What `handle` does before it runs the program: raises backpressure, so that the host gives the instance no other
-/// request until it is done, and keeps the request, `$request`, for `argument`.
+/// What `handle` does before it runs the program, once it has raised backpressure, so that the host gives the instance
+/// no other request until it is done: keeps the request, `$request`, for `argument`.
 let handleBegin =
-    [ $"call {Handler.backpressureInc}"
-      "local.get $request"
+    [ "local.get $request"
       $"global.set {HandlerState.request}"
       "i32.const -1"
       $"global.set {HandlerState.response}" ]
 
 /// What `handle` does once the program has answered: returns the response, then, while the host reads it, writes its
-/// body, waiting as each write blocks, and its trailers, and lowers backpressure. It leaves EXIT, 0, for `handle` to
+/// body, waiting as each write blocks, and its trailers. It leaves EXIT, 0, for `handle` to
 /// return. It needs the locals `$writer`, `$bytes`, `$length` and `$status`.
 let handleFinish =
     [ // A component root always answers: one that doesn't is a bug in its host.
@@ -538,7 +539,6 @@ let handleFinish =
       $"call ${Helpers.free}"
       $"global.get {HandlerState.trailers}"
       "call $__nanyx_http_write_no_trailers"
-      $"call {Handler.backpressureDec}"
       // EXIT: the task is done.
       "i32.const 0" ]
 
@@ -552,11 +552,13 @@ let handleLocals = "(local $writer i32) (local $bytes i32) (local $length i32) (
 let private handleFunctions (start: string option) =
     lines
         [ $"(func $__nanyx_http_handle (export \"{handleExport}\") (param $request i32) (result i32) {handleLocals}"
+          $"  call {backpressureInc}"
           yield! handleBegin |> List.map (fun line -> "  " + line)
           match start with
           | Some name -> $"  call ${name}"
           | None -> ()
           yield! handleFinish |> List.map (fun line -> "  " + line)
+          $"  call {backpressureDec}"
           ")"
           $"(func $__nanyx_http_callback (export \"{handleCallback}\") (param $event i32) (param $handle i32) (param $code i32) (result i32)"
           "  unreachable"
