@@ -86,3 +86,14 @@ main()
 let ``A release build keeps an assert`` () =
     let wat = transpileWatWith { WasmOptions.Default with Release = true } (normalized "def n = 3\nassert(n == 4)\n")
     Assert.Contains("assert(n == 4)", wat)
+
+[<Fact>]
+let ``Run - a failed assert names its file as a crash's place does, by its name in a script and from the root in a package`` () =
+    // Not by its full path, which would show the machine's directories (#2969).
+    let script = runSource (normalized "def n = 3\nassert(n == 4)\n")
+    Assert.StartsWith("main.nyx:2:1: assert(n == 4)\n  n = 3\n", script.StandardError.ReplaceLineEndings "\n")
+    let main = "module main\n\n@entry\ndef main = {\n  def n = 3\n  assert(n == 4)\n}\n"
+    let package, _ = nanyxOnPackage [ "main.nyx", main ] [ "run"; "{package}" ]
+    Assert.Equal(1, package.ExitCode)
+    Assert.StartsWith("src/main.nyx:6:3: assert(n == 4)\n  n = 3\n", package.StandardError.ReplaceLineEndings "\n")
+    Assert.Contains("main (src/main.nyx:6)", package.StandardError)

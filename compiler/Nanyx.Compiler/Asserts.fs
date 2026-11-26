@@ -59,26 +59,27 @@ module internal Asserts =
                 |> List.distinctBy fst
         sides @ names
 
-    /// `expr` with each call of the built-in `assert` in `asserts` written out (see the module's comment).
-    let private writeOutIn (source: string) (asserts: Set<NodeId>) (isFunction: NodeId -> bool) (expr: Expression) : Expression =
+    /// `expr` with each call of the built-in `assert` in `asserts` written out (see the module's comment), its place's
+    /// file named from `root` as a crash's is (see `PackageModules.placeOf`).
+    let private writeOutIn (source: string) (root: string option) (asserts: Set<NodeId>) (isFunction: NodeId -> bool) (expr: Expression) : Expression =
         expr
         |> ExpressionRewrites.mapExpressionKinds (fun node kind ->
             match kind with
             | AssertSyntax.Call condition when asserts.Contains node.Id ->
                 let written = textOf source node.Span |> Option.defaultValue $"{AssertSyntax.builtIn}(...)"
                 let literal text = Expression.from node (LiteralExpr(StringLit text))
-                let header = $"{DeferredErrors.deferredLocation node.Span}{written}\n"
+                let header = $"{PackageModules.placeOf root node.Span}{written}\n"
                 let values = shown source isFunction condition |> List.collect (fun (label, value) -> [ literal label; value ])
                 FunctionCall(AssertSyntax.rewritten, None, condition :: literal header :: values)
             | _ -> kind)
 
     /// `module'`, typed in `state` from `source`, with each call of the built-in `assert` written out (see the module's
-    /// comment). `isFunction` says whether a node is of a function type.
-    let writeOut (source: string) (state: InferState.InferState) (isFunction: NodeId -> bool) (module': Module) : Module =
+    /// comment), in a program that names its files from `root`. `isFunction` says whether a node is of a function type.
+    let writeOut (source: string) (root: string option) (state: InferState.InferState) (isFunction: NodeId -> bool) (module': Module) : Module =
         if state.Asserts.IsEmpty then
             module'
         else
-            let rewrite = writeOutIn source state.Asserts isFunction
+            let rewrite = writeOutIn source root state.Asserts isFunction
             module'
             |> List.map (fun item ->
                 match item.Kind with
