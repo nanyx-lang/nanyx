@@ -689,40 +689,28 @@ public sealed class InfoViewTests : LanguageServerTestBase
     }
 
     // Each signature was laid out by the formatter, though nearly all fit on one line as they are, which took ten times
-    // the rest of a request: a request with a width now takes about what one without takes (#2406).
+    // the rest of a request: a request with a width now lays out only those that don't fit (#2406). It counts them, rather
+    // than timing requests, which a loaded machine makes slow and noisy (#2977).
     [Fact]
     public async Task Info_view_lays_out_only_the_signatures_that_do_not_fit()
     {
+        // The server counts what it lays out in the flow of work it was started in.
+        var laidOut = Nanyx.Formatter.SignatureLayout.startCounting();
+        await RestartWithAsync(TestSettings);
         var uri = DocumentUri.Parse("untitled:InfoView-Width-Cost");
         var defs = string.Join("\n", Enumerable.Range(1, 400).Select(index => $"def value{index}: int -> int = {{ x -> x + {index} }}"));
-        Open(uri, defs + "\n\ndef last: int -> int = { x ->\n  def doubled = x * 2\n  doubled\n}\n");
+        const string tooLong = "def describe: (name: string, age: int, address: string) -> string = { p -> p.name }";
+        Open(uri, defs + "\n" + tooLong + "\n\ndef last: int -> int = { x ->\n  def doubled = x * 2\n  doubled\n}\n");
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
-        var line = 401;
 
-        async Task<double> Time(int? width)
-        {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-            await InfoViewAt(uri, line + 1, 3, width);
-            return clock.Elapsed.TotalMilliseconds;
-        }
-
-        await Time(60);
-        await Time(null);
-        // The quickest of several of each, taken in turn, and more of them if the first don't show it, so that load on the
-        // machine can't decide it.
-        var withWidth = double.MaxValue;
-        var without = double.MaxValue;
-        for (var run = 0; run < 25 && (run < 7 || withWidth >= 2.5 * without); run++)
-        {
-            withWidth = Math.Min(withWidth, await Time(60));
-            without = Math.Min(without, await Time(null));
-        }
-        Assert.True(withWidth < 2.5 * without, $"a request at width 60 took {withWidth:F1} ms, and one without a width {without:F1} ms");
-        var names = Section(await InfoViewAt(uri, line + 1, 3, 60), "module", "names");
-        Assert.Contains("value400: int -> int", names.Select(item => item.Text));
+        var view = await InfoViewAt(uri, 403, 3, 60);
+        Assert.Contains("value400: int -> int", Section(view, "module", "names").Select(item => item.Text));
+        // Only the few names whose signatures are longer than 60 columns: `describe`, and some the host brings in. Each of
+        // the 450 names the view shows was laid out before #2406.
+        Assert.InRange(laidOut.Value, 1, 9);
+        laidOut.Value = 0;
+        await InfoViewAt(uri, 403, 3);
+        Assert.Equal(0, laidOut.Value);
     }
 
     [Fact]
