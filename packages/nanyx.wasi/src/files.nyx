@@ -1,7 +1,7 @@
 --| What the console host's roots share to write `FileSystem`: on WASI preview 1 in `cli.host`,
   and on `wasi:filesystem` in `cli.host.wasi`. Each finds a path in the directories the program
   was given, its preopens, as `within` says.
-module cli.files
+export module files
 
 import (
   nanyx/array

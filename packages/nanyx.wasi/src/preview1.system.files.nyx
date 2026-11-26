@@ -1,6 +1,6 @@
--- Part of the console host, cli.host.nyx and this file: its file system, which the
+-- Part of `preview1.system`, preview1.system.nyx and this file: the file system, which the
 -- FileSystem it provides is written on.
-@partial export module cli.host
+@partial export module preview1.system
 
 -- The file system ---------------------------------------------------------------------------------
 

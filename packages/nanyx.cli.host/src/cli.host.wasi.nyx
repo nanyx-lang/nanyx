@@ -24,8 +24,6 @@ import (
   nanyx/host.runtime
   nanyx/random as (Random)
   nanyx/text
-  cli.files as (bytesAt, within)
-  cli.stdin as (bufferOffset, bufferSize, readLineAfter, readToEndAfter, stateAt)
   nanyx.cli/console as (Console, IoError)
   nanyx.cli/env as (Env)
   nanyx.fs/filesystem as (FileSystem, FsError)
@@ -36,8 +34,10 @@ import (
   nanyx.wasi/abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, settled, takeString, writableEnd, writeOut, writeTo)
   nanyx.wasi/cli as (stderr, stdout)
   nanyx.wasi/clocks as clocks
+  nanyx.wasi/files as (bytesAt, within)
   nanyx.wasi/http as (sendThroughWasi)
   nanyx.wasi/random as wasiRandom
+  nanyx.wasi/stdin as (bufferOffset, bufferSize, readLineAfter, readToEndAfter, stateAt)
 )
 
 -- The host keeps its state in the block the module sets aside for it (see `hostState`): at 4 and 8,
