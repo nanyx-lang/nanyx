@@ -527,7 +527,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
             let var = CoreIrLowerLocals.localAt this.LocalTools scope var (input.ExprTypes |> Map.tryFind expr.Id)
             // A value of a type only known when the program runs, used in an arm of a `Type` match that says what its
             // type is, is unboxed there (see `CoreIrLowerTypeMatch`).
-            match input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst >> toIrType) with
+            // A map's or a set's store is a recursive type, which a box in it is converted in by the type it is of.
+            let narrowed = input.ExprTypes |> Map.tryFind expr.Id |> Option.map (substitute subst)
+            match narrowed |> Option.bind (fun ty -> CoreIrLowerBuild.decanonicalStore this.TypeMatchTools ty (AVar var) (fun atom -> k (Expr.make (Atom atom) (atomType atom)))) with
+            | Some converted -> converted
+            | None ->
+            match narrowed |> Option.map toIrType with
             | Some expected when CoreIrLowerBoxes.holdsBox var.Type && CoreIrLowerBoxes.needsConversion var.Type expected ->
                 CoreIrLowerMembers.coerce this.MemberTools scope (AVar var) expected (fun atom -> k (Expr.make (Atom atom) expected))
             | _ -> k (Expr.make (Atom(AVar var)) var.Type)
@@ -1303,6 +1308,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | BoxReading ty -> CoreIrLowerBoxes.readerFunction newVar functionName ty
         | StandingIn ty -> CoreIrLowerInstances.standInFunction newVar functionName ty
         | ListConverting(given, expected) -> CoreIrLowerBoxes.listConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
+        | RecursiveConverting(given, expected) -> CoreIrLowerBoxes.recursiveConverterFunction (CoreIrLowerMembers.boxTools this.MemberTools emptyScope) newVar functionName given expected
         | Printing printer -> CoreIrLowerDbg.printerFunction printerTools callee functionName printer
         | Describing -> CoreIrLowerTypeMatch.describingFunction this.TypeMatchTools functionName
         | FieldGetting(recordType, fieldName) -> CoreIrLowerTypeMatch.fieldGettingFunction this.TypeMatchTools functionName recordType fieldName
@@ -1409,6 +1415,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | BoxReading _ -> internalError "a box's function lowered as a definition"
         | StandingIn _ -> internalError "a stand-in lowered as a definition"
         | ListConverting _ -> internalError "a list's conversion lowered as a definition"
+        | RecursiveConverting _ -> internalError "a recursive type's conversion lowered as a definition"
         | Printing _ -> internalError "a printer lowered as a definition"
         | Describing
         | FieldGetting _
