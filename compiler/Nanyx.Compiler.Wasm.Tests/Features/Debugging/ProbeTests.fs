@@ -21,7 +21,10 @@ type private Heard =
 let private listen (wanted: Probe -> bool) (source: string) =
     use directory = new TempDirectory()
     directory.Write "main.nyx" source
-    let wat = transpileWatFileWith { WasmOptions.Default with Places = true; Probes = true } (Path.Combine(directory.Path, "main.nyx"))
+    // On a large stack, as `nanyx run` compiles: the backend recurses once per operand of a chain of operators (#2946).
+    let wat =
+        Nanyx.LargeStack.run (fun () ->
+            transpileWatFileWith { WasmOptions.Default with Places = true; Probes = true } (Path.Combine(directory.Path, "main.nyx")))
     let stack = ShadowStack()
     let passed = ResizeArray<string>()
     let stacks = ResizeArray<string list>()

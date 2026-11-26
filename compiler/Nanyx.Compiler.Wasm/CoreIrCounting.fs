@@ -57,7 +57,8 @@ let private operands (ownership: Ownership) (e: Expr) : (Atom * Use) list =
         (args |> List.mapi (fun index arg -> arg, if index < arguments then Owned else Borrowed)) @ [ AVar closure, Borrowed ]
     | CallClosure(closure, args, Owning) -> all Owned args @ [ AVar closure, Owned ]
     | Interpolate parts -> parts |> List.choose (function Hole(hole, _) -> Some(AVar hole, Borrowed) | Text _ -> None)
-    | Dbg(_, text) -> [ text, Borrowed ]
+    | Dbg(_, text)
+    | CrashWith text -> [ text, Borrowed ]
     | ForEach loop -> all Borrowed (ForLoop.sourceAtoms loop)
     | If(cond, _, _) -> [ cond, Borrowed ]
     | FloatConstant _

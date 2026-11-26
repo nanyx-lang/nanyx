@@ -25,6 +25,7 @@
     <Compile Include="Features\Arithmetic\OperandsSettledLaterTests.fs" />
     <Compile Include="Features\Arithmetic\OperatorCheckTimeTests.fs" />
     <Compile Include="Features\Arithmetic\OwnTypeOperatorTests.fs" />
+    <Compile Include="Features\Asserts\AssertTests.fs" />
     <Compile Include="Features\Attached\AttachedTests.fs" />
     <Compile Include="Features\Attached\AttachedExtensionTests.fs" />
     <Compile Include="Features\Attached\BuiltinTypeNameTests.fs" />
@@ -50,6 +51,7 @@
     <Compile Include="Features\Units\AttachedMeasuredOperatorTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
+    <Compile Include="Features\Contexts\MissingContextNameTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeContextTests.fs" />
     <Compile Include="Features\Contexts\TypedContextTests.fs" />
@@ -192,6 +194,7 @@
     <Compile Include="Features\Memory\MArrayTests.fs" />
     <Compile Include="Features\Memory\EscapeTests.fs" />
     <Compile Include="Features\Matches\ExhaustivenessTests.fs" />
+    <Compile Include="Features\Matches\MatchValuesTests.fs" />
     <Compile Include="Features\Matches\MissingArmFixTests.fs" />
     <Compile Include="Features\Matches\AndPatternTests.fs" />
     <Compile Include="Features\Matches\RecordPatternTests.fs" />

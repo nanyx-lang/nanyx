@@ -80,6 +80,7 @@
     <Compile Include="Features\Contexts\DirectMemberCallTests.fs" />
     <Compile Include="Features\Contexts\BorrowedMemberTests.fs" />
     <Compile Include="Features\Contexts\LambdaKnownMemberTests.fs" />
+    <Compile Include="Features\Asserts\RunAssertTests.fs" />
     <Compile Include="Features\Async\WaitingSpecialisationTests.fs" />
     <Compile Include="Features\Async\RunStateMachineTests.fs" />
     <Compile Include="Features\Async\RunTaskTests.fs" />
@@ -96,6 +97,7 @@
     <Compile Include="Features\Components\ComponentExportTests.fs" />
     <Compile Include="Features\Components\ComponentImportTests.fs" />
     <Compile Include="Features\Components\ProvidedExportTests.fs" />
+    <Compile Include="Features\Components\AsyncExportTests.fs" />
     <Compile Include="Features\Components\ComponentCancellationTests.fs" />
     <Compile Include="Features\Components\ComponentWaitTests.fs" />
     <Compile Include="Features\Components\ComponentCallbackTests.fs" />

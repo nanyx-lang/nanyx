@@ -1,0 +1,7 @@
+// WASI 0.3's `wasi:cli/run`, which the app exports: an `async func`, so that it may await the Nanyx component's
+// `later`, which a synchronous `run` can't.
+package wasi:cli@0.3.0;
+
+interface run {
+  run: async func() -> result;
+}

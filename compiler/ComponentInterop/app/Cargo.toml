@@ -1,9 +1,13 @@
-# A Rust command that calls the Nanyx component in ../shapes, which exports `acme:shapes/shapes` (see ../run.sh).
+# A Rust command, of WASI 0.3, that calls the Nanyx component in ../shapes, which exports `acme:shapes/shapes` (see
+# ../run.sh).
 [package]
 name = "app"
 version = "0.1.0"
 edition = "2021"
 publish = false
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
 wit-bindgen = "0.63"

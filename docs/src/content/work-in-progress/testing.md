@@ -81,7 +81,8 @@ Each test file declares a named module, as every file in a package does. It is p
 
 # Asserting
 
-`assert` takes a `bool`. If it is `false`, `assert` crashes with the expression it was given and the values in it:
+`assert` is built: see [`assert`](../stdlib/console#assert). It takes a `bool`, and if it is `false` it crashes with
+where it is, the `assert` as written and the values in it. In a test, the runner reports that under the test's name:
 
 ```nanyx fragment
 @test
@@ -93,18 +94,18 @@ def `scales points` = {
 
 ```text
 FAIL geometry.`scales points`  src/geometry.nyx:18
-  assert(scale(p, 2) == Point(x = 2, y = 4))
-    scale(p, 2) = Point(x = 2, y = 5)
-    p = Point(x = 1, y = 2)
+  src/geometry.nyx:18:3: assert(scale(p, 2) == Point(x = 2, y = 4))
+    scale(p, 2) = (x = 2, y = 5)
+    p = (x = 1, y = 2)
 ```
 
-The place is the file and line of the program's code that crashed, from the crash's report
-([Crash stacks](../deep-dives/crash-stacks#the-runtime)); a column needs the caller's location, which is later
-([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)).
+The place after the test's name is the file and line of the program's code that crashed, from the crash's report
+([Crash stacks](../deep-dives/crash-stacks#the-crash-report)); a column there needs the caller's location, which is
+later ([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)). The message under it, `assert`'s own, has the column.
 
-`assert` is built in, like `dbg`, because only the compiler has what that message needs: the source text of the expression, and a printer for the type of each value in it. For a comparison it prints each side that is not a literal, then each name the expression reads. That is why there is no `assertEqual` or `assertContains`: `assert(xs \contains(3))` already prints `xs`. It prints values the way [`dbg`](../stdlib/console#dbg) does, ignoring any `ToString` the type has.
+`assert` is built in, like `dbg`, because only the compiler has what that message needs: the source text of the expression, and a printer for the type of each value in it. For a comparison it prints each side that is not written out in full, then each name the expression reads, but one bound inside it. That is why there is no `assertEqual` or `assertContains`: `assert(xs \contains(3))` already prints `xs`. It prints values the way [`dbg`](../stdlib/console#dbg) does, ignoring any `ToString` the type has.
 
-`assert` is not only for tests. It works anywhere, and outside a test it is a crash with a good message, as in Rust and Zig. Crashing is not an effect in Nanyx, so `assert` needs no context: `assert: bool -> ()`.
+`assert` is not only for tests. It works anywhere, and outside a test it is a crash with a good message, as in Rust and Zig. Crashing is not an effect in Nanyx, so `assert` needs no context: `assert: bool -> ()`. A release build keeps every `assert`, and it takes no message: the values it prints are the message.
 
 A test stops at the first `assert` that fails. Each test runs on its own (see [Running tests](#running-tests)), so a failure never affects the tests after it.
 
@@ -158,9 +159,9 @@ Running 3 tests in geometry, with 1 deferred error
 PASS geometry.`adds points`
 FAIL geometry.`scales points`  src/geometry.nyx:18
   assert(scale(p, 2) == Point(x = 2, y = 4))
-    scale(p, 2) = Point(x = 2, y = 5)
-    p = Point(x = 1, y = 2)
-FAIL geometry.`parses a point`  src/geometry.nyx:24:14
+    scale(p, 2) = (x = 2, y = 5)
+    p = (x = 1, y = 2)
+FAIL geometry.`parses a point`  src/geometry.nyx:24
   src/geometry.nyx:24:14: error NYX0201: Type mismatch: 'string' is not a number, so it cannot be used with + (deferred from compile time)
 
 1 passed, 2 failed

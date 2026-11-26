@@ -48,7 +48,9 @@ module WitType =
 type ComponentFunction =
     { Export: ComponentExport
       Parameters: (string * WitType) list
-      Result: WitType option }
+      Result: WitType option
+      /// Whether it can wait: its written type requires `Async`, so it is an `async func`, lifted with the callback ABI.
+      Async: bool }
 
 /// The WIT interface a program gives a component built from it: the defs marked `@component`, each exported in the
 /// interface its module names, with the types of their parameters and results written as WIT types (see the
@@ -280,7 +282,7 @@ module ComponentInterface =
             let contextProblems = if contexts.IsEmpty && not requiresContexts then [] else [ Unwritten ]
             let problems = (parameters @ [ result |> Result.map (fun _ -> "", WitType.Bool) ]) |> List.choose (function Error problem -> Some problem | Ok _ -> None)
             match misnamed @ contextProblems @ problems with
-            | [] -> Ok { Export = export; Parameters = parameters |> List.choose Result.toOption; Result = result |> Result.toOption |> Option.flatten }
+            | [] -> Ok { Export = export; Parameters = parameters |> List.choose Result.toOption; Result = result |> Result.toOption |> Option.flatten; Async = false }
             | problems -> Error problems
         | _ -> Error [ Never("a value that isn't a function", "export a function: a WIT interface has only functions and types") ]
 
@@ -327,7 +329,7 @@ module ComponentInterface =
             match typeOf name with
             | None -> []
             | Some ty ->
-                let export = { Module = ""; Name = name; Definition = name }
+                let export = { Module = ""; Name = name; Definition = name; Waits = false }
                 match functionOf export ty (values |> Map.tryFind name) (requiresContexts name) with
                 | Ok _ -> []
                 | Error problems ->
@@ -350,8 +352,16 @@ module ComponentInterface =
                             Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument span $"The import '{name}' names {named} {parameters}, and its function takes {taken}"
                         |> Diagnostics.about name))
 
+    /// Whether `contexts`, those a def requires, include the standard library's `Async`: whether the def can wait.
+    let requiresAsync (contexts: Ty list) =
+        contexts
+        |> List.exists (function
+            | TyNominal({ Home = StandardLibraryModule home; Name = "Async" }, [], _, _) -> home = ModuleOrigin.asyncName
+            | _ -> false)
+
     /// The functions a component built from `typed` exports (see `TypedModule.ComponentExports`), each of the type it
-    /// has there. One whose type can't cross the boundary, which `errors` reported, is left out.
+    /// has there. One whose type can't cross the boundary, which `errors` reported, is left out. One that can wait
+    /// (`ComponentExport.Waits`) is `Async`.
     let functions (typed: TypedModule) : ComponentFunction list =
         let values = valuesOf typed.Module
         typed.ComponentExports
@@ -359,7 +369,8 @@ module ComponentInterface =
             typed.Types
             |> Map.tryFind export.Definition
             |> Option.map (fun ty -> if export.Definition = Hosts.providedExportName export.Name then withoutContexts ty else ty)
-            |> Option.bind (fun ty -> functionOf export ty (values |> Map.tryFind export.Definition) false |> Result.toOption))
+            |> Option.bind (fun ty -> functionOf export ty (values |> Map.tryFind export.Definition) false |> Result.toOption)
+            |> Option.map (fun func -> { func with Async = export.Waits }))
 
     /// The name of the world a package's WIT (see `render`) gives a component built from it: `component`, unless an
     /// interface of the package is named that, when it is `component-world`.
@@ -400,7 +411,8 @@ module ComponentInterface =
         let signature (func: ComponentFunction) =
             let parameters = func.Parameters |> List.map (fun (name, ty) -> $"{name}: {witTypeText ty}") |> String.concat ", "
             let result = func.Result |> Option.map (fun ty -> $" -> {witTypeText ty}") |> Option.defaultValue ""
-            $"  {witName func.Export.Name}: func({parameters}){result};"
+            let kind = if func.Async then "async func" else "func"
+            $"  {witName func.Export.Name}: {kind}({parameters}){result};"
         [ $"interface {name} {{"
           yield! typeDefinitions
           yield! members |> List.distinctBy (fun func -> func.Export.Name) |> List.map signature
@@ -492,7 +504,7 @@ module ComponentInterface =
         typed.Module
         |> List.choose (function
             | Kind (Def (ValueDef(_, name, _, ({ Kind = ComponentImportSyntax.Import(witInterface, functionName, _) } as value)))) ->
-                let import = { Module = witInterface; Name = functionName; Definition = name }
+                let import = { Module = witInterface; Name = functionName; Definition = name; Waits = false }
                 typed.Types |> Map.tryFind name |> Option.bind (fun ty -> functionOf import ty (Some value) false |> Result.toOption)
             | _ -> None)
 

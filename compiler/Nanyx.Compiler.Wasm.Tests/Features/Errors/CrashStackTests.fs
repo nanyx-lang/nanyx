@@ -110,6 +110,18 @@ let ``A failed orCrash is placed where the program called it, past the standard 
     | other -> Assert.Fail $"%A{other}"
 
 [<Fact>]
+let ``A failed assert reports its message, and is placed at the line of the assert, as its message says`` () =
+    match runReporting "def check = { n: int ->\n  assert(n < 2)\n  n\n}\n\nprintln(check(5))\n" with
+    | Error(Nanyx.Runtime.Crashed(Some message, place, _)), written ->
+        Assert.Contains("assert(n < 2)", message)
+        Assert.Contains("n = 5", message)
+        Assert.Equal(written, message)
+        Assert.Equal(Some("", 2), place)
+        // The message names the place too, with its column; a source compiled on its own is in no file, so it names none.
+        Assert.StartsWith("2:3: ", message)
+    | other -> Assert.Fail $"%A{other}"
+
+[<Fact>]
 let ``An error deferred to run time reports its message to the runtime`` () =
     match runReporting "def broken = { n: int ->\n  n + \"x\"\n}\n\nprintln(broken(1))\n" with
     | Error(Nanyx.Runtime.Crashed(Some message, place, _)), written ->

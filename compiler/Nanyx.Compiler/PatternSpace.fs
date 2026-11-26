@@ -10,19 +10,41 @@ open Parser.Program
 /// in one of the rows before, and any value when it is the row asked about, so neither ever reports something on its
 /// account that might not be so.
 module PatternSpace =
-    /// The patterns of an arm of a match on `valueCount` values. A lone `else` is the arm for anything else, whatever
-    /// every value is, so in a match on several values it stands for a catch-all at each position: one `else` per
-    /// value, each written where the `else` is. Brackets around a tuple are optional, as in `def x, y = pair`, so
-    /// several values and a tuple of them are matched alike: in a match on one value, `| x, y` is `| (x, y)`, and in a
-    /// match on two, `| (x, y)` is `| x, y`. Any other arm is as written.
+    /// The patterns of an arm of a match on `valueCount` values. A lone `else` or `_` is the arm for anything else,
+    /// whatever every value is, so in a match on several values it stands for a catch-all at each position: one per
+    /// value, each written where it is. Brackets around a tuple are optional, as in `def x, y = pair`, so several
+    /// values and a tuple of them are matched alike: in a match on one value, `| x, y` is `| (x, y)`, and in a match
+    /// on two, `| (x, y)` is `| x, y`. Any other arm is as written.
     let ofArm (valueCount: int) (patterns: Pattern list) : Pattern list =
         match patterns with
-        | [ Kind ElsePattern as orElse ] when valueCount > 1 ->
-            orElse :: List.init (valueCount - 1) (fun _ -> Pattern.at orElse.Span ElsePattern)
+        | [ Kind (ElsePattern | WildcardPattern as kind) as catchAll ] when valueCount > 1 ->
+            catchAll :: List.init (valueCount - 1) (fun _ -> Pattern.at catchAll.Span kind)
         | first :: _ :: _ when valueCount = 1 ->
             [ Pattern.at (SourceSpan.between first.Span (List.last patterns).Span) (TuplePattern(patterns, false)) ]
         | [ Kind (TuplePattern(elements, false)) ] when valueCount > 1 && elements.Length = valueCount -> elements
         | _ -> patterns
+
+    /// The values and arms of a match on `values`, each arm's patterns as `ofArm` has them. `match a, b` is a match on
+    /// the tuple `(a, b)`, so an arm may have one pattern for all the values, as `| t ->` does; a match with such an
+    /// arm is a match on that tuple, whose other arms are its tuple patterns. Only that match builds the tuple: one
+    /// with a pattern per value in each arm matches the values each in their own place. An arm with neither one
+    /// pattern nor one per value is left as written, for the type checker to report, and so is a lone tuple of another
+    /// size.
+    let ofMatch (values: Expression list) (arms: (Pattern list * 'body) list) : Expression list * (Pattern list * 'body) list =
+        let arms = arms |> List.map (fun (patterns, body) -> ofArm values.Length patterns, body)
+        let forAll (patterns: Pattern list) =
+            match patterns with
+            | [ Kind (TuplePattern(_, false)) ] -> false
+            | [ _ ] -> true
+            | _ -> false
+        let rows = arms |> List.map fst
+        if values.Length > 1
+           && List.exists forAll rows
+           && rows |> List.forall (fun patterns -> forAll patterns || patterns.Length = values.Length) then
+            let tuple = Expression.at (SourceSpan.between (List.head values).Span (List.last values).Span) (TupleExpr values)
+            [ tuple ], arms |> List.map (fun (patterns, body) -> ofArm 1 patterns, body)
+        else
+            values, arms
 
     /// Whether `pattern` matches every value of its type. `(a, _)` matches every tuple: a tuple pattern is irrefutable
     /// when each element is. So is a record pattern (`Money(pence)`, `(x = a)`) whose parts all are: the type says the

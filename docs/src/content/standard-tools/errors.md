@@ -1387,7 +1387,8 @@ To fix it, add a last arm with a name or `_` as its pattern, such as `| other ->
 An operation needs a context that the type of its value does not have: two values are compared with `<` but their
 type has no order, are compared with `==` but contain functions, or are used as a map's keys but cannot be hashed.
 Where the type is a type variable of the definition, the message says which context to add to its type, and an
-editor offers to add it.
+editor offers to add it. The headline names the context with the type it's needed at, as in
+`Missing context 'Ord(map(string, int))'` or `Missing context 'ToString(Point)'`.
 
 ```nanyx
 def less = ["a" => 1] < ["a" => 1]  -- error NYX0205: 'map(string, int)' cannot be ordered with <: maps have no order
@@ -1543,7 +1544,8 @@ where the type is expected, without the constructor, is NYX0260.
 # NYX0213: Wrong number of patterns
 
 An arm of a match on several values, such as a lambda's parameters or a loop over several lists, has a different
-number of patterns from the number of values.
+number of patterns from the number of values. In a `match`, an arm can also have a single pattern, which matches all
+the values as a tuple: `| _ ->` matches whatever they are, and `| t ->` binds their tuple.
 
 ```nanyx
 def first = { a, b -> | x -> x }  -- error NYX0213: This arm has 1 pattern, but the match is on 2 values: ...

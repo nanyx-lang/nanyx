@@ -89,11 +89,15 @@ them down again, so nothing the program computes is kept from one request to the
 
 ## Running with the callback ABI
 
-Under `CliRun` and `HttpHandler`, the start function is a state machine when it calls one (`CoreIrSplitPoints.stateMachines`, given no start
-function to leave out), and its task, the main task, is one the scheduler runs as it runs the others
+Under `CliRun` and `HttpHandler`, the start function is a state machine when it calls one (`CoreIrSplitPoints.stateMachines`,
+given no start function to leave out), and its task, the main task, is one the scheduler runs as it runs the others
 (`ComponentCallback`). A program whose start function never stops is run, gives its result and is done with EXIT at once.
-What follows is `run`'s; `handle` does the same, with what it does before and after the start function
-([The handler](#the-handler)).
+A program's own export that can wait is an entry of the same kind ([Exports that wait](#exports-that-wait)). What follows
+is `run`'s; `handle` does the same, with what it does before and after the start function ([The handler](#the-handler)).
+
+0. `run` raises backpressure (`[backpressure-inc]`), and lowers it once it is done, so that the host starts no other
+   task in the instance meanwhile, as `handle` does: one task at a time per instance, whichever entry it is, so one main
+   task and one scheduler serve them all (settled 2026-11-26).
 
 1. `run` calls the start function. When it stops, its frame goes to the main task, which goes on the queue, and the
    scheduler runs the tasks in turn, as `runOthers` does, resuming the start function's frame when the main task's turn
@@ -110,8 +114,8 @@ What follows is `run`'s; `handle` does the same, with what it does before and af
 
 `TASK_CANCELLED` at the callback cancels the main task, and so every task, whose waits on a subtask cancel it
 ([below](#waiting-while-other-tasks-run)), while a stream's read or write goes on until the host has taken it; the
-program carries on to its end, as a `race`'s loser does, and `run` gives its result. Only the scheduler sets `atTop`, around its own wait: under any other entry, `wait` is
-`[waitable-set-wait]`. A wait on the host under code that runs the tasks to the end, a cached value's getter, would block
+program carries on to its end, as a `race`'s loser does, and `run` gives its result. Only the scheduler sets `atTop`,
+around its own wait: anywhere else, `wait` is `[waitable-set-wait]`. A wait on the host under code that runs the tasks to the end, a cached value's getter, would block
 there too, which an `async func` may; but a cached value can't require a context, so its tasks can't wait on the host.
 `ComponentCallbackTests.fs` and `ComponentCancellationTests.fs` run core modules on a fake host that calls `run` and its
 callback as Wasmtime does.
@@ -352,7 +356,8 @@ made of. The componentizer is given that directory and world, rather than the ho
 The backend gets the functions and the names they are exported under (`WasmOptions.ComponentExports`), each the
 interface's qualified name, `#` and the function's, `acme:shapes/shapes@0.1.0#area-of`. The function of each export's
 def is a root for inlining and for what the module keeps (`CoreIrInline.inlineCalls`, `CoreIrReach.reachedFrom`), and
-`ComponentExports` writes a function that the module exports under that name, lifted synchronously:
+`ComponentExports` writes a function that the module exports under that name, lifted synchronously unless it can wait
+([below](#exports-that-wait)):
 
 `ComponentValues` writes the code that lifts a value of each WIT type into a Nanyx value of the type the backend
 lowered its Nanyx type to, and lowers one back, following the canonical ABI's layout in memory and its flattening to
@@ -379,6 +384,36 @@ name, so the two needn't be in the same order.
 An export runs on whatever the instance has set up: a top-level value is built the first time something reads it,
 and the start function tears it down again at the end of `run`, so an export called before `run`, after it, or with no
 `run` at all works as one called during it.
+
+## Exports that wait
+
+An export whose type requires `Async`, which a def that waits must write, is an `async func` in the WIT
+([#2915](https://github.com/nanyx-lang/nanyx/issues/2915)). Whether it can wait is decided when its module is checked,
+from the contexts its def requires (`ComponentExport.Waits`, `ComponentInterface.requiresAsync`), so the WIT and the
+backend agree; one that requires only contexts that can't wait, such as `Console`, stays a `func`.
+
+```nanyx fragment
+@component
+export def later: [Async, Clock] int -> int = { ms ->
+  sleep(ms * 1ms)
+  ms
+}
+```
+
+`ComponentExports` makes it an entry lifted with the callback ABI, `[async-lift]` and the export's name, with a
+`[callback]` ([Running with the callback ABI](#running-with-the-callback-abi)):
+
+- It raises backpressure, lifts its arguments as a synchronous export does, and keeps those its def doesn't take over
+  in globals of its own, since it may return to the host before they can be dropped. Then it calls its def's function.
+- While every task waits on the host, it and its callback return WAIT, as `run` does.
+- Once the function has finished, it gives the result with `[task-return]` and the function's name, imported from
+  `[export]` and the interface's: as the core values the result is passed as, or past 16 of them the address of a block,
+  lowered into a new block first and freed, with what it points to, once `task.return` has copied it. Then it drops the
+  result and the arguments it kept, lowers backpressure, and returns EXIT. It has no `cabi_post_`.
+
+A synchronous export couldn't do this: the component model doesn't let a task whose type isn't `async` wait before it
+returns. `AsyncExportTests.fs` calls exports that sleep on a fake host, which gives them their events through their
+callbacks, and `compiler/ComponentInterop` has a Rust component await one under Wasmtime ([below](#testing-with-other-languages)).
 
 # A program's own imports
 
@@ -424,9 +459,10 @@ them, as the other component's WIT does, and they are `p0`, `p1` and on if it do
 
 ## Testing with other languages
 
-`compiler/ComponentInterop` holds a Nanyx library component (`shapes`) and two Rust components: a command (`app`) that calls
-the Nanyx component's exports, one of which, `announce`, requires `Console` and prints under the console host's, and a
-component (`units`) whose exports the Nanyx component imports. `run.sh` builds the
+`compiler/ComponentInterop` holds a Nanyx library component (`shapes`) and two Rust components: a WASI 0.3 command (`app`)
+that calls the Nanyx component's exports, one of which, `announce`, requires `Console` and prints under the console
+host's, and another, `later`, sleeps, and a component (`units`) whose exports the Nanyx component imports. `app`'s `run`
+is an `async func`, which awaits `later`: a synchronous `run`, as a WASI 0.2 command's is, may not wait for it. `run.sh` builds the
 three, checks that the Rust components' WIT is what `nanyx build` wrote, composes them with `wac plug`, and runs the
 result under `wasmtime run`, which must print `expected.txt`. The Compiler workflow runs it on Linux, with Wasmtime,
 `wac` and Rust's `wasm32-wasip2` target installed at pinned versions.

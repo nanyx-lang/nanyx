@@ -323,6 +323,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
                     let rest = k (Expr.make (Atom(AVar held)) held.Type)
                     let printed = Expr.make (Let(text, Expr.make (Call(printer, [ AVar held ])) IrString, Expr.make (Dbg(site, AVar text)) IrUnit)) IrUnit
                     Expr.make (Let(held, lowered, Expr.make (Do(printed, rest)) rest.Type)) rest.Type)
+        | AssertSyntax.Checked(condition, header, values) -> this.Assert scope condition header values k
         | WithSyntax.Call(record, Kind (RecordExpr updates)) ->
             // `record with f = v, ...`: a copy of the record with those fields replaced.
             let ty = tyOf expr
@@ -963,6 +964,46 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         if CoreIrLowerMembers.differInContexts value.Type ty || CoreIrLowerBoxes.needsConversion value.Type ty then
             bindTemp value (fun atom -> CoreIrLowerMembers.coerce this.MemberTools scope atom ty (fun atom -> Expr.make (Atom atom) ty))
         else value
+
+    /// Lowers `assert(condition)`, written out with its message's `header` and the `values` it shows, each with its
+    /// label (see `AssertSyntax.Checked`). Each value is evaluated once, into a local, and the condition reads that local
+    /// in its place; then, if the condition is false, the program crashes with the header and a line for each value,
+    /// printed as `dbg` prints it. It checks in a release build too.
+    member this.Assert (scope: Scope) (condition: Expression) (header: string) (values: (string * Expression) list) (k: Expr -> Expr) : Expr =
+        let rec bind (scope: Scope) (remaining: (string * Expression) list) (bound: (string * NodeId * Var) list) =
+            match remaining with
+            | (label, value) :: rest ->
+                this.Complex scope value (fun lowered ->
+                    let name = uniqueName "__assert_value"
+                    let held = newVar name Local lowered.Type
+                    let body = bind { scope with Vars = scope.Vars.Add(name, held) } rest ((label, value.Id, held) :: bound)
+                    Expr.make (Let(held, lowered, body)) body.Type)
+            | [] -> check scope (List.rev bound)
+        and check (scope: Scope) (bound: (string * NodeId * Var) list) =
+            let held = bound |> List.map (fun (_, node, var) -> node, var.Name) |> Map.ofList
+            let rec reading (expr: Expression) =
+                match held |> Map.tryFind expr.Id with
+                | Some name -> { expr with Kind = IdentifierExpr name }
+                | None -> SyntaxTree.mapChildren reading expr
+            this.Atoms scope [ reading condition ] (fun atoms ->
+                let lines =
+                    bound
+                    |> List.map (fun (label, node, var) ->
+                        let ty = unconstrainedAsUnit (substitute subst input.ExprTypes.[node])
+                        label, var, printerTools.PrinterOf (CoreIrLowerDbg.Showing ty))
+                let texts = lines |> List.map (fun _ -> newLocal "__assert_text" IrString)
+                let message = newLocal "__assert_message" IrString
+                let parts =
+                    Text header
+                    :: (List.zip lines texts |> List.collect (fun ((label, _, _), text) -> [ Text $"  {label} = "; Hole(text, HoleString); Text "\n" ]))
+                let crash =
+                    List.foldBack2
+                        (fun (_, var: Var, printer) text rest -> Expr.make (Let(text, Expr.make (Call(printer, [ AVar var ])) IrString, rest)) rest.Type)
+                        lines
+                        texts
+                        (Expr.make (Let(message, Expr.make (Interpolate parts) IrString, Expr.make (CrashWith(AVar message)) IrUnit)) IrUnit)
+                k (Expr.make (If(atoms.Head, Expr.make (Atom AUnit) IrUnit, crash)) IrUnit))
+        bind scope values []
 
     /// Lowers `exprs` in order to atoms, binding each value that is not one to a temporary. An operand that stores to a
     /// local on the way to its value (see `storesBeforeValue`) is lowered whole, its stores with it, into one

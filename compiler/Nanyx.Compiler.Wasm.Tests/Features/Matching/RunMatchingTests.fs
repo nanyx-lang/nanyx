@@ -296,6 +296,25 @@ println(describe(0, 0) ++ ", " ++ describe(0, 5) ++ ", " ++ describe(3, 4))
     runSource source |> assertRan "origin, on the y axis, elsewhere\n"
 
 [<Fact>]
+let ``Run - a lone _ or name in a match on several values`` () =
+    // #2823: `match a, b` is a match on `(a, b)`, so one pattern can match all the values.
+    let source =
+        normalized """def s: string = match 1, 2
+  | 1, 2 -> "matched"
+  | _ -> "not matched"
+println(s)
+def describe: int, string -> string = { n, label ->
+  match n, label
+    | 0, _ -> "zero"
+    | t ->
+      def m, l = t
+      "{m} {l}"
+}
+println(describe(0, "a") ++ ", " ++ describe(3, "b"))
+"""
+    runSource source |> assertRan "matched\nzero, 3 b\n"
+
+[<Fact>]
 let ``Run - several values and a tuple of them are matched alike, brackets or not`` () =
     let source =
         normalized """match (1, 2)

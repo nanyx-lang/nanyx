@@ -663,6 +663,12 @@ module Compiler =
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own, placed = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems
                 let own = own |> ModuleLinking.writeBlockAliases state |> ModuleLinking.writeMemberAliases state |> ModuleLinking.writeAttachedNames state |> writeCells state |> writeContextNames state |> nameIgnoredParameters state.ExprTypes subst
+                // Each `assert` is written out with its message's source text and values (see `Asserts`).
+                let isFunction (node: NodeId) =
+                    match state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst >> Unifier.unalias) with
+                    | Some (TyFunc _) -> true
+                    | _ -> false
+                let own = Asserts.writeOut source state isFunction own
                 // A script's entry point is a def of its own, with the values that need a context in it (see `Scripts`),
                 // which the call of the host's `run` names: typed as the entry point's lambda is.
                 let own, resolvedTypes, state =
@@ -760,7 +766,13 @@ module Compiler =
                                 |> List.map (fun (name, _) ->
                                     { Module = moduleName
                                       Name = name
-                                      Definition = if calledThroughProvide.Contains name then Hosts.providedExportName name else name })
+                                      Definition = if calledThroughProvide.Contains name then Hosts.providedExportName name else name
+                                      Waits =
+                                        calledThroughProvide.Contains name
+                                        && ownTopLevel
+                                           |> List.tryFind (fun symbol -> symbol.Name = name)
+                                           |> Option.bind (fun symbol -> contextTypes |> Map.tryFind symbol.Id)
+                                           |> Option.exists ComponentInterface.requiresAsync })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.

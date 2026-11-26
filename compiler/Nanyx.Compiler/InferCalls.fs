@@ -77,6 +77,16 @@ let rec internal inferCall
             | Ok (typedArg, next) -> Ok (mkTypedExpr expr typedArg.Type None None None, next)
             | Error err -> Error err
         | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall calleeSpan $"`dbg` takes one argument, not {args.Length}" ]
+    elif name = AssertSyntax.builtIn && (TypeEnv.tryFind name env).IsNone then
+        // `assert(condition)`: a `bool`, and nothing comes of it but the crash when it is false (see `Asserts`).
+        match args with
+        | [ condition ] ->
+            match inferExpr env state condition with
+            | Ok (typedCondition, next) ->
+                let constrained = addConstraintAt condition.Span typedCondition.Type (TyPrimitive "bool") next
+                Ok (mkTypedExpr expr (TyPrimitive "unit") None None None, { constrained with Asserts = constrained.Asserts.Add expr.Id })
+            | Error err -> Error err
+        | _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidBuiltInCall calleeSpan $"`assert` takes one argument, a `bool`, not {args.Length}" ]
     elif name = NotSyntax.builtIn then
         // The `not` keyword: the parser represents `not x` as a call to "not" with one argument.
         match args with
@@ -182,7 +192,7 @@ let rec internal inferCall
     let contextCheck =
         match contextRequirementsOf env state name with
         // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
-        | Some contexts -> ensureContextAvailable (Some expr.Id) true env state name (contexts |> List.filter (isParameterizedContext state >> not)) calleeSpan
+        | Some contexts -> ensureContextAvailable (Some expr.Id) true env state name (contexts |> List.filter (isParameterizedContext state >> not)) None calleeSpan
         | None -> Ok state
         |> Result.bind (fun current -> checkContextUse (Some expr.Id) env current (canonicalName env state name) calleeSpan)
     match contextCheck with
@@ -366,7 +376,7 @@ let rec internal inferCall
                             | _ -> []
                         let ofValue = if calleeContexts.IsEmpty || selfCall then [] else ContextVariables.resolved (resolveSoFar next) calleeContexts
                         let used = ofVariables @ ofValue |> List.distinct
-                        let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current name [ ctx ] calleeSpan
+                        let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current name [ ctx ] None calleeSpan
                         ContextVariables.require requirePlain name calleeSpan used (LambdaContexts.recordUnsupplied env used next)
                     // When the callee's type is already a function (an annotated or already-inferred
                     // def), its return type is the call's type directly, so a member access or match on

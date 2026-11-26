@@ -111,6 +111,14 @@ match a, b
 
 The final pattern `(x, y)` matches any tuple and binds both elements to variables.
 
+Since the values are a tuple, an arm can also give one pattern for all of them: `| _ ->` matches whatever they are, and `| t ->` binds the tuple.
+
+```nanyx fragment
+match a, b
+  | 0, 0 -> "both zero"
+  | t -> "something else: {t}"
+```
+
 ## Records
 
 Records can also be destructured in patterns, allowing you to match on specific fields while ignoring others:

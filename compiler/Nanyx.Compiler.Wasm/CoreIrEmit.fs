@@ -646,6 +646,9 @@ type private FunctionEmitter(context: EmitContext) =
             let writes = messages |> List.map (fun message -> $"i32.const {context.StringOffset message}\n    call ${helper Helpers.writeStderr}")
             let all = context.StringOffset(String.concat "" messages)
             writes @ [ $"i32.const {all}"; $"call ${helper Helpers.crashed}"; "unreachable" ] |> String.concat "\n    "
+        | CrashWith message ->
+            // As `Crash`, with a message made at run time, which `Helpers.crashed` is given too.
+            join "\n    " [ atoms [ message ]; $"call ${helper Helpers.writeStderr}"; atoms [ message ]; $"call ${helper Helpers.crashed}"; "unreachable" ]
         | ForEach loop -> this.ForLoop loop (fun atom -> atoms [ atom ])
         | While loop -> this.WhileLoop loop
         | Call(name, args) ->

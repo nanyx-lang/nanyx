@@ -765,8 +765,9 @@ let internal checkContextUse (call: NodeId option) (env: TypeEnv) (state: InferS
 
 /// Checks that `contexts`, which `name` requires, are available at `span`. A context with a member not in scope at all,
 /// or a scoped context nothing supplies, is an error only when `reportMissing`. Where they are required by the call `call`, what provides each that is not
-/// parameterised is recorded.
-let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (span: SourceSpan) : Result<InferState, Diagnostic list> =
+/// parameterised is recorded. `ctxText` writes a parameterised context with the types the call has it at, as
+/// `ToString(Time(int))`, for an error to name it by.
+let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) (env: TypeEnv) (state: InferState) (name: Identifier) (contexts: TypeExpr list) (ctxText: string option) (span: SourceSpan) : Result<InferState, Diagnostic list> =
     // A function imported under an alias (`c.println`), or a context named under one (`c.Console`), finds the
     // context's members under the alias too (`c.write`), as the ambient instance has them, when they are not in
     // scope by their own names.
@@ -822,8 +823,18 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
         match ctx.Kind with
         | TypeName ctxName -> WrittenContexts.isScoped state ctxName
         | _ -> false
-    // Each context with a member not in scope at all, with those members, and each with no members that nothing
-    // supplies (see `withSupplied`).
+    // The members of `ctx`, a context the module declares itself, that are in scope only as the host's ambient
+    // instance's: those of a prelude context the module's own shadows, of the same name and members. The host provides
+    // the prelude's context, never the module's own, so they don't supply it (#2168).
+    let ambientOfAnother (ctx: TypeExpr) =
+        match ctx.Kind with
+        | TypeName ctxName
+        | TypeApply(ctxName, _) when tryFindTypeDef ctxName state |> Option.exists (fun info -> info.Home = state.Home) ->
+            let members, _ = collectContextMembers state ctx
+            members |> List.map (fun (memberName, _, _) -> memberName) |> List.filter (isAmbientMember env state)
+        | _ -> []
+    // Each context with a member not in scope at all, or in scope only as another context's ambient member, with those
+    // members, and each with no members that nothing supplies (see `withSupplied`).
     let missing =
         requiredMembers
         |> List.filter (fun (ctx, _) -> not (isCarried ctx) && not (fromHost ctx) && not (isScopedContext ctx))
@@ -834,7 +845,8 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                     tryFindTypeDef ctxName state
                     |> Option.exists (fun info -> isMemberless info && not (env.Supplied.Contains(TypeDefInfo.nominalId info)))
                 | _ -> false
-            match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone) with
+            let others = ambientOfAnother ctx
+            match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone || List.contains memberName others) with
             | [] when unsupplied -> Some (ctx, [])
             | [] -> None
             | absent -> Some (ctx, absent))
@@ -912,7 +924,13 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
             |> List.partition (fun (ctx, _) -> match ctx.Kind with TypeName _ | TypeApply _ -> true | _ -> false)
         let quoted names = names |> List.distinct |> List.map (fun name -> $"'{name}'")
         let namedContexts =
-            named |> List.choose (fun (ctx, _) -> match ctx.Kind with TypeName ctxName | TypeApply(ctxName, _) -> Some ctxName | _ -> None) |> List.distinct
+            named
+            |> List.choose (fun (ctx, _) ->
+                match ctx.Kind, ctxText with
+                | TypeApply _, Some written -> Some written
+                | (TypeName ctxName | TypeApply(ctxName, _)), _ -> Some ctxName
+                | _ -> None)
+            |> List.distinct
         let contextNames = quoted namedContexts
         let memberNames = unnamed |> List.collect snd |> quoted
         let message =
@@ -945,6 +963,6 @@ let internal requireOperatorContexts (env: TypeEnv) (state: InferState) (expr: E
     match state.CalleeTypes |> Map.tryFind expr.Id |> Option.map Unifier.unalias with
     | Some (TyFunc(_, _, contexts)) when not contexts.IsEmpty ->
         let used = ContextVariables.resolved (resolveSoFar state) contexts
-        let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current callee [ ctx ] span
+        let requirePlain current ctx = ensureContextAvailable (Some expr.Id) true env current callee [ ctx ] None span
         ContextVariables.require requirePlain callee span used (LambdaContexts.recordUnsupplied env used state)
     | _ -> Ok state

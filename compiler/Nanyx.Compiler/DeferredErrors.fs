@@ -35,7 +35,7 @@ module internal DeferredErrors =
           UnknownTypeUses = Set.ofList state.UnknownTypeUses }
 
     /// Where `span` is, as `nanyx` prints a diagnostic's place: `file:line:column: `.
-    let private deferredLocation (span: SourceSpan) =
+    let internal deferredLocation (span: SourceSpan) =
         if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
         else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
 
