@@ -94,25 +94,13 @@ And one rule that keeps the feature small:
 
 ## Structured concurrency
 
-Waiting on one thing is a plain call. Doing several at once is `start!`, and the tasks it starts can't outlive the
-def that started them, as Swift's `async let` and Kotlin's coroutine scopes do:
-
-```nanyx fragment
-def both: [Async, Http] () -> (Response, Response) = {
-  def a = start! http.get(urlA) \orCrash("a failed")
-  def b = start! http.get(urlB) \orCrash("b failed")
-  (await(a), await(b))
-}
-
-def pages = { urls -> urls \map { url -> start! http.get(url) } \map(await) }   -- every one, at once, in order
-```
-
 `start!`, `await`, each def as the scope of its tasks, `concurrent` for a smaller one, `race`, cancellation and the
 linter's `unawaitedTask` are built: how to use them is on [Async](../advanced/async), and how they are built on
 [Async](../deep-dives/async#tasks-and-scopes) in Deep dives.
 
 Why structured, not free `spawn`: a task can't leak, a def's type says everything it needs, and the scope is where a
 task's crash and cancellation go. A free-running task is a process (below), which is explicit about it.
+
 ## Cancellation
 
 Cancellation arrives as a value at the next point where a task waits, as decided with the maintainer on 2026-11-17
