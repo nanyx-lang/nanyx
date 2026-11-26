@@ -34,15 +34,13 @@ def walkList: int -> int = { passes ->
 }
 """
 
-[<Fact>]
+// Timed, not counted: the map's cost over the list's is in where its nodes are in memory, which fuel doesn't see.
+[<Fact; Trait("Category", "Timing")>]
 let ``A for loop over a 10,000-key map takes under one and a half times as long as one over a list of its entries`` () =
     use program = instantiateWasm walks []
     Assert.Equal(10000, program.Call("walkMap", 1))
     Assert.Equal(10000, program.Call("walkList", 1))
-    let time (name: string) =
-        let clock = System.Diagnostics.Stopwatch.StartNew()
-        program.Call(name, 200) |> ignore
-        clock.Elapsed.TotalMilliseconds
+    let time (name: string) = Nanyx.TestTiming.millisecondsOf (fun () -> program.Call(name, 200) |> ignore)
     // One round times the two walks back to back, in turn first, and gives the map's time over the list's. The map's
     // nodes and buckets are spread over more of memory than the list's cells, so load on the machine can slow its walk
     // more than the list's for a while: the quickest round of up to 30 counts, and the test stops at the first under

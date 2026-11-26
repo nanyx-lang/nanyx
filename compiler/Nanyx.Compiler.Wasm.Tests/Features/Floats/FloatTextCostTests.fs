@@ -92,26 +92,13 @@ let ``Writing a float as text allocates only its string`` () =
 [<Fact>]
 let ``Writing a float as text costs a small multiple of writing an int`` () =
     use program = instantiateWasm writing []
-    let time (name: string) =
+    let work (name: string) =
         program.Call(name, 1000) |> ignore
-        let clock = Diagnostics.Stopwatch.StartNew()
-        program.Call(name, 100000) |> ignore
-        clock.Elapsed.TotalMilliseconds
-    let measure () = time "floats", time "wholes", time "ints"
+        float (program.Work(name, 10_000))
     // With big integers of 40 limbs each, a float of 17 digits took over 200 times as long as an int, and a whole
     // number about a hundred times (#2310).
-    let holds (floats, wholes, ints) = floats / ints < 60.0 && wholes / ints < 10.0
-    // When the first runs miss, each is run again in turn, and each one's quickest run counts, so that load on the
-    // machine, which slows one run and not another, can't make the test fail (#2388).
-    let first = measure ()
-    let floats, wholes, ints =
-        if holds first then first
-        else
-            let runs = first :: List.init 5 (fun _ -> measure ())
-            runs |> List.map (fun (f, _, _) -> f) |> List.min,
-            runs |> List.map (fun (_, w, _) -> w) |> List.min,
-            runs |> List.map (fun (_, _, i) -> i) |> List.min
+    let floats, wholes, ints = work "floats", work "wholes", work "ints"
     Assert.True(
-        holds (floats, wholes, ints),
-        $"100,000 floats took {floats:F1} ms, whole numbers {wholes:F1} ms, and ints {ints:F1} ms"
+        floats / ints < 60.0 && wholes / ints < 10.0,
+        $"10,000 floats took {floats} fuel, whole numbers {wholes}, and ints {ints}"
     )

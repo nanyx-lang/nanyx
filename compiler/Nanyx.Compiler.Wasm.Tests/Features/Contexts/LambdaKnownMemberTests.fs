@@ -50,24 +50,14 @@ let ``list.sum of ints allocates nothing`` () =
     Assert.Equal(liveBefore, program.LiveBlocks)
 
 [<Fact>]
-let ``list.sum of ints takes about as long as the fold it wraps written at int`` () =
+let ``list.sum of ints does about as much work as the fold it wraps written at int`` () =
     use program = instantiateWasm summing []
-    let time (name: string) =
+    let work (name: string) =
         program.Call(name, 1000) |> ignore
-        let clock = System.Diagnostics.Stopwatch.StartNew()
-        program.Call(name, 100_000) |> ignore
-        clock.Elapsed.TotalMilliseconds
+        float (program.Work(name, 100_000))
     // Each element's addition through the member's closure took nearly twice as long.
-    let holds (summed: float) (folded: float) = summed / folded < 1.4
-    let summed, folded = time "summed", time "folded"
-    // When the first runs miss, each is run again in turn, and each one's quickest run counts, so that load on the
-    // machine, which slows one run and not the other, can't make the test fail (#2388).
-    let summed, folded =
-        if holds summed folded then summed, folded
-        else
-            let again = List.init 5 (fun _ -> time "summed", time "folded")
-            min summed (again |> List.map fst |> List.min), min folded (again |> List.map snd |> List.min)
-    Assert.True(holds summed folded, $"list.sum took {summed:F1} ms, and the fold {folded:F1} ms")
+    let summed, folded = work "summed", work "folded"
+    Assert.True(summed / folded < 1.4, $"list.sum took {summed} fuel, and the fold {folded}")
 
 [<Fact>]
 let ``seq.range of ints steps with direct calls of succ and compare`` () =

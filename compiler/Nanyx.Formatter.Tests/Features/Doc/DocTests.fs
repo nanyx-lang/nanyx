@@ -1,6 +1,5 @@
 module Nanyx.Formatter.Tests.DocTests
 
-open System.Diagnostics
 open Xunit
 open Nanyx.Formatter
 
@@ -127,7 +126,7 @@ let ``A line suffix takes no width`` () =
     let doc = Doc.group (Doc.concat [ Doc.text "f("; Doc.lineSuffix "-- a long comment that does not fit"; Doc.softLine; Doc.text "x)" ])
     Assert.Equal("f(x) -- a long comment that does not fit\n", Doc.render 10 doc)
 
-[<Fact>]
+[<Fact; Trait("Category", "Timing")>]
 let ``Rendering a deeply nested document takes time in proportion to its size`` () =
     let depth = 20_000
 
@@ -138,12 +137,11 @@ let ``Rendering a deeply nested document takes time in proportion to its size`` 
             (Doc.text "x")
             (seq { 1..depth })
 
-    let stopwatch = Stopwatch.StartNew()
-    let rendered = Doc.render 100 doc
-    stopwatch.Stop()
+    let mutable rendered = ""
+    let milliseconds = Nanyx.TestTiming.millisecondsOf (fun () -> rendered <- Doc.render 100 doc)
 
     Assert.EndsWith(")\n", rendered)
-    Assert.True(stopwatch.Elapsed.TotalSeconds < 5.0, $"Rendering took {stopwatch.Elapsed}")
+    Assert.True(milliseconds < 5000.0, $"Rendering took {milliseconds:F0} ms")
 
 [<Fact>]
 let ``IfBreak follows its group`` () =

@@ -29,11 +29,10 @@ let ``An and chain of 200 is tests compiles and runs`` () =
 /// one run and not the other, can't make the test fail (#2388).
 let private runsInLinearTime (n: int) (source: int -> string) (output: int -> string) =
     let time size =
-        let clock = System.Diagnostics.Stopwatch.StartNew()
-        let outcome = runSource (source size)
-        clock.Stop()
+        let mutable outcome = Unchecked.defaultof<RunOutcome>
+        let milliseconds = Nanyx.TestTiming.millisecondsOf (fun () -> outcome <- runSource (source size))
         outcome |> assertRan (output size)
-        clock.Elapsed.TotalMilliseconds
+        milliseconds
     let quarter = n / 4
     let isLinear (atQuarter: float) (atN: float) = atN < 10.0 * atQuarter
     let atQuarter, atN = time quarter, time n
@@ -45,14 +44,14 @@ let private runsInLinearTime (n: int) (source: int -> string) (output: int -> st
 // The backend writes each level of a chain without copying the code of the levels inside it, and its passes look at
 // each level once, so a chain compiles in time that grows with its length (#2351). 10,000 additions took 30 s to
 // compile in a Release build when each level copied the code inside it.
-[<Fact>]
+[<Fact; Trait("Category", "Timing")>]
 let ``A chain of 10,000 additions compiles and runs in time that grows with its length`` () =
     runsInLinearTime 10_000 (fun n -> "def x = 1" + String.replicate (n - 1) " + 1" + "\nprintln(x)\n") (fun n -> $"{n}\n")
 
 // Each branch of an else-if is joined to the next, which makes a chain of 10,000 type variables, each solved to the one
 // before it. The type checker follows such a chain once, not once for each variable on it, so a long else-if checks in
 // time that grows with its length (#2362). 10,000 branches took 2 minutes in a Release build when it followed it each time.
-[<Fact>]
+[<Fact; Trait("Category", "Timing")>]
 let ``An else-if chain of 10,000 branches compiles and runs in time that grows with its length`` () =
     let source n =
         let branches = [ for i in 1..n -> $"if n == {i} then {i * 2}" ] |> String.concat " else "
@@ -63,7 +62,7 @@ let ``An else-if chain of 10,000 branches compiles and runs in time that grows w
 // `CoreIrProbes.probeLimit` of them, and what a probe may write is worked out once for its chain, so a function of
 // thousands of locals compiles in time that grows with their number. Each probe wrote every local in scope, and 8,000
 // locals ran the backend out of memory (#2488).
-[<Fact>]
+[<Fact; Trait("Category", "Timing")>]
 let ``A function of 8,000 locals compiles and runs in time that grows with their number`` () =
     let source n =
         let defs = [ for i in 1..n -> $"  def x{i} = x0 + 1" ] |> String.concat "\n"
@@ -73,7 +72,7 @@ let ``A function of 8,000 locals compiles and runs in time that grows with their
 // A `memory` block of thousands of stores is one chain of that many links, which the inliner simplifies in each function
 // it is inlined into. A body is simplified until a pass changes nothing, and gone over no more once nothing is inlined
 // into it, so the chain compiles in time that grows with its length (#2408, #2579).
-[<Fact>]
+[<Fact; Trait("Category", "Timing")>]
 let ``A memory block of 4,000 stores compiles and runs in time that grows with their number`` () =
     let source n =
         let stores = String.replicate n "    x := x + 1\n"

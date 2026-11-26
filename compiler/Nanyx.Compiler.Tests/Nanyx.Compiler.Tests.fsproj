@@ -10,6 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Timing, shared by the test projects that time anything (see TestTiming.fs). -->
+    <Compile Include="..\TestTiming.fs" Link="TestTiming.fs" />
     <Compile Include="TestSupport.fs" />
     <Compile Include="Features\Arithmetic\ArithmeticTests.fs" />
     <Compile Include="Features\Arithmetic\DivisionTests.fs" />
@@ -245,6 +247,7 @@
     <Compile Include="Features\Tooling\SymbolsTests.fs" />
     <Compile Include="Features\Tooling\SyntaxTreeTests.fs" />
     <Compile Include="Features\Tooling\TypeHintsTests.fs" />
+    <Compile Include="Features\Tooling\TimingCategoryTests.fs" />
     <Compile Include="Features\Types\AnnotationsTests.fs" />
     <Compile Include="Features\Types\BottomTypeTests.fs" />
     <Compile Include="Features\Types\UndefinedUseTests.fs" />

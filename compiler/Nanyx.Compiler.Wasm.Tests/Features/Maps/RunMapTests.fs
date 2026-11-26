@@ -293,12 +293,10 @@ def removed = (0..99999) \seq.fold(changed, {{ m, i -> map.remove(m, i %% size) 
 println("{{found > 0}} {{map.length(changed)}} {{map.length(removed)}}")
 """
 
-[<Fact>]
+[<Fact; Trait("Category", "Timing")>]
 let ``Run - a lookup, an insert and a remove take time that grows with the log of the map's size`` () =
     let timed (size: int) =
-        let watch = System.Diagnostics.Stopwatch.StartNew()
-        runSourceWith false "" (churning size) |> assertRan $"true {size} 0\n"
-        watch.Elapsed.TotalSeconds
+        Nanyx.TestTiming.millisecondsOf (fun () -> runSourceWith false "" (churning size) |> assertRan $"true {size} 0\n") / 1000.0
     timed 1000 |> ignore
     let small = timed 1000
     let large = timed 100000
