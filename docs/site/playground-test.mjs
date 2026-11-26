@@ -143,6 +143,11 @@ const setEditorOn = async (target, code) => {
   await target.keyboard.insertText(code);
 };
 const setEditor = (code) => setEditorOn(page, code);
+/**
+ * Whether the compiler the page loaded checks code as it is typed and gives its WebAssembly text, which a release before
+ * `BrowserCompiler.Check` doesn't, and the page then shows neither: the WebAssembly button is shown only when it does.
+ */
+const canCheck = async () => (await ready(), page.locator("[data-wat]").isVisible());
 /** The code of the tour page's first example that has a Run button: the block before its bar. */
 const firstRunnableCode = () =>
   page.locator("[data-tour-run]:has(.tour-run-button)").first().locator("xpath=preceding-sibling::*[1]").locator("xpath=descendant-or-self::pre").first();
@@ -269,6 +274,44 @@ const tests = [
     await run();
     const link = page.locator(".pg-run").last().locator(".pg-diagnostic a").first();
     assert.match(await link.getAttribute("href"), /^\/docs\/standard-tools\/errors#nyx\d{4}$/);
+  }],
+  ["the editor underlines a mistake as it is typed, says what it is, and takes the line away once it is put right", async () => {
+    await setEditor('println(1 + "a")\n');
+    if (!(await canCheck())) {
+      // A compiler released before `Check` checks nothing as the code is typed.
+      await page.waitForTimeout(2_000);
+      assert.equal(await page.locator(".cm-lintRange-error").count(), 0);
+      return;
+    }
+    const underline = page.locator(".cm-lintRange-error").first();
+    await underline.waitFor({ timeout: 60_000 });
+    assert.equal(await underline.innerText(), '1 + "a"');
+    await underline.hover();
+    const tooltip = page.locator(".cm-tooltip-lint");
+    await tooltip.waitFor({ timeout: 10_000 });
+    assert.match(await tooltip.innerText(), /NYX\d{4}/);
+    await setEditor('println(1 + 2)\n');
+    await page.waitForFunction(() => !document.querySelector(".cm-lintRange-error"), null, { timeout: 60_000, polling: 100 });
+  }],
+  ["WebAssembly shows the WebAssembly text of the code in the output's place, and follows the code as it changes", async () => {
+    await setEditor('println("first")\n');
+    if (!(await canCheck())) {
+      // A compiler released before `Check` gives no WebAssembly text either, so the page has no button for it.
+      assert.equal(await page.locator("[data-wat]").isVisible(), false);
+      return;
+    }
+    await page.click("[data-wat]");
+    const pane = page.locator("[data-wat-pane]");
+    await page.waitForFunction(() => document.querySelector("[data-wat-pane]")?.textContent?.includes("(module"), null, { timeout: 60_000 });
+    assert.equal(await page.locator("[data-output]").isVisible(), false);
+    assert.match(await pane.innerText(), /first/);
+    await setEditor('println("second")\n');
+    await page.waitForFunction(() => document.querySelector("[data-wat-pane]")?.textContent?.includes("second"), null, { timeout: 60_000 });
+    await setEditor('println(1 + "a")\n');
+    await page.waitForFunction(() => document.querySelector("[data-wat-pane]")?.textContent?.includes("doesn't compile"), null, { timeout: 60_000 });
+    await page.click("[data-wat]");
+    assert.equal(await pane.isVisible(), false);
+    assert.equal(await page.locator("[data-output]").isVisible(), true);
   }],
   ["tasks take turns where one sleeps", async () => {
     await setEditor(tasks);

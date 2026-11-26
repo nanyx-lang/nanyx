@@ -2,17 +2,39 @@
 // the first compile, the compiler's warm-up, takes seconds. `compiler.ts` starts it and posts it each program; it posts
 // back the program's WebAssembly, transferred, and its diagnostics.
 
-/** What the page posts: load the compiler, warming it up on `warmUp`, or compile `source` as the request `id`. */
-export type ToCompiler = { kind: "load"; base: string; warmUp?: string } | { kind: "compile"; id: number; source: string };
+/** A diagnostic as the editor shows it, where it is in the code, `from` and `to`, or `null` for one elsewhere. */
+export interface EditorDiagnostic {
+  code: string;
+  headline: string;
+  body: string;
+  error: boolean;
+  from: number | null;
+  to: number | null;
+}
 
-/** What the worker posts back: the compiler loaded, or why it didn't, or the outcome of the compile `id`. */
+/**
+ * What the page posts: load the compiler, warming it up on `warmUp`, or compile `source`, or check it for the editor's
+ * diagnostics, as the request `id`.
+ */
+export type ToCompiler =
+  | { kind: "load"; base: string; warmUp?: string }
+  | { kind: "compile"; id: number; source: string }
+  | { kind: "check"; id: number; source: string };
+
+/**
+ * What the worker posts back: the compiler loaded, and whether it can check code for the editor and give a program's
+ * WebAssembly text, which a compiler released before it could didn't; or why it didn't load; or the outcome of the
+ * request `id`.
+ */
 export type FromCompiler =
-  | { kind: "loaded" }
+  | { kind: "loaded"; canCheck: boolean }
   | { kind: "failed"; message: string }
-  | { kind: "compiled"; id: number; wasm: Uint8Array | null; diagnostics: string[] };
+  | { kind: "compiled"; id: number; wasm: Uint8Array | null; diagnostics: string[]; wat: string | null }
+  | { kind: "checked"; id: number; diagnostics: EditorDiagnostic[] };
 
 interface LoadedCompiler {
-  compile(source: string): { wasm: Uint8Array | null; diagnostics: string[] };
+  compile(source: string): { wasm: Uint8Array | null; diagnostics: string[]; wat?: string | null };
+  check?(source: string): EditorDiagnostic[];
 }
 
 let compiler: Promise<LoadedCompiler> | null = null;
@@ -29,14 +51,16 @@ self.addEventListener("message", (event: MessageEvent<ToCompiler>) => {
       return loaded;
     })();
     compiler.then(
-      () => post({ kind: "loaded" }),
+      (loaded) => post({ kind: "loaded", canCheck: typeof loaded.check === "function" }),
       (error) => post({ kind: "failed", message: String(error) }),
     );
-  } else {
-    // A compile is posted only once the compiler has loaded.
+  } else if (message.kind === "compile") {
+    // A compile, or a check, is posted only once the compiler has loaded.
     void compiler!.then((loaded) => {
-      const { wasm, diagnostics } = loaded.compile(message.source);
-      post({ kind: "compiled", id: message.id, wasm, diagnostics }, wasm ? [wasm.buffer] : []);
+      const { wasm, diagnostics, wat } = loaded.compile(message.source);
+      post({ kind: "compiled", id: message.id, wasm, diagnostics, wat: wat ?? null }, wasm ? [wasm.buffer] : []);
     });
+  } else {
+    void compiler!.then((loaded) => post({ kind: "checked", id: message.id, diagnostics: loaded.check!(message.source) }));
   }
 });

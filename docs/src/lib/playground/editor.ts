@@ -6,6 +6,7 @@ import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, StreamLanguage, bracketMatching, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import { linter, type Diagnostic } from "@codemirror/lint";
 import { tags } from "@lezer/highlight";
 import grammar from "../../../../extension/syntaxes/nanyx.tmLanguage.json";
 
@@ -110,6 +111,47 @@ const theme = EditorView.theme({
 /** Whether an editor's code can be changed (see `setReadOnly`). */
 const editable = new Compartment();
 
+/** Whether an editor's code is checked as it is typed (see `enableChecks`). */
+const checks = new Compartment();
+
+/** A diagnostic of the code, as the compiler's check gives it (see `compiler.ts`). */
+export interface CodeDiagnostic {
+  code: string;
+  headline: string;
+  body: string;
+  error: boolean;
+  from: number | null;
+  to: number | null;
+}
+
+/**
+ * Checks the editor's code a short pause after each change with `check`, which runs in the compiler's worker, so that
+ * typing never waits on it, and underlines each diagnostic where it is, its headline and body shown on hover, as the
+ * editor extension shows them. One with no place in the code, as in a package it imports, is left to a Run to show.
+ */
+export function enableChecks(view: EditorView, check: (code: string) => Promise<CodeDiagnostic[]>) {
+  const source = async (current: EditorView): Promise<Diagnostic[]> => {
+    const length = current.state.doc.length;
+    const found = await check(current.state.doc.toString());
+    return found.flatMap((diagnostic) => {
+      if (diagnostic.from === null || diagnostic.to === null) return [];
+      const from = Math.min(diagnostic.from, length);
+      // An empty span, as at the end of the code, is underlined over the character after it, or before it at the end.
+      const to = Math.min(Math.max(diagnostic.to, from + 1), length);
+      return [
+        {
+          from: to > from ? from : Math.max(0, from - 1),
+          to,
+          severity: diagnostic.error ? "error" : "warning",
+          source: diagnostic.code,
+          message: `${diagnostic.headline}\n${diagnostic.body}`,
+        },
+      ];
+    });
+  };
+  view.dispatch({ effects: checks.reconfigure(linter(source, { delay: 500 })) });
+}
+
 /**
  * An editor in `parent` holding `code`. `onRun` is called on Ctrl+Enter (⌘+Enter on a Mac), and `onChange` with the
  * code after each change. `numbered` gives it line numbers, as the playground has and a tour example hasn't.
@@ -144,6 +186,7 @@ export function createEditor(
         ]),
         nanyx(),
         editable.of([]),
+        checks.of([]),
         syntaxHighlighting(highlighting),
         theme,
         EditorView.contentAttributes.of({ "aria-label": "Code" }),
