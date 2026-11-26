@@ -42,7 +42,9 @@ type PackageModules =
       CheckedFile: string option
       /// Whether the package is a host library, whose modules may require `HostRuntime` when the build host's package
       /// depends on it (see `HostLibraries.field`).
-      HostLibrary: bool }
+      HostLibrary: bool
+      /// Whether the package's manifest declares it a host (see `HostPackages`), whose modules may require `HostRuntime`.
+      DeclaresHost: bool }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
@@ -127,6 +129,7 @@ module PackageModules =
           Script = false
           CheckedFile = None
           HostLibrary = false
+          DeclaresHost = false
           Modules = Map.empty }
         |> declaring (files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file)))
 

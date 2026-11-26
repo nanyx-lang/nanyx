@@ -32,3 +32,13 @@ let ``A package with a path dependency can't be packed`` () =
     assertDiagnostic "NYX0023" "Invalid manifest value" "" "The dependency 'acme.util' is found by its path, so 'acme.web' can't be packed" outcome.StandardError
     Assert.False(File.Exists(Path.Combine(directory.Path, "web", "acme.web-1.0.0.nyxpkg")))
     Assert.Equal(1, outcome.ExitCode)
+[<Fact>]
+let ``Every package the compiler ships packs, hosts and host libraries too`` () =
+    use output = new TempDirectory()
+    let unpacked =
+        NyxCompiler.ShippedPackages.names ()
+        |> List.choose (fun name ->
+            let outcome = nanyxIn (NyxCompiler.ShippedPackages.directoryOf name) [ "pack"; "--out"; output.Path ]
+            if outcome.ExitCode = 0 then None else Some $"{name}: {outcome.StandardError}{outcome.StandardOutput}")
+    Assert.Empty(unpacked)
+    Assert.Equal(NyxCompiler.ShippedPackages.names().Length, Directory.GetFiles(output.Path, "*.nyxpkg").Length)

@@ -277,13 +277,20 @@ module Compiler =
         let buildHost, hostModules = buildHostOf checkedModules
         // A file of the host's package, or of a package it depends on, such as the interface package it implements.
         let inHostPackage (path: string) = hostModules |> Option.exists (fun modules -> (PackageModules.ownerOf modules path).IsSome)
-        // A file that may require `HostRuntime`: one of the host's own package, its roots and the modules they share, or of
-        // a host library the host's package depends on (see `HostLibraries.field`).
+        // A file that may require `HostRuntime`: one of a host's own package, its roots and the modules they share, or of
+        // a host library the host's package depends on (see `HostLibraries.field`). The host is the build's, and the
+        // package being built when it is a host itself, as when it is checked or packed on its own; so is a host library
+        // being built on its own.
+        let hostPackages =
+            Option.toList hostModules
+            @ (checkedModules.Package |> Option.filter _.DeclaresHost |> Option.toList)
         let isHost (path: string) =
-            hostModules
-            |> Option.exists (fun modules ->
+            hostPackages
+            |> List.exists (fun modules ->
                 modules.Files |> List.exists (PackageModules.samePath path)
                 || PackageModules.ownerOf modules path |> Option.exists _.HostLibrary)
+            || checkedModules.Package
+               |> Option.exists (fun package -> package.HostLibrary && package.Files |> List.exists (PackageModules.samePath path))
         // The module's own host: the build's, for a module of the program itself, which sees the host's prelude and may
         // declare its `@entry`. A file of a package the program depends on, or of the host's package or one it depends on,
         // is a library's, and a module of the standard library is the standard library's: none.
