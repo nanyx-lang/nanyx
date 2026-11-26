@@ -320,7 +320,7 @@ let private published (store: PackageStore) (directory: string) (pins: (string *
         let script = Path.Combine(directory, "stdlib-docs.nyx")
         let dependency =
             { Name = name
-              Source = FromIndex { Minimum = version; Written = string version }
+              Source = FromIndex(VersionRequirement.at version)
               NameSpan = SourceSpan.none
               SourceSpan = SourceSpan.none }
         let pulled =

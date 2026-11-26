@@ -240,7 +240,7 @@ module PackageDependencies =
         | None, None ->
             Resolution.newest store name
             |> Result.bind (function
-                | Some newest -> Result.Ok(FromIndex { Minimum = newest; Written = string newest })
+                | Some newest -> Result.Ok(FromIndex(VersionRequirement.at newest))
                 | None -> Result.Error $"The index at '{store.Index}' has no version of '{name}' to install: check its name, or give the directory it is in with `--path`")
 
     /// Adds the package `name` to the dependencies of the package whose manifest is at `manifestPath`, found as

@@ -61,6 +61,13 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   version, until the next resolution locks it, which `nanyx pull`, `build` and `run` do without a line for it. A script
   names one with no version, `::install nanyx.fs`, at the version the compiler seeded, and a script with no `::host`
   runs under the console host at it.
+- **A seeded package takes the others at their seeded versions.** The shipped packages are built and released together,
+  and a host runs its program against the copies of the libraries it was built with, which define the types, such as
+  `Console`, the two share. So the seeded version of a shipped package depends on each other shipped package it names
+  at that package's seeded version only (`VersionRequirement.exactly`), whatever its manifest writes
+  (`Resolution.requirementIn`). Without it, a program under the seeded `nanyx.cli.host` 0.44.1 would lock a `nanyx.cli`
+  0.44.2 from the index, whose `nanyx` accepts the compiler, and meet two `Console`s. A package that no shipped host
+  runs, such as a library checked alone, takes the newest version its requirements accept.
 - **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest (`HostPackages.tryShipped`)
   rather than keeping a table of hosts; `HostPackages.console` is the host a script runs under. The program's package
   records the host's package (`PackageModules.HostPackage`; for a script or a module given as source,
