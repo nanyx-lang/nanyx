@@ -269,6 +269,22 @@ let takesLinearTime (n: int) (prepare: int -> 'input) (run: 'input -> unit) =
             min (fst first) (fst again), min (snd first) (snd again)
     Assert.True(isLinear (atQuarter, atN), $"{n:N0} took {atN:F1} ms, {atN / atQuarter:F1} times the {atQuarter:F1} ms of {quarter:N0}")
 
+/// Asserts that `run` allocates, given `prepare n`, memory that grows with `n` rather than with its square: less than 8
+/// times what it allocates given a quarter of `n`, where the square would be 16 times. What this thread allocates
+/// (`GC.GetAllocatedBytesForCurrentThread`) is the same however loaded the machine is, so this counts the work of a
+/// function that has no count of its own, such as a walk of the syntax tree, rather than timing it.
+let allocatesLinearly (n: int) (prepare: int -> 'input) (run: 'input -> unit) =
+    let quarter = n / 4
+    let small, large = prepare quarter, prepare n
+    let allocated (input: 'input) =
+        let before = System.GC.GetAllocatedBytesForCurrentThread()
+        run input
+        System.GC.GetAllocatedBytesForCurrentThread() - before
+    // The first run compiles `run`, which allocates too.
+    allocated small |> ignore
+    let atQuarter, atN = allocated small, allocated large
+    Assert.True(atN < 8L * atQuarter, $"{n:N0} allocated {atN:N0} bytes, {float atN / float atQuarter:F1} times the {atQuarter:N0} of {quarter:N0}")
+
 /// Asserts that `source n` compiles in time that grows with `n`, not with its square (see `takesLinearTime`). What
 /// `source` gives is compiled as it is, so a test checks its diagnostics itself; `checksInLinearTime` is for one that
 /// has none.

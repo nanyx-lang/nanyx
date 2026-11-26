@@ -12,28 +12,12 @@ handler as a `wasi:http/service` component. Stage 5 is built too: a program expo
 a package with no `@entry` builds as a library component, and a program imports other components' functions, marked
 `@import` ([A program's own exports](../deep-dives/components#a-programs-own-exports)). The page sets out what was found, the
 [design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
-whose stages are filed as issues.
-
-# Where things stand
-
-**Today a built `.wasm` runs only under `nanyx run`.** It is a core module. The console host does its I/O through WASI
-preview 1 (`wasi_snapshot_preview1`: `fd_write`, `path_open`, `clock_time_get` and the rest, in
-`packages/nanyx.cli.host/src/cli.host.nyx` and `cli.host.files.nyx`). It adds two of the runtime's own imports
-where preview 1 has nothing:
-
-- `nanyx:http`'s `send` and `receive`, which `Nanyx.Runtime.HttpImport` implements on .NET's `HttpClient`;
-- for the HTTP host, `nanyx:serve`.
-
-The compiler's own code imports `fd_write` and `proc_exit` too, to write a crash, a deferred error or `dbg`, and to exit.
-A debug build that the runtime runs also imports `nanyx:debug`, for its probes and `dbg`. A build written to a file has
-none of these ([Foreign functions](../deep-dives/foreign-functions), [Debug probes](../deep-dives/debug-probes)).
-
-**Every wait blocks a thread.** A call such as `http.get` is a host call that blocks the instance's thread
-([Concurrency and crash boundaries](./concurrency-and-crash-boundaries#how-it-runs)).
+whose stages are filed as issues. The spike that tried wit-component, and the backend and componentizer it led to, are
+built and described on [Components](../deep-dives/components) in Deep dives, so they are no longer here.
 
 # What was found
 
-All of this was checked on 2026-11-21, from the sources linked and from a spike that wasn't merged ([The spike](#the-spike)).
+All of this was checked on 2026-11-21, from the sources linked and from a spike that wasn't merged.
 
 ## WASI 0.3
 
@@ -146,12 +130,12 @@ task blocks in `waitable-set.wait`) is the one that would need stack switching
 ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)), and nothing here needs it.
 
 **A synchronous lift works too.** An `async func` export can be lifted without the async ABI, and the instance then
-blocks in each call it makes, as the console host does today. The spike's component is lifted this way, so components
-don't have to wait for #1890. One detail matters here:
+blocks in each call it makes, as the console host does today. A console component's `run` is lifted this way, so
+components didn't have to wait for #1890. One detail matters here:
 
 - The synchronous forms of `stream.read` and `stream.write` are behind a feature that Wasmtime turns off by default.
 - So a blocking read or write is written as the async form, followed straight away by `waitable-set.wait` on its
-  handle. The spike shows that this runs by default.
+  handle, which runs with Wasmtime's defaults ([The core module](../deep-dives/components#the-core-module)).
 
 ## Tooling
 
@@ -162,32 +146,7 @@ don't have to wait for #1890. One detail matters here:
 - **No C API, and nothing in .NET.** wasm-tools's C API has nothing of wit-component's, and no .NET library encodes
   components. WACS.ComponentModel on NuGet has a WIT parser and a runtime, but we didn't evaluate it.
 - **wit-component compiles to WebAssembly.** That is how jco ships wasm-tools to JavaScript, and it lets us run it
-  ourselves (below).
-
-## The spike
-
-The spike was a hand-written core module for "hello" against `wasi:cli/command@0.3.0`. Its `run` was lifted
-synchronously, and it wrote to stdout through `[stream-new-0]write-via-stream`, `write-via-stream` and
-`[stream-write-0]write-via-stream`. Two builds of a 20-line Rust program on wit-component 0.263
-(`embed_component_metadata`, then `ComponentEncoder`) wrapped it as a component:
-
-- **Natively**, the program built the component, and validation passed. The wrapper took a 634-byte core module to a
-  2,371-byte component, so it adds less than 2 KB.
-- **Compiled to `wasm32-wasip1`**, the program was 2.2 MB. Run as a core module on wasmtime-dotnet 48 from F#, with WASI
-  preview 1 and a preopened directory, it wrote a component **byte for byte the same** as the native build.
-  - Compiling the 2.2 MB module took 1.7 s, which a serialized module (`Module.Serialize`) cached by the CLI would save.
-  - Componentizing took 15 ms.
-
-- **`wasmtime run` (51.0.0) runs it,** with one catch:
-  - A *synchronous* `stream.write` is one of the component model's "more async built-ins". Wasmtime 51 turns these off by
-    default, and refuses the component ("synchronous `stream.write` requires the component model more async builtins
-    feature") unless it is run with `-W component-model-more-async-builtins`.
-  - A second version lowered the write async, `[async-lower][stream-write-0]write-via-stream`. When that returned
-    BLOCKED, it joined the stream to a new waitable set and called `[waitable-set-wait]`, all from the same
-    synchronously lifted `run`. It printed its line under `wasmtime run` with default settings.
-
-So the compiler can build components with nothing native beyond the Wasmtime it already embeds, and with
-wit-component's validation.
+  ourselves, as [the componentizer](../deep-dives/components#the-componentizer) does.
 
 # Design
 
@@ -269,40 +228,12 @@ Each import of the console and HTTP hosts maps onto a WASI 0.3 interface, or ont
 
 ## The backend
 
-**What the compiler emits is still a core module,** in wit-component's conventions. The wrapper is built from it.
-
-**wit-component ships as WebAssembly** and runs on the Wasmtime the runtime already embeds, as the spike did.
-
-- It is built from a small Rust crate in the repository to `wasm32-wasip1`, committed beside the crate, and embedded in
-  `Nanyx.Compiler.Runtime`. Rust is needed only to change the crate, not to build or use the CLI.
-- It adds about 2 MB to the CLI, plus a one-off compile that is cached as a serialized module.
-- wit-component validates what it builds and keeps up with the spec; we follow the spec by bumping a crate.
-
-Requiring `wasm-tools` on the user's PATH was rejected as one more thing to install at a matching version, and an
-encoder of our own in F# as a few thousand lines kept in step with a moving spec, with no validator of our own. An F#
-encoder can still replace wit-component later, once the format is settled, with wit-component's output to test it.
-
-**The canonical ABI is lowered by hand in the host packages,** in Nanyx on `nanyx/host.memory`, as the console host
-lowers WASI preview 1 today.
-
-- An `@extern` already names any module and function, so `@extern("wasi:cli/stdout@0.3.0", "[stream-write-0]write-via-stream")`
-  is an ordinary extern.
-- Every lowered signature is `i32` and `i64`, which externs already take.
-- A string is the UTF-8 bytes a Nanyx string already holds, so it goes out as an address and a length. A string that
-  comes back is copied out of a buffer the host allocated through `cabi_realloc`, as the console host copies out of a
-  preview 1 buffer.
-
-The compiler generates lifting and lowering only for user components (stage 5), where Nanyx types cross a boundary a
-user declares: a record as a record, a tag union as a variant, `list` as `list`, `string` as `string`.
-
-**What the compiler adds:**
-
-- **A `cabi_realloc` export** on the allocator: `(old, oldSize, align, newSize) -> address`.
-- **The entry exported under the world's name.** It is `wasi:cli/run@0.3.0#run`, returning 0 for `ok`. The playground
-  build already exports the module's start (`ExportStart`), so this is a name and a result away from it.
-- **The runtime's own imports on stderr and exit**, as above.
-- **The world's WIT,** shipped in the host package (a `wit/` folder, with WASI 0.3's WIT under `wit/deps`), and given to
-  the componentizer with the world's name.
+The backend is built: it writes a core module in wit-component's conventions, and runs wit-component, compiled to
+WebAssembly, on the Wasmtime the runtime already embeds ([The core module](../deep-dives/components#the-core-module),
+[The componentizer](../deep-dives/components#the-componentizer)). Requiring `wasm-tools` on the user's PATH was
+rejected as one more thing to install at a matching version, and an encoder of our own in F# as a few thousand lines
+kept in step with a moving spec, with no validator of our own. An F# encoder can still replace wit-component later, once
+the format is settled, with wit-component's output to test it.
 
 ## Async: a synchronous lift first, the callback ABI after #1890
 
@@ -330,14 +261,11 @@ user declares: a record as a record, a tag union as a variant, `list` as `list`,
 - **#2164 isn't needed for components at all.** Stack switching would make the stackful ABI possible, but the callback
   ABI does the same job with the state machines. #2164 stays about running tasks on stacks.
 
-## User components (stage 5)
-
-Built ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241), [#2326](https://github.com/nanyx-lang/nanyx/issues/2326)),
-and described in [A program's own exports](../deep-dives/components#a-programs-own-exports) and
-[A program's own imports](../deep-dives/components#a-programs-own-imports). What is left: the HTTP host's component
-roots have no `provide` yet, so under that host an export that requires a context is `NYX0237`.
-
 # Open questions
+
+- **Contexts for a user component's exports under the HTTP host.** User components (stage 5) are built and described in
+  [A program's own exports](../deep-dives/components#a-programs-own-exports). The HTTP host's component roots have no
+  `provide` yet, so under that host an export that requires a context is `NYX0237`.
 
 - **Requests at once in one instance.** An instance serves one request at a time, and others in turn. Whether requests
   may interleave in one instance, and so share its memory and crashes, once the callback ABI lets them, belongs with

@@ -35,6 +35,8 @@ type private FakeGitHub(indexFiles: (string * string) list) =
     member val CanFork = true with get, set
     member val CanReadReleases = true with get, set
     member val SaysPermissions = true with get, set
+    /// What GitHub says the account can do on the package's repository; an Actions GITHUB_TOKEN's is said not to push.
+    member val PushOnPackage = true with get, set
     member val CanRelease = true with get, set
 
     member _.Releases = List.ofSeq releases
@@ -58,7 +60,7 @@ type private FakeGitHub(indexFiles: (string * string) list) =
             let canWrite owner = owner = "nanyx-lang" && this.CanPushToIndex || owner = "acme" && forked
             let segments = (path.Split('?')[0]).TrimStart('/').Split('/') |> List.ofArray
             match request.Method, segments with
-            | "GET", [ "repos"; "acme"; "util" ] -> permissions true
+            | "GET", [ "repos"; "acme"; "util" ] -> permissions this.PushOnPackage
             | "GET", [ "repos"; "nanyx-lang"; "packages" ] -> permissions this.CanPushToIndex
             | "GET", [ "repos"; "acme"; "packages" ] ->
                 looksAtFork <- looksAtFork + 1
@@ -137,7 +139,6 @@ let ``A package's first version is released, and a pull request registers it`` (
         + "Comparing its API with the newest version published\n"
         + "It is the first version, so there is nothing to compare\n"
         + "Packing it\n"
-        + "Checking that you can release on acme/util\n"
         + "Checking that you can open the pull request that registers it on nanyx-lang/packages\n"
         + "Creating the release v0.1.0 of acme/util\n"
         + "Released: https://github.com/acme/util/releases/tag/v0.1.0\n"
@@ -185,6 +186,37 @@ let ``A token GitHub doesn't say can push, as Actions' GITHUB_TOKEN, releases a 
     Assert.Equal("", outcome.StandardError)
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal<(string * string) list>([ "acme/util", "v1.0.1" ], github.Releases)
+
+[<Fact>]
+let ``A token whose account GitHub says can't push, as Actions' GITHUB_TOKEN's is, still releases when it can`` () =
+    use directory = new TempDirectory()
+    util directory "1.0.0" shout |> ignore
+    let store = storeIn directory true
+    let app = util directory "1.0.1" (shout.Replace("\"!\"", "\"!!\""))
+    let github = FakeGitHub registered
+    github.PushOnPackage <- false
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal<(string * string) list>([ "acme/util", "v1.0.1" ], github.Releases)
+
+[<Fact>]
+let ``A token that can't release is refused at the release, told what it needs, and leaves nothing behind`` () =
+    use directory = new TempDirectory()
+    util directory "1.0.0" shout |> ignore
+    let store = storeIn directory true
+    let app = util directory "1.0.1" (shout.Replace("\"!\"", "\"!!\""))
+    let github = FakeGitHub registered
+    github.PushOnPackage <- false
+    github.CanRelease <- false
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal(
+        "error: Creating the release v1.0.1 of acme/util failed: GitHub answered 403, Resource not accessible by integration. "
+        + "The token can't create releases on acme/util: give it write access to the repository's contents (in a GitHub Actions workflow, `permissions: contents: write`)\n",
+        outcome.StandardError.ReplaceLineEndings "\n"
+    )
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Empty(github.Releases)
 
 [<Fact>]
 let ``A token GitHub doesn't say can push, refused the release, is told what it needs`` () =
