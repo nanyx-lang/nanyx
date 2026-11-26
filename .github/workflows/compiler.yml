@@ -177,11 +177,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: ComponentInterop/run.sh "$RUNNER_TEMP/interop"
 
-  # The Wasm tests take the longest by far (most of them compile and run a program), so they get a
-  # runner to themselves rather than share its cores with the other test projects.
-  # The Wasm tests take longest, so they run in 3 shards per OS, each with some of the test project's areas: its
-  # directories under Features/, and E2E. .github/scripts/wasm-shards.py says which shard each area is in. To add a
-  # directory, add its name to a shard there. Each shard first checks that every test is in exactly one shard.
+  # The Wasm tests take the longest by far (most of them compile and run a program), so they get runners to themselves
+  # rather than share their cores with the other test projects: 3 shards per OS, each with some of the test project's
+  # areas, its directories under Features/ and E2E. .github/scripts/wasm-shards.py says which shard each area is in: to
+  # add a directory, add its name to a shard there. Each shard first checks that every test is in exactly one shard.
   wasm-test:
     name: Wasm tests (${{ matrix.os }}, shard ${{ matrix.shard }})
     runs-on: ${{ matrix.os }}
@@ -192,7 +191,7 @@ jobs:
         shard: [1, 2, 3]
     env:
       PROJECT: Nanyx.Compiler.Wasm.Tests/Nanyx.Compiler.Wasm.Test.fsproj
-      SHARDS: python${{ runner.os == 'Windows' && '' || '3' }} ../.github/scripts/wasm-shards.py
+      SHARDS: ${{ matrix.os == 'windows-latest' && 'python' || 'python3' }} ../.github/scripts/wasm-shards.py
     steps:
       - uses: actions/checkout@v4
 
