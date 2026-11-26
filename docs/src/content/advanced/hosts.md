@@ -371,7 +371,7 @@ The compiler ships the packages every program needs beside itself, in a `package
 - `nanyx.fs`, the interface package of the file system, which declares `FileSystem`, `Path` and the functions on them;
 - `nanyx.http`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
 - `nanyx.http.host`, the HTTP host;
-- `nanyx.wasi`, the [host library](#host-libraries) the console and HTTP hosts are written on: WASI's random source and clocks, the runtime's `nanyx:http`, and the component model's canonical ABI and WASI 0.3 interfaces their component roots use;
+- `nanyx.wasi`, the [host library](#host-libraries) the console and HTTP hosts are written on: the console's `Console`, `Env` and `FileSystem` on WASI preview 1, WASI's random source and clocks, the runtime's `nanyx:http`, and the component model's canonical ABI and WASI 0.3 interfaces their component roots use;
 - `nanyx.playground.host`, the playground host, which runs a console program in a web page;
 - `nanyx.test.host`, the test host, which runs one test of a program's in a test build.
 

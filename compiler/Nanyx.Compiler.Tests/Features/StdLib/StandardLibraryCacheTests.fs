@@ -216,11 +216,9 @@ let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.cli", 
 let ``The checked library has the shipped packages' modules, with paths beside this compiler`` () =
     let shipped = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.build).Value.Shipped
     Assert.Equal<string list>(
-        [ "nanyx.cli.host/src/cli.files.nyx"
-          "nanyx.cli.host/src/cli.host.files.nyx"
+        [ "nanyx.cli.host/src/cli.host.nyx"
           "nanyx.cli.host/src/cli.host.wasi.files.nyx"
           "nanyx.cli.host/src/cli.prelude.nyx"
-          "nanyx.cli.host/src/cli.stdin.nyx"
           "nanyx.cli/src/console.nyx"
           "nanyx.cli/src/env.nyx"
           "nanyx.fs/src/dir.nyx"
@@ -235,11 +233,14 @@ let ``The checked library has the shipped packages' modules, with paths beside t
           "nanyx.wasi/src/abi.nyx"
           "nanyx.wasi/src/cli.nyx"
           "nanyx.wasi/src/clocks.nyx"
+          "nanyx.wasi/src/files.nyx"
           "nanyx.wasi/src/http.nyx"
           "nanyx.wasi/src/http.service.nyx"
           "nanyx.wasi/src/preview1.nyx"
+          "nanyx.wasi/src/preview1.system.files.nyx"
           "nanyx.wasi/src/random.nyx"
           "nanyx.wasi/src/runtime.nyx"
+          "nanyx.wasi/src/stdin.nyx"
           "nanyx.wasi/src/waits.nyx" ],
         shipped |> List.choose (fun entry -> ShippedPackages.tryDisplay entry.Key) |> List.sort)
     for entry in shipped do
@@ -253,7 +254,7 @@ let ``A compile of a loose script takes the console host's modules from the chec
     Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
     Assert.Equal<string list>([ "start <source>" ], recording.Events |> Seq.filter (fun event -> event.StartsWith "start ") |> List.ofSeq)
     // The console host's module is kept under its first file by name (see the test above).
-    Assert.Contains($"""reused {Path.Combine(Path.GetDirectoryName consoleHostFile, "cli.host.files.nyx")}""", recording.Events)
+    Assert.Contains($"""reused {consoleHostFile}""", recording.Events)
 
 [<Fact>]
 let ``A shipped module whose files have changed is not taken from the checked library`` () =
