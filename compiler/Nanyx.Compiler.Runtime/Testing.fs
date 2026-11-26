@@ -59,24 +59,27 @@ module WasmTester =
     let private runOne (engine: Engine) (module': Module) (table: SpanTable option) (seed: int64) (timeout: TimeSpan) (index: int) (test: ListedTest) =
         ProgramStack.run <| fun () ->
             let output = StringBuilder()
-            use linker = new Linker(engine)
-            use store = new Store(engine)
-            linker.DefineWasi()
-            define linker index seed output
-            Probing.define linker table None
-            Probing.defineDbg linker (fun hit ->
-                lock output (fun () -> output.Append(string hit).Append('\n') |> ignore)
-                true)
-            let reported = ref None
-            CrashImport.define linker reported
             let input = IO.Path.GetTempFileName()
             let errors = new IO.MemoryStream()
-            let finish = WasmRunner.configureIo (Redirected(input, IO.Stream.Null, errors, [])) [ test.FullName ] [] store
-            // The store is interrupted at the next epoch, which the timer starts once the test has had its time.
-            store.SetEpochDeadline 1UL
-            use _ = new Timer((fun _ -> engine.IncrementEpoch()), null, timeout, Timeout.InfiniteTimeSpan)
+            let mutable finish = ignore
+            // The store holds the files WASI writes the test's standard streams to until it is disposed, and Windows
+            // won't let a file that is open be read or deleted, so they are read and deleted once it is, after the try.
             let outcome =
                 try
+                    use linker = new Linker(engine)
+                    use store = new Store(engine)
+                    linker.DefineWasi()
+                    define linker index seed output
+                    Probing.define linker table None
+                    Probing.defineDbg linker (fun hit ->
+                        lock output (fun () -> output.Append(string hit).Append('\n') |> ignore)
+                        true)
+                    let reported = ref None
+                    CrashImport.define linker reported
+                    finish <- WasmRunner.configureIo (Redirected(input, IO.Stream.Null, errors, [])) [ test.FullName ] [] store
+                    // The store is interrupted at the next epoch, which the timer starts once the test has had its time.
+                    store.SetEpochDeadline 1UL
+                    use _ = new Timer((fun _ -> engine.IncrementEpoch()), null, timeout, Timeout.InfiniteTimeSpan)
                     try
                         linker.Instantiate(store, module') |> ignore
                         Passed
