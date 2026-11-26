@@ -184,15 +184,17 @@ requests has no `wasi:http` import. It is Nanyx, on
 
 ### Waiting while other tasks run
 
-A request waits for its response, and reads its body, while the program's other [tasks](./async#tasks-and-scopes) run,
-and so does a sleep. `nanyx.wasi/waits` joins the subtask or the stream's end it waits on to one waitable set the
+A request writes its body, waits for its response, and reads its body, while the program's other
+[tasks](./async#tasks-and-scopes) run, and so does a sleep, and so does the HTTP host's component root as it reads the
+request it serves. Its futures, the trailers it sends and the ones that say a body was read, are written so too. `nanyx.wasi/waits` joins the subtask or the stream's end it waits on to one waitable set the
 instance shares, and waits on the host (`nanyx/host.async`'s `waitOnHost`) until the event for it has come. When every
 task is waiting, the scheduler makes the host's wait, `componentWait`, which waits on that set (`[waitable-set-wait]`)
 and keeps the event's code, in a list in the host's block, for the task that waits on that waitable; that task takes it
 when it looks again. The set's handle is at offset 40 of the host's block and the list's first cell at 44, which the
-component roots leave free. Every other wait blocks: each async-lowered call that returns BLOCKED, a write to stdout or
-a file, a request's body write, a file's read, is waited on at once, in a waitable set of its own, as the runtime's
-own writes are. `examples/sleepers` is a package whose two tasks wake in the order they do only if a sleep lets the
+component roots leave free. A stream's write waits so in `writeAllAsync`, and a read or a future's write in
+`settledAsync`. Every other wait blocks: each async-lowered call that returns BLOCKED, a write to stdout or a file,
+a read of stdin or a file, is waited on at once, in a waitable set of its own, as the runtime's own writes are. Those
+are `Console`'s and `FileSystem`'s, whose functions don't require `Async`, so they can't stop the task that calls them. `examples/sleepers` is a package whose two tasks wake in the order they do only if a sleep lets the
 other run, and CI runs it as a component under Wasmtime beside `nanyx run`.
 
 ## The HTTP host's component root

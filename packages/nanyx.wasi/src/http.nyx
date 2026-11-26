@@ -9,11 +9,11 @@ import (
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/text
-  abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, settled, takeString, writableEnd, writeAll)
+  abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, takeString, writableEnd)
   nanyx.http/client as (HttpError)
   nanyx.http/request as (Method, Request)
   nanyx.http/response as (Response)
-  waits as (awaitCallAsync, settledAsync)
+  waits as (awaitCallAsync, settledAsync, writeAllAsync)
 )
 
 --| How many bytes of a body are read at a time.
@@ -243,7 +243,7 @@ def optionsOf: [HostRuntime] Time(int) -> I32 = { timeout ->
   options
 }
 
---| The request body's stream as an `Output`, as `writeAll` writes one.
+--| The request body's stream as an `Output`, as `writeAllAsync` writes one.
 def bodyOutput: Output = (
   streamNew = bodyStreamNew
   writeViaStream = { readable -> readable }
@@ -253,55 +253,48 @@ def bodyOutput: Output = (
   futureDropReadable = { _ -> () }
 )
 
---| Writes `text`, the request's body, to the stream's writable end `writer`, and drops it.
-def writeBody: [HostRuntime] I32, string -> () = { writer, text ->
-  writeAll(bodyOutput, writer, addressOf(text), byteLength(text))
+--| Writes `text`, the request's body, to the stream's writable end `writer`, and drops it, while
+  the program's other tasks run.
+def writeBody: [Async, HostRuntime] I32, string -> () = { writer, text ->
+  writeAllAsync(bodyOutput, writer, addressOf(text), byteLength(text))
   keepAlive(text)
   bodyStreamDropWritable(writer)
 }
 
 --| Writes `ok(none)` to the trailers' future `writer`, and drops it: the request has no trailers. A
-  `result<option<trailers>, error-code>` is its case at 0 and, for `ok`, the option's at 8.
-def writeNoTrailers: [HostRuntime] I32 -> () = { writer ->
+  `result<option<trailers>, error-code>` is its case at 0 and, for `ok`, the option's at 8. The
+  program's other tasks run until the host reads it.
+def writeNoTrailers: [Async, HostRuntime] I32 -> () = { writer ->
   def block = allocate(56)
   def value = aligned8(block)
   writeI64(value, 0)
   writeI64(value + 8, 0)
-  ignore(settled(writer, trailersFutureWrite(writer, value)))
+  ignore(settledAsync(writer, trailersFutureWrite(writer, value)))
   trailersFutureDropWritable(writer)
   free(block)
 }
 
 --| The blocks of the body stream `reader`, each read with `read` into the `chunkSize`-sized buffer
-  at `buffer`, after `blocks` (the latest first), until it ends.
+  at `buffer`, after `blocks` (the latest first), until it ends, while the program's other tasks
+  run.
 def blocksFrom
-  : [HostRuntime] ([HostRuntime] I32, I32, I32 -> I32), I32, I32, list(string) -> list(string)
+  : [Async, HostRuntime] ([HostRuntime] I32, I32, I32 -> I32), I32, I32, list(string) -> list(string)
   = { read, reader, buffer, blocks ->
-    def status = settled(reader, read(reader, buffer, chunkSize))
+    def status = settledAsync(reader, read(reader, buffer, chunkSize))
     def count = status // 16
     def kept = if count > 0 then [stringAt(buffer, count), ...blocks] else blocks
     if status % 16 != 0 then kept else blocksFrom(read, reader, buffer, kept)
   }
 
---| The body the stream `reader` holds, read with `read`, its stream's `stream-read`, to the end.
+--| The body the stream `reader` holds, read with `read`, its stream's `stream-read`, to the end,
+  while the program's other tasks run.
 export def bodyFrom
-  : [HostRuntime] ([HostRuntime] I32, I32, I32 -> I32), I32 -> string
+  : [Async, HostRuntime] ([HostRuntime] I32, I32, I32 -> I32), I32 -> string
   = { read, reader ->
     def buffer = allocate(chunkSize)
     def body = string.concat(list.reverse(blocksFrom(read, reader, buffer, [])))
     free(buffer)
     body
-  }
-
---| The blocks of the response body stream `reader`, read into the `chunkSize`-sized buffer at
-  `buffer`, after `blocks` (the latest first), until it ends, while the program's other tasks run.
-def responseBlocksFrom
-  : [Async, HostRuntime] I32, I32, list(string) -> list(string)
-  = { reader, buffer, blocks ->
-    def status = settledAsync(reader, responseStreamRead(reader, buffer, chunkSize))
-    def count = status // 16
-    def kept = if count > 0 then [stringAt(buffer, count), ...blocks] else blocks
-    if status % 16 != 0 then kept else responseBlocksFrom(reader, buffer, kept)
   }
 
 --| The headers in `fields`, which it drops.
@@ -326,9 +319,7 @@ def responseOf: [Async, HostRuntime] I32 -> Response = { response ->
   def reader = readI32(ends)
   def trailers = readI32(ends + 4)
   free(ends)
-  def buffer = allocate(chunkSize)
-  def body = string.concat(list.reverse(responseBlocksFrom(reader, buffer, [])))
-  free(buffer)
+  def body = bodyFrom(responseStreamRead, reader)
   responseStreamDropReadable(reader)
   trailersFutureDropReadable(trailers)
   writeConsumed(writableEnd(consumed))
@@ -336,12 +327,13 @@ def responseOf: [Async, HostRuntime] I32 -> Response = { response ->
 }
 
 --| Writes `ok` to the future `writer` that `consume-body` was given, once the body is read, and
-  drops it: a `result<_, error-code>`, its case at 0.
-def writeConsumed: [HostRuntime] I32 -> () = { writer ->
+  drops it: a `result<_, error-code>`, its case at 0. The program's other tasks run until the host
+  reads it.
+def writeConsumed: [Async, HostRuntime] I32 -> () = { writer ->
   def block = allocate(48)
   def value = aligned8(block)
   writeI64(value, 0)
-  ignore(settled(writer, consumedFutureWrite(writer, value)))
+  ignore(settledAsync(writer, consumedFutureWrite(writer, value)))
   consumedFutureDropWritable(writer)
   free(block)
 }

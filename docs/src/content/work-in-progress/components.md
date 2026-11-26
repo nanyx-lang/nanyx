@@ -246,7 +246,9 @@ the format is settled, with wit-component's output to test it.
 - **After [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)'s state machines**, an `Async` entry is lifted
   `[async-lift]` with the scheduler as its `[callback][async-lift]`.
   - A call that waits becomes an `[async-lower]` import, or an async `stream.read` or `stream.write`, whose subtask the
-    task joins to the instance's waitable set.
+    task joins to the instance's waitable set. This is built for every wait in a function that requires `Async`
+    ([Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)); `Console`'s and
+    `FileSystem`'s functions don't, so theirs still block.
   - When every task is waiting, the scheduler returns WAIT. When the callback gets an event, the scheduler resumes the
     task that was waiting on it.
   - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), and
