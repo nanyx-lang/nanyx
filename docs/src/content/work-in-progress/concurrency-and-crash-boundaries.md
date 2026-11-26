@@ -242,10 +242,9 @@ which is how every other failure looks. `Isolate` is a context the host provides
 - **Who's outside a boundary** gets the resources: when an instance dies, the host closes the files and connections it
   held.
 
-Uses before there are any processes:
+The test runner and the HTTP host don't need it: the runtime runs each test, and each request, in a fresh instance of
+its own, and needs only crash reports from it ([Testing](./testing#decided)). Uses before there are any processes:
 
-- The **test runner**: a test's crash is `#crashed`, and the runner records it and runs the next test.
-- The **HTTP host**: "each request in a fresh instance" is `isolate` per request, built from the same primitive.
 - A **playground or REPL**: a crashing snippet doesn't lose the session.
 - **Plugins**: running code the program doesn't trust, with only the contexts it's given.
 
@@ -313,6 +312,6 @@ The rest of async is filed in stages. The crash-boundary steps are proposals, no
 |---|---|---|
 | Async 3: channels, and `seq.buffer`, `conflate` and `merge` | [#1891](https://github.com/nanyx-lang/nanyx/issues/1891) | Planning: full channels, cancelled streams |
 | Tasks on stack switching, once it's standard and widely supported | [#2164](https://github.com/nanyx-lang/nanyx/issues/2164) | Planning |
-| Crash reports: `Crash` with message, span and stack, used by the console, HTTP and test hosts | | proposed |
-| `isolate`, the deep copy, and the test runner and HTTP host built on it | | proposed |
+| Crash reports: `Crash` with message, span and stack, used by the console, HTTP and test hosts | [#2933](https://github.com/nanyx-lang/nanyx/issues/2933) | Ready (testing's stage 1) |
+| `isolate` and the deep copy, once a use needs it that a host's instance per call can't cover | | proposed |
 | `nanyx.process`: typed mailboxes and supervisors, and hot streams on them | | proposed |

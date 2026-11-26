@@ -20,7 +20,7 @@ def main = { name: string -> println("Hello, {name}!") }
     Assert.Equal(
         """It doesn't fit the host 'nanyx.cli.host/cli.host'
   expected: [Async, Clock, Console, Env, FileSystem, Http, Random] () -> a
-  found:    string -> ()""".ReplaceLineEndings "\n",
+  found:    [Console] string -> ()""".ReplaceLineEndings "\n",
         message)
     Assert.Equal("@entry", text)
 

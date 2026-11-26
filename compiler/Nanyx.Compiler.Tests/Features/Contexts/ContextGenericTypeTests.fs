@@ -151,6 +151,30 @@ def pair: () -> [Console] (Thunk(int), int) = { (Thunk(get = { 3 }), 0) }
     Assert.Contains("Only a function type carries contexts", diagnostic.Message)
 
 [<Fact>]
+let ``Contexts in front of a type variable in a field are NYX0253`` () =
+    // #2788: a type variable carries no contexts, so `[ToString(a)] a` would mean nothing.
+    let source = """type Printable(a) = protected (val: [ToString(a)] a)
+type Boxed(a) = (val: [Console] a)
+"""
+    let result = Compiler.compile (normalized source)
+    Assert.Equal<string list>(
+        [ DiagnosticCodes.ContextsOnValueType.Code; DiagnosticCodes.ContextsOnValueType.Code ],
+        result.Diagnostics |> List.map _.Code)
+    Assert.All(result.Diagnostics, fun diagnostic -> Assert.Contains("a type variable doesn't carry contexts", diagnostic.Message))
+
+[<Theory>]
+[<InlineData("""def show: ([ToString(a)] a) -> string = { x -> "x" }""")>]
+[<InlineData("""def make: (a) -> [Console] a = { x -> x }""")>]
+[<InlineData("""def same: (a) -> a = { x ->
+  def y: [Console] a = x
+  y
+}""")>]
+let ``Contexts in front of a type variable in a parameter, a result or an annotation are NYX0253`` (source: string) =
+    let diagnostic = single (Compiler.compile (normalized source))
+    Assert.Equal(DiagnosticCodes.ContextsOnValueType.Code, diagnostic.Code)
+    Assert.Contains("a type variable doesn't carry contexts", diagnostic.Message)
+
+[<Fact>]
 let ``A type has one context variable, and not a scoped context's scope too`` () =
     let source = """scoped context Tx = private ()
 

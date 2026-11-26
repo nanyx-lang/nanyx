@@ -915,8 +915,8 @@ package cache and locked as any package from the index is, with the SHA-256 of i
 packs to another SHA-256 than the one the package index records for the same version, the copy its release attached:
 
 ```text
-warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.46.0'
-  = This compiler's nanyx.cli 0.46.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
+warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.47.0'
+  = This compiler's nanyx.cli 0.47.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
 ```
 
 The compiler builds with its own copy, which a lockfile it writes locks, so another machine that downloads the version
@@ -926,7 +926,7 @@ A released compiler doesn't, since its copies are the ones its release published
 # NYX0052: Package that needs another compiler
 
 The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running,
-or with one compiler only, as `nanyx = "=0.46.0"`, which isn't the one running. The message names both versions:
+or with one compiler only, as `nanyx = "=0.47.0"`, which isn't the one running. The message names both versions:
 
 ```nanyx
 -- file: demo.nyxp
@@ -966,7 +966,7 @@ the new one. `nanyx.http` is the library's name now, so it is an error only wher
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "nanyx.console.core", version = "0.46.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
+  dependencies = [(package = "nanyx.console.core", version = "0.47.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
 )
 ```
 
@@ -1295,7 +1295,7 @@ def size = { n: int -> if n > 10 then "big" }  -- error NYX0201: This `if` has n
 ```
 
 A match arm for a tag that the value's union doesn't have can never match, so it is reported too, with the union's
-tags and the one it most likely means:
+tags and the one it most likely means, of those no other arm handles:
 
 ```nanyx
 def o: #some(int) | #none = #none
@@ -1303,11 +1303,12 @@ def o: #some(int) | #none = #none
 def r =
   match o
     | #some(n) -> n
-    | #none -> 0
     | #nothing -> 2  -- error NYX0201: This arm can never match: the value is a '#some(int) | #none', whose tags are #some and #none, so it has no #nothing: did you mean #none?
 ```
 
-A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any tag.
+A value whose type is a single tag, as `def simple = #nil` is, has that tag alone, so an arm for any other is reported
+the same way. A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any
+tag.
 
 A tag given where a union without a rest is expected, that the union doesn't name, is reported with the union's tags, and
 the one it most likely means:
@@ -1848,8 +1849,8 @@ module main
 def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.cli.host/cli.host' ...
 ```
 
-The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, and names each
-context the entry point requires that the host doesn't provide. To fix it, give the entry point the shape the host
+The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, with the
+contexts it requires, and names each context the entry point requires that the host doesn't provide. To fix it, give the entry point the shape the host
 expects: for a command-line program, a function that takes nothing.
 
 # NYX0238: HostRuntime required outside a host
@@ -2107,6 +2108,13 @@ values belong to a scoped context's scope says so on its declaration, not where 
 
 ```nanyx
 def count: [Console] int = 3  -- error NYX0253: Only a function type carries contexts, and 'int' isn't one: write them on the function that requires them
+```
+
+A type variable carries no contexts either: `(val: [ToString(a)] a)` doesn't make a value that brings its own
+`ToString(a)`. A function that needs `ToString(a)` requires it, as in `[ToString(a)] (a) -> string`.
+
+```nanyx
+type Printable(a) = protected (val: [ToString(a)] a)  -- error NYX0253: 'a' is a type variable, and a type variable doesn't carry contexts: write them on the function that requires them
 ```
 
 To fix it, write the contexts on the function that requires them, or leave them out.

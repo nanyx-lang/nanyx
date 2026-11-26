@@ -142,6 +142,9 @@ jobs:
           check "$(curl -s http://127.0.0.1:8080/hello/ada)" "Hello, ada!"
           check "$(curl -s http://127.0.0.1:8080/hello/grace)" "Hello, grace!"
           check "$(curl -s --data-binary 'some text' http://127.0.0.1:8080/echo)" "some text"
+          # The handler races a 20 ms sleep against a minute's: it answers in time only if handle returns to the host
+          # while both wait, and the loser's sleep is cancelled when the winner wakes.
+          check "$(curl -s --max-time 10 http://127.0.0.1:8080/race)" "the hare wins"
           check "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/nowhere)" "404"
           check "$(curl -s -o /dev/null -w '%{http_code}' -X TRACE http://127.0.0.1:8080/)" "400"
 

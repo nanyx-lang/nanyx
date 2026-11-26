@@ -39,7 +39,6 @@ def main = {
   println("{p.r} {p.g} {p.big} {p.n}")
   match #some(I32.fromInt(-9))
   | #some(n) -> println("{n}")
-  | #none -> println("none")
   for [U64.fromInt(1), U64.fromInt(2)] | n -> println("{n}")
   def add = { x: I8 -> x + I8.fromInt(1) }
   println("{add(I8.fromInt(3))} {[I32.fromInt(1)] == [I32.fromInt(1)]}")
@@ -69,7 +68,6 @@ def main = {
   println("{[I8.fromInt(-1)] < [I8.fromInt(1)]} {bytes == bytes}")
   match #some(U16.fromInt(65_535))
   | #some(n) -> println("{n}")
-  | #none -> println("none")
   def level: I16 = -2
   def shifted = { x: I16 -> x + level }
   println("{shifted(I16.fromInt(-5))}")

@@ -21,12 +21,13 @@ let ``Run - tests as a def's value, an argument, under not and with or`` () =
         normalized """type Item = #foo(string) | #bar(string) | #baz | #quux
 
 def items: list(Item) = [#foo("one"), #bar("two"), #baz, #quux]
+def baz: Item = #baz
 def isQuux = #quux is #quux
 def show = { b: bool -> if b then "yes" else "no" }
 def either = { x: Item -> x is #baz or x is #quux }
 
 println(show(isQuux))
-println(show(#baz is #quux))
+println(show(baz is #quux))
 println("{items \list.filter { x -> not (x is #foo(_)) } \list.length}")
 println("{items \list.filter(either) \list.length}")
 """
