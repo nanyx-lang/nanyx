@@ -828,3 +828,159 @@ let instantiateCoreWith (implement: Wasmtime.FunctionImport -> Wasmtime.Function
 
 /// The core module `wat`, of a component, instantiated on Wasmtime with each of its imports a function that traps.
 let instantiateCore (wat: string) = instantiateCoreWith (fun _ -> None) wat
+
+/// The core module of the component `nanyx build` writes for a console program whose `main.nyx` is `main`, which may
+/// import `nanyx.http`.
+let consoleComponentCore (main: string) =
+    use directory = new TempDirectory()
+    Directory.CreateDirectory(Path.Combine(directory.Path, "src")) |> ignore
+    let dependencies = $"""[(package = "nanyx.http", version = "{Toolchain.version}")]"""
+    let manifest = $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), dependencies = {dependencies}, {consoleHostEntry})"""
+    File.WriteAllText(Path.Combine(directory.Path, "app.nyxp"), manifest + "\n")
+    File.WriteAllText(Path.Combine(directory.Path, "src", "main.nyx"), main)
+    let built = nanyxIn directory.Path [ "build"; "--release"; "--wat" ]
+    Assert.Equal("", built.StandardError)
+    Assert.Equal(0, built.ExitCode)
+    File.ReadAllText(Path.Combine(directory.Path, "out", "app.wat"))
+
+/// What a fake host's waitable gives when its time comes: the event's code and its value.
+type private FakeWaitable = { Deadline: int64; Event: int; Value: int }
+
+/// A host of a console component's imports, enough of them for the tests: `wasi:clocks/monotonic-clock`, the waitable
+/// built-ins, and a `wasi:http` client whose requests' bodies the host takes 50 ms after each write and which answers
+/// every request with an error 100 ms after it is sent. Its clock moves only when the module waits: a wait for a set
+/// takes the waitable in it whose time comes first, and moves the clock to that time. It traps where the canonical
+/// ABI does.
+type FakeWasiHost() =
+    // The canonical ABI's codes: a subtask's states, the events, and what an async built-in gives when it blocks.
+    let started = 1
+    let returned = 2
+    let cancelledBeforeReturned = 4
+    let subtaskEvent = 1
+    let streamWriteEvent = 3
+    let blocked = -1
+    let mutable now = 0L
+    let mutable nextHandle = 1
+    let waitables = Collections.Generic.Dictionary<int, FakeWaitable>()
+    let joined = Collections.Generic.Dictionary<int, int>()
+    let delivered = Collections.Generic.HashSet<int>()
+
+    let handle () =
+        let made = nextHandle
+        nextHandle <- nextHandle + 1
+        made
+
+    /// A subtask that returns `after` nanoseconds from now, and the status an async call that started it gives.
+    let subtask (after: int64) =
+        let made = handle ()
+        waitables.[made] <- { Deadline = now + after; Event = subtaskEvent; Value = returned }
+        (made <<< 4) ||| started
+
+    /// The two ends of a new stream or future, as one `i64`: the readable end, then the writable end.
+    let ends () =
+        let readable = handle ()
+        let writable = handle ()
+        int64 readable ||| (int64 writable <<< 32)
+
+    let isIn (set: int) (waitable: int) =
+        match joined.TryGetValue waitable with
+        | true, joinedTo -> joinedTo = set
+        | _ -> false
+
+    /// The waitable whose time comes first in `set`, its event delivered.
+    let nextEvent (set: int) =
+        let ready =
+            waitables
+            |> Seq.filter (fun pair -> isIn set pair.Key && not (delivered.Contains pair.Key))
+            |> Seq.sortBy (fun pair -> pair.Value.Deadline)
+            |> Seq.tryHead
+        match ready with
+        | None -> failwith "a wait on a set with nothing to wait for"
+        | Some pair ->
+            now <- max now pair.Value.Deadline
+            delivered.Add pair.Key |> ignore
+            pair.Key, pair.Value
+
+    /// The durations, in nanoseconds, of each `wait-for`, by the subtask it started.
+    member val Waits = Collections.Generic.Dictionary<int, int64>()
+    /// When each `wait-for` was started, in nanoseconds, by its subtask.
+    member val WaitStarts = Collections.Generic.Dictionary<int, int64>()
+    /// The subtasks cancelled, and those dropped.
+    member val Cancelled = Collections.Generic.List<int>()
+    member val Dropped = Collections.Generic.List<int>()
+    /// The writable ends of the requests' bodies.
+    member val BodyWriters = Collections.Generic.List<int>()
+    /// Each waitable whose event was delivered, in order.
+    member val Delivered = Collections.Generic.List<int>()
+    member _.Now = now
+
+    member host.Implement(import: Wasmtime.FunctionImport) : Wasmtime.Function.UntypedCallbackDelegate option =
+        match import.ModuleName, import.Name with
+        | "wasi:clocks/monotonic-clock@0.3.0", "now" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ _ results -> results.[0] <- Wasmtime.ValueBox.op_Implicit now))
+        | "wasi:clocks/monotonic-clock@0.3.0", "[async-lower]wait-for" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments results ->
+                let duration = arguments.[0].AsInt64()
+                let status = subtask duration
+                host.Waits.[status >>> 4] <- duration
+                host.WaitStarts.[status >>> 4] <- now
+                results.[0] <- Wasmtime.ValueBox.op_Implicit status))
+        | "$root", "[waitable-set-new]" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ _ results -> results.[0] <- Wasmtime.ValueBox.op_Implicit (handle ())))
+        | "$root", "[waitable-join]" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ ->
+                let waitable = arguments.[0].AsInt32()
+                match arguments.[1].AsInt32() with
+                | 0 -> joined.Remove waitable |> ignore
+                | set -> joined.[waitable] <- set))
+        | "$root", "[waitable-set-wait]" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun caller arguments results ->
+                let waitable, ready = nextEvent (arguments.[0].AsInt32())
+                host.Delivered.Add waitable
+                let memory = caller.GetMemory("memory")
+                let address = int64 (arguments.[1].AsInt32())
+                memory.WriteInt32(address, waitable)
+                memory.WriteInt32(address + 4L, ready.Value)
+                results.[0] <- Wasmtime.ValueBox.op_Implicit ready.Event))
+        | "$root", "[waitable-set-drop]" -> Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ _ _ -> ()))
+        | "$root", "[subtask-cancel]" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments results ->
+                let subtask = arguments.[0].AsInt32()
+                if joined.ContainsKey subtask then failwith $"subtask {subtask} cancelled while in a waitable set"
+                if delivered.Contains subtask then failwith $"subtask {subtask} cancelled after its return was delivered"
+                host.Cancelled.Add subtask
+                delivered.Add subtask |> ignore
+                results.[0] <- Wasmtime.ValueBox.op_Implicit cancelledBeforeReturned))
+        | "$root", "[subtask-drop]" -> Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ -> host.Dropped.Add(arguments.[0].AsInt32())))
+        | ("wasi:http/types@0.3.0" | "wasi:http/client@0.3.0"), name ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun caller arguments results ->
+                let memory = caller.GetMemory("memory")
+                for index in 0 .. results.Length - 1 do
+                    results.[index] <- Wasmtime.ValueBox.op_Implicit 0
+                match name with
+                | "[constructor]fields"
+                | "[constructor]request-options" -> results.[0] <- Wasmtime.ValueBox.op_Implicit (handle ())
+                // A result the host writes in memory, at the address given last, is `ok`, its case 0.
+                | "[method]fields.append" -> memory.WriteInt32(int64 (arguments.[5].AsInt32()), 0)
+                | "[method]request-options.set-connect-timeout"
+                | "[method]request-options.set-first-byte-timeout" -> memory.WriteInt32(int64 (arguments.[3].AsInt32()), 0)
+                | "[stream-new-0][static]request.new"
+                | "[future-new-1][static]request.new" -> results.[0] <- Wasmtime.ValueBox.op_Implicit (ends ())
+                | "[static]request.new" ->
+                    let made = int64 (arguments.[6].AsInt32())
+                    memory.WriteInt32(made, handle ())
+                    memory.WriteInt32(made + 4L, handle ())
+                | "[async-lower][stream-write-0][static]request.new" ->
+                    let writer = arguments.[0].AsInt32()
+                    host.BodyWriters.Add writer
+                    waitables.[writer] <- { Deadline = now + 50_000_000L; Event = streamWriteEvent; Value = arguments.[2].AsInt32() <<< 4 }
+                    delivered.Remove writer |> ignore
+                    results.[0] <- Wasmtime.ValueBox.op_Implicit blocked
+                | "[async-lower]send" ->
+                    // `err`, with the error-code `DNS-timeout`, case 0.
+                    let answer = int64 (arguments.[1].AsInt32())
+                    memory.WriteByte(answer, 1uy)
+                    memory.WriteByte(answer + 8L, 0uy)
+                    results.[0] <- Wasmtime.ValueBox.op_Implicit (subtask 100_000_000L)
+                | _ -> ()))
+        | _ -> None

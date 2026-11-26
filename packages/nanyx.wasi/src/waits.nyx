@@ -15,7 +15,7 @@ import (
   nanyx/host.async as (cancelled, waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
-  abi as (blocked, returned, subtaskDrop, waitableJoin, waitableSetNew, waitableSetWait)
+  abi as (Output, blocked, returned, subtaskDrop, waitableJoin, waitableSetNew, waitableSetWait)
 )
 
 @extern("$root", "[subtask-cancel]")
@@ -126,3 +126,17 @@ def subtaskEventOf: [Async, HostRuntime] I32 -> I32 = { subtask ->
         waitOnHost(componentWait, -1)
         subtaskEventOf(subtask)
 }
+
+--| Writes the `length` bytes at `address` to the writable end `writer`, as `abi`'s `writeAll` does,
+  until the host has taken them all, or has dropped its end, while the program's other tasks run.
+export def writeAllAsync
+  : [Async, HostRuntime] Output, I32, I32, I32 -> ()
+  = { output, writer, address, length ->
+    if length <= 0 then () else
+      def status = settledAsync(writer, output.streamWrite(writer, address, length))
+      def taken = status // 16
+
+      if status % 16 != 0
+        then ()
+        else writeAllAsync(output, writer, I32.wrappingAdd(address, taken), length - taken)
+  }

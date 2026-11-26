@@ -915,8 +915,8 @@ package cache and locked as any package from the index is, with the SHA-256 of i
 packs to another SHA-256 than the one the package index records for the same version, the copy its release attached:
 
 ```text
-warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.45.0'
-  = This compiler's nanyx.cli 0.45.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
+warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.46.0'
+  = This compiler's nanyx.cli 0.46.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
 ```
 
 The compiler builds with its own copy, which a lockfile it writes locks, so another machine that downloads the version
@@ -926,7 +926,7 @@ A released compiler doesn't, since its copies are the ones its release published
 # NYX0052: Package that needs another compiler
 
 The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running,
-or with one compiler only, as `nanyx = "=0.45.0"`, which isn't the one running. The message names both versions:
+or with one compiler only, as `nanyx = "=0.46.0"`, which isn't the one running. The message names both versions:
 
 ```nanyx
 -- file: demo.nyxp
@@ -966,7 +966,7 @@ the new one. `nanyx.http` is the library's name now, so it is an error only wher
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "nanyx.console.core", version = "0.45.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
+  dependencies = [(package = "nanyx.console.core", version = "0.46.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
 )
 ```
 
@@ -2740,20 +2740,21 @@ not a literal stops the program when it runs.
 
 # NYX0293: Dimension's storage that no parameter fixes
 
-A signature names a dimension whose storage, the number type that holds its values, is not the type of a parameter, so
-nothing a call passes says what it is. A dimension written without its storage, as `Time`, is of a storage of its own
-([Units of measure](../advanced/units-of-measure#dimensions-in-types)).
+A signature names a dimension whose storage, the number type that holds its values, is a type variable that no
+parameter's type has, so nothing a call passes says what it is. A dimension written without its storage in a function's
+result is of the storage its body makes it ([Units of measure](../advanced/units-of-measure#dimensions-in-types)), but a
+foreign function, declared with `@extern`, has no body to say.
 
 ```nanyx
 dimension Time
 
 @baseUnit unit ns: Time
 
-def average: list(Time) -> Time = { ts -> average(ts) }  -- error NYX0293: The number that stores 'Time' here is not the type of a parameter, ...
+def make: int -> Time(a) = { n -> make(n) }  -- error NYX0293: The number that stores 'Time' here is not the type of a parameter, ...
 ```
 
-To fix it, write the storage as a parameter's, as in `list(Time(a)) -> Time(a)`, or write a storage, as in
-`Time(int)`.
+To fix it, write the storage as a parameter's, as in `Time(a) -> Time(a)`, write a storage, as in `Time(int)`, or, in
+a function with a body, leave it out, as in `int -> Time`.
 
 # NYX0294: Storage written for a constrained dimension
 

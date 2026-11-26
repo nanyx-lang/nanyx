@@ -8,13 +8,15 @@
 export module http.service
 
 import (
+  nanyx/async as (Async)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/text
-  abi as (aligned8, freeOptionalString, readableEnd, settled, takeString, writableEnd)
+  abi as (aligned8, freeOptionalString, readableEnd, takeString, writableEnd)
   http as (bodyFrom, fieldsOf, headersOf)
   nanyx.http/request as (Method, Request)
   nanyx.http/response as (Response)
+  waits as (settledAsync)
 )
 
 -- A request is a `wasi:http/types` `request`: its method, scheme, authority and path with its
@@ -118,18 +120,19 @@ def urlOf: [HostRuntime] I32 -> string = { request ->
 }
 
 --| Writes `ok` to the future `writer` that `consume-body` was given, once the body is read, and
-  drops it: a `result<_, error-code>`, its case at 0.
-def writeConsumed: [HostRuntime] I32 -> () = { writer ->
+  drops it: a `result<_, error-code>`, its case at 0. The program's other tasks run until the host
+  reads it.
+def writeConsumed: [Async, HostRuntime] I32 -> () = { writer ->
   def block = allocate(48)
   def value = aligned8(block)
   writeI64(value, 0)
-  ignore(settled(writer, consumedFutureWrite(writer, value)))
+  ignore(settledAsync(writer, consumedFutureWrite(writer, value)))
   consumedFutureDropWritable(writer)
   free(block)
 }
 
---| The body of `request`, which it consumes, read to the end.
-def bodyOf: [HostRuntime] I32 -> string = { request ->
+--| The body of `request`, which it consumes, read to the end, while the program's other tasks run.
+def bodyOf: [Async, HostRuntime] I32 -> string = { request ->
   def consumed = consumedFutureNew()
   def ends = allocate(8)
   consumeBody(request, readableEnd(consumed), ends)
@@ -144,7 +147,7 @@ def bodyOf: [HostRuntime] I32 -> string = { request ->
 }
 
 --| The request `handle` was given, or `#unknownMethod` when `Request` can't say what it asks.
-export def incoming: [HostRuntime] () -> #some(Request) | #unknownMethod = { _ ->
+export def incoming: [Async, HostRuntime] () -> #some(Request) | #unknownMethod = { _ ->
   def request = argument()
   def block = allocate(12)
   getMethod(request, block)

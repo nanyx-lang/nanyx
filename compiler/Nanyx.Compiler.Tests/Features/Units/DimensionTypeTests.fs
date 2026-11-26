@@ -1,6 +1,6 @@
-/// Dimensions in types (#2623): `Time(a)` is a measured value stored as an `a`, `Time` alone one of a storage of its
-/// own, and `Bytes` one of the storage it is constrained to; a signature that names a dimension requires `Num` of its
-/// storage without writing it.
+/// Dimensions in types (#2623): `Time(a)` is a measured value stored as an `a`, `Time` alone one of the storage the
+/// function's other bare parameters share, or in its result, one its body settles (#2918), and `Bytes` one of the
+/// storage it is constrained to; a signature that names a dimension requires `Num` of its storage without writing it.
 module Nanyx.Compiler.Tests.Features.DimensionTypes
 
 open Xunit
@@ -33,9 +33,36 @@ let ``A signature that names a dimension requires Num of its storage`` () =
         reported "def isLong: Time -> bool = { t -> true }\ndef f: Time(bool) -> bool = { t -> isLong(t) }" |> List.map fst)
 
 [<Fact>]
-let ``Each dimension written without its storage has a storage of its own`` () =
-    let found = typesIn "def overlap: Time, Time -> bool = { a, b -> true }" [ "overlap" ]
-    Assert.Contains("Time(a), Time(b) -> bool", found.Head)
+let ``The dimensions a function is passed written without their storage share one`` () =
+    Assert.Equal<string list>(
+        [ "Time(a), Time(a) -> bool"; "Time(a), Time(b) -> bool"; "Time(a), Time(b), Time(b) -> bool" ],
+        typesIn
+            "def overlap: Time, Time -> bool = { a, b -> true }\ndef apart: Time(a), Time(b) -> bool = { a, b -> true }\ndef mixed: Time(a), Time, Time -> bool = { s, t, u -> true }"
+            [ "overlap"; "apart"; "mixed" ])
+
+[<Fact>]
+let ``A call that passes differently stored values to dimensions written without their storage is a mismatch`` () =
+    let source = "def overlap: Time, Time -> bool = { a, b -> true }\ndef both = overlap(1ns, 2.0ns)"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "2.0ns" ], reported source)
+    let message = (Compiler.compile (withFinalNewline (dimensions + source))).Diagnostics.Head.Message
+    Assert.Equal("'float' vs 'int'", message)
+    Assert.Empty(reported "def apart: Time(a), Time(b) -> bool = { a, b -> true }\ndef both = apart(1ns, 2.0ns)")
+
+[<Fact>]
+let ``A dimension in a result written without its storage is of the one the body makes it`` () =
+    Assert.Equal<string list>(
+        [ "list(Time(a)) -> Time(a)"; "Time(int)"; "int -> Time(int)" ],
+        typesIn
+            "def total: list(Time) -> Time = { ts -> list.sum(ts) }\ndef second: Time = 1_000_000_000ns\ndef seconds: int -> Time = { n -> n * 1_000_000_000ns }"
+            [ "total"; "second"; "seconds" ])
+
+[<Fact>]
+let ``Hover shows the one Num of the storage the parameters share`` () =
+    let source = withFinalNewline (dimensions + "def overlap: Time, Time -> Time = { a, b -> a + b }")
+    let result = Compiler.compile source
+    Assert.Empty(result.Diagnostics)
+    let hover = Hover.typeAt Unicode result (offsetOf source "overlap" 0 0) |> Option.map _.Type
+    Assert.Equal(Some "def overlap: [Num(a)] Time(a), Time(a) -> Time(a)", hover)
 
 [<Fact>]
 let ``A constrained dimension is of its one storage, and a concrete storage requires nothing`` () =
@@ -58,9 +85,7 @@ let ``Measured values of other storages, other dimensions, or no dimension are d
 [<Fact>]
 let ``A storage no parameter fixes is NYX0293 at the dimension`` () =
     let code = DiagnosticCodes.StorageOnlyInResult.Code
-    Assert.Equal<(string * string) list>([ code, "Time" ], reported "def average: list(Time) -> Time = { ts -> average(ts) }" |> List.filter (fst >> (=) code))
     Assert.Equal<(string * string) list>([ code, "Time(a)" ], reported "def make: int -> Time(a) = { n -> make(n) }" |> List.filter (fst >> (=) code))
-    Assert.Equal<(string * string) list>([ code, "Time" ], reported "def ints: Time(int) -> Time(int) = { t -> t }\ndef value: Time = ints" |> List.filter (fst >> (=) code))
     Assert.Empty(reported "def average: list(Time(a)) -> Time(a) = { ts -> average(ts) }")
 
 [<Fact>]
@@ -74,4 +99,4 @@ let ``A local def's signature is read as a top-level one's`` () =
     Assert.Empty(reported "def outer = { ->\n  def inner: Time -> bool = { t -> true }\n  inner\n}")
     Assert.Contains(
         DiagnosticCodes.StorageOnlyInResult.Code,
-        reported "def make: int -> Time(int) = { n -> make(n) }\ndef outer = { ->\n  def inner: int -> Time = { n -> make(n) }\n  inner\n}" |> List.map fst)
+        reported "def make: int -> Time(int) = { n -> make(n) }\ndef outer = { ->\n  def inner: int -> Time(b) = { n -> make(n) }\n  inner\n}" |> List.map fst)

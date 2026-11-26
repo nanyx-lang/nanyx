@@ -184,16 +184,20 @@ requests has no `wasi:http` import. It is Nanyx, on
 
 ### Waiting while other tasks run
 
-A request waits for its response, and reads its body, while the program's other [tasks](./async#tasks-and-scopes) run,
-and so does a sleep. `nanyx.wasi/waits` joins the subtask or the stream's end it waits on to one waitable set the
-instance shares, and waits on the host (`nanyx/host.async`'s `waitOnHost`) until the event for it has come. When every
-task is waiting, the scheduler makes the host's wait, `componentWait`, which waits on that set (`[waitable-set-wait]`)
+A request writes its body, waits for its response, and reads its body, while the program's other
+[tasks](./async#tasks-and-scopes) run, and so does a sleep, and so does the HTTP host's component root as it reads the
+request it serves. Its futures, the trailers it sends and the ones that say a body was read, are written so too.
+`nanyx.wasi/waits` joins the subtask or the stream's end it waits on to one waitable set the instance shares, and waits
+on the host (`nanyx/host.async`'s `waitOnHost`) until the event for it has come. When every task is waiting, the scheduler makes the host's wait, `componentWait`, which waits on that set (`[waitable-set-wait]`)
 and keeps the event's code, in a list in the host's block, for the task that waits on that waitable; that task takes it
 when it looks again. The set's handle is at offset 40 of the host's block and the list's first cell at 44, which the
-component roots leave free. Every other wait blocks: each async-lowered call that returns BLOCKED, a write to stdout or
-a file, a request's body write, a file's read, is waited on at once, in a waitable set of its own, as the runtime's
-own writes are. `examples/sleepers` is a package whose two tasks wake in the order they do only if a sleep lets the
-other run, and CI runs it as a component under Wasmtime beside `nanyx run`.
+component roots leave free. A stream's write waits so in `writeAllAsync`, and a read or a future's write in
+`settledAsync`. Every other wait blocks: each async-lowered call that returns BLOCKED, a write to stdout or a file,
+a read of stdin or a file, is waited on at once, in a waitable set of its own, as the runtime's own writes are. Those
+are `Console`'s and `FileSystem`'s, whose functions don't require `Async`, so they can't stop the task that calls them.
+`examples/sleepers` is a package whose two tasks wake in the order they do only if a sleep lets the other run, and CI
+runs it as a component under Wasmtime beside `nanyx run`. `ComponentWaitTests.fs` runs a request whose body's write
+blocks on a fake host, and checks that another task's sleep starts and ends meanwhile.
 
 **A cancelled task cancels its subtask.** The scheduler wakes a task that waits on the host when it is cancelled
 ([Cancellation](./async#tasks-and-scopes)), and one waiting for a subtask, a sleep or a request, takes it out of the
@@ -204,7 +208,9 @@ returns, and a request gives `#cancelled` without reading an answer, which the h
 stops what it waits on when it loses. `examples/racers` races a short sleep against a minute's, and says whether the race
 was over at once, which it is only if the loser's sleep was cancelled; CI runs it under Wasmtime too, and
 `ComponentCancellationTests.fs` runs the core module on a fake host that traps where the canonical ABI does. A stream's
-read in a cancelled task, a response's body, still goes on until it is done.
+read or write, or a future's write, in a cancelled task still goes on until the host has taken it, or dropped its end:
+a request's body and its trailers are written in full before the request is cancelled, and a response's body is read
+to its end.
 
 ## The HTTP host's component root
 
