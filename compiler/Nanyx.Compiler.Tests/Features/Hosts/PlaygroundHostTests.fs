@@ -68,6 +68,28 @@ ignore(file.read(path.of("notes.txt")))"""
         Assert.Equal(6, diagnostic.Span.Value.StartLine)
     | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
 
+// Printing the result, whose type names `FsError`, which the playground host's prelude doesn't export, also reported
+// NYX0109 "Unknown type 'FsError'", with no span, as if the `ToString` of the union were looked up by a name the program
+// can't see (#2165).
+[<Fact>]
+let ``Printing a result whose error type the host's prelude doesn't export reports only the missing context`` () =
+    let source =
+        withFinalNewline """::host nanyx.playground.host
+::install nanyx.fs
+
+import nanyx.fs/file as file
+import nanyx.fs/path as path
+
+println(file.read(path.of("notes.txt")))"""
+    match diagnosticsOf source with
+    | [ diagnostic ] ->
+        Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+        Assert.Equal(
+            "'file.read' requires the context 'FileSystem', which the host 'nanyx.playground.host/playground.host' does not provide",
+            diagnostic.Message)
+        Assert.Equal(6, diagnostic.Span.Value.StartLine)
+    | diagnostics -> Assert.Fail $"Expected one diagnostic, got %A{diagnostics}"
+
 /// The diagnostics of `source` compiled as the compiler built for the browser compiles a page's program: a script that
 /// runs under the playground host unless its `::host` names another (`Script.compileUnder`).
 let private underPlayground (source: string) =
