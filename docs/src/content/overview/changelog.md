@@ -8,6 +8,34 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.45.0
+
+*26 November 2026*
+
+The packages the compiler ships are now resolved and locked through the package index like any other package, and
+two programs that failed to compile now do: generic functions called at many types, and `memory` blocks under
+`nanyx wasm` and in the playground.
+
+**Tools**
+
+- **Breaking:** `nanyx build --locked` refuses a lockfile written before this release, since it doesn't lock the
+  packages the compiler ships. Run `nanyx pull` once to add them
+  ([nanyx pull](../standard-tools/command-line#nanyx-pull)).
+- The packages the compiler ships are locked with their SHA-256s, as any package from the index is, and an app's
+  lockfile lists its host and the shipped packages it uses. A shipped library may be named at any version the index
+  has. A shipped host builds only with the compiler it ships with. `NYX0029` now applies only to linters
+  ([Packages](../tour/packages), [Shipped packages](../deep-dives/shipped-packages)).
+- The playground's Examples menu also lists the programs in the repository's `examples` directory, the Nim game among
+  them. One the playground can't run opens read-only, saying why ([Playground](../standard-tools/playground#examples)).
+
+**Fixes**
+
+- A generic function called at more types than the backend specialises it at, 64, no longer fails with `NYX0301`.
+  Past that, it is compiled once more with its type arguments' values boxed, so a definition that calls itself at ever
+  bigger types also compiles ([Memory management](../deep-dives/memory-management#core-ir)).
+- A `memory` block, `random.seeded`'s among them, no longer fails with `NYX0302` when compiled by `nanyx wasm` or in
+  the playground ([Memory management](../deep-dives/memory-management#regions)).
+
 # 0.44.1
 
 *26 November 2026*

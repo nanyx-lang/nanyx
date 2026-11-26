@@ -1,11 +1,11 @@
 (
   package = (
     name = "nanyx.wasi"
-    version = "0.44.1"
+    version = "0.45.0"
     repository = "nanyx-lang/nanyx"
-    nanyx = "=0.44.1"
+    nanyx = "=0.45.0"
     sources = ["src/**/*.nyx"]
     hostLibrary = true
   )
-  dependencies = [(package = "nanyx.http", version = "0.44.1")]
+  dependencies = [(package = "nanyx.http", version = "0.45.0")]
 )
