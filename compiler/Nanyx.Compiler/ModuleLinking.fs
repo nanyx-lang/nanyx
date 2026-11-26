@@ -39,8 +39,9 @@ module internal ModuleLinking =
             | Pipe(value, name, rangeOpt, args) -> Pipe(value, rename current name, rangeOpt, args)
             | other -> other)
 
-    /// `module'` with each name a block import brought in (`zero`, `Money.new`) written as the definition it stands
-    /// for (`money.zero`), which is the only name the backend knows, and each name an import brought in from what a
+    /// `module'` with each name a block import brought in (`zero`, `Money.new`, `m.zero`), or a block's name without its
+    /// file's module in front (`money.zero` in `module shop`), written as the definition it stands for (`money.zero`, or
+    /// `shop.money.zero`), which is the only name the backend knows, and each name an import brought in from what a
     /// module re-exports of its blocks written as the name its definition is inlined under. Only a name inference resolved to that definition
     /// is rewritten, not a local that shadows it. So is each context a def's type requires (`Tx`, as `db.Tx`), whose
     /// members the backend finds by the context's layout, which the block's type definition has under its own name.
@@ -72,6 +73,11 @@ module internal ModuleLinking =
                     | IdentifierExpr name -> IdentifierExpr(resolved current name)
                     | FunctionCall(name, rangeOpt, args) -> FunctionCall(resolved current name, rangeOpt, args)
                     | Pipe(value, name, rangeOpt, args) -> Pipe(value, resolved current name, rangeOpt, args)
+                    // `c.penny` or `coins.penny`, naming a block's definition under another name, is the definition.
+                    | MemberAccess _ as access ->
+                        match SyntaxTree.dottedName current with
+                        | Some name when resolved current name <> name -> IdentifierExpr(resolved current name)
+                        | _ -> access
                     | other -> other)
             module'
             |> List.map (fun item ->
