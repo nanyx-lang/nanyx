@@ -679,7 +679,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                   (match derived with Some t -> cat [ text " = "; typeExpr t ] | None -> Doc.empty) ]
         | UnitDecl(isExport, n, dimension, multiple) ->
             let export = if isExport then "export " else ""
-            cat [ text $"{export}{UnitSyntax.unitKeyword} {Names.written n}: {Names.written dimension}"
+            cat [ text $"{export}{UnitSyntax.unitKeyword} {Names.written n}: "
+                  typeExpr dimension
                   (match multiple with Some value -> cat [ text " = "; expr full value ] | None -> Doc.empty) ]
 
     let code = Doc.render options.LineWidth (topLevel true headerEnd source.Length parsed.Items)

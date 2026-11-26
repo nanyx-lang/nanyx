@@ -374,7 +374,8 @@ and TopLevelItemKind =
     | DimensionDecl of isExport: bool * Identifier * storage: TypeExpr option * derived: TypeExpr option
     /// `unit ms: Time = 1_000us`, a unit of a dimension that is a constant multiple of another unit, a `UnitLit`, or
     /// `unit ns: Time`, with no multiple, the dimension's base unit, which `@baseUnit` before it marks (see `UnitSyntax`).
-    | UnitDecl of isExport: bool * Identifier * dimension: Identifier * multiple: Expression option
+    /// Its dimension is written as a type names it, a `TypeName`.
+    | UnitDecl of isExport: bool * Identifier * dimension: TypeExpr * multiple: Expression option
 
 /// An expression and where it came from. Equality and comparison look only at `Kind`, leaving out the name spans
 /// some kinds carry: two expressions are the same when they are the same code, wherever it was written. It is
@@ -1471,6 +1472,8 @@ type Declarer =
     /// The record's own list of names keeps one of each, so this is how a name written twice is found (see
     /// `NyxCompiler.DuplicateFields`).
     | NamedFieldValue
+    /// A `dimension` or `unit` line declares the dimension's or the unit's name, by the line's item.
+    | MeasureDeclaration
 
 /// The names nodes declare, each with the span it is written at. Declarations have no nodes of their own yet
 /// (#96), so their spans are kept here, keyed by the node they belong to.

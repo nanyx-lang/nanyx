@@ -119,7 +119,8 @@ let private declared (symbol: Symbol) (typeWritten: string) =
     | PatternVariable
     | ContextMember -> $"{symbol.Name}: {typeWritten}"
     | ImportedModule
-    | TypeDefinition -> typeWritten
+    | TypeDefinition
+    | UnitOfMeasure -> typeWritten
 
 /// What hover describes at `offset` in the compiled root module, as `typeAt` finds it: its type there, the symbol of
 /// the name it is, if it is one, and its span.

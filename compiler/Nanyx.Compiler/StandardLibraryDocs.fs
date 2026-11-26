@@ -196,7 +196,7 @@ let private unitEntries (file: string) (docOf: SourceSpan -> string option) : En
                     | Some attribute when UnitSyntax.isBaseUnitDeclaration attribute item -> $"@{UnitSyntax.baseUnitAttribute} "
                     | _ -> ""
                 let multiple = multiple |> Option.map (fun multiple -> $" = {textOf multiple.Span}") |> Option.defaultValue ""
-                entry $"{baseUnit}{UnitSyntax.unitKeyword} {name}: {dimension}{multiple}" item name
+                entry $"{baseUnit}{UnitSyntax.unitKeyword} {name}: {textOf dimension.Span}{multiple}" item name
             | _ -> None)
     | _ -> []
 

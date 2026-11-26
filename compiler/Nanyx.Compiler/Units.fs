@@ -83,7 +83,8 @@ module internal Units =
     /// `derived`, a derived dimension, with each dimension it names stored as `storage`: `Length(a) / Time(a)`.
     let rec private storedAs (storage: Identifier) (derived: TypeExpr) : TypeExpr =
         match derived.Kind with
-        | TypeName name -> TypeExpr.at derived.Span (TypeApply(name, [ TypeExpr.at derived.Span (TypeVar storage) ]))
+        // The dimension's name keeps its node, which a reference to the dimension is recorded at.
+        | TypeName name -> { derived with Kind = TypeApply(name, [ TypeExpr.at derived.Span (TypeVar storage) ]) }
         | TypeProduct _
         | TypeQuotient _ -> TypeExpr.mapChildren (storedAs storage) derived
         | _ -> derived
@@ -112,15 +113,25 @@ module internal Units =
     let private dimensionsOf (items: TopLevelItem list) =
         items |> List.choose (fun item -> match item.Kind with DimensionDecl(_, name, storage, _) -> Some (name, storage, item) | _ -> None)
 
-    /// `state` with each dimension `items` declare marked as one among its type definitions.
+    /// The symbol of the name the `dimension` or `unit` line `item` declares, `kind` and exported if `isExport`, made
+    /// the first time it is asked for. A dimension's, a type, and a unit's are named, not in scope, so they have no
+    /// scope, as a type definition has none.
+    let private declaredSymbol (item: TopLevelItem) (name: Identifier) (kind: SymbolKind) (isExport: bool) (state: InferState) =
+        let symbol, declared = declareSymbol MeasureDeclaration item.Id name kind isExport None state
+        symbol, { declared with Scopes = symbol |> Option.map (fun id -> declared.Scopes |> Map.remove id) |> Option.defaultValue declared.Scopes }
+
+    /// `state` with each dimension `items` declare marked as one among its type definitions, with the symbol of its name,
+    /// which a type that names it refers to.
     let markDimensions (items: TopLevelItem list) (state: InferState) : InferState =
-        { state with
-            TypeDefs =
-                dimensionsOf items
-                |> List.fold (fun typeDefs (name, _, _) ->
-                    match typeDefs |> Map.tryFind name with
-                    | Some info when info.Home = state.Home -> typeDefs |> Map.add name { info with IsDimension = true }
-                    | _ -> typeDefs) state.TypeDefs }
+        dimensionsOf items
+        |> List.fold
+            (fun (state: InferState) (name, _, item) ->
+                match state.TypeDefs |> Map.tryFind name, item.Kind with
+                | Some info, DimensionDecl(isExport, _, _, _) when info.Home = state.Home ->
+                    let symbol, state = declaredSymbol item name TypeDefinition isExport state
+                    { state with TypeDefs = state.TypeDefs |> Map.add name { info with IsDimension = true; Symbol = info.Symbol |> Option.orElse symbol } }
+                | _ -> state)
+            state
 
     /// A unit's declaration as the module writes it: its item, name and dimension, whether `@baseUnit` marks it, and what
     /// it is defined as: a number of another unit, `1_000us`, or numbers of units multiplied and divided, `1km / 1hr`.
@@ -128,6 +139,8 @@ module internal Units =
         { Item: TopLevelItem
           Name: Identifier
           IsExport: bool
+          /// Its dimension, as the `unit` line writes it, a `TypeName`.
+          Dimension: TypeExpr
           DimensionName: Identifier
           IsBase: bool
           Multiple: Expression option }
@@ -142,7 +155,8 @@ module internal Units =
                     { Item = item
                       Name = name
                       IsExport = isExport
-                      DimensionName = dimension
+                      Dimension = dimension
+                      DimensionName = match dimension.Kind with TypeName name -> name | _ -> ""
                       IsBase = before |> Option.exists (fun before -> UnitSyntax.isBaseUnitDeclaration before item)
                       Multiple = multiple }
             | _ -> None)
@@ -327,6 +341,16 @@ module internal Units =
             scaleOf [] name |> ignore
         found, List.ofSeq errors
 
+    /// Each number of a unit that the definitions of `units` write, with the unit it is written with: `1_000us` in
+    /// `unit ms: Time = 1_000us`, and both of `1km / 1hr`.
+    let private writtenUnits (units: Declared list) : (Expression * Identifier) list =
+        let rec within (value: Expression) =
+            match value.Kind with
+            | LiteralExpr(UnitLit(_, unitName)) -> [ value, unitName ]
+            | BinaryOp(_, _, left, right) -> within left @ within right
+            | _ -> []
+        units |> List.collect (fun unit -> unit.Multiple |> Option.toList |> List.collect within)
+
     /// `state` with the units `items` declare added to those its imports brought in, each with its exact scale, and the
     /// errors in `items`' dimensions and units. `hasNum` says whether a type has a `Num` instance.
     let declare (hasNum: Ty -> bool) (state: InferState) (items: TopLevelItem list) : InferState * Diagnostic list =
@@ -347,18 +371,38 @@ module internal Units =
                     Diagnostics.at DiagnosticCodes.DuplicateDefinition unit.Item.Span $"The unit '{name}' is declared already: give one of them another name"
                     |> Diagnostics.about name))
         let found, scaleErrors = scales state resolved
-        let own =
+        let own, state =
             resolved
-            |> List.map (fun (unit, dimension) ->
-                unit.Name,
-                { Name = unit.Name
-                  Dimension = dimension
-                  Scale = found |> Map.tryFind unit.Name |> Option.defaultValue Rational.one
-                  Home = state.Home
-                  IsExport = unit.IsExport
-                  Multiple = unit.Multiple })
+            |> List.mapFold
+                (fun state (unit, dimension) ->
+                    let symbol, state = declaredSymbol unit.Item unit.Name UnitOfMeasure unit.IsExport state
+                    (unit.Name,
+                     { Name = unit.Name
+                       Dimension = dimension
+                       Scale = found |> Map.tryFind unit.Name |> Option.defaultValue Rational.one
+                       Home = state.Home
+                       IsExport = unit.IsExport
+                       Multiple = unit.Multiple
+                       Symbol = symbol }),
+                    state)
+                state
         let units = own |> List.fold (fun acc (name, info) -> acc |> Map.add name info) state.Units
         let errors = storageErrors hasNum state items @ dimensionErrors @ duplicates @ baseUnitErrors state items resolved @ scaleErrors
         // A unit of the module's own is the one its name means, though two imports bring in others of the name.
         let ambiguous = own |> List.fold (fun acc (name, _) -> acc |> Map.remove name) state.AmbiguousUnits
-        { state with Units = units; AmbiguousUnits = ambiguous }, errors |> List.sortBy (fun error -> error.Span |> Option.map _.Start |> Option.defaultValue 0)
+        let state = { state with Units = units; AmbiguousUnits = ambiguous }
+        // Each `unit` line's dimension refers to it, as a type that names it does, and each number of a unit that a
+        // unit's definition writes refers to that unit.
+        let state =
+            resolved
+            |> List.fold (fun state (unit, _) ->
+                match state.TypeDefs |> Map.tryFind unit.DimensionName with
+                | Some info -> recordTypeReference unit.Dimension info state
+                | None -> state) state
+        let state =
+            writtenUnits (resolved |> List.map fst)
+            |> List.fold (fun state (literal: Expression, unitName) ->
+                match unitNamed state literal.Span unitName with
+                | Ok info -> recordUnitReference literal info state
+                | Error _ -> state) state
+        state, errors |> List.sortBy (fun error -> error.Span |> Option.map _.Start |> Option.defaultValue 0)
