@@ -173,6 +173,8 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
                 | ContextMember ->
                     if typeOf symbol.Id |> Option.forall isFunction then Some (TokenType.Function, [])
                     else Some (TokenType.Variable, [ TokenModifier.Readonly ])
+                // A unit is written as part of a number, which is a token of its own.
+                | UnitOfMeasure -> None
             typeAndModifiers
             |> Option.map (fun (tokenType, modifiers) ->
                 { Span = span

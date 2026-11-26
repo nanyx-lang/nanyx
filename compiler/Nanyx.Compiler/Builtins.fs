@@ -112,7 +112,7 @@ module Intrinsics =
     let setOfStore = prefix + "set_of_store"
     /// The store a set holds, as it was made of.
     let setStore = prefix + "set_store"
-    /// The number a measured value is stored as, its number of its dimension's base units, as it is (see
+    /// The number a measured value is stored as, its number of its dimension's default storage units, as it is (see
     /// `Units.storageIntrinsic`).
     let measuredStorage = Units.storageIntrinsic
     /// An array holding a list's elements, in order, each laid out flat in one block (see `Arrays`).

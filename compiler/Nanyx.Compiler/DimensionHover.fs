@@ -27,11 +27,17 @@ let private grouped (number: string) =
 let private multipleOf (info: UnitInfo) =
     info.Multiple |> Option.map (Units.writtenWith (WrittenNumber.text >> grouped))
 
-/// A unit as the list of a dimension's units writes it: `us = 1_000ns`, or `ns (base)`.
+/// Whether `info` is its dimension's default storage unit. A derived dimension has none of its own.
+let private isStorage (info: UnitInfo) = UnitInfo.isStorage info && not (Dimension.isDerived info.Dimension)
+
+/// A unit as the list of a dimension's units writes it: `us = 1_000ns`, `ns (storage)`, or `s = 1_000ms (display)`.
 let private listed (info: UnitInfo) =
+    let roles = [ if isStorage info then "storage"
+                  if info.IsDisplay then "display" ]
+    let roles = if roles.IsEmpty then "" else $""" ({String.concat ", " roles})"""
     match multipleOf info with
-    | Some multiple -> $"`{info.Name} = {multiple}`"
-    | None -> $"`{info.Name}` (base)"
+    | Some multiple -> $"`{info.Name} = {multiple}`{roles}"
+    | None -> $"`{info.Name}`{roles}"
 
 /// What a hover says of the units of `dimension` after its declaration: each unit the module can write, from the
 /// smallest to the largest, with how it is declared, and a value written in one of them. None when it can write none.
@@ -40,7 +46,8 @@ let unitsNote (typed: TypedModule) (dimension: Dimension) : string option =
     | [] -> None
     | units ->
         // A unit from the smaller half, as `ms` is of `Time`'s, which a value is often written in. A number that is no
-        // whole number of base units in it is written as a decimal, `500.0kmh`, which a literal of an integer is not.
+        // whole number of default storage units in it is written as a decimal, `500.0kmh`, which a literal of an
+        // integer is not.
         let example = units[max 0 ((units.Length - 1) / 2 - 1)]
         let number = if Rational.isWhole (Rational.multiply (Rational.make 500I 1I) example.Scale) then "500" else "500.0"
         Some $"""Units: {units |> List.map listed |> String.concat ", "}
@@ -64,18 +71,25 @@ let ofDimension (typed: TypedModule) (info: TypeDefInfo) : string * string optio
             unitsNote typed dimension |> Option.orElse (Some noUnitsNote)
         | _ -> $"{UnitSyntax.dimensionKeyword} {info.Name}", None
 
-/// The declaration of the unit `info`, as hover writes it, `unit ms: Time = 1_000us` or `@baseUnit unit ns: Time`, and
-/// what it says after it: how many of its dimension's base units it is, and the dimension's units.
+/// The declaration of the unit `info`, as hover writes it, `unit ms: Time = 1_000us` or `@storageUnit unit ns: Time`,
+/// and what it says after it: whether it is its dimension's default storage or display unit, how many of its default
+/// storage units it is, and the dimension's units.
 let ofUnit (typed: TypedModule) (info: UnitInfo) : string * string option =
     let dimension = Dimension.text info.Dimension
     let declaration =
+        let marks = info.Marks |> List.map (fun mark -> $"@{Units.attributeOf mark} ") |> String.concat ""
         match multipleOf info with
-        | Some multiple -> $"{UnitSyntax.unitKeyword} {info.Name}: {dimension} = {multiple}"
-        | None -> $"@{UnitSyntax.baseUnitAttribute} {UnitSyntax.unitKeyword} {info.Name}: {dimension}"
-    let inBase =
-        match unitsOf typed info.Dimension |> List.tryFind UnitInfo.isBase with
-        | _ when UnitInfo.isBase info -> Some $"The base unit of `{dimension}`, which its values are stored in."
-        | Some baseUnit -> Some $"A unit of `{dimension}`: `{grouped (Rational.text info.Scale)}{baseUnit.Name}`."
-        | None -> Some $"A unit of `{dimension}`."
-    let notes = Option.toList inBase @ Option.toList (unitsNote typed info.Dimension)
+        | Some multiple -> $"{marks}{UnitSyntax.unitKeyword} {info.Name}: {dimension} = {multiple}"
+        | None -> $"{marks}{UnitSyntax.unitKeyword} {info.Name}: {dimension}"
+    let inStorage =
+        match unitsOf typed info.Dimension |> List.tryFind isStorage with
+        | _ when isStorage info && info.IsDisplay ->
+            $"The default storage and display unit of `{dimension}`, which its values are stored as a number of."
+        | _ when isStorage info -> $"The default storage unit of `{dimension}`, which its values are stored as a number of."
+        | Some storage when info.IsDisplay ->
+            $"The default display unit of `{dimension}`: `{grouped (Rational.text info.Scale)}{storage.Name}`."
+        | Some storage -> $"A unit of `{dimension}`: `{grouped (Rational.text info.Scale)}{storage.Name}`."
+        | None when info.IsDisplay -> $"The default display unit of `{dimension}`."
+        | None -> $"A unit of `{dimension}`."
+    let notes = inStorage :: Option.toList (unitsNote typed info.Dimension)
     declaration, Some (String.concat "\n\n" notes)

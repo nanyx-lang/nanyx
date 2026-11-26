@@ -1,0 +1,55 @@
+--| The test host: it runs one test of a program's, as `nanyx test` does for each.
+
+  A test build's entry point takes the index of a test and runs it (see the Test builds page of the
+  docs). Each test runs in a fresh instance of the build: the runtime starts one, and `run` asks it,
+  through `nanyx:test`, an import of the `nanyx` runtime's own, which test to run and with what
+  seed, and runs it. A test passes if the instance finishes, and fails if it crashes, so a test that
+  fails ends only its own instance.
+
+  The host provides [`Console`], whose output it gives the runtime, which shows it only for a test
+  that fails, and whose input is empty, and [`Random`], seeded with the runtime's seed, as
+  [`random.seeded`] seeds it, so a test that draws random numbers draws the same ones each time it
+  runs with that seed. It provides nothing else: a test loads any other context it needs with `use`.
+export module test.host
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx/random as random
+  nanyx/random as (Random)
+  nanyx.cli/console as (Console, IoError)
+)
+
+@extern("nanyx:test", "index")
+def testIndex: [HostRuntime] () -> I32
+
+@extern("nanyx:test", "seed")
+def testSeed: [HostRuntime] () -> I64
+
+@extern("nanyx:test", "write")
+def testWrite: [HostRuntime] I32, I32 -> ()
+
+@extern("nanyx:test", "writeError")
+def testWriteError: [HostRuntime] I32, I32 -> ()
+
+--| Gives `text` to the runtime through `write`, which reads it from the module's memory.
+def writeWith: [HostRuntime] ([HostRuntime] I32, I32 -> ()), string -> () = { write, text ->
+  write(addressOf(text), byteLength(text))
+  keepAlive(text)
+}
+
+--| Runs the test the runtime asks for: `entry`, the test build's entry point, given the test's index,
+  with a `Console` whose output goes to the runtime and whose input is empty, and a `Random` seeded
+  with the runtime's seed. What `entry` returns is ignored.
+export def run: [HostRuntime] ([Console, Random] int -> a) -> () = { entry ->
+  use Console(
+    write = { text -> writeWith(testWrite, text) }
+    writeError = { text -> writeWith(testWriteError, text) }
+    readLine = { _ -> #endOfInput }
+    readToEnd = { _ -> #some("") }
+    flush = { _ -> () }
+  )
+
+  def index = I32.toInt(testIndex())
+  random.seeded(testSeed(), { _ -> ignore(entry(index)) })
+}

@@ -299,6 +299,7 @@
     <Compile Include="Features\Units\RunUnitLiteralTests.fs" />
     <Compile Include="Features\Units\RunMeasuredArithmeticTests.fs" />
     <Compile Include="Features\Units\RunMeasuredDisplayTests.fs" />
+    <Compile Include="Features\Units\RunStorageAndDisplayUnitTests.fs" />
     <Compile Include="Features\Units\RunDerivedDimensionTests.fs" />
     <Compile Include="Features\Units\RunDerivedUnitTests.fs" />
     <Compile Include="Features\Units\RunAttachedMeasuredOperatorTests.fs" />
@@ -308,6 +309,7 @@
     <Compile Include="Features\Workflows\RunSequenceTests.fs" />
     <Compile Include="Features\Workflows\RunSequenceForTests.fs" />
     <Compile Include="Features\Tests\TestBuildTests.fs" />
+    <Compile Include="Features\Tests\RunTestsTests.fs" />
     <Compile Include="E2E\E2ETests.fs" />
   </ItemGroup>
 

@@ -259,36 +259,60 @@ export def __toString: a -> string = { value ->
 }
 
 --| What the derived `toString` of a measured value stored as an `int` calls: `n` of its
-  dimension's base units, written in the first of the units `names` that it is a whole number of,
-  each as many base units as the scale beside it in `scales`, the largest first, so `1500ms` is
-  written `1500ms` and `120s` is `2min`. Zero, and a value no unit fits, is written as a number of
-  base units, between `before` and `after`.
-export def __measuredIntToString: int, list(string), list(int), string, string -> string = {
-  | n, [name, ...names], [scale, ...scales], before, after ->
+  dimension's default storage units, written in the first of the units `names` that it is a whole
+  number of, each as many default storage units as the scale beside it in `scales`, the largest
+  first, so `1500ms` is written `1500ms` and `120s` is `2min`. Zero is written in `display`, the
+  dimension's default display unit, `0s`, if it is not empty. A value no unit fits, and zero if
+  `display` is empty, is written as a number of default storage units, between `before` and
+  `after`.
+export def __measuredIntToString: int, list(string), list(int), string, string, string -> string = {
+  | n, [name, ...names], [scale, ...scales], display, before, after ->
     if n != 0 and n % scale == 0
       then "{n // scale}{name}"
-      else __measuredIntToString(n, names, scales, before, after)
-  | n, _, _, before, after -> "{before}{n}{after}"
+      else __measuredIntToString(n, names, scales, display, before, after)
+  | n, _, _, display, before, after ->
+    if n == 0 and display != "" then "0{display}" else "{before}{n}{after}"
 }
 
---| What the derived `toString` of a measured value stored as a `float` calls: as
-  [`__measuredIntToString`], `x` written in the first of the units `names` that it is a whole
-  number of, as a whole number, so `1.5s` is written `1500ms`. A number within a millionth of a
-  millionth of a whole one is that whole one, as arithmetic on a `float` rounds: `90.0kmh + 10.0mps`
-  is written `126kmh`, though a kilometre an hour is no whole number of a speed's base units. A
-  number of base units is written as a `float` is.
-export def __measuredFloatToString: float, list(string), list(float), string, string -> string = {
-  | x, [name, ...names], [scale, ...scales], before, after ->
-    def count = x / scale
-    def whole = wholeOf(count, #round)
-    def near = (if whole < 0.0 then -whole else whole) * 1.0e-12
+--| What the derived `toString` of a measured value stored as a `float` calls: `x` of its
+  dimension's default storage units, written in the first of the units `names` that its magnitude
+  is at least 1 of, each as many default storage units as the scale beside it in `scales`, the
+  largest first, so `1.5s` is written `1.5s`, `120.0s` is `2.0min` and `-1.5s` is `-1.5s`. A
+  number under 1 of every unit is written in the last, the smallest: `0.25ns`. It is written as a
+  `float` is, so a whole number keeps its decimal point. A number within a millionth of a millionth
+  of a whole one is that whole one, as arithmetic on a `float` rounds. Zero is written in
+  `display`, the dimension's default display unit, if it is not empty, and with no units, as a
+  number of default storage units between `before` and `after`.
+export def __measuredFloatToString
+  : float, list(string), list(float), string, string, string -> string
+  = {
+    | x, [name, ...names], [scale, ...scales], display, before, after ->
+      def count = x / scale
+      def whole = wholeOf(count, #round)
+      def near = (if whole < 0.0 then -whole else whole) * 1.0e-12
+      def shown = if count - whole <= near and whole - count <= near then whole else count
 
-    if whole != 0.0 and count - whole <= near and whole - count <= near and whole > -1.0e15 and
-      whole < 1.0e15
-      then "{float.toInt(whole, #truncate)}{name}"
-      else __measuredFloatToString(x, names, scales, before, after)
-  | x, _, _, before, after -> "{before}{x}{after}"
-}
+      def smallest = match names
+        | [] -> true
+        | _ -> false
+
+      if x != 0.0 and (shown >= 1.0 or shown <= -1.0 or smallest)
+        then "{shown}{name}"
+        else __measuredFloatToString(x, names, scales, display, before, after)
+    | x, _, _, display, before, after ->
+      if x == 0.0 and display != "" then "{x}{display}" else "{before}{x}{after}"
+  }
+
+--| What the derived `toString` of a value of a derived dimension stored as an `int` calls: `n` of
+  its parts' default storage units, written in `name`, its parts' default display units, each of
+  which is `numerator / denominator` of the others, when it is a whole number of them, so
+  `2000mm * 1000mm` is written `2m*m`. A value that is no whole number of them is written as a
+  number of default storage units, between `before` and `after`: `1500mm*mm`.
+export def __measuredRatioToString
+  : int, string, int, int, string, string -> string
+  = { n, name, numerator, denominator, before, after ->
+    if n % numerator == 0 then "{n // numerator * denominator}{name}" else "{before}{n}{after}"
+  }
 
 --| What the derived `toString` of a list calls: `xs` in square brackets, each element written by
   `show`, with `, ` between them. The elements' texts are joined once, so each is copied once.

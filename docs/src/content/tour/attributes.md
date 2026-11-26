@@ -145,13 +145,21 @@ An `@allow` that suppresses nothing is itself reported, by the official linter's
 
 ## `@baseUnit`
 
-Marks a unit declaration as the base unit of its dimension: the unit its values are stored in, which the dimension's other units are defined in terms of, in the end. It need not be the smallest. A base unit is never defined in terms of other units.
+Marks a unit declaration as the default display unit of its dimension: the unit its values are written in when no other unit is chosen, as zero is. It may be a multiple of another unit, and is optional: a dimension with no `@baseUnit` is written in its default storage unit.
 
 ```nanyx fragment
-@baseUnit unit ns: Time
+@baseUnit unit s: Time = 1_000ms
 ```
 
-See [Units of measure](../advanced/units-of-measure).
+## `@storageUnit`
+
+Marks a unit declaration as the default storage unit of its dimension: the unit its values are stored as a number of. Without it, the compiler works it out, as the largest unit every unit declared with the dimension is a whole number of. Marking it keeps it from changing: a smaller unit added later is an error, not a change to what every value holds.
+
+```nanyx fragment
+@storageUnit unit ns: Time
+```
+
+See [Units of measure](../advanced/units-of-measure#dimensions-and-units).
 
 # Attributes on fields
 

@@ -290,7 +290,8 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
                 let elements = local "__dbg_elements" (IrList(tools.ToIrType elementTy))
                 Expr.letIn elements (Expr.make (CallRuntime(Intrinsics.arrayToList, [ AVar value ], true)) elements.Type) (
                     listText elements elementTy "Array" (showElement elementTy) (ShowingRest(elementTy, false)))
-            // A measured value is written as its dimension around the number of base units it is: `Time(500000000)`.
+            // A measured value is written as its dimension around the number of default storage units it is:
+            // `Time(500000000)`.
             | TyMeasure(dimension, storage) -> wrapped (Dimension.text dimension) storage (AVar value)
             | other -> cannot $"`dbg` of a value of type '{Unifier.tyToString other}'"
         make [ value ] body

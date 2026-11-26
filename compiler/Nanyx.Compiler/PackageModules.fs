@@ -44,7 +44,11 @@ type PackageModules =
       /// depends on it (see `HostLibraries.field`).
       HostLibrary: bool
       /// Whether the package's manifest declares it a host (see `HostPackages`), whose modules may require `HostRuntime`.
-      DeclaresHost: bool }
+      DeclaresHost: bool
+      /// For a test build's modules, the full path of the build's root, which runs one test of the program's: each of
+      /// the program's other files gives it a way to run its own (see `Attributes.testDispatcher`), and its `@entry` is
+      /// not one. None for any other build.
+      TestRoot: string option }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
@@ -130,6 +134,7 @@ module PackageModules =
           CheckedFile = None
           HostLibrary = false
           DeclaresHost = false
+          TestRoot = None
           Modules = Map.empty }
         |> declaring (files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file)))
 

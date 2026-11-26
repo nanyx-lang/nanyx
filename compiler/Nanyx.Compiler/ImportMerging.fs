@@ -156,11 +156,13 @@ module internal ImportMerging =
             |> Map.values
             |> Seq.map (fun symbol -> symbol.Id, symbol)
             |> Map.ofSeq
-        // The exported types and their contexts' members, declared in the imported module's file too.
+        // The exported types and their contexts' members, and the exported units, declared in the imported module's file
+        // too.
         let exportedTypeSymbols =
             exportedTypeDefs
             |> Map.values
             |> Seq.collect (fun info -> Option.toList info.Symbol @ (info.Members |> Map.values |> List.ofSeq))
+            |> Seq.append (ModuleLinking.exportedUnits imported |> Map.filter (fun name _ -> isSelected name) |> Map.values |> Seq.choose _.Symbol)
             |> Seq.choose (fun id -> imported.Typed.Symbols |> Map.tryFind id)
             |> Seq.map (fun symbol -> symbol.Id, symbol)
             |> Map.ofSeq

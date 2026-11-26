@@ -8,7 +8,7 @@ open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
 let private dimensions =
-    "dimension Time\n@baseUnit unit ns: Time\nunit us: Time = 1_000ns\nunit ms: Time = 1_000us\nunit s: Time = 1_000ms\nunit ps: Time = 0.001ns\n"
+    "dimension Time\n@baseUnit unit ns: Time\nunit us: Time = 1_000ns\nunit ms: Time = 1_000us\nunit s: Time = 1_000ms\n"
     + "dimension Length(float)\n@baseUnit unit m: Length\nunit mm: Length = 0.001m\n"
     + "dimension Bytes(int)\n@baseUnit unit B: Bytes\nunit KB: Bytes = 1_000B\n"
 
@@ -51,15 +51,10 @@ let ``Numbers with units of two storages are of two types`` () =
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, (reported "def both = [0.5s, 500ms]").Head |> fst)
 
 [<Fact>]
-let ``In integer storage, a number with a unit that is no whole number of base units is an error with the fix`` () =
+let ``In integer storage, a number with a unit that is no whole number of default storage units is an error with the fix`` () =
     let code, message = only "def x: Time(int) = 1.5ns"
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     Assert.Contains("'1.5ns' is 3/2 of a 'ns', which is no whole number of 'ns'", message)
-    // One written whole is stored as an integer, which it can't be, rather than quietly as a float.
-    let code, message = only "def y = 1ps"
-    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    Assert.Contains("write it as a decimal, `1.0ps`, to store it as a `float`", message)
-    Assert.Empty(reported "def z = 1.0ps")
 
 [<Fact>]
 let ``A number with a unit that doesn't fit its storage is NYX0229`` () =

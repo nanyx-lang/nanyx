@@ -52,8 +52,8 @@ println(walk)
 println(5mm)
 println(2KiB)
 println(50.5KB)
--- 2350m
--- 5mm
+-- 2.35km
+-- 5.0mm
 -- 2KiB
 -- 50500B
 ```
@@ -61,29 +61,39 @@ println(50.5KB)
 - **Dimensions.** `dimension Time` declares a dimension that any number type can store. `dimension Length(float)`
   constrains one to a storage: a `Length` is always a `float`, and a `Bytes` an `int`. The storage must be a number
   type ([NYX0290](../standard-tools/errors#nyx0290)).
-- **The base unit.** Each dimension has one unit marked `@baseUnit`, the unit its values are stored in. A dimension with
-  none, or with two, is an error ([NYX0286](../standard-tools/errors#nyx0286),
-  [NYX0287](../standard-tools/errors#nyx0287)).
-- **Other units.** Every other unit is a constant multiple of a unit of the same dimension, so of the base unit in the
-  end. The multiple need not be whole, and the base need not be the smallest unit: `mm` is `0.001m`. Units defined in a
-  circle, or in another dimension's units, are errors ([NYX0288](../standard-tools/errors#nyx0288),
-  [NYX0289](../standard-tools/errors#nyx0289)).
+- **Units.** One unit of a dimension is no multiple of another, `unit m: Length`, and every other unit is a constant
+  multiple of a unit of the same dimension, so of that one in the end. The multiple need not be whole, and the first
+  unit need not be the smallest: `mm` is `0.001m`. A dimension with no units, or with two that are no multiple of
+  another, is an error ([NYX0286](../standard-tools/errors#nyx0286)), and so are units defined in a circle, or in another
+  dimension's units ([NYX0288](../standard-tools/errors#nyx0288), [NYX0289](../standard-tools/errors#nyx0289)).
+- **The default storage unit.** A dimension's values are stored as a number of its **default storage unit**: the largest
+  unit that every unit declared with the dimension is a whole number of. It is usually the smallest, `mm` above, but
+  not always: with `mm` and `inch = 25.4mm`, an inch is no whole number of millimetres, and the compiler asks for a unit
+  of `0.2mm` ([NYX0299](../standard-tools/errors#nyx0299)). `@storageUnit` marks it by hand,
+  `@storageUnit unit ns: Time`, so that adding a smaller unit is an error rather than a change to what every value
+  holds ([NYX0300](../standard-tools/errors#nyx0300)).
+- **The default display unit.** `@baseUnit` marks the unit a dimension is written in when no other unit is chosen, as
+  zero is: `0m`. It may be a multiple, as `m` is of `mm`, and is optional: a dimension with no `@baseUnit` is written in
+  its default storage unit. A dimension has at most one of each mark ([NYX0287](../standard-tools/errors#nyx0287)).
 - **Units are names of their own kind**, apart from values and types: `500ms` means the unit `ms` even where a value
   named `ms` is in scope. `dimension` and `unit` are not reserved words either: they begin a declaration only at the
   start of a top-level line, with a name after them.
 - **Exporting and importing.** A module exports dimensions and units as it does types, with `export` before the
   declaration, and an import brings in the units its module exports, unqualified, or only those it selects:
   `import physics as (Length, m, km)`. A module's own unit, or an imported one, is the one its name means there, over
-  the prelude's. A module can add units to a dimension another declares, `unit ps: Time = 0.001ns`, but not a base unit.
+  the prelude's. A module can add units to a dimension another declares, `unit tick: Time = 10ns`, but each must be a
+  whole number of the dimension's default storage unit, so that it doesn't change what a value holds
+  ([NYX0300](../standard-tools/errors#nyx0300)), and it can't mark them ([NYX0287](../standard-tools/errors#nyx0287)).
 
-The base unit is what a dimension's values can hold exactly. `Time`'s is `ns`, so a `Time(int)` holds every whole
-number of nanoseconds for about 292 years either side of zero, and sums of whole units are exact: `100ms + 200ms ==
-300ms`. A `Length(float)` based on `m` holds `5mm` as `0.005`, inexactly, as a `float` holds most decimals.
+The default storage unit is what a dimension's values can hold exactly. `Time`'s is `ns`, so a `Time(int)` holds every
+whole number of nanoseconds for about 292 years either side of zero, and sums of whole units are exact: `100ms + 200ms
+== 300ms`. Every unit declared with a dimension is a whole number of its default storage unit, so a `Length(float)`
+holds `5mm` as exactly `5.0`.
 
 # Numbers with units
 
 A number followed by a unit with no space between them is one literal: `500ms`, `1_000ns`, `0.5s`, `1.5e3ms`. Its type
-is the unit's dimension, and the compiler scales it to the base unit: `0.5s` is stored as `500_000_000`. `100 ms`, with
+is the unit's dimension, and the compiler scales it to the default storage unit: `0.5s` is stored as `500_000_000`. `100 ms`, with
 a space, is the number `100` followed by the name `ms`.
 
 A literal's storage is the one the code around it expects, as a plain number's type is. Where nothing expects one, it
@@ -99,13 +109,14 @@ println(t)
 println(u)
 println(v == t)
 println(w)
--- 500ms
+-- 500.0ms
 -- 500ms
 -- true
 -- 500ms
 ```
 
-A program doesn't mix two storages by accident, and in an `int` storage a literal must be a whole number of base units:
+A program doesn't mix two storages by accident, and in an `int` storage a literal must be a whole number of default
+storage units:
 
 ```nanyx
 def t = 0.5s
@@ -149,7 +160,7 @@ which it means:
 | `a == b`, `a < b`, ... | `bool` | Both `Time(a)` |
 | `a * n`, `n * a` | `Time(a)` | Scaling by an `a` |
 | `a / n` | `Time(fraction)` | A `Time(int)` divided by `2` is a `Time(float)` |
-| `a // n` | `Time(a)` | Floored to a whole number of base units |
+| `a // n` | `Time(a)` | Floored to a whole number of default storage units |
 | `a / b` | `fraction` | How many `b`s in `a`, with the fraction: `t / 1s` |
 | `a // b` | `a` | How many whole `b`s in `a`: `t // 1s` |
 | `a % b` | `Time(a)` | What is left: `-1500ms % 1s` is `500ms` |
@@ -220,7 +231,7 @@ def sprint = speed(100.0m, 9.58s)
 println(sprint * 9.58s)
 println(2.0m * 3.0m)
 println(1.0km / 1.0m)
--- 100m
+-- 100.0m
 -- 6.0m*m
 -- 1000.0
 ```
@@ -231,23 +242,30 @@ Two storages on its parts, and a part that is no dimension, are errors
 ## Units of a derived dimension
 
 A derived dimension's units are defined from its parts' units, multiplied and divided, on one line and read from the
-left: `unit kmh: Speed = 1km / 1hr`, or `unit g: Acceleration = 9.80665m / 1s / 1s`. It has no base unit of its own,
-since its values are stored in its parts' base units, so a unit of one marked `@baseUnit`, or not defined, is an error
+left: `unit kmh: Speed = 1km / 1hr`, or `unit g: Acceleration = 9.80665m / 1s / 1s`. It has no default storage or
+display unit of its own, since its values are stored in its parts' default storage units and displayed in their default
+display units, so a unit of one marked `@baseUnit` or `@storageUnit`, or not defined, is an error
 ([NYX0297](../standard-tools/errors#nyx0297)), as is a definition of another dimension
 ([NYX0289](../standard-tools/errors#nyx0289)). A unit can be defined from another of the dimension's units, its own or
 imported: `unit mph: Speed = 1.609344kmh`.
 
-A number with one is a value of the dimension, `90.0kmh`, stored as its number of the parts' base units, as `500ms` is.
+A number with one is a value of the dimension, `90.0kmh`, stored as its number of the parts' default storage units, as
+`500ms` is.
 That is seldom a whole number, a kilometre an hour being 1/3_600_000_000 of a metre a nanosecond, so write it with a
 decimal point to store it as a `float`: `90kmh` in an `int` is an error that says so.
 
-A value prints in the largest of the dimension's units it is a whole number of, as a `Time` does, and in its parts' base
-units, joined by `*` and `/`, when none fits:
+A value prints in its parts' default display units, joined by `*` and `/` with no spaces, and a divisor of more than
+one part in brackets: `m/s`, `m*m`, `m/(s*s)`. Its own units make values but never print them: the units come from the
+declarations, not from the value's size, so the output is predictable, as a ratio has no best unit (`1.0m/s`,
+`1.0km/ks` and `0.001mm/ms` are one value). An `int` that is no whole number of the display units prints in the parts'
+default storage units, the only ones it is exact in, and a value whose part's display unit the module can't see prints
+as `dbg` writes it.
 
 ```nanyx
 dimension Length
 
-@baseUnit unit m: Length
+unit mm: Length
+@baseUnit unit m: Length = 1_000mm
 unit km: Length = 1_000m
 
 dimension Speed = Length / Time
@@ -257,32 +275,44 @@ unit kmh: Speed = 1km / 1hr
 def cruise = 90.0kmh
 println(cruise)
 println(36.0km / 0.5hr)
-println(cruise + 100.0m / 1.0hr)
--- 90kmh
--- 72kmh
--- 2.5027777777777776e-8m/ns
+println(1m / 1s)
+println(2000mm * 1000mm)
+println(1500mm * 1mm)
+-- 25.0m/s
+-- 20.0m/s
+-- 1.0m/s
+-- 2m*m
+-- 1500mm*mm
 ```
 
-With `unit mps: Speed = 1m / 1s` seen too, `90.0kmh` prints as `25mps`, the larger unit. A `float` that arithmetic has
-left within a millionth of a millionth of a whole number of a unit counts as that whole number: `90.0kmh + 10.0mps`
-prints `35mps`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an error
-([NYX0298](../standard-tools/errors#nyx0298)).
+A `float` that arithmetic has left within a millionth of a millionth of a whole number counts as that whole number:
+`90.0kmh + 10.0m / 1.0s` prints `35.0m/s`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an
+error ([NYX0298](../standard-tools/errors#nyx0298)).
 
 # Printing
 
-A measured value prints in the largest unit in which it is a whole number, and in the base unit otherwise, or when it is
-zero:
+A measured value prints in a unit chosen by its storage:
+
+- **An `int`** prints in the largest unit it is a whole number of, the only units it is exact in, and in the default
+  storage unit when it is a whole number of no other: `1500ms`, `2min`.
+- **A `float` or `F32`** prints in the largest unit its magnitude is at least 1 of, `1.5s`, `16.5ms`, `-1.5s`, and in
+  the smallest unit when it is under 1 of every unit: `0.25ns`. It is written as a `float` is, so a whole number keeps
+  its decimal point, as `println(2.0)` writes `2.0`: `120.0s` prints `2.0min`.
+- **Zero** prints in the default display unit, which is `s` for a `Time`: `0s`, `0.0s`.
 
 ```nanyx
-println("{1.5s} {120s} {16.5ms} {0.25ns} {0s}")
+println("{1500ms} {120s} {1.5s} {16.5ms} {120.0s} {0.25ns} {0s} {0.0s}")
 println([1s, 2min, 3hr])
--- 1500ms 2min 16500us 0.25ns 0ns
+-- 1500ms 2min 1.5s 16.5ms 2.0min 0.25ns 0s 0.0s
 -- [1s, 2min, 3hr]
 ```
 
 Only the units the printing module can write are tried: its own, and those it imports. A generic `Time(a)` is printed
-in the base unit, `1500000000ns`, and needs `ToString(a)`; a function that wants the largest unit takes a `Time(int)`.
-`dbg` writes a measured value as its dimension around its number of base units, `Time(1500000000)`.
+in the default storage unit, `1500000000ns`, and needs `ToString(a)`, as choosing a unit needs a comparison; a function
+that wants a unit chosen takes a `Time(int)` or a `Time(float)`. A value of a derived dimension is written in its
+parts' default display units (see [Units of a derived dimension](#units-of-a-derived-dimension)), and an `int` that is
+no whole number of them in their default storage units. `dbg` writes a measured value as its dimension around its number of default storage units,
+`Time(1500000000)`.
 
 # Time in the standard library
 

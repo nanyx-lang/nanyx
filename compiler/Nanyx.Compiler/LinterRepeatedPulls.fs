@@ -134,7 +134,8 @@ module RepeatedPulls =
                         | TopLevelValue
                         | ImportedModule
                         | TypeDefinition
-                        | ContextMember -> false)
+                        | ContextMember
+                        | UnitOfMeasure -> false)
                 let effectful = model.Types |> Map.tryFind expr.Id |> Option.bind effectfulSeq |> Option.isSome
                 if local && effectful then Set.singleton symbol else Set.empty
             | None -> Set.empty

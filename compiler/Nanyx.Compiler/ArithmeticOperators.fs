@@ -120,7 +120,8 @@ module internal ArithmeticOperators =
     type private LiteralReading =
         /// The member of the context the function requires that it is written as.
         | AsMember of Expression
-        /// The member a number with a unit is written as, its number of base units, of the dimension it is a value of.
+        /// The member a number with a unit is written as, its number of default storage units, of the dimension it is
+        /// a value of.
         | AsMeasured of Expression * Dimension
         /// The error at the literal: it cannot be of the type it is used at.
         | Wrong of Diagnostic
@@ -160,19 +161,19 @@ module internal ArithmeticOperators =
         | _ -> None
 
     /// What the number with a unit `literal`, `number unitName`, is beside a measured value of the generic storage
-    /// `storage`: its number of base units, as `literalReading` reads a plain literal beside a value of a type variable,
-    /// `fromInt(500000000)` for `500ms`, or `zero`. A fraction of a base unit is no number of a storage that may be an
-    /// integer type.
+    /// `storage`: its number of default storage units, as `literalReading` reads a plain literal beside a value of a
+    /// type variable, `fromInt(500000000)` for `500ms`, or `zero`. A fraction of a default storage unit is no number of
+    /// a storage that may be an integer type.
     let private measuredReading (env: TypeEnv) (state: InferState) (literal: Expression) (number: WrittenNumber) (unitName: Identifier) (storage: Ty) : LiteralReading option =
         let bound (name: Identifier) = (TypeEnv.tryFind name env).IsSome
         match Unifier.unalias (resolveSoFar state storage), state.ContextScope, state.Units |> Map.tryFind unitName with
         | TyVar v, DefScope(_, false), Some info when bound zero && not (NumericLiterals.isUnsettledVar state v) ->
-            let value = NumericLiterals.inBaseUnits state number unitName
+            let value = NumericLiterals.inStorageUnits state number unitName
             let dimension = info.Dimension
             if not (Rational.isWhole value) then
                 let written = UnitSyntax.written number unitName
                 Some (Wrong (Diagnostics.at DiagnosticCodes.TypeMismatch literal.Span
-                                 $"'{written}' is {Rational.text value} of its base unit, which no number of '{Unifier.tyToDisplayString Ascii (TyVar v)}' may be, as an integer type can't: write a whole number of the base unit"))
+                                 $"'{written}' is {Rational.text value} of its default storage unit, which no number of '{Unifier.tyToDisplayString Ascii (TyVar v)}' may be, as an integer type can't: write a whole number of the default storage unit"))
             elif value.Numerator.IsZero then Some (AsMeasured({ literal with Kind = IdentifierExpr zero }, dimension))
             elif bound fromInt then
                 Some (AsMeasured({ literal with Kind = FunctionCall(fromInt, None, [ Expression.at literal.Span (LiteralExpr(IntLit value.Numerator)) ]) }, dimension))
