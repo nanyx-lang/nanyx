@@ -40,7 +40,7 @@ export def describe: #some(string) | #error(#a | #other(string)) -> string = {
 """
     directory.Write
         "main.nyx"
-        $"""::dependency acme.two ./lib2
+        $"""::install acme.two ./lib2
 
 {import}
 
@@ -72,5 +72,5 @@ export def ek: [Typed(a)] a -> {result} = {{ x ->
     | else -> {wrap "#nul"}
 }}
 """
-    directory.Write "main.nyx" $"::dependency lib ./lib\n\n{import}\n\nprintln({call}(3))\n"
+    directory.Write "main.nyx" $"::install lib ./lib\n\n{import}\n\nprintln({call}(3))\n"
     assertRan $"{expected}\n" (nanyxIn directory.Path [ "run"; Path.Combine(directory.Path, "main.nyx") ])

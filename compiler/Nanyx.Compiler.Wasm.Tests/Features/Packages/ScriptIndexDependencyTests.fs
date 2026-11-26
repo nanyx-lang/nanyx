@@ -1,4 +1,4 @@
-/// A script's dependencies on packages from the index: `::dependency acme.core 1.0.0` pins the exact version the script
+/// A script's dependencies on packages from the index: `::install acme.core 1.0.0` pins the exact version the script
 /// uses, since a script has no lockfile. `nanyx run` and `nanyx pull` download it, and the packages it depends on, into
 /// the cache, checked against the index's SHA-256, and a build reads them from the cache. A package from the index named
 /// with no version is an error, with a fix that writes the newest.
@@ -23,7 +23,7 @@ let ``Run - a script runs with the exact version of a package from the index its
     let store = storeIn directory
     publishCore directory store "1.0.0" 1 ""
     publishCore directory store "1.1.0" 2 ""
-    let script = scriptWith directory "::dependency acme.core 1.0.0"
+    let script = scriptWith directory "::install acme.core 1.0.0"
     let outcome = nanyxInStore store (Path.GetDirectoryName script) [ "run"; "script.nyx" ]
     Assert.Equal("1\n", normalised outcome.StandardOutput)
     Assert.Equal(0, outcome.ExitCode)
@@ -40,7 +40,7 @@ let ``Run - the packages a pinned package depends on are chosen as a package's a
     directory.Write "web/web.nyxp" "(package = (name = \"acme.web\", version = \"0.1.0\"), dependencies = [(package = \"acme.core\", version = \"1.0\")])\n"
     directory.Write "web/web.nyx" "export module web\n\nimport acme.core/core as core\n\nexport def page = core.answer * 10\n"
     publishToIndex store (Path.Combine(directory.Path, "web")) [ "acme.core", "1.0" ] "" |> ignore
-    directory.Write "scripts/script.nyx" "::dependency acme.web 0.1.0\n\nimport acme.web/web as web\n\nprintln(web.page)\n"
+    directory.Write "scripts/script.nyx" "::install acme.web 0.1.0\n\nimport acme.web/web as web\n\nprintln(web.page)\n"
     let outcome = nanyxInStore store (Path.Combine(directory.Path, "scripts")) [ "pull"; "script.nyx" ]
     Assert.Equal("acme.core 1.2.0\nacme.web 0.1.0\n", normalised outcome.StandardOutput)
     Assert.Equal(0, outcome.ExitCode)
@@ -52,7 +52,7 @@ let ``Run - an unlisted version a script names still resolves`` () =
     use directory = new TempDirectory()
     let store = storeIn directory
     publishCore directory store "1.0.0" 7 """, "unlisted": true"""
-    let script = scriptWith directory "::dependency acme.core 1.0.0"
+    let script = scriptWith directory "::install acme.core 1.0.0"
     let outcome = nanyxInStore store (Path.GetDirectoryName script) [ "run"; "script.nyx" ]
     Assert.Equal("7\n", normalised outcome.StandardOutput)
     Assert.Equal(0, outcome.ExitCode)
@@ -64,7 +64,7 @@ let ``Run - a version the index doesn't have, or that can't be downloaded, is an
     publishCore directory store "1.0.0" 1 ""
     publishCore directory store "1.1.0" 2 """, "available": false"""
     for version in [ "2.0.0"; "1.1.0" ] do
-        let script = scriptWith directory $"::dependency acme.core {version}"
+        let script = scriptWith directory $"::install acme.core {version}"
         let outcome = nanyxInStore store (Path.GetDirectoryName script) [ "run"; "script.nyx" ]
         Assert.Contains($"script.nyx depends on acme.core {version}", outcome.StandardError)
         Assert.Equal("", outcome.StandardOutput)
@@ -77,7 +77,7 @@ let ``Run - a download that isn't what the index recorded isn't used`` () =
     publishCore directory store "1.0.0" 1 ""
     let artifact = Path.Combine(store.Index, "artifacts", "acme.core-1.0.0.nyxpkg")
     File.AppendAllText(artifact, "changed")
-    let script = scriptWith directory "::dependency acme.core 1.0.0"
+    let script = scriptWith directory "::install acme.core 1.0.0"
     let outcome = nanyxInStore store (Path.GetDirectoryName script) [ "run"; "script.nyx" ]
     Assert.Contains("The download of 'acme.core' 1.0.0 has the SHA-256", outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
@@ -87,7 +87,7 @@ let ``A build reads a pinned package from the cache alone, and says how to downl
     use directory = new TempDirectory()
     let store = storeIn directory
     publishCore directory store "1.0.0" 1 ""
-    let script = scriptWith directory "::dependency acme.core 1.0.0"
+    let script = scriptWith directory "::install acme.core 1.0.0"
     let directives = Script.readFrom store script (File.ReadAllText script)
     let diagnostic = Assert.Single directives.Diagnostics
     Assert.Equal(DiagnosticCodes.PackageNotDownloaded.Code, diagnostic.Code)
@@ -100,7 +100,7 @@ let ``A build reads a pinned package from the cache alone, and says how to downl
 let ``A script names the exact version it uses, not the versions it accepts`` () =
     use directory = new TempDirectory()
     let store = storeIn directory
-    let script = scriptWith directory "::dependency acme.core 1.0"
+    let script = scriptWith directory "::install acme.core 1.0"
     let diagnostic = Assert.Single (Script.readFrom store script (File.ReadAllText script)).Diagnostics
     Assert.Equal(DiagnosticCodes.InvalidDirective.Code, diagnostic.Code)
     Assert.Contains("A script names the exact version of 'acme.core' it uses, as in `1.2.0`, not the versions it accepts, '1.0'", diagnostic.Message)
@@ -112,11 +112,11 @@ let ``A package from the index named with no version is an error, whose fix writ
     publishCore directory store "1.0.0" 1 ""
     publishCore directory store "1.2.0" 2 ""
     publishCore directory store "1.3.0" 3 """, "yanked": true"""
-    let script = scriptWith directory "::dependency acme.core"
+    let script = scriptWith directory "::install acme.core"
     let source = File.ReadAllText script
     let diagnostic = Assert.Single (Script.readFrom store script source).Diagnostics
     Assert.Equal(DiagnosticCodes.InvalidDirective.Code, diagnostic.Code)
-    Assert.Contains("`::dependency acme.core` needs the version of 'acme.core' to use, as in `::dependency acme.core 1.2.0`", diagnostic.Message)
+    Assert.Contains("`::install acme.core` needs the version of 'acme.core' to use, as in `::install acme.core 1.2.0`", diagnostic.Message)
     Assert.Contains("the newest in the index is 1.2.0", diagnostic.Message)
     let fix = Assert.Single diagnostic.Fixes
     Assert.Equal("Use acme.core 1.2.0", fix.Title)

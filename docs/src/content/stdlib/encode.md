@@ -15,7 +15,7 @@ Here a shape is written with its kind in a member of its own, as the decoders pa
 writes a tag as an object of one member:
 
 ```nanyx
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 
 import (
   nanyx.json/encode as encode

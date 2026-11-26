@@ -23,7 +23,7 @@ let private regexPackage = System.IO.Path.Combine(__SOURCE_DIRECTORY__, "nanyx.r
 /// error.
 let private runRegex (body: string) =
     let source =
-        $"::dependency nanyx.regex {regexPackage}\n" + """
+        $"::install nanyx.regex {regexPackage}\n" + """
 import nanyx.regex/regex
 
 def re = { pattern ->

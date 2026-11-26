@@ -166,7 +166,7 @@ module Resolution =
 
     /// The warning (`NYX0051`) that `name` `version`, which the script `script` (its name) pins, is unlisted.
     let pinnedUnlisted (script: string) (name: string) (version: SemanticVersion) : Diagnostic =
-        unlistedWarning name version $"'{script}' pins with `::dependency`" "to move to a listed version, change the version its `::dependency` names"
+        unlistedWarning name version $"'{script}' pins with `::install`" "to move to a listed version, change the version its `::install` names"
 
     /// What `requirements` ask for that `lockfile` doesn't satisfy, each a line naming it: a package it doesn't lock, one
     /// it locks at a version the requirement doesn't accept, or one a locked package depends on that it doesn't lock.

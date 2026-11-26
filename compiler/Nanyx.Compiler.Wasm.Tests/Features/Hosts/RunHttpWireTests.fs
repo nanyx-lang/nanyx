@@ -9,7 +9,7 @@ open TranspilerWasmTestHelpers
 
 /// A script that reads a response of `headers` headers and a body of `bodyBytes` bytes with `wire.readResponse`.
 let private readingResponse (headers: int) (bodyBytes: int) =
-    $"""::dependency nanyx.http
+    $"""::install nanyx.http
 
 import nanyx.http/wire as wire
 

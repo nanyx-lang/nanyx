@@ -14,7 +14,7 @@ let private wordsOf (source: string) = (directiveOf source).Words |> List.map _.
 
 [<Fact>]
 let ``A directive is its name and the words after it`` () =
-    Assert.Equal<string list>([ "dependency"; "acme.util"; "../util" ], wordsOf "::dependency acme.util ../util\n")
+    Assert.Equal<string list>([ "install"; "acme.util"; "../util" ], wordsOf "::install acme.util ../util\n")
     let directive = directiveOf "::lint   unusedBindings #error\n"
     Assert.Equal("lint", directive.Name)
     Assert.Equal<string list>([ "unusedBindings"; "#error" ], directive.Arguments |> List.map _.Text)

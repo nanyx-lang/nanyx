@@ -378,7 +378,7 @@ const tests = [
     assert.equal(await page.locator(".tour-run-output").count(), 0);
   }],
   ["an example that needs another host, and the error reference's, get no playground link", async () => {
-    for (const value of ["match args()\n  | [name, ..._] -> println(name)\n  | [] -> ()", "::host acme.server ../server\n\nprintln(1)", "::dependency nanyx.json 0.2.0\n\nprintln(1)"]) {
+    for (const value of ["match args()\n  | [name, ..._] -> println(name)\n  | [] -> ()", "::host acme.server ../server\n\nprintln(1)", "::install nanyx.json 0.2.0\n\nprintln(1)"]) {
       const tree = { type: "root", children: [{ type: "code", lang: "nanyx", meta: "", value }] };
       remarkPlaygroundLinks()(tree, { path: "/docs/src/content/advanced/example.md" });
       assert.equal(tree.children.length, 1, value);

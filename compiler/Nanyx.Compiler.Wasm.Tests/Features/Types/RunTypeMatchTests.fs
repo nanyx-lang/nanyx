@@ -144,7 +144,7 @@ println(zeros((n = 3, s = "x", xs = [true], b = false), type (n: int, s: string,
 [<Fact>]
 let ``Run - a generic encoder writes JSON for any record, union, list and built-in type`` () =
     let source =
-        """::dependency nanyx.json 0.4.2
+        """::install nanyx.json 0.4.2
 
 import nanyx.json/json as json
 
@@ -336,7 +336,7 @@ println("{kind(type char)} {kind(type string)} {kind(type int)}")
 let ``Run - json.encode of a record with a char field is an error it gives, not a compile failure`` () =
     // #2658: nanyx.json 0.4.2 gives a description kind it doesn't know, such as `#char`, as an EncodeError.
     let source =
-        """::dependency nanyx.json 0.4.2
+        """::install nanyx.json 0.4.2
 
 import nanyx.json/json as json
 

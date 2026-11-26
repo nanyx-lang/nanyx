@@ -136,7 +136,7 @@ dependencies = [
 ]
 ```
 
-The package is imported as one on disk is, `import acme.web/http`, and the file by its module name, `import retry`. A reference must be pinned to a full commit SHA, as its `rev` or as a `commit` beside a tag or branch, because what a tag or branch names can move (`NYX0038`); an editor offers to look the commit up and write it in. A file from GitHub declares no `module` name of its own, can't be exported, and imports only the standard library (`NYX0040`). A package with a GitHub reference can be built and run, but not packed or published (`NYX0039`). In a script, `::dependency retry github:acme/snippets/retry.nyx@<commit>` does the same.
+The package is imported as one on disk is, `import acme.web/http`, and the file by its module name, `import retry`. A reference must be pinned to a full commit SHA, as its `rev` or as a `commit` beside a tag or branch, because what a tag or branch names can move (`NYX0038`); an editor offers to look the commit up and write it in. A file from GitHub declares no `module` name of its own, can't be exported, and imports only the standard library (`NYX0040`). A package with a GitHub reference can be built and run, but not packed or published (`NYX0039`). In a script, `::install retry github:acme/snippets/retry.nyx@<commit>` does the same.
 
 `nanyx pull` fetches what GitHub references name into the package cache, and a build reads it from there: one not fetched yet is an error that says to pull (`NYX0041`).
 
@@ -258,16 +258,16 @@ For script mode, Nanyx synthesizes a package description in memory rather than r
 import "./utils" as utils
 ```
 
-Each directive is a name and the words it takes, separated by spaces: `::linter nanyx.lint` and the `::lint unusedBindings #error` under it say what `linters = [(package = "nanyx.lint", version = "0.42.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. A `::lint` line is for the linter of the nearest `::linter` above it. `::host` and `::dependency` name the script's host and each package it imports from, as a manifest's `host` and `dependencies` do:
+Each directive is a name and the words it takes, separated by spaces: `::linter nanyx.lint` and the `::lint unusedBindings #error` under it say what `linters = [(package = "nanyx.lint", version = "0.42.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. A `::lint` line is for the linter of the nearest `::linter` above it. `::host` and `::install` name the script's host and each package it imports from, as a manifest's `host` and `dependencies` do:
 
 ```nanyx fragment
 ::host nanyx.cli.host
-::dependency acme.util ../util
+::install acme.util ../util
 
 import acme.util/strings
 ```
 
-A package's name is followed by where it is found: a directory, which starts with `.` or `/`, relative to the script, or a version, which starts with a digit. A package from the index is named at the exact version the script uses, `::dependency acme.json 1.2.0`: a script has no lockfile, so that version is its pin, and `nanyx run` downloads it. A package the compiler ships needs neither: it is at the compiler's version. Without `::host`, a script runs under `nanyx.cli.host`. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
+A package's name is followed by where it is found: a directory, which starts with `.` or `/`, relative to the script, or a version, which starts with a digit. A package from the index is named at the exact version the script uses, `::install acme.json 1.2.0`: a script has no lockfile, so that version is its pin, and `nanyx run` downloads it. A package the compiler ships needs neither: it is at the compiler's version. Without `::host`, a script runs under `nanyx.cli.host`. The directives are listed in [Files and projects](../getting-started/files-and-projects). A file in a package cannot have directives: they go in the package's manifest instead.
 
 Script modules and named package modules are distinct. A named module is imported through its package or module identity; an anonymous script module is imported by file path.
 

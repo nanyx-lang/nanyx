@@ -162,7 +162,7 @@ directive takes: a package's name missing, a word that is neither a version nor 
 Directives say for a script what a package's manifest would say ([Packages](../tour/packages)).
 
 ```nanyx
-::dependency acme.util latest  -- error NYX0009: 'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory, which starts with `.` or `/`, as `../util`
+::install acme.util latest  -- error NYX0009: 'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory, which starts with `.` or `/`, as `../util`
 
 def total = 1
 ```
@@ -395,7 +395,7 @@ To fix it, write the value the message asks for: `sources = ["*.nyx"]`.
 The manifest, or a script's directives, use something the compiler knows but doesn't support yet, such as a dependency
 on GitHub where nothing can fetch it.
 
-To fix it, give the directory the package is in instead, as in `::dependency acme.util ../util`.
+To fix it, give the directory the package is in instead, as in `::install acme.util ../util`.
 
 # NYX0025: Module not public
 
@@ -641,7 +641,7 @@ def total = 1
 
 To fix it, write it as the message says, which the error's fix does: `::linters.default` is `::linter nanyx.lint`,
 `::linters.default.unusedBindings = "error"` is `::lint unusedBindings #error` under it, `::dependencies.acme.util =
-{ path = "../util" }` is `::dependency acme.util ../util`, and `::formatter.lineWidth = 80` is
+{ path = "../util" }` is `::install acme.util ../util`, and `::formatter.lineWidth = 80` is
 `::format lineWidth 80`.
 
 # NYX0036: Lint setting with no linter above it
@@ -709,7 +709,7 @@ the standard library, on the package it comes from.
 
 A dependency named by its version is the version `nanyx.lock` locks, unpacked in the package cache, and that version
 isn't there: the lockfile is new, or the cache was cleared. The same goes for a dependency on GitHub, at the commit it
-is pinned to, and for the version a script's `::dependency` pins, as in `::dependency acme.util 1.2.0`: a build reads
+is pinned to, and for the version a script's `::install` pins, as in `::install acme.util 1.2.0`: a build reads
 it from the cache, and never downloads.
 
 ```nanyx
@@ -741,7 +741,7 @@ names no `sources`, they are `**/*.nyx`, every Nanyx file under it.
 
 ```nanyx
 -- file: main.nyx
-::dependency acme.util ./util
+::install acme.util ./util
 
 def total = 1
 -- file: util/util.nyxp
@@ -757,7 +757,7 @@ More than one source file of a package declares an `@entry`, and a package runs 
 
 ```nanyx
 -- file: main.nyx
-::dependency acme.tool ./tool
+::install acme.tool ./tool
 
 def total = 1
 -- file: tool/tool.nyxp
@@ -893,7 +893,7 @@ To fix it, write `export scoped`, which the error's fix does; `nanyx format` wri
 # NYX0051: Unlisted version
 
 A warning, not an error: the build goes on. Its author has unlisted the version a lockfile locks, or a script's
-`::dependency` pins, with [`nanyx unlist`](./command-line#nanyx-unlist), so no new resolution chooses it, but what
+`::install` pins, with [`nanyx unlist`](./command-line#nanyx-unlist), so no new resolution chooses it, but what
 already names it keeps it. A command that reads the package index for the version, `nanyx pull`, `install`, `build` or
 `run`, warns; one that reads it only from the package cache doesn't:
 
@@ -904,7 +904,7 @@ warning NYX0051: Unlisted version 'acme.json 0.1.1'
 
 To move to a listed version in a package, delete the version's entry from `nanyx.lock`: `nanyx pull`, or the next
 build, locks the newest listed version the manifest accepts. If it accepts none, change the version it asks for first.
-In a script, change the version its `::dependency` names. Or keep the version, if you need it.
+In a script, change the version its `::install` names. Or keep the version, if you need it.
 
 # NYX0052: Package that needs a newer compiler
 
@@ -941,7 +941,7 @@ named `.host` is a host, declare its `host`.
 The packages the compiler ships were renamed when every host came to be named `<name>.host`: `nanyx.console.core` is
 `nanyx.cli`, the console host `nanyx.console` is `nanyx.cli.host`, `nanyx.http.core` is `nanyx.http`, the HTTP host
 `nanyx.http` is `nanyx.http.host`, and `nanyx.playground` is `nanyx.playground.host`. A manifest's `host` or
-`dependencies`, a script's `::host` or `::dependency`, or `--host` that names one by its old name is an error that gives
+`dependencies`, a script's `::host` or `::install`, or `--host` that names one by its old name is an error that gives
 the new one. `nanyx.http` is the library's name now, so it is an error only where a host is named:
 
 ```nanyx

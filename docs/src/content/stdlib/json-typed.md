@@ -23,7 +23,7 @@ both. Text that isn't JSON is an `#invalidJson`, as `json.parse` gives. A decode
 of what it reads, and reads a long list in constant stack.
 
 ```nanyx
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 
 import nanyx.json/json as json
 
@@ -53,7 +53,7 @@ A tagged union whose tag is a member of its own is read by the decoder that memb
 decoder, including one picked by what an earlier `try` read.
 
 ```nanyx
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 
 import nanyx.json/json as json
 

@@ -366,4 +366,4 @@ The compiler ships the packages every program needs beside itself, in a `package
 - `nanyx.wasi`, the [host library](#host-libraries) the console and HTTP hosts are written on: WASI's random source and clocks, the runtime's `nanyx:http`, and the component model's canonical ABI and WASI 0.3 interfaces their component roots use;
 - `nanyx.playground.host`, the playground host, which runs a console program in a web page.
 
-A manifest or a directive names a package the compiler ships at the compiler's version exactly; any other version is an error that names the one shipped (`NYX0029`). In a `::host` or `::dependency` directive it needs no version at all: `::dependency nanyx.cli`. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.
+A manifest or a directive names a package the compiler ships at the compiler's version exactly; any other version is an error that names the one shipped (`NYX0029`). In a `::host` or `::install` directive it needs no version at all: `::install nanyx.cli`. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.

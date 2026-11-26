@@ -5,7 +5,7 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-// A script names its host with `::host` and the packages it imports from with `::dependency`, as a manifest's `host`
+// A script names its host with `::host` and the packages it imports from with `::install`, as a manifest's `host`
 // and `dependencies` do (#1504, #1599).
 
 /// A library, `acme.util`, in `util/`, beside the script in `scripts/`.
@@ -25,8 +25,8 @@ let private compileScriptWith (files: (string * string) list) (source: string) =
 let private codesOf (diagnostics: Diagnostic list) = diagnostics |> List.map _.Code
 
 [<Fact>]
-let ``A script imports a public module of a package its ::dependency finds by path`` () =
-    let source = withFinalNewline """::dependency acme.util ../util
+let ``A script imports a public module of a package its ::install finds by path`` () =
+    let source = withFinalNewline """::install acme.util ../util
 
 import acme.util/strings
 
@@ -34,7 +34,7 @@ println(shout("hi"))"""
     Assert.Empty(compileScriptWith util source)
 
 [<Fact>]
-let ``Without ::dependency a script can't import the package`` () =
+let ``Without ::install a script can't import the package`` () =
     let source = withFinalNewline """import acme.util/strings
 
 println(shout("hi"))"""
@@ -45,7 +45,7 @@ let ``A script imports only a dependency's public modules`` () =
     let files = util @ [ "util/secrets.nyx", withFinalNewline """module secrets
 
 export def mark = "!" """ ]
-    let source = withFinalNewline """::dependency acme.util ../util
+    let source = withFinalNewline """::install acme.util ../util
 
 import acme.util/secrets
 
@@ -54,7 +54,7 @@ println(mark)"""
 
 [<Fact>]
 let ``A script depends on a package the compiler ships by its name`` () =
-    let source = withFinalNewline $"""::dependency nanyx.cli
+    let source = withFinalNewline $"""::install nanyx.cli
 
 import nanyx.cli/env as (Env)
 
@@ -68,7 +68,7 @@ let ``A script still imports files beside it by path when it has dependencies`` 
     let files = util @ [ "scripts/helper.nyx", withFinalNewline """module helper
 
 export def twice = { s: string -> s ++ s }""" ]
-    let source = withFinalNewline """::dependency acme.util ../util
+    let source = withFinalNewline """::install acme.util ../util
 
 import acme.util/strings
 import helper
@@ -100,14 +100,14 @@ println("hi")"""
 [<InlineData("::host", "NYX0009", "`::host` takes a host and where it is found")>]
 [<InlineData("::host nanyx.cli.host ../console extra", "NYX0009", "`::host` takes a host and where it is found")>]
 [<InlineData("::host nanyx.cli.host latest", "NYX0009", "'latest' is neither a version, which starts with a digit, as `1.2.0`, nor a directory")>]
-[<InlineData("::dependency acme.util 1.2.0", "NYX0041", "'acme.util' 1.2.0 isn't in the package cache")>]
-[<InlineData("::dependency acme.util 1.2", "NYX0009", "A script names the exact version of 'acme.util' it uses, as in `1.2.0`, not the versions it accepts, '1.2'")>]
-[<InlineData("::dependency acme.util ../nowhere", "NYX0023", "The dependency 'acme.util' can't be read")>]
-[<InlineData("::dependency acme.other ../util", "NYX0023", "is named 'acme.util', not 'acme.other'")>]
-[<InlineData("::dependency acme.util", "NYX0009", "`::dependency acme.util` needs the version of 'acme.util' to use, as in `::dependency acme.util 1.2.0`, or the directory it is in, as in `../util`")>]
-[<InlineData("::dependency nanyx.cli 0.0.1", "NYX0029", "The compiler ships 'nanyx.cli' {version}, not 0.0.1")>]
-[<InlineData("::dependency", "NYX0009", "`::dependency` takes a package and where it is found")>]
-let ``A wrong ::host or ::dependency is the manifest's error, at the directive`` (directive: string, code: string, message: string) =
+[<InlineData("::install acme.util 1.2.0", "NYX0041", "'acme.util' 1.2.0 isn't in the package cache")>]
+[<InlineData("::install acme.util 1.2", "NYX0009", "A script names the exact version of 'acme.util' it uses, as in `1.2.0`, not the versions it accepts, '1.2'")>]
+[<InlineData("::install acme.util ../nowhere", "NYX0023", "The dependency 'acme.util' can't be read")>]
+[<InlineData("::install acme.other ../util", "NYX0023", "is named 'acme.util', not 'acme.other'")>]
+[<InlineData("::install acme.util", "NYX0009", "`::install acme.util` needs the version of 'acme.util' to use, as in `::install acme.util 1.2.0`, or the directory it is in, as in `../util`")>]
+[<InlineData("::install nanyx.cli 0.0.1", "NYX0029", "The compiler ships 'nanyx.cli' {version}, not 0.0.1")>]
+[<InlineData("::install", "NYX0009", "`::install` takes a package and where it is found")>]
+let ``A wrong ::host or ::install is the manifest's error, at the directive`` (directive: string, code: string, message: string) =
     let directive = directive.Replace("{version}", Toolchain.version)
     let source = "-- A script.\n" + directive + withFinalNewline """
 
@@ -130,8 +130,8 @@ println("hi")"""
 
 [<Fact>]
 let ``A script lists each package it depends on once`` () =
-    let source = withFinalNewline """::dependency acme.util ../util
-::dependency acme.util ../util
+    let source = withFinalNewline """::install acme.util ../util
+::install acme.util ../util
 
 println("hi")"""
     let diagnostic = Assert.Single(compileScriptWith util source)
@@ -146,7 +146,7 @@ let ``A dependency's file is a library's, which doesn't see the host's prelude``
           "util/strings.nyx", withFinalNewline """export module strings
 
 export def greet: [Console] () -> () = { () -> println("hi") }""" ]
-    let source = withFinalNewline """::dependency acme.util ../util
+    let source = withFinalNewline """::install acme.util ../util
 
 import acme.util/strings
 
@@ -158,7 +158,7 @@ greet()"""
 let ``The editor compiles a script in the build its directives make`` () =
     use package = new TempPackage(util)
     let path = package.Path "scripts/main.nyx"
-    let source = withFinalNewline """::dependency acme.util ../util
+    let source = withFinalNewline """::install acme.util ../util
 
 import acme.util/strings
 

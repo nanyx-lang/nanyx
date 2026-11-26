@@ -66,7 +66,7 @@ let ``A script's directives and --host name a shipped package by its new name`` 
         diagnosticsOf "::host nanyx.console\n\nprintln(1)")
     Assert.Equal<(string * string) list>(
         [ renamed, "'nanyx.http.core' is now 'nanyx.http'" ],
-        diagnosticsOf "::dependency nanyx.http.core\n\nprintln(1)")
+        diagnosticsOf "::install nanyx.http.core\n\nprintln(1)")
     // `--host` reads a shipped host by its name.
     match HostPackages.tryShipped "nanyx.console" with
     | Result.Error message -> Assert.Equal("The host 'nanyx.console' is now 'nanyx.cli.host'", message)

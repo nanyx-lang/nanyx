@@ -7,7 +7,7 @@ order: 12.5
 A function that can wait, on an HTTP request or a file, requires `Async`, and is otherwise an ordinary function:
 
 ```nanyx fragment
-::dependency nanyx.http
+::install nanyx.http
 
 import nanyx.http/http as http
 

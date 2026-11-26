@@ -165,7 +165,7 @@ println(["a", "b"] \list.map { name -> "Hi, {named(name)}" })""")
 let ``A program that writes, reads and walks files gives the same when every wait stops`` () =
     use directory = new TempDirectory()
     let source =
-        """::dependency nanyx.fs
+        """::install nanyx.fs
 
 import (
   nanyx.fs/file as file

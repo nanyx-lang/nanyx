@@ -36,7 +36,7 @@
           }
         },
         {
-          "comment": "A script's directive, at the start of a line: its name, then words separated by spaces: `::dependency acme.util ../util`, `::lint unusedBindings #error`",
+          "comment": "A script's directive, at the start of a line: its name, then words separated by spaces: `::install acme.util ../util`, `::lint unusedBindings #error`",
           "name": "meta.preprocessor.directive.nanyx",
           "begin": "^(::)([A-Za-z]\\w*)?",
           "beginCaptures": {

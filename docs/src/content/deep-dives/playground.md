@@ -113,7 +113,7 @@ since the docs' pages are swapped in by the client router.
 A block opens in the playground when it is runnable (`isRunnable`: fenced ` ```nanyx ` with nothing after it and no
 `-- error` comment), is one file, and needs no host but the playground's. `needsAnotherHost` decides that from the
 block's source when the site is built: a block needs another host when it names one with `::host`; when it depends on a
-package from the index, `::dependency nanyx.json 0.4.0`, which the playground can't download; when it imports, or
+package from the index, `::install nanyx.json 0.4.0`, which the playground can't download; when it imports, or
 depends on, a module only the console host can run, such as `nanyx.fs`'s or `nanyx.cli/env`; or when it uses,
 outside a comment, a name only the console host's prelude brings in and doesn't declare it itself, such as `args`,
 `exit`, `FileSystem` or `Http` and the members of those contexts. Which names and modules those are is read from the two

@@ -9,7 +9,7 @@ open Parser.Program
 type DirectiveWord = { Text: string; Span: SourceSpan }
 
 /// A `::` directive at the top of a script, which says what one entry of a package's manifest would: `::host
-/// nanyx.cli.host`, `::dependency acme.util ../util`, `::lint unusedBindings #error`. It is a line of words separated by
+/// nanyx.cli.host`, `::install acme.util ../util`, `::lint unusedBindings #error`. It is a line of words separated by
 /// spaces: the directive's name, then what it takes.
 type Directive =
     { /// The directive's name, then the words after it: `dependency`, `acme.util`, `../util`. Empty for a line with

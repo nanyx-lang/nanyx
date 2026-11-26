@@ -130,7 +130,7 @@ let ``Dependencies move into the manifest, a path made relative to it, and one n
     use directory = new TempDirectory()
     let root =
         scripts directory "app" [
-            "tools/fetch.nyx", "::dependency acme.util ../../util\n::dependency acme.json 1.2.0\n\nexport def fetch = 1\n" ]
+            "tools/fetch.nyx", "::install acme.util ../../util\n::install acme.json 1.2.0\n\nexport def fetch = 1\n" ]
     let outcome = nanyxIn directory.Path [ "migrate"; "app" ]
     Assert.Equal(0, outcome.ExitCode)
     Assert.Contains("""  dependencies = [(package = "acme.util", path = "../util"), (package = "acme.json", version = "1.2.0")]""", read root "app.nyxp")
@@ -159,8 +159,8 @@ let ``A directory whose name is not a package name needs --name`` () =
 [<Fact>]
 let ``A directive whose version isn't one is an error naming it`` () =
     use directory = new TempDirectory()
-    let root = scripts directory "app" [ "app.nyx", "::dependency acme.util 1.x\n\nprintln(\"hi\")\n" ]
+    let root = scripts directory "app" [ "app.nyx", "::install acme.util 1.x\n\nprintln(\"hi\")\n" ]
     let outcome = nanyxIn directory.Path [ "migrate"; "app" ]
-    Assert.Contains("app.nyx:1: ::dependency acme.util 1.x: '1.x' is not a version, which must be a version, `1.2.0`, or its first numbers, `1.2`", outcome.StandardError)
+    Assert.Contains("app.nyx:1: ::install acme.util 1.x: '1.x' is not a version, which must be a version, `1.2.0`, or its first numbers, `1.2`", outcome.StandardError)
     Assert.Equal(1, outcome.ExitCode)
     Assert.False(File.Exists(Path.Combine(root, "app.nyxp")))

@@ -119,7 +119,7 @@ let ``A script runs under the host its ::host finds by path`` () =
     Assert.Equal(0, outcome.ExitCode)
 
 [<Fact>]
-let ``A script runs with the packages its ::dependency lines name`` () =
+let ``A script runs with the packages its ::install lines name`` () =
     use directory = new TempDirectory()
     Directory.CreateDirectory(Path.Combine(directory.Path, "util")) |> ignore
     File.WriteAllText(
@@ -127,7 +127,7 @@ let ``A script runs with the packages its ::dependency lines name`` () =
         """(package = (name = "acme.util", version = "0.1.0"))""")
     File.WriteAllText(Path.Combine(directory.Path, "util", "strings.nyx"), "export module strings\n\nexport def shout = { s: string -> s ++ \"!\" }\n")
     let path = Path.Combine(directory.Path, "script.nyx")
-    File.WriteAllText(path, "::dependency acme.util ./util\n\nimport acme.util/strings\n\nprintln(shout(\"hi\"))\n")
+    File.WriteAllText(path, "::install acme.util ./util\n\nimport acme.util/strings\n\nprintln(shout(\"hi\"))\n")
     let outcome = nanyxIn directory.Path [ "run"; path ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal("hi!\n", outcome.StandardOutput.ReplaceLineEndings "\n")

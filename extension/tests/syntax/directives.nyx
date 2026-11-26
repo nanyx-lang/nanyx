@@ -10,9 +10,10 @@
 --     ^^^^^^^^^^^^^^ variable.other.directive.nanyx
 --                    ^^^^^^ constant.other.tag.directive.nanyx - constant.other.symbol.nanyx
 
-::dependency acme.util ../util
---           ^^^^^^^^^ entity.name.package.directive.nanyx
---                     ^^^^^^^ string.unquoted.path.directive.nanyx
+::install acme.util ../util
+--^^^^^^^ keyword.control.directive.nanyx
+--        ^^^^^^^^^ entity.name.package.directive.nanyx
+--                  ^^^^^^^ string.unquoted.path.directive.nanyx
 
 ::host nanyx.cli.host 0.28.0
 --                    ^^^^^^ constant.numeric.version.directive.nanyx

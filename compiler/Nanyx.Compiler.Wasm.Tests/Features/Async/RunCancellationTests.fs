@@ -57,7 +57,7 @@ let ``A request in a task race cancels gives #cancelled, so a timeout is a race 
     withSlowServer (fun url ->
         assertPrints
             "the request was cancelled\n#timedOut\n"
-            $"""::dependency nanyx.http
+            $"""::install nanyx.http
 
 import nanyx.http/http as http
 
@@ -81,7 +81,7 @@ let ``Cancelling a task cancels every task it started`` () =
     withSlowServer (fun url ->
         assertPrints
             "the child's request was cancelled\nquick\n"
-            $"""::dependency nanyx.http
+            $"""::install nanyx.http
 
 import nanyx.http/http as http
 
@@ -106,7 +106,7 @@ println(raced())""")
 let ``A file's function in a cancelled task gives #cancelled and does nothing`` () =
     assertPrints
         "the loser's write was cancelled\nfalse\nfirst\n"
-        """::dependency nanyx.fs
+        """::install nanyx.fs
 
 import (
   nanyx.fs/file as file

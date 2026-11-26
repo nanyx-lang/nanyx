@@ -1,4 +1,4 @@
-::dependency nanyx.regex 0.1.1
+::install nanyx.regex 0.1.1
 
 module casing
 

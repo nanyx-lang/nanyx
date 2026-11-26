@@ -12,14 +12,14 @@ type ScriptDirectives =
       /// manifest's `linters` would. None when there is no `::linter` directive: then no linter runs, as for a package
       /// whose manifest has no `linters`.
       Linters: LinterOptions option
-      /// The build the `::host` and `::dependency` directives make: the host the script runs under and the packages it
+      /// The build the `::host` and `::install` directives make: the host the script runs under and the packages it
       /// imports from (see `Package.scriptModules`). None when there are neither, or they are wrong: then the script
       /// runs under the console host and imports only the standard library and files.
       Build: PackageModules option
       /// What is wrong with the directives, each at its line, or at the word it is about.
       Diagnostics: Diagnostic list }
 
-/// Where the package a `::host`, `::dependency` or `::linter` directive names is found.
+/// Where the package a `::host`, `::install` or `::linter` directive names is found.
 type DirectivePlace =
     /// At a version, a word that starts with a digit: `1.2.0`.
     | AtVersion of DirectiveWord
@@ -35,7 +35,7 @@ type DirectivePlace =
 type DirectiveSetting =
     /// `::host nanyx.cli.host`: the host the script runs under.
     | HostSetting of package: DirectiveWord * DirectivePlace
-    /// `::dependency acme.util ../util`: a package the script imports from; or `::dependency retry
+    /// `::install acme.util ../util`: a package the script imports from; or `::install retry
     /// github:acme/snippets/retry.nyx@<commit>`, a file from GitHub it imports as the module `retry`.
     | DependencySetting of package: DirectiveWord * DirectivePlace
     /// `::linter nanyx.lint`: a linter to run.
@@ -47,7 +47,7 @@ type DirectiveSetting =
     | FormatSetting of key: DirectiveWord * value: DataValue
 
 module Script =
-    let private directiveList = "`::host`, `::dependency`, `::linter`, `::lint` and `::format`"
+    let private directiveList = "`::host`, `::install`, `::linter`, `::lint` and `::format`"
 
     let private invalid (span: SourceSpan) (message: string) = Diagnostics.at DiagnosticCodes.InvalidDirective span message
 
@@ -55,8 +55,8 @@ module Script =
     let private usage (name: string) =
         match name with
         | "host" -> $"`::host` takes a host and where it is found: write `::host {Hosts.consolePackage}`, or `::host acme.server ../server`"
-        | "dependency" ->
-            "`::dependency` takes a package and where it is found, or a module name and a file on GitHub: write `::dependency acme.util ../util`, `::dependency nanyx.cli` or `::dependency acme.web github:acme/web@<commit>`, or `::dependency retry github:acme/snippets/retry.nyx@<commit>`"
+        | "install" ->
+            "`::install` takes a package and where it is found, or a module name and a file on GitHub: write `::install acme.util ../util`, `::install nanyx.cli` or `::install acme.web github:acme/web@<commit>`, or `::install retry github:acme/snippets/retry.nyx@<commit>`"
         | "linter" -> "`::linter` takes a linter: write `::linter nanyx.lint`"
         | "lint" -> "`::lint` takes a rule of the linter above it and a severity: write `::lint unusedBindings #error`"
         | _ -> "`::format` takes a setting and its value: write `::format lineWidth 100`"
@@ -82,7 +82,7 @@ module Script =
         elif word.Text[0] = '.' || word.Text[0] = '/' || word.Text[0] = '\\' || Path.IsPathRooted word.Text then Result.Ok(AtPath word)
         else Result.Error(invalid word.Span $"'{word.Text}' is neither a version, which starts with a digit, as `1.2.0`, nor a directory, which starts with `.` or `/`, as `../util`")
 
-    /// The package a `::host`, `::dependency` or `::linter` directive names, and where it is found.
+    /// The package a `::host`, `::install` or `::linter` directive names, and where it is found.
     let private packageOf (directive: Directive) : Result<DirectiveWord * DirectivePlace, Diagnostic> =
         match directive.Arguments with
         | [] -> Result.Error(invalid directive.Span (usage directive.Name) |> Diagnostics.about $"::{directive.Name}")
@@ -113,7 +113,7 @@ module Script =
         let format = matching @"formatter\.(\w+)\s*=\s*([0-9]+)"
         let atVersion = matching $@"(host|dependencies)\.([\w.]+)\s*=\s*{oldString}"
         let atPath = matching $@"(host|dependencies)\.([\w.]+)\s*=\s*\{{\s*path\s*=\s*{oldString}\s*\}}"
-        let named (table: string) = if table = "host" then "host" else "dependency"
+        let named (table: string) = if table = "host" then "host" else "install"
         if linterOn.Success then
             linterPackage linterOn.Groups[1].Value |> Option.map (fun package -> $"::linter {package}")
         elif rule.Success then
@@ -145,7 +145,7 @@ module Script =
             Diagnostics.at
                 DiagnosticCodes.OldFormDirective
                 directive.Span
-                $"Directives are lines of words now, not a manifest's key and a TOML value: write them as `::host {Hosts.consolePackage}`, `::dependency acme.util ../util`, `::linter nanyx.lint`, `::lint unusedBindings #error` and `::format lineWidth 100`"
+                $"Directives are lines of words now, not a manifest's key and a TOML value: write them as `::host {Hosts.consolePackage}`, `::install acme.util ../util`, `::linter nanyx.lint`, `::lint unusedBindings #error` and `::format lineWidth 100`"
 
     /// The error for a `::lint` with no `::linter` above it, with a fix that turns on the official linter above it.
     let private lintWithoutLinter (directive: Directive) : Diagnostic =
@@ -169,7 +169,7 @@ module Script =
                         match packageOf directive with
                         | Result.Ok (_, AtGitHub place) -> Result.Error(invalid place.Span "A host cannot be found on GitHub yet: give the directory it is in, as in `::host acme.server ../server`"), linter
                         | setting -> setting |> Result.map HostSetting, linter
-                    | "dependency" -> packageOf directive |> Result.map DependencySetting, linter
+                    | "install" -> packageOf directive |> Result.map DependencySetting, linter
                     | "linter" ->
                         match packageOf directive with
                         | Result.Ok (_, AtPath path) ->
@@ -195,7 +195,7 @@ module Script =
         |> fst
 
     /// The entry the package `package`, found at `place`, is in a manifest, written at `span`, with `fields` after it:
-    /// `::dependency acme.util ../util` is `(package = "acme.util", path = "../util")`. A package the compiler ships,
+    /// `::install acme.util ../util` is `(package = "acme.util", path = "../util")`. A package the compiler ships,
     /// named with neither, is named at the compiler's version.
     let private entryOf (span: SourceSpan) (package: DirectiveWord) (place: DirectivePlace) (fields: DataField list) : DataValue =
         let field name (word: DirectiveWord) = { Name = name; NameSpan = word.Span; Value = { Data = DataString word.Text; Location = word.Span } }
@@ -247,7 +247,7 @@ module Script =
             newestFound.[(store.Index, name)] <- (DateTime.UtcNow, newest)
             newest
 
-    /// What is wrong with the package `package` a `::dependency` names, found at `place`, as a script names it: a package
+    /// What is wrong with the package `package` a `::install` names, found at `place`, as a script names it: a package
     /// from the index needs the exact version the script uses, since a script has no lockfile and the version its
     /// directive writes is its pin. One with no version is offered the newest the index of `store` has.
     let private unpinned (store: PackageStore) (package: DirectiveWord) (place: DirectivePlace) : Diagnostic list =
@@ -257,7 +257,7 @@ module Script =
             let example = newest |> Option.map string |> Option.defaultValue "1.2.0"
             let found = match newest with Some version -> $": the newest in the index is {version}" | None -> ""
             let message =
-                $"`::dependency {package.Text}` needs the version of '{package.Text}' to use, as in `::dependency {package.Text} {example}`, or the directory it is in, as in `../{package.Text.Substring(package.Text.LastIndexOf '.' + 1)}`. A script has no lockfile, so the version it writes is the one it uses{found}"
+                $"`::install {package.Text}` needs the version of '{package.Text}' to use, as in `::install {package.Text} {example}`, or the directory it is in, as in `../{package.Text.Substring(package.Text.LastIndexOf '.' + 1)}`. A script has no lockfile, so the version it writes is the one it uses{found}"
             let diagnostic = invalid package.Span message |> Diagnostics.about package.Text
             match newest with
             | Some version ->
@@ -282,7 +282,7 @@ module Script =
             | FromIndex requirement -> Some(dependency.Name, requirement.Minimum)
             | _ -> None)
 
-    /// The build the `::host` and `::dependency` directives of `settings` make, if there are any, for the script at
+    /// The build the `::host` and `::install` directives of `settings` make, if there are any, for the script at
     /// `filePath`, whose imports by path, and the directories its directives give, are relative to its directory, with
     /// the packages they name found in `store`; or what is wrong with them. A script that names no host runs under the
     /// shipped host `defaultHost`; with no directives at all under the console host, it has no build of its own, and
@@ -375,7 +375,7 @@ module Script =
         readFromUnder Hosts.consolePackage store filePath source
 
     /// What `nanyx pull` does for the script at `filePath`, whose text is `source`: downloads into the cache of `store`
-    /// each package from the index its `::dependency` lines pin, and the packages they depend on (see
+    /// each package from the index its `::install` lines pin, and the packages they depend on (see
     /// `ScriptDependencies.pull`), giving a line for each and a warning for each pin the index has unlisted, or what
     /// went wrong. A directive written wrong is left for the build to report.
     let pull (store: PackageStore) (filePath: string) (source: string) : Result<Pulled, string list> =
@@ -403,7 +403,7 @@ module Script =
             ErrorsDeferred = result.ErrorsDeferred && not (directives.Diagnostics |> List.exists Diagnostics.isError) }
 
     /// Compiles `source` as the file at `filePath` with the linters `options` gives, in the build `directives` make, if
-    /// they make one: under the host its `::host` names, importing from the packages its `::dependency` lines name. Otherwise
+    /// they make one: under the host its `::host` names, importing from the packages its `::install` lines name. Otherwise
     /// it is compiled as `Package.compileSourceReading` compiles it. Each module's check is reported to `listener`, and
     /// each other file it needs is read by `readFile`.
     let compileSourceReading

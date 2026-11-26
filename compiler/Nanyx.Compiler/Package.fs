@@ -435,7 +435,7 @@ module Package =
 
     /// The build of the script at `filePath`, which runs under the host `host` names, the host the compiler ships as the
     /// package `defaultHost` if it names none, and imports from the packages `dependencies` lists and the files from GitHub `files` lists, as
-    /// its `::host` and `::dependency` directives say (see `Script`), found in `store`, at the versions `locked` gives
+    /// its `::host` and `::install` directives say (see `Script`), found in `store`, at the versions `locked` gives
     /// those named by their version; or what is wrong with them, each at the directive it is about, or at `span` for
     /// what is about a package as a whole.
     let scriptModules

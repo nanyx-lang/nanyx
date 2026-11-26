@@ -28,7 +28,7 @@ let private assertPrints (straight: string) (stopping: string) (source: string) 
 
 /// A function that waits, on the file system, so that with every wait stopping, a task takes turns there.
 let private waiting =
-    """::dependency nanyx.fs
+    """::install nanyx.fs
 
 import (
   nanyx.fs/file as file

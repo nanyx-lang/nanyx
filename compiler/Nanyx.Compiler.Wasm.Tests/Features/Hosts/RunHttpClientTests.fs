@@ -13,7 +13,7 @@ open TranspilerWasmTestHelpers
 
 /// The directives and imports of a script that uses `nanyx.http`.
 let private header =
-    """::dependency nanyx.http
+    """::install nanyx.http
 
 import nanyx.http/http as http
 

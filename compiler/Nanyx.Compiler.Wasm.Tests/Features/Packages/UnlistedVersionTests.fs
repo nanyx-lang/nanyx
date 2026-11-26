@@ -40,7 +40,7 @@ let private appLocking (directory: TempDirectory) (more: string) =
 
 /// The script `script.nyx`, in its own directory, that pins acme.core 1.1.0 and prints its answer. Gives its directory.
 let private scriptPinning (directory: TempDirectory) =
-    directory.Write "scripts/script.nyx" "::dependency acme.core 1.1.0\n\nimport acme.core/core as core\n\nprintln(core.answer)\n"
+    directory.Write "scripts/script.nyx" "::install acme.core 1.1.0\n\nimport acme.core/core as core\n\nprintln(core.answer)\n"
     Path.Combine(directory.Path, "scripts")
 
 [<Fact>]
@@ -98,7 +98,7 @@ let ``Run - an unlisted version a script pins is used, with a warning`` () =
     let scripts = scriptPinning directory
     let ran = nanyxInStore store scripts [ "run"; "script.nyx" ]
     Assert.Equal(
-        warning "'script.nyx' pins with `::dependency`" "to move to a listed version, change the version its `::dependency` names",
+        warning "'script.nyx' pins with `::install`" "to move to a listed version, change the version its `::install` names",
         normalised ran.StandardError
     )
     Assert.Equal("2\n", normalised ran.StandardOutput)
