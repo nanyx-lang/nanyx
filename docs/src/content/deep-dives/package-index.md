@@ -22,7 +22,8 @@ client noticing. `PackageIndex.fs` reads it.
   first and builds every other address from it, so the index can move to another address with a change there and a
   redirect, not a client release. The compiler refuses a format it doesn't read.
 - **One file per package**, `<index><namespace>/<name>.json`, lists every version ever recorded with its `url`,
-  `sha256`, `nanyx` (the oldest compiler it builds with), `dependencies`, `unlisted` and `available`
+  `sha256`, `nanyx` (the compilers it builds with, as its manifest writes them: `0.43`, that one or later, or `=0.43.0`, that one
+  only), `dependencies`, `unlisted` and `available`
   (`PackageIndex.versions`). An older file writes `unlisted` as `yanked`, which the compiler reads as the same. A
   package the index doesn't list has no file: a 404, which is read as no versions.
 - **The index stores no artifacts and mirrors nothing.** A package's versions are the releases of its own GitHub

@@ -31,7 +31,8 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
   the compiler.
 - **A release publishes them to the index.** Each shipped manifest names this repository, `repository =
-  "nanyx-lang/nanyx"`, and the oldest compiler it builds with, the one it ships with, and each release attaches its
+  "nanyx-lang/nanyx"`, and the compilers it builds with: a library the one it ships with or a later one, and a host or
+  a host library that one only, `=0.43.0`, since they use the compiler's internals. Each release attaches its
   `.nyxpkg` to the `compiler/<version>` release, which the [package index](./package-index) records as it does any
   package's release ([Releases](./releases#the-shipped-packages)). The compiler still reads them from `packages/`
   beside it: resolving them from the index, as any package is, is the rest of

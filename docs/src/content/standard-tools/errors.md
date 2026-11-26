@@ -906,10 +906,10 @@ To move to a listed version in a package, delete the version's entry from `nanyx
 build, locks the newest listed version the manifest accepts. If it accepts none, change the version it asks for first.
 In a script, change the version its `::install` names. Or keep the version, if you need it.
 
-# NYX0052: Package that needs a newer compiler
+# NYX0052: Package that needs another compiler
 
-The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running.
-The message names both versions:
+The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running,
+or with one compiler only, as `nanyx = "=0.43.0"`, which isn't the one running. The message names both versions:
 
 ```nanyx
 -- file: demo.nyxp
@@ -918,7 +918,8 @@ The message names both versions:
 )
 ```
 
-To fix it, install a newer compiler. If the package does build with this one, lower its `nanyx`.
+To fix it, install a newer compiler, or the one the package names. If the package does build with this one, lower its
+`nanyx`, or use a version of the package made for this compiler.
 
 # NYX0053: Host package not named for a host
 

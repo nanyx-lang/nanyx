@@ -70,6 +70,19 @@ type VersionRequirement =
 
     override this.ToString() = this.Written
 
+/// The compilers a package builds with, as its manifest's `nanyx` writes them: `0.43` or `0.43.0`, that compiler or a
+/// later one, or `=0.43.0`, that compiler only, as a host and the host library it is written on say, since they use the
+/// compiler's internals.
+type CompilerRequirement =
+    { /// The oldest compiler accepted, and the only one when `Exact`.
+      Oldest: SemanticVersion
+      /// Whether only `Oldest` is accepted.
+      Exact: bool
+      /// The requirement as it is written.
+      Written: string }
+
+    override this.ToString() = this.Written
+
 module SemanticVersion =
     let private pattern = Regex(@"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$")
 
@@ -123,3 +136,23 @@ module VersionRequirement =
             version.PreRelease.IsEmpty
             || (not minimum.PreRelease.IsEmpty && (version.Major, version.Minor, version.Patch) = (minimum.Major, minimum.Minor, minimum.Patch))
         compatible && version >= minimum && preRelease
+
+module CompilerRequirement =
+    /// What a package's `nanyx` must be, to finish "must be ...".
+    let rule = "a version, `0.43.0`, or its first numbers, `0.43`, for that compiler or a later one; or `=` and a whole version, `=0.43.0`, for that compiler only"
+
+    /// The requirement `text` writes, if it is one: `=0.43.0`, that compiler only, or else a version or its first numbers
+    /// (see `VersionRequirement.tryParse`), that compiler or a later one.
+    let tryParse (text: string) : CompilerRequirement option =
+        if text.StartsWith "=" then
+            SemanticVersion.tryParse (text.Substring 1) |> Option.map (fun version -> { Oldest = version; Exact = true; Written = text })
+        else
+            VersionRequirement.tryParse text |> Option.map (fun requirement -> { Oldest = requirement.Minimum; Exact = false; Written = text })
+
+    /// Whether the compiler `running` satisfies `requirement`.
+    let accepts (requirement: CompilerRequirement) (running: SemanticVersion) : bool =
+        if requirement.Exact then running = requirement.Oldest else running >= requirement.Oldest
+
+    /// The compilers `requirement` accepts, as a message names them: `nanyx 0.43 or later`, or `nanyx 0.43.0 only`.
+    let describe (requirement: CompilerRequirement) : string =
+        if requirement.Exact then $"nanyx {requirement.Oldest} only" else $"nanyx {requirement.Written} or later"

@@ -132,8 +132,9 @@ those files workable. Problems with the code's structure are tracked as GitHub i
   so the PR that bumps `<Version>` also sets that version in every manifest under `packages/` (the package's own
   `version` and each shipped dependency's), in `examples/`, and in the docs that name a shipped package's version
   (`git grep '<old version>' packages examples docs/src/content`). Without it, every package fails with `NYX0029` and
-  the release job never runs. A shipped manifest's `nanyx`, the oldest compiler it builds with, is the new version's
-  major and minor, `0.43` for `0.43.0`, which a test checks.
+  the release job never runs. A shipped manifest's `nanyx`, the compilers it builds with, moves too: a library's is the
+  new version's major and minor, `0.43` for `0.43.0`, and a host's or a host library's is that version only, `=0.43.0`,
+  since they use the compiler's internals. A test checks both.
 - **A release publishes the shipped packages.** The release attaches each shipped package's `<name>-<version>.nyxpkg`
   to the `compiler/<version>` release, and the package index's sync records it from there, as it does any package's
   release ([Releases](docs/src/content/deep-dives/releases.md#the-shipped-packages)). A shipped package whose public

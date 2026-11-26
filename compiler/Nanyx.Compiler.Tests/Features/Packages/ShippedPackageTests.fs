@@ -106,9 +106,10 @@ let ``A shipped package's file is named after its package, wherever the compiler
     Assert.Equal(None, ShippedPackages.tryDisplay (Path.GetFullPath "main.nyx"))
 
 [<Fact>]
-let ``Every shipped package is published from this repository, at the compiler's version, needing the compiler's release`` () =
+let ``Every shipped package is published from this repository, at the compiler's version, building with the compiler's release`` () =
     // A release publishes each one to the package index, whose sync records the releases of the repository a manifest
-    // names, so each names this one, and the oldest compiler it builds with is the one it ships with.
+    // names, so each names this one. A host, and a host library hosts are written on, build with the compiler they ship
+    // with only, since they use its internals; any other with it or a later one.
     let manifests =
         ShippedPackages.names ()
         |> List.map (fun name ->
@@ -116,6 +117,11 @@ let ``Every shipped package is published from this repository, at the compiler's
             name, manifest.Version, manifest.Repository |> Option.map string, manifest.Nanyx |> Option.map string)
     let expected =
         ShippedPackages.names ()
-        |> List.map (fun name -> name, Toolchain.version, Some "nanyx-lang/nanyx", Some(NewPackage.nanyxOf Toolchain.version))
+        |> List.map (fun name ->
+            let manifest = manifestOf name
+            let nanyx =
+                if manifest.Declares.IsSome || manifest.HostLibrary then $"={Toolchain.version}"
+                else NewPackage.nanyxOf Toolchain.version
+            name, Toolchain.version, Some "nanyx-lang/nanyx", Some nanyx)
     Assert.Equal<(string * string * string option * string option) list>(expected, manifests)
     Assert.Equal(7, manifests.Length)
