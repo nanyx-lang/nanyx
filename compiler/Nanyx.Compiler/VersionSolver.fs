@@ -8,8 +8,8 @@ type UnusableVersion =
     | Unlisted
     /// Its release or asset is missing from GitHub, so it can't be downloaded.
     | Unavailable
-    /// It needs a newer compiler: the oldest it builds with, and this one.
-    | NeedsCompiler of oldest: string * running: string
+    /// It needs another compiler: the compilers it builds with, and this one.
+    | NeedsCompiler of requirement: CompilerRequirement * running: string
     /// The index writes one of its dependencies as something this compiler can't read.
     | UnreadableDependencies
 
@@ -449,7 +449,7 @@ module VersionSolver =
         match reason with
         | Unlisted -> if one then "is unlisted" else "are unlisted"
         | Unavailable -> if one then "is missing from GitHub" else "are missing from GitHub"
-        | NeedsCompiler(oldest, running) -> $"""{(if one then "needs" else "need")} nanyx {oldest} or later (this is {running})"""
+        | NeedsCompiler(requirement, running) -> $"""{(if one then "needs" else "need")} {CompilerRequirement.describe requirement} (this is {running})"""
         | UnreadableDependencies -> if one then "has dependencies the index writes in a way this nanyx can't read" else "have dependencies the index writes in a way this nanyx can't read"
 
     /// Who depends on something, in a dependency: the package on disk that writes it, for one of the root's.
