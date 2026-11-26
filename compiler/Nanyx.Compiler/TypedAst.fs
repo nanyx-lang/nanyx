@@ -383,7 +383,8 @@ module TypeDefInfo =
 /// kind of its own, apart from values and types.
 type UnitInfo =
     { Name: string
-      Dimension: NominalId
+      /// What it is a unit of: a dimension, `Time`, or a derived dimension, `Length / Time`.
+      Dimension: Dimension
       Scale: Rational
       Home: ModuleOrigin
       IsExport: bool }

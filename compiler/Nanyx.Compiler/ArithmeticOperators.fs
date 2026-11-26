@@ -168,7 +168,7 @@ module internal ArithmeticOperators =
         match Unifier.unalias (resolveSoFar state storage), state.ContextScope, state.Units |> Map.tryFind unitName with
         | TyVar v, DefScope(_, false), Some info when bound zero && not (NumericLiterals.isUnsettledVar state v) ->
             let value = NumericLiterals.inBaseUnits state number unitName
-            let dimension = Dimension.ofBase info.Dimension
+            let dimension = info.Dimension
             if not (Rational.isWhole value) then
                 let written = UnitSyntax.written number unitName
                 Some (Wrong (Diagnostics.at DiagnosticCodes.TypeMismatch literal.Span

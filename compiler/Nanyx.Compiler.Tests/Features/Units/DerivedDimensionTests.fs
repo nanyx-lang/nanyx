@@ -77,13 +77,6 @@ let ``A part that is no dimension beside a constrained dimension is NYX0296 alon
     Assert.Equal("int", at)
 
 [<Fact>]
-let ``A unit of a derived dimension is NYX0297`` () =
-    Assert.Equal(
-        (DiagnosticCodes.UnitOfDerivedDimension.Code,
-         "'Speed' is a derived dimension, which has no units of its own: a value of it is written in its parts' units, as `100m / 9.58s` is"),
-        only "dimension Speed = Length / Time\nunit kph: Speed = 1m")
-
-[<Fact>]
 let ``// across two dimensions, and a power, say how to write them`` () =
     Assert.Equal(
         (DiagnosticCodes.TypeMismatch.Code,
