@@ -924,7 +924,7 @@ A released compiler doesn't, since its copies are the ones its release published
 # NYX0052: Package that needs another compiler
 
 The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running,
-or with one compiler only, as `nanyx = "=0.43.0"`, which isn't the one running. The message names both versions:
+or with one compiler only, as `nanyx = "=0.44.0"`, which isn't the one running. The message names both versions:
 
 ```nanyx
 -- file: demo.nyxp
@@ -964,7 +964,7 @@ the new one. `nanyx.http` is the library's name now, so it is an error only wher
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "nanyx.console.core", version = "0.43.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
+  dependencies = [(package = "nanyx.console.core", version = "0.44.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
 )
 ```
 
