@@ -1543,7 +1543,8 @@ where the type is expected, without the constructor, is NYX0260.
 # NYX0213: Wrong number of patterns
 
 An arm of a match on several values, such as a lambda's parameters or a loop over several lists, has a different
-number of patterns from the number of values.
+number of patterns from the number of values. In a `match`, an arm can also have a single pattern, which matches all
+the values as a tuple: `| _ ->` matches whatever they are, and `| t ->` binds their tuple.
 
 ```nanyx
 def first = { a, b -> | x -> x }  -- error NYX0213: This arm has 1 pattern, but the match is on 2 values: ...

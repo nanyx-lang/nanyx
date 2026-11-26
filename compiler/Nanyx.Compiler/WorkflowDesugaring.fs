@@ -33,7 +33,7 @@ module internal IdentifierNames =
             sanitized
 
 /// Desugaring before type checking: workflow keywords into calls to their builder's members, `for` loops, a match's
-/// lone `else` and the holes of interpolated strings.
+/// lone `else`, `_` or pattern for all its values, and the holes of interpolated strings.
 module WorkflowDesugaring =
     /// A builder's block: a call, to a name the compiler did not make up, whose last argument is a lambda without
     /// parameters, as `proc { ... }` and `retrying(3) { ... }` are. The builder's name, its other arguments, the lambda,
@@ -126,6 +126,23 @@ module WorkflowDesugaring =
             diagnostics.Add(
                 Diagnostics.at DiagnosticCodes.InvalidWorkflow expr.Span
                     $"`{keyword}` is {where}, so the rest of the `{builderName}` block cannot follow it: {advice}")
+        // The matches the parser made of a lambda's arms, as in `{ a, b -> | x, y -> ... }`, and of a loop's: each the
+        // body of a lambda written where it is. Only a written `match` takes one pattern for all its values.
+        let armsOfLambdas =
+            module'
+            |> List.collect SyntaxTree.ofItem
+            |> List.collect SyntaxTree.expressionsWithin
+            |> List.choose (fun expr ->
+                match expr.Kind with
+                | Lambda(_, (Kind (Match _) as body), _) when body.Span = expr.Span -> Some body.Id
+                | _ -> None)
+            |> Set.ofList
+        // The values and arms of the match `expr` (see `PatternSpace.ofMatch`).
+        let ofMatch (expr: Expression) (values: Expression list) (arms: MatchArm list) =
+            if armsOfLambdas.Contains expr.Id then
+                values, arms |> List.map (fun (patterns, body) -> PatternSpace.ofArm values.Length patterns, body)
+            else
+                PatternSpace.ofMatch values arms
         let mutable freshNames = 0
         let freshName prefix =
             freshNames <- freshNames + 1
@@ -432,13 +449,15 @@ module WorkflowDesugaring =
                 Block(desugarBlock statements)
             // An arm, like a branch of an `if`, only runs when it is chosen. One that is a statement of its own is
             // desugared by `desugarBranching` instead when it uses a keyword.
-            // A lone `else` in a match on several values becomes one per value (`PatternSpace.ofArm`).
+            // A lone `else` or `_` in a match on several values becomes one per value, and a match with an arm of one
+            // pattern for all of them is one on their tuple (`PatternSpace.ofMatch`).
             | Match(exprs, arms) ->
+                let exprs, arms = ofMatch expr exprs arms
                 let mappedExprs = exprs |> List.map desugarExpr
                 let mappedArms =
                     arms
                     |> List.map (fun (patterns, expr) ->
-                        PatternSpace.ofArm exprs.Length patterns |> List.map (Pattern.mapExpressions desugarExpr),
+                        patterns |> List.map (Pattern.mapExpressions desugarExpr),
                         within InConditionalPart (fun () -> desugarExpr expr))
                 Match(mappedExprs, mappedArms)
             | Except(value, arms) -> desugarKind { expr with Kind = Except.asMatch expr value arms }
@@ -620,8 +639,8 @@ module WorkflowDesugaring =
                 match kind with
                 | IfExpr(cond, thenExpr, elseExpr) -> IfExpr(desugarExpr cond, branch thenExpr, branch elseExpr)
                 | Match(values, arms) ->
-                    let desugarArm (patterns, body) =
-                        PatternSpace.ofArm values.Length patterns |> List.map (Pattern.mapExpressions desugarExpr), branch body
+                    let values, arms = ofMatch expr values arms
+                    let desugarArm (patterns, body) = patterns |> List.map (Pattern.mapExpressions desugarExpr), branch body
                     Match(values |> List.map desugarExpr, arms |> List.map desugarArm)
                 | other -> other
             match restFunction with
