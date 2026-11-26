@@ -8,6 +8,22 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.44.1
+
+*26 November 2026*
+
+A fix for publishing a package from its own CI, which 0.44.0 meant to allow, and hover for the built-in types.
+
+**Tools**
+
+- `nanyx publish` runs from a package's own GitHub Actions workflow with its `GITHUB_TOKEN` and
+  `permissions: contents: write`. 0.44.0 refused it, because GitHub says such a token's account can't push, though the
+  token can create releases. A token that really can't release is refused when the release is created, with nothing
+  left behind ([nanyx publish](../standard-tools/command-line#nanyx-publish)).
+- Hovering a built-in type's name, such as `int`, `I64`, `char` or `List`, says what the type is and gives its other
+  name: `int` is another name for `I64`, and `List` is `list`
+  ([VS Code extension](../standard-tools/vs-code-extension)).
+
 # 0.44.0
 
 *26 November 2026*
