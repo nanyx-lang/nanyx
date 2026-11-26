@@ -9,12 +9,12 @@ package: nanyx.regex 0.1.1
 [package index](https://github.com/nanyx-lang/packages) from [nanyx-lang/regex](https://github.com/nanyx-lang/regex),
 whose README says how its engine works. An application lists it in its manifest's `dependencies`,
 `(package = "nanyx.regex", version = "0.1")`, which `nanyx install nanyx.regex` adds, and a script names the version it
-uses in a `::install nanyx.regex 0.1.1` line. Import `nanyx.regex/regex`, and call its functions through the type
+uses in a `::dependency nanyx.regex 0.1.1` line. Import `nanyx.regex/regex`, and call its functions through the type
 they are attached to, `Regex.find`, or pipe a text into them, `text \Regex.find(digits)`. It is pure, so it needs no
 context. The [cookbook](../cookbook/regular-expressions) shows it at work.
 
 ```nanyx
-::install nanyx.regex 0.1.1
+::dependency nanyx.regex 0.1.1
 
 import nanyx.regex/regex
 
@@ -32,7 +32,7 @@ A pattern that is wrong is a `RegexError`, with the column it goes wrong at and 
 can be checked before it is used:
 
 ```nanyx
-::install nanyx.regex 0.1.1
+::dependency nanyx.regex 0.1.1
 
 import nanyx.regex/regex
 
@@ -54,7 +54,7 @@ Regular expressions: patterns that find, test, replace and split text.
 first, so they pipe: `"a1b22" \Regex.find(digits)`. [`Regex.isMatch`](#regexismatch) says whether a regex matches anywhere in a text,
 [`Regex.find`](#regexfind) finds the first match, [`Regex.findAll`](#regexfindall) each in turn, [`Regex.replace`](#regexreplace) and
 [`Regex.replaceWith`](#regexreplacewith) replace them, and [`Regex.split`](#regexsplit) splits a text where they are. A program
-names `nanyx.regex` in its manifest's `dependencies`, or a script in a `::install` line, and
+names `nanyx.regex` in its manifest's `dependencies`, or a script in a `::dependency` line, and
 imports it as `import nanyx.regex/regex`.
 
 A pattern is usually written as a raw, single-quoted string, `'\d+'`, so its backslashes need no
