@@ -188,21 +188,22 @@ let private unitEntries (file: string) (docOf: SourceSpan -> string option) : En
         let entry (written: string) (item: TopLevelItem) (name: string) =
             declaredIn item name
             |> Option.map (fun declaration -> { Name = name; Declaration = declaration; Written = written; Doc = docOf declaration; Members = [] })
+        let marked = UnitSyntax.unitsWithAttributes items
         items
-        |> List.mapi (fun index item -> (if index = 0 then None else Some items[index - 1]), item)
-        |> List.choose (fun (before, item) ->
+        |> List.choose (fun item ->
             match item.Kind with
             | DimensionDecl(true, name, storage, derived) ->
                 let storage = storage |> Option.map (fun storage -> $"({textOf storage.Span})") |> Option.defaultValue ""
                 let derived = derived |> Option.map (fun derived -> $" = {textOf derived.Span}") |> Option.defaultValue ""
                 entry $"{UnitSyntax.dimensionKeyword} {name}{storage}{derived}" item name
             | UnitDecl(true, name, dimension, multiple) ->
-                let baseUnit =
-                    match before with
-                    | Some attribute when UnitSyntax.isBaseUnitDeclaration attribute item -> $"@{UnitSyntax.baseUnitAttribute} "
-                    | _ -> ""
+                let attributes =
+                    marked
+                    |> List.tryFind (fun (unit, _) -> obj.ReferenceEquals(unit, item))
+                    |> Option.map (snd >> List.map (fun attribute -> $"@{attribute} ") >> String.concat "")
+                    |> Option.defaultValue ""
                 let multiple = multiple |> Option.map (fun multiple -> $" = {textOf multiple.Span}") |> Option.defaultValue ""
-                entry $"{baseUnit}{UnitSyntax.unitKeyword} {name}: {textOf dimension.Span}{multiple}" item name
+                entry $"{attributes}{UnitSyntax.unitKeyword} {name}: {textOf dimension.Span}{multiple}" item name
             | _ -> None)
     | _ -> []
 

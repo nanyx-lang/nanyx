@@ -195,7 +195,7 @@ type Ty =
     /// `FunctionContexts.carried`). A reader writes them in front of the type, `[FileSystem] Stream(string)`.
     | TyContexts of Ty list
     /// A measured value: a number of the storage type with a dimension, `Time(int)`, which is its storage at run time,
-    /// measured in the dimension's base unit (see `Units`).
+    /// measured in the dimension's default storage unit (see `Units`).
     | TyMeasure of Dimension * storage: Ty
 
 /// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
@@ -381,25 +381,38 @@ module TypeDefInfo =
     /// The identity of the nominal type `info` defines.
     let nominalId (info: TypeDefInfo) : NominalId = { Home = info.Home; Name = info.Name }
 
-/// A unit of measure, `unit ms: Time = 1_000us`: its dimension's identity, how many of the dimension's base units it is,
-/// exactly, and the module it is declared in, which exports it if `IsExport` (see `Units`). A unit's name is of a
-/// kind of its own, apart from values and types.
+/// An attribute that marks a unit: `@storageUnit`, which sets its dimension's default storage unit by hand, or
+/// `@baseUnit`, which marks its default display unit (see `Units`).
+type UnitMark =
+    | StorageUnitMark
+    | DisplayUnitMark
+
+/// A unit of measure, `unit ms: Time = 1_000us`: its dimension's identity, how many of the dimension's default storage
+/// units it is, exactly, and the module it is declared in, which exports it if `IsExport` (see `Units`). A unit's name
+/// is of a kind of its own, apart from values and types.
 type UnitInfo =
     { Name: string
       /// What it is a unit of: a dimension, `Time`, or a derived dimension, `Length / Time`.
       Dimension: Dimension
+      /// How many of its dimension's default storage units it is; for a unit of a derived dimension, how many of its
+      /// parts' default storage units, multiplied and divided as the parts are.
       Scale: Rational
       Home: ModuleOrigin
       IsExport: bool
       /// What it is declared as, as written: a multiple of another unit, `1_000us`, or of its parts' units, `1km / 1hr`;
-      /// none for its dimension's base unit.
+      /// none for the unit its dimension's others are defined from.
       Multiple: Expression option
+      /// The attributes written before it, `@storageUnit` and `@baseUnit`.
+      Marks: UnitMark list
+      /// Whether it is its dimension's default display unit: the one `@baseUnit` marks, or, if none is marked, its
+      /// default storage unit.
+      IsDisplay: bool
       /// The symbol of its name, which a number written with it refers to (see `UnitOfMeasure`).
       Symbol: SymbolId option }
 
 module UnitInfo =
-    /// Whether `info` is its dimension's base unit, the one its values are stored in.
-    let isBase (info: UnitInfo) = info.Scale = Rational.one
+    /// Whether `info` is its dimension's default storage unit, the one its values are stored as a number of.
+    let isStorage (info: UnitInfo) = info.Scale = Rational.one
 
 /// A definition marked `@component`, which a component built from the program exports, in the WIT interface its module
 /// names (see `ComponentInterface`).

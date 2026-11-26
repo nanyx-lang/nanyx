@@ -17,7 +17,7 @@ describes them, and [Units of measure](../deep-dives/units#derived-dimensions) i
 written on each part, `Length(float) / Time(float)`, since a part is already a type the parser reads and a type printed
 that way reads back as the same type. A derived dimension has units of its own, defined from its parts' units,
 `unit kmh: Speed = 1km / 1hr`, and a value of one prints in the largest of them it is a whole number of, or in its
-parts' base units when none fits ([Units of a derived
+parts' default storage units when none fits ([Units of a derived
 dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). What is still open:
 
 - **Dimension variables.** `def square: d -> d^2` (spelling open) needs unification that solves equations such as
@@ -51,7 +51,7 @@ dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). What is 
 
 - **F#** puts the unit in the type: `float<ms>` and `float<s>` are different types, and converting is multiplying by a
   constant. Nanyx puts the dimension in the type, so `sleep` takes any `Time`.
-- **Rust's uom** types quantities by dimension and stores them in a base unit, as Nanyx does, and is generic over the
+- **Rust's uom** types quantities by dimension and stores them in a default storage unit, as Nanyx does, and is generic over the
   storage type, as Nanyx's dimensions are.
 - **Kotlin's `Duration`**, Go's `time.Duration` and Rust's `std::time::Duration` are one dimension stored as whole
   nanoseconds, as a `Time(int)` is.

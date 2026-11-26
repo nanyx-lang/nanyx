@@ -90,7 +90,7 @@ let ``A dimension is declared, constrained to one storage type or not`` () =
     | other -> failwith $"Unexpected parse result: %A{other}"
 
 [<Fact>]
-let ``A unit is declared as a multiple of another unit, or as the base unit, marked on its line`` () =
+let ``A unit is declared as a multiple of another unit, or as the unit the others are defined from, marked on its line`` () =
     match parseModule "@baseUnit unit ns: Time\nunit us: Time = 1_000ns\nexport unit mm: Length = 0.001m" with
     | Result.Ok [ Kind (Attribute("baseUnit", None))
                   Kind (UnitDecl(false, "ns", Kind (TypeName "Time"), None))
@@ -98,6 +98,16 @@ let ``A unit is declared as a multiple of another unit, or as the base unit, mar
                   Kind (UnitDecl(true, "mm", Kind (TypeName "Length"), Some (Kind (LiteralExpr(UnitLit(fraction, "m")))))) ] ->
         Assert.Equal(number 1000L 0 false, whole)
         Assert.Equal(number 1L -3 true, fraction)
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
+let ``A unit can be marked @storageUnit and @baseUnit on its line`` () =
+    match parseModule "@storageUnit @baseUnit unit ns: Time\n@baseUnit unit s: Time = 1_000_000_000ns" with
+    | Result.Ok [ Kind (Attribute("storageUnit", None))
+                  Kind (Attribute("baseUnit", None))
+                  Kind (UnitDecl(false, "ns", Kind (TypeName "Time"), None))
+                  Kind (Attribute("baseUnit", None))
+                  Kind (UnitDecl(false, "s", Kind (TypeName "Time"), Some _)) ] -> ()
     | other -> failwith $"Unexpected parse result: %A{other}"
 
 [<Fact>]

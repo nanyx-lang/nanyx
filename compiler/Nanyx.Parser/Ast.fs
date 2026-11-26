@@ -373,8 +373,8 @@ and TopLevelItemKind =
     /// `UnitSyntax`).
     | DimensionDecl of isExport: bool * Identifier * storage: TypeExpr option * derived: TypeExpr option
     /// `unit ms: Time = 1_000us`, a unit of a dimension that is a constant multiple of another unit, a `UnitLit`, or
-    /// `unit ns: Time`, with no multiple, the dimension's base unit, which `@baseUnit` before it marks (see `UnitSyntax`).
-    /// Its dimension is written as a type names it, a `TypeName`.
+    /// `unit ns: Time`, with no multiple, the one unit of its dimension that the others are defined from (see
+    /// `UnitSyntax`). Its dimension is written as a type names it, a `TypeName`.
     | UnitDecl of isExport: bool * Identifier * dimension: TypeExpr * multiple: Expression option
 
 /// An expression and where it came from. Equality and comparison look only at `Kind`, leaving out the name spans
@@ -1427,7 +1427,7 @@ module TopLevelItem =
         | Attribute(name, None), ModuleDecl _ -> name = partialAttribute
         | _ -> false
 
-/// Units of measure: `dimension Time`, `@baseUnit unit ns: Time` and `unit ms: Time = 1_000us`. The words are not
+/// Units of measure: `dimension Time`, `@storageUnit unit ns: Time` and `unit ms: Time = 1_000us`. The words are not
 /// reserved: each begins a declaration only at the start of a top-level item, with a name after it on its line, so code
 /// that uses them as names keeps working.
 module UnitSyntax =
@@ -1437,14 +1437,40 @@ module UnitSyntax =
     /// The word that begins a unit's declaration.
     let unitKeyword = "unit"
 
-    /// The attribute that marks a dimension's base unit, written on the unit's line: `@baseUnit unit ns: Time`.
+    /// The attribute that marks a dimension's default display unit, the unit its values are written in when no other
+    /// unit is chosen, written on the unit's line: `@baseUnit unit s: Time = 1_000ms`.
     let baseUnitAttribute = "baseUnit"
 
-    /// Whether `attribute` is `@baseUnit` and `next`, the item after it, a unit's declaration.
-    let isBaseUnitDeclaration (attribute: TopLevelItem) (next: TopLevelItem) =
-        match attribute.Kind, next.Kind with
-        | Attribute(name, None), UnitDecl _ -> name = baseUnitAttribute
+    /// The attribute that sets a dimension's default storage unit by hand, the unit its values are stored as a number
+    /// of, written on the unit's line: `@storageUnit unit ns: Time`.
+    let storageUnitAttribute = "storageUnit"
+
+    /// Whether `item` is an attribute that marks a unit, `@baseUnit` or `@storageUnit`.
+    let isUnitAttribute (item: TopLevelItem) =
+        match item.Kind with
+        | Attribute(name, None) -> name = baseUnitAttribute || name = storageUnitAttribute
         | _ -> false
+
+    /// Whether `attribute` marks a unit and `next`, the item after it, is the unit's declaration or another attribute
+    /// that marks it, as in `@storageUnit @baseUnit unit ns: Time`.
+    let isUnitAttributeDeclaration (attribute: TopLevelItem) (next: TopLevelItem) =
+        isUnitAttribute attribute
+        && match next.Kind with
+           | UnitDecl _ -> true
+           | _ -> isUnitAttribute next
+
+    /// Each unit's declaration among `items`, with the names of the attributes right before it that mark it.
+    let unitsWithAttributes (items: TopLevelItem list) : (TopLevelItem * string list) list =
+        items
+        |> List.fold
+            (fun (marks, units) item ->
+                match item.Kind with
+                | Attribute(name, None) when isUnitAttribute item -> marks @ [ name ], units
+                | UnitDecl _ -> [], (item, marks) :: units
+                | _ -> [], units)
+            ([], [])
+        |> snd
+        |> List.rev
 
     /// The operators that join dimensions in a derived dimension, `Length / Time` and `Time * Time` (`TypeProduct`,
     /// `TypeQuotient`), as they are written.

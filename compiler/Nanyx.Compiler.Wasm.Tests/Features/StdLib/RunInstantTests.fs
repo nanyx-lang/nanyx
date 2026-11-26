@@ -161,7 +161,7 @@ let ``Run - an instant's Unix time is its time since 1970, and a unit divides it
     println((Instant.epoch \minus(1s)) \toUnixTime // 1ms)
   | _ -> println("not ISO")
 """
-    |> assertRan "1795683600250\n1795683600\n0ns\n-1000\n"
+    |> assertRan "1795683600250\n1795683600\n0s\n-1000\n"
 
 [<Fact>]
 let ``Run - shift moves an instant on by a positive time and back by a negative one`` () =

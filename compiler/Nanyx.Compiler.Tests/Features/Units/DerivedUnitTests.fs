@@ -46,12 +46,12 @@ let ``A unit of a derived dimension that its parts' units don't define is NYX029
     Assert.Equal<(string * string * string) list>(
         [ DiagnosticCodes.UnitOfDerivedDimension.Code,
           "unit loose: Speed",
-          "'Speed' is a derived dimension, whose units are multiples of its parts' base units: define 'loose' from its parts' units, as in `unit kmh: Speed = 1km / 1hr`" ],
+          "'Speed' is a derived dimension, whose units are multiples of its parts' default storage units: define 'loose' from its parts' units, as in `unit kmh: Speed = 1km / 1hr`" ],
         reported "unit loose: Speed")
     Assert.Equal<(string * string * string) list>(
         [ DiagnosticCodes.UnitOfDerivedDimension.Code,
           "unit base: Speed",
-          "'Speed' is a derived dimension, whose values are stored in its parts' base units, so it has no base unit of its own: define 'base' from its parts' units, as in `unit kmh: Speed = 1km / 1hr`" ],
+          "'Speed' is a derived dimension, whose values are stored in its parts' default storage units, so it has no default storage or display unit of its own: define 'base' from its parts' units, as in `unit kmh: Speed = 1km / 1hr`" ],
         reported "@baseUnit unit base: Speed")
 
 [<Fact>]

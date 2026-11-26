@@ -304,19 +304,20 @@ module internal NumericLiterals =
         Diagnostics.at DiagnosticCodes.TypeMismatch span
             $"'{written}' has no unit, so it is no '{Dimension.text dimension}': write it with a unit of '{Dimension.text dimension}', or `zero` for nothing of it"
 
-    /// How many base units of its dimension the number with a unit `number unitName` is, exactly.
-    let inBaseUnits (state: InferState) (number: WrittenNumber) (unitName: Identifier) : Rational =
+    /// How many default storage units of its dimension the number with a unit `number unitName` is, exactly.
+    let inStorageUnits (state: InferState) (number: WrittenNumber) (unitName: Identifier) : Rational =
         let scale = state.Units |> Map.tryFind unitName |> Option.map _.Scale |> Option.defaultValue Rational.one
         Rational.multiply (Rational.ofWritten number) scale
 
-    /// What the number with a unit `number unitName`, at `span`, stored as `ty`, is at run time, the plain number of base
-    /// units it is, or why it can't be stored so: a fraction of a base unit is no integer, and one outside the
-    /// storage's range doesn't fit it.
+    /// What the number with a unit `number unitName`, at `span`, stored as `ty`, is at run time, the plain number of
+    /// default storage units it is, or why it can't be stored so: a fraction of a default storage unit is no integer,
+    /// and one outside the storage's range doesn't fit it.
     let private storedAs (state: InferState) (span: SourceSpan) (number: WrittenNumber) (unitName: Identifier) (ty: Ty) : Result<Literal, Diagnostic> =
-        let value = inBaseUnits state number unitName
-        // A derived dimension has no base unit of its own: its base unit is its parts', multiplied and divided, `m/ns`.
+        let value = inStorageUnits state number unitName
+        // A derived dimension has no default storage unit of its own: it is stored in its parts', multiplied and
+        // divided, `m/ns`.
         let baseOf (dimension: Dimension) =
-            state.Units |> Map.tryFindKey (fun _ other -> other.Dimension = dimension && UnitInfo.isBase other)
+            state.Units |> Map.tryFindKey (fun _ other -> other.Dimension = dimension && UnitInfo.isStorage other)
         let partBase (id: NominalId) = baseOf (Dimension.ofBase id)
         let baseUnit =
             state.Units
@@ -326,7 +327,7 @@ module internal NumericLiterals =
                 elif info.Dimension |> List.forall (fst >> partBase >> Option.isSome) then
                     Some (Dimension.writtenWith (partBase >> Option.get) "*" "/" info.Dimension)
                 else None)
-            |> Option.defaultValue "base unit"
+            |> Option.defaultValue "storage unit"
         let written = UnitSyntax.written number unitName
         match Unifier.unalias ty with
         | TyPrimitive "int"
@@ -346,11 +347,12 @@ module internal NumericLiterals =
         | _ -> Ok (FloatLit (Rational.toFloat value))
 
     /// `state` with every literal settled, and each that cannot be of the type it has, as the constraints solve it, an
-    /// error. A number with a unit is stored as its number of base units, the plain literal it is read as from then on
-    /// (`ReadAs`). An integer literal where a floating-point type is expected is an error here, with a fix. One of any other
-    /// type of another kind is constrained to its default type at the literal, so that the conflict is reported as any
-    /// other is, with the module's constraints. One out of its type's range is an error here. An error here that is at
-    /// an expression fails to check there, and the errors of the others, which are patterns, are given back.
+    /// error. A number with a unit is stored as its number of default storage units, the plain literal it is read as
+    /// from then on (`ReadAs`). An integer literal where a floating-point type is expected is an error here, with a
+    /// fix. One of any other type of another kind is constrained to its default type at the literal, so that the
+    /// conflict is reported as any other is, with the module's constraints. One out of its type's range is an error
+    /// here. An error here that is at an expression fails to check there, and the errors of the others, which are
+    /// patterns, are given back.
     let check (state: InferState) : InferState * Diagnostic list =
         let settled = settle (fun _ -> true) state
         let subst = fst (Solving.solve settled.Constraints)

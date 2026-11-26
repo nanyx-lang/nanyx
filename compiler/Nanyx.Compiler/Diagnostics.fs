@@ -226,8 +226,8 @@ module DiagnosticCodes =
     let OldFormTypeParameter = code 282 "Type parameter written the old way" Severity.Warning
     let ValueContextTypeOpen = code 283 "Value of a type only a later use fixes" Severity.Error
     let NotOneChar = code 284 "Char literal that is not one character" Severity.Error
-    let DimensionWithoutBaseUnit = code 286 "Dimension without a base unit" Severity.Error
-    let MisplacedBaseUnit = code 287 "Base unit that can't be one" Severity.Error
+    let UnitsNotFromOne = code 286 "Dimension whose units aren't defined from one" Severity.Error
+    let MisplacedUnitAttribute = code 287 "Unit attribute that can't apply" Severity.Error
     let UnitCycle = code 288 "Units defined in a circle" Severity.Error
     let UnitOfAnotherDimension = code 289 "Unit defined in another dimension's units" Severity.Error
     let DimensionStorageNotNumber = code 290 "Dimension stored in a type that isn't a number" Severity.Error
@@ -239,6 +239,8 @@ module DiagnosticCodes =
     let NotADimension = code 296 "Part of a derived dimension that is no dimension" Severity.Error
     let UnitOfDerivedDimension = code 297 "Unit of a derived dimension that its parts' units don't define" Severity.Error
     let UnitWorthNothing = code 298 "Unit worth nothing" Severity.Error
+    let NoStorageUnit = code 299 "Dimension with no unit to store it in" Severity.Error
+    let UnitNotWholeStorageUnits = code 300 "Unit that is no whole number of the storage unit" Severity.Error
 
     // Tests.
     let NotATest = code 310 "Test that isn't a test's type" Severity.Error
@@ -276,8 +278,8 @@ module DiagnosticCodes =
           InvalidTypeParameter; MissingTypeArgument; TypeChosenAtRunTime; TypeDescriptionPattern; PackagedTypeEscapes
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
-          DimensionWithoutBaseUnit; MisplacedBaseUnit; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
-          NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing
+          UnitsNotFromOne; MisplacedUnitAttribute; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
+          NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing; NoStorageUnit; UnitNotWholeStorageUnits
           NotATest; ReferenceToTest; TestContextNotProvided
           UnsupportedByBackend; BackendInternalError ]
 

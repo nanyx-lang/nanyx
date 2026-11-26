@@ -79,7 +79,7 @@ let ``A power of a measured value is an error that says to multiply it by itself
     Assert.Contains("multiply it by itself", message)
 
 [<Fact>]
-let ``Beside a generic storage, a number with a unit that is no whole number of base units is an error`` () =
+let ``Beside a generic storage, a number with a unit that is no whole number of default storage units is an error`` () =
     let code, message = only "def later: Time(a) -> Time(a) = { t -> t + 0.5ns }"
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    Assert.Contains("'0.5ns' is 1/2 of its base unit", message)
+    Assert.Contains("'0.5ns' is 1/2 of its default storage unit", message)
