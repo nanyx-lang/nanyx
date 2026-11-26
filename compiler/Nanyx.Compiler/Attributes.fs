@@ -5,16 +5,22 @@ open Parser.Program
 /// The `@attribute` lines of a module, which the compiler resolves before inference.
 module Attributes =
     /// The defs of a module marked `@component`, which a component exports, and `@import`, which it imports, each by name
-    /// with where it is written.
+    /// with where it is written; and those marked `@test`.
     type ComponentDefs =
         { Exports: (string * SourceSpan) list
           Imports: (string * SourceSpan) list
           /// The exports that require contexts, each run under the host's by a def `applyAttributes` made up (see
           /// `providedExport`): the call of the host's `provide` in it, as an entry point's call of `run` is.
-          Provided: EntryPoint list }
+          Provided: EntryPoint list
+          /// The defs marked `@test`, which a test build runs (see `testAttribute`).
+          Tests: (string * SourceSpan) list }
 
     /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
     let entryAttribute = "entry"
+
+    /// The attribute that marks a definition as a test, which a test build runs and every other build leaves out:
+    /// `` @test def `adds points` = { ... } ``.
+    let testAttribute = "test"
 
     /// The attribute that marks an exported definition as one a component built from the program exports:
     /// `@component export def area: Shape -> float = ...`, in the WIT interface its module names (see
@@ -402,9 +408,16 @@ module Attributes =
         let components = ResizeArray<string * SourceSpan>()
         let imports = ResizeArray<string * SourceSpan>()
         let provided = ResizeArray<TopLevelItem * EntryPoint>()
+        let tests = ResizeArray<string * SourceSpan>()
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entries, List.rev externs, List.rev errors
+            | Kind (Attribute(name, Some argument)) :: rest when name = testAttribute ->
+                let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"
+                loop rest acc entries externs (error :: errors)
+            | Kind (Attribute(name, None)) :: (Kind (Def (ValueDef(_, defName, _, _))) as def) :: rest when name = testAttribute ->
+                tests.Add((defName, def.Span))
+                loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ errors)
             | Kind (Attribute(name, Some argument)) :: rest when name = componentAttribute ->
                 let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
@@ -455,10 +468,10 @@ module Attributes =
             // `@baseUnit` marks a dimension's base unit, which the unit's declaration, after it, is checked with.
             | Kind (Attribute(name, None)) as attribute :: (Kind (UnitDecl _) as unit) :: rest when name = UnitSyntax.baseUnitAttribute ->
                 loop rest (unit :: attribute :: acc) entries externs errors
-            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute && name <> componentAttribute && name <> componentImportAttribute ->
+            | Kind (Attribute(name, _)) as attribute :: rest when name <> entryAttribute && name <> Externs.attribute && name <> componentAttribute && name <> componentImportAttribute && name <> testAttribute ->
                 let error =
                     Diagnostics.at DiagnosticCodes.UnknownAttribute attribute.Span
-                        $"A definition can have '@{entryAttribute}', '@{Externs.attribute}', '@{componentAttribute}', '@{componentImportAttribute}' or '@{allowAttribute}'"
+                        $"A definition can have '@{entryAttribute}', '@{testAttribute}', '@{Externs.attribute}', '@{componentAttribute}', '@{componentImportAttribute}' or '@{allowAttribute}'"
                     |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
             | Kind (Attribute(name, Some argument)) :: rest when name = entryAttribute ->
@@ -496,6 +509,6 @@ module Attributes =
                 // The host's prelude is imported into every module of the program, not here (see `Library`).
                 let entryImport = match host with Some host when not entries.IsEmpty || provided.Count > 0 -> [ hostImport host ] | _ -> []
                 let wrappers = provided |> Seq.map fst |> List.ofSeq
-                let components = { Exports = List.ofSeq components; Imports = List.ofSeq imports; Provided = provided |> Seq.map snd |> List.ofSeq }
+                let components = { Exports = List.ofSeq components; Imports = List.ofSeq imports; Provided = provided |> Seq.map snd |> List.ofSeq; Tests = List.ofSeq tests }
                 Ok (entryImport @ items @ wrappers @ List.map snd entries, List.map fst entries, components)
             | errors -> Error errors

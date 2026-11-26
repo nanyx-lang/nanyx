@@ -68,6 +68,9 @@ type Manifest =
       Version: string
       /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
       Sources: string list
+      /// Globs relative to `Root` that select the package's test files, which are part of it only in a test build (see
+      /// `Package.testResult`); none unless the manifest says.
+      Tests: string list
       /// The GitHub repository whose releases are the package's versions, `repository = "acme/web"`, which
       /// `nanyx publish` creates them in; none if the manifest doesn't say.
       Repository: GitHubRepository option
@@ -101,7 +104,7 @@ module Manifest =
     /// The fields a manifest may have. `formatter` is the formatter's, which checks what is in it.
     let private fields = [ "package"; "dependencies"; "linters"; "host"; "formatter" ]
 
-    let private packageFields = [ "name"; "version"; "sources"; "repository"; "nanyx"; HostPackages.field; HostLibraries.field ]
+    let private packageFields = [ "name"; "version"; "sources"; "tests"; "repository"; "nanyx"; HostPackages.field; HostLibraries.field ]
 
 
     /// The fields of an entry of `linters`.
@@ -642,7 +645,7 @@ module Manifest =
                     if manifest.Data.IsDataRecord then
                         problems.AddAbout DiagnosticCodes.MissingManifestField manifest.Location "package" "The manifest has no `package`, which needs at least a name and a version"
                     None
-            let name, version, sources, repository, nanyx =
+            let name, version, sources, tests, repository, nanyx =
                 match package with
                 | Some (fields, span) ->
                     let name = problems.RequiredText "package" span fields "name" namePattern nameRule
@@ -658,8 +661,9 @@ module Manifest =
                         problems.Text "package" fields "repository" repositoryPattern "a GitHub repository, `owner/name`, as `acme/web`"
                         |> Option.map (fun text -> let found = repositoryPattern.Match text in { Owner = found.Groups["owner"].Value; Name = found.Groups["name"].Value })
                     let nanyx = DataValue.field "nanyx" fields |> Option.bind (readNanyx problems)
-                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), repository, nanyx
-                | None -> None, None, None, None, None
+                    let tests = problems.Strings "package" fields "tests" |> Option.map (List.map fst)
+                    name, version, problems.Strings "package" fields "sources" |> Option.map (List.map fst), tests, repository, nanyx
+                | None -> None, None, None, None, None, None
             let linters = field "linters" |> Option.map (fun field -> readLinters problems field.Value)
             let host = field "host" |> Option.bind (fun field -> readHost problems (Path.GetDirectoryName path) field.Value)
             match problems.All with
@@ -670,6 +674,7 @@ module Manifest =
                       Name = defaultArg name ""
                       Version = defaultArg version ""
                       Sources = defaultArg sources [ "**/*.nyx" ]
+                      Tests = defaultArg tests []
                       Repository = repository
                       Nanyx = nanyx
                       PackageSpan = package |> Option.map snd |> Option.defaultValue manifest.Location
