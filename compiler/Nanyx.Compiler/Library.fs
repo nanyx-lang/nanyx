@@ -136,6 +136,16 @@ module Compiler =
     let private moduleFromTypedItems (defer: Expression -> Expression * Diagnostic list) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (operatorInstances: Map<NodeId, TypeExpr>) (readAs: Map<NodeId, Expression>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module * Diagnostic list =
         let lower (expr: Expression) =
             let deferred, placed = defer expr
+            // An expression an error made a trap stays one, though inference read it as another, as it does a unit
+            // literal (#2966). A module without errors is given back as it is, with none.
+            let readAs =
+                if readAs.IsEmpty || LanguagePrimitives.PhysicalEquality deferred expr then readAs
+                else
+                    let trapped =
+                        SyntaxTree.expressionsWithin deferred
+                        |> List.choose (fun within -> match within.Kind with CrashSyntax.Call _ -> Some within.Id | _ -> None)
+                        |> Set.ofList
+                    readAs |> Map.filter (fun node _ -> not (trapped.Contains node))
             deferred |> retargetPipes pipeTargets |> callOperators operatorCalls operatorInstances |> writeAsRead readAs |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks, placed
         let lowered =
             items

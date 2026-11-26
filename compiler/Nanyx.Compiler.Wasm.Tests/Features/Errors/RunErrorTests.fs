@@ -415,3 +415,36 @@ println("never")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
     Assert.Contains(":4:15: error: the value matched here has no known type, because of an error deferred from compile time", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a deferred error at a unit literal stops the program there, not running on with the literal`` () =
+    // Inference reads a unit literal as another expression, which was written over the trap the error made (#2966).
+    let source =
+        normalized """dimension Distance
+@baseUnit unit cm: Distance
+dimension Time
+@baseUnit unit s: Time
+
+println("before")
+def t: Time(int) = 2cm
+println(t)
+"""
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains(":7:20: error NYX0201: Type mismatch: 'Distance(int)' vs 'Time(int)' (deferred from compile time)", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a deferred error in a field's call stops the program there`` () =
+    // A call of a record's field is read as a block that calls it, as a unit literal is read as another expression.
+    let source =
+        normalized """def r = (f = { x: int -> x + 1 })
+
+println("before")
+println(r.f("s"))
+println("after")
+"""
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains(":4:13: error NYX0201: Type mismatch: 'string' vs 'int' (deferred from compile time)", outcome.StandardError)
