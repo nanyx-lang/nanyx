@@ -8,6 +8,43 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.43.0
+
+*26 November 2026*
+
+A release that finishes units of measure and starts making the shipped packages ordinary index packages. A derived
+dimension has units of its own, hovering a dimension lists its units, a script installs a package with `::install`,
+and this release publishes the packages the compiler ships to the package index. One change breaks code: it is marked
+below.
+
+**Language**
+
+- A derived dimension declares units of its own from its parts' units, `unit kmh: Speed = 1km / 1hr`. A literal such as
+  `90.0kmh` is a value of it, and a value prints in the largest of its units it is a whole number of, as `90kmh` or
+  `25mps` ([Units of a derived dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). A unit worth
+  nothing, such as `1m / 0s`, is [NYX0298](../standard-tools/errors#nyx0298), and so is a plain unit defined as `0ms`,
+  which was accepted before.
+- A script names a package it uses with `::install`, which takes the same words `::dependency` did: a package, then a
+  version or a directory. **This breaks code** that writes `::dependency`, which is now an unknown directive,
+  [NYX0009](../standard-tools/errors#nyx0009): write `::install nanyx.fs`
+  ([Files and projects](../getting-started/files-and-projects)).
+
+**Tools**
+
+- Hovering a dimension, plain or derived, shows its units, smallest to largest with the base unit marked, and a
+  literal to write a value with. A measured value's hover ends with the same list, and hovering a unit shows its
+  declaration and its size in base units ([VS Code extension](../standard-tools/vs-code-extension)).
+- Each compiler release carries the packages it ships, as `<name>-<version>.nyxpkg`, and the package index records them
+  as it does any package's release ([Package index](../deep-dives/package-index)).
+- `nanyx check` and `nanyx pack` work on a host, or a host library, on its own.
+
+**Fixes**
+
+- A derived dimension with a part that is no dimension, in a signature, is reported once, as
+  [NYX0296](../standard-tools/errors#nyx0296).
+- A measured `float` within a millionth of a millionth of a whole number of a unit prints as that whole number, so
+  `90.0kmh + 10.0mps` prints `35mps`.
+
 # 0.42.0
 
 *26 November 2026*
