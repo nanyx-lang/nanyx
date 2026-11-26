@@ -157,6 +157,8 @@ def area: Shape -> float = { shape ->
 
 A payload that is a record with named fields is taken apart by name, as any record is: with `#rectangle(width: float, height: float)`, the pattern `#rectangle(width, height)` binds each field to the local of the same name. This also works for a lambda's parameter, as in `{ #rectangle(width, height) -> width * height }`. As with a record, `...` leaves the other fields out: `#rectangle(width, ...)` binds `width` alone.
 
+An arm for a tag the value's type doesn't have can never match, so it is an error (NYX0201), which suggests the tag it most likely means: a misspelt `#nothing` for `#none`. A value whose type is a single tag, as `def simple = #nil` is, has only that tag, so an arm for any other is the same error. Only a union with a rest, such as `#some(a) | r`, can have a tag it doesn't name.
+
 A tag that carries the unit value is matched as it is written, with empty brackets, and `()` on its own matches the unit value:
 
 ```nanyx

@@ -12,11 +12,11 @@ module internal UnknownTagArms =
         | _ -> ty
 
     /// The tags of `ty` with their payloads, in the order it names them, if it is a closed union of tags. A union
-    /// with a rest can have any tag. So can a single tag, as far as this check goes: it is often the type inferred
-    /// for one value (`def simple = #nil`), and a match on that is written for the union it stands in for.
+    /// with a rest can have any tag. A single tag, as `def simple = #nil` is, is a union of that one tag (#2160).
     let private closedTags (ty: Ty) : (string * Ty option) list option =
         match unwrap ty with
-        | TyUnion items when items.Length > 1 && items |> List.forall (function TyTag _ -> true | _ -> false) ->
+        | TyTag(name, payload) -> Some [ name, payload ]
+        | TyUnion items when not items.IsEmpty && items |> List.forall (function TyTag _ -> true | _ -> false) ->
             items |> List.choose (function TyTag(name, payload) -> Some (name, payload) | _ -> None) |> Some
         | _ -> None
 
@@ -40,14 +40,14 @@ module internal UnknownTagArms =
     let private unknownTag (ty: Ty) (tags: string list) (span: SourceSpan) (tagName: string) : Diagnostic =
         let listed =
             match tags |> List.map (sprintf "#%s") with
-            | [ only ] -> only
-            | many -> String.concat ", " (List.truncate (many.Length - 1) many) + " and " + List.last many
+            | [ only ] -> $"whose only tag is {only}"
+            | many -> "whose tags are " + String.concat ", " (List.truncate (many.Length - 1) many) + " and " + List.last many
         let suggestions = suggest tags tagName |> List.map (sprintf "#%s")
         let question =
             match suggestions with
             | [] -> ""
             | _ -> $""": did you mean {String.concat " or " suggestions}?"""
-        let message = $"This arm can never match: the value is a '{TypePrinting.tyToString ty}', whose tags are {listed}, so it has no #{tagName}{question}"
+        let message = $"This arm can never match: the value is a '{TypePrinting.tyToString ty}', {listed}, so it has no #{tagName}{question}"
         { Diagnostics.at DiagnosticCodes.TypeMismatch span message with
             Fixes =
                 suggestions

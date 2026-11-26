@@ -1306,7 +1306,9 @@ def r =
     | #nothing -> 2  -- error NYX0201: This arm can never match: the value is a '#some(int) | #none', whose tags are #some and #none, so it has no #nothing: did you mean #none?
 ```
 
-A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any tag.
+A value whose type is a single tag, as `def simple = #nil` is, has that tag alone, so an arm for any other is reported
+the same way. A union with a rest, such as `#some(a) | r`, can have any tag, so a match on one accepts an arm for any
+tag.
 
 A tag given where a union without a rest is expected, that the union doesn't name, is reported with the union's tags, and
 the one it most likely means:
