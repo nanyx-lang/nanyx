@@ -796,9 +796,12 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                                 { current with
                                     PendingContextInstances = pending :: current.PendingContextInstances
                                     HoleScopes = current.HoleScopes |> Map.add call.Id (env, annotatedDef) })
-                        // An argument that failed to check, as `1.5s / 1ms` does, its storages a `float` and an `int`,
-                        // is the error, reported where it is: the context of a type it left unsettled is not (#2852).
-                        | Error _, _ when snd (Solving.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span) ->
+                        // Where an argument failed to check, as `1.5s / 1ms` does, its storages a `float` and an `int`,
+                        // that is the error, reported where it is: the context of a type it left unsettled is not (#2852).
+                        // A `for` loop's `__toSeq(xs)` is left to fail: `inferExpr` reads it as the call it stands for (see `PipeTargets`).
+                        | Error _, _ when
+                            name <> ForSyntax.toSeq
+                            && snd (Solving.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span) ->
                             Ok (found @ [ None ], current)
                         | Error errors, _ -> Error errors
                 | _ -> Ok (found @ [ None ], current))) (Ok ([], state))
