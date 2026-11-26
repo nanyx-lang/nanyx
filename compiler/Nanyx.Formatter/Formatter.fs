@@ -360,6 +360,7 @@ let format (options: Options) (parsed: SourceModule) : string =
         match s.Kind with
         | DefStatement(false, n, t, Kind (RecSyntax.Call inner)) -> defDoc false "rec" n t inner
         | DefStatement(false, n, t, Kind (MutSyntax.Call inner)) -> defDoc false "mut" n t inner
+        | DefStatement(isExport, n, Some t, value) when (PatternSyntax.shapeOf n).IsSome -> patternDoc isExport t value
         | DefStatement(isExport, n, t, value) -> defDoc isExport "def" n t value
         | TypeDefStatement(n, modifiers, parameters, body) -> typeDefDoc n modifiers parameters body
         | ImportStatement items -> importDoc s.Span.Start s.Span.End items

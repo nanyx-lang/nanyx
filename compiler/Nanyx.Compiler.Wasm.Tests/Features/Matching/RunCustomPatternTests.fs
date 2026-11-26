@@ -373,3 +373,109 @@ no pair
 big
 small
 """
+
+[<Fact>]
+let ``Run - a pattern declared in a function's block is in scope for the rest of the block`` () =
+    """
+def classify = { input ->
+  pattern string -> #Num(int) | #Skip = { s ->
+    | "" -> #Skip
+    | _ -> #Num(1)
+  }
+
+  match input
+    | #Skip -> "skip"
+    | #Num(n) -> "num {n}"
+}
+
+println(classify(""))
+println(classify("x"))
+"""
+    |> printsAs """
+skip
+num 1
+"""
+
+[<Fact>]
+let ``Run - a block's pattern can name the block's local type, and a lambda after it uses it`` () =
+    """
+def polish = { input: string ->
+  type State = #some(list(int)) | #stackUnderflow
+
+  pattern string -> #Num(int) | #Plus | _ = {
+    | "+" -> #Plus
+    | s ->
+      match int.fromString(s)
+        | #some(n) -> #Num(n)
+        | _ -> _
+  }
+
+  def step: State, string -> State = {
+    | #some([b, a, ...rest]), #Plus -> #some([a + b, ...rest])
+    | #some(_), #Plus -> #stackUnderflow
+    | #some(stack), #Num(n) -> #some([n, ...stack])
+    | state, _ -> state
+  }
+
+  list.fold(string.split(input, on = " "), #some([]), step)
+}
+
+println(polish("1 2 + 4 +"))
+println(polish("+"))
+"""
+    |> printsAs """
+#some([7])
+#stackUnderflow
+"""
+
+[<Fact>]
+let ``Run - a block's pattern captures what a local def can`` () =
+    """
+def classify = { limit: int, x: int ->
+  pattern int -> #Over | _ = { n -> if n > limit then #Over else _ }
+  def inner = { y: int ->
+    match y
+      | #Over -> "over"
+      | _ -> "under"
+  }
+  inner(x)
+}
+
+println(classify(5, 7))
+println(classify(5, 3))
+"""
+    |> printsAs """
+over
+under
+"""
+
+[<Fact>]
+let ``Run - a module block declares a pattern, which it uses, and exports one`` () =
+    """
+module signs =
+  pattern int -> #Zero | _ = { n -> n == 0 }
+
+  export pattern int -> #Neg | #Pos = { n -> if n < 0 then #Neg else #Pos }
+
+  export def describe = { n: int ->
+    match n
+      | #Zero -> "zero"
+      | #Neg -> "negative"
+      | #Pos -> "positive"
+  }
+
+import signs
+
+println(describe(0))
+println(describe(-2))
+println(
+  match 5
+    | #Neg -> "-"
+    | #Pos -> "+"
+)
+"""
+    |> printsAs """
+zero
+negative
++
+"""

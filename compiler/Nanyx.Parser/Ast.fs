@@ -923,7 +923,8 @@ module PatternSyntax =
     /// Whether `name` is what a pattern returns, bound for a match (see `resultName`).
     let isResultName (name: Identifier) = name.StartsWith resultPrefix
 
-    /// The pattern a top-level def declares, as the parser writes it: its signature and its body.
+    /// The pattern a def declares, at the top level or in a module block, as the parser writes it: its signature and its
+    /// body. A function's block declares one as a def statement of the same name.
     let (|Declaration|_|) (definition: Definition) =
         match definition with
         | ValueDef(_, name, Some (Signature signature), body) when (shapeOf name).IsSome -> Some (signature, body)

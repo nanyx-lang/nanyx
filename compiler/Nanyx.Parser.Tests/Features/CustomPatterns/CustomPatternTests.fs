@@ -112,3 +112,38 @@ let ``a lower-case tag never takes arguments`` () =
     let reported, text = parseErrorOf "def f = { | #split(\",\")(a, b) -> 1 }"
     Assert.Equal("Expected `,` or `->`", reported)
     Assert.Equal("(a, b) -> 1 }", text)
+
+[<Fact>]
+let ``a function's block declares a pattern as a def statement of its function`` () =
+    let source = """
+def classify = { input ->
+  pattern string -> #Num(int) | #Skip = { s -> #Skip }
+  input
+}
+"""
+    match itemOf source with
+    | Kind (Def (ValueDef (_, _, _, Kind (Lambda (_, Kind (Block [ Kind (DefStatement (false, name, Some (PatternSyntax.Signature signature), Kind (Lambda _))); _ ]), _))))) ->
+        Assert.Equal(Some ({ Tags = [ "Num"; "Skip" ]; WithPayload = [ "Num" ]; TakesArguments = false; IsPartial = false; ReturnsBool = false }: PatternSyntax.Shape), PatternSyntax.shapeOf name)
+        Assert.Equal(TypeName "string", signature.Input.Kind)
+    | other -> failwith $"Unexpected item: %A{other}"
+
+[<Fact>]
+let ``a pattern in a function's block can't be exported`` () =
+    let reported, _ = parseErrorOf "def f = { x ->\n  export pattern int -> #Even | #Odd = { n -> #Even }\n  x\n}\n"
+    Assert.Equal("A pattern declared in a function's block is local to it, so it can't be exported: declare it at the top level, or in a module block, to export it", reported)
+
+[<Fact>]
+let ``a module block declares a pattern, exported or not`` () =
+    let source = """
+module shapes =
+  export pattern int -> #Neg | #Pos = { n -> if n < 0 then #Neg else #Pos }
+  pattern int -> #Zero | _ = { n -> n == 0 }
+"""
+    // The block's items are qualified with its name (see `ModuleBlocks`).
+    match parseModule (source.ReplaceLineEndings "\n") with
+    | Result.Ok [ Kind (ModuleDecl (_, "shapes"))
+                  Kind (Def (PatternSyntax.Declaration _ & ValueDef (true, exported, _, _)))
+                  Kind (Def (PatternSyntax.Declaration _ & ValueDef (false, own, _, _))) ] ->
+        Assert.Equal("shapes.__pattern__3Neg3Pos", exported)
+        Assert.Equal("shapes.__pattern_PB_4Zero", own)
+    | other -> failwith $"Unexpected parse: %A{other}"
