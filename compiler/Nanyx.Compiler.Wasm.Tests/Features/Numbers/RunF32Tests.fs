@@ -41,7 +41,6 @@ def main = {
   println("{s.x} {[a, a + a]}")
   match #some(a)
   | #some(x) -> println("{x}")
-  | #none -> println("none")
   def scale = { y: F32 -> y * a }
   println("{scale(F32.fromInt(2))} {[a] == [a]} {(a, 1) < (a, 2)}")
 }

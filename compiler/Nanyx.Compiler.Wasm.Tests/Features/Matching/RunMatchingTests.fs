@@ -311,8 +311,10 @@ match 1, 2
 """
     runSource source |> assertRan "1, 2\n1, 2\n1, 2\n1, 2\n"
 
+// A single tag is a union of that one tag, so an arm for another is the error a union's would be, deferred to where
+// the match runs (#2160).
 [<Fact>]
-let ``Run - an arm for a tag the value cannot have never matches`` () =
+let ``Run - an arm for a tag the value cannot have is an error`` () =
     let source =
         normalized """def simple = #nil
 
@@ -324,8 +326,8 @@ def check = match simple
 println(check)
 """
     let outcome = runSource source
-    Assert.Equal(0, outcome.ExitCode)
-    Assert.Equal("empty\n", outcome.StandardOutput)
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Contains("error NYX0201: Type mismatch: This arm can never match: the value is a '#nil', whose only tag is #nil, so it has no #some", outcome.StandardError)
 [<Fact>]
 let ``Run - a list taken from a tag a catch-all arm passed on keeps its elements counted`` () =
     // `except` passes `#some(set)` on through a catch-all arm. That arm's tag was not joined with the `#some([])`, so

@@ -12,7 +12,6 @@ let ``An arm for a tag a closed union doesn't have is an error at its pattern, s
 def r =
   match o
     | #some(n) -> n
-    | #none -> 0
     | #nothing -> 2"""
     let code, message, text = onlyDiagnostic source
     Assert.Equal("NYX0201", code)
@@ -92,8 +91,10 @@ def one = g(#nothing)
 def two = g(#some(2))""")
     Assert.Empty(result.Diagnostics)
 
+// A single tag was let through, as the type inferred for one value that a match is written for the union of, but it is
+// a union of that one tag, so an arm for another can never match (#2160).
 [<Fact>]
-let ``A match on a value inferred as a single tag accepts an arm for another tag`` () =
+let ``An arm for another tag than a single tag's is an error`` () =
     let source =
         withFinalNewline """def simple = #nil
 
@@ -104,4 +105,36 @@ def check =
     | _ -> "other"
 
 println(check)"""
-    Assert.Empty((Compiler.compile source).Diagnostics)
+    let code, message, text = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal("This arm can never match: the value is a '#nil', whose only tag is #nil, so it has no #some", message)
+    Assert.Equal("#some(x)", text)
+
+[<Fact>]
+let ``An arm for a tag a single tag's name is close to suggests it`` () =
+    let source =
+        withFinalNewline """def simple = #nil
+
+def check =
+  match simple
+    | #nill -> 1
+    | _ -> 0"""
+    let diagnostic = single (Compiler.compile source)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    let fix = Assert.Single(diagnostic.Fixes)
+    Assert.Equal("#nil", (Assert.Single(fix.Edits)).NewText)
+
+// A cell made with `#none` and matched as an option was told its `#some` arm meant `#none`, which another arm handles.
+[<Fact>]
+let ``The error suggests no tag another arm already handles`` () =
+    let source =
+        withFinalNewline """def nothing = #none
+
+def r =
+  match nothing
+    | #some(n) -> n
+    | #none -> 0"""
+    let diagnostic = single (Compiler.compile source)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.Equal("This arm can never match: the value is a '#none', whose only tag is #none, so it has no #some", diagnostic.Message)
+    Assert.Empty(diagnostic.Fixes)
