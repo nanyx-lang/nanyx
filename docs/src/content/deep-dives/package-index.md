@@ -57,6 +57,12 @@ Before it records a version, Sync runs `nanyx api-check` on it and the newest ve
 unlisted and is available, and a version whose number is too small for its API's changes is reported, not recorded. A
 package's first version isn't checked.
 
+A release's tag is `v1.2.0` or `1.2.0`, perhaps after a prefix that ends in `/`. The compiler's releases,
+`compiler/0.43.0`, carry the [packages it ships](./shipped-packages), each registered with `nanyx-lang/nanyx`, so Sync
+records them as it does any package ([Releases](./releases#the-shipped-packages)). The API check holds them to their
+version too: a compiler release whose shipped package breaks its API in a patch release, or in a minor one from 1.0.0
+up, records nothing for that package, and Sync reports it.
+
 ## Unlisting
 
 Unlisting is a pull request that sets `unlisted` on a version, which `nanyx unlist` opens (`Publishing.unlist`). The

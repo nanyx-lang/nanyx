@@ -30,6 +30,12 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
   executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
   the compiler.
+- **A release publishes them to the index.** Each shipped manifest names this repository, `repository =
+  "nanyx-lang/nanyx"`, and the oldest compiler it builds with, the one it ships with, and each release attaches its
+  `.nyxpkg` to the `compiler/<version>` release, which the [package index](./package-index) records as it does any
+  package's release ([Releases](./releases#the-shipped-packages)). The compiler still reads them from `packages/`
+  beside it: resolving them from the index, as any package is, is the rest of
+  [#2699](https://github.com/nanyx-lang/nanyx/issues/2699).
 - **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest (`HostPackages.tryShipped`)
   rather than keeping a table of hosts; `HostPackages.console` is the host a script runs under. The program's package
   records the host's package (`PackageModules.HostPackage`; for a script or a module given as source,

@@ -132,7 +132,12 @@ those files workable. Problems with the code's structure are tracked as GitHub i
   so the PR that bumps `<Version>` also sets that version in every manifest under `packages/` (the package's own
   `version` and each shipped dependency's), in `examples/`, and in the docs that name a shipped package's version
   (`git grep '<old version>' packages examples docs/src/content`). Without it, every package fails with `NYX0029` and
-  the release job never runs.
+  the release job never runs. A shipped manifest's `nanyx`, the oldest compiler it builds with, is the new version's
+  major and minor, `0.43` for `0.43.0`, which a test checks.
+- **A release publishes the shipped packages.** The release attaches each shipped package's `<name>-<version>.nyxpkg`
+  to the `compiler/<version>` release, and the package index's sync records it from there, as it does any package's
+  release ([Releases](docs/src/content/deep-dives/releases.md#the-shipped-packages)). A shipped package whose public
+  API changes more than the version allows isn't recorded: below 1.0.0 a patch release may not break one.
 - **The PR that bumps the version writes its changelog section.** Add a `# <version>` section at the top of the
   [Changelog](docs/src/content/overview/changelog.md), with the date under it in italics. The release job uses that
   section as the GitHub release's notes, and the Compiler workflow fails if there isn't one.
