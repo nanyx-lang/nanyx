@@ -528,8 +528,9 @@ To fix it, make every package that depends on it give the same directory.
 
 # NYX0029: Version not shipped
 
-A manifest names a linter or host the compiler ships, such as `nanyx.lint` or `nanyx.cli.host`, at a version other than
-the one it ships. The compiler ships each of them at its own version, and a manifest names them at it exactly.
+A manifest names a linter, such as `nanyx.lint`, at a version other than the one the compiler ships. The compiler runs
+the linters it ships itself, at its own version, so a manifest names them at it exactly. A host or a package the compiler
+ships, such as `nanyx.cli.host`, is a package from the package index like any other, named at any version it has.
 
 ```nanyx
 -- file: demo.nyxp

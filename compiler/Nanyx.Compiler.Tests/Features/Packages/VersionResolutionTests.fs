@@ -151,10 +151,13 @@ let ``Resolution locks each package the build reaches, with its hash and depende
         )
     match resolveIn package Lockfile.empty with
     | Result.Ok lockfile ->
+        // A package the compiler ships is locked as any other, at the version the compiler seeded, with its SHA-256.
+        let cli = (PackageStore.seededCopy (storeOf package) "nanyx.cli").Value
         Assert.Equal<LockedPackage list>(
             [ { Name = "acme.core"; Version = version "2.3.0"; Sha256 = hashOf 'a'; Dependencies = [] }
-              { Name = "acme.web"; Version = version "1.0.0"; Sha256 = hashOf 'a'; Dependencies = [ "acme.core" ] } ],
-            lockfile.Packages
+              { Name = "acme.web"; Version = version "1.0.0"; Sha256 = hashOf 'a'; Dependencies = [ "acme.core"; "nanyx.cli" ] }
+              { Name = "nanyx.cli"; Version = cli.Version; Sha256 = cli.Sha256; Dependencies = [] } ],
+            lockfile.Packages |> List.filter (fun locked -> locked.Name.StartsWith "acme." || locked.Name = "nanyx.cli")
         )
     | other -> failwith $"{other}"
 

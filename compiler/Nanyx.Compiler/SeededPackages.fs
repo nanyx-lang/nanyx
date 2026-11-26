@@ -23,7 +23,6 @@ module SeededPackages =
         for dependency in manifest.Dependencies do
             match dependency.Source with
             | FromIndex requirement -> dependencies.[dependency.Name] <- JsonValue.Create requirement.Written
-            | DependencySource.Shipped -> dependencies.[dependency.Name] <- JsonValue.Create Toolchain.version
             | DependencySource.AtPath _
             | OnGitHub _ -> ()
         let version = JsonObject()
@@ -39,12 +38,30 @@ module SeededPackages =
         file.["versions"] <- JsonArray(version)
         file.ToJsonString options + "\n"
 
+    /// The compiler's own copy of each package it ships, at the version its manifest gives, without packing them: what
+    /// they are read from while they are packed, since they depend on one another, and their seeding is what packs them.
+    let private ownCopies () : SeededCopy list =
+        ShippedPackages.names ()
+        |> List.choose (fun name ->
+            Manifest.tryReadIn (ShippedPackages.directoryOf name)
+            |> Option.bind (fun manifest -> SemanticVersion.tryParse manifest.Version)
+            |> Option.map (fun version -> { Name = name; Version = version; Sha256 = ""; Source = ShippedPackages.directoryOf name }))
+
+    /// The compiler's own copy of each package it ships, as `store` would have it seeded, but neither packed nor
+    /// unpacked into its cache, and with no SHA-256: what a store reads them as when nothing it builds is locked or
+    /// downloaded, as while they are packed, and in the compiler built for the browser, which would otherwise pack them
+    /// on a page (see `inMemory`).
+    let private listedUnpacked (store: PackageStore) : Result<Seeded, string list> =
+        Result.Ok { Index = PackageStore.shippedIndex store; Copies = ownCopies () }
+
     /// Each package the compiler ships, packed, with its manifest; or why one can't be. They depend only on the packages
-    /// the compiler ships, so they pack the same whatever `store` reads them through.
+    /// the compiler ships, which are read from the compiler's own copies (see `ownCopies`), so they pack the same whatever
+    /// `store` they are packed for.
     let private packWith (store: PackageStore) : Result<(Manifest * byte array) list, string list> =
+        let unseeded = { store with Seed = listedUnpacked }
         ShippedPackages.names ()
         |> List.map (fun name ->
-            Package.findIn store (ShippedPackages.directoryOf name)
+            Package.findIn unseeded (ShippedPackages.directoryOf name)
             |> Result.bind (fun package ->
                 PackageApi.pack package
                 |> Result.map (fun bytes -> package.Manifest, bytes)
@@ -121,7 +138,7 @@ module SeededPackages =
                     $"The package cache holds a '{name}' {version}, in '{directory}', that isn't the one this compiler ships: its {named} differ. A package in the cache is never changed, so delete that directory, and the next build puts this compiler's copy there"
 
     /// `seed`, done now: the index written, if it isn't, and each package unpacked into the cache, if it isn't.
-    let private seedOnce (store: PackageStore) : Result<string, string list> =
+    let private seedOnce (store: PackageStore) : Result<Seeded, string list> =
         let target = PackageStore.shippedIndex store
         let written =
             if Directory.Exists target then
@@ -140,32 +157,37 @@ module SeededPackages =
                     errors)
         written
         |> Result.bind (fun () ->
-            let unpackedAll =
+            let copies =
                 Directory.GetFiles(Path.Combine(target, "index"), "*.json", SearchOption.AllDirectories)
                 |> Array.sort
                 |> Array.toList
-                |> List.choose (fun indexFile ->
-                    match PackageIndex.versions target (Path.GetFileNameWithoutExtension indexFile) with
+                |> List.map (fun indexFile ->
+                    let name = Path.GetFileNameWithoutExtension indexFile
+                    match PackageIndex.versions target name with
                     | Result.Ok(file, [ version ]) ->
                         let archive = Path.GetFullPath(Path.Combine(Path.GetDirectoryName file, version.Url))
-                        match unpacked store (Path.GetFileNameWithoutExtension indexFile) version.Version (File.ReadAllBytes archive) with
-                        | Result.Ok() -> None
-                        | Result.Error message -> Some message
-                    | Result.Ok(_, listed) -> Some $"The index of the packages the compiler ships, '{target}', lists {listed.Length} versions of '{Path.GetFileNameWithoutExtension indexFile}', not one"
-                    | Result.Error message -> Some message)
-            match unpackedAll with
-            | [] -> Result.Ok target
+                        unpacked store name version.Version (File.ReadAllBytes archive)
+                        |> Result.map (fun () ->
+                            { Name = name
+                              Version = version.Version
+                              Sha256 = version.Sha256
+                              Source = ShippedPackages.directoryOf name })
+                    | Result.Ok(_, listed) -> Result.Error $"The index of the packages the compiler ships, '{target}', lists {listed.Length} versions of '{name}', not one"
+                    | Result.Error message -> Result.Error message)
+            match copies |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
+            | [] -> Result.Ok { Index = target; Copies = copies |> List.choose Result.toOption }
             | errors -> Result.Error errors)
 
     /// The stores this process has seeded, by the index each was seeded into.
-    let private seeded = System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Result<string, string list>>>()
+    let private seeded = System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Result<Seeded, string list>>>()
 
     /// Seeds the packages the compiler ships into `store`, if it hasn't yet: packs each into the index of its own in the
     /// store's cache (`PackageStore.shippedIndex`), which another process seeding at the same time can't see half made,
-    /// and unpacks into the cache each that it doesn't hold. Gives the index's directory; or why a package can't be
+    /// and unpacks into the cache each that it doesn't hold. Gives the index's directory and each package, which a build
+    /// reads from the compiler's own copy (see `SeededCopy`); or why a package can't be
     /// seeded: it doesn't pack, or the cache holds another copy of its version. A store is seeded once a process, and
     /// one that couldn't be is tried again the next time.
-    let seed (store: PackageStore) : Result<string, string list> =
+    let seed (store: PackageStore) : Result<Seeded, string list> =
         let key = PackageStore.shippedIndex store
         let result = seeded.GetOrAdd(key, fun _ -> lazy (seedOnce store)).Value
         if Result.isError result then seeded.TryRemove key |> ignore
@@ -184,3 +206,9 @@ module SeededPackages =
     /// packages the compiler ships with `seed`.
     let store (cache: string) (index: string) (github: GitHubFetcher) : PackageStore =
         { Cache = cache; Index = index; GitHub = github; Seed = seed }
+
+    /// A store whose cache is `cache` and whose index is `index`, which fetches from GitHub with `github`, and which reads
+    /// the packages the compiler ships from the compiler's own copies without seeding them: for the compiler built for
+    /// the browser, whose page locks and downloads nothing, so packing them there would cost the page for nothing.
+    let inMemory (cache: string) (index: string) (github: GitHubFetcher) : PackageStore =
+        { Cache = cache; Index = index; GitHub = github; Seed = listedUnpacked }

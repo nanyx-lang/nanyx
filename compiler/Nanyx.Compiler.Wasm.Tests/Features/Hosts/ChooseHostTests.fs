@@ -42,7 +42,7 @@ let ``A host the compiler doesn't ship, with no path, is an error saying how to 
     let outcome = onPackage $"""host = (package = "nanyx.nope", version = "{Toolchain.version}")""" main [ "check" ]
     Assert.Equal(1, outcome.ExitCode)
     Assert.Contains(
-        """app.nyxp:3:21: error NYX0023: The compiler ships no package 'nanyx.nope': give the path of a host the compiler doesn't ship, as `host = (package = "nanyx.nope", path = "../nanyx.nope")`""",
+        $"""error NYX0048: The host 'nanyx.nope' {Toolchain.version} is neither one the compiler ships nor locked in 'nanyx.lock': run `nanyx pull` to choose its version from the package index and lock it, or give the directory it is in, as in `host = (package = "nanyx.nope", path = "../nanyx.nope")`""",
         outcome.StandardError)
 
 [<Fact>]
@@ -87,7 +87,7 @@ let ``--host naming a package the compiler doesn't ship is a usage error naming 
     let outcome = onPackage "" main [ "run"; "--host"; "nanyx.nope" ]
     Assert.Equal(2, outcome.ExitCode)
     Assert.StartsWith("--host: ", outcome.StandardError.Trim())
-    Assert.Contains("The compiler ships no package 'nanyx.nope'", outcome.StandardError)
+    Assert.Contains("The host 'nanyx.nope' {Toolchain.version} is neither one the compiler ships nor locked", outcome.StandardError.Replace(Toolchain.version, "{Toolchain.version}"))
 
 [<Fact>]
 let ``--host takes the directory of a host package`` () =

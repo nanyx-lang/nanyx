@@ -91,8 +91,9 @@ println("hi")"""
     Assert.Empty(compileScriptWith [] source)
 
 [<Theory>]
-[<InlineData("::host nanyx.cli.host 0.0.1", "NYX0029", "The compiler ships 'nanyx.cli.host' {version}, not 0.0.1")>]
-[<InlineData("::host nanyx.nope {version}", "NYX0023", "The compiler ships no package 'nanyx.nope': give the path of a host the compiler doesn't ship")>]
+// A host or a package the compiler ships, at another version, is a package from the index like any other.
+[<InlineData("::host nanyx.cli.host 0.0.1", "NYX0041", "'nanyx.cli.host' 0.0.1 isn't in the package cache")>]
+[<InlineData("::host nanyx.nope {version}", "NYX0041", "'nanyx.nope' {version} isn't in the package cache")>]
 [<InlineData("::host nanyx.nope", "NYX0009", "The compiler ships no package 'nanyx.nope': give the directory it is in, as in `../nope`")>]
 [<InlineData("::host acme.util ../util", "NYX0023", "'acme.util' is not a host")>]
 [<InlineData("::host acme.other ../util", "NYX0023", "The package in")>]
@@ -105,7 +106,7 @@ println("hi")"""
 [<InlineData("::install acme.util ../nowhere", "NYX0023", "The dependency 'acme.util' can't be read")>]
 [<InlineData("::install acme.other ../util", "NYX0023", "is named 'acme.util', not 'acme.other'")>]
 [<InlineData("::install acme.util", "NYX0009", "`::install acme.util` needs the version of 'acme.util' to use, as in `::install acme.util 1.2.0`, or the directory it is in, as in `../util`")>]
-[<InlineData("::install nanyx.cli 0.0.1", "NYX0029", "The compiler ships 'nanyx.cli' {version}, not 0.0.1")>]
+[<InlineData("::install nanyx.cli 0.0.1", "NYX0041", "'nanyx.cli' 0.0.1 isn't in the package cache")>]
 [<InlineData("::install", "NYX0009", "`::install` takes a package and where it is found")>]
 let ``A wrong ::host or ::install is the manifest's error, at the directive`` (directive: string, code: string, message: string) =
     let directive = directive.Replace("{version}", Toolchain.version)

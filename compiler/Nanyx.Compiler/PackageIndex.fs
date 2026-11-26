@@ -145,7 +145,8 @@ module PackageIndex =
     let listing (store: PackageStore) (name: string) : Result<string * IndexedVersion list * Diagnostic list, string> =
         store.Seed store
         |> Result.mapError (String.concat "\n")
-        |> Result.bind (fun seededIndex ->
+        |> Result.bind (fun seeded ->
+            let seededIndex = seeded.Index
             let seeded =
                 match versions seededIndex name with
                 | Result.Ok(file, listed) -> listed |> List.map (fun version -> { version with Url = resolve file version.Url })

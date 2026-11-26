@@ -10,9 +10,7 @@ open Parser.Program.DataValues
 type DependencySource =
     /// In a directory on disk, by its full path: `path = "../util"`.
     | AtPath of directory: string
-    /// Shipped with the compiler, named at the compiler's version exactly: `version = "0.28.0"`.
-    | Shipped
-    /// From the package index, at the versions the requirement accepts: `version = "1.2"`.
+    /// From the package index, which lists the packages the compiler ships too, at the versions the requirement accepts: `version = "1.2"`.
     | FromIndex of VersionRequirement
     /// In a GitHub repository, at a commit: `github = "acme/web", rev = "..."`.
     | OnGitHub of GitHubReference
@@ -47,8 +45,12 @@ type FileReference =
 type HostEntry =
     { /// The host's package.
       Package: string
-      /// The full path of the host package's directory, for a host found by its `path`; none for one the compiler ships.
+      /// The full path of the host package's directory, for a host found by its `path`; none for one from the package
+      /// index, at `Version`.
       Path: string option
+      /// The versions of the host that the entry accepts, for one from the package index, `version = "0.43.0"`: those
+      /// compatible with it, as a dependency's are; none for one found by its `path`.
+      Version: VersionRequirement option
       /// Where the entry is written, which an error about the host it names is reported at.
       Span: SourceSpan
       /// The settings its `settings` gives the host, which must be ones the host takes (see `Host.Settings`).
@@ -284,8 +286,9 @@ module Manifest =
         { Linters = Linters.all |> List.filter (fun linter -> chosen |> List.exists (fun (a, _) -> a.Name = linter.Name))
           Severities = chosen |> List.collect snd |> Map.ofList }
 
-    /// The host the manifest's `host` names, if the entry is right: a package the compiler ships, named at the compiler's
-    /// version exactly, or one found by its `path`, relative to `root`, which has no version. Its `settings`, a record,
+    /// The host the manifest's `host` names, if the entry is right: a package from the index, at a version, or one found
+    /// by its `path`, relative to `root`, which has no version. Whether it is a host is known once it is read (see
+    /// `Package`). Its `settings`, a record,
     /// are checked against those the host takes once the host is read (see `Package`).
     let private readHost (problems: Problems) (root: string) (value: DataValue) : HostEntry option =
         problems.Record "the host" hostFields value
@@ -304,29 +307,14 @@ module Manifest =
                 | Some field ->
                     problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"The host '{name}' is found by its path, so it has no version: give one or the other"
                     None
-                | None -> Some { Package = name; Path = Some(Path.GetFullPath(Path.Combine(root, path))); Span = value.Location; Settings = settings }
+                | None -> Some { Package = name; Path = Some(Path.GetFullPath(Path.Combine(root, path))); Version = None; Span = value.Location; Settings = settings }
             | Some name, None when (RenamedPackages.asHost name).IsSome ->
                 problems.AddAbout DiagnosticCodes.RenamedPackage (DataValue.field "package" fields).Value.Value.Location name (RenamedPackages.asHost name).Value
                 None
             | Some name, None ->
-                let version = problems.RequiredText "the host" value.Location fields "version" versionPattern "a semantic version, `1.2.0`"
-                match HostPackages.tryShipped name with
-                | Result.Error message ->
-                    problems.Add
-                        DiagnosticCodes.InvalidManifestValue
-                        (DataValue.field "package" fields).Value.Value.Location
-                        $"{message}: give the path of a host the compiler doesn't ship, as `host = (package = \"{name}\", path = \"../{name}\")`"
-                    None
-                | Result.Ok _ ->
-                    match version with
-                    | Some version when version <> Toolchain.version ->
-                        problems.Add
-                            DiagnosticCodes.VersionNotShipped
-                            (DataValue.field "version" fields).Value.Value.Location
-                            $"The compiler ships '{name}' {Toolchain.version}, not {version}: name a package the compiler ships at its version exactly"
-                        None
-                    | Some _ -> Some { Package = name; Path = None; Span = value.Location; Settings = settings }
-                    | None -> None
+                problems.RequiredText "the host" value.Location fields "version" versionPattern "a semantic version, `1.2.0`"
+                |> Option.bind VersionRequirement.tryParse
+                |> Option.map (fun version -> { Package = name; Path = None; Version = Some version; Span = value.Location; Settings = settings })
             | None, _ -> None)
 
     /// Checks the `host` field of the manifest's `package`, which declares the package a host: its root module, its
@@ -476,7 +464,6 @@ module Manifest =
         let readPackage (fields: DataField list) (value: DataValue) : Dependency option =
             let name = problems.RequiredText "a dependency" value.Location fields "package" namePattern nameRule
             let example = $"""path = "../{name |> Option.map (fun name -> name.Substring(name.LastIndexOf '.' + 1)) |> Option.defaultValue "util"}" """.TrimEnd()
-            let shipped = name |> Option.filter (fun name -> ShippedPackages.isShipped name)
             let renamed = name |> Option.bind RenamedPackages.asDependency
             match DataValue.field "path" fields, DataValue.field "version" fields with
             | None, _ when renamed.IsSome ->
@@ -489,21 +476,6 @@ module Manifest =
                     version.NameSpan
                     $"The dependency '{named}' is found by its path, so it has no version: give one or the other"
                 None
-            | None, Some version when shipped.IsSome ->
-                match problems.Text "a dependency" fields "version" versionPattern "a semantic version, `1.2.0`" with
-                | Some written when written <> Toolchain.version ->
-                    problems.Add
-                        DiagnosticCodes.VersionNotShipped
-                        version.Value.Location
-                        $"The compiler ships '{shipped.Value}' {Toolchain.version}, not {written}: name a package the compiler ships at its version exactly"
-                    None
-                | Some _ ->
-                    Some
-                        { Name = shipped.Value
-                          Source = Shipped
-                          NameSpan = (DataValue.field "package" fields).Value.Value.Location
-                          SourceSpan = version.Value.Location }
-                | None -> None
             | None, Some version ->
                 match version.Value.Data, name with
                 | DataString written, Some name ->
@@ -729,7 +701,6 @@ module Manifest =
              match dependency.Source with
              | OnGitHub reference -> Some(error dependency.SourceSpan $"The dependency '{dependency.Name}', '{reference}',")
              | AtPath _
-             | Shipped
              | FromIndex _ -> None))
         @ (manifest.Files |> List.map (fun file -> error file.GitHubSpan $"The module '{file.Module}', '{file.Reference}',"))
 
@@ -738,13 +709,12 @@ module Manifest =
 
     /// The entry of `dependencies`, or the `host`, that names the package `name` found at `source`, as `nanyx migrate`,
     /// `nanyx install` and `nanyx new` write it: `(package = "acme.util", path = "../util")`, its path relative to
-    /// `root`, the manifest's directory; one the compiler ships at the compiler's version, `toolVersion`; and a file on
-    /// GitHub, which is a module of the package, `(module = "retry", github = "acme/snippets/retry.nyx", rev = "...")`.
-    /// A reference with no commit yet is written with no `rev`, which the build's fix pins.
-    let entryText (toolVersion: string) (root: string) (name: string) (source: DependencySource) : string =
+    /// `root`, the manifest's directory; one from the index at a version, `(package = "nanyx.cli", version = "0.43.0")`;
+    /// and a file on GitHub, which is a module of the package, `(module = "retry", github = "acme/snippets/retry.nyx",
+    /// rev = "...")`. A reference with no commit yet is written with no `rev`, which the build's fix pins.
+    let entryText (root: string) (name: string) (source: DependencySource) : string =
         match source with
         | AtPath directory -> $"(package = {quotedString name}, path = {quotedString (PackageModules.relativePath root directory)})"
-        | Shipped -> $"(package = {quotedString name}, version = {quotedString toolVersion})"
         | FromIndex requirement -> $"(package = {quotedString name}, version = {quotedString (string requirement)})"
         | OnGitHub reference ->
             let key = if reference.File.IsSome then "module" else "package"

@@ -140,28 +140,64 @@ module Package =
     /// directives pin (see `ScriptDependencies.cached`).
     type private Lookup = { Store: PackageStore; Locked: Lockfile }
 
-    /// The directory of `dependency`, which accepts the versions `requirement` gives: that of the version the lockfile
-    /// locks, in the cache; or why it can't be: it isn't locked, the version locked isn't one it accepts, or that version
-    /// isn't in the cache, which `nanyx pull` fills.
-    let private locked (lookup: Lookup) (dependency: Dependency) (requirement: VersionRequirement) : Result<string, Problem list> =
-        let error code message = Result.Error [ AtManifest(Diagnostics.at code dependency.SourceSpan message |> Diagnostics.about dependency.Name) ]
-        match Lockfile.tryFind dependency.Name lookup.Locked with
+    /// The versions compatible with this compiler's, at which a host the compiler ships is named where no manifest names
+    /// it: by `--host`, or as a script's host.
+    let private atCompilerVersion = VersionRequirement.at (SemanticVersion.tryParse Toolchain.version |> Option.get)
+
+    /// What a manifest asks for a package from the index as: a dependency, or its host.
+    type private Requested =
+        | ADependency
+        | AHost
+
+    /// Where a package from the index is read from: the cache, which never changes, so its checked modules can be kept
+    /// beside it; or the compiler's own copy of a package it seeded into the cache, whose checked modules it has already
+    /// (see `PackageStore.seededCopy`).
+    type private Found =
+        | InCache of directory: string
+        | Seeded of copy: SeededCopy
+
+    /// The directory a found package is read from.
+    let private directoryOf (found: Found) =
+        match found with
+        | InCache directory -> directory
+        | Seeded copy -> copy.Source
+
+    /// Where the package `name` from the index, which a manifest asks for at `span` at the versions `requirement` accepts,
+    /// is read from: the version the lockfile locks, from the compiler's own copy if the compiler seeded that version
+    /// into the cache, or else from the cache. One the lockfile doesn't lock yet is read from the copy the compiler
+    /// seeded, if `requirement` accepts its version, so that a package needs no `nanyx pull` to build with the packages
+    /// the compiler ships, and the next one locks it. Or why it can't be read: it isn't locked, the version locked isn't
+    /// one it accepts, or that version isn't in the cache, which `nanyx pull` fills.
+    let private locked (lookup: Lookup) (what: Requested) (name: string) (span: SourceSpan) (requirement: VersionRequirement) : Result<Found, Problem list> =
+        let error code message = Result.Error [ AtManifest(Diagnostics.at code span message |> Diagnostics.about name) ]
+        let seeded = PackageStore.seededCopy lookup.Store name
+        match Lockfile.tryFind name lookup.Locked with
         | None ->
-            error
-                DiagnosticCodes.DependencyNotLocked
-                $"The dependency '{dependency.Name}' {requirement} is not locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version and lock it"
+            match seeded with
+            | Some copy when VersionRequirement.accepts requirement copy.Version -> Result.Ok(Seeded copy)
+            | _ ->
+                match what with
+                | ADependency ->
+                    error
+                        DiagnosticCodes.DependencyNotLocked
+                        $"The dependency '{name}' {requirement} is not locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version and lock it"
+                | AHost ->
+                    error
+                        DiagnosticCodes.DependencyNotLocked
+                        $"The host '{name}' {requirement} is neither one the compiler ships nor locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version from the package index and lock it, or give the directory it is in, as in `host = (package = \"{name}\", path = \"../{name}\")`"
         | Some locked when not (VersionRequirement.accepts requirement locked.Version) ->
             error
                 DiagnosticCodes.InvalidManifestValue
-                $"'{Lockfile.fileName}' locks '{dependency.Name}' {locked.Version}, but this dependency accepts only {requirement} and the versions compatible with it"
+                $"'{Lockfile.fileName}' locks '{name}' {locked.Version}, but this dependency accepts only {requirement} and the versions compatible with it"
         | Some locked ->
-            let directory = PackageStore.directoryOf lookup.Store dependency.Name locked.Version
-            if Directory.Exists directory then
-                Result.Ok directory
-            else
+            let directory = PackageStore.directoryOf lookup.Store name locked.Version
+            match seeded with
+            | Some copy when copy.Version = locked.Version -> Result.Ok(Seeded copy)
+            | _ when Directory.Exists directory -> Result.Ok(InCache directory)
+            | _ ->
                 error
                     DiagnosticCodes.PackageNotDownloaded
-                    $"'{Lockfile.fileName}' locks '{dependency.Name}' {locked.Version}, but it isn't in the package cache, '{lookup.Store.Cache}': run `nanyx pull` to download it"
+                    $"'{Lockfile.fileName}' locks '{name}' {locked.Version}, but it isn't in the package cache, '{lookup.Store.Cache}': run `nanyx pull` to download it"
 
     /// The package `manifest` describes, with the packages it depends on, found through `lookup`. `chain` is the manifests
     /// of the packages that led to it, nearest first, each with its package's name, and `reached` every package the
@@ -196,17 +232,22 @@ module Package =
             Result.Error(errorsOf entry @ exports @ errorsOf referenced @ errorsOf dependencies @ errorsOf host)
 
     /// The host `entry` names, if there is one, read from the manifest of its package, which must declare it a host (see
-    /// `HostPackages`), with that package: one the compiler ships, or one in the directory the entry gives.
+    /// `HostPackages`), with that package: one from the index, found as a dependency from the index is (see `locked`), or
+    /// one in the directory the entry gives.
     and private hostIn (lookup: Lookup) (reached: Reached) (entry: HostEntry option) : Result<(Host * Package) option, Problem list> =
         match entry with
         | None -> Result.Ok None
         | Some entry ->
             let error message = Result.Error [ AtManifest(Diagnostics.at DiagnosticCodes.InvalidManifestValue entry.Span message) ]
-            let directory = entry.Path |> Option.defaultWith (fun () -> ShippedPackages.directoryOf entry.Package)
-            match Manifest.manifestIn directory with
-            | Result.Error _ when entry.Path.IsNone -> error $"The compiler ships no package '{entry.Package}'"
-            | Result.Error message -> error $"The host '{entry.Package}' can't be read: {message}"
-            | Result.Ok path ->
+            let directory =
+                match entry.Path, entry.Version with
+                | Some directory, _ -> Result.Ok directory
+                | None, Some requirement -> locked lookup AHost entry.Package entry.Span requirement |> Result.map directoryOf
+                | None, None -> error $"The host '{entry.Package}' has no `version` or `path`"
+            match directory |> Result.map (fun directory -> directory, Manifest.manifestIn directory) with
+            | Result.Error problems -> Result.Error problems
+            | Result.Ok(_, Result.Error message) -> error $"The host '{entry.Package}' can't be read: {message}"
+            | Result.Ok(directory, Result.Ok path) ->
                 match Manifest.read path with
                 | Result.Error errors -> Result.Error(errors |> List.map AtManifest)
                 | Result.Ok found when found.Name <> entry.Package ->
@@ -232,9 +273,8 @@ module Package =
             | OnGitHub reference ->
                 lookup.Store.GitHub.FetchTree reference.Repository reference.Commit
                 |> Result.mapError (fun failure -> [ notFetched dependency.SourceSpan $"The dependency '{dependency.Name}'" failure ])
-            | FromIndex requirement -> locked lookup dependency requirement
+            | FromIndex requirement -> locked lookup ADependency dependency.Name dependency.SourceSpan requirement |> Result.map directoryOf
             | AtPath directory -> Result.Ok directory
-            | Shipped -> Result.Ok(ShippedPackages.directoryOf dependency.Name)
         let read (dependency: Dependency) (directory: string) =
             match Manifest.manifestIn directory with
             | Result.Error message -> error DiagnosticCodes.InvalidManifestValue dependency.SourceSpan $"The dependency '{dependency.Name}' can't be read: {message}"
@@ -258,14 +298,16 @@ module Package =
                     | _ ->
                         reached.[found.Name] <- path
                         ofManifestIn lookup reached chain found
-        // A package from the index or GitHub is in the cache, and never changes, so its checked modules can be kept.
+        // A package from the index or GitHub is in the cache, and never changes, so its checked modules can be kept; the
+        // compiler's own copy of one it seeded is checked already (see `CheckedLibrary`).
         let checkedFile (dependency: Dependency) (package: Package) =
             let kept identity = { package with CheckedFile = Some(CheckedPackages.fileFor lookup.Store.Cache package.Manifest.Name identity) }
             match dependency.Source with
+            | FromIndex _ when PackageStore.seededCopy lookup.Store dependency.Name |> Option.exists (fun copy -> PackageModules.samePath copy.Source package.Manifest.Root) ->
+                package
             | FromIndex _ -> kept (string package.Manifest.Version)
             | OnGitHub reference -> kept reference.Commit
-            | AtPath _
-            | Shipped -> package
+            | AtPath _ -> package
         dependencies
         |> List.map (fun dependency -> fetched dependency |> Result.bind (read dependency) |> Result.map (checkedFile dependency))
         |> all
@@ -337,9 +379,9 @@ module Package =
         let entry =
             if Directory.Exists full then
                 let packageName = match Manifest.manifestIn full with Result.Ok path -> Path.GetFileNameWithoutExtension path | Result.Error _ -> name
-                { Package = packageName; Path = Some full; Span = SourceSpan.none; Settings = [] }
+                { Package = packageName; Path = Some full; Version = None; Span = SourceSpan.none; Settings = [] }
             else
-                { Package = name; Path = None; Span = SourceSpan.none; Settings = [] }
+                { Package = name; Path = None; Version = Some atCompilerVersion; Span = SourceSpan.none; Settings = [] }
         match hostIn { Store = store; Locked = Lockfile.empty } (Reached()) (Some entry) with
         | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
         | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
@@ -451,7 +493,7 @@ module Package =
         (dependencies: Dependency list)
         (files: FileReference list)
         : Result<PackageModules, Diagnostic list> =
-        let host = host |> Option.defaultValue { Package = defaultHost; Path = None; Span = span; Settings = [] }
+        let host = host |> Option.defaultValue { Package = defaultHost; Path = None; Version = Some atCompilerVersion; Span = span; Settings = [] }
         let reached = Reached()
         let lookup = { Store = store; Locked = locked }
         let diagnostics problems =

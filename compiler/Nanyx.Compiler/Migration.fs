@@ -48,11 +48,15 @@ module Migration =
         | _ -> DataValue.describe value
 
     /// Where the package a `::host` or `::install` directive names is found, as the manifest says it: a directory
-    /// relative to the script, `scriptDirectory`; the compiler's, for a package named with no place; a version; or a
-    /// GitHub reference, pinned to the `rev` it gives, if any. Or what is wrong with the version or the reference.
-    let private sourceOf (scriptDirectory: string) (place: DirectivePlace) : Result<DependencySource, string> =
+    /// relative to the script, `scriptDirectory`; the compiler's version, `toolVersion`, for a package named with no
+    /// place; a version; or a GitHub reference, pinned to the `rev` it gives, if any. Or what is wrong with the version or
+    /// the reference.
+    let private sourceOf (toolVersion: string) (scriptDirectory: string) (place: DirectivePlace) : Result<DependencySource, string> =
         match place with
-        | DirectivePlace.Shipped -> Result.Ok DependencySource.Shipped
+        | DirectivePlace.Shipped ->
+            match VersionRequirement.tryParse toolVersion with
+            | Some requirement -> Result.Ok(FromIndex requirement)
+            | None -> Result.Error $"'{toolVersion}' is not a version, which must be {VersionRequirement.rule}"
         | DirectivePlace.AtPath path -> Result.Ok(DependencySource.AtPath(Path.GetFullPath(path.Text, scriptDirectory)))
         | AtVersion version ->
             match VersionRequirement.tryParse version.Text with
@@ -81,19 +85,19 @@ module Migration =
 
     /// What `setting`, one of `script`'s, says in the manifest, or what is wrong with the place it names a package at.
     /// `Script.read` has checked the rest.
-    let private settingOf (script: Script) (setting: DirectiveSetting) : Result<Setting, string> =
+    let private settingOf (toolVersion: string) (script: Script) (setting: DirectiveSetting) : Result<Setting, string> =
         let scriptDirectory = Path.GetDirectoryName script.Path
         match setting with
         | LinterSetting(package, _) -> Result.Ok(LinterOn package.Text)
         | LintSetting(linter, rule, severity) -> Result.Ok(RuleSeverity(linter.Text, rule.Text, dataText severity))
         | FormatSetting(key, value) -> Result.Ok(FormatterSetting(key.Text, dataText value))
-        | HostSetting(package, place) -> sourceOf scriptDirectory place |> Result.map (fun source -> HostEntry(package.Text, source))
-        | DependencySetting(package, place) -> sourceOf scriptDirectory place |> Result.map (fun source -> DependencyEntry(package.Text, source))
+        | HostSetting(package, place) -> sourceOf toolVersion scriptDirectory place |> Result.map (fun source -> HostEntry(package.Text, source))
+        | DependencySetting(package, place) -> sourceOf toolVersion scriptDirectory place |> Result.map (fun source -> DependencyEntry(package.Text, source))
 
     /// Each setting the scripts' directives make, once, with the first directive that makes it; or an error for each key
     /// two directives set to different values, naming both, for the second `::host` that names another host, and for a
     /// directive whose version or GitHub reference is wrong.
-    let private settings (root: string) (scripts: Script list) : Result<Setting list, string list> =
+    let private settings (toolVersion: string) (root: string) (scripts: Script list) : Result<Setting list, string list> =
         let made =
             scripts
             |> List.collect (fun script ->
@@ -101,7 +105,7 @@ module Migration =
                 |> List.choose (function
                     | directive, Result.Ok setting ->
                         let location = located root script directive
-                        Some(settingOf script setting |> Result.map (fun setting -> setting, location) |> Result.mapError (fun message -> $"{location}: {message}"))
+                        Some(settingOf toolVersion script setting |> Result.map (fun setting -> setting, location) |> Result.mapError (fun message -> $"{location}: {message}"))
                     | _, Result.Error _ -> None))
         match made |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
         | _ :: _ as wrong -> Result.Error wrong
@@ -130,15 +134,15 @@ module Migration =
                     settings
                     |> List.choose (function RuleSeverity(linter, rule, severity) when linter = package -> Some $"{rule} = {severity}" | _ -> None)
                 match rules with
-                | [] -> Manifest.entryText toolVersion root package DependencySource.Shipped
+                | [] -> $"(package = {Manifest.quotedString package}, version = {Manifest.quotedString toolVersion})"
                 | rules ->
                     $"""(package = {Manifest.quotedString package}, version = {Manifest.quotedString toolVersion}, settings = (rules = ({String.concat ", " rules})))""")
         let host =
             settings
             |> List.tryPick (function HostEntry(name, source) -> Some(name, source) | _ -> None)
-            |> Option.orElse (if hasEntry then Some(Hosts.consolePackage, DependencySource.Shipped) else None)
-            |> Option.map (fun (name, source) -> Manifest.entryText toolVersion root name source)
-        let dependencies = settings |> List.choose (function DependencyEntry(name, source) -> Some(Manifest.entryText toolVersion root name source) | _ -> None)
+            |> Option.map (fun (name, source) -> Manifest.entryText root name source)
+            |> Option.orElse (if hasEntry then Some $"(package = {Manifest.quotedString Hosts.consolePackage}, version = {Manifest.quotedString toolVersion})" else None)
+        let dependencies = settings |> List.choose (function DependencyEntry(name, source) -> Some(Manifest.entryText root name source) | _ -> None)
         let formatter = settings |> List.choose (function FormatterSetting(key, value) -> Some $"{key} = {value}" | _ -> None)
         [ yield "("
           yield $"  package = (name = {Manifest.quotedString name}, version = \"0.1.0\", sources = [{quotedSources}])"
@@ -330,7 +334,7 @@ module Migration =
                         Result.Error
                             [ $"The scripts {names} each have top-level statements, but a package runs from one `@entry`: migrate them one at a time, with `nanyx migrate <file>`, or make all but one of them modules first" ]
                     | entryScripts ->
-                        settings root scripts
+                        settings toolVersion root scripts
                         |> Result.bind (fun settings ->
                             let entryScript = List.tryHead entryScripts
                             let isEntry (script: Script) = entryScript |> Option.exists (fun entry -> entry.Path = script.Path)
@@ -351,7 +355,7 @@ module Migration =
                                 let downloads =
                                     settings
                                     |> List.choose (function
-                                        | DependencyEntry(dependency, FromIndex _) when not (ShippedPackages.isShipped dependency) -> Some dependency
+                                        | DependencyEntry(dependency, FromIndex _) -> Some dependency
                                         | _ -> None)
                                 Result.Ok
                                     { ManifestPath = Path.Combine(root, packageName + Manifest.extension)

@@ -107,8 +107,27 @@ let private publish (package: TempPackage) (manifest: string) : LockedPackage =
       Sha256 = hash
       Dependencies = found.Dependencies |> List.map _.Manifest.Name }
 
+/// The packages the console host brings, locked as a pull of any app under it locks them: the host and the packages
+/// it depends on, at the versions the compiler seeded.
+let private shippedLocks (package: TempPackage) : LockedPackage list =
+    let manifest = okOf (Manifest.check (package.Path "app/app.nyxp") $"(package = (name = \"app\", version = \"0.1.0\"), {consoleHostEntry})" |> Result.mapError (List.map Manifest.describe))
+    match Resolution.resolve (storeOf package) manifest Lockfile.empty with
+    | Result.Ok resolved -> resolved.Lockfile.Packages
+    | Result.Error error -> failwith $"{error}"
+
+/// Writes `package`'s app's lockfile, locking `locked` and the packages its host brings (see `shippedLocks`).
 let private lock (package: TempPackage) (locked: LockedPackage list) =
-    File.WriteAllText(package.Path "app/nanyx.lock", Lockfile.write { Packages = locked })
+    File.WriteAllText(package.Path "app/nanyx.lock", Lockfile.write { Packages = locked @ shippedLocks package })
+
+/// The packages `package`'s app's lockfile locks that the test publishes, without the packages the compiler ships.
+let private lockedOfTheTest (package: TempPackage) =
+    (okOf (Lockfile.read (package.Path "app/nanyx.lock"))).Value.Packages
+    |> List.filter (fun locked -> not (List.contains locked.Name (ShippedPackages.names ())))
+
+/// The lines `pull` gives about the packages the test publishes, without those about the packages the compiler ships,
+/// which an app under the console host locks too.
+let private ofTheTest (lines: string list) =
+    lines |> List.filter (fun line -> not (ShippedPackages.names () |> List.exists (fun name -> line.Contains $" {name} " || line.StartsWith $"{name} ")))
 
 [<Fact>]
 let ``Packing the same package twice makes the same bytes, of its manifest and its sources`` () =
@@ -196,9 +215,9 @@ let ``Pull downloads a locked package into the cache, and the build uses it`` ()
     use package = new TempPackage(util @ app [ """(package = "acme.util", version = "1.0")""" ])
     lock package [ publish package "util/acme.util.nyxp" ]
     let store = storeOf package
-    Assert.Equal<string list>([ "acme.util 1.0.0 (downloaded)" ], okOf (pullFrom store (package.Path "app/app.nyxp")))
+    Assert.Equal<string list>([ "acme.util 1.0.0 (downloaded)" ], ofTheTest (okOf (pullFrom store (package.Path "app/app.nyxp"))))
     Assert.True(File.Exists(package.Path "cache/acme.util/1.0.0/strings.nyx"))
-    Assert.Equal<string list>([ "acme.util 1.0.0 (in the cache)" ], okOf (pullFrom store (package.Path "app/app.nyxp")))
+    Assert.Equal<string list>([ "acme.util 1.0.0 (in the cache)" ], ofTheTest (okOf (pullFrom store (package.Path "app/app.nyxp"))))
     let build = Package.build (okOf (Package.ofManifestFrom store (package.Path "app/app.nyxp")))
     Assert.Empty(build.Diagnostics)
 
@@ -300,7 +319,7 @@ export def loud = { s: string -> shout(s) }"""
     let webLocked = publish package "web/acme.web.nyxp"
     Assert.Equal<string list>([ "acme.util" ], webLocked.Dependencies)
     lock package [ utilLocked; webLocked ]
-    let pulled = okOf (pullFrom store (package.Path "app/app.nyxp"))
+    let pulled = ofTheTest (okOf (pullFrom store (package.Path "app/app.nyxp")))
     Assert.Equal<string list>([ "acme.web 2.1.0 (downloaded)"; "acme.util 1.0.0 (in the cache)" ], pulled)
     Assert.Empty((Package.build (okOf (Package.ofManifestFrom store (package.Path "app/app.nyxp")))).Diagnostics)
 
@@ -330,10 +349,10 @@ let ``A dependency the lockfile doesn't lock is an error for a build, and pull l
     let diagnostic = (manifest ()).Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.DependencyNotLocked.Code, diagnostic.Code)
     Assert.Contains("is not locked in 'nanyx.lock': run `nanyx pull` to choose its version and lock it", diagnostic.Message)
-    Assert.Equal<string list>([ "Locked acme.util 1.0.0"; "acme.util 1.0.0 (downloaded)" ], okOf (pullFrom store (package.Path "app/app.nyxp")))
-    Assert.Equal<LockedPackage list>([ locked ], (okOf (Lockfile.read (package.Path "app/nanyx.lock"))).Value.Packages)
+    Assert.Equal<string list>([ "Locked acme.util 1.0.0"; "acme.util 1.0.0 (downloaded)" ], ofTheTest (okOf (pullFrom store (package.Path "app/app.nyxp"))))
+    Assert.Equal<LockedPackage list>([ locked ], lockedOfTheTest package)
     Assert.Empty((manifest ()).Diagnostics)
-    Assert.Equal<string list>([ "acme.util 1.0.0 (in the cache)" ], okOf (pullFrom store (package.Path "app/app.nyxp")))
+    Assert.Equal<string list>([ "acme.util 1.0.0 (in the cache)" ], ofTheTest (okOf (pullFrom store (package.Path "app/app.nyxp"))))
 
 [<Fact>]
 let ``A changed requirement is locked again, and the build no longer needs what it drops`` () =
@@ -344,12 +363,12 @@ let ``A changed requirement is locked again, and the build no longer needs what 
     File.WriteAllText(package.Path "util/acme.util.nyxp", "(package = (name = \"acme.util\", version = \"2.0.0\"))\n")
     let newer = publish package "util/acme.util.nyxp"
     File.WriteAllText(package.Path "app/app.nyxp", (File.ReadAllText(package.Path "app/app.nyxp")).Replace("\"1.0\"", "\"2.0\""))
-    let pulled = okOf (pullFrom store (package.Path "app/app.nyxp"))
+    let pulled = ofTheTest (okOf (pullFrom store (package.Path "app/app.nyxp")))
     Assert.Equal<string list>(
         [ "Locked acme.util 2.0.0, in place of 1.0.0"; "Unlocked acme.gone 1.0.0, which the build no longer needs"; "acme.util 2.0.0 (downloaded)" ],
         pulled
     )
-    Assert.Equal<LockedPackage list>([ newer ], (okOf (Lockfile.read (package.Path "app/nanyx.lock"))).Value.Packages)
+    Assert.Equal<LockedPackage list>([ newer ], lockedOfTheTest package)
 
 [<Fact>]
 let ``A locked version the dependency doesn't accept is an error at its version`` () =

@@ -98,7 +98,8 @@ let ``A build locks what the manifest adds, and with --locked refuses a lockfile
         + "error: 'app' depends on 'acme.core' 1.0, which it doesn't lock\n",
         refused.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, refused.ExitCode)
-    Assert.False(File.Exists(Path.Combine(app, "nanyx.lock")))
+    // The pull locked the packages the console host brings; the refused build left the lockfile as it was.
+    Assert.DoesNotContain("acme.core", File.ReadAllText(Path.Combine(app, "nanyx.lock")))
     let built = nanyxInStore store app [ "build" ]
     Assert.Equal("Locked acme.core 1.0.0\n", built.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(0, built.ExitCode)

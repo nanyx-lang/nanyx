@@ -119,3 +119,12 @@ def both = { _ ->
 
 both()"""
     Assert.Empty(diagnosticsOf source)
+
+[<Fact>]
+let ``A page's program uses the packages the compiler ships with nothing packed or unpacked, as the browser compiles it`` () =
+    use directory = new TempPackage([])
+    let store = SeededPackages.inMemory (directory.Path "cache") (directory.Path "index") GitHub.unsupported
+    let source = withFinalNewline "::install nanyx.cli\n\nimport nanyx.cli/console as console\n\n@entry\ndef main = {\n  console.println(\"hi\")\n}"
+    Assert.Empty((Script.compileUnder Hosts.playgroundPackage store (directory.Path "main.nyx") source).Diagnostics)
+    // A page locks and downloads nothing, so the cache isn't even made.
+    Assert.False(System.IO.Directory.Exists(directory.Path "cache"))

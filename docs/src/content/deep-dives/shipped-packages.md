@@ -34,9 +34,7 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   "nanyx-lang/nanyx"`, and the compilers it builds with: a library the one it ships with or a later one, and a host or
   a host library that one only, `=0.44.1`, since they use the compiler's internals. Each release attaches its
   `.nyxpkg` to the `compiler/<version>` release, which the [package index](./package-index) records as it does any
-  package's release ([Releases](./releases#the-shipped-packages)). The compiler still reads them from `packages/`
-  beside it: resolving them from the index, as any package is, is the rest of
-  [#2699](https://github.com/nanyx-lang/nanyx/issues/2699).
+  package's release ([Releases](./releases#the-shipped-packages)).
 - **The compiler seeds them into the package cache.** `SeededPackages.seed` packs each shipped package as the release
   packs it, which gives the same bytes on any machine ([The package index](./package-index#the-cache)), unpacks it into
   the cache at `<name>/<version>`, as a download is, and lists it with its SHA-256 in an index of its own in the cache,
@@ -51,8 +49,25 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   modules compiled after the ones that read the store, so it is passed in where a store is made, and a store can't be
   made without one. `SeededPackages.user` is the user's store, which the CLI, the language server and the tests use, and
   `SeededPackages.store` one at a cache and an index of the caller's. `PackageIndex.listing` seeds the store before it
-  lists anything. A process seeds each store once, and packs the shipped packages once for every store it seeds. Builds
-  resolve the shipped packages as index packages once [#2701](https://github.com/nanyx-lang/nanyx/issues/2701) is done.
+  lists anything, and a build before it reads a package from the index. A process seeds each store once, and packs the
+  shipped packages once for every store it seeds; a cache seeded already for this compiler isn't packed again.
+- **They are resolved as packages from the index.** A dependency or a host the compiler ships is named at a version,
+  resolved by `Resolution` with the index's packages, and locked with its SHA-256. Seeding is the one place that knows
+  which packages the compiler ships (`PackageStore.seededCopy`): a locked version that is the one the compiler seeded
+  is read from the compiler's own copy in `packages/` (`Package.locked`), which seeding checked holds the same files as
+  the cache, so the checked library's modules of it apply and a build under a shipped host checks none of its modules
+  from source ([#2702](https://github.com/nanyx-lang/nanyx/issues/2702)); any other version is read from the cache, as
+  any package's is. One the lockfile doesn't lock yet is read from the seeded copy, if its requirement accepts that
+  version, until the next resolution locks it, which `nanyx pull`, `build` and `run` do without a line for it. A script
+  names one with no version, `::install nanyx.fs`, at the version the compiler seeded, and a script with no `::host`
+  runs under the console host at it.
+- **A seeded package takes the others at their seeded versions.** The shipped packages are built and released together,
+  and a host runs its program against the copies of the libraries it was built with, which define the types, such as
+  `Console`, the two share. So the seeded version of a shipped package depends on each other shipped package it names
+  at that package's seeded version only (`VersionRequirement.exactly`), whatever its manifest writes
+  (`Resolution.requirementIn`). Without it, a program under the seeded `nanyx.cli.host` 0.44.1 would lock a `nanyx.cli`
+  0.44.2 from the index, whose `nanyx` accepts the compiler, and meet two `Console`s. A package that no shipped host
+  runs, such as a library checked alone, takes the newest version its requirements accept.
 - **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest (`HostPackages.tryShipped`)
   rather than keeping a table of hosts; `HostPackages.console` is the host a script runs under. The program's package
   records the host's package (`PackageModules.HostPackage`; for a script or a module given as source,
@@ -62,9 +77,9 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   that declare the host's module), and a statement in that file isn't a script's. A shipped package's file is named
   after its package in messages, `nanyx.cli.host/src/cli.host.nyx`, wherever the compiler is installed
   (`ShippedPackages.tryDisplay`).
-- **The interface package.** `nanyx.cli.host` depends on `nanyx.cli` by version: a dependency may name a
-  package the compiler ships at the compiler's version exactly (`NYX0029` otherwise), as a linter or host may, and
-  `ShippedPackages.tryModules` reads a shipped package's public modules and the shipped packages it depends on. A file
+- **The interface package.** `nanyx.cli.host` depends on `nanyx.cli` by version, as any package depends on another
+  from the index, and `ShippedPackages.tryModules` reads a shipped package's public modules and the shipped packages it
+  depends on, for a loose file, which has no package store and runs under the compiler's own copy of the console host. A file
   of the host's package, or of a package it depends on, sees no host, so the interface package doesn't import the
   prelude that re-exports it. The reference on the `console` and `env` pages of the docs site is generated from its
   doc comments, as the standard library's is ([#1505](https://github.com/nanyx-lang/nanyx/issues/1505), see

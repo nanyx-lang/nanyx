@@ -29,42 +29,47 @@ module ScriptDependencies =
                           Warnings = (resolved.Unlisted |> List.map (fun (package, version) -> Resolution.pinnedUnlisted name package version)) @ resolved.Warnings }
                 | errors -> Result.Error errors
 
-    /// The versions of `name` in the cache of `store`, as the solver reads them: each with the dependencies its manifest
-    /// names by their version. None for a package the compiler ships.
+    /// The versions of `name` in the cache of `store`, and the one the compiler seeded, as the solver reads them: each
+    /// with the dependencies its manifest names by their version.
     let private cachedVersions (store: PackageStore) (name: string) : Result<SolverVersion list option, string> =
-        if ShippedPackages.isShipped name then
-            Result.Ok None
-        else
-            let directory = Path.Combine(store.Cache, name)
-            let versions =
-                if Directory.Exists directory then
-                    Directory.GetDirectories directory
-                    |> Array.choose (fun versionDirectory ->
-                        SemanticVersion.tryParse (Path.GetFileName versionDirectory)
-                        |> Option.bind (fun version ->
-                            Manifest.tryReadIn versionDirectory
-                            |> Option.map (fun manifest ->
-                                { Version = version
-                                  Dependencies =
-                                    manifest.Dependencies
-                                    |> List.choose (fun dependency ->
-                                        match dependency.Source with
-                                        | FromIndex requirement -> Some(dependency.Name, requirement)
-                                        | _ -> None)
-                                  Unusable = None })))
-                    |> List.ofArray
-                else
-                    []
-            Result.Ok(Some versions)
+        let versionOf (version: SemanticVersion) (directory: string) =
+            Manifest.tryReadIn directory
+            |> Option.map (fun manifest ->
+                { Version = version
+                  Dependencies =
+                    manifest.Dependencies
+                    |> List.choose (fun dependency ->
+                        match dependency.Source with
+                        | FromIndex requirement -> Some(dependency.Name, requirement)
+                        | _ -> None)
+                  Unusable = None })
+        let directory = Path.Combine(store.Cache, name)
+        let cached =
+            if Directory.Exists directory then
+                Directory.GetDirectories directory
+                |> Array.choose (fun versionDirectory -> SemanticVersion.tryParse (Path.GetFileName versionDirectory) |> Option.bind (fun version -> versionOf version versionDirectory))
+                |> List.ofArray
+            else
+                []
+        // The version the compiler seeded, which a store that doesn't unpack it, as the browser's, has only there.
+        let seeded =
+            PackageStore.seededCopy store name
+            |> Option.filter (fun copy -> cached |> List.forall (fun found -> found.Version <> copy.Version))
+            |> Option.bind (fun copy -> versionOf copy.Version copy.Source)
+            |> Option.toList
+        Result.Ok(Some(cached @ seeded))
 
     /// The versions a build of the script `script` (its name, for messages) uses: each of `pins` at the version it gives,
     /// and the packages they depend on, chosen from those in the cache of `store`, which `pull` fills, as a lockfile
-    /// records them. Or why they can't be: a pin, or a package it needs, isn't in the cache.
+    /// records them, with the packages the compiler ships seeded into it first (see `PackageStore.seededCopy`). Or why
+    /// they can't be: a pin, or a package it needs, isn't in the cache.
     let cached (store: PackageStore) (script: string) (pins: (string * SemanticVersion) list) : Result<Lockfile, string list> =
         let pullHint = $"`nanyx run` downloads it, as `nanyx pull {script}` does"
         let missing =
             pins
-            |> List.filter (fun (name, version) -> not (Directory.Exists(PackageStore.directoryOf store name version)))
+            |> List.filter (fun (name, version) ->
+                PackageStore.seededCopy store name |> Option.forall (fun copy -> copy.Version <> version)
+                && not (Directory.Exists(PackageStore.directoryOf store name version)))
             |> List.map (fun (name, version) -> $"'{name}' {version} isn't in the package cache, '{store.Cache}': {pullHint}")
         match pins, missing with
         | [], _ -> Result.Ok Lockfile.empty
