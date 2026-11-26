@@ -160,10 +160,14 @@ below.
 
 `nanyx test` is a debug build, as `nanyx run` is, so a type or name error should fail only the test that reaches it,
 and the others run as usual, so a change can be tested while other code is still broken: this is what makes deferral
-useful for red-green iteration. Today an error is deferred only in the file a program starts from, and an error in a
-module it imports stops the build. A test build starts from a root that imports every module with tests, so an error in
-any of them stops it, and nothing runs. Deferring an error in an imported module, which `nanyx run` wants too, is what
-is left. `nanyx test --release` refuses to run if there is any error.
+useful for red-green iteration.
+
+Today no error is deferred in a test build. An error is deferred only in the file a program starts from, and an error in
+a module it imports stops the build ([Deferred errors](../tour/error-handling#deferred-errors)). A test build starts from
+a root that imports every module with tests, a script's tests included, so an error in a module with tests, or in a
+module one imports, stops it: `nanyx test` reports the errors, runs nothing, and exits with 1. Deferring an error in an
+imported module, which `nanyx run` wants too, is [#2967](https://github.com/nanyx-lang/nanyx/issues/2967).
+`nanyx test --release` refuses to run if there is any error, and will go on doing so.
 
 The tests run in a core module, as `nanyx run`'s program does, so a test that reaches a call of an `@import` fails with
 `NYX0278` ([Components](../deep-dives/components#a-programs-own-imports)).
@@ -201,7 +205,8 @@ These fit the design but are not part of the first version:
 | 1. Crash reports as data: message, span and stack | [#2933](https://github.com/nanyx-lang/nanyx/issues/2933) |
 | 2. `assert` | [#2934](https://github.com/nanyx-lang/nanyx/issues/2934) |
 | 3. `@test` and test builds: built ([Test builds](../deep-dives/test-builds)) | [#2930](https://github.com/nanyx-lang/nanyx/issues/2930) |
-| 4. `nanyx test`, `nanyx.test.host` and `nanyx:test`: built, but for deferred errors ([Running tests](#running-tests)) | [#2931](https://github.com/nanyx-lang/nanyx/issues/2931) |
+| 4. `nanyx test`, `nanyx.test.host` and `nanyx:test`: built, but for deferred errors ([Deferred errors](#deferred-errors)) | [#2931](https://github.com/nanyx-lang/nanyx/issues/2931) |
+| 4a. Defer a type error in an imported module | [#2967](https://github.com/nanyx-lang/nanyx/issues/2967) |
 | 5. A context the test host lacks, and `@test(#io)` | [#2935](https://github.com/nanyx-lang/nanyx/issues/2935) |
 | 6. Virtual time, editors, `@test(#crashes)` and later items | [#2932](https://github.com/nanyx-lang/nanyx/issues/2932) |
 

@@ -191,7 +191,8 @@ A test's `Random` is seeded, so a test that draws random numbers draws the same 
 A test may require only `Console` and `Random`, which the test host provides (`NYX0312`).
 
 `nanyx test` exits with 0 when every test passes, and 1 when one fails or the tests can't be built. A type or name
-error in the module a test is in stops the build, as an error in a module the program imports stops `nanyx run`.
+error in a module with tests, or in a module one imports, stops the build, and no test runs, as an error in a module a
+program imports stops `nanyx run` ([#2967](https://github.com/nanyx-lang/nanyx/issues/2967)).
 
 | Option | What it does |
 |--------|--------------|
