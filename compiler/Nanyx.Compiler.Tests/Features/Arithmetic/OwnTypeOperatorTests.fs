@@ -31,16 +31,6 @@ let ``An operator a private type has none of names what it attaches for the oper
         onlyDiagnostic source)
 
 [<Fact>]
-let ``A time added to or taken from an instant names what Instant attaches for the two`` () =
-    for op in [ "+"; "-" ] do
-        let source = $"def later = {{ () -> now() {op} 5s }}\n"
-        Assert.Equal(
-            (DiagnosticCodes.TypeMismatch.Code,
-             $"'Instant' has no `{op}`: it attaches `minus` and `plus` for these operands, as in `x \\minus(y)` or `x \\plus(y)`",
-             $"now() {op} 5s"),
-            onlyDiagnostic source)
-
-[<Fact>]
 let ``An operator a private type attaches is the one called`` () =
     let source = money + "def Money.`-`: Money, Money -> Money = { Money(x), Money(y) -> Money(x - y) }\n\ndef f = { a: Money, b: Money -> a - b }\n"
     let result = Compiler.compile source

@@ -20,7 +20,10 @@ let ``An instant is moved by a time and measured from another`` () =
         [ "a"; "b"; "c" ] |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name]))
 
 [<Fact>]
-let ``A time added to an instant with an operator says an instant is no time`` () =
-    let code, message, _ = onlyDiagnostic (withFinalNewline "def f = { a: Instant -> a + 5s }")
-    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
-    Assert.Equal("`+` takes two values of one dimension, and a value of 'Instant' is not a 'Time'", message)
+let ``A time added to or taken from an instant with an operator names what Instant attaches for the two`` () =
+    for op in [ "+"; "-" ] do
+        Assert.Equal(
+            (DiagnosticCodes.TypeMismatch.Code,
+             $"'Instant' has no `{op}`: it attaches `minus` and `plus` for these operands, as in `x \\minus(y)` or `x \\plus(y)`",
+             $"a {op} 5s"),
+            onlyDiagnostic (withFinalNewline $"def f = {{ a: Instant -> a {op} 5s }}"))
