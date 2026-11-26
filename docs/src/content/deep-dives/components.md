@@ -182,7 +182,7 @@ requests has no `wasi:http` import. It is Nanyx, on
   WebAssembly and wit-component allow.
 - **Standard input** is one stream, which `wasi:cli/stdin`'s `read-via-stream` opens the first time the program reads:
   its result is a tuple, written to memory the host is given the address of. Each read fills the buffer in the host's
-  block from it. Taking lines and the rest of the input out of the buffer is `cli.stdin`'s, shared with the core
+  block from it. Taking lines and the rest of the input out of the buffer is `nanyx.wasi`'s `stdin`, shared with the core
   root, which fills the buffer with WASI preview 1's `fd_read`.
 - **Arguments and environment variables** are `list<string>` and `list<tuple<string, string>>`, returned in memory: an
   address and a count, each string an address and a length. The host allocates them with `cabi_realloc`, which is the
@@ -194,7 +194,7 @@ requests has no `wasi:http` import. It is Nanyx, on
 - **Exiting** is `wasi:cli/exit`'s `exit-with-code`, which takes 0 to 255; any other code exits with 1.
 - **Files** are `wasi:filesystem`'s, in `cli.host.wasi.files.nyx`, a `@partial` fragment of the root. The preopens
   come from `get-directories` once, and are kept in the host's block; a path is found in one as the core root finds it
-  in WASI preview 1's (`within`, in `cli.files`, which both roots share, with `bytesAt`). A file is opened with
+  in WASI preview 1's (`within`, in `nanyx.wasi`'s `files`, which both roots share, with `bytesAt`). A file is opened with
   `open-at`, read through `read-via-stream` from an offset, and written through `write-via-stream` or
   `append-via-stream`, which are `Output`s as stdout is, so `writeTo` writes a file too; its future's
   `result<_, error-code>` says whether the write went through. `stat`, `stat-at`, `create-directory-at`,

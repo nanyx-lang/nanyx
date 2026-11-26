@@ -138,7 +138,7 @@ in progress.
   for what they do on their own (`readFile`, `writeFile`, `pathExists`, `listDirectory`, ...), since the prelude makes
   them ambient names. `listDirectory` gives names in any order, and `dir.list` sorts and joins them, so another host
   has less to do.
-- **The file system on WASI.** The console host writes `FileSystem` in `cli.host.files.nyx`, a `@partial` fragment of its root module `cli.host` (a host package's modules are assembled from their fragments as a program's are, `PartialModules.otherFragments` searching the host's package too), on WASI's
+- **The file system on WASI.** The console host's `FileSystem` is written in the host library `nanyx.wasi`, in `preview1.system.files.nyx`, a `@partial` fragment of its module `preview1.system` (a package's modules are assembled from their fragments as a program's are, `PartialModules.otherFragments` searching the host's packages too), which `cli.host`'s `provide` loads with `Console` and `Env`, on WASI's
   `fd_prestat_get` and `fd_prestat_dir_name`, `path_open`, `fd_read`, `fd_pread`, `fd_write`, `fd_close`,
   `fd_filestat_get`, `fd_readdir`, `path_filestat_get`, `path_unlink_file` and `path_create_directory`. A path is
   found in the runtime's preopened directories: a relative one in the preopen named `.`, an absolute one in the
