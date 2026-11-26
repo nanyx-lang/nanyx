@@ -653,23 +653,23 @@ module WorkflowDesugaring =
                     ])
         // A `for` loop statement over `iterable` whose body uses a workflow keyword, `expr`, followed by `rest`: a call
         // to the builder's `for` member with the iterable, the body and the rest of the block up to `next`. The body
-        // takes the loop's element and the rest of the loop, which its chain goes on to where it ends; a `try` that
-        // fails or a `return` in it ends the whole block, as one outside the loop does.
+        // takes the loop's element and gives back `#__nextItem` where its chain ends, for the member to go on to the next
+        // item; a `try` that fails or a `return` in it gives back what ends the whole block, as one outside the loop
+        // does. So the member walks the items in a loop of its own, and a body's call returns before the next (#2683).
         //
-        //   for(items, { item, __next_1 -> <body, then __next_1()> }, { <rest of the block> })
+        //   for(items, { item -> <body, then #__nextItem> }, { <rest of the block> })
         and desugarLoop (expr: Expression) iterable (loop: Expression) parameters (body: Expression) (rest: Statement list) next =
-            let nextName = freshName "next"
             let goOn (last: Expression option) =
-                let call = madeFor expr (FunctionCall(nextName, None, []))
+                let nextItem = madeFor expr (TagExpr(WorkflowSyntax.nextItemTag, None))
                 match last with
-                | Some value -> madeFor value (Block [ Statement.from value (ExprStatement value); Statement.from call (ExprStatement call) ])
-                | None -> call
+                | Some value -> madeFor value (Block [ Statement.from value (ExprStatement value); Statement.from nextItem (ExprStatement nextItem) ])
+                | None -> nextItem
             let statements =
                 match body.Kind with
                 | Block statements -> statements
                 | _ -> [ Statement.from body (ExprStatement body) ]
             let bodyChain = desugarChain (statements |> List.collect liftStatementBinds) goOn
-            let bodyFunction = { loop with Kind = Lambda(parameters @ [ nextName, None ], bodyChain, false) }
+            let bodyFunction = { loop with Kind = Lambda(parameters, bodyChain, false) }
             let restFunction = madeFor expr (Lambda([], desugarChain rest next, false))
             memberCall expr (Option.get builder) WorkflowSyntax.forMember [ desugarExpr iterable; bodyFunction; restFunction ]
         // A `yield` of `value` in a sequence, `expr`, followed by `rest`: the sequence of `value` and then what the rest

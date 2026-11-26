@@ -1146,7 +1146,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
                 | Kind (Def (ValueDef(_, name, _, value))) when name = func.Export.Definition -> Some value.Span
                 | _ -> None)
         let message =
-            $"'{func.Export.Definition}' imports '{func.Export.Name}' from {func.Export.Module}, which only a component built from the program can call: `nanyx build` builds one, and `nanyx run` can't run it"
+            $"'{func.Export.Definition}' imports '{func.Export.Name}' from {func.Export.Module}, which only a component built from the program can call: `nanyx build` builds one, and `nanyx run` and `nanyx test` can't run it"
         raise (BackendFailure(match span with Some span -> Diagnostics.at DiagnosticCodes.ComponentImportOutsideComponent span message | None -> Diagnostics.general DiagnosticCodes.ComponentImportOutsideComponent message))
     | _ -> ()
     let importFunctions = ComponentImports.functions exportContext componentImports

@@ -310,6 +310,7 @@
     <Compile Include="Features\Workflows\RunSequenceForTests.fs" />
     <Compile Include="Features\Tests\TestBuildTests.fs" />
     <Compile Include="Features\Tests\RunTestsTests.fs" />
+    <Compile Include="Features\Tests\TestCommandTests.fs" />
     <Compile Include="E2E\E2ETests.fs" />
   </ItemGroup>
 

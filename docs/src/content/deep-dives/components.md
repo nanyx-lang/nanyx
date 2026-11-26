@@ -8,7 +8,7 @@ The compiler can write a WebAssembly component that targets WASI 0.3, so that a 
 runtime that implements WASI 0.3, and not only under `nanyx`'s own runtime. The design, and the stages still to come,
 are on [Components](../work-in-progress/components) in Work in progress. `nanyx build` writes a component for a program
 whose host has a component root, as the console and HTTP hosts do; `--core` writes a core module, which is all `nanyx run`,
-the debugger and the profiler run.
+`nanyx test`, the debugger and the profiler run.
 
 A program can export functions of its own from its component, marked `@component`, for components in other languages
 to call ([A program's own exports](#a-programs-own-exports)), and import theirs, marked `@import`
@@ -446,8 +446,8 @@ def area: Shape -> float
   payload widened into the places its cases share, or by the block's address. It frees all of it after the call. It
   lifts the result as an export lifts its arguments, from the core value or from the block it allocated for it, whose
   strings and lists the callee allocated through `cabi_realloc`, and frees those blocks.
-- **Outside a component, nothing provides an import.** In a core module, as `nanyx run` runs and `nanyx build --core`
-  and `nanyx wasm` write, a call of one that the program reaches is `NYX0278`, naming it, at its def.
+- **Outside a component, nothing provides an import.** In a core module, as `nanyx run` and `nanyx test` run and
+  `nanyx build --core` and `nanyx wasm` write, a call of one that the program reaches is `NYX0278`, naming it, at its def.
 
 ## Names at the boundary
 

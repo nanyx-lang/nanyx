@@ -260,10 +260,10 @@ def run: int -> int = { n ->
 
 [<Fact>]
 let ``A proc block compiles to the nested match written by hand`` () =
-    let getA = "def getA: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }\n\n"
-    let procBlock =
-        getA
-        + normalized """def block: int -> #some(int) | #none = { n ->
+    let source =
+        normalized """def getA: int -> #some(int) | #none = { n -> if n > 0 then #some(n) else #none }
+
+def byProc: int -> #some(int) | #none = { n ->
   proc {
     def a = try getA(n)
     def b = try getA(n + 1)
@@ -271,10 +271,8 @@ let ``A proc block compiles to the nested match written by hand`` () =
     return a + b + c
   }
 }
-"""
-    let handWritten =
-        getA
-        + normalized """def block: int -> #some(int) | #none = { n ->
+
+def byHand: int -> #some(int) | #none = { n ->
   match getA(n)
     | #some(a) ->
       match getA(n + 1)
@@ -287,9 +285,11 @@ let ``A proc block compiles to the nested match written by hand`` () =
 }
 """
     // `proc`, its block, the members, the continuations and `getA` are inlined, nothing is boxed, and what is left is
-    // the code of the nested match: the same instructions, on locals named differently.
-    let block source = functionText "block" (transpileWat source) |> withLocalsNumbered
-    Assert.Equal(block handWritten, block procBlock)
+    // the code of the nested match: the same instructions, on locals named differently. The two are in one program, so
+    // their tags are numbered alike.
+    let wat = transpileWat source
+    let block name = (functionText name wat |> withLocalsNumbered).Replace($"${name}", "$block")
+    Assert.Equal(block "byHand", block "byProc")
 
 [<Fact>]
 let ``A proc block allocates fewer inlined`` () =

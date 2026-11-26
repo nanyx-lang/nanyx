@@ -105,7 +105,7 @@ def has a type and no value, and its type crosses a component's boundary as `@co
 def area: float, float -> float
 ```
 
-Only a component can call it, so `nanyx run` reports an error where a program calls one. See
+Only a component can call it, so `nanyx run` and `nanyx test` report an error where a program calls one. See
 [Components](../deep-dives/components#a-programs-own-imports).
 
 ## `@test`

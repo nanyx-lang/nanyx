@@ -88,9 +88,9 @@ jobs:
             fi
           done
 
-      # The Wasm tests run in the job below.
+      # The Wasm tests run in the job below, and the timing tests in the Timing workflow.
       - name: Test
-        run: dotnet test Nyx.Compiler.slnx --no-build --configuration Release -p:SkipWasmTests=true
+        run: dotnet test Nyx.Compiler.slnx --no-build --configuration Release -p:SkipWasmTests=true --filter "Category!=Timing"
 
       # A WASI 0.3 component must run outside nanyx too: each example package is built as one and run under Wasmtime,
       # which must print what nanyx run does (see docs/src/content/deep-dives/components.md).
@@ -201,8 +201,9 @@ jobs:
       - name: Build
         run: dotnet build ${{ env.PROJECT }} --no-restore --configuration Release
 
+      # The timing tests run in the Timing workflow.
       - name: Test
-        run: dotnet test ${{ env.PROJECT }} --no-build --configuration Release
+        run: dotnet test ${{ env.PROJECT }} --no-build --configuration Release --filter "Category!=Timing"
 
   # The playground host's runner, in headless Chromium: the compiler built for the browser compiles programs under the
   # playground host, and the runner runs them in a web worker (see compiler/Nanyx.Browser/playground-test.mjs). Then

@@ -85,3 +85,68 @@ def main = {
 """
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan "1 1 1\n1 2 2\nrow 1\n2 1 2\n2 2 4\nrow 2\nend\ndone\n1 1 1\n1 2 2\n1 3 3\nrow 1\n2 1 2\n2 2 4\nerror too big: 2 * 3\n"
+
+[<Fact>]
+let ``Run - a loop over a million items runs in constant stack`` () =
+    // Each body gives back `#__nextItem` and returns before `procFor` goes on to the next item, so no frame is kept for
+    // an item, though the body's results are converted to and from the boxed ones of `for`'s type (#2683).
+    let source =
+        """def check: int -> #some(int) | #error(string) = { n ->
+  if n < 0 then #error("negative") else #some(n)
+}
+
+def largest: list(int) -> #some(int) | #error(string) = { items -> proc {
+  for items | item ->
+    def n = try check(item)
+    if n > 2_000_000 then return n
+
+  return 0
+}}
+
+println(largest((0..1_000_000) \seq.toList))
+"""
+    runSource source |> assertRan "#some(0)\n"
+
+[<Fact>]
+let ``Run - a builder's own for decides what each item's result does`` () =
+    // A `for` in the shape the desugared loop calls: the body gives back `#__nextItem` where it ends, a failure where a
+    // `try` fails, or `#some` where it returns. This one goes on past a failure instead of ending the block.
+    let source =
+        parse
+        + """
+context Lenient = (
+  try: [c] ((#some(a) | r), ([c] a -> #some(b) | r)) -> #some(b) | r
+  zero: #some() | r
+  for: [d] (list(x), ([d] x -> #__nextItem | #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s
+)
+
+def lenientFor
+  : [c] list(a), ([c] a -> #__nextItem | #some(b) | r), ([c] () -> #some(b) | r) -> #some(b) | r
+  = {
+    | [], _, rest -> rest()
+    | [item, ...others], body, rest ->
+      match body(item)
+        | #some(value) -> #some(value)
+        | _ -> lenientFor(others, body, rest)
+  }
+
+def lenient: [c] ([Lenient, c] () -> #some(b) | r) -> #some(b) | r = { block ->
+  use Lenient(
+    try = {
+      | #some(value), continue -> continue(value)
+      | failure, _ -> failure
+    }
+    zero = #some()
+    for = { items, body, rest -> lenientFor(items, body, rest) }
+  ) in block()
+}
+
+def printAll: [Console] list(string) -> #some() | #error(string) = { names -> lenient {
+  for names | name ->
+    def n = try parse(name)
+    println("{name}: {n}")
+}}
+
+println(showDone(printAll(["a", "bad", "abc"])))
+"""
+    runSource source |> assertRan "a: 1\nabc: 3\ndone\n"

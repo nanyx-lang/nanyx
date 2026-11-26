@@ -447,3 +447,34 @@ module Script =
 
     /// `compileFileReportingIn`, telling nobody.
     let compileFileIn (store: PackageStore) (filePath: string) : CompileResult = compileFileReportingIn store CompileListener.none filePath
+
+    /// The test build of the script at `filePath`, whose text is `source`, with the packages its directives name found
+    /// in `store` and each module's check reported to `listener`: the compile of the script, under the test host in
+    /// place of its own, and, if it has tests, of a root beside it that imports it by its path (see
+    /// `Package.testRootSource`), whose `Typed.Tests` are the script's own and whose diagnostics are the script's too. Or
+    /// why the test host can't be read.
+    let testBuild (store: PackageStore) (listener: CompileListener) (filePath: string) (source: string) : Result<CompileResult * CompileResult option, Diagnostic list> =
+        let filePath = Path.GetFullPath filePath
+        let directives = readFrom store filePath source
+        Package.scriptModules Hosts.testPackage store Lockfile.empty filePath SourceSpan.none None [] []
+        |> Result.map (fun testHost ->
+            let root = Path.Combine(Path.GetDirectoryName filePath, Package.testRootFile)
+            let build =
+                { (directives.Build |> Option.defaultValue testHost) with
+                    Host = testHost.Host
+                    HostPackage = testHost.HostPackage
+                    TestRoot = Some root }
+            let options = directives.Linters |> Option.defaultValue Linters.none
+            let script = Compiler.compileSourceInReporting listener File.ReadAllText build options filePath source |> withDirectives directives
+            let own (tests: Test list) = tests |> List.filter (fun test -> PackageModules.samePath test.Span.File filePath)
+            match script.Typed |> Option.map (_.Tests >> own) with
+            | Some (_ :: _ as tests) ->
+                let imported = $"\"./{Path.GetFileNameWithoutExtension filePath}\""
+                let result = Compiler.compileSourceInReporting listener File.ReadAllText build Linters.none root (Package.testRootSource [ imported, tests.Length ])
+                script,
+                Some
+                    { result with
+                        Diagnostics = script.Diagnostics @ result.Diagnostics |> List.distinct
+                        ErrorsDeferred = script.ErrorsDeferred && result.ErrorsDeferred
+                        Typed = result.Typed |> Option.map (fun typed -> { typed with Tests = own typed.Tests }) }
+            | _ -> script, None)

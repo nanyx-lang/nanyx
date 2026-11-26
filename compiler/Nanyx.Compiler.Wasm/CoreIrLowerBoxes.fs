@@ -121,8 +121,12 @@ let rec convert (tools: BoxTools) (atom: Atom) (expected: IrType) (k: Atom -> Ex
                         tools.Convert (AVar field) expectedTy (fun converted -> fields rest (slot + 1) ((name, converted) :: acc)))
             fields (List.zip givenFields (List.map snd expectedFields)) 0 [])
     | IrList givenElement, IrList expectedElement ->
-        // A new list of the elements, each converted.
-        bindLocal tools "__converted" (Expr.make (Call(tools.ListConverter givenElement expectedElement, [ atom ])) expected) (AVar >> k)
+        // A new list of the elements, each converted, by a loop that starts with nothing converted (see
+        // `listConverterFunction`). The list is bound first, as it may be a temporary that waits for no store.
+        bindLocal tools "__list" (Expr.make (Atom atom) given) (fun list ->
+            bindLocal tools "__none" (Expr.make (MakeList []) expected) (fun reversed ->
+                bindLocal tools "__none" (Expr.make (MakeList []) expected) (fun made ->
+                    bindLocal tools "__converted" (Expr.make (Call(tools.ListConverter givenElement expectedElement, [ AVar list; AVar reversed; AVar made ])) expected) (AVar >> k))))
     | IrRecursive _, IrRecursive _ ->
         // What it is made of, converted, by a function that calls itself where the type holds itself (#2881).
         bindLocal tools "__converted" (Expr.make (Call(tools.RecursiveConverter given expected, [ atom ])) expected) (AVar >> k)
@@ -130,32 +134,57 @@ let rec convert (tools: BoxTools) (atom: Atom) (expected: IrType) (k: Atom -> Ex
         // A new array of the elements, each converted as a list's are.
         let call name args ty = Expr.make (CallRuntime(name, args, true)) ty
         bindLocal tools "__elements" (call NyxCompiler.Intrinsics.arrayToList [ atom ] (IrList givenElement)) (fun elements ->
-            let converted = Expr.make (Call(tools.ListConverter givenElement expectedElement, [ AVar elements ])) (IrList expectedElement)
-            bindLocal tools "__converted" converted (fun list ->
-                bindLocal tools "__converted" (call NyxCompiler.Intrinsics.arrayOfList [ AVar list ] expected) (AVar >> k)))
+            bindLocal tools "__none" (Expr.make (MakeList []) (IrList expectedElement)) (fun reversed ->
+                bindLocal tools "__none" (Expr.make (MakeList []) (IrList expectedElement)) (fun made ->
+                    let converted = Expr.make (Call(tools.ListConverter givenElement expectedElement, [ AVar elements; AVar reversed; AVar made ])) (IrList expectedElement)
+                    bindLocal tools "__converted" converted (fun list ->
+                        bindLocal tools "__converted" (call NyxCompiler.Intrinsics.arrayOfList [ AVar list ] expected) (AVar >> k)))))
     | _ -> internalError $"a conversion from '{IrType.show given}' to '{IrType.show expected}'"
 
 /// The function `functionName` that converts a list of values of `given` to a list of values of `expected`: a new list
-/// of the same length, each element converted (see `convert`).
+/// of the same length, each element converted (see `convert`). It is a loop, calling itself only in tail position, so it
+/// converts a list of any length (#2683): it takes the elements still to convert, those converted so far, the last
+/// first, and the converted list made of those, which it is called with empty. Once every element is converted, it puts
+/// each converted one in front of the list it makes, so that they come out in order.
 let listConverterFunction (tools: BoxTools) (newVar: string -> VarKind -> IrType -> Var) (functionName: string) (given: IrType) (expected: IrType) : Function =
-    let list = newVar "__list" Param (IrList given)
+    let converted = IrList expected
+    let remaining = newVar "__list" Param (IrList given)
+    let reversed = newVar "__reversed" Param converted
+    let made = newVar "__made" Param converted
     let head = newVar "__head" Local given
     let tail = newVar "__tail" Local (IrList given)
-    let converted = IrList expected
-    let cons =
+    let convertedHead = newVar "__converted_head" Local expected
+    let convertedTail = newVar "__converted_tail" Local converted
+    let cons element list = Expr.make (CallRuntime(Helpers.listCons, [ element; list ], true)) converted
+    // The locals the box tools bind here are named apart from this function's own variables, which `newVar` names: the
+    // tools name theirs where the conversion was asked for, and a local of a parameter's name would be the parameter.
+    let call args = Expr.make (Call(functionName, args)) converted
+    let convertOne =
         tools.Convert (AVar head) expected (fun element ->
-            let rest = tools.NewLocal "__converted_tail" converted
-            let cell = Expr.make (CallRuntime(Helpers.listCons, [ element; AVar rest ], true)) converted
-            Expr.make (Let(rest, Expr.make (Call(functionName, [ AVar tail ])) converted, cell)) converted)
-    let arms =
-        [ { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = cons }
-          { Patterns = [ PWildcard ]; Body = Expr.make (MakeList []) converted } ]
+            bindLocal tools "__reversed_next" (cons element (AVar reversed)) (fun reversed -> call [ AVar tail; AVar reversed; AVar made ]))
+    let putBack =
+        bindLocal tools "__made_next" (cons (AVar convertedHead) (AVar made)) (fun made -> call [ AVar remaining; AVar convertedTail; AVar made ])
+    let putBackAll =
+        Expr.make
+            (Match(
+                [ reversed ],
+                [ { Patterns = [ PList([ PBind convertedHead ], Some (PBind convertedTail)) ]; Body = putBack }
+                  { Patterns = [ PWildcard ]; Body = Expr.make (Atom(AVar made)) converted } ]
+            ))
+            converted
     { Name = functionName
       Source = functionName
       TypeArguments = []
-      Params = [ list ]
+      Params = [ remaining; reversed; made ]
       Result = converted
-      Body = Expr.make (Match([ list ], arms)) converted
+      Body =
+        Expr.make
+            (Match(
+                [ remaining ],
+                [ { Patterns = [ PList([ PBind head ], Some (PBind tail)) ]; Body = convertOne }
+                  { Patterns = [ PWildcard ]; Body = putBackAll } ]
+            ))
+            converted
       Place = None }
 
 /// The function `functionName` that converts a value of `given`, a recursive type, to a value of `expected`: what it is

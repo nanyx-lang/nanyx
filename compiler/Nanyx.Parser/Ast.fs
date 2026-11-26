@@ -1068,8 +1068,11 @@ module WorkflowSyntax =
     let bareKeywords = [ tryKeyword; yieldKeyword ]
     /// The member that is the value of a builder's block that ends without `return`.
     let zeroMember = "zero"
-    /// The member that runs a `for` loop whose body uses a keyword: `for(items, { item, next -> ... }, { _ -> ... })`.
+    /// The member that runs a `for` loop whose body uses a keyword: `for(items, { item -> ... }, { ... })`.
     let forMember = "for"
+    /// The tag a `for` loop's body gives back when it is done with an item and the loop goes on to the next, as it does
+    /// where the body ends: the body's other results, a failure or a `return`'s value, end the loop (see `forMember`).
+    let nextItemTag = "__nextItem"
 
 module TypeRecordField =
     /// The attributes of a record type's fields: each field, with the attributes written before it (see

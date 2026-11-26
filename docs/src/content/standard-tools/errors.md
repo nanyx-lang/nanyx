@@ -915,8 +915,8 @@ package cache and locked as any package from the index is, with the SHA-256 of i
 packs to another SHA-256 than the one the package index records for the same version, the copy its release attached:
 
 ```text
-warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.48.0'
-  = This compiler's nanyx.cli 0.48.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
+warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.49.0'
+  = This compiler's nanyx.cli 0.49.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
 ```
 
 The compiler builds with its own copy, which a lockfile it writes locks, so another machine that downloads the version
@@ -926,7 +926,7 @@ A released compiler doesn't, since its copies are the ones its release published
 # NYX0052: Package that needs another compiler
 
 The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running,
-or with one compiler only, as `nanyx = "=0.48.0"`, which isn't the one running. The message names both versions:
+or with one compiler only, as `nanyx = "=0.49.0"`, which isn't the one running. The message names both versions:
 
 ```nanyx
 -- file: demo.nyxp
@@ -966,7 +966,7 @@ the new one. `nanyx.http` is the library's name now, so it is an error only wher
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "nanyx.console.core", version = "0.48.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
+  dependencies = [(package = "nanyx.console.core", version = "0.49.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
 )
 ```
 
@@ -2510,7 +2510,7 @@ members of a union, and write the type a type variable stands for.
 # NYX0278: Component import called outside a component
 
 A program calls a def marked `@import`, a function another component exports, in a program that isn't built as a
-component: `nanyx run`, `nanyx wasm`, or `nanyx build --core`. Only the component `nanyx build` writes imports the
+component: `nanyx run`, `nanyx test`, `nanyx wasm`, or `nanyx build --core`. Only the component `nanyx build` writes imports the
 function, and a runtime that runs it gives the other component's
 ([Components](../deep-dives/components#a-programs-own-imports)). It is reported at the def.
 

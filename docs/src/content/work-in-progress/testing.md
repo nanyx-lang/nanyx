@@ -21,7 +21,7 @@ This page fills in the rest: how a test is written, how it fails, and how the ru
 Settled with the maintainer on 26 November 2026 ([#2936](https://github.com/nanyx-lang/nanyx/issues/2936)):
 
 - **Crash boundaries aren't a prerequisite.** The runtime runs each test in a fresh instance, as it answers each
-  request in one for the HTTP host ([One instance per test](#one-instance-per-test)). The language-level `isolate` on
+  request in one for the HTTP host ([Test builds](../deep-dives/test-builds#the-runner)). The language-level `isolate` on
   [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#isolate-a-crash-boundary-as-a-value) waits for
   a use the runner can't cover.
 - **The test host is a shipped package,** `nanyx.test.host`, beside the console and HTTP hosts. Its root imports the
@@ -150,42 +150,27 @@ Its output is still captured.
 
 # Running tests
 
-```text
-nanyx test [path] [--filter text] [--release]
-```
-
-`nanyx test` takes a package's directory or manifest, or a script, as `nanyx run` does. It runs every test whose full name (`` geometry.`adds points` ``) contains the filter, and reports each one:
-
-```text
-Running 3 tests in geometry, with 1 deferred error
-
-PASS geometry.`adds points`
-FAIL geometry.`scales points`  src/geometry.nyx:18
-  assert(scale(p, 2) == Point(x = 2, y = 4))
-    scale(p, 2) = (x = 2, y = 5)
-    p = (x = 1, y = 2)
-FAIL geometry.`parses a point`  src/geometry.nyx:24
-  src/geometry.nyx:24:14: error NYX0201: Type mismatch: 'string' is not a number, so it cannot be used with + (deferred from compile time)
-
-1 passed, 2 failed
-```
-
-It exits with 0 if every test passes and 1 if any fails, or if the tests could not be built.
-
-## One instance per test
-
-A crash ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a test build whose entry point runs the test at the index it is given, and creates a fresh instance of that module for each test, as `nanyx run` creates one for each request a program under the HTTP host answers. The test host's `run` asks the runtime's `nanyx:test` which index to run and calls the entry point with it, so the host, not the runtime, calls the test, under the contexts it provides. The crash report the runtime gets from a failed instance is what the runner prints. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each. The test build and the host are built: see [Test builds](../deep-dives/test-builds#running-one).
-
-A test that runs for longer than a time limit fails, with a message that says so; `--timeout` sets the limit.
+`nanyx test` is built: the [command line](../standard-tools/command-line#nanyx-test) says what it does, and
+[Test builds](../deep-dives/test-builds) how. It takes a package's directory or manifest, or a script; it runs each test
+in a fresh instance of the test build, whose host runs the test at the index the runtime gives it; it reports each test,
+with why one failed and what it printed; and it stops a test that runs past `--timeout`. What is left of the design is
+below.
 
 ## Deferred errors
 
-`nanyx test` is a debug build, as `nanyx run` is. A type or name error is reported, and the test that reaches it fails with that error's message, as `` `parses a point` `` does above. The others run as usual, so a change can be tested while other code is still broken: this is what makes deferral useful for red-green iteration. `nanyx test --release` refuses to run if there is any error.
+`nanyx test` is a debug build, as `nanyx run` is, so a type or name error should fail only the test that reaches it,
+and the others run as usual, so a change can be tested while other code is still broken: this is what makes deferral
+useful for red-green iteration.
+
+Today no error is deferred in a test build. An error is deferred only in the file a program starts from, and an error in
+a module it imports stops the build ([Deferred errors](../tour/error-handling#deferred-errors)). A test build starts from
+a root that imports every module with tests, a script's tests included, so an error in a module with tests, or in a
+module one imports, stops it: `nanyx test` reports the errors, runs nothing, and exits with 1. Deferring an error in an
+imported module, which `nanyx run` wants too, is [#2967](https://github.com/nanyx-lang/nanyx/issues/2967).
+`nanyx test --release` refuses to run if there is any error, and will go on doing so.
 
 The tests run in a core module, as `nanyx run`'s program does, so a test that reaches a call of an `@import` fails with
-`NYX0278` ([Components](../deep-dives/components#a-programs-own-imports)). When `nanyx test` is built, that error's message,
-the NYX0278 entry in the error reference, the tour's Attributes page and the Components deep dive name it beside
-`nanyx run` ([#2386](https://github.com/nanyx-lang/nanyx/issues/2386)).
+`NYX0278` ([Components](../deep-dives/components#a-programs-own-imports)).
 
 ## Editors
 
@@ -220,7 +205,8 @@ These fit the design but are not part of the first version:
 | 1. Crash reports as data: message, span and stack | [#2933](https://github.com/nanyx-lang/nanyx/issues/2933) |
 | 2. `assert` | [#2934](https://github.com/nanyx-lang/nanyx/issues/2934) |
 | 3. `@test` and test builds: built ([Test builds](../deep-dives/test-builds)) | [#2930](https://github.com/nanyx-lang/nanyx/issues/2930) |
-| 4. `nanyx test`, `nanyx.test.host` and `nanyx:test` | [#2931](https://github.com/nanyx-lang/nanyx/issues/2931) |
+| 4. `nanyx test`, `nanyx.test.host` and `nanyx:test`: built, but for deferred errors ([Deferred errors](#deferred-errors)) | [#2931](https://github.com/nanyx-lang/nanyx/issues/2931) |
+| 4a. Defer a type error in an imported module | [#2967](https://github.com/nanyx-lang/nanyx/issues/2967) |
 | 5. A context the test host lacks, and `@test(#io)` | [#2935](https://github.com/nanyx-lang/nanyx/issues/2935) |
 | 6. Virtual time, editors, `@test(#crashes)` and later items | [#2932](https://github.com/nanyx-lang/nanyx/issues/2932) |
 

@@ -54,6 +54,22 @@ module WasmTester =
         linker.DefineFunction(moduleName, "write", write)
         linker.DefineFunction(moduleName, "writeError", write)
 
+    /// `stack`, the stack of a test that failed, innermost first, without the frames that ran the test rather than being
+    /// it: those after the last frame in the file the test is written in, which are the build's entry point and the test
+    /// host's. A stack with no frame in the test's file is left whole.
+    let private withinTest (test: ListedTest) (stack: Frame list) =
+        match stack |> List.tryFindIndexBack (fun frame -> frame.Place |> Option.exists (fun (file, _) -> file = test.File)) with
+        | Some last -> List.take (last + 1) stack
+        | None -> stack
+
+    /// `error`, the reason a test failed, with its stack within the test (see `withinTest`).
+    let private failedWithin (test: ListedTest) (error: RunError) =
+        match error with
+        | Crashed(message, place, stack) -> Crashed(message, place, withinTest test stack)
+        | ArithmeticError(fault, functionName, stack) -> ArithmeticError(fault, functionName, withinTest test stack)
+        | Trapped(message, stack) -> Trapped(message, withinTest test stack)
+        | other -> other
+
     /// Runs the test at `index`, `test`, of the build `module'`, compiled for `engine` with the epoch interruption that
     /// stops it after `timeout`, its places in `table`, with `seed`, on a thread with the stack a program runs with.
     let private runOne (engine: Engine) (module': Module) (table: SpanTable option) (seed: int64) (timeout: TimeSpan) (index: int) (test: ListedTest) =
@@ -87,7 +103,7 @@ module WasmTester =
                     | :? WasmtimeException as ex when WasmRunner.exitedCleanly ex -> Passed
                     | :? TrapException as trap when trap.Type = TrapCode.Interrupt -> TimedOut timeout
                     | :? WasmtimeException as ex when ex.ExitCode.HasValue -> Failed(Exited ex.ExitCode.Value)
-                    | :? WasmtimeException as ex -> Failed(WasmRunner.trapped table reported.Value ex)
+                    | :? WasmtimeException as ex -> Failed(failedWithin test (WasmRunner.trapped table reported.Value ex))
                 finally
                     finish ()
                     IO.File.Delete input
