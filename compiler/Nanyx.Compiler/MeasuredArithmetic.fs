@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Arithmetic on measured values (see `Units`): the table "Arithmetic" on the docs' Units and dimensions page. The
+/// Arithmetic on measured values (see `Units`): the table "Arithmetic" on the docs' Units of measure page. The
 /// compiler types each operator on a measured value as the operator on its storage, which is what it is at run time,
 /// and gives the result its dimension where the table says: `t + u` and `t * 2` are `Time(a)`, `t / 2` is
 /// `Time(fraction)` and `t / u` a `fraction`. A product or quotient of two dimensions is of their derived dimension,
