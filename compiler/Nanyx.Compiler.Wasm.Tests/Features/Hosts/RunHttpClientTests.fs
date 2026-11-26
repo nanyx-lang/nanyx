@@ -108,7 +108,7 @@ let ``A request's timeout is a time, and a plain number is not one`` () =
     run $"""match http.send(Request.of(#get, "{server.Url}/hello") with timeout = 2s)
   | #some(response) -> println(response.body)
   | #timeout -> println("no answer: timeout")
-  | #connectionFailed(why) -> println("no answer: connection failed {why}")
+  | #connectionFailed(why) -> println("no answer: connection failed {{why}}")
   | _ -> println("no answer: other")
 """
     |> assertPrinted "Hello!\n"
