@@ -51,9 +51,11 @@ public sealed class HoverHandler : HoverHandlerBase
             return ModuleHover(request, document, lastGood, offset, module);
         }
 
-        // A unit, or a dimension's or unit's declaration, shows the units of its dimension. A type's name, in an
-        // annotation inside a block say, is about the type, not the block around it.
+        // A unit, or a dimension's or unit's declaration, shows the units of its dimension, and a built-in type's name
+        // what the type is. A type's name, in an annotation inside a block say, is about the type, not the block around
+        // it.
         var info = CompilerHover.unitAt(compiled, offset)
+            ?? CompilerHover.builtInTypeAt(compiled, offset)
             ?? Definition.typeDefinitionAt(_settings.TypeNotation, lastGood.FileName, compiled, offset)
             ?? CompilerHover.typeAt(_settings.TypeNotation, compiled, offset);
         if (info is null || document.FromLastGood(info.Value.Span.Start, info.Value.Span.End) is not { } span)
