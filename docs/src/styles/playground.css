@@ -162,3 +162,20 @@
   overflow: auto;
   padding: 0.75rem 1rem;
 }
+
+.pg-output[hidden] {
+  display: none;
+}
+
+/* The WebAssembly text the code compiles to, in place of the output while its toggle is on. */
+.pg-wat {
+  margin: 0;
+  font-family: "Hasklig", "JetBrains Mono", monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.pg-button[aria-pressed="true"] {
+  background: hsl(var(--muted));
+}

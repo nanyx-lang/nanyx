@@ -7,8 +7,7 @@ order: 10
 The [playground](/playground) is a page of the docs site where you write Nanyx, run it and share it, with the compiler
 running in the page. How to use it is on [Playground](../standard-tools/playground) in Standard tools; the host its
 programs run under, its runner and how a program reads input are on [Hosts](./hosts). This page says how the page is
-built. What is still planned is tracked as issues: diagnostics as you type and a WebAssembly text pane
-([#2154](https://github.com/nanyx-lang/nanyx/issues/2154)), running up to the first deferred error and a trap's stack
+built. What is still planned is tracked as issues: running up to the first deferred error and a trap's stack
 ([#2747](https://github.com/nanyx-lang/nanyx/issues/2747)), hover types and inlay hints
 ([#2756](https://github.com/nanyx-lang/nanyx/issues/2756)), phones
 ([#2765](https://github.com/nanyx-lang/nanyx/issues/2765)), and the open questions of files and HTTP
@@ -61,6 +60,20 @@ isolated says that its programs can't read input.
 attributes, directives and type names, whose keywords are the TextMate grammar's
 (`extension/syntaxes/nanyx.tmLanguage.json`): `editor.ts` imports the grammar and reads its `keywords` patterns. Its colours are the
 docs' code blocks' (`site/shiki-themes.mjs`). Ctrl+Enter, or ⌘+Enter, runs the program.
+
+**Diagnostics as you type.** Half a second after the code last changed, the editor (`enableChecks`, `editor.ts`, a
+CodeMirror `linter`) asks the compiler's worker to check it, with `BrowserCompiler.Check`, which type-checks without
+emitting anything and gives each diagnostic's code, headline, message, severity and span. An error is underlined in
+red and a warning in yellow, and hovering it shows its code and message; a diagnostic with no place in the code, such
+as one in the prelude, isn't shown there, only in a run's output.
+
+**The WebAssembly text.** **WebAssembly**, in the toolbar, shows the WebAssembly text the code compiles to, which
+`BrowserCompiler.Compile` gives beside the module, in the output's place, until it is pressed again. While it is shown
+it follows the code, half a second after each change; code that doesn't compile shows its diagnostics there instead.
+
+Both need a compiler that has `Check`, which 0.47.0 and the releases before it haven't: the worker says whether the
+compiler it loaded has it (`canCheck`), and with one that hasn't the page shows neither, and behaves as it did before
+them. So they go live on the site when `playgroundRelease` moves past 0.47.0, to the first release that has `Check`.
 
 **Running.** Run compiles the editor's code (`compileAndRun`) with `BrowserCompiler.Compile` (through `compiler.js`); when it gives a
 module, the runner's `run` runs it with a `Random` seeded from `crypto.getRandomValues`, and Stop, which takes Run's

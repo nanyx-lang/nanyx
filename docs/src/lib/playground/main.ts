@@ -4,7 +4,7 @@
 
 import type { EditorView } from "@codemirror/view";
 import { PlaygroundUnavailable, compileAndRun, loadPlayground, releaseNotesUrl, type Playground, type Running } from "./compiler";
-import { createEditor, setCode, setReadOnly } from "./editor";
+import { createEditor, enableChecks, setCode, setReadOnly } from "./editor";
 import { codeOf, shareLink } from "./share";
 import { Terminal } from "./terminal";
 
@@ -51,6 +51,10 @@ const examples = element<HTMLSelectElement>("[data-examples]");
 const status = element("[data-status]");
 const release = element("[data-release]");
 const readOnlyNote = element("[data-read-only]");
+const watButton = element<HTMLButtonElement>("[data-wat]");
+const watPane = element("[data-wat-pane]");
+const outputView = element("[data-output]");
+const outputTitle = element("[data-output-title]");
 
 let playground: Playground | null = null;
 let running: Running | null = null;
@@ -65,15 +69,42 @@ const terminal = new Terminal(element("[data-output]"), {
 });
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let watTimer: ReturnType<typeof setTimeout> | undefined;
 const editor: EditorView = createEditor(element("[data-editor]"), "", {
   onRun: () => void runProgram(),
   onChange: (code) => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => stored.set(storageKey, code), 300);
+    if (watShown) {
+      clearTimeout(watTimer);
+      watTimer = setTimeout(() => void showWat(), 500);
+    }
   },
 });
 
 const code = () => editor.state.doc.toString();
+
+/** Whether the WebAssembly text pane is shown in the output's place. */
+let watShown = false;
+
+/** Shows the WebAssembly text the editor's code compiles to, or why there is none, if the code hasn't changed since. */
+async function showWat() {
+  if (!playground) return;
+  const source = code();
+  const compiled = await playground.compiler.compile(source);
+  if (!watShown || code() !== source) return;
+  watPane.textContent = compiled.wat ?? ["The code doesn't compile, so it has no WebAssembly text:", ...compiled.diagnostics].join("\n");
+}
+
+/** Shows the WebAssembly text pane in the output's place, or the output again. */
+function setWatShown(shown: boolean) {
+  watShown = shown;
+  watButton.setAttribute("aria-pressed", String(shown));
+  watPane.hidden = !shown;
+  outputView.hidden = shown;
+  outputTitle.textContent = shown ? "WebAssembly text" : "Output";
+  if (shown) void showWat();
+}
 const isEdited = () => code() !== opened && code().trim() !== "";
 
 /**
@@ -237,6 +268,12 @@ async function loadCompiler() {
     return;
   }
   showRelease(playground.release);
+  // A compiler that can check code as it is typed can show its WebAssembly text too; one released before it can't.
+  const check = playground.compiler.check;
+  if (check) {
+    enableChecks(editor, check);
+    watButton.hidden = false;
+  }
   if (!playground.runner.canReadInput) {
     terminal.notice("This page isn't cross-origin isolated, so programs can't read input. Reload it to fix that.", "note");
   }
@@ -246,6 +283,7 @@ async function loadCompiler() {
 }
 
 runButton.addEventListener("click", () => void runProgram());
+watButton.addEventListener("click", () => setWatShown(!watShown));
 stopButton.addEventListener("click", () => running?.stop());
 element("[data-clear]").addEventListener("click", () => terminal.clear());
 // Ctrl+Enter runs from anywhere on the page but the input line, where Enter gives the line. The editor handles its own.

@@ -4,10 +4,24 @@
 // the page keeps responding while it compiles; the program runs in the runner's.
 
 import type { Exit, Terminal } from "./terminal";
-import type { FromCompiler, ToCompiler } from "./compile-worker";
+import type { EditorDiagnostic, FromCompiler, ToCompiler } from "./compile-worker";
 
+export type { EditorDiagnostic };
+
+/** What compiling a program gives: its WebAssembly, if it compiles, and its text, and its diagnostics. */
+export interface Compiled {
+  wasm: Uint8Array | null;
+  diagnostics: string[];
+  wat: string | null;
+}
+
+/**
+ * The compiler, in its worker. `check` gives the diagnostics the editor shows as the code is typed; a compiler released
+ * before it had it has none, nor gives a program's WebAssembly text.
+ */
 export interface Compiler {
-  compile(source: string): Promise<{ wasm: Uint8Array | null; diagnostics: string[] }>;
+  compile(source: string): Promise<Compiled>;
+  check: ((source: string) => Promise<EditorDiagnostic[]>) | null;
 }
 
 export interface Running {
@@ -80,24 +94,35 @@ async function load(warmUp: string | undefined): Promise<Playground> {
 function startCompiler(warmUp: string | undefined): Promise<Compiler> {
   const worker = new Worker(new URL("./compile-worker.ts", import.meta.url), { type: "module" });
   const post = (message: ToCompiler) => worker.postMessage(message);
-  const pending = new Map<number, (outcome: { wasm: Uint8Array | null; diagnostics: string[] }) => void>();
+  // The answers awaited, by request: each request has an id of its own, whatever its kind.
+  const pending = new Map<number, (answer: FromCompiler) => void>();
   let next = 0;
+  const ask = (request: (id: number) => ToCompiler) =>
+    new Promise<FromCompiler>((answered) => {
+      const id = next++;
+      pending.set(id, answered);
+      post(request(id));
+    });
   return new Promise((resolve, reject) => {
     worker.addEventListener("message", (event: MessageEvent<FromCompiler>) => {
       const message = event.data;
       if (message.kind === "loaded") {
         resolve({
-          compile: (source) =>
-            new Promise((done) => {
-              const id = next++;
-              pending.set(id, done);
-              post({ kind: "compile", id, source });
-            }),
+          compile: async (source) => {
+            const answer = await ask((id) => ({ kind: "compile", id, source }));
+            return answer.kind === "compiled" ? { wasm: answer.wasm, diagnostics: answer.diagnostics, wat: answer.wat } : { wasm: null, diagnostics: [], wat: null };
+          },
+          check: message.canCheck
+            ? async (source) => {
+                const answer = await ask((id) => ({ kind: "check", id, source }));
+                return answer.kind === "checked" ? answer.diagnostics : [];
+              }
+            : null,
         });
       } else if (message.kind === "failed") {
         reject(new Error(message.message));
       } else {
-        pending.get(message.id)?.({ wasm: message.wasm, diagnostics: message.diagnostics });
+        pending.get(message.id)?.(message);
         pending.delete(message.id);
       }
     });

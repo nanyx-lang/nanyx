@@ -52,8 +52,9 @@ public static partial class BrowserCompiler
     /// Compiles <paramref name="source"/> as <c>nanyx build</c> compiles a script, but under the playground host,
     /// <c>nanyx.playground.host</c>, unless its <c>::host</c> names another; and gives a JSON object: <c>wasm</c>, the
     /// binary in base 64 (absent when there are errors), <c>diagnostics</c>, and <c>checkMs</c>, <c>emitMs</c> and
-    /// <c>assembleMs</c>, the times of parsing and checking, lowering to WebAssembly text, and assembling the binary.
-    /// The module exports its start, as <c>__nanyx_start</c>, for the playground host's runner to call.
+    /// <c>assembleMs</c>, the times of parsing and checking, lowering to WebAssembly text, and assembling the binary, and
+    /// <c>wat</c>, the WebAssembly text the binary is assembled from (absent when there is none). The module exports its
+    /// start, as <c>__nanyx_start</c>, for the playground host's runner to call.
     /// </summary>
     [JSExport]
     public static string Compile(string source)
@@ -62,7 +63,7 @@ public static partial class BrowserCompiler
         var result = Script.compileUnder(Hosts.playgroundPackage, Store, ScriptPath, source);
         var checkMs = stopwatch.Elapsed.TotalMilliseconds;
         var diagnostics = result.Diagnostics.Select(d => $"{d.Code}: {Diagnostics.oneLine(d)}").ToList();
-        string? wasm = null;
+        string? wasm = null, wat = null;
         double emitMs = 0, assembleMs = 0;
         if (FSharpOption<TypedModule>.get_IsSome(result.Typed) && !result.Diagnostics.Any(Diagnostics.isError))
         {
@@ -76,18 +77,48 @@ public static partial class BrowserCompiler
             else
             {
                 stopwatch.Restart();
-                wasm = System.Convert.ToBase64String(WasmBinary.assemble(emitted.ResultValue));
+                wat = emitted.ResultValue;
+                wasm = System.Convert.ToBase64String(WasmBinary.assemble(wat));
                 assembleMs = stopwatch.Elapsed.TotalMilliseconds;
             }
         }
 
-        return JsonSerializer.Serialize(new CompileOutcome(wasm, diagnostics.ToArray(), checkMs, emitMs, assembleMs), OutcomeJson.Default.CompileOutcome);
+        return JsonSerializer.Serialize(new CompileOutcome(wasm, diagnostics.ToArray(), checkMs, emitMs, assembleMs, wat), OutcomeJson.Default.CompileOutcome);
+    }
+
+    /// <summary>
+    /// Checks <paramref name="source"/> as <see cref="Compile"/> does, without writing WebAssembly, for an editor to show
+    /// its diagnostics as the code is typed; and gives a JSON object whose <c>diagnostics</c> are each one's <c>code</c>,
+    /// <c>headline</c>, <c>body</c>, whether it is an <c>error</c>, and <c>from</c> and <c>to</c>, where it is in
+    /// <paramref name="source"/>, or none for one elsewhere, as in a package it imports.
+    /// </summary>
+    [JSExport]
+    public static string Check(string source)
+    {
+        var result = Script.compileUnder(Hosts.playgroundPackage, Store, ScriptPath, source);
+        var diagnostics =
+            result.Diagnostics
+                .Select(d =>
+                {
+                    var inSource = FSharpOption<Parser.Program.SourceSpan>.get_IsSome(d.Span) && d.Span.Value.File == ScriptPath && d.Span.Value.Start >= 0;
+                    int? from = inSource ? System.Math.Min(d.Span.Value.Start, source.Length) : null;
+                    int? to = inSource ? System.Math.Min(System.Math.Max(d.Span.Value.End, d.Span.Value.Start), source.Length) : null;
+                    return new EditorDiagnostic(d.Code, Diagnostics.headline(d), d.Message, Diagnostics.isError(d), from, to);
+                })
+                .ToArray();
+        return JsonSerializer.Serialize(new CheckOutcome(diagnostics), OutcomeJson.Default.CheckOutcome);
     }
 }
 
-public sealed record CompileOutcome(string? wasm, string[] diagnostics, double checkMs, double emitMs, double assembleMs);
+public sealed record CompileOutcome(string? wasm, string[] diagnostics, double checkMs, double emitMs, double assembleMs, string? wat);
+
+/// <summary>A diagnostic as the editor shows it: its code, headline and body, and where it is in the code, if it is there.</summary>
+public sealed record EditorDiagnostic(string code, string headline, string body, bool error, int? from, int? to);
+
+public sealed record CheckOutcome(EditorDiagnostic[] diagnostics);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(CompileOutcome))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(CheckOutcome))]
 internal sealed partial class OutcomeJson : System.Text.Json.Serialization.JsonSerializerContext
 {
 }

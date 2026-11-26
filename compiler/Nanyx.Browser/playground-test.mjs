@@ -121,6 +121,25 @@ match readToEnd()
     assert.equal(result.stdout, "100000 éé\n[b\n\nc\n]");
     assert.deepEqual(result.exit, { code: 0 });
   }],
+  ["Check gives each diagnostic's code, headline and place in the code, for the editor to underline", async (_, page) => {
+    const source = 'println("ok")\nprintln(1 + "a")\n';
+    const diagnostics = await page.evaluate((source) => window.playground.check(source), source);
+    assert.equal(diagnostics.length, 1);
+    const [diagnostic] = diagnostics;
+    assert.match(diagnostic.code, /^NYX\d{4}$/);
+    assert.equal(diagnostic.error, true);
+    assert.ok(diagnostic.headline.length > 0 && diagnostic.body.length > 0);
+    assert.equal(source.slice(diagnostic.from, diagnostic.to), '1 + "a"');
+  }],
+  ["Check gives no diagnostics for code that compiles", async (_, page) => {
+    assert.deepEqual(await page.evaluate(() => window.playground.check('println("ok")\n')), []);
+  }],
+  ["Compile gives the WebAssembly text the module is assembled from, and none for code that doesn't compile", async (_, page) => {
+    const wat = await page.evaluate(() => window.playground.wat('println("the text")\n'));
+    assert.match(wat, /^\(module/);
+    assert.match(wat, /__nanyx_start/);
+    assert.equal(await page.evaluate(() => window.playground.wat('println(1 + "a")\n')), null);
+  }],
   ["Stop ends a program that never does", async (_, page) => {
     const result = await page.evaluate(() => window.playground.runAndStopAfter("def spin: int -> int = { n -> spin(n + 1) }\n\nprintln(spin(0))\n", 500));
     assert.deepEqual(result.exit, { code: null, stopped: true });

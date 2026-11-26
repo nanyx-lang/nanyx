@@ -52,6 +52,7 @@ const searchItems = (await getAllPages()).map(({ page, section }) => ({
           }
         </select>
         <button type="button" class="pg-button" data-share>Share</button>
+        <button type="button" class="pg-button" data-wat hidden aria-pressed="false" title="Show the WebAssembly text the code compiles to">WebAssembly</button>
         <span class="pg-read-only" data-read-only hidden></span>
         <span class="pg-status" data-status role="status">Loading the compiler…</span>
         <span class="pg-release" data-release></span>
@@ -71,9 +72,10 @@ const searchItems = (await getAllPages()).map(({ page, section }) => ({
         </div>
         <section class="pg-output-pane" aria-label="Output">
           <div class="pg-output-header">
-            <span>Output</span>
+            <span data-output-title>Output</span>
             <button type="button" class="pg-link-button" data-clear>Clear</button>
           </div>
+          <pre class="pg-output pg-wat" data-wat-pane hidden></pre>
           <div class="pg-output pg-terminal" data-output aria-live="polite">
             <div data-log></div>
             <label class="pg-input-line" data-input-line hidden>
