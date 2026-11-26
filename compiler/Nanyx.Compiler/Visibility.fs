@@ -175,7 +175,10 @@ let internal blockIsolationAt (state: InferState) (name: string) (symbolId: Symb
                       |> Diagnostics.about name
                       |> Diagnostics.withRelated symbol.Declaration $"'{name}' is declared here" ]
             // At the top level, a block's name for what another block gives is one only an import there brings in.
-            | None when name <> symbol.Name && state.BlockAliases |> Map.tryFind name = Some symbol.Name && not (broughtInHere ()) ->
+            | None when
+                name <> symbol.Name
+                && state.BlockImports |> List.exists (fun blockImport -> blockImport.Names |> Map.tryFind name = Some symbol.Name)
+                && not (broughtInHere ()) ->
                 let blockName =
                     state.BlockImports
                     |> List.tryPick (fun blockImport ->
