@@ -344,7 +344,7 @@ done, and the other tasks run after it.
 
 ## Host libraries
 
-Hosts share what they are written on through _host libraries_: packages whose manifest says `hostLibrary = true` in its `package`. A host library's modules may require `HostRuntime`, as a host's own do, when the build host's package depends on it, so two hosts call the same foreign functions without each declaring them:
+Hosts share what they are written on through _host libraries_: packages whose manifest says `hostLibrary = true` in its `package`. A host library's modules may require `HostRuntime`, as a host's own do, when the build host's package depends on it, or when the library is checked or packed on its own, so two hosts call the same foreign functions without each declaring them:
 
 ```nanyx fragment
 (
