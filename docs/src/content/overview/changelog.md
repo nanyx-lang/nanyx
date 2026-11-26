@@ -8,6 +8,48 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.46.0
+
+*26 November 2026*
+
+Dimensions written without their storage are easier to use together, a chain of pipes checks in time that grows with
+its length, and a program built as a component cancels its waits on the host and lets other tasks run while it writes a
+request.
+
+**Language**
+
+- **Changed:** the dimensions a function is passed written without their storage share one storage, so
+  `def speed: Distance, Time -> _ = { d, t -> d / t }` compiles. A dimension in a result written without its storage is
+  of whatever storage the body makes it, so `list(Time) -> Time` does too. A call that passes differently stored values
+  to such a signature, as `overlap(1s, 2.0s)` against `Time, Time -> bool`, no longer compiles: write
+  `Time(a), Time(b)` to take two ([Units of measure](../advanced/units-of-measure#dimensions-in-types)).
+
+**Tools**
+
+- Error messages write a context's associated types as a signature does, `[Iter(c, elem = string)]`, rather than
+  positionally, `[Iter(c, string)]` ([Associated types](../advanced/contexts#associated-types)).
+
+**Performance**
+
+- A chain of pipes is checked in time that grows with its length: each stage's value is inferred once. A chain of 14
+  took up to a minute.
+- In a program built as a component, sending a request's body, and an HTTP handler's reading of its request, let the
+  program's other tasks run while the host takes them
+  ([Components](../deep-dives/components#waiting-while-other-tasks-run)).
+
+**Fixes**
+
+- In a program built as a component, a request or a sleep whose task is cancelled, as a `race`'s loser is, stops then,
+  rather than when it would have finished ([Cancelling](../advanced/async#cancelling)).
+- A def whose annotation leaves its result to inference, `-> _`, and returns a type of a context's associated type, as
+  `Distance(a), Time(a) -> _` over `d / t` does, gives each call that type at the call's own types: the quotient
+  printed `()cm/s` ([Units of measure](../advanced/units-of-measure#derived-dimensions)).
+- A derived dimension whose parts are stored as their storage's fraction, as in
+  `Distance(Num(a).fraction) / Time(Num(a).fraction)`, is no longer refused as two storages, and
+  [NYX0295](../standard-tools/errors#nyx0295) writes a storage as it is written rather than as a number.
+- A call to a def that failed to check no longer also reports the contexts the def requires as missing, and hover no
+  longer writes them over the def's broken type.
+
 # 0.45.0
 
 *26 November 2026*
@@ -334,7 +376,7 @@ floats as text much faster. One change breaks code: it is marked below.
   ([Types](../tour/types#top-and-bottom-types)).
 - A lambda that a `use` gives a context's member is inferred where the `use` is, so the contexts it needs besides the
   member's own are required by the def around it, and `use Emit(emit = ...)` without its type compiles where the def
-  settles it ([Contexts](../advanced/contexts)).
+  settles it ([Associated types](../advanced/contexts#associated-types)).
 - A destructuring def, `def (a, b) = pair`, can be written in a `module` block, and exported from it.
 
 **Standard library**
@@ -392,7 +434,7 @@ run of faster type checking. Four changes break code: they are marked below.
   wherever the context is. **This breaks code** that imports them, as `import nanyx/async as (start, await)`, which is
   now NYX0104 ([Attached definitions](../advanced/attached-definitions)).
 - Functions that need different contexts can share a list or an `if`'s branches, so `race([{ #some(http.get(url)) },
-  { sleep(5_000); #timedOut }])` type-checks ([Contexts](../advanced/contexts)).
+  { sleep(5_000); #timedOut }])` type-checks ([Associated types](../advanced/contexts#associated-types)).
 - A constructor pattern takes a nominal value apart: `Email(s)` binds the whole value, and several patterns, `...` or
   named fields read its fields, as `Email(address = s)` ([Pattern matching](../tour/pattern-matching#named-types)).
 - A lambda that starts with a pipe, `{ \math.abs }`, is `{ x -> x \math.abs }`
@@ -403,7 +445,7 @@ run of faster type checking. Four changes break code: they are marked below.
   wrote `{ a, b -> ... }` for `(x: int, y: int) -> int`: it is now NYX0280; rename a field with a record pattern,
   `{ (x = a, y = b) -> ... }` ([Functions](../tour/functions)).
 - A lambda given for a record field, or given back by a function, can use the contexts of the function type it is
-  checked against ([Contexts](../advanced/contexts)).
+  checked against ([Associated types](../advanced/contexts#associated-types)).
 
 **Standard library**
 
@@ -451,7 +493,7 @@ annotated local `def`, which can report errors in code that compiled before.
 - A local `rec` that writes its type runs only in the contexts its type declares, and is checked against the parameter
   and result types it writes, as a local `def` is. **This breaks code** whose `rec` calls something that needs a context
   its type doesn't declare: it is now NYX0211, fixed by adding the context, such as `[c]`, to the type
-  ([Contexts](../advanced/contexts)).
+  ([Associated types](../advanced/contexts#associated-types)).
 - A local function that writes a context variable of the function around it, such as `def go: [c] int -> int` inside a
   `[c]` function, compiles and runs, instead of failing with NYX0301.
 
@@ -529,7 +571,7 @@ other WebAssembly components and be called by them.
   `with` are NYX0212 there. A private type gets no `==`, `<` or hashing derived from its hidden representation, and
   nor does a structure holding one ([Nominal and protected types](../advanced/nominal-and-protected-types)).
 - A scoped context may have members, and a `use` of an instance of it supplies it
-  ([Contexts](../advanced/contexts)).
+  ([Associated types](../advanced/contexts#associated-types)).
 - A `memory` block frees the mutable objects made in it when it ends: its references (`MRef`), the boxes of cells a
   lambda captures, and `MArray`s, cycles through them included. Each block has a region of its own; a mutable object
   stored into an outer block's object, or given back from the block, moves to the outer region
@@ -546,7 +588,7 @@ other WebAssembly components and be called by them.
   **This breaks code** that calls `Slice.ofArray` ([Slice](../stdlib/slice)).
 - `MList.add` makes one allocation per element, not two.
 - `use Log(log = println)`: a generic function given as a context member finds its instances
-  ([Contexts](../advanced/contexts)).
+  ([Associated types](../advanced/contexts#associated-types)).
 
 **Tools**
 
@@ -754,7 +796,7 @@ existing code; they are marked below.
   also be nested ([Re-exporting](../tour/modules#re-exporting)).
 - An `@extern` function can be passed as a value.
 - **This breaks code** that calls a parameter needing a scoped context without supplying it: that is now `NYX0211`,
-  unless the def loads an instance with `use` ([Contexts](../advanced/contexts)).
+  unless the def loads an instance with `use` ([Associated types](../advanced/contexts#associated-types)).
 - **This breaks code** with a match arm for a tag the matched union doesn't have: it is now a type error, with a fix
   that removes the arm ([Pattern matching](../tour/pattern-matching)).
 - **This breaks code** that imports a block's names selectively and relies on getting the rest: only the named ones
@@ -812,7 +854,7 @@ refactorings. Several changes break existing code; they are marked below.
 - Custom patterns: declare total and partial patterns, give them arguments, and compose them with `&`
   ([Custom patterns](../advanced/custom-patterns)).
 - Associated types: a context can have a member of kind type, as `FromString(a)` does for its failure type; generic
-  values can be context members, and a type can be generic in contexts ([Contexts](../advanced/contexts)).
+  values can be context members, and a type can be generic in contexts ([Associated types](../advanced/contexts#associated-types)).
 - Square-bracket literals build any collection type through `fromArray`, and an array can be called: `xs(i)` is
   `array.at(xs, i)` ([Collections](../tour/collections)).
 - `seq { }` with a bare `yield`, and a `for` loop walks a `seq` ([Sequences and queries](../advanced/sequences-and-queries)).
@@ -906,7 +948,7 @@ host. The backend gained an inliner and a smaller, faster heap.
   ([Nominal and protected types](../advanced/nominal-and-protected-types)).
 - `;` separates statements on one line.
 - Functions that require contexts compose, and a point-free value carries the contexts its parts need
-  ([Contexts](../advanced/contexts)).
+  ([Associated types](../advanced/contexts#associated-types)).
 - A record that names a field twice is an error.
 
 **Standard library**
@@ -979,7 +1021,7 @@ Mutable cells take shape, imports get finer control, and the type checker gets m
 - Cells are declared with `mut x = e`, passed to functions with `mut`, and a memory block names its instance:
   `memory { m -> ... }` ([Memory](../advanced/memory)).
 - Selective imports, `as (a, b)` and `as m & (a, b)`, and re-exports, `export m (a, b)` ([Modules](../tour/modules)).
-- `scoped context`, for contexts that must stay inside the call that supplies them ([Contexts](../advanced/contexts)).
+- `scoped context`, for contexts that must stay inside the call that supplies them ([Associated types](../advanced/contexts#associated-types)).
 - `[]` says a function requires no contexts; `use C(T)(members)` loads an instance written out in place.
 - A lambda can annotate its result, `{ (x: int): int -> x * 2 }`, and `f()(args)` calls the result of a call
   ([Lambdas and higher-order functions](../tour/lambdas-and-higher-order-functions)).
@@ -1045,7 +1087,7 @@ Contexts become part of function types, `int` is a true 64-bit integer, and the 
 **Language**
 
 - Function types carry their contexts, joined with `&`; lambdas get the contexts they use, and a lambda can't use a
-  context outside the scope that supplies it ([Contexts](../advanced/contexts)).
+  context outside the scope that supplies it ([Associated types](../advanced/contexts#associated-types)).
 - The capitalised built-in names, `I64`, `F64` and `Boolean`, are the real types; `int`, `float` and `bool` are their
   aliases ([Types](../tour/types)).
 - `int` compiles to a 64-bit integer.
@@ -1135,7 +1177,7 @@ Structural equality, inferred parameterised contexts, and stack-safe list functi
 **Language**
 
 - `==` compares records, tuples, lists and tag payloads by structure, and requires `Eq`.
-- An unannotated def infers the parameterised contexts it needs ([Contexts](../advanced/contexts)).
+- An unannotated def infers the parameterised contexts it needs ([Associated types](../advanced/contexts#associated-types)).
 - `use <expr>` loads an instance; `use C(T) = ...` is gone.
 - A record pattern names every field or ends in `...`, and a closed record rejects extra or missing fields
   ([Records](../tour/records)).
