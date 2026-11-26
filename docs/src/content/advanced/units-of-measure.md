@@ -179,8 +179,8 @@ println(1s > 999ms)
 ```
 
 A dimension has `Add` and `Sub` instances, so generic code such as `list.sum` sums times. It has no `Num` instance:
-`Num`'s `*` takes two values of one type, and a `Time` times a `Time` is no `Time`. Two dimensions, or a number with no
-unit, in a sum are errors:
+`Num`'s `*` takes two values of one type, and a `Time` times a `Time` is no `Time` but a `Time * Time` (see [Derived
+dimensions](#derived-dimensions)). Two dimensions, or a number with no unit, in a sum are errors:
 
 ```nanyx
 dimension Length(float)
@@ -189,6 +189,43 @@ dimension Length(float)
 
 def far = 5m + 2s  -- error NYX0201: `+` takes two values of one dimension, and 'Length' and 'Time' are two
 ```
+
+# Derived dimensions
+
+Dimensions joined by `*` and `/` in a type are a **derived dimension**: `Length / Time` is a speed, `Time * Time` a time
+squared, and `Length / (Time * Time)` an acceleration. `dimension Speed = Length / Time` names one, generic in its
+storage as its parts are: `Speed(float)` is the same type as `Length(float) / Time(float)`. A storage is written on each
+part, `Length(float) / Time(float)`, and the parts share it; a part written without one takes the others'.
+
+`*` and `/` between measured values multiply and divide their dimensions, and dimensions that cancel leave a plain
+number. A quotient is of the storage's `fraction`, so dividing two `int`-stored values is not rounded, and `//` rounds
+only within one dimension or by a number. There is no syntax for a power yet: a square is `t * t`.
+
+```nanyx
+dimension Length
+
+@baseUnit unit m: Length
+unit km: Length = 1_000m
+
+dimension Speed = Length / Time
+
+def speed: Length(float), Time(float) -> Speed(float) = { d, t ->
+  d / t
+}
+
+def sprint = speed(100.0m, 9.58s)
+println(sprint * 9.58s)
+println(2.0m * 3.0m)
+println(1.0km / 1.0m)
+-- 100m
+-- 6.0m*m
+-- 1000.0
+```
+
+A derived dimension has no units of its own: a value of one is written in its parts' units, `1km / 1hr`, and printed in
+their base units, joined by `*` and `/`. Two storages on its parts, a part that is no dimension, and a unit declared on
+one are errors ([NYX0295](../standard-tools/errors#nyx0295), [NYX0296](../standard-tools/errors#nyx0296),
+[NYX0297](../standard-tools/errors#nyx0297)).
 
 # Printing
 
