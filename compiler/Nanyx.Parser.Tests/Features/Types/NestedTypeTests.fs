@@ -1,50 +1,46 @@
 /// Types nested many levels deep, which the parser reads once at each level (#2218). When it read each level twice, a
-/// depth of 20 took 218 s, and the time doubled with each level.
+/// depth of 20 took 218 s, and the time doubled with each level. The tests count the tokens it reads, which load on the
+/// machine doesn't change, rather than time it.
 module ParserTests.Features.NestedTypes
 
 open Xunit
+open Parser.Program
 open ParserTestHelpers
 
 /// `wrap` applied `depth` times to `innermost`.
 let private nested (depth: int) (wrap: string -> string) (innermost: string) =
     Seq.fold (fun inner _ -> wrap inner) innermost (seq { 1..depth })
 
-/// Asserts that `source` parses whole within 10 s. It takes milliseconds when each level is read once, and a parse that
-/// doubles with each level doesn't finish at a depth of 30: the test fails when the time is up rather than waiting for
-/// it. The parse runs on a thread of its own, started at once, so the 10 s don't include waiting for a thread-pool thread
-/// while other tests keep the pool busy (#2613), and a background thread, so a parse still running doesn't keep the test
-/// run alive.
-let private parsesInTime (source: string) =
-    let failure: exn option ref = ref None
-    let parse =
-        System.Threading.Thread(
-            (fun () ->
-                try
-                    readsWhole source
-                with error ->
-                    failure.Value <- Some error),
-            IsBackground = true
-        )
-    parse.Start()
-    Assert.True(parse.Join(System.TimeSpan.FromSeconds 10.0), "The parse didn't finish in 10 s")
-    failure.Value |> Option.iter (fun error -> raise (System.AggregateException("The parse failed", error)))
+/// How many tokens the parser takes reading `source` whole, each one read again after a reading that didn't match
+/// counted again (see `ParseState.TokensRead`).
+let private tokensRead (source: string) =
+    match DescentTopLevel.tryReadModuleWithState "t.nyx" source with
+    | Ok (_, state) -> state.TokensRead
+    | Error error -> failwith $"{error.Message} at {error.Span.StartLine + 1}:{error.Span.StartColumn + 1}"
+
+/// Asserts that `source depth` is read in work that grows with its depth: 16 levels take at most three times the tokens
+/// of 8, about twice when each level is read once. Read twice, each level doubles the work, so 16 levels take 256 times
+/// what 8 do. The depths are small so that such a parse still ends, and the test fails rather than hangs.
+let private readsOnceALevel (source: int -> string) =
+    let atEight, atSixteen = tokensRead (source 8), tokensRead (source 16)
+    Assert.True(atSixteen <= 3 * atEight, $"16 levels took {atSixteen} tokens, {float atSixteen / float atEight:F1} times the {atEight} of 8")
 
 [<Fact>]
-let ``A type applied to a type applied to a type, 30 deep, parses in time`` () =
-    parsesInTime $"""def x: {nested 30 (fun t -> $"list({t})") "int"} = []"""
+let ``A type applied to a type applied to a type is read once a level`` () =
+    readsOnceALevel (fun depth -> $"""def x: {nested depth (fun t -> $"list({t})") "int"} = []""")
 
 [<Fact>]
-let ``A function type in brackets, 30 deep, parses in time`` () =
-    parsesInTime $"""def f: {nested 30 (fun t -> $"({t} -> int)") "int"} = g"""
+let ``A function type in brackets is read once a level`` () =
+    readsOnceALevel (fun depth -> $"""def f: {nested depth (fun t -> $"({t} -> int)") "int"} = g""")
 
 [<Fact>]
-let ``A tuple type in a tuple type, 30 deep, parses in time`` () =
-    parsesInTime $"""def y: {nested 30 (fun t -> $"(int, {t})") "int"} = z"""
+let ``A tuple type in a tuple type is read once a level`` () =
+    readsOnceALevel (fun depth -> $"""def y: {nested depth (fun t -> $"(int, {t})") "int"} = z""")
 
 [<Fact>]
-let ``A tag's payload of a tag, 30 deep, parses in time`` () =
-    parsesInTime $"""def y: {nested 30 (fun t -> $"#a({t})") "int"} = z"""
+let ``A tag's payload of a tag is read once a level`` () =
+    readsOnceALevel (fun depth -> $"""def y: {nested depth (fun t -> $"#a({t})") "int"} = z""")
 
 [<Fact>]
-let ``A capitalised call of a capitalised call, 30 deep, parses in time`` () =
-    parsesInTime $"""def y = {nested 30 (fun t -> $"Wrap({t})") "x"}"""
+let ``A capitalised call of a capitalised call is read once a level`` () =
+    readsOnceALevel (fun depth -> $"""def y = {nested depth (fun t -> $"Wrap({t})") "x"}""")

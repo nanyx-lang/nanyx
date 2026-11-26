@@ -24,7 +24,8 @@ tree is needed ([#2730](https://github.com/nanyx-lang/nanyx/issues/2730)).
   `DescentTopLevel.fs`). `DescentCursor` has the cursor, which reads the layout pass's tokens and goes back for an
   alternative (`NoMatch`, which `Cursor.Attempt` catches), and the side state kept beside the tree (`ParseState`): the
   names nodes declare, where documentable constructs start, `module name =` blocks, comments from the lexer's trivia,
-  and string texts. The files read, in order: types, with a field's default and a `where` constraint read as
+  string texts, and how many tokens it took (`TokensRead`), a token read again after going back counted again, which
+  tests of how the parser scales count rather than time it. The files read, in order: types, with a field's default and a `where` constraint read as
   expressions; literals, with a `+` or `-` written straight before a number as its sign and `1.` as a float, though the
   lexer reads both apart, and a number with a unit as a `UnitLit` that keeps the number exactly, as digits and a power
   of ten (`WrittenNumber`), and whether it was written whole or as a decimal; patterns, with a guard's lambda and a custom pattern's arguments read as expressions;
