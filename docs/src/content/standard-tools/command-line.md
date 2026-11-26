@@ -250,7 +250,7 @@ See [Formatter](./formatter) for the style, the settings and what happens to a f
 `nanyx new acme.demo` makes a package in a new directory, named for the last part of the package's name, `demo`,
 unless you give another: `nanyx new acme.demo tools/demo`. The directory must be new or empty. The package has a
 manifest, `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, the
-compiler's minor version as the oldest the package builds with, `nanyx = "0.43"`, and `src/main.nyx`, whose `@entry` prints "Hello, World!". A package's name is lower case, with words separated by dots.
+compiler's minor version as the oldest the package builds with, `nanyx = "0.44"`, and `src/main.nyx`, whose `@entry` prints "Hello, World!". A package's name is lower case, with words separated by dots.
 
 ## `nanyx migrate`
 
@@ -384,7 +384,8 @@ goes on to the pull request. A release with a different `.nyxpkg` is refused, si
 The index's sync records the release within the hour (for a new package, once a maintainer has merged its
 registration). `publish` signs in to GitHub with `GITHUB_TOKEN`, if it is set, or else with the GitHub CLI's login
 (`gh auth login`); the token must be able to create releases on the repository, and to push to or fork
-nanyx-lang/packages and open pull requests on it.
+nanyx-lang/packages and open pull requests on it. Once a package is registered, a version can be published from its
+repository's GitHub Actions workflow with the workflow's own `GITHUB_TOKEN`, given `permissions: contents: write`.
 
 ## `nanyx unlist`
 

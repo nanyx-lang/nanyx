@@ -241,6 +241,25 @@ let unitAt (result: CompileResult) (offset: int) : HoverInfo option =
         literal |> Option.orElseWith inType |> Option.orElseWith declaration
     | _ -> None
 
+/// The hover on a built-in type's name, such as `int`, `I64` or `List`, written in a type in the compiled root module at
+/// `offset`: what the type is (see `BuiltInTypeHover`). `None` when none is there, or when the module defines a type of
+/// that name, which is that type.
+let builtInTypeAt (result: CompileResult) (offset: int) : HoverInfo option =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        typeExprsAt offset syntax
+        |> List.tryPick (fun typeExpr ->
+            let named (name: Identifier) (span: SourceSpan) =
+                if contains offset span && not (typed.TypeDefs.ContainsKey name) then
+                    BuiltInTypeHover.describe name |> Option.map (fun (written, note) -> { Type = written; Span = span; Note = Some note })
+                else
+                    None
+            match typeExpr.Kind with
+            | TypeName name -> named name typeExpr.Span
+            | TypeApply(name, _) -> named name { typeExpr.Span with End = typeExpr.Span.Start + name.Length }
+            | _ -> None)
+    | _ -> None
+
 /// A module a hover is on: the file it is read from, as its spans name it (see `ImportedFile`), the name it is shown
 /// by, and the span of the syntax that names it.
 type ModuleHover = { File: string; Name: string; Span: SourceSpan }

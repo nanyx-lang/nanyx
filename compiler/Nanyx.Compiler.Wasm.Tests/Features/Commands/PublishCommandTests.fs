@@ -15,7 +15,9 @@ open TranspilerWasmTestHelpers
 /// A fake GitHub, signed in as `acme`, which can push to `acme/util`: the releases made, with their assets, the files of
 /// the index's repository, the branches made and files written in it or in `acme/packages`, acme's fork of it, and the
 /// pull requests opened on it, with every request it was sent. Whether acme can push to the index or fork it, whether
-/// opening a pull request fails, and how many looks the fork takes to appear once it is asked for, can be set.
+/// opening a pull request fails, how many looks the fork takes to appear once it is asked for, whether GitHub says what
+/// acme can do to a repository (it doesn't for an Actions `GITHUB_TOKEN`), and whether creating a release fails, can be
+/// set.
 type private FakeGitHub(indexFiles: (string * string) list) =
     let files = Collections.Generic.Dictionary<string, string>(dict indexFiles)
     let releases = ResizeArray<string * string>()
@@ -32,6 +34,8 @@ type private FakeGitHub(indexFiles: (string * string) list) =
     member val LooksBeforeForkAppears = 0 with get, set
     member val CanFork = true with get, set
     member val CanReadReleases = true with get, set
+    member val SaysPermissions = true with get, set
+    member val CanRelease = true with get, set
 
     member _.Releases = List.ofSeq releases
     member _.Assets = List.ofSeq assets
@@ -46,7 +50,11 @@ type private FakeGitHub(indexFiles: (string * string) list) =
             requests.Add $"{request.Method} {path}"
             let body () = JsonNode.Parse(Encoding.UTF8.GetString request.Body.Value)
             let answer status (json: string) = Result.Ok { Status = status; Body = json }
-            let permissions (push: bool) = answer 200 $$"""{ "permissions": { "pull": true, "push": {{(if push then "true" else "false")}} } }"""
+            let permissions (push: bool) =
+                if this.SaysPermissions then
+                    answer 200 $$"""{ "permissions": { "pull": true, "push": {{(if push then "true" else "false")}} } }"""
+                else
+                    answer 200 """{ "private": false }"""
             let canWrite owner = owner = "nanyx-lang" && this.CanPushToIndex || owner = "acme" && forked
             let segments = (path.Split('?')[0]).TrimStart('/').Split('/') |> List.ofArray
             match request.Method, segments with
@@ -62,6 +70,7 @@ type private FakeGitHub(indexFiles: (string * string) list) =
                     |> Seq.map (fun (name, bytes) -> $$"""{ "name": "{{name}}", "digest": "sha256:{{PackageArchive.sha256 bytes}}" }""")
                     |> String.concat ", "
                 answer 200 $$"""{ "id": 1, "html_url": "https://github.com/{{owner}}/{{repo}}/releases/tag/{{tag}}", "assets": [{{listed}}] }"""
+            | "POST", [ "repos"; _; _; "releases" ] when not this.CanRelease -> answer 403 """{ "message": "Resource not accessible by integration" }"""
             | "POST", [ "repos"; owner; repo; "releases" ] ->
                 let tag = string (body ()).["tag_name"]
                 releases.Add($"{owner}/{repo}", tag)
@@ -163,6 +172,50 @@ let ``A patch of a registered package is released, with no pull request`` () =
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal<(string * string) list>([ "acme/util", "v1.0.1" ], github.Releases)
     Assert.Empty(github.Pulls)
+
+[<Fact>]
+let ``A token GitHub doesn't say can push, as Actions' GITHUB_TOKEN, releases a registered package's version`` () =
+    use directory = new TempDirectory()
+    util directory "1.0.0" shout |> ignore
+    let store = storeIn directory true
+    let app = util directory "1.0.1" (shout.Replace("\"!\"", "\"!!\""))
+    let github = FakeGitHub registered
+    github.SaysPermissions <- false
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal<(string * string) list>([ "acme/util", "v1.0.1" ], github.Releases)
+
+[<Fact>]
+let ``A token GitHub doesn't say can push, refused the release, is told what it needs`` () =
+    use directory = new TempDirectory()
+    util directory "1.0.0" shout |> ignore
+    let store = storeIn directory true
+    let app = util directory "1.0.1" (shout.Replace("\"!\"", "\"!!\""))
+    let github = FakeGitHub registered
+    github.SaysPermissions <- false
+    github.CanRelease <- false
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal(
+        "error: Creating the release v1.0.1 of acme/util failed: GitHub answered 403, Resource not accessible by integration. "
+        + "The token can't create releases on acme/util: give it write access to the repository's contents (in a GitHub Actions workflow, `permissions: contents: write`)\n",
+        outcome.StandardError.ReplaceLineEndings "\n"
+    )
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Empty(github.Releases)
+
+[<Fact>]
+let ``An account GitHub doesn't say can push to the index registers through its fork`` () =
+    use directory = new TempDirectory()
+    let app = util directory "0.1.0" shout
+    let store = storeIn directory false
+    let github = FakeGitHub []
+    github.SaysPermissions <- false
+    github.CanPushToIndex <- true
+    let outcome = nanyxWithGitHub store github.Client app [ "publish" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal<(string * string) list>([ "Register acme.util", "acme:register-acme.util" ], github.Pulls)
 
 [<Fact>]
 let ``An account that can push to the index registers from a branch of it, with a suffix when its name is taken`` () =

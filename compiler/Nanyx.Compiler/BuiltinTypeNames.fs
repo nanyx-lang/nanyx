@@ -23,6 +23,10 @@ module internal BuiltinTypeNames =
               "F64", "float"
               "Boolean", "bool" ]
 
+    /// The alias the compiler works with for the built-in type `written` names, as `int` for `I64`; none for any other
+    /// name.
+    let aliasOf (written: string) : string option = aliases |> Map.tryFind written
+
     /// Each library type's alias and the type it is written as: `seq(int)` is the prelude's `Sequence(int)`, and `seq.map`
     /// is `Sequence.map` (see `Seqs`). The type is declared as a user's is, so here the alias is the other way round.
     let private libraryAliases = Map.ofList [ Seqs.alias, Seqs.typeName ]

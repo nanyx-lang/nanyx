@@ -14,8 +14,11 @@ open Transpiler.Wasm.CoreIrLowerScope
 open Transpiler.Wasm.CoreIrLower
 
 /// The most specialisations one definition may have: a definition that calls itself at ever bigger types
-/// (polymorphic recursion) would otherwise have no end of them.
-let private maxSpecialisations = 32
+/// (polymorphic recursion) would otherwise have no end of them. A valid program can need many, though: a list function
+/// such as `reverseOnto`, which `list.map` and `list.reverse` call, is specialised at every element type the program
+/// maps or reverses, and nanyx.json's tests reach more than 32 of them. 64 leaves room for that and still stops a
+/// runaway definition soon. Past the cap, the definition should be compiled once more at boxed types instead (#2890).
+let private maxSpecialisations = 64
 
 /// A WebAssembly name for a specialisation, such as `id__int`: its definition's name, then its type arguments, then
 /// `__known` if it is specialised on known context members (see `CoreIrLowerKnown`).

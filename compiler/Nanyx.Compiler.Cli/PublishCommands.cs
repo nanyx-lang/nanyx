@@ -99,8 +99,10 @@ internal static partial class CliCommands
         // Everything that can stop the publish part way is checked before the release is made, so that a failure leaves
         // nothing behind; a publish that stops after it all the same can be run again to finish (see createRelease).
         shell.Out.WriteLine($"Checking that you can release on {repository}");
+        // GitHub doesn't say for every token whether it can push (an Actions GITHUB_TOKEN's answer has no permissions), so
+        // when it doesn't, the publish goes on and creating the release says so if it can't.
         var canRelease = GitHubApi.canPush(github, repository);
-        if (canRelease.IsError || !canRelease.ResultValue)
+        if (canRelease.IsError || canRelease.ResultValue is { Value: false })
         {
             shell.Error.WriteLine(canRelease.IsError
                 ? $"error: {canRelease.ErrorValue}"

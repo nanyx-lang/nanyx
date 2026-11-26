@@ -9,9 +9,11 @@
 
 --| A point in time: a number of nanoseconds since the start of 1970, UTC (Unix time), which
   reaches about 292 years either side of it. `Clock`'s `now` gives one. The time between two is
-  [`Instant.since`], exactly, and [`Instant.plus`] and [`Instant.minus`] move one by a time:
-  `now() \since(start)`, `now() \plus(5s)`. It is written as ISO 8601 writes it, in UTC: `"{i}"` is
-  `2026-11-25T18:20:57Z`.
+  their difference, exactly, and a time added to one moves it: `now() - start` and `now() + 5s`.
+  [`Instant.since`], [`Instant.plus`] and [`Instant.minus`] are the same by name, and `minus` moves
+  one back, `now() \minus(5s)`, which `-` doesn't, as it is the time between two. [`Instant.shift`]
+  moves one by a time that may be negative either way: `now() \shift(-5s)`. It is written as
+  ISO 8601 writes it, in UTC: `"{i}"` is `2026-11-25T18:20:57Z`.
 export type Instant = private int
 
 --| The start of 1970, UTC, which a host's clock counts its time of day from:
@@ -19,19 +21,36 @@ export type Instant = private int
 export def Instant.epoch: Instant = Instant(0)
 
 --| The time from `earlier` to `i`, exactly: `now() \since(start)` is how long has passed since
-  `start`. It is negative if `earlier` is after `i`.
+  `start`. It is negative if `earlier` is after `i`. It is [`Instant.-`] by name.
 export def Instant.since: Instant, Instant -> Time(int) = { Instant(nanos), Instant(earlier) ->
   (nanos - earlier) * 1ns
 }
 
---| The instant `time` after `i`: `now() \plus(5s)`.
+--| The instant `time` after `i`: `now() \plus(5s)`. It is [`Instant.+`] by name.
 export def Instant.plus: Instant, Time(int) -> Instant = { Instant(nanos), time ->
   Instant(nanos + time // 1ns)
 }
 
---| The instant `time` before `i`: `now() \minus(1d)`.
+--| The instant `time` before `i`: `now() \minus(1d)`. `-` is the time between two instants, so
+  moving one back is by name only.
 export def Instant.minus: Instant, Time(int) -> Instant = { Instant(nanos), time ->
   Instant(nanos - time // 1ns)
+}
+
+--| The instant `time` from `i`: on for a positive time and back for a negative one, as a time
+  worked out at run time may be either. `now() \shift(-5s)` is five seconds ago.
+export def Instant.shift: Instant, Time(int) -> Instant = { Instant(nanos), time ->
+  Instant(nanos + time // 1ns)
+}
+
+--| The time from `earlier` to `i`, exactly, as [`Instant.since`] gives it: `now() - start`.
+export def Instant.`-`: Instant, Instant -> Time(int) = { i, earlier ->
+  Instant.since(i, earlier)
+}
+
+--| The instant `time` after `i`, as [`Instant.plus`] gives it: `now() + 5s`.
+export def Instant.`+`: Instant, Time(int) -> Instant = { i, time ->
+  Instant.plus(i, time)
 }
 
 --| The time from [`Instant.epoch`], the start of 1970, UTC, to `at`: its Unix time. Divide it by a
