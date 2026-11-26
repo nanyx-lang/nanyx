@@ -174,7 +174,7 @@ cheap.
 Nothing starts it: like `Console`, the host provides it.
 
 - **No `async { }` block.** "May wait" is the `Async` context, which code has or doesn't. "Runs at the same time" is a
-  separate thing, a task ([Structured concurrency](../work-in-progress/concurrency-and-crash-boundaries#structured-concurrency)).
+  separate thing, a task ([Tasks and scopes](#tasks-and-scopes)).
   Those are the two things an `async` block mixes up in C# or JavaScript.
 - **Code without `Async` can't get it.** A library that doesn't ask for it provably never waits, as one that doesn't
   ask for `Console` never prints.

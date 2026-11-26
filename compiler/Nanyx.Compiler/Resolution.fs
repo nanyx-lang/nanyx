@@ -68,10 +68,23 @@ module Resolution =
     /// This compiler's version, if it is a semantic version.
     let private running = SemanticVersion.tryParse Toolchain.version
 
-    /// `indexed` as the solver reads it: why it can't be chosen, if it can't. An unlisted version can be, when `locked` is
-    /// what the lockfile locks of its package, since a build that already locks it keeps it.
-    let private candidate (locked: SemanticVersion option) (indexed: IndexedVersion) : SolverVersion =
-        let dependencies = indexed.Dependencies |> List.map (fun (name, written) -> name, requirementOf written)
+    /// What the version `version` of the package `name` asks of the package `dependency`, which the index writes as
+    /// `written`: if `name` at `version` is the copy of a package that `store` seeded, and `dependency` is seeded too, the
+    /// seeded version only. The packages the compiler ships are built and released together, and a host runs its
+    /// programs against the copies it was built with, so a program under the seeded host that read a newer library from
+    /// the index would meet two of its types, one the host's and one its own.
+    let private requirementIn (store: PackageStore) (name: string) (version: SemanticVersion) (dependency: string) (written: string) =
+        let seededAt (package: string) = PackageStore.seededCopy store package |> Option.map _.Version
+        match seededAt name, seededAt dependency with
+        | Some seeded, Some shipped when seeded = version -> Some(VersionRequirement.exactly shipped)
+        | _ -> requirementOf written
+
+    /// `indexed`, a version of the package `name`, as the solver reads it: why it can't be chosen, if it can't. An unlisted
+    /// version can be, when `locked` is what the lockfile locks of its package, since a build that already locks it keeps
+    /// it.
+    let private candidate (store: PackageStore) (name: string) (locked: SemanticVersion option) (indexed: IndexedVersion) : SolverVersion =
+        let dependencies =
+            indexed.Dependencies |> List.map (fun (dependency, written) -> dependency, requirementIn store name indexed.Version dependency written)
         let needsNewer =
             match indexed.Nanyx |> Option.bind CompilerRequirement.tryParse, running with
             | Some requirement, Some running when not (CompilerRequirement.accepts requirement running) -> Some(NeedsCompiler(requirement, Toolchain.version))
@@ -89,7 +102,7 @@ module Resolution =
     /// What the script `script` (its name, for messages) asks of each of `pins`: exactly the version it gives.
     let pinRequirements (script: string) (pins: (string * SemanticVersion) list) : RootRequirement list =
         pins
-        |> List.map (fun (name, version) -> { From = script; Package = name; Requirement = { Minimum = version; Written = string version } })
+        |> List.map (fun (name, version) -> { From = script; Package = name; Requirement = VersionRequirement.at version })
 
     /// `versions` of the package `name`, each the version `versionOf` gives: only the one `pinned` gives, if it names
     /// the package.
@@ -115,7 +128,7 @@ module Resolution =
             |> Result.map (fun (_, listed, listingWarnings) ->
                 listings.[name] <- listed
                 warnings.AddRange listingWarnings
-                Some(listed |> onlyPinned pinned name _.Version |> List.map (candidate (locked.TryFind name))))
+                Some(listed |> onlyPinned pinned name _.Version |> List.map (candidate store name (locked.TryFind name))))
         let input =
             { Root = root
               Requirements = requirements
@@ -200,7 +213,7 @@ module Resolution =
         PackageIndex.listing store name
         |> Result.map (fun (_, listed, _) ->
             listed
-            |> List.map (candidate None)
+            |> List.map (candidate store name None)
             |> List.filter (fun version -> version.Unusable.IsNone && version.Version.PreRelease.IsEmpty)
             |> List.map _.Version
             |> List.tryLast)

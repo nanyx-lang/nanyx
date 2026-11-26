@@ -137,3 +137,28 @@ let ``A package under a shipped host is read from the compiler's own copy, so no
         recording.Events
         |> List.filter (fun event -> event.StartsWith "start " && (event.Contains ShippedPackages.directory || event.Contains store.Cache))
     Assert.Empty(checkedFromSource)
+
+[<Fact>]
+let ``A seeded host is resolved with the shipped packages it was built with, though the index has newer ones`` () =
+    let newer = string (SemanticVersion.nextPatch (SemanticVersion.tryParse Toolchain.version).Value)
+    let cli = $"""dependencies = [(package = "nanyx.cli", version = "{Toolchain.version}")]"""
+    use package =
+        new TempPackage(
+            [ "app/app.nyxp", $"""(package = (name = "app", version = "0.1.0"), {consoleHostEntry}, {cli})"""
+              "library/library.nyxp", $"""(package = (name = "library", version = "0.1.0"), {cli})""" ])
+    let store = storeOf package
+    // As the index is once the next release's libraries are on it, which this compiler, building with their `nanyx`, can
+    // choose; its host, which builds with that compiler only, it can't.
+    for name in [ "nanyx.cli"; "nanyx.fs"; "nanyx.http"; "nanyx.wasi" ] do
+        indexListing package name [ newer, String.replicate 64 "c" ]
+    let lockedOf (directory: string) =
+        match Resolution.resolve store (Manifest.tryReadIn (package.Path directory)).Value Lockfile.empty with
+        | Result.Ok resolved -> resolved.Lockfile.Packages |> List.map (fun locked -> locked.Name, string locked.Version)
+        | Result.Error error -> failwith $"%A{error}"
+    // A program under the host reads the libraries the host was built with, which define the types it runs them with.
+    Assert.Equal<(string * string) list>(
+        [ for name in [ "nanyx.cli"; Hosts.consolePackage; "nanyx.fs"; "nanyx.http"; "nanyx.wasi" ] -> name, Toolchain.version ]
+        |> List.sort,
+        lockedOf "app" |> List.sort)
+    // A library, which no host runs, takes the newest.
+    Assert.Equal<(string * string) list>([ "nanyx.cli", newer ], lockedOf "library")

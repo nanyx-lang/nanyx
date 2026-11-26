@@ -10,8 +10,7 @@ programs run under, its runner and how a program reads input are on [Hosts](./ho
 built. What is still planned is tracked as issues: diagnostics as you type and a WebAssembly text pane
 ([#2154](https://github.com/nanyx-lang/nanyx/issues/2154)), running up to the first deferred error and a trap's stack
 ([#2747](https://github.com/nanyx-lang/nanyx/issues/2747)), hover types and inlay hints
-([#2756](https://github.com/nanyx-lang/nanyx/issues/2756)), more examples
-([#2762](https://github.com/nanyx-lang/nanyx/issues/2762)), phones
+([#2756](https://github.com/nanyx-lang/nanyx/issues/2756)), phones
 ([#2765](https://github.com/nanyx-lang/nanyx/issues/2765)), and the open questions of files and HTTP
 ([#2759](https://github.com/nanyx-lang/nanyx/issues/2759)), compiler versions
 ([#2769](https://github.com/nanyx-lang/nanyx/issues/2769)), packages
@@ -82,7 +81,22 @@ example, and says so.
 
 **Examples.** The Examples menu is every example in the [language tour](../tour/variables) that opens in the
 playground ([below](#the-docs-examples)), grouped by its page in the tour's order, and named by the heading it is
-under. `docs/site/playground-examples.mjs` reads them: a block is runnable when it is fenced ` ```nanyx ` with nothing after `nanyx` and has no `-- error` comment, which are the
+under; and after them the programs in the repository's `examples` directory, the one source of examples that aren't
+the tour's, which the docs' [Examples](../examples/all-examples) section shows too. `repositoryExampleGroups`, in
+`docs/site/playground-examples.mjs`, reads those from `docs/site/examples.mjs`, which lists each file with its title
+and group, and each package (`examplePackages`); the build fails when the directory holds one it doesn't list. They are
+grouped as the Examples section groups them, each group titled `Examples: <group>`, with the packages last, and opened
+as they are in the repository, with nothing added. One the playground can't run is in the menu all the same, with
+`readOnly`, why it can't: what `whyNotInPlayground` says of its code (another host, a package from the index, or what
+only the console host gives a program, such as files, [#2759](https://github.com/nanyx-lang/nanyx/issues/2759)); for
+one `examples.mjs` gives a `skip`, that the compiler gets it wrong there, naming the issue, as a docs block fenced
+` ```nanyx skip=#<issue> ` isn't run; or, for a package, that its manifest names another host, or that it has several files, which the playground can't open
+yet ([#2844](https://github.com/nanyx-lang/nanyx/issues/2844)), shown each under a `-- file:` line. The menu marks it
+"(read-only)", and choosing it opens its code read-only (`setReadOnly`, `editor.ts`), with the reason in Run's place,
+until another example or a link is opened; it isn't kept as the code last written. Each file's page in the Examples
+section (`src/content.config.ts`) ends with a link that opens it in the playground, or says why the playground can't
+run it. `playground-examples.mjs` reads the
+tour's examples: a block is runnable when it is fenced ` ```nanyx ` with nothing after `nanyx` and has no `-- error` comment, which are the
 blocks [the tests run](./compilation#docs-examples). As those tests do, it adds `import nanyx/text` to each that doesn't
 import it or turn a linter on, after its module declaration or else after its directives; the links under the examples
 on every page open their code so. Choosing an example asks
@@ -93,7 +107,8 @@ runs as (`playgroundCode`) are in `docs/site/playground-code.mjs`, which the tou
 in headless Chromium with Playwright: it waits for the compiler, runs hello world, types two lines of input and
 Ctrl+D, checks that runs keep the output before them, that a compile error links its code, that Share's link opens the
 code without running it, that a bad link opens hello world, that a reload keeps the code, that a tour link opens its
-example in an isolated page, and runs every example in the menu, checking that none fails; and the docs' examples
+example in an isolated page, and runs every example in the menu that isn't read-only, ending its input if it reads any,
+checking that none fails, and that each read-only one opens read-only, its reason in Run's place; and the docs' examples
 (below), running every example on the pages outside the tour, as its "Open in the playground" link opens it, ending its
 input if it reads any, and checking that none fails. Those two run their examples on four playground pages at once,
 each with a compiler of its own, a quarter of them each
@@ -112,11 +127,13 @@ since the docs' pages are swapped in by the client router.
 
 A block opens in the playground when it is runnable (`isRunnable`: fenced ` ```nanyx ` with nothing after it and no
 `-- error` comment), is one file, and needs no host but the playground's. `needsAnotherHost` decides that from the
-block's source when the site is built: a block needs another host when it names one with `::host`; when it depends on a
+block's source when the site is built, through `whyNotInPlayground`, which says why: a block needs another host when it names one with `::host`; when it depends on a
 package from the index, `::install nanyx.json 0.4.0`, which the playground can't download; when it imports, or
 depends on, a module only the console host can run, such as `nanyx.fs`'s or `nanyx.cli/env`; or when it uses,
 outside a comment, a name only the console host's prelude brings in and doesn't declare it itself, such as `args`,
-`exit`, `FileSystem` or `Http` and the members of those contexts. Which names and modules those are is read from the two
+`exit`, `FileSystem` or `Http`, the members of those contexts and the defs attached to them, which are in scope by their
+bare names wherever the context is. A type that isn't a context brings in nothing more: what is attached to `Path`, such
+as `of` and `text`, is reached through it. Which names and modules those are is read from the two
 hosts' preludes, `packages/nanyx.cli.host/src/cli.prelude.nyx` and `packages/nanyx.playground.host/src/playground.prelude.nyx`,
 so a host that brings in more changes it. The [error reference](../standard-tools/errors)'s examples get no bar, as
 each shows its section's error, and nor do those in a standard library page's generated reference, which are its doc
@@ -262,7 +279,7 @@ downloads it from the release named by `playgroundRelease` in `docs/site/playgro
 named, and unpacks it into `public/playground/compiler`, so the site serves the compiler at `/playground/compiler/`;
 `compiler.js` fetches its files from beside itself, so it works from there. Moving the playground on to a newer
 release is changing that line, after the release is published: a build that names a release without the asset fails.
-It names the latest release, 0.43.0. A release is due whenever the tour uses something the named release can't compile: the page test's run of every example fails until one is out and named here. When it is `null`, the build unpacks nothing and the page says its
+It names the latest release, 0.44.1. A release is due whenever the tour uses something the named release can't compile: the page test's run of every example fails until one is out and named here. When it is `null`, the build unpacks nothing and the page says its
 compiler isn't on the site. To build the site with a compiler you built
 yourself, set `NANYX_BROWSER_ZIP` to its zip.
 

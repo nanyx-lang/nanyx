@@ -68,6 +68,16 @@
   color: hsl(var(--muted-foreground));
 }
 
+/* Why an example the playground shows read-only can't run, in Run's place. */
+.pg-read-only {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+.pg-read-only[hidden] {
+  display: none;
+}
+
 .pg-release {
   margin-left: auto;
   color: hsl(var(--muted-foreground));

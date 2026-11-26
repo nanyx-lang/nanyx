@@ -272,7 +272,7 @@ module VersionSolver =
         let listing = state.Listing package |> Array.ofList
         let at = listing |> Array.findIndex (fun candidate -> candidate.Version = version)
         let same (name: string) (requirement: VersionRequirement) (candidate: SolverVersion) =
-            candidate.Dependencies |> List.exists (fun (other, written) -> other = name && written.Minimum = requirement.Minimum)
+            candidate.Dependencies |> List.exists (fun (other, written) -> other = name && written.Minimum = requirement.Minimum && written.Exact = requirement.Exact)
         listing.[at].Dependencies
         |> List.filter (fun (name, _) -> name <> package)
         |> List.choose (fun (name, requirement) ->

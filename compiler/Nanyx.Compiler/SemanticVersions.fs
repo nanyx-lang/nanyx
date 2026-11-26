@@ -61,10 +61,13 @@ type SemanticVersion =
 /// Which versions of a package a dependency accepts, as a manifest writes it: `1.2` or `1.2.0`, any version
 /// compatible with that one. A compatible version is at least it, with the same major version; below 1.0.0, where
 /// any release can break, with the same minor version too. A pre-release is accepted only when the requirement names
-/// a pre-release of the same version.
+/// a pre-release of the same version. A requirement can also be for one version only, `=1.2.0`, which no manifest writes:
+/// what a version of a package the compiler ships asks of the others it ships (see `Resolution`).
 type VersionRequirement =
-    { /// The oldest version accepted.
+    { /// The oldest version accepted, and the only one when `Exact`.
       Minimum: SemanticVersion
+      /// Whether only `Minimum` is accepted.
+      Exact: bool
       /// The requirement as it is written.
       Written: string }
 
@@ -117,17 +120,20 @@ module VersionRequirement =
     /// the version with zeros for the rest.
     let tryParse (text: string) : VersionRequirement option =
         match SemanticVersion.tryParse text with
-        | Some version -> Some { Minimum = version; Written = text }
+        | Some version -> Some { Minimum = version; Exact = false; Written = text }
         | None ->
             let found = partial.Match text
             if found.Success then
                 let minor = if found.Groups[2].Success then int found.Groups[2].Value else 0
-                Some { Minimum = { Major = int found.Groups[1].Value; Minor = minor; Patch = 0; PreRelease = [] }; Written = text }
+                Some { Minimum = { Major = int found.Groups[1].Value; Minor = minor; Patch = 0; PreRelease = [] }; Exact = false; Written = text }
             else
                 None
 
     /// The versions compatible with `version`, written as `version` is: `1.2.0`.
-    let at (version: SemanticVersion) : VersionRequirement = { Minimum = version; Written = string version }
+    let at (version: SemanticVersion) : VersionRequirement = { Minimum = version; Exact = false; Written = string version }
+
+    /// `version` only, written `=1.2.0`.
+    let exactly (version: SemanticVersion) : VersionRequirement = { Minimum = version; Exact = true; Written = $"={version}" }
 
     /// Whether `version` satisfies `requirement` (see `VersionRequirement`).
     let accepts (requirement: VersionRequirement) (version: SemanticVersion) : bool =
@@ -138,7 +144,7 @@ module VersionRequirement =
         let preRelease =
             version.PreRelease.IsEmpty
             || (not minimum.PreRelease.IsEmpty && (version.Major, version.Minor, version.Patch) = (minimum.Major, minimum.Minor, minimum.Patch))
-        compatible && version >= minimum && preRelease
+        if requirement.Exact then version = minimum else compatible && version >= minimum && preRelease
 
 module CompilerRequirement =
     /// What a package's `nanyx` must be, to finish "must be ...".

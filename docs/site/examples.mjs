@@ -14,7 +14,9 @@ export const EXAMPLES_SOURCE_URL = "https://github.com/nanyx-lang/nanyx/blob/mai
 export const EXAMPLES_OVERVIEW_SLUG = "all-examples";
 
 /**
- * @typedef {{ file: string; slug: string; title: string; description: string }} Example
+ * @typedef {{ file: string; slug: string; title: string; description: string; skip?: number }} Example
+ * An example the compiler gets wrong in the playground has `skip`, the issue that says so: the playground shows it
+ * read-only, naming the issue, as a docs block fenced ```nanyx skip=#<issue> isn't run.
  * @typedef {{ title: string; description: string; examples: Example[] }} ExampleGroup
  */
 
@@ -49,6 +51,12 @@ export const exampleGroups = [
         description: "Convert between camel, pascal, kebab, snake, title and sentence case.",
       },
       {
+        file: "directives.nyx",
+        slug: "directives",
+        title: "Script directives",
+        description: "A script that turns on a lint rule and sets its formatting with directives before its code.",
+      },
+      {
         file: "regex-matching.nyx",
         slug: "regex-matching",
         title: "Regex matching with custom patterns",
@@ -71,6 +79,12 @@ export const exampleGroups = [
         slug: "constraints",
         title: "Constrained values",
         description: "Protected nominal types whose only constructors check an invariant.",
+      },
+      {
+        file: "money.nyx",
+        slug: "money",
+        title: "A module block",
+        description: "A protected money type in a module block that the rest of its file imports.",
       },
       {
         file: "vendingMachine.nyx",
@@ -206,6 +220,18 @@ export const exampleGroups = [
       },
     ],
   },
+];
+
+/**
+ * The packages in the `examples` directory, each a directory with a manifest and its sources under `src`. The
+ * playground's Examples menu lists them after the files; the Examples section has pages for the files only.
+ *
+ * @type {{ directory: string; title: string; description: string }[]}
+ */
+export const examplePackages = [
+  { directory: "greeter", title: "Greeter", description: "A package of two files, with the official linter turned on." },
+  { directory: "hello.server", title: "Hello server", description: "A package under the HTTP host, which serves its @entry." },
+  { directory: "sleepers", title: "Sleepers", description: "A package whose tasks take turns while they sleep." },
 ];
 
 /** Every example in display order, with its page order and group. */

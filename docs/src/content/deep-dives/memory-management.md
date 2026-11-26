@@ -497,7 +497,9 @@ linked and unlinked without asking whether it is first or last.
 **A block with nothing to free has no region.** Once inlining is done, a function that makes no box, calls no function
 value, and calls only functions that can't make one either has its `__nanyx_region_enter`s and `__nanyx_region_exit`s
 taken out (`CoreIrUnusedRegions`), so a block whose cells are all locals, as a loop is written, allocates nothing when it
-runs ([#2418](https://github.com/nanyx-lang/nanyx/issues/2418)). A block that keeps its region inside such a function has
+runs ([#2418](https://github.com/nanyx-lang/nanyx/issues/2418)). A `__nanyx_region_exit` of a temporary, the block's
+result read nowhere else, leaves the temporary in its place, so that it is still read once
+([#2906](https://github.com/nanyx-lang/nanyx/issues/2906)). A block that keeps its region inside such a function has
 the region around the function's caller as its outer one, which is where its result is promoted to.
 
 **Boxes.** A mutable object is a box laid out as a record of five fields (`CoreIrRegions.boxType`): the table slot of the
@@ -537,7 +539,9 @@ holds whatever the type checker allows, so a hole in the escape check
 ([Memory](../advanced/memory#values-cannot-escape-memory-scope)) would make an object live longer, not be freed while
 it is used, except in the outermost block, whose result has no region to move to.
 
-**Ending a block.** `__nanyx_region_exit` pops the region and `__nanyx_region_end` frees what is on it: it takes a
+**Ending a block.** `__nanyx_region_exit` promotes the block's result, when it can hold a mutable object and there is
+a block around this one, and a result that is a temporary is computed into a local first, since the promotion may not
+read it ([#2906](https://github.com/nanyx-lang/nanyx/issues/2906)). Then it pops the region and `__nanyx_region_end` frees what is on it: it takes a
 reference to every box on the list, so that none is freed or taken off it while it runs, then calls each box's drop
 function, which gives up the references the boxes hold to each other, then frees each box, whatever its count says, and
 the region. A block can't be left without ending it: a crash ends the program, and a workflow's `try` or `return` in a
