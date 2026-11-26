@@ -76,8 +76,9 @@ and run them on their own, on a quiet machine, with `--filter "Category=Timing"`
 `TestTiming.millisecondsOf` (`TestTiming.fs`, which each test project that times anything compiles), which fails unless
 the test is marked `[<Trait("Category", "Timing")>]`. Where a test can compare an amount of work instead of time, it
 does: a WebAssembly program's fuel (`WasmProgram.Work`), which counts the instructions a call runs, the type
-checker's full solves (`Solving.countingFullSolves`), or the tokens the parser reads (`ParseState.TokensRead`). Those
-are in no category.
+checker's full solves (`Solving.countingFullSolves`), the tokens the parser reads (`ParseState.TokensRead`), or, for a
+function with no count of its own, the bytes it allocates on its thread (`TestSupport.allocatesLinearly`). Those are in
+no category.
 
 The playground host's runner is tested in headless Chromium, with Playwright (`npm install playwright` and
 `npx playwright install chromium` where they aren't installed):
