@@ -27,12 +27,6 @@ let private runIn (directory: string) (options: string list) (source: string) =
         StandardOutput = outcome.StandardOutput.ReplaceLineEndings "\n"
         StandardError = outcome.StandardError.ReplaceLineEndings "\n" }
 
-/// Asserts that `outcome` ran cleanly and printed `expected`.
-let private assertPrinted (expected: string) (outcome: RunOutcome) =
-    Assert.Equal("", outcome.StandardError)
-    Assert.Equal(expected.ReplaceLineEndings "\n", outcome.StandardOutput)
-    Assert.Equal(0, outcome.ExitCode)
-
 [<Fact>]
 let ``A file is read line by line, without its line breaks`` () =
     use directory = new TempDirectory()

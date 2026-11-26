@@ -32,16 +32,12 @@ let private run (source: string) =
             StandardError = outcome.StandardError.ReplaceLineEndings "\n" }
     let outcome = runWith []
     let yielding = runWith [ "--yield-at-every-wait" ]
-    Assert.Equal(outcome.StandardOutput, yielding.StandardOutput)
-    Assert.Equal(outcome.StandardError, yielding.StandardError)
-    Assert.Equal(outcome.ExitCode, yielding.ExitCode)
+    // Neither run is the one expected, so the message says which gave what.
+    let gave (run: RunOutcome) = run.StandardOutput, run.StandardError, run.ExitCode
+    Assert.True(
+        (gave outcome = gave yielding),
+        $"The run gave %A{gave outcome}, and with --yield-at-every-wait %A{gave yielding}")
     outcome
-
-/// Asserts that `outcome` ran cleanly and printed `expected`.
-let private assertPrinted (expected: string) (outcome: RunOutcome) =
-    Assert.Equal("", outcome.StandardError)
-    Assert.Equal(expected.ReplaceLineEndings "\n", outcome.StandardOutput)
-    Assert.Equal(0, outcome.ExitCode)
 
 /// The test server's answer: `/hello` says hello with a header of its own, `/echo` gives back what it was sent, and
 /// anything else is not found.
@@ -111,7 +107,9 @@ let ``A request's timeout is a time, and a plain number is not one`` () =
     use server = new TestServer(echo)
     run $"""match http.send(Request.of(#get, "{server.Url}/hello") with timeout = 2s)
   | #some(response) -> println(response.body)
-  | _ -> println("no answer")
+  | #timeout -> println("no answer: timeout")
+  | #connectionFailed(why) -> println("no answer: connection failed {why}")
+  | _ -> println("no answer: other")
 """
     |> assertPrinted "Hello!\n"
     let outcome = run $"""def request = Request.of(#get, "{server.Url}/hello") with timeout = 2000
