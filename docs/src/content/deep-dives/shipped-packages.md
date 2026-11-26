@@ -25,7 +25,7 @@ packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
 
 - **Shipped packages are source directories.** `packages/` at the repository root holds them, each named for its
   package, with its manifest at the compiler's version and its sources under `src`: `packages/nanyx.cli.host`,
-  `packages/nanyx.cli`, `packages/nanyx.fs`, `packages/nanyx.http`, `packages/nanyx.http.host`, and the
+  `packages/nanyx.cli`, `packages/nanyx.fs`, `packages/nanyx.http`, `packages/nanyx.http.host`, `packages/nanyx.test.host`, and the
   others in `packages/`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the

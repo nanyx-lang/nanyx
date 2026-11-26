@@ -354,7 +354,14 @@ module Compiler =
                 match WorkflowDesugaring.desugarWithDiagnostics (importedKeywordKinds (importsOf moduleBlocks items)) items with
                 | _, (_ :: _ as errors), _, _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
                 | desugaredAst, [], memberPlaces, lowered, delayCalls ->
-                    Attributes.applyAttributes host desugaredAst
+                    // A test build's program files, but its root, run their tests through the dispatcher it gives
+                    // them, and have no entry point.
+                    let testBuild =
+                        match origin, checkedModules.Package with
+                        | SourceFile path, Some ({ TestRoot = Some root } as package) ->
+                            PackageModules.isProgramFile package path && not (PackageModules.samePath path root)
+                        | _ -> false
+                    Attributes.applyAttributes host testBuild desugaredAst
                     |> Result.map (fun (desugared, entries, components) ->
                         // A module's statements run as an entry point of their own (see `Scripts`).
                         let desugared, script =
@@ -719,7 +726,7 @@ module Compiler =
                         | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
                         | _ -> true)
                     |> ModuleLinking.distinctDefinitions
-                    |> ModuleLinking.reachedItems instances own ((merged.ComponentExports |> List.map _.Definition) @ (merged.Tests |> List.map _.Definition))
+                    |> ModuleLinking.reachedItems instances own (merged.ComponentExports |> List.map _.Definition)
                 // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
                 // alias), each meaning the definition the environment settled on (an explicit import's over
                 // the prelude's), less the names the module declares at the top level itself.

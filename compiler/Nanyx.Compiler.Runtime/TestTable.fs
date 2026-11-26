@@ -11,17 +11,15 @@ type ListedTest =
       Line: int
       Column: int }
 
-    /// Its full name, `` geometry.`adds points` ``.
+    /// Its full name, the module's and its own, as they are declared: `geometry.adds points`.
     member this.FullName = $"{this.Module}.{this.Name}"
 
 module TestTable =
     /// The name of the section, as `WasmBinary.testTableName` names it.
     let sectionName = "nanyx.tests"
 
-    /// The name of the export that runs the test at `index`, as `Transpiler.Wasm.CodeGen.testExport` names it.
-    let exportName (index: int) = $"test#{index}"
-
-    /// The tests the module in the binary format `wasm` lists, in the order of their indexes; none if it lists none.
+    /// The tests the module in the binary format `wasm` lists, each at the index its test build's entry point runs it at
+    /// (see `NyxCompiler.Package.testRootSource`); none if it lists none.
     let read (wasm: byte array) : ListedTest list =
         match SpanTable.customSection sectionName wasm with
         | None -> []

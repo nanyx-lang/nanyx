@@ -22,6 +22,32 @@ module Attributes =
     /// `` @test def `adds points` = { ... } ``.
     let testAttribute = "test"
 
+    /// The def a test build adds to each of its program's modules that has tests, which the build's root calls to run
+    /// one: exported, `[Console, Random] int -> ()`, requiring the contexts the test host provides (`Hosts.testContexts`),
+    /// it runs the module's test at the index it is given, in the order they are written. No other build has it.
+    let testDispatcher = "__tests"
+
+    /// `export def __tests: [Console, Random] int -> () = { index -> if index == 0 then t0() else ... else () }` for the tests
+    /// `tests`, each with where it is written, which is where its part of the def is (see `testDispatcher`).
+    let private dispatcherOf (tests: (string * SourceSpan) list) : TopLevelItem =
+        let index = "index"
+        let span = snd tests.Head
+        let body =
+            List.foldBack
+                (fun (position, (test, at)) otherwise ->
+                    let expr kind = Expression.at at kind
+                    let isPosition = expr (BinaryOp("==", None, expr (IdentifierExpr index), expr (LiteralExpr(IntLit(bigint (position: int))))))
+                    expr (IfExpr(isPosition, expr (FunctionCall(test, None, [])), otherwise)))
+                (List.indexed tests)
+                (Expression.at span UnitExpr)
+        // Its type is written, not inferred: a def made up here and left unannotated loses the contexts its tests are
+        // inferred to require, and the backend then finds `Console`'s members out of scope in it (NYX0302). The test
+        // host's contexts are the most a test may require (see `TestChecks`), so writing them all costs nothing.
+        let typeExpr kind = TypeExpr.at span kind
+        let contexts = Hosts.testContexts |> List.map (TypeName >> typeExpr)
+        let signature = typeExpr (TypeWithContext(contexts, typeExpr (TypeFunc(typeExpr (TypeName "int"), typeExpr TypeUnit))))
+        TopLevelItem.at span (Def (ValueDef(true, testDispatcher, Some signature, Expression.at span (Lambda([ index, None ], body, false)))))
+
     /// The attribute that marks an exported definition as one a component built from the program exports:
     /// `@component export def area: Shape -> float = ...`, in the WIT interface its module names (see
     /// `ComponentInterface`).
@@ -402,8 +428,10 @@ module Attributes =
     /// console host for a file in no package. A package with no host is a library, so an `@entry` in it is an error. With the module, each entry point (see `EntryPoint`) and each def marked `@component`. An attribute before
     /// a member of a context declaration is checked here too, and stays where it is (see `fieldAttributeErrors`), as is
     /// one in a block (see `statementAttributeErrors`). `@allow` is for the linters: it is checked and left out (see
-    /// `withoutAllows`).
-    let applyAttributes (host: Host option) (module': Module) : Result<Module * EntryPoint list * ComponentDefs, Diagnostic list> =
+    /// `withoutAllows`). `@test` marks a test, which is left as it is and given back by name, with where it is written; in
+    /// a test build, `testBuild`, a module with tests also gets its `testDispatcher`, and an `@entry` is a def like any
+    /// other.
+    let applyAttributes (host: Host option) (testBuild: bool) (module': Module) : Result<Module * EntryPoint list * ComponentDefs, Diagnostic list> =
         // The defs marked `@component` and `@import`, each with where it is written, as `loop` finds them.
         let components = ResizeArray<string * SourceSpan>()
         let imports = ResizeArray<string * SourceSpan>()
@@ -478,6 +506,9 @@ module Attributes =
             | Kind (Attribute(name, Some argument)) :: rest when name = entryAttribute ->
                 let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
+            // A test build runs the program's tests, from its root, rather than the program.
+            | Kind (Attribute(attributeName, None)) :: (Kind (Def _) as def) :: rest when attributeName = entryAttribute && testBuild ->
+                loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ errors)
             | Kind (Attribute(attributeName, _)) as attribute :: (Kind (Def (ValueDef(_, name, _, _))) as def) :: rest when attributeName = entryAttribute && host.IsNone ->
                 let error =
                     Diagnostics.at
@@ -511,5 +542,6 @@ module Attributes =
                 let entryImport = match host with Some host when not entries.IsEmpty || provided.Count > 0 -> [ hostImport host ] | _ -> []
                 let wrappers = provided |> Seq.map fst |> List.ofSeq
                 let components = { Exports = List.ofSeq components; Imports = List.ofSeq imports; Provided = provided |> Seq.map snd |> List.ofSeq; Tests = List.ofSeq tests }
-                Ok (entryImport @ items @ wrappers @ List.map snd entries, List.map fst entries, components)
+                let dispatcher = if testBuild && tests.Count > 0 then [ dispatcherOf (List.ofSeq tests) ] else []
+                Ok (entryImport @ items @ wrappers @ dispatcher @ List.map snd entries, List.map fst entries, components)
             | errors -> Error errors

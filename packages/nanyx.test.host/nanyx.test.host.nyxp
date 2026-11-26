@@ -1,0 +1,11 @@
+(
+  package = (
+    name = "nanyx.test.host"
+    version = "0.48.0"
+    repository = "nanyx-lang/nanyx"
+    nanyx = "=0.48.0"
+    sources = ["src/**/*.nyx"]
+    host = (root = "test.host", prelude = "test.prelude")
+  )
+  dependencies = [(package = "nanyx.cli", version = "0.48.0")]
+)
