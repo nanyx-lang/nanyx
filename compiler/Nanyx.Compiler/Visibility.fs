@@ -174,6 +174,14 @@ let internal blockIsolationAt (state: InferState) (name: string) (symbolId: Symb
                     [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is defined outside module '{blockName}', which sees only its own definitions and what it imports"
                       |> Diagnostics.about name
                       |> Diagnostics.withRelated symbol.Declaration $"'{name}' is declared here" ]
+            // At the top level, a block's name for what another block gives is one only an import there brings in.
+            | None when name <> symbol.Name && state.BlockAliases |> Map.tryFind name = Some symbol.Name && not (broughtInHere ()) ->
+                let blockName =
+                    state.BlockImports
+                    |> List.tryPick (fun blockImport ->
+                        if blockImport.Names.ContainsKey name then blockAround state.ModuleBlocks blockImport.Import.Span |> Option.map fst else None)
+                    |> Option.defaultValue ""
+                [ Diagnostics.at DiagnosticCodes.OutsideModuleBlock span $"'{name}' is only imported in module '{blockName}', and a module block's imports are its own: import it here too" |> Diagnostics.about name ]
             | _ -> []
         | None -> []
 
