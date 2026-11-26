@@ -9,12 +9,12 @@ package: nanyx.regex 0.1.1
 [package index](https://github.com/nanyx-lang/packages) from [nanyx-lang/regex](https://github.com/nanyx-lang/regex),
 whose README says how its engine works. An application lists it in its manifest's `dependencies`,
 `(package = "nanyx.regex", version = "0.1")`, which `nanyx install nanyx.regex` adds, and a script names the version it
-uses in a `::dependency nanyx.regex 0.1.1` line. Import `nanyx.regex/regex`, and call its functions through the type
+uses in a `::install nanyx.regex 0.1.1` line. Import `nanyx.regex/regex`, and call its functions through the type
 they are attached to, `Regex.find`, or pipe a text into them, `text \Regex.find(digits)`. It is pure, so it needs no
 context. The [cookbook](../cookbook/regular-expressions) shows it at work.
 
 ```nanyx
-::dependency nanyx.regex 0.1.1
+::install nanyx.regex 0.1.1
 
 import nanyx.regex/regex
 
@@ -32,7 +32,7 @@ A pattern that is wrong is a `RegexError`, with the column it goes wrong at and 
 can be checked before it is used:
 
 ```nanyx
-::dependency nanyx.regex 0.1.1
+::install nanyx.regex 0.1.1
 
 import nanyx.regex/regex
 
