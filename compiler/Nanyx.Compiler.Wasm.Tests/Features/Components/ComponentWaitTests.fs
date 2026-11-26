@@ -14,7 +14,7 @@ let ``Another task sleeps while a request's body is written, and wakes before th
     let engine, store, instance = instantiateCoreWith host.Implement (consoleComponentCore main)
     use _ = engine
     use _ = store
-    Assert.Equal(0, instance.GetFunction<int>("wasi:cli/run@0.3.0#run").Invoke())
+    host.Run instance
     let sleep = Assert.Single(host.WaitStarts.Keys)
     let writer = Assert.Single(host.BodyWriters)
     // The sleep starts while the body's write is blocked, not once the host has taken it, and wakes first.

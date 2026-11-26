@@ -44,7 +44,7 @@ let ``A library component's exports are called with no run, which it doesn't exp
     use _ = store
     Assert.Equal(6.0, instance.GetFunction<double, double, double>("acme:geo/shapes@0.1.0#area").Invoke(2.0, 3.0))
     Assert.Equal(14L, instance.GetFunction<int64, int64>("acme:geo/names@0.1.0#twice").Invoke(7L))
-    Assert.Null(instance.GetFunction "wasi:cli/run@0.3.0#run")
+    Assert.Null(instance.GetFunction "[async-lift]wasi:cli/run@0.3.0#run")
 
 [<Fact>]
 let ``A library component under a host with no world for libraries is an error that says so`` () =

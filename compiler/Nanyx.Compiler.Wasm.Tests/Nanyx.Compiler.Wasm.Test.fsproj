@@ -98,6 +98,7 @@
     <Compile Include="Features\Components\ProvidedExportTests.fs" />
     <Compile Include="Features\Components\ComponentCancellationTests.fs" />
     <Compile Include="Features\Components\ComponentWaitTests.fs" />
+    <Compile Include="Features\Components\ComponentCallbackTests.fs" />
     <Compile Include="Features\Embedding\EmbedderOptionsTests.fs" />
     <Compile Include="Features\Profiling\RunProfileTests.fs" />
     <Compile Include="Features\Docs\ErrorReferenceTests.fs" />

@@ -850,7 +850,8 @@ type private FakeWaitable = { Deadline: int64; Event: int; Value: int }
 /// built-ins, and a `wasi:http` client whose requests' bodies the host takes 50 ms after each write and which answers
 /// every request with an error 100 ms after it is sent. Its clock moves only when the module waits: a wait for a set
 /// takes the waitable in it whose time comes first, and moves the clock to that time. It traps where the canonical
-/// ABI does.
+/// ABI does. It runs `run` as a host runs one lifted with the callback ABI (`Run`): while `run` or its callback returns
+/// WAIT, it gives the callback the next event of the set.
 type FakeWasiHost() =
     // The canonical ABI's codes: a subtask's states, the events, and what an async built-in gives when it blocks.
     let started = 1
@@ -858,7 +859,10 @@ type FakeWasiHost() =
     let cancelledBeforeReturned = 4
     let subtaskEvent = 1
     let streamWriteEvent = 3
+    let taskCancelledEvent = 6
     let blocked = -1
+    let exit = 0
+    let wait = 2
     let mutable now = 0L
     let mutable nextHandle = 1
     let waitables = Collections.Generic.Dictionary<int, FakeWaitable>()
@@ -912,6 +916,12 @@ type FakeWasiHost() =
     member val BodyWriters = Collections.Generic.List<int>()
     /// Each waitable whose event was delivered, in order.
     member val Delivered = Collections.Generic.List<int>()
+    /// How many times the module blocked in `[waitable-set-wait]`, rather than returning WAIT.
+    member val BlockingWaits = 0 with get, set
+    /// What `run` gave with `task.return`, if it has.
+    member val Returned: int option = None with get, set
+    /// How many times `run` returned WAIT, or its callback did.
+    member val Waited = 0 with get, set
     member _.Now = now
 
     member host.Implement(import: Wasmtime.FunctionImport) : Wasmtime.Function.UntypedCallbackDelegate option =
@@ -935,6 +945,7 @@ type FakeWasiHost() =
                 | set -> joined.[waitable] <- set))
         | "$root", "[waitable-set-wait]" ->
             Some(Wasmtime.Function.UntypedCallbackDelegate(fun caller arguments results ->
+                host.BlockingWaits <- host.BlockingWaits + 1
                 let waitable, ready = nextEvent (arguments.[0].AsInt32())
                 host.Delivered.Add waitable
                 let memory = caller.GetMemory("memory")
@@ -952,6 +963,10 @@ type FakeWasiHost() =
                 delivered.Add subtask |> ignore
                 results.[0] <- Wasmtime.ValueBox.op_Implicit cancelledBeforeReturned))
         | "$root", "[subtask-drop]" -> Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ -> host.Dropped.Add(arguments.[0].AsInt32())))
+        | "[export]wasi:cli/run@0.3.0", "[task-return]run" ->
+            Some(Wasmtime.Function.UntypedCallbackDelegate(fun _ arguments _ ->
+                if host.Returned.IsSome then failwith "task.return called twice"
+                host.Returned <- Some(arguments.[0].AsInt32())))
         | ("wasi:http/types@0.3.0" | "wasi:http/client@0.3.0"), name ->
             Some(Wasmtime.Function.UntypedCallbackDelegate(fun caller arguments results ->
                 let memory = caller.GetMemory("memory")
@@ -984,3 +999,19 @@ type FakeWasiHost() =
                     results.[0] <- Wasmtime.ValueBox.op_Implicit (subtask 100_000_000L)
                 | _ -> ()))
         | _ -> None
+
+    /// Runs `run` of `instance` to its end, as a host does one lifted with the callback ABI, and checks that it gave
+    /// `ok`; after `cancelAfter` waits, it gives the callback TASK_CANCELLED rather than the set's next event.
+    member host.Run(instance: Wasmtime.Instance, ?cancelAfter: int) =
+        let callback = instance.GetFunction<int, int, int, int>("[callback][async-lift]wasi:cli/run@0.3.0#run")
+        let mutable code = instance.GetFunction<int>("[async-lift]wasi:cli/run@0.3.0#run").Invoke()
+        while code &&& 0xF = wait do
+            host.Waited <- host.Waited + 1
+            code <-
+                if cancelAfter = Some host.Waited then callback.Invoke(taskCancelledEvent, 0, 0)
+                else
+                    let waitable, ready = nextEvent (code >>> 4)
+                    host.Delivered.Add waitable
+                    callback.Invoke(ready.Event, waitable, ready.Value)
+        Assert.Equal(exit, code)
+        Assert.Equal(Some 0, host.Returned)

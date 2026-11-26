@@ -15,8 +15,18 @@ open Transpiler.Wasm.WasmRuntime
 /// The version of WASI 0.3 the module imports and exports, which every 0.3 host accepts.
 let wasiVersion = "0.3.0"
 
-/// The name the module exports `CliRun` under: `wasi:cli/run`'s `run`, which returns `result`, lifted synchronously.
-let runExport = $"wasi:cli/run@{wasiVersion}#run"
+/// The interface whose `run` the module exports as `CliRun`.
+let private runInterface = $"wasi:cli/run@{wasiVersion}"
+
+/// The name the module exports `CliRun` under: `wasi:cli/run`'s `run`, which returns `result`, lifted async with a
+/// callback (see `ComponentCallback`).
+let runExport = $"[async-lift]{runInterface}#run"
+
+/// The name of `run`'s callback, which the host calls with each event while `run` waits.
+let runCallback = $"[callback]{runExport}"
+
+/// `run`'s `task.return`, which gives its `result`: 0, `ok`.
+let runTaskReturn = "$__nanyx_cli_task_return"
 
 /// The interface whose `handle` the module exports as `HttpHandler`.
 let private handlerInterface = $"wasi:http/handler@{wasiVersion}"
@@ -106,7 +116,9 @@ let imports (entry: ComponentEntry) =
     [ yield! streamImports Stdout
       yield! streamImports Stderr
       match entry with
-      | CliRun
+      | CliRun ->
+          $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
+          $"""  (import "[export]{runInterface}" "[task-return]run" (func {runTaskReturn} (param i32)))"""
       | Library -> $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
       | HttpHandler -> yield! handlerImports
       $"""  (import "$root" "[waitable-set-new]" (func {Waitables.setNew} (result i32)))"""
@@ -117,6 +129,18 @@ let imports (entry: ComponentEntry) =
 
 /// What an async built-in returns when it hasn't finished: the canonical ABI's BLOCKED.
 let private blocked = -1
+
+/// What the scheduler and the callback share with `wait` (see `waitExtern`) while `run` is lifted with the callback ABI:
+/// the event the callback was given, for `wait` to give the host's code (its code, 0 for none, and its two values); the
+/// set that `wait` was asked to wait on when the scheduler can return to the host instead (0 for none); and whether it
+/// can, which it can only when no other code is running.
+module Callback =
+    let pendingCode = "$__nanyx_cb_pending_code"
+    let pendingFirst = "$__nanyx_cb_pending_first"
+    let pendingSecond = "$__nanyx_cb_pending_second"
+    let waitSet = "$__nanyx_cb_wait_set"
+    let atTop = "$__nanyx_cb_at_top"
+    let all = [ pendingCode; pendingFirst; pendingSecond; waitSet; atTop ]
 
 /// Waits for the waitable `$handle` in a set of its own, and gives the code its event came with: for a stream write,
 /// how many bytes it took (above the low 4 bits) and whether it went on (the low 4 bits, 0).
@@ -349,12 +373,53 @@ let private argumentExtern = componentExtern "argument" [] (Some ExternValue.I32
 /// trailers' future, and the address and length of its body, which it copies, to write once `handle` has returned.
 let private resultExtern = componentExtern "result" (List.replicate 5 ExternValue.I32) None
 
+/// `wait`, which a component root's wait on its shared waitable set calls in place of `[waitable-set-wait]`, with the
+/// set and where to write the event, and which gives the event's code: 0 (none) when the scheduler is to return to the
+/// host instead, waiting on the set, and give the event to the callback (see `waitFunction`).
+let private waitExtern = componentExtern "wait" [ ExternValue.I32; ExternValue.I32 ] (Some ExternValue.I32)
+
 /// The foreign functions of `Hosts.componentModule` that the module defines for `entry`.
 let externs (entry: ComponentEntry) =
     match entry with
     | CliRun
-    | Library -> []
-    | HttpHandler -> [ argumentExtern; resultExtern ]
+    | Library -> [ waitExtern ]
+    | HttpHandler -> [ waitExtern; argumentExtern; resultExtern ]
+
+/// `wait` (see `waitExtern`), named by `functionName`: the event the callback was given, if it has one that the root
+/// hasn't taken yet; or none, when the scheduler is the one waiting, with nothing else running, and returns to the host
+/// with the set instead of blocking; or else the event `[waitable-set-wait]` waits for. Only `run`'s scheduler, under
+/// the callback ABI, sets `Callback.atTop`, so for any other entry this is `[waitable-set-wait]`.
+let private waitFunction (functionName: Extern -> string) =
+    lines
+        [ for name in Callback.all do
+              $"(global {name} (mut i32) (i32.const 0))"
+          $"(func ${functionName waitExtern} (param $set i32) (param $event i32) (result i32)"
+          "  (local $code i32)"
+          $"  global.get {Callback.pendingCode}"
+          "  local.tee $code"
+          "  if"
+          "    local.get $event"
+          $"    global.get {Callback.pendingFirst}"
+          "    i32.store"
+          "    local.get $event"
+          $"    global.get {Callback.pendingSecond}"
+          "    i32.store offset=4"
+          "    i32.const 0"
+          $"    global.set {Callback.pendingCode}"
+          "    local.get $code"
+          "    return"
+          "  end"
+          $"  global.get {Callback.atTop}"
+          "  if"
+          "    local.get $set"
+          $"    global.set {Callback.waitSet}"
+          "    i32.const 0"
+          "    return"
+          "  end"
+          "  local.get $set"
+          "  local.get $event"
+          $"  call {Waitables.setWait}"
+          ")" ]
 
 /// Where the handler keeps the request and what `result` was given, from `handle`'s call to its end.
 module private HandlerState =
@@ -496,6 +561,7 @@ let functions (entry: ComponentEntry) (functionName: Extern -> string) =
       fdWriteFunction
       procExitFunction entry
       cabiReallocFunction
+      waitFunction functionName
       match entry with
       | CliRun
       | Library -> ()
@@ -504,10 +570,11 @@ let functions (entry: ComponentEntry) (functionName: Extern -> string) =
           writeNoTrailersFunction ]
     |> String.concat "\n"
 
-/// The entry, exported under its name for `entry`: `run` runs the program's start function, if it has one, and returns
-/// `ok` (0), and a program that crashes or exits stops in `proc_exit` instead, with its exit code; `handle` is
-/// `handleFunctions`. A library has none: the root `nanyx build` makes for it only imports modules, so it has no start
-/// function, and each export builds the top-level values it reads when it first reads them.
+/// The entry, exported under its name for `entry`, for a program whose start function, if it has one, never stops (see
+/// `ComponentCallback` for one that does): `run` runs the start function, gives `ok` (0) with `task.return`, and returns
+/// EXIT, so its callback is never called; a program that crashes or exits stops in `proc_exit` instead, with its exit
+/// code. `handle` is `handleFunctions`. A library has none: the root `nanyx build` makes for it only imports modules, so
+/// it has no start function, and each export builds the top-level values it reads when it first reads them.
 let entryFunction (entry: ComponentEntry) (start: string option) =
     match entry with
     | CliRun ->
@@ -517,6 +584,12 @@ let entryFunction (entry: ComponentEntry) (start: string option) =
               | Some name -> $"  call ${name}"
               | None -> ()
               "  i32.const 0"
+              $"  call {runTaskReturn}"
+              // EXIT: the task is done.
+              "  i32.const 0"
+              ")"
+              $"(func $__nanyx_cli_callback (export \"{runCallback}\") (param $event i32) (param $first i32) (param $second i32) (result i32)"
+              "  unreachable"
               ")" ]
     | HttpHandler -> handleFunctions start
     | Library -> ""
