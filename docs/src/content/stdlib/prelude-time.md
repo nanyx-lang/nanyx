@@ -27,15 +27,17 @@ dimension Time
 ```
 
 How long something takes: a duration, stored in nanoseconds in any number type, so `500ms` is
-a `Time(int)` of 500,000,000 and `0.5s` a `Time(float)`. A point in time is not one.
+a `Time(int)` of 500,000,000 and `0.5s` a `Time(float)`, and written in seconds when no other
+unit fits, so zero is `0s`. A point in time is not one.
 
 ## `ns`
 
 ```nanyx fragment
-@baseUnit unit ns: Time
+@storageUnit unit ns: Time
 ```
 
-A nanosecond, `Time`'s base unit: every other unit of it is a whole number of them.
+A nanosecond, `Time`'s default storage unit: every other unit of it is a whole number of
+them. It is set by hand, as an `Instant` counts nanoseconds.
 
 ## `us`
 
@@ -56,10 +58,10 @@ A millisecond, 1,000 microseconds.
 ## `s`
 
 ```nanyx fragment
-unit s: Time = 1_000ms
+@baseUnit unit s: Time = 1_000ms
 ```
 
-A second, 1,000 milliseconds.
+A second, 1,000 milliseconds, and `Time`'s default display unit.
 
 ## `min`
 

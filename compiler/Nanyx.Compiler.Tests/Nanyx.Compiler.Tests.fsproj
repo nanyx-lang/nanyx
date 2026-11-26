@@ -42,6 +42,7 @@
     <Compile Include="Features\Chars\CharLiteralTests.fs" />
     <Compile Include="Features\Units\UnitLiteralTests.fs" />
     <Compile Include="Features\Units\UnitDeclarationTests.fs" />
+    <Compile Include="Features\Units\StorageAndDisplayUnitTests.fs" />
     <Compile Include="Features\Units\DimensionTypeTests.fs" />
     <Compile Include="Features\Units\MeasuredArithmeticTests.fs" />
     <Compile Include="Features\Units\MeasuredDisplayTests.fs" />

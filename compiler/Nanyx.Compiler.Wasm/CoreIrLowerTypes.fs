@@ -272,7 +272,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     // A `Map`'s keys are in the order a record's fields are stored in.
     | TyRecord(fields, _) -> IrRecord(fields |> Map.toList |> sortFields |> List.map (fun (name, fieldTy) -> name, toIrType fieldTy))
     | TyNominal _ as nominal -> toIrType (RecursiveNominals.underlying nominal)
-    // A measured value is its storage, in its dimension's base unit (see `Units`).
+    // A measured value is its storage, in its dimension's default storage unit (see `Units`).
     | TyMeasure(_, storage) -> toIrType storage
     | TyApply("list", [ element ]) -> IrList(toIrType element)
     // A map and a set are laid out as their stores (see `Maps.storeOf` and `Sets.storeOf`).

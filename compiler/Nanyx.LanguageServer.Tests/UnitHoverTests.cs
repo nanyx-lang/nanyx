@@ -12,7 +12,7 @@ public sealed class UnitHoverTests : LanguageServerTestBase
 {
     /// <summary>What every hover on the prelude's <c>Time</c> says after its declaration.</summary>
     private const string TimeUnits =
-        "Units: `ns` (base), `us = 1_000ns`, `ms = 1_000us`, `s = 1_000ms`, `min = 60s`, `hr = 60min`, `d = 24hr`\n\nWrite a value as `500ms`.";
+        "Units: `ns` (storage), `us = 1_000ns`, `ms = 1_000us`, `s = 1_000ms` (display), `min = 60s`, `hr = 60min`, `d = 24hr`\n\nWrite a value as `500ms`.";
 
     [Fact]
     public async Task A_dimension_in_a_type_lists_its_units_from_the_smallest()
@@ -71,18 +71,23 @@ public sealed class UnitHoverTests : LanguageServerTestBase
             """);
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        const string lengthUnits = "Units: `mm = 0.001m`, `m` (base), `km = 1_000m`\n\nWrite a value as `500.0mm`.";
+        const string lengthUnits = "Units: `mm = 0.001m` (storage), `m` (display), `km = 1_000m`\n\nWrite a value as `500mm`.";
         var dimension = await HoverAt(uri, 0, 12);
         Assert.Equal($"```nanyx\ndimension Length\n```\n\n{lengthUnits}", dimension?.Contents.MarkupContent?.Value);
 
-        var baseUnit = await HoverAt(uri, 2, 16);
+        var displayUnit = await HoverAt(uri, 2, 16);
         Assert.Equal(
-            $"```nanyx\n@baseUnit unit m: Length\n```\n\nThe base unit of `Length`, which its values are stored in.\n\n{lengthUnits}",
-            baseUnit?.Contents.MarkupContent?.Value);
+            $"```nanyx\n@baseUnit unit m: Length\n```\n\nThe default display unit of `Length`: `1_000mm`.\n\n{lengthUnits}",
+            displayUnit?.Contents.MarkupContent?.Value);
 
-        var multiple = await HoverAt(uri, 4, 6);
+        var storageUnit = await HoverAt(uri, 4, 6);
         Assert.Equal(
-            $"```nanyx\nunit mm: Length = 0.001m\n```\n\nA unit of `Length`: `1/1000m`.\n\n{lengthUnits}",
+            $"```nanyx\nunit mm: Length = 0.001m\n```\n\nThe default storage unit of `Length`, which its values are stored as a number of.\n\n{lengthUnits}",
+            storageUnit?.Contents.MarkupContent?.Value);
+
+        var multiple = await HoverAt(uri, 3, 6);
+        Assert.Equal(
+            $"```nanyx\nunit km: Length = 1_000m\n```\n\nA unit of `Length`: `1_000_000mm`.\n\n{lengthUnits}",
             multiple?.Contents.MarkupContent?.Value);
 
         // The dimension in a type of the module's own.
@@ -114,7 +119,7 @@ public sealed class UnitHoverTests : LanguageServerTestBase
 
         // Each hint is what a value of its dimension is written as above.
         Assert.EndsWith("Write a value as `500ms`.", (await HoverAt(uri, 10, 5))?.Contents.MarkupContent?.Value);
-        Assert.EndsWith("Write a value as `500.0mm`.", (await HoverAt(uri, 11, 5))?.Contents.MarkupContent?.Value);
+        Assert.EndsWith("Write a value as `500mm`.", (await HoverAt(uri, 11, 5))?.Contents.MarkupContent?.Value);
         Assert.EndsWith("Write a value as `500.0kmh`.", (await HoverAt(uri, 12, 5))?.Contents.MarkupContent?.Value);
     }
 
