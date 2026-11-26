@@ -5,8 +5,8 @@ open Parser.Program
 /// Custom patterns (see the custom patterns page and `PatternSyntax`): the patterns in scope in a module, found by the
 /// tags they return, and the checks on the capitalised tags the module writes.
 module internal CustomPatterns =
-    /// Where a pattern in scope is declared: in the module itself, where its type is written, or in a module it
-    /// imports, by the symbol of its def.
+    /// Where a pattern in scope is declared: in the module itself, at its top level or in a block, where its type is
+    /// written, or in a module it imports, by the symbol of its def.
     type Origin =
         | Own of SourceSpan
         | Imported of SymbolId option
@@ -17,11 +17,19 @@ module internal CustomPatterns =
           Shape: PatternSyntax.Shape
           Origin: Origin }
 
-    /// The patterns in scope, by the tags they return, each tag's own first, and the names more than one import
-    /// brings in, with the modules each comes from as `module.name`.
+    /// A pattern declared in a block, as a local def is, with where it is in scope: from its declaration, whose body
+    /// returns its tags, to the end of its block.
+    type Local =
+        { Region: SourceSpan
+          Pattern: InScope }
+
+    /// The patterns in scope at the top level, by the tags they return, each tag's own first; the names more than one
+    /// import brings in, with the modules each comes from as `module.name`; and the patterns blocks declare, outer
+    /// blocks' first, which are in scope only within their blocks (see `at`).
     type Scope =
         { ByTag: Map<Identifier, InScope list>
-          AmbiguousImports: Map<Identifier, string list> }
+          AmbiguousImports: Map<Identifier, string list>
+          Locals: Local list }
 
     /// The patterns the module declares itself, as top-level defs (see `PatternSyntax`).
     let private ownPatterns (items: Module) : InScope list =
@@ -31,6 +39,25 @@ module internal CustomPatterns =
             | Def(ValueDef(_, name, Some signature, _)) ->
                 PatternSyntax.shapeOf name |> Option.map (fun shape -> { Name = name; Shape = shape; Origin = Own signature.Span })
             | _ -> None)
+
+    /// The patterns the blocks of `items` declare, outer blocks' first and each block's in order.
+    let private localPatterns (items: Module) : Local list =
+        items
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.expressionsWithin
+        |> List.collect (fun expr ->
+            match expr.Kind with
+            | Block statements ->
+                statements
+                |> List.choose (fun statement ->
+                    match statement.Kind with
+                    | DefStatement(_, name, Some signature, _) ->
+                        PatternSyntax.shapeOf name
+                        |> Option.map (fun shape ->
+                            { Region = { expr.Span with Start = statement.Span.Start }
+                              Pattern = { Name = name; Shape = shape; Origin = Own signature.Span } })
+                    | _ -> None)
+            | _ -> [])
 
     /// The patterns in scope in `items`, a module whose imports gave the names in `env`, more than one import giving
     /// those of `ambiguousImports` (see `InferState.AmbiguousImports`).
@@ -50,7 +77,22 @@ module internal CustomPatterns =
           AmbiguousImports =
             ambiguousImports
             |> Map.filter (fun name _ -> (PatternSyntax.shapeOf name).IsSome)
-            |> Map.map (fun _ (_, sources) -> sources) }
+            |> Map.map (fun _ (_, sources) -> sources)
+          Locals = localPatterns items }
+
+    /// `scope` as it is at `span`: with the patterns of the blocks `span` is written in from their declarations on, which
+    /// come before the others that return their tags, as a local def hides another of its name, the innermost and
+    /// latest first.
+    let at (scope: Scope) (span: SourceSpan) : Scope =
+        scope.Locals
+        |> List.filter (fun local -> SourceSpan.contains local.Region span)
+        |> List.fold
+            (fun scope local ->
+                let byTag =
+                    local.Pattern.Shape.Tags
+                    |> List.fold (fun byTag tag -> byTag |> Map.add tag (local.Pattern :: (byTag |> Map.tryFind tag |> Option.defaultValue []))) scope.ByTag
+                { scope with ByTag = byTag })
+            scope
 
     /// What a tag names in `scope`: the one pattern that returns it, the several that do, or none.
     type Resolution =
@@ -98,8 +140,10 @@ module internal CustomPatterns =
         |> Diagnostics.about $"#{tag}"
 
     /// Each capitalised tag written in `items`, with where it is written: in a value, a pattern or a type, but not in a
-    /// pattern's own type, which declares its tags.
-    let private patternTags (items: Module) : (Identifier * SourceSpan) list =
+    /// pattern's own type, which declares its tags, as `locals`' are written within theirs.
+    let private patternTags (locals: Local list) (items: Module) : (Identifier * SourceSpan) list =
+        let inLocalDeclaration span =
+            locals |> List.exists (fun local -> match local.Pattern.Origin with Own declared -> SourceSpan.contains declared span | Imported _ -> false)
         let rec ofItem (item: TopLevelItem) =
             let ownTypes =
                 match item.Kind with
@@ -129,7 +173,7 @@ module internal CustomPatterns =
             (ownTypes |> List.collect typeTags) @ inExpressions
         and typeTags (typeExpr: TypeExpr) =
             TypeExpr.within typeExpr |> List.choose (function { Kind = TypeTag(tag, _); Span = span } -> Some (tag, span) | _ -> None)
-        items |> List.collect ofItem |> List.filter (fst >> PatternSyntax.isPatternTag)
+        items |> List.collect ofItem |> List.filter (fun (tag, span) -> PatternSyntax.isPatternTag tag && not (inLocalDeclaration span))
 
     /// Each of the module's own patterns that returns a tag one declared before it returns.
     let private clashingDeclarations (items: Module) : Diagnostic list =
@@ -149,10 +193,10 @@ module internal CustomPatterns =
     /// each of the module's own patterns that returns a tag another of them returns.
     let check (scope: Scope) (items: Module) : Diagnostic list =
         let atUses =
-            patternTags items
+            patternTags scope.Locals items
             |> List.distinct
             |> List.choose (fun (tag, span) ->
-                match resolve scope tag with
+                match resolve (at scope span) tag with
                 | Found _ -> None
                 | NoPattern -> Some (unknownPattern tag span)
                 | Ambiguous sources -> Some (ambiguousPattern tag span sources))
@@ -405,14 +449,16 @@ module internal CustomPatterns =
             span
             "`_` as a value means \"no match\", which only a custom pattern's body can return"
 
-    /// `items` with each match whose arms use a pattern's tags rewritten to run the patterns (see `rewriteMatch`), and
-    /// each pattern the module declares as the function it is (see `lowerDeclaration`); and the errors for pattern tags
+    /// `items` with each match whose arms use a pattern's tags rewritten to run the patterns in scope at it (see
+    /// `rewriteMatch` and `at`), and each pattern the module declares, at its top level or in a block, as the function it
+    /// is (see `lowerDeclaration`); and the errors for pattern tags
     /// written where a match can't use them, and for `_` as a value outside a pattern's body (see `withoutUnknownNoMatch`).
     let rewrite (scope: Scope) (items: Module) : Module * Diagnostic list =
         let errors = ResizeArray<Diagnostic>()
         let visit (current: Expression) (kind: ExpressionKind) =
             match kind with
             | Match(scrutinees, arms) ->
+                let scope = at scope current.Span
                 arms |> List.collect fst |> List.collect (nestedUses scope) |> List.map nestedPattern |> errors.AddRange
                 let rewritten, argumentErrors = rewriteMatch scope current scrutinees arms
                 errors.AddRange argumentErrors
@@ -421,7 +467,21 @@ module internal CustomPatterns =
                 errors.Add (noMatchOutsidePattern current.Span)
                 kind
             | other -> other
-        let inValue = ExpressionRewrites.mapExpressionKinds visit
+        // A block's patterns are lowered as the top level's are, before the `_` in their bodies is visited.
+        let lowerLocal =
+            ExpressionRewrites.mapExpressionKinds (fun _ kind ->
+                match kind with
+                | Block statements ->
+                    statements
+                    |> List.map (fun statement ->
+                        match statement.Kind with
+                        | DefStatement(isExport, name, Some written, value) when (PatternSyntax.shapeOf name).IsSome ->
+                            let loweredType, loweredBody = lowerDeclaration (PatternSyntax.shapeOf name).Value written value
+                            { statement with Kind = DefStatement(isExport, name, Some loweredType, loweredBody) }
+                        | _ -> statement)
+                    |> Block
+                | other -> other)
+        let inValue value = ExpressionRewrites.mapExpressionKinds visit (lowerLocal value)
         let rec inItem (item: TopLevelItem) =
             match item.Kind with
             | Def(ValueDef(isExport, name, Some written, value)) when (PatternSyntax.shapeOf name).IsSome ->
