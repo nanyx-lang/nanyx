@@ -386,13 +386,14 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         finalState
                         |> recordSymbolType symbol declaredTy
                         |> recordAnnotated symbol expectedDeclaredOpt.IsSome
-                    // Each `_` the def's contexts are applied to is the type its value made it.
-                    let settledType = DefAnnotations.settleContextHoles finalState name typeOpt
+                    // Each `_` the def's contexts are applied to is the type its value made it, and so is one elsewhere
+                    // in its type that the value made a variable the type names.
+                    let settledType = DefAnnotations.settleHoles finalState name typeOpt
                     let typeOpt, contextOpt =
                         match settledType with
                         | Ok settled when settled <> typeOpt ->
-                            let contextOpt = fst (extractDefContexts settled expr)
-                            state <- registerContextRequirement (recordWrittenType name settled state) name contextOpt.Value declaredTypeExprOpt
+                            let contextOpt, settledTypeExprOpt = extractDefContexts settled expr
+                            state <- registerContextRequirement (recordWrittenType name settled state) name contextOpt.Value settledTypeExprOpt
                             settled, contextOpt
                         | _ -> typeOpt, contextOpt
                     let rigidResult =

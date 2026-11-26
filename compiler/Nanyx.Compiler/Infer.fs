@@ -952,12 +952,13 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 finalState
                                 |> recordSymbolType symbol declaredTy
                                 |> recordAnnotated symbol expectedDeclaredOpt.IsSome
-                            // Each `_` the def's contexts are applied to is the type its value made it.
+                            // Each `_` the def's contexts are applied to is the type its value made it, and so is one
+                            // elsewhere in its type that the value made a variable the type names.
                             let typeOpt =
-                                match DefAnnotations.settleContextHoles finalState name typeOpt with
+                                match DefAnnotations.settleHoles finalState name typeOpt with
                                 | Ok settled when settled <> typeOpt ->
-                                    let contexts = (fst (extractDefContexts settled value)).Value
-                                    current <- registerLocalContextRequirement (recordWrittenType name settled current) symbol name contexts declaredTypeExprOpt
+                                    let contexts, settledTypeExprOpt = extractDefContexts settled value
+                                    current <- registerLocalContextRequirement (recordWrittenType name settled current) symbol name contexts.Value settledTypeExprOpt
                                     settled
                                 | Ok _ -> typeOpt
                                 | Error err ->

@@ -38,3 +38,23 @@ dbg(v)
               "1000.0"
               "Length / Time(1.0438413361169103e-8)"
               "" ])
+
+// The result's type is left to inference, and was the def's own fraction at the call, which no instance fixed, so the
+// quotient was printed as `()cm/s` (#2879).
+[<Fact>]
+let ``Run - a quotient of a generic storage whose result type is inferred`` () =
+    let source =
+        """dimension Distance
+
+@baseUnit unit cm: Distance
+
+dimension Time
+
+@baseUnit unit s: Time
+
+def speed: Distance(a), Time(a) -> _ = { d, t -> d / t }
+
+println(speed(100cm, 2s))
+println(speed(100.0cm, 4.0s))
+"""
+    runSource source |> assertRan "50.0cm/s\n25.0cm/s\n"
