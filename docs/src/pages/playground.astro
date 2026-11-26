@@ -1,21 +1,23 @@
 ---
 // The playground: write Nanyx, run it and share it, with the compiler running in the page. Its examples are the
-// tour's runnable ones (`site/playground-examples.mjs`), and its scripts are in `src/lib/playground`.
+// tour's runnable ones and those in the repository's `examples` directory (`site/playground-examples.mjs`), and its
+// scripts are in `src/lib/playground`.
 import Base from "@/layouts/Base.astro";
 import Header from "@/components/Header.astro";
 import SearchDialog from "@/components/SearchDialog";
 import { getAllPages } from "@/lib/nav";
-import { defaultExample, tourExampleGroups } from "../../site/playground-examples.mjs";
+import { defaultExample, repositoryExampleGroups, tourExampleGroups } from "../../site/playground-examples.mjs";
 import "@/styles/playground.css";
 import "@/styles/playground-shared.css";
 
-const groups = tourExampleGroups(
+const tourGroups = tourExampleGroups(
   import.meta.glob<string>("../content/tour/*.md", { query: "?raw", import: "default", eager: true }),
 );
+const groups = [...tourGroups, ...repositoryExampleGroups()];
 
 const data = {
   groups,
-  defaultExample: defaultExample(groups),
+  defaultExample: defaultExample(tourGroups),
 };
 
 const searchItems = (await getAllPages()).map(({ page, section }) => ({
@@ -43,13 +45,14 @@ const searchItems = (await getAllPages()).map(({ page, section }) => ({
             groups.map((group) => (
               <optgroup label={group.title}>
                 {group.examples.map((example) => (
-                  <option value={example.id}>{example.title}</option>
+                  <option value={example.id}>{example.readOnly ? `${example.title} (read-only)` : example.title}</option>
                 ))}
               </optgroup>
             ))
           }
         </select>
         <button type="button" class="pg-button" data-share>Share</button>
+        <span class="pg-read-only" data-read-only hidden></span>
         <span class="pg-status" data-status role="status">Loading the compiler…</span>
         <span class="pg-release" data-release></span>
       </div>

@@ -4,7 +4,7 @@
 
 import type { EditorView } from "@codemirror/view";
 import { PlaygroundUnavailable, compileAndRun, loadPlayground, releaseNotesUrl, type Playground, type Running } from "./compiler";
-import { createEditor, setCode } from "./editor";
+import { createEditor, setCode, setReadOnly } from "./editor";
 import { codeOf, shareLink } from "./share";
 import { Terminal } from "./terminal";
 
@@ -12,6 +12,8 @@ interface Example {
   id: string;
   title: string;
   code: string;
+  /** Why the playground can't run it, for an example it shows read-only. */
+  readOnly?: string;
 }
 
 interface PageData {
@@ -48,11 +50,14 @@ const shareButton = element<HTMLButtonElement>("[data-share]");
 const examples = element<HTMLSelectElement>("[data-examples]");
 const status = element("[data-status]");
 const release = element("[data-release]");
+const readOnlyNote = element("[data-read-only]");
 
 let playground: Playground | null = null;
 let running: Running | null = null;
 /** The code last opened from an example or a link, unchanged: replacing it needs no asking. */
 let opened: string | null = null;
+/** Why the code in the editor can't run, while it is an example the playground shows read-only. */
+let readOnly: string | null = null;
 
 const terminal = new Terminal(element("[data-output]"), {
   onLine: (line) => running?.input(line),
@@ -71,11 +76,24 @@ const editor: EditorView = createEditor(element("[data-editor]"), "", {
 const code = () => editor.state.doc.toString();
 const isEdited = () => code() !== opened && code().trim() !== "";
 
-/** Opens `source` in the editor, as code that can be replaced without asking. */
-function open(source: string) {
+/**
+ * Opens `source` in the editor, as code that can be replaced without asking; read-only, with Run's place taken by
+ * `why` it can't run, for an example the playground can't run. Such an example isn't kept as the code last written.
+ */
+function open(source: string, why: string | null = null) {
   opened = source;
+  setReadOnlyCode(why);
   setCode(editor, source);
-  stored.set(storageKey, source);
+  if (why === null) stored.set(storageKey, source);
+}
+
+/** Shows the editor's code as an example the playground can't run, and why, or as code it runs when `why` is null. */
+function setReadOnlyCode(why: string | null) {
+  readOnly = why;
+  setReadOnly(editor, why !== null);
+  readOnlyNote.textContent = why ?? "";
+  readOnlyNote.hidden = why === null;
+  setRunning(running !== null);
 }
 
 function setStatus(text: string) {
@@ -85,13 +103,13 @@ function setStatus(text: string) {
 
 /** Shows Run, or Stop in its place while a program runs; Run is enabled once the compiler is ready. */
 function setRunning(isRunning: boolean) {
-  runButton.hidden = isRunning;
+  runButton.hidden = isRunning || readOnly !== null;
   stopButton.hidden = !isRunning;
   runButton.disabled = playground === null;
 }
 
 async function runProgram() {
-  if (!playground || running) return;
+  if (!playground || running || readOnly !== null) return;
   runButton.disabled = true;
   await compileAndRun(playground, terminal, code(), {
     onCompiling: () => setStatus("Compiling…"),
@@ -141,7 +159,7 @@ function wireExamples() {
     examples.value = "";
     if (!example) return;
     if (isEdited() && !confirm(`Replace your code with the example “${example.title}”?`)) return;
-    open(example.code);
+    open(example.code, example.readOnly ?? null);
     editor.focus();
   });
 }
