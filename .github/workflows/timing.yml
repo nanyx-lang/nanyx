@@ -1,0 +1,79 @@
+name: Timing
+
+# The tests that compare how long things take, marked `[<Trait("Category", "Timing")>]`, which the Compiler workflow
+# leaves out: on a shared runner their noise is often bigger than what they look for. They run here every night on
+# main, and on demand on a branch with `gh workflow run Timing --ref <branch>`. Each run keeps the tests' times, in its
+# summary and as an artifact, so there's a history (see compiler/README.md, "Running tests").
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # A failed night opens an issue, or comments on the open one.
+  issues: write
+  # To find the last night that passed.
+  actions: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+defaults:
+  run:
+    working-directory: compiler
+
+jobs:
+  timing:
+    name: Timing tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Nyx.Compiler.slnx
+
+      - name: Build
+        run: dotnet build Nyx.Compiler.slnx --no-restore --configuration Release
+
+      - name: Test
+        run: >
+          dotnet test Nyx.Compiler.slnx --no-build --configuration Release --filter "Category=Timing"
+          --logger "trx" --results-directory "$RUNNER_TEMP/timing"
+
+      - name: Write the times to the summary
+        if: always()
+        run: python3 ../.github/scripts/timing-summary.py "$RUNNER_TEMP/timing" "$RUNNER_TEMP/timing/times.csv" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: timing-${{ github.run_number }}
+          path: |
+            ${{ runner.temp }}/timing/*.csv
+            ${{ runner.temp }}/timing/**/*.trx
+          retention-days: 90
+
+      # A failed night is an issue labelled `ci`, which names the commits since the last night that passed. One that is
+      # open already gets a comment instead.
+      - name: Report a failed night
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow Timing --branch main --event schedule --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+          range=${last:+$last..}$GITHUB_SHA
+          run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          body="The timing tests failed in the night's run: $run. Commits since the last night that passed: \`$range\` ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/${last:-$GITHUB_SHA}...$GITHUB_SHA)."
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label ci --state open --search "Timing tests failed in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label ci --title "Timing tests failed" --body "$body"
+          fi

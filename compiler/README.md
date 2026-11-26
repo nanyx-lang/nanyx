@@ -66,7 +66,9 @@ dotnet test Nyx.Compiler.slnx
 ```
 
 A few tests compare how long things take, which a busy machine can make fail on noise. They are in the `Timing`
-category, which CI runs. A local run can leave them out:
+category, which the Compiler workflow leaves out: the **Timing** workflow (`.github/workflows/timing.yml`) runs them
+every night on main, keeps their times in its summary and as an artifact, and opens an issue labelled `ci` when a night
+fails. To run them on a branch, use `gh workflow run Timing --ref <branch>`. A local run can leave them out too:
 
 ```powershell
 dotnet test Nyx.Compiler.slnx --filter "Category!=Timing"
