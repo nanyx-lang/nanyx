@@ -1,6 +1,5 @@
 namespace NyxCompiler
 
-open System.Collections.Concurrent
 open System.IO
 open Parser.Program.DataValues
 
@@ -67,26 +66,20 @@ module HostPackages =
     let notAHost (name: string) =
         $"'{name}' is not a host: a host's manifest declares that it is one, with the module that exports '{Hosts.runFunction}', as `package = (..., {field} = ({rootField} = \"<module>\"))`"
 
-    let private shipped = ConcurrentDictionary<string, Result<Host, string>>()
-
-    /// The host the compiler ships as the package `name`, or why there is none. Its manifest is `<name>.nyxp` in its
-    /// directory (see `ShippedPackages`), and never changes while the process runs, so it is read once.
-    let tryShipped (name: string) : Result<Host, string> =
-        shipped.GetOrAdd(name, fun name ->
-            let directory = ShippedPackages.directoryOf name
-            let path = Path.Combine(directory, name + ".nyxp")
-            // A host named by its old name is told its new one (see `RenamedPackages`).
-            let renamedOr (message: string) = RenamedPackages.asHost name |> Option.defaultValue message
-            if not (File.Exists path) then
-                Error (renamedOr $"The compiler ships no package '{name}'")
-            else
-                match DataValue.read path (File.ReadAllText path) with
-                | Ok manifest -> ofManifest name directory manifest |> Option.map Ok |> Option.defaultValue (Error (renamedOr (notAHost name)))
-                | Error _ -> Error $"The manifest of '{name}', which the compiler ships, can't be read")
-
-    /// The console host the compiler ships, which a script runs under.
+    /// The console host, as the compiler's own copy of it declares it: what a loose file, which has no package store, runs
+    /// under, and what a package and a script run under when they name no host (see `Package` for the version of it a
+    /// package resolves). Its manifest never changes while the process runs, so it is read once.
     let console : Lazy<Host> =
         lazy
-            (match tryShipped Hosts.consolePackage with
-             | Ok host -> host
-             | Error message -> raise (InvalidDataException $"The compiler is not installed correctly: {message}"))
+            (let directory = ShippedPackages.directoryOf Hosts.consolePackage
+             let path = Path.Combine(directory, Hosts.consolePackage + ".nyxp")
+             let declared =
+                 if File.Exists path then
+                     match DataValue.read path (File.ReadAllText path) with
+                     | Ok manifest -> ofManifest Hosts.consolePackage directory manifest
+                     | Error _ -> None
+                 else
+                     None
+             match declared with
+             | Some host -> host
+             | None -> raise (InvalidDataException $"The compiler is not installed correctly: its console host, '{path}', can't be read"))

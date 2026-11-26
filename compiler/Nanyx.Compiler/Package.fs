@@ -382,9 +382,13 @@ module Package =
                 { Package = packageName; Path = Some full; Version = None; Span = SourceSpan.none; Settings = [] }
             else
                 { Package = name; Path = None; Version = Some atCompilerVersion; Span = SourceSpan.none; Settings = [] }
-        match hostIn { Store = store; Locked = Lockfile.empty } (Reached()) (Some entry) with
-        | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
-        | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
+        // A host named by its old name is told its new one (see `RenamedPackages`).
+        match RenamedPackages.asHost name with
+        | Some renamed when entry.Path.IsNone -> Result.Error renamed
+        | _ ->
+            match hostIn { Store = store; Locked = Lockfile.empty } (Reached()) (Some entry) with
+            | Result.Ok host -> Result.Ok { package with Host = host |> Option.map fst; HostPackage = host |> Option.map snd }
+            | Result.Error problems -> Result.Error(problems |> List.map describe |> String.concat "; ")
 
     /// The package `path` names: a manifest, or a directory in or under the package, with the packages it depends on,
     /// found in `store`. An error says why there is none.

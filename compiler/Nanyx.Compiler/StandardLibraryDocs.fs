@@ -265,7 +265,8 @@ let private documented () : Documented list =
               Pin = None })
     let packages =
         ShippedPackages.names ()
-        |> List.filter (fun name -> Result.isError (HostPackages.tryShipped name))
+        // A host is what programs run under, not what they call.
+        |> List.filter (fun name -> Manifest.tryReadIn (ShippedPackages.directoryOf name) |> Option.exists (fun manifest -> manifest.Declares.IsNone))
         |> List.choose ShippedPackages.tryModules
         // A host library is what hosts are written on, which a program can't call (see `HostLibraries`).
         |> List.filter (fun modules -> not modules.HostLibrary)
