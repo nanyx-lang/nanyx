@@ -15,8 +15,18 @@ open Transpiler.Wasm.WasmRuntime
 /// The version of WASI 0.3 the module imports and exports, which every 0.3 host accepts.
 let wasiVersion = "0.3.0"
 
-/// The name the module exports `CliRun` under: `wasi:cli/run`'s `run`, which returns `result`, lifted synchronously.
-let runExport = $"wasi:cli/run@{wasiVersion}#run"
+/// The interface whose `run` the module exports as `CliRun`.
+let private runInterface = $"wasi:cli/run@{wasiVersion}"
+
+/// The name the module exports `CliRun` under: `wasi:cli/run`'s `run`, which returns `result`, lifted async with a
+/// callback (see `ComponentCallback`).
+let runExport = $"[async-lift]{runInterface}#run"
+
+/// The name of `run`'s callback, which the host calls with each event while `run` waits.
+let runCallback = $"[callback]{runExport}"
+
+/// `run`'s `task.return`, which gives its `result`: 0, `ok`.
+let runTaskReturn = "$__nanyx_cli_task_return"
 
 /// The interface whose `handle` the module exports as `HttpHandler`.
 let private handlerInterface = $"wasi:http/handler@{wasiVersion}"
@@ -106,7 +116,9 @@ let imports (entry: ComponentEntry) =
     [ yield! streamImports Stdout
       yield! streamImports Stderr
       match entry with
-      | CliRun
+      | CliRun ->
+          $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
+          $"""  (import "[export]{runInterface}" "[task-return]run" (func {runTaskReturn} (param i32)))"""
       | Library -> $"""  (import "wasi:cli/exit@{wasiVersion}" "exit-with-code" (func {exitWithCode} (param i32)))"""
       | HttpHandler -> yield! handlerImports
       $"""  (import "$root" "[waitable-set-new]" (func {Waitables.setNew} (result i32)))"""
@@ -117,6 +129,18 @@ let imports (entry: ComponentEntry) =
 
 /// What an async built-in returns when it hasn't finished: the canonical ABI's BLOCKED.
 let private blocked = -1
+
+/// What the scheduler and the callback share with `wait` (see `waitExtern`) while `run` is lifted with the callback ABI:
+/// the event the callback was given, for `wait` to give the host's code (its code, 0 for none, and its two values); the
+/// set that `wait` was asked to wait on when the scheduler can return to the host instead (0 for none); and whether it
+/// can, which it can only when no other code is running.
+module Callback =
+    let pendingCode = "$__nanyx_cb_pending_code"
+    let pendingFirst = "$__nanyx_cb_pending_first"
+    let pendingSecond = "$__nanyx_cb_pending_second"
+    let waitSet = "$__nanyx_cb_wait_set"
+    let atTop = "$__nanyx_cb_at_top"
+    let all = [ pendingCode; pendingFirst; pendingSecond; waitSet; atTop ]
 
 /// Waits for the waitable `$handle` in a set of its own, and gives the code its event came with: for a stream write,
 /// how many bytes it took (above the low 4 bits) and whether it went on (the low 4 bits, 0).
@@ -349,12 +373,53 @@ let private argumentExtern = componentExtern "argument" [] (Some ExternValue.I32
 /// trailers' future, and the address and length of its body, which it copies, to write once `handle` has returned.
 let private resultExtern = componentExtern "result" (List.replicate 5 ExternValue.I32) None
 
+/// `wait`, which a component root's wait on its shared waitable set calls in place of `[waitable-set-wait]`, with the
+/// set and where to write the event, and which gives the event's code: 0 (none) when the scheduler is to return to the
+/// host instead, waiting on the set, and give the event to the callback (see `waitFunction`).
+let private waitExtern = componentExtern "wait" [ ExternValue.I32; ExternValue.I32 ] (Some ExternValue.I32)
+
 /// The foreign functions of `Hosts.componentModule` that the module defines for `entry`.
 let externs (entry: ComponentEntry) =
     match entry with
     | CliRun
-    | Library -> []
-    | HttpHandler -> [ argumentExtern; resultExtern ]
+    | Library -> [ waitExtern ]
+    | HttpHandler -> [ waitExtern; argumentExtern; resultExtern ]
+
+/// `wait` (see `waitExtern`), named by `functionName`: the event the callback was given, if it has one that the root
+/// hasn't taken yet; or none, when the scheduler is the one waiting, with nothing else running, and returns to the host
+/// with the set instead of blocking; or else the event `[waitable-set-wait]` waits for. Only `run`'s scheduler, under
+/// the callback ABI, sets `Callback.atTop`, so for any other entry this is `[waitable-set-wait]`.
+let private waitFunction (functionName: Extern -> string) =
+    lines
+        [ for name in Callback.all do
+              $"(global {name} (mut i32) (i32.const 0))"
+          $"(func ${functionName waitExtern} (param $set i32) (param $event i32) (result i32)"
+          "  (local $code i32)"
+          $"  global.get {Callback.pendingCode}"
+          "  local.tee $code"
+          "  if"
+          "    local.get $event"
+          $"    global.get {Callback.pendingFirst}"
+          "    i32.store"
+          "    local.get $event"
+          $"    global.get {Callback.pendingSecond}"
+          "    i32.store offset=4"
+          "    i32.const 0"
+          $"    global.set {Callback.pendingCode}"
+          "    local.get $code"
+          "    return"
+          "  end"
+          $"  global.get {Callback.atTop}"
+          "  if"
+          "    local.get $set"
+          $"    global.set {Callback.waitSet}"
+          "    i32.const 0"
+          "    return"
+          "  end"
+          "  local.get $set"
+          "  local.get $event"
+          $"  call {Waitables.setWait}"
+          ")" ]
 
 /// Where the handler keeps the request and what `result` was given, from `handle`'s call to its end.
 module private HandlerState =
@@ -428,62 +493,72 @@ let private writeNoTrailersFunction =
           $"  call ${Helpers.free}"
           ")" ]
 
-/// `handle`, lifted async with a callback (see `HttpHandler`). It takes the request, runs the program's start function,
-/// `start`, if it has one, which answers it through `argument` and `result`, and returns the response; then, while the
-/// host reads it, writes its body, waiting as each write blocks, and its trailers. Backpressure keeps the host from
-/// giving the instance another request until then, and the start function runs afresh for each one.
-///
-/// The program runs synchronously, as it does under `CliRun`: it waits for what it imports where it calls it. So the
-/// callback is only ever called if the host cancels the task, and traps.
+/// The name of `handle`'s callback, which the host calls with each event while `handle` waits.
+let handleCallback = $"[callback]{handleExport}"
+
+/// What `handle` does before it runs the program: raises backpressure, so that the host gives the instance no other
+/// request until it is done, and keeps the request, `$request`, for `argument`.
+let handleBegin =
+    [ $"call {Handler.backpressureInc}"
+      "local.get $request"
+      $"global.set {HandlerState.request}"
+      "i32.const -1"
+      $"global.set {HandlerState.response}" ]
+
+/// What `handle` does once the program has answered: returns the response, then, while the host reads it, writes its
+/// body, waiting as each write blocks, and its trailers, and lowers backpressure. It leaves EXIT, 0, for `handle` to
+/// return. It needs the locals `$writer`, `$bytes`, `$length` and `$status`.
+let handleFinish =
+    [ // A component root always answers: one that doesn't is a bug in its host.
+      $"global.get {HandlerState.response}"
+      "i32.const -1"
+      "i32.eq"
+      "if"
+      "  unreachable"
+      "end"
+      "i32.const 0"
+      $"global.get {HandlerState.response}"
+      "i32.const 0"
+      "i64.const 0"
+      "i32.const 0"
+      "i32.const 0"
+      "i32.const 0"
+      "i32.const 0"
+      $"call {Handler.taskReturn}"
+      $"global.get {HandlerState.body}"
+      "local.set $writer"
+      $"global.get {HandlerState.bytes}"
+      "local.set $bytes"
+      $"global.get {HandlerState.length}"
+      "local.set $length"
+      yield! writeAllLines $"call {Handler.bodyWrite}" |> List.map (fun line -> line.Substring 2)
+      "local.get $writer"
+      $"call {Handler.bodyDropWritable}"
+      $"global.get {HandlerState.bytes}"
+      $"call ${Helpers.free}"
+      $"global.get {HandlerState.trailers}"
+      "call $__nanyx_http_write_no_trailers"
+      $"call {Handler.backpressureDec}"
+      // EXIT: the task is done.
+      "i32.const 0" ]
+
+/// The locals `handleFinish` needs.
+let handleLocals = "(local $writer i32) (local $bytes i32) (local $length i32) (local $status i32)"
+
+/// `handle`, lifted async with a callback (see `HttpHandler`), for a program whose start function, `start`, if it has
+/// one, never stops (see `ComponentCallback` for one that does): it runs the start function, which answers the request
+/// through `argument` and `result`, and then returns the response and writes its body (`handleFinish`). The callback is
+/// never called.
 let private handleFunctions (start: string option) =
     lines
-        [ $"(func $__nanyx_http_handle (export \"{handleExport}\") (param $request i32) (result i32)"
-          "  (local $writer i32)"
-          "  (local $bytes i32)"
-          "  (local $length i32)"
-          "  (local $status i32)"
-          $"  call {Handler.backpressureInc}"
-          "  local.get $request"
-          $"  global.set {HandlerState.request}"
-          "  i32.const -1"
-          $"  global.set {HandlerState.response}"
+        [ $"(func $__nanyx_http_handle (export \"{handleExport}\") (param $request i32) (result i32) {handleLocals}"
+          yield! handleBegin |> List.map (fun line -> "  " + line)
           match start with
           | Some name -> $"  call ${name}"
           | None -> ()
-          // A component root always answers: one that doesn't is a bug in its host.
-          $"  global.get {HandlerState.response}"
-          "  i32.const -1"
-          "  i32.eq"
-          "  if"
-          "    unreachable"
-          "  end"
-          "  i32.const 0"
-          $"  global.get {HandlerState.response}"
-          "  i32.const 0"
-          "  i64.const 0"
-          "  i32.const 0"
-          "  i32.const 0"
-          "  i32.const 0"
-          "  i32.const 0"
-          $"  call {Handler.taskReturn}"
-          $"  global.get {HandlerState.body}"
-          "  local.set $writer"
-          $"  global.get {HandlerState.bytes}"
-          "  local.set $bytes"
-          $"  global.get {HandlerState.length}"
-          "  local.set $length"
-          yield! writeAllLines $"call {Handler.bodyWrite}"
-          "  local.get $writer"
-          $"  call {Handler.bodyDropWritable}"
-          $"  global.get {HandlerState.bytes}"
-          $"  call ${Helpers.free}"
-          $"  global.get {HandlerState.trailers}"
-          "  call $__nanyx_http_write_no_trailers"
-          $"  call {Handler.backpressureDec}"
-          // EXIT: the task is done.
-          "  i32.const 0"
+          yield! handleFinish |> List.map (fun line -> "  " + line)
           ")"
-          $"(func $__nanyx_http_callback (export \"[callback]{handleExport}\") (param $event i32) (param $handle i32) (param $code i32) (result i32)"
+          $"(func $__nanyx_http_callback (export \"{handleCallback}\") (param $event i32) (param $handle i32) (param $code i32) (result i32)"
           "  unreachable"
           ")" ]
 
@@ -496,6 +571,7 @@ let functions (entry: ComponentEntry) (functionName: Extern -> string) =
       fdWriteFunction
       procExitFunction entry
       cabiReallocFunction
+      waitFunction functionName
       match entry with
       | CliRun
       | Library -> ()
@@ -504,10 +580,11 @@ let functions (entry: ComponentEntry) (functionName: Extern -> string) =
           writeNoTrailersFunction ]
     |> String.concat "\n"
 
-/// The entry, exported under its name for `entry`: `run` runs the program's start function, if it has one, and returns
-/// `ok` (0), and a program that crashes or exits stops in `proc_exit` instead, with its exit code; `handle` is
-/// `handleFunctions`. A library has none: the root `nanyx build` makes for it only imports modules, so it has no start
-/// function, and each export builds the top-level values it reads when it first reads them.
+/// The entry, exported under its name for `entry`, for a program whose start function, if it has one, never stops (see
+/// `ComponentCallback` for one that does): `run` runs the start function, gives `ok` (0) with `task.return`, and returns
+/// EXIT, so its callback is never called; a program that crashes or exits stops in `proc_exit` instead, with its exit
+/// code. `handle` is `handleFunctions`. A library has none: the root `nanyx build` makes for it only imports modules, so
+/// it has no start function, and each export builds the top-level values it reads when it first reads them.
 let entryFunction (entry: ComponentEntry) (start: string option) =
     match entry with
     | CliRun ->
@@ -517,6 +594,12 @@ let entryFunction (entry: ComponentEntry) (start: string option) =
               | Some name -> $"  call ${name}"
               | None -> ()
               "  i32.const 0"
+              $"  call {runTaskReturn}"
+              // EXIT: the task is done.
+              "  i32.const 0"
+              ")"
+              $"(func $__nanyx_cli_callback (export \"{runCallback}\") (param $event i32) (param $first i32) (param $second i32) (result i32)"
+              "  unreachable"
               ")" ]
     | HttpHandler -> handleFunctions start
     | Library -> ""

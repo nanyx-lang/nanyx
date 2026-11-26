@@ -8,7 +8,8 @@ This page is the design for [#2182](https://github.com/nanyx-lang/nanyx/issues/2
 that target WASI 0.3, so that what `nanyx build` writes runs under Wasmtime, or any runtime that implements WASI 0.3, and
 not only under `nanyx`'s own runtime. Stages 0 to 3 are built, and described on
 [Components](../deep-dives/components) in Deep dives: every console program builds as a component, and every HTTP
-handler as a `wasi:http/service` component. Stage 5 is built too: a program exports functions marked `@component`,
+handler as a `wasi:http/service` component. Stage 4 is built too: both entries are lifted with the callback ABI, so
+`start!` and `race` run concurrently in a component, and cancellation reaches the host. Stage 5 is built as well: a program exports functions marked `@component`,
 a package with no `@entry` builds as a library component, and a program imports other components' functions, marked
 `@import` ([A program's own exports](../deep-dives/components#a-programs-own-exports)). The page sets out what was found, the
 [design](#design) the maintainer settled on 2026-11-21, what is still [open](#open-questions), and the [plan](#plan),
@@ -235,34 +236,15 @@ rejected as one more thing to install at a matching version, and an encoder of o
 kept in step with a moving spec, with no validator of our own. An F# encoder can still replace wit-component later, once
 the format is settled, with wit-component's output to test it.
 
-## Async: a synchronous lift first, the callback ABI after #1890
+## Async
 
-- **First**, `run` is lifted synchronously. `handle` was to be too, until stage 3 found it can't be (below).
-  - A call that waits, or a stream read or write, is lowered async and waited on at once with `waitable-set.wait`,
-    which runs with Wasmtime's default settings. A synchronous `stream.write` doesn't.
-  - A wait blocks the instance, as it blocks its thread today.
-  - The host package writes this "start, then wait" pair once per kind of call. It is the same code that #1890's
-    scheduler later splits in two.
-- **After [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)'s state machines**, an `Async` entry is lifted
-  `[async-lift]` with the scheduler as its `[callback][async-lift]`.
-  - A call that waits becomes an `[async-lower]` import, or an async `stream.read` or `stream.write`, whose subtask the
-    task joins to the instance's waitable set. This is built for every wait in a function that requires `Async`
-    ([Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)); `Console`'s and
-    `FileSystem`'s functions don't, so theirs still block.
-  - When every task is waiting, the scheduler returns WAIT. When the callback gets an event, the scheduler resumes the
-    task that was waiting on it.
-  - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), which
-    is built ([Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)), and
-    `TASK_CANCELLED` arriving at the callback is how the host cancels the entry.
-- **Stage 1 doesn't depend on #1890 or #2164.** A synchronously lifted component is the same program model as today.
-- **`wasi:http/service` amends this for its entry (settled 2026-11-22).** Its `handle` is lifted async with the
-  callback ABI from stage 3 on, not synchronously: the host reads the response's body from a stream only after
-  `handle` returns, so a synchronous `handle` can't write a body bigger than the stream's buffer. The compiler
-  generates a small wrapper for that entry alone, which runs the program as synchronously as a `run` does, returns
-  the response with `task.return`, and then writes the body ([The handler](../deep-dives/components#the-handler)).
-  #1890's scheduler replaces the wrapper in stage 4.
-- **#2164 isn't needed for components at all.** Stack switching would make the stackful ABI possible, but the callback
-  ABI does the same job with the state machines. #2164 stays about running tasks on stacks.
+Built ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240)): both entries are lifted with the callback ABI, the
+scheduler returning WAIT while every task waits on the host, waits in functions that require `Async` are async lowers
+joined to one waitable set, and cancellation reaches the host's subtasks
+([Running with the callback ABI](../deep-dives/components#running-with-the-callback-abi),
+[Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)). The stackful ABI, which would
+need stack switching ([#2164](https://github.com/nanyx-lang/nanyx/issues/2164)), isn't needed for components: the
+callback ABI does the same job with the state machines.
 
 # Open questions
 
@@ -291,6 +273,6 @@ Each stage is an issue. A stage is marked done here when its issue closes.
 | 1b. Files in components ([#2237](https://github.com/nanyx-lang/nanyx/issues/2237)), done | `FileSystem` on `wasi:filesystem`, in the console host's component root | The same, for programs that read and write files |
 | 2. HTTP client ([#2238](https://github.com/nanyx-lang/nanyx/issues/2238)), done | `Http` on `wasi:http/client`, with bodies over streams | Programs that make requests run outside `nanyx` too |
 | 3. HTTP service ([#2239](https://github.com/nanyx-lang/nanyx/issues/2239)), done | `nanyx.http.host`'s component root exports `wasi:http/handler` (world `wasi:http/service`), one request at a time per instance, no `Env` | Deploy a handler with `wasmtime serve`, or to a host that runs `wasi:http` components |
-| 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)) | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
+| 4. Async components ([#2240](https://github.com/nanyx-lang/nanyx/issues/2240), after [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)), done | Entries lifted with the callback ABI, waits as async lowers joined to a waitable set, cancellation | `start!` and `race` run concurrently in a component, with no thread per wait |
 | 5. User components ([#2241](https://github.com/nanyx-lang/nanyx/issues/2241), [#2326](https://github.com/nanyx-lang/nanyx/issues/2326)), done | WIT for a program's own exports and imports, and the canonical ABI generated for Nanyx types, with `out/wit`; library components; exports that require the host's contexts; a test in CI with Rust components under `wasmtime run` | Write plugins and libraries that other languages' components call, and call theirs |
 | 6. One root per host ([#2242](https://github.com/nanyx-lang/nanyx/issues/2242)) | Run 0.3 components in `nanyx run`, once an embedding supports it (upstream or our own), and delete the core roots | One implementation of each host |

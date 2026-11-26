@@ -13,13 +13,13 @@ let private recovered (source: string) =
 let ``An item left open is left out and the items after it are read`` () =
     let items, errors = recovered "def a = 1\n\ndef b = (1 +\n\ndef c = a + 2\n"
     Assert.Equal<string list>([ "def a = 1"; "def c = a + 2" ], items)
-    Assert.Equal<(int * string) list>([ 5, "Expected `)`, found `c`" ], errors)
+    Assert.Equal<(int * string) list>([ 5, "Expected `)`" ], errors)
 
 [<Fact>]
 let ``An item that runs on into the line of the mistake is left out with it`` () =
     let items, errors = recovered "def a = 1\n\ndef d = a +\n\ndef e = a * 2\n\ndef f = e\n"
     Assert.Equal<string list>([ "def a = 1"; "def e = a * 2"; "def f = e" ], items)
-    Assert.Equal<(int * string) list>([ 5, "Expected an expression, found `=`" ], errors)
+    Assert.Equal<(int * string) list>([ 5, "Expected an expression" ], errors)
 
 [<Fact>]
 let ``Each mistake is noted, in the order of the text`` () =

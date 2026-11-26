@@ -40,10 +40,12 @@ def main: [Console, Env] () -> () = { println("hi") }"""
     match diagnosticsOf source |> List.filter Diagnostics.isError with
     | [ diagnostic ] ->
         Assert.Equal(DiagnosticCodes.EntryDoesNotFitHost.Code, diagnostic.Code)
-        Assert.StartsWith(
+        // The entry's contexts were left out of what it was found to be, so the reason it doesn't fit wasn't shown (#2163).
+        Assert.Equal(
             """It doesn't fit the host 'nanyx.playground.host/playground.host'
   expected: [Async, Clock, Console, Random] () -> a
-""".ReplaceLineEndings "\n",
+  found:    [Console, Env] () -> ()
+  it doesn't provide 'Env'""".ReplaceLineEndings "\n",
             diagnostic.Message)
     | diagnostics -> Assert.Fail $"Expected one error, got %A{diagnostics}"
 

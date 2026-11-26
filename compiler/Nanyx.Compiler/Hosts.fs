@@ -119,8 +119,16 @@ module Hosts =
     /// the entry point requires that `run` doesn't provide.
     let entryMismatch (entry: EntryPoint) (found: Ty option) (required: Ty list) (expected: Ty option) =
         let unknown = TyPrimitive "?error"
+        // The entry point's type with the contexts it requires, which its type in the module leaves to the requirements
+        // recorded beside it: a context the host doesn't provide is why it doesn't fit (#2163).
+        let withRequired =
+            found
+            |> Option.map (fun ty ->
+                match Unifier.unalias ty with
+                | TyFunc(input, output, contexts) -> TyFunc(input, output, contexts @ required |> List.distinct)
+                | _ -> ty)
         // Shown together, so that the variables are named alike in both.
-        let shown = Unifier.tysToDisplayStrings Source [ defaultArg expected unknown; defaultArg found unknown ]
+        let shown = Unifier.tysToDisplayStrings Source [ defaultArg expected unknown; defaultArg withRequired unknown ]
         // The contexts the entry point requires that the host's `run` doesn't provide, by name.
         let namesOf (contexts: Ty list) =
             contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source

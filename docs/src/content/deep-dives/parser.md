@@ -59,7 +59,9 @@ tree is needed ([#2730](https://github.com/nanyx-lang/nanyx/issues/2730)).
   rest. The lexer's own mistakes (a string or a block comment never closed) are reported as the lexer words them.
   Anything else is reported where the furthest reading failed, as what was expected there and what was found
   (`Cursor.Unexpected`): each reading notes what it expected when it fails (`Cursor.Fail`, and `Cursor.Expect` for a
-  token), and those at the furthest token are listed.
+  token), and those at the furthest token are listed. The token found is the error's `Found`, which a syntax error's
+  headline names, and not in its message, but for the end of the file, which the message says; a mistake reported at a
+  token with a message of its own can name it too (`Cursor.ReportFound`).
 - **Reading past mistakes.** The compiler reads a file with `Api.parseModuleFileWithDocsRecovering`
   (`DescentTopLevel.readModuleRecovering`), which goes on after a mistake: the top-level item it is in is left out,
   the error is noted, and reading goes on at the first line after the item's start, from the error's line on, that

@@ -54,9 +54,10 @@ file is the one compiled.
 
 # NYX0001: Syntax error
 
-The file could not be parsed: the text at the position shown is not what the grammar allows there. The message
-names what the parser expected and what it found, as in "Expected `)`, found the end of the file", or says what the
-mistake is and what to write instead.
+The file could not be parsed: the text at the position shown is not what the grammar allows there. The headline names
+the token the parser found there, as in "Syntax error '`]`'", and the message what it expected instead, as in
+"Expected `)`". At the end of the file the message says so, as in "Expected `)`, found the end of the file". Other
+messages say what the mistake is and what to write instead.
 
 ```nanyx
 def total = (1 + 2  -- error NYX0001: the closing parenthesis is missing
@@ -914,8 +915,8 @@ package cache and locked as any package from the index is, with the SHA-256 of i
 packs to another SHA-256 than the one the package index records for the same version, the copy its release attached:
 
 ```text
-warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.45.0'
-  = This compiler's nanyx.cli 0.45.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
+warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.46.0'
+  = This compiler's nanyx.cli 0.46.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
 ```
 
 The compiler builds with its own copy, which a lockfile it writes locks, so another machine that downloads the version
@@ -925,7 +926,7 @@ A released compiler doesn't, since its copies are the ones its release published
 # NYX0052: Package that needs another compiler
 
 The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running,
-or with one compiler only, as `nanyx = "=0.45.0"`, which isn't the one running. The message names both versions:
+or with one compiler only, as `nanyx = "=0.46.0"`, which isn't the one running. The message names both versions:
 
 ```nanyx
 -- file: demo.nyxp
@@ -965,7 +966,7 @@ the new one. `nanyx.http` is the library's name now, so it is an error only wher
 -- file: demo.nyxp
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [(package = "nanyx.console.core", version = "0.45.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
+  dependencies = [(package = "nanyx.console.core", version = "0.46.0")]  -- error NYX0054: 'nanyx.console.core' is now 'nanyx.cli'
 )
 ```
 
@@ -1848,8 +1849,8 @@ module main
 def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.cli.host/cli.host' ...
 ```
 
-The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, and names each
-context the entry point requires that the host doesn't provide. To fix it, give the entry point the shape the host
+The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, with the
+contexts it requires, and names each context the entry point requires that the host doesn't provide. To fix it, give the entry point the shape the host
 expects: for a command-line program, a function that takes nothing.
 
 # NYX0238: HostRuntime required outside a host

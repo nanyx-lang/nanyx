@@ -22,7 +22,7 @@ def main = {
 }
 """
     Assert.Equal((7, 3), position)
-    Assert.Equal("Expected `]`, found `xs`", message)
+    Assert.Equal("Expected `]`", message)
     Assert.DoesNotContain("backtracked", message)
 
 [<Fact>]
@@ -38,7 +38,7 @@ def main = {
 }
 """
     Assert.Equal((6, 3), position)
-    Assert.Equal("Expected an expression, found `]`", message)
+    Assert.Equal("Expected an expression", message)
     Assert.DoesNotContain("backtracked", message)
 
 [<Fact>]
@@ -51,7 +51,7 @@ def main = {
 }
 """
     Assert.Equal((4, 3), position)
-    Assert.Equal("Expected `]`, found `xs`", message)
+    Assert.Equal("Expected `]`", message)
 
 [<Fact>]
 let ``A nested list with a comma before its closing bracket fails in the nested list`` () =
@@ -66,7 +66,7 @@ def main = {
 }
 """
     Assert.Equal((6, 3), position)
-    Assert.Equal("Expected an expression, found `]`", message)
+    Assert.Equal("Expected an expression", message)
     Assert.DoesNotContain("backtracked", message)
 
 [<Fact>]
@@ -82,7 +82,7 @@ def main = {
 }
 """
     Assert.Equal((6, 3), position)
-    Assert.Equal("Expected an expression, found `)`", message)
+    Assert.Equal("Expected an expression", message)
     Assert.DoesNotContain("backtracked", message)
 
 [<Fact>]
@@ -97,7 +97,7 @@ def main = {
 }
 """
     Assert.Equal((6, 3), position)
-    Assert.Equal("Expected an expression, found `)`", message)
+    Assert.Equal("Expected an expression", message)
     Assert.DoesNotContain("backtracked", message)
 
 [<Fact>]
@@ -111,4 +111,4 @@ def xs = [
 def y = 1
 """
     Assert.Equal((6, 1), position)
-    Assert.Equal("Expected `]`, found `def`", message)
+    Assert.Equal("Expected `]`", message)
