@@ -235,3 +235,31 @@ let memberCalling (tools: LiftedTools) (functionName: string) (key: ContextMembe
         | None -> internalError $"the member '{ContextMemberKey.text key}' named as a value of '{IrType.show expectedTy}', which doesn't take it"
     | _ -> internalError $"the member '{ContextMemberKey.text key}' named as a value of '{IrType.show expectedTy}'"
 
+/// The function `functionName` that a call of a definition past its cap on specialisations calls (see
+/// `CoreIrLowerModule.boxedInstead`): it takes what a specialisation of type `expectedTy` would, its values and the
+/// members it requires, converts each to the type the specialisation `boxed`, of type `boxedTy`, with its type
+/// arguments' values boxed, takes it at, calls it, and converts what it gives back.
+let boxedCalling (tools: LiftedTools) (functionName: string) (boxed: string) (boxedTy: IrType) (expectedTy: IrType) : Function =
+    match boxedTy, expectedTy with
+    | IrFunction(boxedInput, boxedOutput, boxedMembers, _), IrFunction(input, result, members, _) ->
+        let values = valuesOf input |> List.mapi (fun index ty -> tools.NewVar $"__arg{index + 1}" Param ty)
+        let passed = members |> List.map (fun (key, ty) -> key, tools.NewVar (contextMemberParameter key) Param ty)
+        let scope = { tools.EmptyScope with Members = passed |> Map.ofList }
+        let call (arguments: Atom list) (memberAtoms: Atom list) =
+            let called = Expr.make (Call(boxed, arguments @ memberAtoms)) boxedOutput
+            if CoreIrLowerBoxes.needsConversion boxedOutput result || CoreIrLowerMembers.differInContexts boxedOutput result then
+                tools.BindTemp called (fun value -> tools.Coerce scope value result (fun atom -> Expr.make (Atom atom) result))
+            else
+                { called with Type = result }
+        let memberAtoms = boxedMembers |> List.map (fun (key, _) -> AVar scope.Members.[key])
+        let body =
+            tools.CoerceAll scope memberAtoms (List.map snd boxedMembers) (fun memberAtoms ->
+                tools.CoerceAll scope (values |> List.map AVar) (valuesOf boxedInput) (fun arguments -> call arguments memberAtoms))
+        { Name = functionName
+          Source = functionName
+          TypeArguments = []
+          Params = values @ List.map snd passed
+          Result = result
+          Body = body
+          Place = None }
+    | _ -> internalError $"a call through a boxed specialisation from '{IrType.show expectedTy}' to '{IrType.show boxedTy}'"
