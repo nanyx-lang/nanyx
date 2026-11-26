@@ -550,6 +550,9 @@ let assertRan (expectedOutput: string) (outcome: RunOutcome) =
     Assert.Equal(expectedOutput, outcome.StandardOutput)
     Assert.Equal("", outcome.StandardError)
 
+/// `assertRan` for `expected` written in a test's source, whose line breaks are a checkout's: they are made `\n`.
+let assertPrinted (expected: string) (outcome: RunOutcome) = assertRan (expected.ReplaceLineEndings "\n") outcome
+
 /// The calls `calls`, each a call in Nanyx and the `float` it should give, run in one program that imports `nanyx/math`
 /// as `math`: each value it prints must be the expected one when that is NaN, zero or infinite, and otherwise as near
 /// it as `close expected actual` asks.
