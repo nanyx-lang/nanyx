@@ -98,18 +98,10 @@ internal static partial class CliCommands
 
         // Everything that can stop the publish part way is checked before the release is made, so that a failure leaves
         // nothing behind; a publish that stops after it all the same can be run again to finish (see createRelease).
-        shell.Out.WriteLine($"Checking that you can release on {repository}");
-        // GitHub doesn't say for every token whether it can push (an Actions GITHUB_TOKEN's answer has no permissions), so
-        // when it doesn't, the publish goes on and creating the release says so if it can't.
-        var canRelease = GitHubApi.canPush(github, repository);
-        if (canRelease.IsError || canRelease.ResultValue is { Value: false })
-        {
-            shell.Error.WriteLine(canRelease.IsError
-                ? $"error: {canRelease.ErrorValue}"
-                : $"error: The account you are signed in to GitHub as can't push to {repository}, so it can't create the release: sign in as one that can, or use a token with write access to it");
-            return 1;
-        }
-
+        // Whether the token can release isn't asked beforehand: GitHub's answer for a repository says what its account can
+        // do, and an Actions GITHUB_TOKEN's account is said not to push though the token can release. Creating the release
+        // is the first thing the publish changes, so a token that can't is refused there with nothing left behind, and
+        // createRelease says what it needs.
         var registrationPath = Publishing.registrationPath(manifest.Name);
         var registered = GitHubApi.indexFile(github, registrationPath);
         if (registered.IsError)

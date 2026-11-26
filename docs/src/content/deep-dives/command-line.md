@@ -104,15 +104,16 @@ and the live view is drawn inside the box.
 `.nyxpkg` (`PackageApi.ofArchive`). `nanyx publish` and `nanyx unlist` are `PublishCommands.cs`: the GitHub requests they send are
 `GitHubApi.fs`, through a `GitHubClient` the `Shell`'s `GitHub` gives (a fake one in the Wasm tests, otherwise GitHub
 signed in with `GITHUB_TOKEN` or `gh auth token`), and the files of the index's repository they write are
-`Publishing.fs`. `publish` checks everything it can before it creates the release: that the account can push to the
-package's repository (`GitHubApi.canPush`) and, for a first version, where it will open the registration from
-(`GitHubApi.indexRoute`: a branch of nanyx-lang/packages if it can push there, otherwise its fork, made and waited for,
-since GitHub makes a fork in the background). GitHub doesn't say what every token can do: its answer for a GitHub Actions
-`GITHUB_TOKEN`, an installation token, has no `permissions`. Then `canPush` gives none, `publish` goes on and lets
-creating the release fail, with a message that says the token needs write access to the repository's contents, and
-`indexRoute` goes through a fork. So a package that is registered already publishes from its own repository's CI with
-the workflow's `GITHUB_TOKEN`; its first version, whose registration is a pull request to nanyx-lang/packages, needs a
-token of an account. `GitHubApi.createRelease` finishes a release a publish left part way, one
+`Publishing.fs`. `publish` checks everything it can before it creates the release, such as, for a first version, where
+it will open the registration from (`GitHubApi.indexRoute`: a branch of nanyx-lang/packages if the account can push
+there, by `GitHubApi.canPush`, otherwise its fork, made and waited for, since GitHub makes a fork in the background). It
+doesn't ask beforehand whether the token can release on the package's repository: GitHub's answer for a repository says
+what the token's account can do, and for a GitHub Actions `GITHUB_TOKEN` it says the account can't push, though the token
+can create releases given `permissions: contents: write`. Creating the release is the first thing a publish changes, so a
+token that can't is refused there with nothing left behind, with a message that says it needs write access to the
+repository's contents. So a package that is registered already publishes from its own repository's CI with the
+workflow's `GITHUB_TOKEN`; its first version, whose registration is a pull request to nanyx-lang/packages, needs a token
+of an account. `GitHubApi.createRelease` finishes a release a publish left part way, one
 with the same asset (by the `digest` GitHub records) or none yet, so running `publish` again finishes it. The index
 those pull requests change is described on [The package index](./package-index). The cache and the index a command uses are the
 `Shell`'s `Packages`, `PackageStore.user ()` (`NANYX_PACKAGES`, `NANYX_INDEX`); the Wasm tests give their own.
