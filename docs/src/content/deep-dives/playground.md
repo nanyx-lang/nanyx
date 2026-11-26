@@ -39,11 +39,13 @@ the system's.
 backend emits for [tail calls](./tail-calls) (Safari has it from 18.2), and says the browser can't run Nanyx programs when it doesn't. It reads
 `/playground/compiler/release.json`, which the docs build writes beside the compiler (below), for the release the page
 names at the right of the toolbar, linked to the release's notes on GitHub; when there is no such file, the site has no
-compiler, and the page says so. Then it imports `compiler.js` and the playground host's runner,
-`packages/nanyx.playground.host/runner/playground.js`, from beside it, loads the compiler, and compiles the default example
-at once: the first compile is most of the wait (see [the measurement](#the-measurement)), so the first Run is quick.
-"Loading the compiler…" shows in the toolbar, with Run disabled, until then. The compiler runs on the page's main
-thread ([#2750](https://github.com/nanyx-lang/nanyx/issues/2750) moves it to a worker); a program runs in a worker.
+compiler, and the page says so. Then it imports the playground host's runner,
+`packages/nanyx.playground.host/runner/playground.js`, from beside it, and starts the compiler in a worker of its own
+(`compile-worker.ts`), which imports `compiler.js`, loads the compiler, and compiles the default example at once: the
+first compile is most of the wait (see [the measurement](#the-measurement)), so the first Run is quick. "Loading the
+compiler…" shows in the toolbar, with Run disabled, until then. The page keeps responding meanwhile, and while any
+program compiles: the editor takes typing, and the page posts each program to the worker, which posts back its
+WebAssembly, transferred, and its diagnostics. A program runs in the runner's worker.
 
 **The page's route is cross-origin isolated** (`Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` in
 `docs/vercel.json`), so that a program can read input ([Hosts](./hosts)). The headers come with the page's own
@@ -51,7 +53,9 @@ response, so a page the client router swaps in isn't isolated: the playground's 
 (`clientRouter={false}`), and every link to it loads it afresh with `data-astro-reload`: the header's, and in the docs'
 markdown, each link to `/playground` (`rehypePlaygroundReload`) and the tour's "Open in the playground" links. Under
 those headers the page loads only what is from the site itself, and its scripts, the editor among them, are bundled
-into the site's. A page that isn't isolated says that its programs can't read input.
+into the site's. The compiler's worker, which the site bundles as `/_astro/compile-worker-*.js`, is served with the same
+headers, since an isolated page can only start a worker whose script says it is isolated too. A page that isn't
+isolated says that its programs can't read input.
 
 **The editor.** CodeMirror 6, with a highlighter of its own (`StreamLanguage`) for comments, strings, numbers, tags,
 attributes, directives and type names, whose keywords are the TextMate grammar's
