@@ -159,6 +159,19 @@ module SyntaxTree =
           As: WrittenAs
           Item: TopLevelItem }
 
+    /// `t` as a message writes it, for a type variable's name or a dimension's storage: a name, the arguments it is
+    /// applied to, and an associated type, as in `Num(a).fraction`.
+    let rec typeText (t: TypeExpr) : string =
+        match t.Kind with
+        | TypeName name
+        | TypeVar name -> name
+        | TypeApply(name, args) -> $"""{name}({args |> List.map typeText |> String.concat ", "})"""
+        | TypeNamedArgument(name, value) -> $"{name} = {typeText value}"
+        | TypeAssociated(context, name) -> $"{typeText context}.{name}"
+        | TypeHole -> "_"
+        | TypeUnit -> "()"
+        | _ -> "…"
+
     /// The types a type definition named `name` writes: its parameters' constraints, then its body.
     let private typeDefinitionTypes (name: Identifier) (parameters: (string * TypeExpr option) list) (body: TypeExpr) =
         (parameters |> List.choose snd |> List.map (fun constraint' -> constraint', ParameterConstraint)) @ [ body, TypeBody name ]

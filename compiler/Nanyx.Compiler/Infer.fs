@@ -156,6 +156,9 @@ let private argTypesFromExpected (state: InferState) (span: SourceSpan) (args: (
 /// inferring it did before it failed is dropped. The smallest expression that fails is the one recorded: one whose
 /// parts check but that does not itself (a call with the wrong number of arguments) is recorded whole.
 let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression) : Result<TypedExpr * InferState, Diagnostic list> =
+    match state.Inferred |> Map.tryFind expr.Id with
+    | Some typed -> Ok (typed, { state with Inferred = state.Inferred |> Map.remove expr.Id })
+    | None ->
     let outer = state.Origin
     let origin = if SourceSpan.isNone expr.Span then outer else expr.Span
     let inferred =
@@ -663,12 +666,25 @@ and private inferPipe (env: TypeEnv) (state: InferState) (expr: Expression) (val
             let current = checkArgumentsOnly ()
             Ok (mkTypedExpr expr Unifier.errorType None None None, { current with FailedExprs = (expr.Id, [ misfit ]) :: current.FailedExprs })
         | None ->
-        match inferExpr env (LambdaContexts.forgetSince state nextState) { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) } with
+        let call = { expr with Kind = FunctionCall(resolvedName, spanOpt, callArgs) }
+        // A value that is itself a pipe, the chain to the left of this one, is given to the call as it is typed already:
+        // inferring it again at each stage made a chain's checking double with every stage (#1851). Nothing the call
+        // expects of its argument changes how a pipe is typed. Any other value is inferred again as the call's first
+        // argument, where what the call expects of it, as a lambda's parameter types, is known.
+        let inferCall () =
+            match value.Kind with
+            | Pipe _ ->
+                inferExpr env { nextState with Inferred = nextState.Inferred |> Map.add value.Id typedValue } call
+                |> Result.map (fun (typedCall, finalState) -> typedCall, { finalState with Inferred = finalState.Inferred |> Map.remove value.Id })
+            | _ ->
+                inferExpr env (LambdaContexts.forgetSince state nextState) call
+                // The call infers the value again, as its first argument, so what the value used the first time goes. A
+                // call in the value left to find its instance later is left again at the types the call settles, so the
+                // one left the first time, at types nothing settles, goes.
+                |> Result.map (fun (typedCall, finalState) ->
+                    typedCall, withoutRepeatedPending state.PendingContextInstances nextState.PendingContextInstances finalState)
+        match inferCall () with
         | Ok (typedCall, finalState) ->
-            // The call infers the value again, as its first argument, so what the value used the first time goes. A
-            // call in the value left to find its instance later is left again at the types the call settles, so the
-            // one left the first time, at types nothing settles, goes.
-            let finalState = withoutRepeatedPending state.PendingContextInstances nextState.PendingContextInstances finalState
             // The call failed if it recorded itself as failed. Its error for a name it found nothing for, or more
             // than one of, is the pipe's, which says what the pipe looked for.
             let finalState =
@@ -952,12 +968,13 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 finalState
                                 |> recordSymbolType symbol declaredTy
                                 |> recordAnnotated symbol expectedDeclaredOpt.IsSome
-                            // Each `_` the def's contexts are applied to is the type its value made it.
+                            // Each `_` the def's contexts are applied to is the type its value made it, and so is one
+                            // elsewhere in its type that the value made a variable the type names.
                             let typeOpt =
-                                match DefAnnotations.settleContextHoles finalState name typeOpt with
+                                match DefAnnotations.settleHoles finalState name typeOpt with
                                 | Ok settled when settled <> typeOpt ->
-                                    let contexts = (fst (extractDefContexts settled value)).Value
-                                    current <- registerLocalContextRequirement (recordWrittenType name settled current) symbol name contexts declaredTypeExprOpt
+                                    let contexts, settledTypeExprOpt = extractDefContexts settled value
+                                    current <- registerLocalContextRequirement (recordWrittenType name settled current) symbol name contexts.Value settledTypeExprOpt
                                     settled
                                 | Ok _ -> typeOpt
                                 | Error err ->

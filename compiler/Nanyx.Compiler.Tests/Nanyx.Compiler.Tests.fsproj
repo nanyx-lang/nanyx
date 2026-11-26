@@ -213,6 +213,7 @@
     <Compile Include="Features\Packages\ShippedPackageTests.fs" />
     <Compile Include="Features\Packages\SeededPackageTests.fs" />
     <Compile Include="Features\Packages\VersionResolutionTests.fs" />
+    <Compile Include="Features\Pipes\PipeChainTests.fs" />
     <Compile Include="Features\Scripts\ScriptTests.fs" />
     <Compile Include="Features\Scripts\ScriptPackageTests.fs" />
     <Compile Include="Features\Timings\CompileTimingTests.fs" />
