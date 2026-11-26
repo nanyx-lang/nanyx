@@ -134,6 +134,27 @@ The elements of `xs` combined with `f`, in order, starting from the first: `Arra
 \array.reduce { * }` is `#some(120)`, and an empty array, having no first element, gives `#none`.
 To start from another value, use [`array.fold`](#arrayfold).
 
+## `array.foldBack`
+
+```nanyx fragment
+def array.foldBack: [c] array(a), b, ([c] (b, a) -> b) -> b
+```
+
+[`array.fold`](#arrayfold) from the last element to the first, without copying `xs`:
+`array.foldBack(Array["a", "b", "c"], "", { acc, x -> acc ++ x })` is `"cba"`.
+
+## `array.foldWhile`
+
+```nanyx fragment
+def array.foldWhile: [c] array(a), b, ([c] (b, a) -> #continue(b) | #stop(b)) -> b
+```
+
+[`array.fold`](#arrayfold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next
+element, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
+or after the last element. `step` isn't called again after a `#stop`:
+`array.foldWhile(Array[1, 2, 3, 4, 5], 0, { total, x -> if total + x > 6 then #stop(total) else
+#continue(total + x) })` is `6`.
+
 ## `array.isEmpty`
 
 ```nanyx fragment
