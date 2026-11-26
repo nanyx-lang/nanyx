@@ -478,7 +478,7 @@ let private instanceText (state: InferState) (ctxName: Identifier) (argTys: Ty l
         associated
         |> List.map (fun (name, ty) -> name, resolveSoFar state ty)
         |> List.filter (snd >> TypeEnv.freeTyVars >> Set.isEmpty)
-        |> List.map (fun (name, ty) -> $"{name} = {Unifier.tyToString ty}")
+        |> List.map (fun (name, ty) -> $"{name} = {Unifier.tyToStringIn state.TypeDefs ty}")
     $"""{ctxName}({String.concat ", " (positional @ named)})"""
 
 /// The associated types of the context `ctxName` that an instance at `argTys` in `env` leaves unfixed, by name: each
@@ -555,7 +555,7 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
     match argTys, contextMemberTypes state ctxName argTys with
     | forType :: _, Some members ->
         // The name a definition for the type is attached under: `Point`, `Money`, `int`.
-        let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToString forType)
+        let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToStringIn state.TypeDefs forType)
         let definitionOf memberName =
             match NoneDefault.tryDefinitions ctxName argTys with
             | Some definitions -> definitions |> List.tryFind (fst >> (=) memberName) |> Option.map snd |> Option.filter (fun name -> (TypeEnv.tryFind name env).IsSome)
@@ -578,9 +578,9 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
                         match fixedTwoWays next ctxName argTys opened memberName definitionTy span with
                         | Some (name, earlier, own) ->
                             Error [ Diagnostics.at DiagnosticCodes.AssociatedTypeFixedTwice span
-                                        $"The instance '{instanceText state ctxName argTys}' fixes its associated type '{name}' two ways: '{definition}' makes it '{Unifier.tyToString own}', where it is already '{Unifier.tyToString earlier}'" ]
+                                        $"The instance '{instanceText state ctxName argTys}' fixes its associated type '{name}' two ways: '{definition}' makes it '{Unifier.tyToStringIn state.TypeDefs own}', where it is already '{Unifier.tyToStringIn state.TypeDefs earlier}'" ]
                         | None ->
-                            fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToString (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToString (resolveSoFar next memberTy)}'"))
+                            fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToStringIn state.TypeDefs (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToStringIn state.TypeDefs (resolveSoFar next memberTy)}'"))
                 (Ok ([], withAttachedAssociated state attachTo ctxName argTys span))
             |> Result.bind (fun (bound, next) ->
                 match unfixedAssociated env next false ctxName argTys |> List.filter opened.Contains with

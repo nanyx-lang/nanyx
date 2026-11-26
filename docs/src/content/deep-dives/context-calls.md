@@ -251,8 +251,10 @@ A type is written back for a reader as a signature writes it. Given the module's
 (`Unifier.tyToDisplayStringIn`, `Signatures.typesWithContexts`), the printer (`TypePrinting.printTy`) leaves out an
 associated argument that is the signature's own variable of that name, `[Iter(c)]`, and writes any other by name,
 `Iter(c, elem = string)` or, for one inference leaves open, `Iter(a, elem = b)`. Hover, `nanyx check`, the type lenses,
-the stdlib reference and the refactorings that write a type do so. Messages made while the constraints are solved
-(`Unifier.tyToString`) don't have the type definitions, so they still write the arguments positionally.
+the stdlib reference and the refactorings that write a type do so, and so does a diagnostic (`Unifier.tyToStringIn`): a
+mismatch found when the module's constraints are solved is written once its type definitions are known, and a message
+inference makes is written with the type definitions it has so far. A message made without them (`Unifier.tyToString`),
+as by a check that has no state to hand, still writes the arguments positionally.
 
 A function's type need not write its associated types, as `elem` in `countAll: [Iter(c)] c -> int`, though its body has
 values of them, whose layout depends on what they are. So the type checker records what each one is at each call, by
