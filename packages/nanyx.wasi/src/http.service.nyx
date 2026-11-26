@@ -15,8 +15,8 @@ import (
   abi as (aligned8, freeOptionalString, readableEnd, takeString, writableEnd)
   http as (bodyFrom, fieldsOf, headersOf)
   nanyx.http/request as (Method, Request)
-  waits as (settledAsync)
   nanyx.http/response as (Response)
+  waits as (settledAsync)
 )
 
 -- A request is a `wasi:http/types` `request`: its method, scheme, authority and path with its

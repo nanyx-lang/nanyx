@@ -278,7 +278,8 @@ def writeNoTrailers: [Async, HostRuntime] I32 -> () = { writer ->
   at `buffer`, after `blocks` (the latest first), until it ends, while the program's other tasks
   run.
 def blocksFrom
-  : [Async, HostRuntime] ([HostRuntime] I32, I32, I32 -> I32), I32, I32, list(string) -> list(string)
+  : [Async, HostRuntime]
+    ([HostRuntime] I32, I32, I32 -> I32), I32, I32, list(string) -> list(string)
   = { read, reader, buffer, blocks ->
     def status = settledAsync(reader, read(reader, buffer, chunkSize))
     def count = status // 16
