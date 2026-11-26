@@ -767,6 +767,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                             match otherInstanceInScope env current ctxName argTys with
                             | Some other when not settled -> Error [ unsettledBesideOther name ctxName other calleeSpan ]
                             | _ -> ensureContextAvailable (Some call.Id) true env current name [ ctx ] calleeSpan
+                        let argumentFailed = lazy (Solving.failsWithin call.Span current.Constraints)
                         match available, current.ContextScope with
                         | Ok next, _ -> Ok (found @ [ None ], next)
                         // In an unannotated def, a type the call leaves open may be settled by the rest of the body,
@@ -782,7 +783,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         // do not fit the callee are the error instead (see `inferExpr`).
                         | Error errors, scope when
                             argTys |> List.exists (TypeEnv.freeTyVars >> Set.isEmpty >> not)
-                            && not (snd (Solving.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span)) ->
+                            && not argumentFailed.Value ->
                             let annotatedDef =
                                 match scope with
                                 | DefScope(defName, _) -> Some defName
@@ -801,7 +802,7 @@ and private resolveInstancesAt (reference: bool) (env: TypeEnv) (state: InferSta
                         // A `for` loop's `__toSeq(xs)` is left to fail: `inferExpr` reads it as the call it stands for (see `PipeTargets`).
                         | Error _, _ when
                             name <> ForSyntax.toSeq
-                            && snd (Solving.solve current.Constraints) |> List.exists (snd >> SourceSpan.contains call.Span) ->
+                            && argumentFailed.Value ->
                             Ok (found @ [ None ], current)
                         | Error errors, _ -> Error errors
                 | _ -> Ok (found @ [ None ], current))) (Ok ([], state))

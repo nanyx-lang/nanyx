@@ -113,3 +113,16 @@ let ``A constraint set aside while a def is checked leaves the defs after it sol
         count
     let addedBefore count = fullSolves (procLike @ pipeDefs 1 count) - fullSolves (pipeDefs 1 count)
     Assert.Equal(addedBefore 10, addedBefore 40)
+
+[<Fact>]
+let ``A call passed a division whose storages don't agree adds no full solve for the defs after it that another error doesn't`` () : unit =
+    // The call finds no instance for the type the division leaves open, and looks for the division's failure among the
+    // constraints solved so far, not by solving them afresh (#2852).
+    let fullSolves (first: string) count =
+        let result, solves = Solving.countingFullSolves (fun () -> Compiler.compile (moduleOf ([ first ] @ pipeDefs 1 count)))
+        Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], result.Diagnostics |> List.map _.Code)
+        solves
+    let addedBefore count =
+        fullSolves "def first: [Console] () -> () = { () -> println(1.5s / 1ms) }" count
+        - fullSolves "def first: int = \"one\"" count
+    Assert.Equal(addedBefore 20, addedBefore 80)
