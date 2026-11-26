@@ -32,7 +32,7 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   the compiler.
 - **A release publishes them to the index.** Each shipped manifest names this repository, `repository =
   "nanyx-lang/nanyx"`, and the compilers it builds with: a library the one it ships with or a later one, and a host or
-  a host library that one only, `=0.44.0`, since they use the compiler's internals. Each release attaches its
+  a host library that one only, `=0.44.1`, since they use the compiler's internals. Each release attaches its
   `.nyxpkg` to the `compiler/<version>` release, which the [package index](./package-index) records as it does any
   package's release ([Releases](./releases#the-shipped-packages)). The compiler still reads them from `packages/`
   beside it: resolving them from the index, as any package is, is the rest of
