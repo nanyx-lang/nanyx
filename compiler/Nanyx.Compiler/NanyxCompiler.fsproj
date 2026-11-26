@@ -161,6 +161,7 @@
     <Compile Include="OwnedDefinitions.fs" />
     <Compile Include="ModuleOrigins.fs" />
     <Compile Include="ImportMerging.fs" />
+    <Compile Include="TestChecks.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="Downloads.fs" />
     <Compile Include="GitHub.fs" />

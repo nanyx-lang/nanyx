@@ -990,3 +990,23 @@ let assemble (wat: string) : byte array =
             vector table library (fun out number -> unsigned out (uint64 number))
             section out 0uy table
         out.ToArray()
+
+/// The name of the custom section a test build lists its tests in (see `withTests`).
+let testTableName = "nanyx.tests"
+
+/// `wasm`, a test build's module, with the custom section `testTableName` after its others, listing `tests` in the order
+/// the module exports them, each `test#<index>`: a vector of each test's module, name, file, line and column, the
+/// strings as names are written and the numbers as unsigned LEB128s. The runtime reads it to find a test by its index or
+/// its name, and to say where it is (see `Nanyx.Runtime.TestTable`).
+let withTests (tests: (string * string * string * int * int) list) (wasm: byte array) : byte array =
+    let out = Bytes(wasm)
+    let table = Bytes()
+    name table testTableName
+    vector table tests (fun out (moduleName, testName, file, line, column) ->
+        name out moduleName
+        name out testName
+        name out file
+        unsigned out (uint64 line)
+        unsigned out (uint64 column))
+    section out 0uy table
+    out.ToArray()
