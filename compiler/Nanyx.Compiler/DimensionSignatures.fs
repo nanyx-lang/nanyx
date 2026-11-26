@@ -99,13 +99,18 @@ module internal DimensionSignatures =
                     match part.Kind with
                     | TypeApply(name, [ storage ]) when dimensions.TryFind name = Some true -> Some storage
                     | _ -> None)
-            for part in parts do
-                match part.Kind with
-                | TypeName name
-                | TypeApply(name, _) when dimensions.ContainsKey name -> ()
-                | TypeName name
-                | TypeApply(name, _) -> errors.Add(notADimension part name)
-                | _ -> errors.Add(notADimension part "this")
+            let notDimensions =
+                parts
+                |> List.choose (fun part ->
+                    match part.Kind with
+                    | TypeName name
+                    | TypeApply(name, _) when dimensions.ContainsKey name -> None
+                    | TypeName name
+                    | TypeApply(name, _) -> Some (notADimension part name)
+                    | _ -> Some (notADimension part "this"))
+            errors.AddRange notDimensions
+            // One that names something no dimension is that error alone: it has no storage to require `Num` of.
+            if not notDimensions.IsEmpty then t else
             match written |> List.distinctBy writtenStorage with
             | first :: second :: _ ->
                 errors.Add(
