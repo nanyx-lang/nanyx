@@ -251,3 +251,26 @@ let ``Run - a list of a type with its own == is compared through it, element by 
           """["a"] == ["b"]""" ]
     |> runSource
     |> assertRan "T\nF\nF\nT\nF\n"
+
+[<Fact>]
+let ``Run - a type's inferred == is passed to a function that requires Eq`` () =
+    // `Obj.==` is inferred to require `Eq(a)`, with no type written (#2814).
+    let source =
+        """type Obj(a) = protected (members: list((string, a)))
+
+def Obj.`==` = { x: Obj(a), y: Obj(a) ->
+  list.all(x.members, { m -> list.contains(y.members, m) }) and x.members.length == y.members.length
+}
+
+def sameT: [Eq(t)] t, t -> bool = { a, b -> a == b }
+
+@entry
+def main = {
+  def p = Obj(members = [("a", 1), ("b", 2)])
+  def q = Obj(members = [("b", 2), ("a", 1)])
+  println(sameT(p, q))
+  println(sameT(p, Obj(members = [("a", 1)])))
+}
+"""
+            .ReplaceLineEndings "\n"
+    runSource source |> assertRan "true\nfalse\n"
