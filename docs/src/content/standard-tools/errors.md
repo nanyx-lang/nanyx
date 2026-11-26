@@ -2609,7 +2609,7 @@ To fix it, write one character, or use a `string` where the value is more than o
 # NYX0286: Dimension without a base unit
 
 A dimension has no base unit, the unit its values are stored in, or a unit is neither its dimension's base unit nor a
-multiple of another unit ([Units and dimensions](../work-in-progress/units-and-dimensions)).
+multiple of another unit ([Units of measure](../advanced/units-of-measure#dimensions-and-units)).
 
 ```nanyx
 dimension Time  -- error NYX0286: 'Time' has no base unit, the unit its values are stored in: ...
@@ -2724,7 +2724,7 @@ not a literal stops the program when it runs.
 
 A signature names a dimension whose storage, the number type that holds its values, is not the type of a parameter, so
 nothing a call passes says what it is. A dimension written without its storage, as `Time`, is of a storage of its own
-([Units and dimensions](../work-in-progress/units-and-dimensions#dimensions-in-types)).
+([Units of measure](../advanced/units-of-measure#dimensions-in-types)).
 
 ```nanyx
 dimension Time

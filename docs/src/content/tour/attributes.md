@@ -131,7 +131,7 @@ Marks a unit declaration as the base unit of its dimension: the unit its values 
 @baseUnit unit ns: Time
 ```
 
-See [Units and dimensions](../work-in-progress/units-and-dimensions), which is currently a design proposal.
+See [Units of measure](../advanced/units-of-measure).
 
 # Attributes on fields
 

@@ -738,7 +738,7 @@ def mean: [Num(a)] list(a) -> fraction = { xs ->
 }
 ```
 
-`mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves, as it would for a function that requires `Sub(a)`. Its division gives `fraction`, so `mean([1, 2, 4])` is the `float` `2.333...`, and `mean` of a list of `F32`s an `F32`. A function that doesn't write its type and divides values of a type variable with `/` is inferred to return that variable's `fraction`, and one that divides ints with `/` to return a `float`. A measured type, such as a length, is to have an `Add` and a `Sub` but no `Num`, because multiplying two lengths gives an area ([units and dimensions](../work-in-progress/units-and-dimensions)).
+`mean` calls `list.sum`, which requires `Add(a)`: contexts are structural, and a `Num` has every member an `Add` has, so the `Num` it is given serves, as it would for a function that requires `Sub(a)`. Its division gives `fraction`, so `mean([1, 2, 4])` is the `float` `2.333...`, and `mean` of a list of `F32`s an `F32`. A function that doesn't write its type and divides values of a type variable with `/` is inferred to return that variable's `fraction`, and one that divides ints with `/` to return a `float`. A measured type, such as a time, has an `Add` and a `Sub` but no `Num`, because multiplying two times gives no time ([Units of measure](./units-of-measure#arithmetic)).
 
 ## Append(a)
 

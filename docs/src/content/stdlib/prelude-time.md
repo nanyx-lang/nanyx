@@ -4,7 +4,7 @@ description: The Time dimension and its units, from nanoseconds to days
 order: 5.7
 ---
 
-`Time` is how long something takes: a [dimension](../work-in-progress/units-and-dimensions), stored in nanoseconds in
+`Time` is how long something takes: a [dimension](../advanced/units-of-measure), stored in nanoseconds in
 any number type, so `500ms` is a `Time(int)` of 500,000,000 and `0.5s` a `Time(float)`. It and its units are in the
 [prelude](prelude), so no import is needed, and [`sleep`](clock) takes a `Time(int)`:
 
