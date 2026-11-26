@@ -45,7 +45,10 @@ const types = {
   ".woff2": "font/woff2",
 };
 
-/** Serves `dist` with clean URLs, and the playground's route with the headers `vercel.json` gives it. */
+/**
+ * Serves `dist` with clean URLs, and the playground's route, and the compiler's worker its page starts, with the headers
+ * `vercel.json` gives them.
+ */
 const server = createServer((request, response) => {
   const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
   const candidates = [pathname, pathname + ".html", join(pathname, "index.html")];
@@ -57,7 +60,7 @@ const server = createServer((request, response) => {
     return;
   }
   const headers = { "Content-Type": types[extname(file)] ?? "application/octet-stream" };
-  if (pathname === "/playground" || pathname.startsWith("/playground/")) {
+  if (pathname === "/playground" || pathname.startsWith("/playground/") || pathname.startsWith("/_astro/compile-worker-")) {
     headers["Cross-Origin-Opener-Policy"] = "same-origin";
     headers["Cross-Origin-Embedder-Policy"] = "require-corp";
   }
@@ -215,6 +218,22 @@ const helloWorld = playgroundData.defaultExample.code;
 const menuExamples = playgroundData.groups.flatMap((group) => group.examples);
 
 const tests = [
+  ["the editor takes typing while the compiler loads and compiles its warm-up, in a worker of its own", async () => {
+    // A context of its own, so that the code typed, which the page keeps in the browser's storage, isn't what the
+    // next page opens with.
+    const own = await browser.newContext();
+    const loading = await own.newPage();
+    watch(loading);
+    await loading.goto(`${origin}/playground`);
+    await loading.click(".cm-content");
+    await loading.keyboard.press("ControlOrMeta+End");
+    await loading.keyboard.type("-- typed while loading");
+    await loading.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("-- typed while loading"));
+    // The text was there before the compiler was ready, which the page says once its first compile has ended.
+    assert.notEqual(await loading.evaluate(() => document.documentElement.dataset.playground), "ready");
+    await readyOn(loading);
+    await own.close();
+  }],
   ["the page loads the compiler and starts with the tour's hello world", async () => {
     await page.goto(`${origin}/playground`);
     assert.equal(await page.evaluate(() => crossOriginIsolated), true);
