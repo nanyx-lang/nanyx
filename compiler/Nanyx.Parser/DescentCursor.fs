@@ -18,13 +18,28 @@ exception NoMatch
 exception Reported of ParseError
 
 /// How a token reads in a message: its text in backticks, or the end of the file.
-let describeToken (source: string) (token: Token) =
+let private describeToken (source: string) (token: Token) =
     match token.Kind with
     | EndOfFile -> "the end of the file"
     | StringStart
     | StringLiteral -> "a string"
     | Number -> "a number"
     | _ -> $"`{source.Substring(token.Start, token.End - token.Start)}`"
+
+/// The text of `token` as a syntax error's headline names what the parser found (see `ParseError.Found`): none at the end
+/// of the file, or for the start of a string, which runs on past it.
+let private foundText (source: string) (token: Token) =
+    match token.Kind with
+    | EndOfFile
+    | StringStart -> None
+    | _ -> Some $"`{source.Substring(token.Start, token.End - token.Start)}`"
+
+/// The error at `span` that `expected`, a message saying what was expected, is not `token`, which is found there. A
+/// token the headline can name is left out of the message; any other is said there, as "the end of the file".
+let private expectedAt (source: string) (span: SourceSpan) (token: Token) (expected: string) : ParseError =
+    match foundText source token with
+    | Some _ as found -> { Message = expected; Span = span; Found = found }
+    | None -> { Message = $"{expected}, found {describeToken source token}"; Span = span; Found = None }
 
 /// How a token kind reads as what was expected.
 let private describeKind (kind: TokenKind) =
@@ -153,7 +168,12 @@ type Cursor(file: string, source: string, laid: Laid array) =
 
     /// Reports the mistake `message` at `offset` (see `Reported`).
     member _.Report (offset: int) (message: string) : 'a =
-        raise (Reported { Message = message; Span = lines.Span file offset (min source.Length (offset + 1)) })
+        raise (Reported { Message = message; Span = lines.Span file offset (min source.Length (offset + 1)); Found = None })
+
+    /// Reports `expected` at `token`, which is not it: the message says what was expected, and the error names the
+    /// token found (see `ParseError.Found`).
+    member _.ReportFound (token: Token) (expected: string) : 'a =
+        raise (Reported (expectedAt source (lines.Span file token.Start (min source.Length (max (token.Start + 1) token.End))) token expected))
 
     /// The message for text no reading matches: what was found at the furthest item reached, and what was expected
     /// there, if anything was noted.
@@ -163,13 +183,12 @@ type Cursor(file: string, source: string, laid: Laid array) =
         while i < laid.Length - 1 && (match laid[i] with Code _ -> false | _ -> true) do
             i <- i + 1
         let token = match laid[i] with Code token -> token | _ -> { Kind = EndOfFile; Start = source.Length; End = source.Length; Leading = []; Trailing = [] }
-        let found = describeToken source token
-        let message =
-            match expected with
-            | [] -> $"Unexpected {found}"
-            | [ single ] -> $"Expected {single}, found {found}"
-            | several -> $"""Expected {String.concat ", " (List.take (several.Length - 1) several)} or {List.last several}, found {found}"""
-        { Message = message; Span = lines.Span file token.Start (min source.Length (max (token.Start + 1) token.End)) }
+        let span = lines.Span file token.Start (min source.Length (max (token.Start + 1) token.End))
+        match expected with
+        | [] when token.Kind = EndOfFile -> { Message = "Unexpected end of the file"; Span = span; Found = None }
+        | [] -> { Message = "It can't come here"; Span = span; Found = foundText source token }
+        | [ single ] -> expectedAt source span token $"Expected {single}"
+        | several -> expectedAt source span token $"""Expected {String.concat ", " (List.take (several.Length - 1) several)} or {List.last several}"""
 
     /// Takes the code token at the cursor if it is `kind` (with the text `text`), and says whether it did.
     member this.Skip(kind: TokenKind, ?text: string) =

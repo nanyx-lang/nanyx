@@ -151,7 +151,7 @@ let private scan (filePath: string) (source: string) : Piece list * ParseError l
     let headerEnd = Directives.headerEnd source
     let pieces = Collections.Generic.List<Piece>()
     let errors = Collections.Generic.List<ParseError>()
-    let error (start: int) (finish: int) (message: string) = errors.Add { Message = message; Span = lines.Span filePath start finish }
+    let error (start: int) (finish: int) (message: string) = errors.Add { Message = message; Span = lines.Span filePath start finish; Found = None }
     let at (i: int) = if i < source.Length then source[i] else '\000'
     let isLineEnd (i: int) = i >= source.Length || source[i] = '\n' || source[i] = '\r'
     let lineEnd (i: int) =

@@ -102,7 +102,7 @@ let ``A pipe chain in a match arm's block continues on more indented lines`` () 
 [<Fact>]
 let ``A pipe at the indent of the statement's line does not continue it`` () =
     let reported, text = parseErrorOf "def f = { n ->\n  n\n  \\add(2)\n}"
-    Assert.Equal("Expected an expression, found `\\`", reported)
+    Assert.Equal("Expected an expression", reported)
     Assert.Equal("\\add(2)", text)
 
 [<Fact>]

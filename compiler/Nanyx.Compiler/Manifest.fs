@@ -571,7 +571,7 @@ module Manifest =
     let private dataErrors (errors: DataError list) =
         errors
         |> List.map (function
-            | NotParsed error -> Diagnostics.at DiagnosticCodes.SyntaxError error.Span error.Message
+            | NotParsed error -> Diagnostics.ofParseError error
             | NotData (span, message) -> Diagnostics.at DiagnosticCodes.CodeInManifest span message)
 
     /// A TOML table header, `[package]`, or a TOML key at the top level, `name = "shop"`.

@@ -4,8 +4,13 @@ module Parser.Program.SourceTrivia
 
 open System
 
-/// Why a module could not be parsed, and where.
-type ParseError = { Message: string; Span: SourceSpan }
+/// Why a module could not be parsed, and where. `Found` is the text of the token the parser found where it expected
+/// something else, which a syntax error's headline names; none at the end of the file, or for a mistake the message
+/// says itself.
+type ParseError =
+    { Message: string
+      Span: SourceSpan
+      Found: string option }
 
 /// What the parser skips that the formatter has to put back, and where it is. Neither span includes the final line
 /// break.
