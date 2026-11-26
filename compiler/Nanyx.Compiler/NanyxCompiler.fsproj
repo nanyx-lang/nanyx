@@ -179,6 +179,7 @@
     <Compile Include="Script.fs" />
     <Compile Include="Migration.fs" />
     <Compile Include="PackageDependencies.fs" />
+    <Compile Include="DimensionHover.fs" />
     <Compile Include="Hover.fs" />
     <Compile Include="Definition.fs" />
     <Compile Include="NominalNames.fs" />

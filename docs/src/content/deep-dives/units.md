@@ -174,3 +174,12 @@ among them: `90.0kmh` is `90kmh`, or `25mps` where `unit mps: Speed = 1m / 1s` i
 of a derived dimension with no units, is written in its parts' base units, joined by `*` and `/` with no spaces:
 `100.0m / 9.58s` is `1.0438413361169103e-8m/ns`. A module that can't write a part's base unit writes it as `dbg` does,
 `Length / Time(1.04e-8)`.
+
+# Hover
+
+`DimensionHover` writes what an editor shows on a dimension or a unit, and `Hover.unitAt` finds one at a position: the
+unit of a number with a unit, a dimension's name in a type, and a `dimension` or `unit` declaration. A dimension, plain or
+derived, shows its declaration and the units of it the module can write, `typed.Units`, from the smallest to the
+largest, each as it is declared, `ms = 1_000us` or `kmh = 1km / 1hr`, with the multiple `UnitInfo.Multiple` keeps, and a
+value written in one of them; a unit shows its declaration and how many base units it is. A measured value's own hover, `def timeout: Time(int)`, ends with its
+dimension's units too (`Hover.hoverOf`).

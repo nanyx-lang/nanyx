@@ -387,7 +387,10 @@ type UnitInfo =
       Dimension: Dimension
       Scale: Rational
       Home: ModuleOrigin
-      IsExport: bool }
+      IsExport: bool
+      /// What it is declared as, as written: a multiple of another unit, `1_000us`, or of its parts' units, `1km / 1hr`;
+      /// none for its dimension's base unit.
+      Multiple: Expression option }
 
 module UnitInfo =
     /// Whether `info` is its dimension's base unit, the one its values are stored in.

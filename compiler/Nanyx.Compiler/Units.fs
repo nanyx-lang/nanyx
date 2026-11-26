@@ -230,12 +230,14 @@ module internal Units =
                 | _ -> [])
         perUnit @ perDimension
 
-    /// `value`, a unit's definition, as it is written: `1_000us`, or `1km / 1hr`.
-    let rec private written (value: Expression) : string =
+    /// `value`, what a unit is defined as, as written, with each number written by `number`: `1_000us`, `1km / 1hr`.
+    let rec internal writtenWith (number: WrittenNumber -> string) (value: Expression) : string =
         match value.Kind with
-        | LiteralExpr(UnitLit(number, unitName)) -> UnitSyntax.written number unitName
-        | BinaryOp(op, _, left, right) -> $"{written left} {op} {written right}"
+        | LiteralExpr(UnitLit(written, unitName)) -> number written + unitName
+        | BinaryOp(op, _, left, right) -> $"{writtenWith number left} {op} {writtenWith number right}"
         | _ -> "it"
+
+    let private written = writtenWith WrittenNumber.text
 
     /// The error for `unit`, a unit of `dimension`, defined as `value`, a value of `found`, another dimension.
     let private ofAnotherDimension (unit: Declared) (dimension: Dimension) (value: Expression) (found: Dimension) : Diagnostic =
@@ -353,7 +355,8 @@ module internal Units =
                   Dimension = dimension
                   Scale = found |> Map.tryFind unit.Name |> Option.defaultValue Rational.one
                   Home = state.Home
-                  IsExport = unit.IsExport })
+                  IsExport = unit.IsExport
+                  Multiple = unit.Multiple })
         let units = own |> List.fold (fun acc (name, info) -> acc |> Map.add name info) state.Units
         let errors = storageErrors hasNum state items @ dimensionErrors @ duplicates @ baseUnitErrors state items resolved @ scaleErrors
         // A unit of the module's own is the one its name means, though two imports bring in others of the name.
