@@ -296,7 +296,9 @@ and private expressionsOfType (typeExpr: TypeExpr) =
                 (fieldType |> Option.toList |> List.collect expressionsOfType)
                 @ (defaultValue |> Option.toList |> List.collect expressions)
             | TypeFieldAttribute (_, argument, _) -> argument |> Option.toList |> List.collect expressions)
-    | TypeFunc (input, output) -> expressionsOfType input @ expressionsOfType output
+    | TypeFunc (input, output)
+    | TypeProduct (input, output)
+    | TypeQuotient (input, output) -> expressionsOfType input @ expressionsOfType output
     | TypeTag (_, payload) -> payload |> Option.toList |> List.collect expressionsOfType
     | TypeWithContext (contexts, inner) -> (contexts |> List.collect expressionsOfType) @ expressionsOfType inner
     | TypeConstraint (_, constrained, value) -> expressionsOfType constrained @ expressions value
@@ -309,7 +311,7 @@ let rec private expressionsOfItem (item: TopLevelItem) =
     | Import _
     | ReExport _
     | Attribute _ -> []
-    | DimensionDecl (_, _, storage) -> storage |> Option.toList |> List.collect expressionsOfType
+    | DimensionDecl (_, _, storage, derived) -> Option.toList storage @ Option.toList derived |> List.collect expressionsOfType
     | UnitDecl (_, _, _, multiple) -> multiple |> Option.toList |> List.collect expressions
     | ModuleBlock (_, items) -> items |> List.collect expressionsOfItem
     | Def (ValueDef (_, _, typeOpt, value)) -> (typeOpt |> Option.toList |> List.collect expressionsOfType) @ expressions value
@@ -376,7 +378,7 @@ let rec private typesOfItem (item: TopLevelItem) =
     match item.Kind with
     | Def (ValueDef (_, _, typeOpt, _)) -> Option.toList typeOpt
     | Def (TypeDef (_, _, parameters, body)) -> parameterTypes parameters @ [ body ]
-    | DimensionDecl (_, _, storage) -> Option.toList storage
+    | DimensionDecl (_, _, storage, derived) -> Option.toList storage @ Option.toList derived
     | ModuleBlock (_, items) -> items |> List.collect typesOfItem
     | ModuleDecl _
     | Import _
@@ -408,7 +410,9 @@ let rec private typesWithin (typeExpr: TypeExpr) : TypeExpr list =
             fields |> List.collect (function
                 | TypeField (_, _, fieldType, _) -> fieldType |> Option.toList |> List.collect typesWithin
                 | TypeFieldAttribute _ -> [])
-        | TypeFunc (input, output) -> typesWithin input @ typesWithin output
+        | TypeFunc (input, output)
+        | TypeProduct (input, output)
+        | TypeQuotient (input, output) -> typesWithin input @ typesWithin output
         | TypeTag (_, payload) -> payload |> Option.toList |> List.collect typesWithin
         | TypeConstraint (_, inner, _)
         | TypeWhere (inner, _) -> typesWithin inner

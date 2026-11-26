@@ -251,6 +251,13 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     for name, modifiers, parameters, body in inDependencyOrder (Units.withDimensionsAsTypes module') do
         state <- registerTypeDef state name modifiers parameters body
     state <- Units.markDimensions module' state
+    // A derived dimension, `dimension Speed = Length / Time`, is registered again once the dimensions are marked as such,
+    // so that what it names is read as dimensions (see `Units.withDimensionsAsTypes`).
+    let derived = module' |> List.filter (fun item -> match item.Kind with DimensionDecl(_, _, _, Some _) -> true | _ -> false)
+    if not derived.IsEmpty then
+        for name, modifiers, parameters, body in inDependencyOrder (Units.withDimensionsAsTypes derived) do
+            state <- registerTypeDef state name modifiers parameters body
+        state <- Units.markDimensions module' state
     let withUnits, unitErrors = Units.declare (hasInstance env state "Num") state module'
     state <- withUnits
     errors <- errors @ unitErrors

@@ -329,7 +329,11 @@ module TypePrinting =
         // Only where the contexts a type carries are printed on their own, which a reader never sees: they are written
         // in front of the type.
         | TyContexts contexts -> $"""[{writtenContexts contexts |> List.map (contextAsPrinted p >> printTy p false) |> String.concat ", "}]"""
-        // A measured value is written as its dimension applied to its storage, `Time(int)`.
+        // A measured value is written as its dimension applied to its storage, `Time(int)`, and one of a derived dimension
+        // as each part so, `Length(float) / Time(float)`, as an annotation writes it.
+        | TyMeasure(dimension, storage) when Dimension.isDerived dimension ->
+            let stored = printTy p false storage
+            Dimension.writtenWith (fun id -> $"{id.Name}({stored})") " * " " / " dimension
         | TyMeasure(dimension, storage) -> $"{Dimension.text dimension}({printTy p false storage})"
 
     /// `ty` as it would be written in a def's annotation: see `printTy`.

@@ -51,3 +51,15 @@ let ``A declaration keeps its doc comment and the comment after it`` () =
 [<Fact>]
 let ``dimension and unit used as names are formatted as names`` () =
     unchanged (lines [ "def unit = 1"; "def dimension = 2"; "def f = { unit, dimension -> unit + dimension }" ])
+
+[<Fact>]
+let ``A derived dimension is written with spaces around * and /, and brackets only on the right`` () =
+    unchanged (
+        lines
+            [ "dimension Speed = Length / Time"
+              ""
+              "export dimension Acceleration = Length / (Time * Time)"
+              ""
+              "def f: Length(a) / Time(a), Length / Time / Time -> Length * Length = { a, b ->"
+              "  a * a"
+              "}" ])

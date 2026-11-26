@@ -252,7 +252,12 @@ let private unitDeclaration (c: Cursor) (start: int) : TopLevelItem list =
                     c.Expect RightParen |> ignore
                     Some storage
                 else None
-            DimensionDecl(isExport, declared, storage)
+            let derived =
+                if storage.IsNone && c.Is Equals && c.OnSameLine then
+                    c.Take() |> ignore
+                    Some (DescentTypes.typeExpr c)
+                else None
+            DimensionDecl(isExport, declared, storage, derived)
         else
             c.Expect Colon |> ignore
             let dimension, _ = identifierWithSpan c

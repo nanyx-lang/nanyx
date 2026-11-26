@@ -252,17 +252,53 @@ module Dimension =
     /// The dimension `id` declares, alone.
     let ofBase (id: NominalId) : Dimension = [ id, 1 ]
 
-    /// `dimension` as it is written: `Time`, or a product and quotient of dimensions, `Length/Time^2`.
-    let text (dimension: Dimension) : string =
-        let part (id: NominalId, exponent: int) = if abs exponent = 1 then id.Name else $"{id.Name}^{abs exponent}"
-        let above = dimension |> List.filter (fun (_, exponent) -> exponent > 0) |> List.map part
-        let below = dimension |> List.filter (fun (_, exponent) -> exponent < 0) |> List.map part
-        let product parts = String.concat " * " parts
-        match above, below with
-        | [], [] -> "1"
-        | _, [] -> product above
-        | [], _ -> $"1/{product below}"
-        | _ -> $"{product above}/{product below}"
+    /// The base dimensions of `parts`, each once, with the sum of its exponents, but for those that sum to none, in
+    /// order: so a dimension is one list however it is written, and `Length * Time / Time` is `Length`.
+    let private normalized (parts: (NominalId * int) list) : Dimension =
+        parts
+        |> List.groupBy fst
+        |> List.map (fun (id, each) -> id, each |> List.sumBy snd)
+        |> List.filter (fun (_, exponent) -> exponent <> 0)
+        |> List.sortBy fst
+
+    /// The dimension of a product of a value of `left` and one of `right`: their exponents added.
+    let multiply (left: Dimension) (right: Dimension) : Dimension = normalized (left @ right)
+
+    /// The dimension of a value of `left` divided by one of `right`: `right`'s exponents taken off `left`'s.
+    let divide (left: Dimension) (right: Dimension) : Dimension =
+        normalized (left @ (right |> List.map (fun (id, exponent) -> id, -exponent)))
+
+    /// Whether `dimension` is a product or quotient of dimensions, not one alone.
+    let isDerived (dimension: Dimension) : bool =
+        match dimension with
+        | [ _, 1 ] -> false
+        | _ -> true
+
+    /// The base dimensions `dimension` multiplies by, each as many times as its exponent says, and those it divides by.
+    let parts (dimension: Dimension) : NominalId list * NominalId list =
+        let repeated (sign: int) =
+            dimension |> List.collect (fun (id, exponent) -> if sign * exponent > 0 then List.replicate (abs exponent) id else [])
+        repeated 1, repeated -1
+
+    /// `dimension` written with `written` for each base dimension, joined by `times` and `over`: `Length / Time`,
+    /// `Time * Time`, or `Length / (Time * Time)`, with a divisor of more than one part in brackets. A dimension of
+    /// nothing above a divisor is written `1`.
+    let writtenWith (written: NominalId -> string) (times: string) (over: string) (dimension: Dimension) : string =
+        let above, below = parts dimension
+        let product (ids: NominalId list) = ids |> List.map written |> String.concat times
+        let dividend = if above.IsEmpty then "1" else product above
+        match below with
+        | [] -> dividend
+        | [ single ] -> dividend + over + written single
+        | _ -> $"{dividend}{over}({product below})"
+
+    /// `dimension` as it is written: `Time`, or a product and quotient of dimensions, `Length / Time`.
+    let text (dimension: Dimension) : string = writtenWith _.Name " * " " / " dimension
+
+    /// A value of `dimension` stored as `storage`: a measured value, or the plain number a dimension of nothing is, as
+    /// `Length / Length` is.
+    let measured (dimension: Dimension) (storage: Ty) : Ty =
+        if dimension.IsEmpty then storage else TyMeasure(dimension, storage)
 
 /// A simple typed expression placeholder for future expansion. `Arguments` are a call's arguments (a pipe's
 /// include the piped value first), so a lambda passed to a call keeps its inferred type.

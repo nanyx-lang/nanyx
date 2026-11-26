@@ -1,0 +1,87 @@
+/// Derived dimensions (#2816): products and quotients of dimensions in types and in arithmetic, a dimension that names
+/// one, and the errors.
+module Nanyx.Compiler.Tests.Features.DerivedDimension
+
+open Xunit
+open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
+
+let private length = "dimension Length\n@baseUnit unit m: Length\nunit km: Length = 1_000m\n"
+
+/// The type of each def `source` declares after the dimensions, by name, which compiles with no diagnostic.
+let private typesIn (source: string) (names: string list) =
+    let result = Compiler.compile (withFinalNewline (length + source))
+    Assert.Empty(result.Diagnostics)
+    names |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name])
+
+/// The code and message of the one diagnostic compiling `source` after the dimensions gives.
+let private only (source: string) =
+    let code, message, _ = onlyDiagnostic (withFinalNewline (length + source))
+    code, message
+
+[<Fact>]
+let ``A product or quotient of measured values adds or takes off the exponents`` () =
+    Assert.Equal<string list>(
+        [ "Length(float) / Time(float)"; "Length(int) * Length(int)"; "Length(float) / (Time(float) * Time(float))"; "Length(float)"; "float" ],
+        typesIn
+            "def a = 100.0m / 9.58s\ndef b = 2m * 3m\ndef c = 10.0m / 2.0s / 1.0s\ndef d = a * 1.0s\ndef e = 1.0km / 1.0m"
+            [ "a"; "b"; "c"; "d"; "e" ])
+
+[<Fact>]
+let ``A quotient is of the storage's fraction, so dividing ints is not rounded`` () =
+    Assert.Equal<string list>([ "Length(float) / Time(float)"; "1 / Time(float)" ], typesIn "def a = 100m / 3s\ndef b = 1.0 / 2.0s" [ "a"; "b" ])
+
+[<Fact>]
+let ``Derived dimensions are written in annotations with * and /, the storage on each part`` () =
+    Assert.Equal<string list>(
+        [ "Length(float), Time(float) -> Length(float) / Time(float)"; "Time(a) * Time(a) -> Time(a) * Time(a)" ],
+        typesIn
+            "def speed: Length(float), Time(float) -> Length(float) / Time(float) = { d, t -> d / t }\ndef square: Time(a) * Time(a) -> Time(a) * Time(a) = { t -> t }"
+            [ "speed"; "square" ])
+
+[<Fact>]
+let ``A bare derived dimension in a signature is of one storage, shared by its parts`` () =
+    Assert.Equal<string list>(
+        [ "Length(a) / Time(a) -> Length(a) / Time(a)" ],
+        typesIn "def same: Length / Time -> int = { v -> 1 }\ndef sameAgain: Length(a) / Time -> Length(a) / Time(a) = { v -> v }" [ "sameAgain" ])
+    Assert.Equal<string list>([ "Length(a) / Time(a) -> int" ], typesIn "def same: Length / Time -> int = { v -> 1 }" [ "same" ])
+
+[<Fact>]
+let ``A dimension that names a derived dimension is the same dimension wherever it is written`` () =
+    Assert.Equal<string list>(
+        [ "Length(float), Time(float) -> Length(float) / Time(float)"; "Length(float) / Time(float)"; "Length(float)" ],
+        typesIn
+            "dimension Speed = Length / Time\ndef speed: Length(float), Time(float) -> Speed(float) = { d, t -> d / t }\ndef v: Length(float) / Time(float) = speed(100.0m, 9.58s)\ndef back: Length(float) * Time(float) / Time(float) = 2.0m"
+            [ "speed"; "v"; "back" ])
+
+[<Fact>]
+let ``Two parts of a derived dimension stored differently are NYX0295`` () =
+    Assert.Equal(
+        (DiagnosticCodes.DerivedDimensionStorages.Code,
+         "The parts of 'Length / Time' are stored as 'a' and as 'float', and a derived dimension's parts share one storage: write it on every part, or on none"),
+        only "def f: Length(a) / Time(float) -> int = { _ -> 1 }")
+    Assert.Equal(DiagnosticCodes.DerivedDimensionStorages.Code, fst (only "dimension Speed = Length(float) / Time"))
+
+[<Fact>]
+let ``A part of a derived dimension that is no dimension is NYX0296`` () =
+    Assert.Equal(
+        (DiagnosticCodes.NotADimension.Code, "'int' is no dimension, and a derived dimension multiplies and divides dimensions, as `Length / Time` does"),
+        only "def f: Length / int -> int = { _ -> 1 }")
+    Assert.Equal(DiagnosticCodes.NotADimension.Code, fst (only "dimension Speed = Length / string"))
+
+[<Fact>]
+let ``A unit of a derived dimension is NYX0297`` () =
+    Assert.Equal(
+        (DiagnosticCodes.UnitOfDerivedDimension.Code,
+         "'Speed' is a derived dimension, which has no units of its own: a value of it is written in its parts' units, as `100m / 9.58s` is"),
+        only "dimension Speed = Length / Time\nunit kph: Speed = 1m")
+
+[<Fact>]
+let ``// across two dimensions, and a power, say how to write them`` () =
+    Assert.Equal(
+        (DiagnosticCodes.TypeMismatch.Code,
+         "`//` rounds only between two values of one dimension, or by a number, and 'Length' // 'Time' would round a 'Length / Time': divide with `/`"),
+        only "def x = 1.0m // 2.0s")
+    Assert.Equal(
+        (DiagnosticCodes.TypeMismatch.Code, "A power of a 'Length' has no syntax yet: multiply it by itself, as `t * t` does, for a 'Length * Length'"),
+        only "def x = 1.0m ** 2")

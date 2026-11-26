@@ -25,6 +25,8 @@ let rec private unboundIn (bound: Set<Identifier>) (inFunction: bool) (typeExpr:
         (namedIn contexts |> List.filter (fst >> bound.Contains >> not)) @ unboundIn bound false inner
     | TypeWithContext(contexts, inner) -> unboundIn (Set.union bound (names contexts)) false inner
     | TypeFunc(arg, ret) -> unboundIn bound true arg @ unboundIn bound true ret
+    | TypeProduct(left, right)
+    | TypeQuotient(left, right) -> within left @ within right
     | TypeTuple items
     | TypeUnion items
     | TypeIntersection items -> items |> List.collect within

@@ -81,9 +81,19 @@ module internal ContextInference =
                 if args.IsEmpty then Some (TypeName(nominalName nominal))
                 else all args |> Option.map (fun args -> TypeApply(nominalName nominal, args)) |> Option.orElse (Some (TypeName(nominalName nominal)))
             | TyPrimitive name -> Some (TypeName name)
-            // A measured value of one dimension is written as the dimension applied to its storage, `Time(int)`.
+            // A measured value of one dimension is written as the dimension applied to its storage, `Time(int)`, and one of
+            // a derived dimension as its parts so, multiplied and divided: `Length(float) / Time(float)`. One with nothing
+            // to divide, `1 / Time`, has no type to write.
             | TyMeasure([ id, 1 ], storage) -> typeExprOf names storage |> Option.map (fun storage -> TypeApply(nominalName id, [ storage ]))
-            | TyMeasure _ -> None
+            | TyMeasure(dimension, storage) ->
+                match Dimension.parts dimension, typeExprOf names storage with
+                | (first :: above, below), Some storage ->
+                    let part (id: NominalId) = TypeExpr.synthetic (TypeApply(nominalName id, [ storage ]))
+                    let joined (combine: TypeExpr * TypeExpr -> TypeExprKind) (start: TypeExpr) (ids: NominalId list) =
+                        ids |> List.fold (fun written id -> TypeExpr.synthetic (combine (written, part id))) start
+                    let product = joined TypeProduct (part first) above
+                    Some (joined TypeQuotient product below).Kind
+                | _ -> None
             | TyAlias(name, [], _) -> Some (TypeName(aliasName name))
             | FunctionContexts.CellType(held, _) -> typeExprOf names held |> Option.map (fun held -> TypeApply(CellPassingSyntax.typeName, [ held ]))
             | TyAlias(name, args, _) -> all args |> Option.map (fun args -> TypeApply(aliasName name, args))

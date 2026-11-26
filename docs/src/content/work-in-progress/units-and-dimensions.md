@@ -5,11 +5,13 @@ order: 2
 ---
 
 > **Status: designed, being built.** The first step, single dimensions over any numeric storage, is settled below and is
-> being built; derived dimensions such as `Length/Time` come second and still have open questions (see
+> being built; derived dimensions such as `Length / Time` come second, and their dimension variables and exponents still
+> have open questions (see
 > [Step 2](#step-2-derived-dimensions) and [Open questions](#open-questions)). The compiler reads unit literals and
 > checks the declarations of dimensions and units, reads dimensions in types, types numbers with units and the
 > arithmetic on them, and writes measured values as text, as [Dimensions in types](#dimensions-in-types),
-> [Literals](#literals), [Arithmetic](#arithmetic) and [Display](#display) say ([Units of measure](../deep-dives/units)
+> [Literals](#literals), [Arithmetic](#arithmetic) and [Display](#display) say, and derived dimensions written with `*`
+> and `/`, as [Step 2](#step-2-derived-dimensions) says ([Units of measure](../deep-dives/units)
 > says how). The prelude declares `Time`, and `Clock`'s `sleep` takes one, as [Time in the standard
 > library](#time-in-the-standard-library) says, and [`Instant`](#instant), a point in time. The standard library's other
 > dimensions are still to come.
@@ -126,7 +128,7 @@ def isLong: Time -> bool
 def overlap: Time, Time -> bool -- Time(a), Time(b) -> bool
 def average: list(Time) -> Time -- error: the result's storage is not fixed by the parameter's
 def average: list(Time(a)) -> Time(a) = { ts -> list.sum(ts) // fromInt(ts.length) }
-def speed: Length(a), Time(a) -> Speed(a) = { d, t -> d / t } -- step 2: derived dimensions
+def speed: Length(a), Time(a) -> Speed(a) = { d, t -> d / t } -- a derived dimension (see Step 2)
 ```
 
 A storage written only in the result, as an unwritten one always is, is an error that shows how to tie it to a
@@ -182,6 +184,9 @@ for the integer types):
 | `a // b` | `a` | How many whole `b`s in `a`: `t // 1s` |
 | `a % b` | `Time(a)` | What is left: `-1500ms // 1s` is `-2` and `-1500ms % 1s` is `500ms` |
 
+A product or quotient of two measured values, `d * t` or `d / t`, is of their derived dimension (see [Step
+2](#step-2-derived-dimensions)), a quotient at the `fraction` storage.
+
 A dimension has `Add` and `Sub` instances, so generic code such as `[Add(a)] a, a -> a` sums times. It has no `Num`
 instance: `Num`'s `*` is `(a, a) -> a`, and a `Time` times a `Time` is not a `Time`. The compiler types `*`, `/`, `//`
 and `%` on measured values itself, by the rules above, through the storage's `Num`.
@@ -232,16 +237,28 @@ to 9999 is written with a sign and six digits, ISO 8601's expanded form, though 
 
 # Step 2: derived dimensions
 
-Not part of the first step, and not settled.
+The first half is built ([Units of measure](../deep-dives/units#derived-dimensions) says how); dimension variables and a
+spelling for exponents are open (#2817).
 
-- **Derived dimensions.** `Length / Time` is a dimension, and `dimension Speed = Length / Time` names it, generic in
-  its storage as its parts are: `Speed(a)`. The compiler stores a dimension as sorted base dimensions with integer
-  exponents, so `Length / Time` and `Length * Time^-1` are the same dimension, and `*` and `/` add and subtract
-  exponents: `100m / 9.58s` is a `Speed(float)`. Both sides share a storage, so a `Length(float)` divided by a
-  `Time(int)` converts one first.
+- **Derived dimensions.** In a type, dimensions joined by `*` and `/`, with brackets, are a dimension: `Length / Time`,
+  `Time * Time`, `Length / (Time * Time)`. There is no exponent yet: a square is `Time * Time`. `dimension Speed =
+  Length / Time` names one, generic in its storage as its parts are: `Speed(a)`. The compiler stores a dimension as
+  sorted base dimensions with integer exponents, so `Speed`, `Length / Time` and `Length * Time / (Time * Time)` are
+  one dimension, and one whose exponents are all zero is a plain number. `*` and `/` on measured values add and
+  subtract exponents: `100m / 9.58s` is a `Speed(float)`.
+- **Storage on each part.** A storage is written on each part, `Length(float) / Time(float)`, not on the whole, as
+  `(Length / Time)(float)` would be: a part is already a type the parser reads, so the derived dimension needs no new
+  syntax for it, and a type printed that way reads back as the same type. The parts share one storage: a part written
+  without one takes the others', and two different ones are an error. A dimension that names a derived one is written
+  with the storage on the whole, `Speed(float)`, since it is one name.
 - **Integer storage.** `/` across two dimensions gives the `fraction` storage, so `50MB / 1s` is a `float`-stored
   `Bytes / Time`, not `0` bytes per nanosecond. `//` is only between values of one dimension or by a plain number, so
   a derived dimension is never truncated.
+- **No units of its own.** A derived dimension has no units: a unit declared on one is an error, a value of one is
+  written in its parts' units, `1km / 1hr`, and printed in its parts' base units, `1.04e-8m/ns`. This is the simpler of
+  the two choices: units on a derived dimension, `unit kph: Speed = 1km / 1hr`, need a scale worked out from a quotient
+  of units, and printing in the largest whole unit of a quotient has no single answer. Open: whether a derived dimension
+  can declare units later.
 - **Dimension variables.** `def square: d -> d^2` (spelling open) needs unification that solves equations such as
   `d * d = Length^2`. This is the largest piece of the work; Kennedy's "Types for Units-of-Measure" gives an algorithm
   that fits a Hindley–Milner checker. `Time(a)` already means a `Time` stored as `a`, so a dimension variable needs a

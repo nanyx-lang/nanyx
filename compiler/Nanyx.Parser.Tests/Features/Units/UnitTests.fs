@@ -84,9 +84,9 @@ let ``A unit literal is an operand and an argument`` () =
 [<Fact>]
 let ``A dimension is declared, constrained to one storage type or not`` () =
     match parseModule "dimension Time\ndimension Bytes(int)\nexport dimension Length(float)" with
-    | Result.Ok [ Kind (DimensionDecl(false, "Time", None))
-                  Kind (DimensionDecl(false, "Bytes", Some (Kind (TypeName "int"))))
-                  Kind (DimensionDecl(true, "Length", Some (Kind (TypeName "float")))) ] -> ()
+    | Result.Ok [ Kind (DimensionDecl(false, "Time", None, None))
+                  Kind (DimensionDecl(false, "Bytes", Some (Kind (TypeName "int")), None))
+                  Kind (DimensionDecl(true, "Length", Some (Kind (TypeName "float")), None)) ] -> ()
     | other -> failwith $"Unexpected parse result: %A{other}"
 
 [<Fact>]
@@ -147,7 +147,7 @@ let ``A module block declares dimensions and units as the top level does`` () =
     match parseModule "module m =\n  export dimension Time\n  @baseUnit unit ns: Time\n  unit us: Time = 1_000ns\n" with
     // The block's items are lifted to the top level, after a declaration of its module.
     | Result.Ok [ Kind (ModuleDecl(false, "m"))
-                  Kind (DimensionDecl(true, "Time", None))
+                  Kind (DimensionDecl(true, "Time", None, None))
                   Kind (Attribute("baseUnit", None))
                   Kind (UnitDecl(false, "ns", "Time", None))
                   Kind (UnitDecl(false, "us", "Time", Some _)) ] -> ()
@@ -159,3 +159,28 @@ let ``A number with a unit is not a pattern yet, but a guard compares with one``
         ("A number with a unit is not a pattern yet: compare the value in a guard instead, as in `| == 0ms ->`", "0ms -> true"),
         parseErrorOf "def f = { t ->\n  match t\n    | 0ms -> true\n    | _ -> false\n}")
     readsWhole "def f = { t ->\n  match t\n    | == 0ms -> true\n    | _ -> false\n}"
+
+[<Fact>]
+let ``A derived dimension is dimensions joined by * and /, read from the left, with brackets`` () =
+    match parseModule "def f: Length / Time, Time * Time, Length / (Time * Time), Length / Time / Time -> int = { _ -> 1 }" with
+    | Result.Ok [ Kind (Def (ValueDef(_, "f", Some (Kind (TypeFunc(Kind (TypeTuple [ first; second; third; fourth ]), _))), _))) ] ->
+        match first.Kind, second.Kind, third.Kind, fourth.Kind with
+        | TypeQuotient(Kind (TypeName "Length"), Kind (TypeName "Time")),
+          TypeProduct(Kind (TypeName "Time"), Kind (TypeName "Time")),
+          TypeQuotient(Kind (TypeName "Length"), Kind (TypeProduct(Kind (TypeName "Time"), Kind (TypeName "Time")))),
+          TypeQuotient(Kind (TypeQuotient(Kind (TypeName "Length"), Kind (TypeName "Time"))), Kind (TypeName "Time")) -> ()
+        | other -> failwith $"Unexpected types: %A{other}"
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
+let ``Each part of a derived dimension can be written with its storage`` () =
+    match parseModule "def f: Length(float) / Time(float) -> int = { _ -> 1 }" with
+    | Result.Ok [ Kind (Def (ValueDef(_, "f", Some (Kind (TypeFunc(Kind (TypeQuotient(Kind (TypeApply("Length", [ _ ])), Kind (TypeApply("Time", [ _ ])))), _))), _))) ] -> ()
+    | other -> failwith $"Unexpected parse result: %A{other}"
+
+[<Fact>]
+let ``A dimension can name a derived dimension`` () =
+    match parseModule "export dimension Speed = Length / Time\ndimension Area = Length * Length\n" with
+    | Result.Ok [ Kind (DimensionDecl(true, "Speed", None, Some (Kind (TypeQuotient _))))
+                  Kind (DimensionDecl(false, "Area", None, Some (Kind (TypeProduct _)))) ] -> ()
+    | other -> failwith $"Unexpected parse result: %A{other}"
