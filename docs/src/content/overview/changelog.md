@@ -8,6 +8,34 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.47.0
+
+*26 November 2026*
+
+Two checks are stricter, a program built as a component no longer blocks while its tasks wait on the host, and error
+messages say more about what they found.
+
+**Language**
+
+- **Changed:** a match arm for a tag that a value of a single tag doesn't have is an error, as one for a tag a union
+  doesn't have already was. With `def simple = #nil`, `match simple | #some(x) -> …` no longer compiles
+  ([NYX0201](../standard-tools/errors#nyx0201)).
+- **Changed:** contexts written in front of a bare type variable, as in `(val: [ToString(a)] a)`, are an error: write
+  them on the function that requires them ([NYX0253](../standard-tools/errors#nyx0253)).
+
+**Tools**
+
+- A syntax error's headline names the token it found, ``Syntax error '`]`'``, and its message says what was expected
+  ([NYX0001](../standard-tools/errors#nyx0001)).
+- When an entry point doesn't fit its host, the type it was found to have includes the contexts it requires, as
+  `[Console, Env] () -> ()` ([NYX0237](../standard-tools/errors#nyx0237)).
+
+**Performance**
+
+- A program built as a component exports `run` and an HTTP handler's `handle` with the callback ABI, so while every
+  task waits on the host, the instance returns to the host rather than blocking, and the host can cancel `run`
+  ([Components](../deep-dives/components#running-with-the-callback-abi)).
+
 # 0.46.0
 
 *26 November 2026*
