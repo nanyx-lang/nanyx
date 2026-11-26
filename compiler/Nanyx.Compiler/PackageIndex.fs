@@ -127,6 +127,42 @@ module PackageIndex =
                     | _ -> []
                 Result.Ok(file, listed |> List.sortBy _.Version))
 
+    /// The warning (`NYX0303`) that the copy of `name` at `version` the compiler ships packs to `shipped`, and the index
+    /// records it with the SHA-256 `indexed`.
+    let private shippedDiffers (name: string) (version: SemanticVersion) (shipped: string) (indexed: string) : Diagnostic =
+        Diagnostics.general
+            DiagnosticCodes.ShippedPackageDiffers
+            $"This compiler's {name} {version} isn't the one the package index has: the copy it ships packs to the SHA-256 {shipped}, and the index records {indexed}. It builds with its own copy, which a lockfile it writes locks, and a download of {name} {version} won't match that. A compiler built from source whose packages/ have changed since its release does this; a released compiler doesn't, so report it if yours does"
+        |> Diagnostics.about $"{name} {version}"
+
+    /// The versions of the package `name` that `store` lists, oldest first, with where the index file that lists them
+    /// is, which a version's relative `url` is relative to: those its index lists and, for a package the compiler ships,
+    /// the version it seeded in the store's cache (see `PackageStore.shippedIndex`), whose `url` is where it is on disk.
+    /// The seeded version is listed when the index can't be read, so that a build offline finds it; when the index lists
+    /// it with another SHA-256, the seeded one is the one this compiler builds with, and the warning (`NYX0303`) with the
+    /// versions says so. Or why the index can't be read, for a package the compiler doesn't ship.
+    let listing (store: PackageStore) (name: string) : Result<string * IndexedVersion list * Diagnostic list, string> =
+        let seededIndex = PackageStore.shippedIndex store
+        let seeded =
+            if Directory.Exists seededIndex then
+                match versions seededIndex name with
+                | Result.Ok(file, listed) -> listed |> List.map (fun version -> { version with Url = resolve file version.Url })
+                | Result.Error _ -> []
+            else
+                []
+        match seeded, versions store.Index name with
+        | [], remote -> remote |> Result.map (fun (file, listed) -> file, listed, [])
+        | seeded, Result.Error _ -> Result.Ok(seededIndex, seeded, [])
+        | seeded, Result.Ok(file, remote) ->
+            let differing =
+                seeded
+                |> List.choose (fun shipped ->
+                    remote
+                    |> List.tryFind (fun indexed -> indexed.Version = shipped.Version && indexed.Sha256 <> shipped.Sha256)
+                    |> Option.map (fun indexed -> shippedDiffers name shipped.Version shipped.Sha256 indexed.Sha256))
+            let isSeeded (version: IndexedVersion) = seeded |> List.exists (fun shipped -> shipped.Version = version.Version)
+            Result.Ok(file, remote |> List.filter (isSeeded >> not) |> List.append seeded |> List.sortBy _.Version, differing)
+
     /// The directory `locked` is unpacked in, in the cache of `store`: downloaded from the store's index, if it isn't
     /// there yet, and checked against the lockfile's SHA-256 before it is unpacked. Or why it can't be: the index
     /// doesn't list it, its release is missing, or what is downloaded isn't what was locked. An unlisted version still

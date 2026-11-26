@@ -8,8 +8,10 @@ open System.Security.Cryptography
 /// The `.nyxpkg` format, a package as it is published and downloaded: a zip of its manifest, at the zip's root, and the
 /// source files its `sources` select, at their paths relative to it. Packing is deterministic, whatever machine packs:
 /// each file is written as UTF-8 with LF line endings and no byte-order mark, the entries are in order of their paths,
-/// and they all have the same time, permissions and platform, so the same commit packs to the same bytes, and the same
-/// SHA-256, from a Windows checkout with CRLF line endings as from a Linux one.
+/// stored rather than compressed, and they all have the same time, permissions and platform, so the same commit packs to
+/// the same bytes, and the same SHA-256, from a Windows checkout with CRLF line endings as from a Linux one. Stored,
+/// because deflate's output differs between builds of .NET and of zlib: a compiler's release and the same compiler built
+/// elsewhere would pack the same files to different bytes.
 module PackageArchive =
     /// A packed package's file extension.
     let extension = ".nyxpkg"
@@ -97,7 +99,7 @@ module PackageArchive =
                 (
                     use zip = new ZipArchive(stream, ZipArchiveMode.Create, true)
                     for name, bytes in entries do
-                        let entry = zip.CreateEntry(name, CompressionLevel.Optimal)
+                        let entry = zip.CreateEntry(name, CompressionLevel.NoCompression)
                         entry.LastWriteTime <- entryTime
                         entry.ExternalAttributes <- entryAttributes
                         use target = entry.Open()

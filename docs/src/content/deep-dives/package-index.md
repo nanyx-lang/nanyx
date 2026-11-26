@@ -22,7 +22,8 @@ client noticing. `PackageIndex.fs` reads it.
   first and builds every other address from it, so the index can move to another address with a change there and a
   redirect, not a client release. The compiler refuses a format it doesn't read.
 - **One file per package**, `<index><namespace>/<name>.json`, lists every version ever recorded with its `url`,
-  `sha256`, `nanyx` (the oldest compiler it builds with), `dependencies`, `unlisted` and `available`
+  `sha256`, `nanyx` (the compilers it builds with, as its manifest writes them: `0.43`, that one or later, or `=0.43.0`, that one
+  only), `dependencies`, `unlisted` and `available`
   (`PackageIndex.versions`). An older file writes `unlisted` as `yanked`, which the compiler reads as the same. A
   package the index doesn't list has no file: a 404, which is read as no versions.
 - **The index stores no artifacts and mirrors nothing.** A package's versions are the releases of its own GitHub
@@ -100,7 +101,11 @@ downloaded as. A build only reads the cache. A package in the cache keeps its ch
 doesn't check it again ([The nanyx command](./command-line#packages)).
 
 A `.nyxpkg` packs to the same bytes from any checkout of the same commit (`PackageArchive.fs`), so anyone can rebuild a
-release's asset from its tag and check it against the index's SHA-256.
+release's asset from its tag and check it against the index's SHA-256. Its entries are stored, not compressed: deflate's
+output differs between builds of .NET and of zlib, so a compressed package packed by the compiler's release and by the
+same compiler built from source would differ. A package is a few kilobytes of source, so this costs little. Packages
+packed by 0.44.0 or later are the first that can be rebuilt byte for byte. Versions packed before it were compressed:
+they can't be rebuilt to the same bytes, and keep the SHA-256 the index recorded for them.
 
 # Why it's built this way
 

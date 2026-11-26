@@ -26,7 +26,7 @@ module ScriptDependencies =
                 | [] ->
                     Result.Ok
                         { Lines = packages |> List.map (fun locked -> $"{locked.Name} {locked.Version}")
-                          Warnings = resolved.Unlisted |> List.map (fun (package, version) -> Resolution.pinnedUnlisted name package version) }
+                          Warnings = (resolved.Unlisted |> List.map (fun (package, version) -> Resolution.pinnedUnlisted name package version)) @ resolved.Warnings }
                 | errors -> Result.Error errors
 
     /// The versions of `name` in the cache of `store`, as the solver reads them: each with the dependencies its manifest

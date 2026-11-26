@@ -404,8 +404,14 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 mkTypedExpr expr (listType elementTy) None None None, nextState
             // Checked against a `list(a)` whose `a` is known, each element is given where an `a` is expected, as an
             // argument is: two lambdas that give back different tags of the union `a`'s result is fit it, though they
-            // don't join. Where `a` is still a variable, as `list.length`'s is, the elements say what it is, joined.
-            | typedItems when expectedElement |> Option.exists (fun element -> match resolveSoFar current element with TyVar _ -> false | _ -> true) ->
+            // don't join. Where `a` is still a variable, as `list.length`'s is, the elements say what it is, joined, and
+            // so they do where it is a tuple or a record with a field still a variable, as `__map`'s entries, `(k, v)`,
+            // are: `["k" => #s("a"), "v" => #n(1.0)]` holds `#s(string) | #n(float)`s (#2882).
+            | typedItems when expectedElement |> Option.exists (fun element ->
+                match resolveSoFar current element with
+                | TyVar _ -> false
+                | TyRecord(fields, _) -> fields |> Map.forall (fun _ field -> match resolveSoFar current field with TyVar _ -> false | _ -> true)
+                | _ -> true) ->
                 let element = expectedElement.Value
                 mkTypedExpr expr (listType element) None None None,
                 typedItems |> List.fold (fun constrained item -> addAssignableConstraintAt item.Expr.Span item.Type element constrained) current

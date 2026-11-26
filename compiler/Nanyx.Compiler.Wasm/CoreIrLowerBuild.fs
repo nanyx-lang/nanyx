@@ -39,7 +39,20 @@ let rec decanonical (tools: TypeMatchTools) (ty: Ty) (boxed: Var) (k: Atom -> Ex
             bindLocal tools "__boxes" (call Intrinsics.arrayToList [ AVar boxes ] (IrList IrBox)) (fun list ->
                 bindLocal tools "__elements" (Expr.make (Call(elements, [ AVar list ])) (tools.ToIrType listTy)) (fun values ->
                     bindLocal tools "__array" (call Intrinsics.arrayOfList [ AVar values ] (tools.ToIrType ty)) (AVar >> k))))
+    // A value of a type still only known when the program runs stays boxed.
+    | _ when tools.ToIrType ty = IrBox -> k (AVar boxed)
     | _ -> unboxed (tools.ToIrType ty) (AVar >> k)
+
+/// `store`, a map's or a set's store in its canonical form, its keys and values boxed, as the map or set of `collection`
+/// it holds, passed to `k`, if `collection` is laid out otherwise: a map an arm of a `Type` match narrows to
+/// `map(string, v)`, which a field's `get` gave with its keys boxed (#2881). None if it is laid out so already.
+let decanonicalStore (tools: TypeMatchTools) (collection: Ty) (store: Atom) (k: Atom -> Expr) : Expr option =
+    match Unifier.unalias collection with
+    | Maps.MapType _
+    | Sets.SetType _ when atomType store = canonicalElements tools collection && atomType store <> tools.ToIrType collection ->
+        let elements = tools.Request (decanonicalName collection) (Decanonicalising collection)
+        Some (bindLocal tools "__elements" (Expr.make (Call(elements, [ store ])) (tools.ToIrType collection)) (AVar >> k))
+    | _ -> None
 
 /// The function a closure that unboxes a value of `ty` from its canonical form is over: it takes the closure's
 /// environment and the box.

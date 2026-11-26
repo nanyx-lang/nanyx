@@ -69,10 +69,10 @@ type Manifest =
       /// The GitHub repository whose releases are the package's versions, `repository = "acme/web"`, which
       /// `nanyx publish` creates them in; none if the manifest doesn't say.
       Repository: GitHubRepository option
-      /// The oldest compiler the package builds with, `nanyx = "0.39"`, which the package index records and the
-      /// resolver reads; none if the manifest doesn't say. A compiler older than it refuses the manifest
-      /// (`NeedsNewerCompiler`).
-      Nanyx: VersionRequirement option
+      /// The compilers the package builds with, `nanyx = "0.39"`, that compiler or a later one, or `nanyx = "=0.43.0"`,
+      /// that compiler only, which the package index records and the resolver reads; none if the manifest doesn't say.
+      /// A compiler it doesn't accept refuses the manifest (`NeedsOtherCompiler`).
+      Nanyx: CompilerRequirement option
       /// Where its `package` is written, which an error about the package as a whole is reported at.
       PackageSpan: SourceSpan
       /// The packages it depends on, in the order `dependencies` lists them.
@@ -620,24 +620,28 @@ module Manifest =
             let span = { File = path; Start = starts.[index] + column; End = starts.[index] + line.TrimEnd().Length; StartLine = index; StartColumn = column }
             Diagnostics.at DiagnosticCodes.TomlManifest span "The manifest is a Nanyx record, `( package = (...) ... )`, not TOML")
 
-    /// The oldest compiler `field`, a package's `nanyx`, says the package builds with, if it says one this compiler can
-    /// read: an error at the field where it isn't a version requirement, or names a compiler newer than this one.
-    let private readNanyx (problems: Problems) (field: DataField) : VersionRequirement option =
+    /// The compilers `field`, a package's `nanyx`, says the package builds with, if it says ones this compiler can read:
+    /// an error at the field where it isn't a compiler requirement, or doesn't accept this compiler.
+    let private readNanyx (problems: Problems) (field: DataField) : CompilerRequirement option =
         match field.Value.Data with
         | DataString written ->
-            match VersionRequirement.tryParse written, SemanticVersion.tryParse Toolchain.version with
-            | Some requirement, Some running when requirement.Minimum > running ->
+            match CompilerRequirement.tryParse written, SemanticVersion.tryParse Toolchain.version with
+            | Some requirement, Some running when not (CompilerRequirement.accepts requirement running) ->
+                let fix =
+                    if requirement.Exact then "build it with that compiler, or use a version of the package made for this one"
+                    elif requirement.Oldest > running then "install a newer compiler to build it"
+                    else "build it with one of those"
                 problems.Add
-                    DiagnosticCodes.NeedsNewerCompiler
+                    DiagnosticCodes.NeedsOtherCompiler
                     field.Value.Location
-                    $"The package builds with nanyx {written} or later, and this is nanyx {Toolchain.version}: install a newer compiler to build it"
+                    $"The package builds with {CompilerRequirement.describe requirement}, and this is nanyx {Toolchain.version}: {fix}"
                 None
             | Some requirement, _ -> Some requirement
             | None, _ ->
-                problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"""The package's `nanyx` "{written}" must be {VersionRequirement.rule}"""
+                problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"""The package's `nanyx` "{written}" must be {CompilerRequirement.rule}"""
                 None
         | _ ->
-            problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"The package's `nanyx` must be a string, {VersionRequirement.rule}, not {DataValue.describe field.Value}"
+            problems.Add DiagnosticCodes.InvalidManifestValue field.Value.Location $"The package's `nanyx` must be a string, {CompilerRequirement.rule}, not {DataValue.describe field.Value}"
             None
 
     /// The manifest at `path`, whose text is `text`, or every problem with it, each at the field it is about. One in

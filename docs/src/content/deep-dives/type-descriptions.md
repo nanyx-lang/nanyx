@@ -139,7 +139,12 @@ from the type's definition (`TypeDefInfo.Doc`, filled from the module's doc comm
   type, as a walker is, is specialised once with that type's values boxed (`IrBox`, as a context member's own type
   variables are, see [Context calls](context-calls)). Its match matches on `__describe` of the number it is given. In
   an arm that narrows `a`, a boxed name is unboxed where it is used (`FunctionLowering.Identifier`), and the arm's value
-  is boxed back to the match's type (`FunctionLowering.Branch`), both through `CoreIrLowerBoxes.convert`.
+  is boxed back to the match's type (`FunctionLowering.Branch`), both through `CoreIrLowerBoxes.convert`. A map's or a
+  set's store is a recursive type, which `convert` converts through a function of its own, the body its type unfolds
+  to converted part by part, calling itself where the type holds itself (`recursiveConverterFunction`, `RecursiveConverting`):
+  so a map an arm narrows to `map(string, v)` has its keys unboxed, and one the arm makes has them boxed again on the way
+  back (#2881). A map or a set in its canonical form, its keys and values boxed in turn, is unboxed by its type
+  (`CoreIrLowerBuild.decanonicalStore`), so a value that is a collection is read in its own canonical form.
 - **Canonical boxes.** For that to work whatever the value is, a boxed value of a collection holds its elements boxed:
   a list, a set or an array of boxes, and a map whose entries are tuples of boxes. A record or a union is boxed as it
   is, since only its description's `get`s read it. A field's `get` (`fieldGettingFunction`) and a case's `get`

@@ -906,10 +906,25 @@ To move to a listed version in a package, delete the version's entry from `nanyx
 build, locks the newest listed version the manifest accepts. If it accepts none, change the version it asks for first.
 In a script, change the version its `::install` names. Or keep the version, if you need it.
 
-# NYX0052: Package that needs a newer compiler
+# NYX0303: Shipped package that differs from the index's
 
-The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running.
-The message names both versions:
+A warning, not an error: the build goes on. A package the compiler ships, such as `nanyx.cli`, is seeded into the
+package cache and locked as any package from the index is, with the SHA-256 of its `.nyxpkg`. This compiler's copy of it
+packs to another SHA-256 than the one the package index records for the same version, the copy its release attached:
+
+```text
+warning NYX0303: Shipped package that differs from the index's 'nanyx.cli 0.44.0'
+  = This compiler's nanyx.cli 0.44.0 isn't the one the package index has: the copy it ships packs to the SHA-256 3f1c…, and the index records 9a0e…. …
+```
+
+The compiler builds with its own copy, which a lockfile it writes locks, so another machine that downloads the version
+from the index gets other bytes. A compiler built from source whose `packages/` have changed since its release does this.
+A released compiler doesn't, since its copies are the ones its release published: report it if yours does.
+
+# NYX0052: Package that needs another compiler
+
+The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running,
+or with one compiler only, as `nanyx = "=0.43.0"`, which isn't the one running. The message names both versions:
 
 ```nanyx
 -- file: demo.nyxp
@@ -918,7 +933,8 @@ The message names both versions:
 )
 ```
 
-To fix it, install a newer compiler. If the package does build with this one, lower its `nanyx`.
+To fix it, install a newer compiler, or the one the package names. If the package does build with this one, lower its
+`nanyx`, or use a version of the package made for this compiler.
 
 # NYX0053: Host package not named for a host
 

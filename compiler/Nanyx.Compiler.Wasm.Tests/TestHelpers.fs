@@ -123,9 +123,10 @@ let private inProcessWith (store: NyxCompiler.PackageStore option) (github: NyxC
     finally
         File.Delete inputFile
 
-/// The packages from the index that the tests' programs and the docs' examples use, though the compiler doesn't ship
-/// them, so that no test needs the network: `nanyx.json` 0.1.0, 0.2.0 and 0.4.2, and `nanyx.regex` 0.1.1, the `.nyxpkg`s their
-/// releases on nanyx-lang/json and nanyx-lang/regex carry (`Packages/<package>-<version>.nyxpkg`, downloaded from the
+/// The packages from the index that the tests' programs and the docs' examples use, so that no test needs the network:
+/// the packages the compiler ships, seeded into the store (see `SeededPackages`), and, though the compiler doesn't ship
+/// them, `nanyx.json` 0.1.0, 0.2.0 and 0.4.2, and `nanyx.regex` 0.1.1, the `.nyxpkg`s their releases on nanyx-lang/json
+/// and nanyx-lang/regex carry (`Packages/<package>-<version>.nyxpkg`, downloaded from the
 /// releases, whose SHA-256s the index records). They are listed in an index on disk, in a directory of its own, and
 /// downloaded into the store's cache once, before any test reads them, so that tests run in parallel never unpack one at
 /// the same time.
@@ -160,6 +161,9 @@ let private packagesForTests =
                  match PackageIndex.download store locked with
                  | Result.Ok _ -> ()
                  | Result.Error message -> failwith message
+         match SeededPackages.seed store with
+         | Result.Ok _ -> ()
+         | Result.Error errors -> failwith (String.concat "\n" errors)
          store)
 
 /// The package store the tests build and run with: an index on disk and a cache of their own, with the packages from

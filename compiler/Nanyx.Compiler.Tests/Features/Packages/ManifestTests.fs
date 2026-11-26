@@ -311,13 +311,32 @@ let ``A package's nanyx is the oldest compiler it builds with, which the JSON of
 let ``A package whose nanyx is newer than the compiler is one error at the field, naming both versions`` () =
     let source = """(package = (name = "demo", version = "0.1.0", nanyx = "99.0"))"""
     let error = errorOf source
-    Assert.Equal(DiagnosticCodes.NeedsNewerCompiler.Code, error.Code)
+    Assert.Equal(DiagnosticCodes.NeedsOtherCompiler.Code, error.Code)
     Assert.Equal($"The package builds with nanyx 99.0 or later, and this is nanyx {Toolchain.version}: install a newer compiler to build it", error.Message)
     Assert.Equal("\"99.0\"", source.Substring(error.Span.Value.Start, error.Span.Value.End - error.Span.Value.Start))
 
 [<Fact>]
-let ``A package's nanyx must be a version, or its first numbers`` () =
+let ``A package's nanyx can name one compiler only, which another compiler refuses at the field`` () =
+    let manifest = okOf $"""(package = (name = "acme.engine", version = "0.1.0", nanyx = "={Toolchain.version}"))"""
+    Assert.Equal(Some(true, SemanticVersion.tryParse Toolchain.version), manifest.Nanyx |> Option.map (fun nanyx -> nanyx.Exact, Some nanyx.Oldest))
+    Assert.Contains($"\"nanyx\": \"={Toolchain.version}\"", Manifest.toJson manifest.Value)
+    let source = """(package = (name = "demo", version = "0.1.0", nanyx = "=0.1.0"))"""
+    let error = errorOf source
+    Assert.Equal(DiagnosticCodes.NeedsOtherCompiler.Code, error.Code)
+    Assert.Equal(
+        $"The package builds with nanyx 0.1.0 only, and this is nanyx {Toolchain.version}: build it with that compiler, or use a version of the package made for this one",
+        error.Message
+    )
+    Assert.Equal("\"=0.1.0\"", source.Substring(error.Span.Value.Start, error.Span.Value.End - error.Span.Value.Start))
+
+[<Fact>]
+let ``A package's nanyx must be a version, or its first numbers, or one compiler's version`` () =
     let error = errorOf """(package = (name = "demo", version = "0.1.0", nanyx = "latest"))"""
     Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, error.Code)
-    Assert.Equal("The package's `nanyx` \"latest\" must be a version, `1.2.0`, or its first numbers, `1.2`", error.Message)
+    Assert.Equal(
+        "The package's `nanyx` \"latest\" must be a version, `0.43.0`, or its first numbers, `0.43`, for that compiler or a later one; or `=` and a whole version, `=0.43.0`, for that compiler only",
+        error.Message
+    )
+    // One compiler is named by its whole version.
+    Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, (errorOf """(package = (name = "demo", version = "0.1.0", nanyx = "=0.43"))""").Code)
     Assert.Equal(DiagnosticCodes.InvalidManifestValue.Code, (errorOf """(package = (name = "demo", version = "0.1.0", nanyx = 32))""").Code)

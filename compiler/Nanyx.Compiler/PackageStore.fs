@@ -42,3 +42,9 @@ module PackageStore =
 
     /// The directory the package `name` at `version` is unpacked in, in the cache.
     let directoryOf (store: PackageStore) (name: string) (version: SemanticVersion) = Path.Combine(store.Cache, name, string version)
+
+    /// The index of the packages the compiler ships, which it seeds in the cache of `store` before it resolves them
+    /// (see `SeededPackages`), laid out as the package index is: one for each compiler version and the sources it ships
+    /// (`ShippedPackages.fingerprint`), so compilers that ship different packages under one version don't share one.
+    let shippedIndex (store: PackageStore) =
+        Path.Combine(store.Cache, ".shipped", Toolchain.version, ShippedPackages.fingerprint.Value)

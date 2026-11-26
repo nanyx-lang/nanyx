@@ -24,6 +24,19 @@ module ShippedPackages =
     let names () : string list =
         if Directory.Exists directory then Directory.GetDirectories directory |> Array.map Path.GetFileName |> Array.sort |> List.ofArray else []
 
+    /// A fingerprint of the files of every package the compiler ships, each path and its text with LF line endings: what
+    /// the packages it seeds into the package cache are packed from (see `PackageStore.shippedIndex`), so that a compiler
+    /// built from other sources seeds its own. The first 16 hexadecimal digits of their SHA-256.
+    let fingerprint: Lazy<string> =
+        lazy
+            (use hash = System.Security.Cryptography.IncrementalHash.CreateHash System.Security.Cryptography.HashAlgorithmName.SHA256
+             for name in names () do
+                 let root = directoryOf name
+                 for file in Directory.GetFiles(root, "*", SearchOption.AllDirectories) |> Array.map (fun file -> Path.GetRelativePath(root, file).Replace('\\', '/')) |> Array.sort do
+                     let text = File.ReadAllText(Path.Combine(root, file)).Replace("\r\n", "\n")
+                     hash.AppendData(Text.Encoding.UTF8.GetBytes $"{name}/{file}\n{text.Length}\n{text}")
+             Convert.ToHexString(hash.GetHashAndReset()).Substring(0, 16).ToLowerInvariant())
+
     let private modules = ConcurrentDictionary<string, PackageModules option>()
 
     /// The manifest of the shipped package `name`, as data.

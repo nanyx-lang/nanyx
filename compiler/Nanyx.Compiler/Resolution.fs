@@ -10,11 +10,12 @@ type ResolutionError =
     /// The index can't be read.
     | IndexUnreadable of string
 
-/// What a resolution chose: the lockfile that records it, and the versions in it the index has unlisted, which only a
-/// lockfile or a script's pin keeps.
+/// What a resolution chose: the lockfile that records it, the versions in it the index has unlisted, which only a
+/// lockfile or a script's pin keeps, and what reading the index warned of (`PackageIndex.listing`).
 type Resolved =
     { Lockfile: Lockfile
-      Unlisted: (string * SemanticVersion) list }
+      Unlisted: (string * SemanticVersion) list
+      Warnings: Diagnostic list }
 
 /// What pulling the dependencies of a package or a script did: a line for each package, and a warning (`NYX0051`) for
 /// each version it uses that the index has unlisted, which it read the index for.
@@ -67,8 +68,8 @@ module Resolution =
             |> List.filter (fst >> ShippedPackages.isShipped >> not)
             |> List.map (fun (name, written) -> name, requirementOf written)
         let needsNewer =
-            match indexed.Nanyx |> Option.bind VersionRequirement.tryParse, running with
-            | Some oldest, Some running when oldest.Minimum > running -> Some(NeedsCompiler(indexed.Nanyx.Value, Toolchain.version))
+            match indexed.Nanyx |> Option.bind CompilerRequirement.tryParse, running with
+            | Some requirement, Some running when not (CompilerRequirement.accepts requirement running) -> Some(NeedsCompiler(requirement, Toolchain.version))
             | _ -> None
         let unusable =
             if not indexed.Available then Some Unavailable
@@ -103,13 +104,15 @@ module Resolution =
         (pinned: Map<string, SemanticVersion>)
         : Result<Resolved, ResolutionError> =
         let listings = Dictionary<string, IndexedVersion list>()
+        let warnings = ResizeArray<Diagnostic>()
         let versions (name: string) =
             if ShippedPackages.isShipped name then
                 Result.Ok None
             else
-                PackageIndex.versions store.Index name
-                |> Result.map (fun (_, listed) ->
+                PackageIndex.listing store name
+                |> Result.map (fun (_, listed, listingWarnings) ->
                     listings.[name] <- listed
+                    warnings.AddRange listingWarnings
                     Some(listed |> onlyPinned pinned name _.Version |> List.map (candidate (locked.TryFind name))))
         let input =
             { Root = root
@@ -129,7 +132,8 @@ module Resolution =
                 chosen |> List.filter (fun (name, version) -> listings.[name] |> List.exists (fun listed -> listed.Version = version && listed.Unlisted))
             Result.Ok
                 { Lockfile = { Packages = chosen |> List.map entry }
-                  Unlisted = unlisted }
+                  Unlisted = unlisted
+                  Warnings = List.ofSeq warnings }
         | NoSolution lines ->
             let message = String.concat "\n" lines
             Result.Error(Conflict(Diagnostics.general DiagnosticCodes.VersionConflict message |> Diagnostics.about root))

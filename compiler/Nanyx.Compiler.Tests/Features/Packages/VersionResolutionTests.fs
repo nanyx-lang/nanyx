@@ -199,6 +199,19 @@ let ``A version that needs a newer compiler is passed over, and explained when t
     )
 
 [<Fact>]
+let ``A version that builds with another compiler only is passed over, and explained when there is no other`` () =
+    let other = """, "nanyx": "=0.1.0" """
+    let this = $""", "nanyx": "={Toolchain.version}" """
+    use fits =
+        new TempPackage(indexAndApp [ "acme.host", [ listed "1.0.0" [] this; listed "1.1.0" [] other ] ] [ """(package = "acme.host", version = "1.0")""" ])
+    Assert.Equal<string list>([ "acme.host 1.0.0" ], lockedVersions (resolveIn fits Lockfile.empty))
+    use none = new TempPackage(indexAndApp [ "acme.host", [ listed "1.1.0" [] other ] ] [ """(package = "acme.host", version = "1.0")""" ])
+    Assert.Equal(
+        $"Because acme.host 1.1.0 needs nanyx 0.1.0 only (this is {Toolchain.version}) and app depends on acme.host 1.0, the dependencies can't all be satisfied.",
+        (conflictOf (resolveIn none Lockfile.empty)).Message
+    )
+
+[<Fact>]
 let ``The dependencies of a package found by its path are resolved with the build's`` () =
     let files =
         indexAndApp [ "acme.core", [ listed "1.0.0" [] ""; listed "2.0.0" [] "" ] ] [ """(package = "acme.util", path = "../util")""" ]

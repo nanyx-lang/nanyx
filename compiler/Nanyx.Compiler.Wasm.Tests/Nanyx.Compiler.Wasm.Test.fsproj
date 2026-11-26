@@ -286,6 +286,7 @@
     <Compile Include="Features\TailCalls\StackOverflowTests.fs" />
     <Compile Include="Features\Types\RunTypeMatchTests.fs" />
     <Compile Include="Features\Types\RunTypeBuildTests.fs" />
+    <Compile Include="Features\Types\RunTypeCollectionNarrowingTests.fs" />
     <Compile Include="Features\Units\RunUnitLiteralTests.fs" />
     <Compile Include="Features\Units\RunMeasuredArithmeticTests.fs" />
     <Compile Include="Features\Units\RunMeasuredDisplayTests.fs" />

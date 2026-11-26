@@ -46,6 +46,13 @@ export def Instant.`+`: Instant, Time(int) -> Instant = { i, time ->
   Instant.plus(i, time)
 }
 
+--| The time from [`Instant.epoch`], the start of 1970, UTC, to `at`: its Unix time. Divide it by a
+  unit for a number of them, as an API that takes Unix time wants: `now() \toUnixTime // 1ms` is
+  the milliseconds since 1970, and `// 1s` the seconds.
+export def Instant.toUnixTime: Instant -> Time(int) = { at ->
+  at \since(Instant.epoch)
+}
+
 -- The nanoseconds in a second, and the seconds in a day.
 def isoSecond: int = 1_000_000_000
 

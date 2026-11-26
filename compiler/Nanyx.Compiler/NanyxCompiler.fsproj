@@ -212,6 +212,7 @@
     <Compile Include="Documentation.fs" />
     <Compile Include="StandardLibraryDocs.fs" />
     <Compile Include="PackageApi.fs" />
+    <Compile Include="SeededPackages.fs" />
     <Compile Include="Publishing.fs" />
     <Compile Include="LibraryCatalog.fs" />
     <Compile Include="LibrarySearch.fs" />
