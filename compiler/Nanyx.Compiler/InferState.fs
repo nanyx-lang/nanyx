@@ -331,6 +331,10 @@ type InferState =
             /// as: `0` in `x + 0`, where `x` is of a type variable `a` of a function that requires `Add(a)`, is `zero`,
             /// and `x ** n` is `__pow(x, n)` (see `ArithmeticOperators`).
             ReadAs: Map<NodeId, Expression>;
+            /// The expressions inferred already, by node, that a call infers again as its argument: a pipe's value when it
+            /// is itself a pipe, which its call is given typed rather than inferring the chain to its left once more for
+            /// each stage (see `Infer.inferPipe`). `inferExpr` gives the typed expression and drops it.
+            Inferred: Map<NodeId, TypedExpr>;
             /// The built-in property each member access reads, by its node, where it reads one rather than a
             /// record's field: `s.length` on a string.
             BuiltInProperties: Map<NodeId, BuiltInProperty>;
@@ -532,6 +536,7 @@ let emptyState =
             OperatorCalls = Map.empty;
             OperatorInstances = Map.empty;
             ReadAs = Map.empty;
+            Inferred = Map.empty;
             BuiltInProperties = Map.empty;
             WorkflowBlocks = Set.empty;
             Origin = SourceSpan.none;
