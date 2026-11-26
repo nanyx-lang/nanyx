@@ -1,11 +1,13 @@
 // The compiler built for the browser and the playground host's runner, loaded once per page from where the docs build
 // unpacks them (`site/playground-compiler.mjs`), and a run of a program into a terminal. The playground page and the
-// tour's examples both run programs through this.
+// tour's examples both run programs through this. The compiler runs in a worker of its own (`compile-worker.ts`), so
+// the page keeps responding while it compiles; the program runs in the runner's.
 
 import type { Exit, Terminal } from "./terminal";
+import type { FromCompiler, ToCompiler } from "./compile-worker";
 
 export interface Compiler {
-  compile(source: string): { wasm: Uint8Array | null; diagnostics: string[] };
+  compile(source: string): Promise<{ wasm: Uint8Array | null; diagnostics: string[] }>;
 }
 
 export interface Running {
@@ -67,14 +69,41 @@ async function load(warmUp: string | undefined): Promise<Playground> {
     throw new PlaygroundUnavailable("The playground's compiler isn't on this site yet: it comes with the next compiler release.");
   }
   const { release } = (await response.json()) as { release: string | null };
-  const [{ loadCompiler }, runner] = await Promise.all([
-    import(/* @vite-ignore */ compilerBase + "compiler.js"),
-    importRunner(),
-  ]);
-  const compiler: Compiler = await loadCompiler();
-  // The first compile is the compiler's warm-up, most of the wait: done now, the first Run is quick.
-  if (warmUp !== undefined) compiler.compile(warmUp);
+  const [compiler, runner] = await Promise.all([startCompiler(warmUp), importRunner()]);
   return { compiler, runner: runner as Runner, release };
+}
+
+/**
+ * The compiler, loaded in a worker of its own, once it has compiled `warmUp`, if it is given: the first compile is the
+ * compiler's warm-up, most of the wait, so that the first Run is quick.
+ */
+function startCompiler(warmUp: string | undefined): Promise<Compiler> {
+  const worker = new Worker(new URL("./compile-worker.ts", import.meta.url), { type: "module" });
+  const post = (message: ToCompiler) => worker.postMessage(message);
+  const pending = new Map<number, (outcome: { wasm: Uint8Array | null; diagnostics: string[] }) => void>();
+  let next = 0;
+  return new Promise((resolve, reject) => {
+    worker.addEventListener("message", (event: MessageEvent<FromCompiler>) => {
+      const message = event.data;
+      if (message.kind === "loaded") {
+        resolve({
+          compile: (source) =>
+            new Promise((done) => {
+              const id = next++;
+              pending.set(id, done);
+              post({ kind: "compile", id, source });
+            }),
+        });
+      } else if (message.kind === "failed") {
+        reject(new Error(message.message));
+      } else {
+        pending.get(message.id)?.({ wasm: message.wasm, diagnostics: message.diagnostics });
+        pending.delete(message.id);
+      }
+    });
+    worker.addEventListener("error", (event) => reject(new Error(event.message)));
+    post({ kind: "load", base: new URL(compilerBase, location.href).href, warmUp });
+  });
 }
 
 /**
@@ -91,13 +120,11 @@ export function releaseNotesUrl(release: string) {
   return `https://github.com/nanyx-lang/nanyx/releases/tag/compiler%2F${encodeURIComponent(release)}`;
 }
 
-const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
-
 /**
  * Compiles `source` and, when it compiles, runs it, showing what happens in `terminal` under a run of its own: its
  * diagnostics, what it writes, its input line while it reads, and how it ended. `onCompiling` is called before the
- * compile (the page has painted by then), and `onStarted` with the running program, for Stop and input. Gives how the
- * program ended, or `null` when it didn't compile.
+ * compile, which runs in the compiler's worker while the page goes on, and `onStarted` with the running program, for
+ * Stop and input. Gives how the program ended, or `null` when it didn't compile.
  */
 export async function compileAndRun(
   { compiler, runner }: Playground,
@@ -107,8 +134,7 @@ export async function compileAndRun(
 ): Promise<Exit | null> {
   terminal.beginRun();
   onCompiling();
-  await nextPaint();
-  const outcome = compiler.compile(source);
+  const outcome = await compiler.compile(source);
   if (!outcome.wasm) {
     terminal.diagnostics(outcome.diagnostics, "diagnostic");
     return null;

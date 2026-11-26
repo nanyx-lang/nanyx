@@ -215,6 +215,22 @@ const helloWorld = playgroundData.defaultExample.code;
 const menuExamples = playgroundData.groups.flatMap((group) => group.examples);
 
 const tests = [
+  ["the editor takes typing while the compiler loads and compiles its warm-up, in a worker of its own", async () => {
+    // A context of its own, so that the code typed, which the page keeps in the browser's storage, isn't what the
+    // next page opens with.
+    const own = await browser.newContext();
+    const loading = await own.newPage();
+    watch(loading);
+    await loading.goto(`${origin}/playground`);
+    await loading.click(".cm-content");
+    await loading.keyboard.press("ControlOrMeta+End");
+    await loading.keyboard.type("-- typed while loading");
+    await loading.waitForFunction(() => document.querySelector(".cm-content")?.textContent?.includes("-- typed while loading"));
+    // The text was there before the compiler was ready, which the page says once its first compile has ended.
+    assert.notEqual(await loading.evaluate(() => document.documentElement.dataset.playground), "ready");
+    await readyOn(loading);
+    await own.close();
+  }],
   ["the page loads the compiler and starts with the tour's hello world", async () => {
     await page.goto(`${origin}/playground`);
     assert.equal(await page.evaluate(() => crossOriginIsolated), true);
