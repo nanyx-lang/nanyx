@@ -68,6 +68,9 @@ type Cursor(file: string, source: string, laid: Laid array) =
     // How many lambdas the cursor is inside.
     let mutable lambdaDepth = 0
     let mutable expected: string list = []
+    // How many code tokens have been taken, a token read again after a reading that didn't match counted again: the
+    // parser's work, which grows with the text when each part of it is read a few times at most.
+    let mutable tokensRead = 0
 
     member _.Source = source
     member _.Index
@@ -123,6 +126,7 @@ type Cursor(file: string, source: string, laid: Laid array) =
         match this.Token with
         | Some token ->
             index <- index + 1
+            tokensRead <- tokensRead + 1
             if index > furthest then
                 furthest <- index
                 expected <- []
@@ -268,6 +272,9 @@ type Cursor(file: string, source: string, laid: Laid array) =
         with get () = implicitArgumentNext
         and set value = implicitArgumentNext <- value
     member _.StringTexts = stringTexts
+
+    /// How many code tokens have been taken (see `ParseState.TokensRead`).
+    member _.TokensRead = tokensRead
 
     /// Notes `name`, written at `span`, as declared by the construct being read (see `Collecting`).
     member _.NoteName (name: Identifier) (span: SourceSpan) = pending <- (name, span) :: pending

@@ -25,7 +25,10 @@ type ParseState =
       DocumentableStarts: Map<int, int>
       /// The text of each string literal parsed so far (between the quotes, without any interpolation holes), as
       /// start and end offsets, most recent first. A blank line in one is part of the string, not of the layout.
-      StringTexts: (int * int) list }
+      StringTexts: (int * int) list
+      /// How many code tokens the parser took, each one read again after a reading that didn't match counted again: its
+      /// work, which a test of how the parser scales counts rather than times.
+      TokensRead: int }
 
 module ParseState =
     let empty () =
@@ -33,4 +36,5 @@ module ParseState =
           ModuleBlocks = []
           Comments = []
           DocumentableStarts = Map.empty
-          StringTexts = [] }
+          StringTexts = []
+          TokensRead = 0 }

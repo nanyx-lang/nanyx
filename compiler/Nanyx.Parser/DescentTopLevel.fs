@@ -476,6 +476,7 @@ let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem
                 Declared = c.Declared
                 DocumentableStarts = c.DocumentableStarts
                 StringTexts = c.StringTexts
+                TokensRead = c.TokensRead
                 Comments = c.Comments
                 ModuleBlocks = c.ModuleBlocks }
         Ok(List.ofSeq all, state)
@@ -549,6 +550,7 @@ let readModuleRecovering (file: string) (source: string) : TopLevelItem list * P
             Declared = c.Declared
             DocumentableStarts = c.DocumentableStarts
             StringTexts = c.StringTexts
+            TokensRead = c.TokensRead
             Comments = c.Comments
             ModuleBlocks = c.ModuleBlocks }
     List.ofSeq all, state, errors |> Seq.sortBy _.Span.Start |> List.ofSeq
