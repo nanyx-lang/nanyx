@@ -100,7 +100,10 @@ downloaded as. A build only reads the cache. A package in the cache keeps its ch
 doesn't check it again ([The nanyx command](./command-line#packages)).
 
 A `.nyxpkg` packs to the same bytes from any checkout of the same commit (`PackageArchive.fs`), so anyone can rebuild a
-release's asset from its tag and check it against the index's SHA-256.
+release's asset from its tag and check it against the index's SHA-256. Its entries are stored, not compressed: deflate's
+output differs between builds of .NET and of zlib, so a compressed package packed by the compiler's release and by the
+same compiler built from source would differ. A package is a few kilobytes of source, so this costs little. Versions
+packed before 0.44.0 were compressed, and keep the SHA-256 the index recorded for them.
 
 # Why it's built this way
 
