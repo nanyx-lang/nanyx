@@ -761,12 +761,12 @@ module DbgSyntax =
     let builtIn = "dbg"
 
 /// `assert(condition)`: built in, as `dbg` is, and called by that name where nothing else is named `assert`. Once the
-/// condition is typed, the compiler writes each call as a call to `checked`, which carries what its message needs:
+/// condition is typed, the compiler writes each call as a call to `rewritten`, which carries what its message needs:
 /// where it is and its source text, then, for each value the message shows, its label and the expression, which is the
 /// same node as in the condition, so that the backend evaluates it once (see the compiler's `Asserts`).
 module AssertSyntax =
     let builtIn = "assert"
-    let checked = "__assert"
+    let rewritten = "__assert"
 
     /// The condition of an `assert` as written.
     let (|Call|_|) (kind: ExpressionKind) =
@@ -775,7 +775,7 @@ module AssertSyntax =
         | _ -> None
 
     /// The condition, the header of the message, and each value it shows with its label, of an `assert` the compiler
-    /// has written as a call to `checked`.
+    /// has written as a call to `rewritten`.
     let (|Checked|_|) (kind: ExpressionKind) =
         let rec shown (args: Expression list) =
             match args with
@@ -783,7 +783,7 @@ module AssertSyntax =
             | [] -> Some []
             | _ -> None
         match kind with
-        | FunctionCall(name, _, condition :: { Kind = LiteralExpr(StringLit header) } :: values) when name = checked ->
+        | FunctionCall(name, _, condition :: { Kind = LiteralExpr(StringLit header) } :: values) when name = rewritten ->
             shown values |> Option.map (fun values -> condition, header, values)
         | _ -> None
 

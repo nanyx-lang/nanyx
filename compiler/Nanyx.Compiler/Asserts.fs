@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 
 /// `assert(condition)`, once the module is typed: each call of the built-in `assert` is written as a call to
-/// `AssertSyntax.checked`, with what its message needs, which only the front end has: where it is, its source text, and
+/// `AssertSyntax.rewritten`, with what its message needs, which only the front end has: where it is, its source text, and
 /// the values the message shows, each with its label. For a comparison, those are each side that is not a constant;
 /// then each name the condition reads, but one bound inside it (a lambda's parameter, a match's binding). Each value is
 /// the node the condition holds, so the backend evaluates it once, for the condition and the message alike, and prints
@@ -69,7 +69,7 @@ module internal Asserts =
                 let literal text = Expression.from node (LiteralExpr(StringLit text))
                 let header = $"{DeferredErrors.deferredLocation node.Span}{written}\n"
                 let values = shown source isFunction condition |> List.collect (fun (label, value) -> [ literal label; value ])
-                FunctionCall(AssertSyntax.checked, None, condition :: literal header :: values)
+                FunctionCall(AssertSyntax.rewritten, None, condition :: literal header :: values)
             | _ -> kind)
 
     /// `module'`, typed in `state` from `source`, with each call of the built-in `assert` written out (see the module's
