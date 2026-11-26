@@ -303,6 +303,17 @@ export def __measuredFloatToString
       if x == 0.0 and display != "" then "{x}{display}" else "{before}{x}{after}"
   }
 
+--| What the derived `toString` of a value of a derived dimension stored as an `int` calls: `n` of
+  its parts' default storage units, written in `name`, its parts' default display units, each of
+  which is `numerator / denominator` of the others, when it is a whole number of them, so
+  `2000mm * 1000mm` is written `2m*m`. A value that is no whole number of them is written as a
+  number of default storage units, between `before` and `after`: `1500mm*mm`.
+export def __measuredRatioToString
+  : int, string, int, int, string, string -> string
+  = { n, name, numerator, denominator, before, after ->
+    if n % numerator == 0 then "{n // numerator * denominator}{name}" else "{before}{n}{after}"
+  }
+
 --| What the derived `toString` of a list calls: `xs` in square brackets, each element written by
   `show`, with `, ` between them. The elements' texts are joined once, so each is copied once.
 export def __listToString: [c] list(a), ([c] a -> string) -> string = { xs, show ->

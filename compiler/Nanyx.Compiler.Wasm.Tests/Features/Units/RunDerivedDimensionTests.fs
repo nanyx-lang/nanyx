@@ -1,5 +1,5 @@
 /// Derived dimensions at run time (#2816): a product or quotient of measured values is the product or quotient of their
-/// storages, and is written in its parts' base units.
+/// storages, and is written in its parts' default display units.
 module TranspilerWasmTests.Features.Units.RunDerivedDimension
 
 open Xunit
@@ -31,10 +31,10 @@ dbg(v)
     |> assertRan (
         String.concat
             "\n"
-            [ "1.0438413361169103e-8m/ns"
+            [ "10.438413361169102m/s"
               "100.0m"
               "6.0m*m"
-              "5.0e-18m/(ns*ns)"
+              "5.0m/(s*s)"
               "1000.0"
               "Length / Time(1.0438413361169103e-8)"
               "" ])
@@ -98,3 +98,36 @@ println(speed(100cm, 2s))
 println(pace(100.0cm, 4.0s))
 """
     runSource source |> assertRan "50.0cm/s\n25.0cm/s\n"
+
+/// `Distance`, stored in millimetres and displayed in metres.
+let private distance =
+    """dimension Distance
+
+unit mm: Distance
+@baseUnit unit m: Distance = 1_000mm
+unit km: Distance = 1_000m
+
+dimension Speed = Distance / Time
+
+unit kmh: Speed = 1km / 1hr
+
+"""
+
+[<Fact>]
+let ``Run - a derived value is written in its parts' display units, never its own`` () =
+    let source =
+        distance + """@entry
+def main = {
+  println(1m / 1s)
+  println(100.0m / 9.58s)
+  println(90.0kmh)
+  println(1500mm * 1mm)
+  println(2000mm * 1000mm)
+  println(1.0m / 1.0s / 1.0s)
+  dbg(1m / 1s)
+}
+"""
+    runSource (normalized source)
+    |> assertRanWithDbg
+        "1.0m/s\n10.438413361169102m/s\n25.0m/s\n1500mm*mm\n2m*m\n1.0m/(s*s)\n"
+        "[main.nyx:19] Distance / Time(0.000001)\n"

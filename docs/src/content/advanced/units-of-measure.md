@@ -243,8 +243,8 @@ Two storages on its parts, and a part that is no dimension, are errors
 
 A derived dimension's units are defined from its parts' units, multiplied and divided, on one line and read from the
 left: `unit kmh: Speed = 1km / 1hr`, or `unit g: Acceleration = 9.80665m / 1s / 1s`. It has no default storage or
-display unit of its own, since its values are stored in its parts' default storage units, so a unit of one marked
-`@baseUnit` or `@storageUnit`, or not defined, is an error
+display unit of its own, since its values are stored in its parts' default storage units and displayed in their default
+display units, so a unit of one marked `@baseUnit` or `@storageUnit`, or not defined, is an error
 ([NYX0297](../standard-tools/errors#nyx0297)), as is a definition of another dimension
 ([NYX0289](../standard-tools/errors#nyx0289)). A unit can be defined from another of the dimension's units, its own or
 imported: `unit mph: Speed = 1.609344kmh`.
@@ -254,13 +254,18 @@ A number with one is a value of the dimension, `90.0kmh`, stored as its number o
 That is seldom a whole number, a kilometre an hour being 1/3_600_000_000 of a metre a nanosecond, so write it with a
 decimal point to store it as a `float`: `90kmh` in an `int` is an error that says so.
 
-A value prints in one of the dimension's own units, chosen as for a `Time` (see [Printing](#printing)), and in its parts'
-default storage units, joined by `*` and `/`, when there are none, or an `int` is a whole number of none:
+A value prints in its parts' default display units, joined by `*` and `/` with no spaces, and a divisor of more than
+one part in brackets: `m/s`, `m*m`, `m/(s*s)`. Its own units make values but never print them: the units come from the
+declarations, not from the value's size, so the output is predictable, as a ratio has no best unit (`1.0m/s`,
+`1.0km/ks` and `0.001mm/ms` are one value). An `int` that is no whole number of the display units prints in the parts'
+default storage units, the only ones it is exact in, and a value whose part's display unit the module can't see prints
+as `dbg` writes it.
 
 ```nanyx
 dimension Length
 
-@baseUnit unit m: Length
+unit mm: Length
+@baseUnit unit m: Length = 1_000mm
 unit km: Length = 1_000m
 
 dimension Speed = Length / Time
@@ -270,16 +275,19 @@ unit kmh: Speed = 1km / 1hr
 def cruise = 90.0kmh
 println(cruise)
 println(36.0km / 0.5hr)
-println(cruise + 100.0m / 1.0hr)
--- 90.0kmh
--- 72.0kmh
--- 90.1kmh
+println(1m / 1s)
+println(2000mm * 1000mm)
+println(1500mm * 1mm)
+-- 25.0m/s
+-- 20.0m/s
+-- 1.0m/s
+-- 2m*m
+-- 1500mm*mm
 ```
 
-With `unit mps: Speed = 1m / 1s` seen too, `90.0kmh` prints as `25.0mps`, the larger unit. A `float` that arithmetic
-has left within a millionth of a millionth of a whole number of a unit counts as that whole number: `90.0kmh + 10.0mps`
-prints `35.0mps`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an error
-([NYX0298](../standard-tools/errors#nyx0298)).
+A `float` that arithmetic has left within a millionth of a millionth of a whole number counts as that whole number:
+`90.0kmh + 10.0m / 1.0s` prints `35.0m/s`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an
+error ([NYX0298](../standard-tools/errors#nyx0298)).
 
 # Printing
 
@@ -301,8 +309,9 @@ println([1s, 2min, 3hr])
 
 Only the units the printing module can write are tried: its own, and those it imports. A generic `Time(a)` is printed
 in the default storage unit, `1500000000ns`, and needs `ToString(a)`, as choosing a unit needs a comparison; a function
-that wants a unit chosen takes a `Time(int)` or a `Time(float)`. A value of a derived dimension that none of its own units fits is written in its parts' default storage
-units. `dbg` writes a measured value as its dimension around its number of default storage units,
+that wants a unit chosen takes a `Time(int)` or a `Time(float)`. A value of a derived dimension is written in its
+parts' default display units (see [Units of a derived dimension](#units-of-a-derived-dimension)), and an `int` that is
+no whole number of them in their default storage units. `dbg` writes a measured value as its dimension around its number of default storage units,
 `Time(1500000000)`.
 
 # Time in the standard library

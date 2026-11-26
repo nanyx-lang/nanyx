@@ -51,7 +51,7 @@ let ``A unit of a derived dimension that its parts' units don't define is NYX029
     Assert.Equal<(string * string * string) list>(
         [ DiagnosticCodes.UnitOfDerivedDimension.Code,
           "unit base: Speed",
-          "'Speed' is a derived dimension, whose values are stored in its parts' default storage units, so it has no default storage or display unit of its own: define 'base' from its parts' units, as in `unit kmh: Speed = 1km / 1hr`" ],
+          "'Speed' is a derived dimension, whose values are stored in its parts' default storage units and displayed in their default display units, so it has no default storage or display unit of its own: define 'base' from its parts' units, as in `unit kmh: Speed = 1km / 1hr`" ],
         reported "@baseUnit unit base: Speed")
 
 [<Fact>]
