@@ -195,6 +195,17 @@ a file, a request's body write, a file's read, is waited on at once, in a waitab
 own writes are. `examples/sleepers` is a package whose two tasks wake in the order they do only if a sleep lets the
 other run, and CI runs it as a component under Wasmtime beside `nanyx run`.
 
+**A cancelled task cancels its subtask.** The scheduler wakes a task that waits on the host when it is cancelled
+([Cancellation](./async#tasks-and-scopes)), and one waiting for a subtask, a sleep or a request, takes it out of the
+shared set, which `[subtask-cancel]` requires, and cancels it, unless the event that it returned is kept already: the
+canonical ABI traps on cancelling a subtask whose return was delivered. The synchronous `[subtask-cancel]` waits until
+the host has settled the subtask, and gives the state it ended in, which `awaitCallAsync` gives back: a sleep then
+returns, and a request gives `#cancelled` without reading an answer, which the host never wrote. So a `race`'s loser
+stops what it waits on when it loses. `examples/racers` races a short sleep against a minute's, and says whether the race
+was over at once, which it is only if the loser's sleep was cancelled; CI runs it under Wasmtime too, and
+`ComponentCancellationTests.fs` runs the core module on a fake host that traps where the canonical ABI does. A stream's
+read in a cancelled task, a response's body, still goes on until it is done.
+
 ## The HTTP host's component root
 
 `http.host.wasi` provides `Http`, `Clock`, `Random` and `Async`, as the console host's root does, in the world

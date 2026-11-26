@@ -1,0 +1,11 @@
+-- Written by nanyx, which keeps it up to date: don't edit it by hand.
+(
+  version = 1
+  packages = [
+    (package = "nanyx.cli", version = "0.45.0", sha256 = "916a109dc437e73c34d8055260579fc03bfdda1c7b98a4c8232914acdcd2c3f8", dependencies = [])
+    (package = "nanyx.cli.host", version = "0.45.0", sha256 = "638b0dc9feb9337e506d76853dc1e63a18302373910901ae1db68221ce9dc5cd", dependencies = ["nanyx.cli", "nanyx.fs", "nanyx.http", "nanyx.wasi"])
+    (package = "nanyx.fs", version = "0.45.0", sha256 = "69817a479e5fa86bfd1006e6552a52f5869ae0746b41efeb92ba7cc00152cb60", dependencies = [])
+    (package = "nanyx.http", version = "0.45.0", sha256 = "7ed49c012054f95d2f22ce576eecae9ca31844580a9f881a12f270b13747266f", dependencies = [])
+    (package = "nanyx.wasi", version = "0.45.0", sha256 = "ef9a59a88b68b04591a67af198dd08a1c494552a7cd6a0dec91641feeae978b3", dependencies = ["nanyx.http"])
+  ]
+)

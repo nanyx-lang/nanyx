@@ -38,7 +38,10 @@ export def ticks: [HostRuntime] () -> Time(int) = { _ ->
 
 --| Waits until `ms` milliseconds have passed on `wasi:clocks/monotonic-clock`, while the program's
   other tasks run: the wait is a subtask, which the shared waitable set waits on (see `waits`). In a
-  cancelled task it returns at once; in one cancelled while it sleeps, once the time has passed.
+  cancelled task it returns at once, and in one cancelled while it sleeps, the wait is cancelled
+  and it returns then.
 export def sleepFor: [Async, HostRuntime] int -> () = { ms ->
-  if ms > 0 and not cancelled() then awaitCallAsync(monotonicWaitFor(ms * 1_000_000)) else ()
+  if ms > 0 and not cancelled()
+    then ignore(awaitCallAsync(monotonicWaitFor(ms * 1_000_000)))
+    else ()
 }
