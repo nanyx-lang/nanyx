@@ -8,6 +8,46 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.44.0
+
+*26 November 2026*
+
+A release about instants, packages and fixes that nanyx.json needed. `Instant` has `-` and `+`, a package packs to the
+same bytes on any machine and can publish from its own CI, and the compiler starts treating the packages it ships as
+index packages. It also fixes two bugs with maps that broke nanyx.json.
+
+**Standard library**
+
+- `Instant` has `-` and `+`: `now() - start` is the `Time(int)` between two instants, and `now() + 5s` an `Instant`.
+  `Instant.shift` moves an instant by a time that may be negative, `now() \shift(-5s)`, and `Instant.toUnixTime` is its
+  time since 1970, so `now() \toUnixTime // 1ms` is a number of milliseconds for an API that wants one
+  ([Instant](../advanced/units-of-measure#instant)).
+
+**Tools**
+
+- A manifest's `nanyx` can name one compiler only, `nanyx = "=0.44.0"`, as the shipped hosts and `nanyx.wasi` now do,
+  since they use the compiler's internals. A package for another compiler is
+  [NYX0052](../standard-tools/errors#nyx0052), which names both versions.
+- A `.nyxpkg` packs to the same bytes on any machine, so a release's asset can be rebuilt from its tag and checked
+  against the package index's SHA-256 ([Package index](../deep-dives/package-index)).
+- `nanyx publish` works from a package's own GitHub Actions workflow, with its `GITHUB_TOKEN` and
+  `permissions: contents: write`, once the package is registered
+  ([nanyx publish](../standard-tools/command-line#nanyx-publish)).
+- The compiler seeds the package cache, and a local index beside it, with the packages it ships, the first step to
+  resolving them as index packages. A shipped package whose SHA-256 differs from the index's is
+  [NYX0303](../standard-tools/errors#nyx0303).
+
+**Fixes**
+
+- A map or a set read from a record's field through its type description, or built into one, keeps its keys. Before,
+  they came out as garbage or the program trapped.
+- A map literal whose values are different tags, `["k" => #s("a"), "v" => #n(1.0)]`, is a map of their union rather than
+  a mismatch.
+- An operator attached to a type is called when the other operand is a measured value, as `s + 3s` with
+  `` Stamp.`+`: Stamp, Time(int) -> Stamp ``.
+- A generic function can be specialised at up to 64 sets of type arguments, up from 32, so a program that maps or
+  reverses lists of many element types no longer fails with NYX0301.
+
 # 0.43.0
 
 *26 November 2026*
