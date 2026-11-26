@@ -28,10 +28,13 @@ let private makesBoxes (body: Expr) =
 let private callees (body: Expr) =
     allExprs body |> Seq.choose (fun e -> match e.Kind with Call(name, _) -> Some name | _ -> None) |> Set.ofSeq
 
-/// `e` without its calls of `region_enter` and `region_exit`, each now `()`. A chain is walked in a loop, so that a long
-/// one cannot overflow the stack.
+/// `e` without its calls of `region_enter` and `region_exit`, each now `()`, but a `region_exit` of a temporary, the
+/// block's result, which is now the temporary: the call was its one use, and a temporary nothing uses is a broken rule
+/// (#2906). A chain is walked in a loop, so that a long one cannot overflow the stack.
 let rec private withoutRegions (e: Expr) : Expr =
     match e.Kind with
+    | CallRuntime(name, [ AVar result ], _) when name = WasmRegions.Names.regionExit && result.Kind = Temp ->
+        { e with Kind = Atom(AVar result); Type = result.Type }
     | CallRuntime(name, _, _) when name = WasmRegions.Names.regionEnter || name = WasmRegions.Names.regionExit ->
         { e with Kind = Atom AUnit; Type = IrUnit }
     | Let _

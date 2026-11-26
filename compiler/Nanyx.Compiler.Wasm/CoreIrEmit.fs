@@ -812,18 +812,27 @@ type private FunctionEmitter(context: EmitContext) =
             join "\n    " [ yield! promote; "i32.const 0" ]
         | CallRuntime(name, [ result ], _) when name = WasmRegions.Names.regionExit ->
             let outer = freshLocal "__outer_region" "i32"
+            // A temporary result is computed here, where it is read, into a local of its own: the promotion reads it
+            // only when there is a block around this one, and a result that needs none doesn't read it, but a
+            // temporary is computed once, where it is read, and has to be (#2906).
+            let computed, read =
+                match result with
+                | AVar var when var.Kind = Temp ->
+                    let held = freshLocal "__block_result" (CoreIrLayout.valueType var.Type)
+                    [ atoms [ result ]; $"local.set ${held}" ], $"local.get ${held}"
+                | _ -> [], atoms [ result ]
             let promote =
                 if CoreIrRegions.canHoldMutable (atomType result) then
                     [ $"global.get {WasmRegions.innermostGlobal}"
                       touching $"i32.load offset={WasmRegions.ownerOffset}"
                       $"local.tee ${outer}"
                       "if"
-                      atoms [ result ]
+                      read
                       $"local.get ${outer}"
                       $"call ${CoreIrRegions.promoteName (atomType result)}"
                       "end" ]
                 else []
-            join "\n    " [ yield! promote; $"call ${helper name}"; "i32.const 0" ]
+            join "\n    " [ yield! computed; yield! promote; $"call ${helper name}"; "i32.const 0" ]
         // Whether the reference the intrinsic takes over is the only one, read from the count before it is given up. An
         // immortal object's count is 0, so it is never held exclusively.
         | CallRuntime(name, [ value ], _) when name = Intrinsics.isExclusive ->
