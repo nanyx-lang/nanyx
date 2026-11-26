@@ -822,8 +822,18 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
         match ctx.Kind with
         | TypeName ctxName -> WrittenContexts.isScoped state ctxName
         | _ -> false
-    // Each context with a member not in scope at all, with those members, and each with no members that nothing
-    // supplies (see `withSupplied`).
+    // The members of `ctx` in scope only as the host's ambient instance's members of another context: one of the
+    // prelude's that the module's own context of the same name and members shadows. The host provides that context,
+    // not `ctx`, so they don't supply it (#2168).
+    let ambientOfAnother (ctx: TypeExpr) =
+        let members, _ = collectContextMembers state ctx
+        members
+        |> List.choose (fun (memberName, _, own) ->
+            match own, state.AmbientMembers |> Map.tryFind memberName with
+            | Some own, Some (ambient, _) when own <> ambient && isAmbientMember env state memberName -> Some memberName
+            | _ -> None)
+    // Each context with a member not in scope at all, or in scope only as another context's ambient member, with those
+    // members, and each with no members that nothing supplies (see `withSupplied`).
     let missing =
         requiredMembers
         |> List.filter (fun (ctx, _) -> not (isCarried ctx) && not (fromHost ctx) && not (isScopedContext ctx))
@@ -834,7 +844,8 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                     tryFindTypeDef ctxName state
                     |> Option.exists (fun info -> isMemberless info && not (env.Supplied.Contains(TypeDefInfo.nominalId info)))
                 | _ -> false
-            match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone) with
+            let others = ambientOfAnother ctx
+            match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone || List.contains memberName others) with
             | [] when unsupplied -> Some (ctx, [])
             | [] -> None
             | absent -> Some (ctx, absent))

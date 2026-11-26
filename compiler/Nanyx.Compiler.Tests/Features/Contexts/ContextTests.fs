@@ -107,6 +107,22 @@ def h = { g() }""")))
         message (contexts + (normalized """def g: [Log, Metrics] () -> () = { log("hi") }
 def h: [Log] () -> () = { g() }""")))
 
+// The module's own `Random` has a member named as the prelude's `Random`'s, `bits`, which the host makes ambient, so it
+// was taken to be available, and only `Log` was reported (#2168).
+[<Fact>]
+let ``A module's own context named and shaped like a prelude's is not supplied by the host's members`` () =
+    let diagnostic =
+        Compiler.compile (
+            normalized """context Log = (log: string -> ())
+context Random = (bits: () -> int)
+def g: [Log, Random] () -> () = { log("hi") }
+def h = { g() }
+"""
+        )
+        |> fun result -> Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.Equal("'g' requires the contexts 'Log' and 'Random', which are not available here", diagnostic.Message)
+
 [<Fact>]
 let ``A function passed as a value needs its contexts where it is called, not where it is named`` () =
     let definitions = """
