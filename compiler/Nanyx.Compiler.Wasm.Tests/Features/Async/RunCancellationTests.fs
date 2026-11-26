@@ -21,16 +21,18 @@ let private run (options: string list) (source: string) =
         StandardError = outcome.StandardError.ReplaceLineEndings "\n" }
 
 /// Asserts that `source` prints `expected` in every mode. What it writes to stderr is shown whole, with the mode, since
-/// an exception from the runtime is written there with its stack (see `WasmRunner.trapped`), and an exception thrown out
-/// of a run says which mode it was thrown in, with the exception whole.
+/// an exception from the runtime is written there with its stack (see `WasmRunner.trapped`), an exception thrown out
+/// of a run says which mode it was thrown in, with the exception whole, and what it printed and how it exited are
+/// compared with the mode beside them, so a failure says which mode it was.
 let private assertPrints (expected: string) (source: string) =
     for options in [ []; [ "--yield-at-every-wait" ]; [ "--yield-at-every-wait"; "--no-inline" ] ] do
         let outcome =
             try run options source
             with ex -> raise (Exception($"With %A{options}, the run threw:\n{ex}", ex))
         Assert.True(outcome.StandardError = "", $"With %A{options}, it wrote to stderr:\n{outcome.StandardError}")
-        Assert.Equal(normalized expected, outcome.StandardOutput)
-        Assert.Equal(0, outcome.ExitCode)
+        let mode = $"%A{options}"
+        Assert.Equal((mode, normalized expected), (mode, outcome.StandardOutput))
+        Assert.Equal((mode, 0), (mode, outcome.ExitCode))
 
 [<Fact>]
 let ``race gives what the first to finish gave, and a loser's sleep returns at once`` () =
@@ -43,12 +45,21 @@ println(fastest())
 println(ticks() - started < 30s)"""
 
 /// A server that holds its answer to `/slow` until the test is done, so a request to it ends only by being
-/// cancelled, and answers anything else at once.
+/// cancelled, and its answer to `/started` until a request to `/slow` has come, one for each, so a contestant that asks
+/// for `/started` before it sleeps finishes only once the request it races against is under way. That makes the race
+/// a matter of order, not of how long a request takes to start on a loaded machine (#2878). It answers anything else at
+/// once.
 let private withSlowServer (test: string -> unit) =
     use release = new ManualResetEventSlim()
+    use slowCame = new SemaphoreSlim(0)
     use server =
         new TestServer(fun _ path _ _ ->
-            if path = "/slow" then release.Wait(TimeSpan.FromSeconds 60.0) |> ignore
+            match path with
+            | "/slow" ->
+                slowCame.Release() |> ignore
+                release.Wait(TimeSpan.FromSeconds 60.0) |> ignore
+            | "/started" -> slowCame.Wait(TimeSpan.FromSeconds 60.0) |> ignore
+            | _ -> ()
             200, [], "answered")
     try test server.Url finally release.Set()
 
@@ -71,7 +82,7 @@ def fetch: [Async, Console, Http] string -> #some(string) | #cancelled | #failed
 }}
 
 def limited: [Async, Clock, Console, Http] () -> #some(string) | #cancelled | #failed | #timedOut = {{ _ ->
-  race([{{ fetch("{url}/slow") }}, {{ sleep(50ms); #timedOut }}])
+  race([{{ fetch("{url}/slow") }}, {{ http.get("{url}/started"); sleep(50ms); #timedOut }}])
 }}
 
 println(limited())""")
@@ -98,7 +109,9 @@ def parent = {{ url: string ->
   await(task)
 }}
 
-def raced = {{ _ -> race([{{ parent("{url}/slow") }}, {{ sleep(50ms); "quick" }}]) }}
+def raced = {{ _ ->
+  race([{{ parent("{url}/slow") }}, {{ http.get("{url}/started"); sleep(50ms); "quick" }}])
+}}
 
 println(raced())""")
 
