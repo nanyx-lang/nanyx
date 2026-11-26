@@ -284,7 +284,8 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
             match expr.Kind with
             | Lambda(_, body, _) -> body
             | _ -> expr
-        state <- { state with FailedExprs = (failedNode.Id, diagnostics) :: state.FailedExprs }
+        // Its type is the error type, which requires no contexts: a call to it gets that type and no more errors.
+        state <- forgetContextRequirement { state with FailedExprs = (failedNode.Id, diagnostics) :: state.FailedExprs } name
         types <- types |> Map.add name Unifier.errorType
         emit (TypedDef (TypedValueDef(isExport, name, None, mkTypedExpr expr Unifier.errorType None None None)))
         match TypeEnv.tryFind name env with
