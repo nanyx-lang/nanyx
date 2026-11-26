@@ -187,22 +187,6 @@ module Solving =
             solved[constraints] <- known
             known.Result
 
-    /// Marks `constraints`, the list the type checker holds once it has generalised a top-level def, as one later
-    /// solves can start from (see `unifyDetailed`), if it agrees: the next def's constraints usually share no variable
-    /// with it, so a module is solved once, a def at a time, rather than again for each def (#1266).
-    let checkpoint (constraints: ConstraintSet) =
-        match constraints, unifyDetailed constraints with
-        | _ :: _, Ok _ ->
-            match checkpoints.TryGetValue constraints, solvedLists.Value.TryGetValue constraints with
-            | (false, _), (true, { Result = Ok subst; NextRestId = nextRestId; Extension = extension }) ->
-                let vars =
-                    match checkpointTail constraints with
-                    | Some (newer, previous) -> varIds newer previous.Vars
-                    | None -> varIds constraints Set.empty
-                checkpoints.AddOrUpdate(constraints, { Subst = subst; NextRestId = nextRestId; Extension = extension; Vars = vars })
-            | _ -> ()
-        | _ -> ()
-
     /// Solves `constraints`, or gives the first that cannot be satisfied, with what was wrong and where.
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
         unifyDetailed constraints |> Result.mapError (fun (message, span, _) -> message tyToString, span)
@@ -260,6 +244,12 @@ module Solving =
         new System.Threading.ThreadLocal<Dictionary<ConstraintSet, SoFar>>(fun () ->
             Dictionary<ConstraintSet, SoFar>(HashIdentity.Reference))
 
+    /// The lists `checkpoint` marked whose constraints did not all agree, each with what `solvedSoFar` made of it: the
+    /// checkpoint is on the constraints of it that agree, which the lists after it are solved on top of. They are kept
+    /// as long as the lists are, as the checkpoints are, so that a list after one still reaches its checkpoint once
+    /// `soFarLists` has been cleared (#2848).
+    let private checkpointedSoFar = System.Runtime.CompilerServices.ConditionalWeakTable<ConstraintSet, SoFar>()
+
     /// `constraints` solved as `solveDetailed` does, for the type checker, which asks again and again as it goes. The
     /// constraints in front of a list solved lately are solved with the constraints of it that agree, after its failures,
     /// rather than the whole list from the start each time: an error in the module would otherwise have every later
@@ -281,15 +271,49 @@ module Solving =
                 | true, known when obj.ReferenceEquals(known.Kept, remaining) -> constraints, known.Failures
                 | true, known -> List.rev newer @ known.Kept, known.Failures
                 | false, _ ->
-                    match remaining with
-                    | [] -> constraints, []
-                    | constraint :: rest -> walk (constraint :: newer) rest
+                    match checkpointedSoFar.TryGetValue remaining, remaining with
+                    | (true, known), _ -> List.rev newer @ known.Kept, known.Failures
+                    | _, [] -> constraints, []
+                    | _, constraint :: rest -> walk (constraint :: newer) rest
             let toSolve, earlier = walk [] constraints
             let subst, kept, _, failures = solveSettingAside toSolve [] []
             let known = { Subst = subst; Kept = kept; Failures = earlier @ failures }
             if given.Count >= solvedListsKept then given.Clear()
             given[constraints] <- known
             known
+
+    /// Marks `constraints`, a list that agrees, as one later solves can start from (see `unifyDetailed`).
+    let private mark (constraints: ConstraintSet) =
+        match checkpoints.TryGetValue constraints, solvedLists.Value.TryGetValue constraints with
+        | (false, _), (true, { Result = Ok subst; NextRestId = nextRestId; Extension = extension }) ->
+            let vars =
+                match checkpointTail constraints with
+                | Some (newer, previous) -> varIds newer previous.Vars
+                | None -> varIds constraints Set.empty
+            checkpoints.AddOrUpdate(constraints, { Subst = subst; NextRestId = nextRestId; Extension = extension; Vars = vars })
+        | _ -> ()
+
+    /// Marks `constraints`, the list the type checker holds once it has generalised a top-level def, as one later
+    /// solves can start from (see `unifyDetailed`): the next def's constraints usually share no variable with it, so a
+    /// module is solved once, a def at a time, rather than again for each def (#1266). One that doesn't agree, after a
+    /// type error, marks the constraints of it that do, which `solvedSoFar` solves the lists after it on top of, so
+    /// that the error doesn't have every later def solved from the start (#2848).
+    let checkpoint (constraints: ConstraintSet) =
+        match constraints with
+        | [] -> ()
+        | _ ->
+            // Solved past its failures first: solving a list with a failure in it as it is would solve it from the start.
+            match solvedSoFar constraints with
+            | known when obj.ReferenceEquals(known.Kept, constraints) ->
+                match unifyDetailed constraints with
+                | Ok _ -> mark constraints
+                | Error _ -> ()
+            | { Kept = _ :: _ as kept } as known when not (checkpointedSoFar.TryGetValue constraints |> fst) ->
+                checkpointedSoFar.AddOrUpdate(constraints, known)
+                match unifyDetailed kept with
+                | Ok _ -> mark kept
+                | Error _ -> ()
+            | _ -> ()
 
     /// The constraints of `constraints` that agree, as `solveDetailed` keeps them: those it sets aside are not among
     /// them. The type checker asks whether a constraint fits with those it has so far by solving it with these, so that
