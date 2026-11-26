@@ -296,17 +296,35 @@ def total: list(string) -> #some(int) | #empty = { items ->
 }
 ```
 
-The `for` member of the builder's context runs such a loop. It takes the list, the body and the rest of the block. A loop over a map or a set is given the list `map.toList` or `set.toList` makes of it, so a builder's `for` takes only lists. The body takes an item and the rest of the loop, which it calls to go on to the next item once it has finished with this one. A `for` loop statement like the one above becomes, roughly:
+The `for` member of the builder's context runs such a loop. It takes the list, the body and the rest of the block. A loop over a map or a set is given the list `map.toList` or `set.toList` makes of it, so a builder's `for` takes only lists. The body takes an item, and gives back `#__nextItem` once it has finished with it, where the loop goes on to the next item, or else what ends the block: a failure, where a `try` fails, or a `return`'s value. A `for` loop statement like the one above becomes, roughly:
 
 ```nanyx fragment
-for(items, { item, next -> <the body, then next()> }, { <the rest of the block> })
+for(items, { item -> <the body, then #__nextItem> }, { <the rest of the block> })
 ```
 
-So the builder decides how the iterations combine. `proc`'s `for` goes through the items in order and stops at the first failure or `return`, since a body that ends that way never calls `next`. Another builder could collect every failure, or run the iterations at the same time. A loop whose body uses no keyword runs as a loop, and needs no `for`. One that does, in a builder whose context has no `for`, is a compile error, which says to handle the value with a `match` in the body or give the context a `for`.
+So the builder decides how the iterations combine. `proc`'s `for` goes through the items in order, calling the body on each, and stops at the first failure or `return`:
+
+```nanyx fragment
+for: [d] (list(x), ([d] x -> #__nextItem | #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s
+```
+
+```nanyx fragment
+def procFor
+  : [c] list(a), ([c] a -> #__nextItem | #some(b) | r), ([c] () -> #some(b) | r) -> #some(b) | r
+  = {
+    | [], _, rest -> rest()
+    | [item, ...others], body, rest ->
+      match body(item)
+        | #__nextItem -> procFor(others, body, rest)
+        | ended -> ended
+  }
+```
+
+Each body's call returns before the next item's, and the loop goes on with a tail call, so a loop runs in constant stack however many items it walks. Another builder could go on past a failure, collect every failure, or run the iterations at the same time. A loop whose body uses no keyword runs as a loop, and needs no `for`. One that does, in a builder whose context has no `for`, is a compile error, which says to handle the value with a `match` in the body or give the context a `for`.
 
 For now the loop must be a statement of its own in the block, and walk one list, map or set.
 
-For now a builder's `for` loop keeps a stack frame for each item it walks, so a loop over a long list, of some thousands of items, runs out of stack. That holds for `proc`'s too, though `proc`'s `for` and the body's call of the rest of the loop are written as [tail calls](../tour/functions#tail-recursion): the body and the rest of the loop are passed to a `for` that is generic in its items and its result, and the compiler converts each call's result back to the loop's own types after it returns, so no step's call is the last thing it does ([#2683](https://github.com/nanyx-lang/nanyx/issues/2683)). A loop whose body uses no keyword runs as a plain loop, in constant stack, so for a long list handle the value with a `match` in the body. A member that does something after its continuation returns, as `defer` does, makes each step keep a frame too, and always will.
+A member that does something after its continuation returns, as `defer` does, makes each step of a loop that uses it keep a stack frame, and always will.
 
 ## Where a keyword can't be
 
