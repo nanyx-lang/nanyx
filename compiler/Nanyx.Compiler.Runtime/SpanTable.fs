@@ -84,7 +84,7 @@ module SpanTable =
     let sectionName = "nanyx.spans"
 
     /// Reads an unsigned LEB128 at `at` in `bytes`, giving it and where the next thing starts.
-    let private unsigned (bytes: byte array) (at: int) =
+    let internal unsigned (bytes: byte array) (at: int) =
         let mutable value = 0UL
         let mutable shift = 0
         let mutable i = at
@@ -98,22 +98,27 @@ module SpanTable =
         int value, i
 
     /// Reads a name, a length and that many bytes of UTF-8, at `at`.
-    let private name (bytes: byte array) (at: int) =
+    let internal name (bytes: byte array) (at: int) =
         let length, start = unsigned bytes at
         Text.Encoding.UTF8.GetString(bytes, start, length), start + length
 
-    /// The table of the module in the binary format `wasm`, if it has one.
-    let read (wasm: byte array) : SpanTable option =
+    /// Where the contents of the custom section `named` of the module in the binary format `wasm` start, after its name,
+    /// and where they end, if it has one.
+    let internal customSection (named: string) (wasm: byte array) =
         // The sections follow the magic number and the version, each its id, its size and its contents.
         let rec find (at: int) =
             if at >= wasm.Length then None
             else
                 let id = wasm.[at]
                 let size, contents = unsigned wasm (at + 1)
-                if id = 0uy && fst (name wasm contents) = sectionName then Some(snd (name wasm contents), contents + size)
+                if id = 0uy && fst (name wasm contents) = named then Some(snd (name wasm contents), contents + size)
                 else find (contents + size)
+        find 8
+
+    /// The table of the module in the binary format `wasm`, if it has one.
+    let read (wasm: byte array) : SpanTable option =
         try
-            find 8
+            customSection sectionName wasm
             |> Option.map (fun (start, finish) ->
                 let mutable at = start
                 let number () =

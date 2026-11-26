@@ -93,6 +93,18 @@ All source files included in a package must contain named modules.
 
 An anonymous module is therefore a compilation error when encountered during a package build, and so is a source file with top-level statements: a package's code runs from its `@entry`. Anonymous modules are intended for script mode and file-path imports rather than inclusion in normal packages.
 
+## Test files
+
+A package can keep [tests](./attributes#test) in files of their own. The `tests` field of `package` selects them, as `sources` selects the rest:
+
+```nanyx fragment
+(
+  package = (name = "acme.web", version = "1.2.0", sources = ["src/**/*.nyx"], tests = ["tests/**/*.nyx"])
+)
+```
+
+A test file is part of the package in a test build alone, and every other build leaves it out. Like a source file, it declares a named module, and it can import the package's modules. A file that both `sources` and `tests` select is an error at the manifest (`NYX0023`). With no `tests`, a package has no test files.
+
 # Package dependencies
 
 Dependencies on other packages are declared in the package manifest's `dependencies` list. Each entry names a package and the directory it is in, relative to the manifest:

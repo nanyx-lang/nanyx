@@ -11,6 +11,7 @@
     <Compile Include="AsyncImport.fs" />
     <Compile Include="HttpImport.fs" />
     <Compile Include="SpanTable.fs" />
+    <Compile Include="TestTable.fs" />
     <Compile Include="Probing.fs" />
     <Compile Include="Profiling.fs" />
     <Compile Include="Runner.fs" />

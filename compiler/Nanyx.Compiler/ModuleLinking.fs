@@ -388,6 +388,12 @@ module internal ModuleLinking =
         checkedModule.Typed.ComponentExports
         |> List.map (fun export -> { export with Definition = renames |> Map.tryFind export.Definition |> Option.defaultValue export.Definition })
 
+    /// The tests of `checkedModule`, by the names `item` inlines them under.
+    let internal testsForImport (item: ImportItem) (checkedModule: CheckedModule) : Test list =
+        let renames = inlinedRenames item checkedModule
+        checkedModule.Typed.Tests
+        |> List.map (fun test -> { test with Definition = renames |> Map.tryFind test.Definition |> Option.defaultValue test.Definition })
+
     let internal inlinedItemsForImport (item: ImportItem) (checkedModule: CheckedModule) : TopLevelItem list =
         let renames = inlinedRenames item checkedModule
         let rename (name: string) = renames |> Map.tryFind name |> Option.defaultValue name

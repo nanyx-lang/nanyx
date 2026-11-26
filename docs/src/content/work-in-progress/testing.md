@@ -57,7 +57,7 @@ A [name in backticks](../tour/naming-conventions#names-in-backticks) can be any 
 
 A test takes no arguments and returns `()`. It passes if it finishes, and fails if it crashes: an `assert` that does not hold, a [deferred error](#deferred-errors), a non-exhaustive match or any other crash.
 
-Tests are only compiled into a test build. `nanyx run` and `nanyx build` leave them out, so code that is not a test cannot refer to one, and doing so is an error. Linters do not report a test as unused.
+Tests are only compiled into a test build. `nanyx run` and `nanyx build` leave them out, so code that is not a test cannot refer to one, and doing so is an error (`NYX0311`). Linters do not report a test as unused. This is built: see [Test builds](../deep-dives/test-builds).
 
 ## Tests beside the code
 
@@ -122,9 +122,12 @@ def `loads the defaults when there is no config file` = {
 A test that needs a context it does not load is a compile-time error, as an entry is that needs a context its host doesn't provide:
 
 ```text
-error: the test `loads the defaults when there is no config file` requires context `FileSystem`, which the test host does not provide
-  load a fake with `use FileSystem(...)`, or mark the test `@test(#io)` to use the real one
+error NYX0312: Context the test host doesn't provide
+  = The test 'loads the defaults when there is no config file' requires the context 'FileSystem', which the test host does not provide: load an instance of it, such as a fake, with `use` in the test
 ```
+
+The check is built, with an empty set of provided contexts until the test host provides `Console` and `Random`
+([#2931](https://github.com/nanyx-lang/nanyx/issues/2931)); `@test(#io)` adds its advice to the message.
 
 So a unit test never touches the file system, the clock or the environment unless it says so, and the compiler checks that. This is the check [Hosts](./hosts#the-test-runner-is-a-host) wants: the same program runs under a test host with no IO.
 
@@ -212,7 +215,7 @@ These fit the design but are not part of the first version:
 |---|---|
 | 1. Crash reports as data: message, span and stack | [#2933](https://github.com/nanyx-lang/nanyx/issues/2933) |
 | 2. `assert` | [#2934](https://github.com/nanyx-lang/nanyx/issues/2934) |
-| 3. `@test` and test builds | [#2930](https://github.com/nanyx-lang/nanyx/issues/2930) |
+| 3. `@test` and test builds: built ([Test builds](../deep-dives/test-builds)) | [#2930](https://github.com/nanyx-lang/nanyx/issues/2930) |
 | 4. `nanyx test`, `nanyx.test.host` and `nanyx:test` | [#2931](https://github.com/nanyx-lang/nanyx/issues/2931) |
 | 5. A context the test host lacks, and `@test(#io)` | [#2935](https://github.com/nanyx-lang/nanyx/issues/2935) |
 | 6. Virtual time, editors, `@test(#crashes)` and later items | [#2932](https://github.com/nanyx-lang/nanyx/issues/2932) |

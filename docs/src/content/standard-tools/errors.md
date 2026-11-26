@@ -2845,6 +2845,49 @@ unit instant: Speed = 1m / 0s  -- error NYX0298: `0s` is nothing, so 'instant' w
 
 To fix it, define it from a number of units that isn't zero.
 
+# NYX0310: Test that isn't a test's type
+
+A def marked `@test` takes arguments or gives back a value. A test is run with nothing and gives back `()`: it is a
+block, as `{ assert(...) }` is, that checks what it is about with `assert`.
+
+```nanyx
+@test
+def positive: int -> () = { n -> assert(n > 0) }  -- error NYX0310: A test takes no arguments and gives back `()`, ...
+```
+
+To fix it, write the test as a block that makes its own values: `def positive = { assert(3 > 0) }`.
+
+# NYX0311: Reference to a test
+
+Code that isn't a test refers to a def marked `@test`. Tests are part of a test build alone, which `nanyx test` makes,
+so no other build has them. Another test may call one.
+
+```nanyx
+@test
+def adds = {
+  assert(1 + 1 == 2)
+}
+
+def check = { adds() }  -- error NYX0311: 'adds' is a test, which only a test build has, ...
+```
+
+To fix it, move what the test and the other code share into a def that isn't marked `@test`, and call that from both.
+
+# NYX0312: Context the test host doesn't provide
+
+A test requires a context that the test host doesn't provide it. A test runs under the test host, so it may require
+only the contexts that host provides; any other it must provide itself.
+
+```nanyx
+@test
+def greets = {  -- error NYX0312: The test 'greets' requires the context 'Console', which the test host does not provide: ...
+  println("hello")
+}
+```
+
+To fix it, load an instance of the context in the test with `use`, such as a fake that records what the code does
+with it, and assert on what it recorded.
+
 # NYX0301: Not supported by the WebAssembly backend
 
 The program type-checks, but uses something the WebAssembly backend cannot compile yet. The message names what it
