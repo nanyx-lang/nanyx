@@ -654,6 +654,13 @@ let internal registerContextRequirement (state: InferState) (name: Identifier) (
             | Some signature -> state.ContextSignatures |> Map.add name signature
             | None -> state.ContextSignatures |> Map.remove name }
 
+/// `state` without the contexts the top-level def `name` was recorded to require (see `registerContextRequirement`): a
+/// def that failed to check is of the error type, so a call to it requires nothing, and reports no missing context.
+let internal forgetContextRequirement (state: InferState) (name: Identifier) =
+    { state with
+        ContextRequirements = state.ContextRequirements |> Map.remove name
+        ContextSignatures = state.ContextSignatures |> Map.remove name }
+
 /// Records that the local function `name`, declared as `symbol`, requires `contexts`, as `registerContextRequirement`
 /// does, and by its symbol too (see `LocalContextRequirements`).
 let internal registerLocalContextRequirement state (symbol: SymbolId option) name contexts signature =
