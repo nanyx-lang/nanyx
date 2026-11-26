@@ -822,16 +822,16 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
         match ctx.Kind with
         | TypeName ctxName -> WrittenContexts.isScoped state ctxName
         | _ -> false
-    // The members of `ctx` in scope only as the host's ambient instance's members of another context: one of the
-    // prelude's that the module's own context of the same name and members shadows. The host provides that context,
-    // not `ctx`, so they don't supply it (#2168).
+    // The members of `ctx`, a context the module declares itself, that are in scope only as the host's ambient
+    // instance's: those of a prelude context the module's own shadows, of the same name and members. The host provides
+    // the prelude's context, never the module's own, so they don't supply it (#2168).
     let ambientOfAnother (ctx: TypeExpr) =
-        let members, _ = collectContextMembers state ctx
-        members
-        |> List.choose (fun (memberName, _, own) ->
-            match own, state.AmbientMembers |> Map.tryFind memberName with
-            | Some own, Some (ambient, _) when own <> ambient && isAmbientMember env state memberName -> Some memberName
-            | _ -> None)
+        match ctx.Kind with
+        | TypeName ctxName
+        | TypeApply(ctxName, _) when tryFindTypeDef ctxName state |> Option.exists (fun info -> info.Home = state.Home) ->
+            let members, _ = collectContextMembers state ctx
+            members |> List.map (fun (memberName, _, _) -> memberName) |> List.filter (isAmbientMember env state)
+        | _ -> []
     // Each context with a member not in scope at all, or in scope only as another context's ambient member, with those
     // members, and each with no members that nothing supplies (see `withSupplied`).
     let missing =
