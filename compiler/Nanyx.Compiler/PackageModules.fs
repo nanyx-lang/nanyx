@@ -185,6 +185,24 @@ module PackageModules =
     /// `path` relative to `root`, with forward slashes, as a manifest and messages write it.
     let relativePath (root: string) (path: string) = Path.GetRelativePath(root, path).Replace('\\', '/')
 
+    /// The name a program shows for the source file at `file`, a path as a span names it: its path from `root`, the root
+    /// of its package, with `/` between its parts; its name alone without a root (a script) or when it is outside the
+    /// root. A crash's place, a `dbg`'s, and an error deferred to run time name a file so.
+    let shownFile (root: string option) (file: string) =
+        match root with
+        | _ when file = "" -> ""
+        | Some root ->
+            let relative = Path.GetRelativePath(root, file)
+            if relative.StartsWith ".." || Path.IsPathRooted relative then Path.GetFileName file
+            else relative.Replace('\\', '/')
+        | None -> Path.GetFileName file
+
+    /// Where `span` is, as a program that names its files from `root` writes a place in a message: `file:line:column: `,
+    /// the file as `shownFile` names it, or the line and column alone for a span with no file.
+    let placeOf (root: string option) (span: SourceSpan) =
+        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
+        else $"{shownFile root span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
+
     /// A file of the package as messages name it: relative to the manifest, with forward slashes.
     let display (modules: PackageModules) (filePath: string) = relativePath modules.Root filePath
 

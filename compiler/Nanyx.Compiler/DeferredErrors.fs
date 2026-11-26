@@ -17,12 +17,15 @@ module internal DeferredErrors =
           /// The cases each match that does not handle every case leaves out, by the match's node.
           Unhandled: Map<NodeId, Diagnostic list>
           /// The expressions that need the type of a value that has none, because of an error.
-          UnknownTypeUses: Set<NodeId> }
+          UnknownTypeUses: Set<NodeId>
+          /// The root the program names its files from, its package's, which none is for a script (see
+          /// `PackageModules.shownFile`).
+          Root: string option }
 
     /// Where the errors `state` recorded as it inferred a module were found, with `mismatches`, the conflicts solving
-    /// its constraints found. An expression recorded twice keeps the diagnostics recorded first (the lists are newest
-    /// first).
-    let sitesOf (state: InferState) (mismatches: Diagnostic list) : Sites =
+    /// its constraints found, in a program that names its files from `root`. An expression recorded twice keeps the
+    /// diagnostics recorded first (the lists are newest first).
+    let sitesOf (state: InferState) (mismatches: Diagnostic list) (root: string option) : Sites =
         let byNode (entries: (NodeId * Diagnostic list) list) = Map.ofList entries
         { Failed = byNode state.FailedExprs
           Mismatches =
@@ -32,17 +35,13 @@ module internal DeferredErrors =
             |> List.map (fun (span, found) -> span, List.map snd found)
             |> Map.ofList
           Unhandled = byNode state.UnhandledMatches
-          UnknownTypeUses = Set.ofList state.UnknownTypeUses }
+          UnknownTypeUses = Set.ofList state.UnknownTypeUses
+          Root = root }
 
-    /// Where `span` is, as `nanyx` prints a diagnostic's place: `file:line:column: `.
-    let internal deferredLocation (span: SourceSpan) =
-        if span.File = "" then $"{span.StartLine + 1}:{span.StartColumn + 1}: "
-        else $"{span.File}:{span.StartLine + 1}:{span.StartColumn + 1}: "
-
-    /// What a deferred error writes when it is reached, on one line: its place, its code and headline, then its body,
-    /// marked as deferred.
-    let internal deferredMessage (diagnostic: Diagnostic) =
-        let location = diagnostic.Span |> Option.map deferredLocation |> Option.defaultValue ""
+    /// What a deferred error writes when it is reached, on one line: its place, its file named from `root` as a crash's
+    /// is (see `PackageModules.placeOf`), its code and headline, then its body, marked as deferred.
+    let internal deferredMessage (root: string option) (diagnostic: Diagnostic) =
+        let location = diagnostic.Span |> Option.map (PackageModules.placeOf root) |> Option.defaultValue ""
         $"{location}error {diagnostic.Code}: {Diagnostics.oneLine diagnostic} (deferred from compile time)\n"
 
     /// `expr` with each expression that failed to check replaced by a call to `__crash`, which writes the errors
@@ -60,7 +59,7 @@ module internal DeferredErrors =
             FunctionCall(CrashSyntax.builtIn, None, [ Expression.from node (LiteralExpr (StringLit message)) ])
         let crash (node: Expression) (diagnostics: Diagnostic list) =
             placed.AddRange diagnostics
-            crashWith node (diagnostics |> List.map deferredMessage |> String.concat "")
+            crashWith node (diagnostics |> List.map (deferredMessage sites.Root) |> String.concat "")
         let deferred =
             expr
             |> mapExpressionKinds (fun node kind ->
@@ -74,6 +73,6 @@ module internal DeferredErrors =
                     let catchAll = values |> List.map (fun _ -> Pattern.at node.Span WildcardPattern)
                     Match(values, arms @ [ catchAll, Expression.from node (crash node missing) ])
                 | [], _, _ when sites.UnknownTypeUses.Contains node.Id ->
-                    crashWith node $"{deferredLocation node.Span}error: the value used here has no known type, because of an error deferred from compile time\n"
+                    crashWith node $"{PackageModules.placeOf sites.Root node.Span}error: the value used here has no known type, because of an error deferred from compile time\n"
                 | _ -> kind)
         deferred, List.ofSeq placed

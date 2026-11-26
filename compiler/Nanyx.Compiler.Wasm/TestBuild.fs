@@ -8,11 +8,11 @@ open Transpiler.Wasm.CodeGen
 
 /// The module, in the binary format, of a test build whose root `typed` is, compiled with `options`, its `dbg`s and
 /// crashes given to the runtime, listing the root's `Tests`, each test's place from 1 and its file named as
-/// `options.SourceRoot` names files (see `CoreIr.shownFile`).
+/// `options.SourceRoot` names files (see `PackageModules.shownFile`).
 let assemble (options: WasmOptions) (typed: TypedModule) : byte array =
     // The runner takes each `dbg` a test reaches, and keeps it with what the test prints, and a crash's message, which
     // it reports (see `Nanyx.Runtime.WasmTester`).
     let wat, _ = transpileTypedModuleWithOptions { options with DbgToEmbedder = true; CrashToRuntime = true } typed
-    let shown = CoreIr.shownFile options.SourceRoot
+    let shown = NyxCompiler.PackageModules.shownFile options.SourceRoot
     WasmBinary.assemble wat
     |> WasmBinary.withTests (typed.Tests |> List.map (fun test -> test.Module, test.Name, shown test.Span.File, test.Span.StartLine + 1, test.Span.StartColumn + 1))

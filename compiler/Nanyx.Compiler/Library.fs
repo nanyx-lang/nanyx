@@ -136,6 +136,16 @@ module Compiler =
     let private moduleFromTypedItems (defer: Expression -> Expression * Diagnostic list) (pipeTargets: Map<NodeId, Identifier>) (operatorCalls: Map<NodeId, Identifier>) (operatorInstances: Map<NodeId, TypeExpr>) (readAs: Map<NodeId, Expression>) (properties: Map<NodeId, BuiltInProperty>) (workflowBlocks: Set<NodeId>) (items: TypedTopLevelItem list) : Module * Diagnostic list =
         let lower (expr: Expression) =
             let deferred, placed = defer expr
+            // An expression an error made a trap stays one, though inference read it as another, as it does a unit
+            // literal (#2966). A module without errors is given back as it is, with none.
+            let readAs =
+                if readAs.IsEmpty || LanguagePrimitives.PhysicalEquality deferred expr then readAs
+                else
+                    let trapped =
+                        SyntaxTree.expressionsWithin deferred
+                        |> List.choose (fun within -> match within.Kind with CrashSyntax.Call _ -> Some within.Id | _ -> None)
+                        |> Set.ofList
+                    readAs |> Map.filter (fun node _ -> not (trapped.Contains node))
             deferred |> retargetPipes pipeTargets |> callOperators operatorCalls operatorInstances |> writeAsRead readAs |> callBuiltInProperties properties |> inlineWorkflowBlocks workflowBlocks, placed
         let lowered =
             items
@@ -680,10 +690,13 @@ module Compiler =
                 let moduleDiagnostics = testErrors @ componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ taskErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // A warning doesn't stop the module running or being imported (see `CheckedModule.Warnings`).
                 let moduleErrors, moduleWarnings = moduleDiagnostics |> List.partition Diagnostics.isError
+                // A message the program writes names a file as a crash's place does: from the package's root, or by its
+                // name alone in a script (see `PackageModules.shownFile`).
+                let sourceRoot = checkedModules.Package |> Option.map _.Root
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
                 let defer =
                     if moduleErrors.IsEmpty then fun expr -> expr, []
-                    else DeferredErrors.deferErrors (DeferredErrors.sitesOf state mismatchErrors)
+                    else DeferredErrors.deferErrors (DeferredErrors.sitesOf state mismatchErrors sourceRoot)
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own, placed = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems
                 let own = own |> ModuleLinking.writeBlockAliases state |> ModuleLinking.writeMemberAliases state |> ModuleLinking.writeAttachedNames state |> writeCells state |> writeContextNames state |> nameIgnoredParameters state.ExprTypes subst
@@ -692,7 +705,7 @@ module Compiler =
                     match state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst >> Unifier.unalias) with
                     | Some (TyFunc _) -> true
                     | _ -> false
-                let own = Asserts.writeOut source state isFunction own
+                let own = Asserts.writeOut source sourceRoot state isFunction own
                 // A script's entry point is a def of its own, with the values that need a context in it (see `Scripts`),
                 // which the call of the host's `run` names: typed as the entry point's lambda is.
                 let own, resolvedTypes, state =

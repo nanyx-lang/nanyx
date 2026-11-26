@@ -1261,7 +1261,8 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
           TypeOf = tyOf
           Tail = this.Tail
           Branch = this.Branch
-          Complex = this.Complex }
+          Complex = this.Complex
+          SourceRoot = DbgBuild.sourceRoot input.Dbg }
 
     /// The start function: each top-level expression in turn, its value dropped. The start function returns nothing,
     /// so nothing in it is a tail call; its body ends in unit, which the emitter leaves out (see `emitStart`).
