@@ -8,6 +8,65 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.49.0
+
+*26 November 2026*
+
+Testing arrives: `@test`, test files, and `nanyx test`, which runs each test in an instance of its own under a test host
+the compiler ships. Measures print in units a reader expects, a custom pattern can be local to a block, and a loop with
+`try` or `return` in it runs in constant stack.
+
+**Language**
+
+- A def marked `@test` is a test: a block that checks what it is about with `assert`. Only another test may refer to a
+  test, and a test may require only the contexts the test host provides, `Console` and `Random`
+  ([NYX0310](../standard-tools/errors#nyx0310), [NYX0311](../standard-tools/errors#nyx0311),
+  [NYX0312](../standard-tools/errors#nyx0312); [`@test`](../tour/attributes#test)).
+- A [custom pattern](../advanced/custom-patterns#where-a-pattern-is-declared) can be declared in a function's block,
+  where it is local to the block as a local def is, and in a module block, which can export it.
+- **Changed:** a `for` loop whose body uses `try` or `return` runs in constant stack, however long its list. A builder's
+  `for` member gives its body each item alone, and the body gives back `#__nextItem` to go on to the next, where it
+  called a `next` closure before: a builder that defines `for` changes its type to
+  `[d] (list(x), ([d] x -> #__nextItem | #some(y) | s), ([d] () -> #some(y) | s)) -> #some(y) | s`
+  ([Keywords in loops](../advanced/workflows#keywords-in-loops)).
+- **Changed:** a dimension's values are stored in its default storage unit, the largest declared unit every unit of the
+  dimension is a whole number of, and `@baseUnit` now marks only the unit its values are written in. `@storageUnit`
+  sets the storage unit by hand. A dimension with no such unit is [NYX0299](../standard-tools/errors#nyx0299), and a
+  unit that is no whole number of it [NYX0300](../standard-tools/errors#nyx0300)
+  ([Units of measure](../advanced/units-of-measure#dimensions-and-units)).
+- **Changed:** a measure prints as a reader expects ([Printing](../advanced/units-of-measure#printing)):
+  - zero in the default display unit, as `0m` or `0s`;
+  - a `float` in the largest unit it is at least 1 of, `1.5m` rather than `1500mm`;
+  - a derived dimension's value in its parts' default display units, `1.0m/s`.
+
+**Standard library**
+
+- `array.foldBack` and `Slice.foldBack` fold from the last element without copying. Every collection has `foldWhile`,
+  a fold whose step returns `#continue(acc)` or `#stop(acc)`, which stops at the first `#stop` and so also ends on an
+  endless sequence ([prelude-lists](../stdlib/prelude-lists)).
+
+**Tools**
+
+- `nanyx test` runs the tests of a package, or of a script ([`nanyx test`](../standard-tools/command-line#nanyx-test)):
+  - each test runs in an instance of its own and is reported as PASS or FAIL;
+  - a failing test shows why it failed, with the stack, and what it printed;
+  - it takes `--filter`, `--seed` and `--timeout`;
+  - an error in a module with tests stops the build for now
+    ([#2967](https://github.com/nanyx-lang/nanyx/issues/2967)).
+- A package's manifest selects test files with `tests`. A test build compiles them with the sources, and every other
+  build leaves them out ([Test files](../tour/packages#test-files)).
+- The compiler ships a test host, `nanyx.test.host`, which runs one test of a test build with a `Console` whose output
+  goes to the runner and a seeded `Random` ([The test host](../advanced/hosts#the-test-host)).
+- In the editor, go to definition, find references and Rename Symbol work on a dimension and on a unit, `km` in `2km`.
+  Renaming a unit renames every number written with it ([VS Code extension](../standard-tools/vs-code-extension)).
+
+**Fixes**
+
+- A module block's `import` of another block stays in the block: the file's top level can no longer use what it
+  imports ([NYX0110](../standard-tools/errors#nyx0110)).
+- In a file that declares a module, a block's definitions can be named with the block's short name, `coins.penny`, and
+  an aliased block import, `import coins as c`, works in `c.penny`.
+
 # 0.48.0
 
 *26 November 2026*

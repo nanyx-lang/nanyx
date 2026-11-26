@@ -120,8 +120,9 @@ those files workable. Problems with the code's structure are tracked as GitHub i
   tokens the parser reads (`ParseState.TokensRead`), or, for a function with no count of its own, what it allocates
   (`TestSupport.allocatesLinearly`).
   One that has to time something does it with `TestTiming.millisecondsOf` and is marked
-  `[<Trait("Category", "Timing")>]`, which a local run may leave out with `--filter "Category!=Timing"` and CI runs
-  ([compiler/README.md](compiler/README.md#running-tests)).
+  `[<Trait("Category", "Timing")>]`. CI leaves those out, and the nightly Timing workflow runs them
+  ([compiler/README.md](compiler/README.md#running-tests)). A change to what a timing test covers runs that test, with
+  `--filter "Category=Timing"`, locally or with `gh workflow run Timing --ref <branch>`, and its PR says so.
 - **Show what differed.** A failing comparison should print the difference: use `Assert.Equal(expected,
   actual)`, not `failwith "mismatch"`.
 
