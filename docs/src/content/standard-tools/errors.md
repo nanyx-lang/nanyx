@@ -355,7 +355,7 @@ linter's `settings`, or its `rules`. The message lists the fields it takes.
 ```nanyx
 -- file: demo.nyxp
 (
-  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: Package has no field 'src': its fields are 'name', 'version', 'sources', 'repository', 'nanyx', 'host', 'hostLibrary'
+  package = (name = "demo", version = "0.1.0", src = ["*.nyx"])  -- error NYX0021: Package has no field 'src': its fields are 'name', 'version', 'sources', 'tests', 'repository', 'nanyx', 'host', 'hostLibrary'
 )
 ```
 

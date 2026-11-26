@@ -149,7 +149,7 @@ let ``An unknown field is an error at its name`` () =
     Assert.Equal<string list>([ DiagnosticCodes.UnknownManifestField.Code; DiagnosticCodes.UnknownManifestField.Code ], errors |> List.map _.Code)
     Assert.Equal<string list>(
         [ "The manifest has no field 'extras': its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'"
-          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'repository', 'nanyx', 'host', 'hostLibrary'" ],
+          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'tests', 'repository', 'nanyx', 'host', 'hostLibrary'" ],
         errors |> List.map _.Message
     )
     let extras = errors.[0].Span.Value
