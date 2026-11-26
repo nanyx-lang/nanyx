@@ -24,6 +24,7 @@
     <Compile Include="Features\Arithmetic\NumberConversionTests.fs" />
     <Compile Include="Features\Arithmetic\OperandsSettledLaterTests.fs" />
     <Compile Include="Features\Arithmetic\OperatorCheckTimeTests.fs" />
+    <Compile Include="Features\Arithmetic\OwnTypeOperatorTests.fs" />
     <Compile Include="Features\Attached\AttachedTests.fs" />
     <Compile Include="Features\Attached\AttachedExtensionTests.fs" />
     <Compile Include="Features\Attached\BuiltinTypeNameTests.fs" />

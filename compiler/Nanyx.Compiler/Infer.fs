@@ -561,6 +561,9 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
                     AppendOperator.check constrained expr leftExpr.Type rightExpr.Type
                     |> Result.map (fun (resultTy, joined) -> mkTypedExpr expr resultTy None None None, joined)
                 | BinaryOp(op, _, _, _) when ArithmeticOperators.isOperator op ->
+                    match OperatorCalls.lacking env constrained expr op leftExpr.Type input with
+                    | Some error -> Error [ error ]
+                    | None ->
                     let resultTy, constrained = ArithmeticOperators.resultOf constrained expr op leftExpr.Type
                     ArithmeticOperators.check constrained expr op leftExpr.Type rightExpr.Type resultTy (ArithmeticOperators.numericOperandType constrained leftExpr.Type rightExpr.Type)
                     |> Result.map (fun numericConstrained -> mkTypedExpr expr resultTy None None None, numericConstrained)

@@ -105,6 +105,52 @@ module internal OperatorCalls =
                 | Some instance -> next.OperatorInstances |> Map.add expr.Id instance
                 | None -> next.OperatorInstances }
 
+    /// The definitions attached to `ownTy`, the type of an arithmetic operator's left operand, that take its operands
+    /// (`input`) as the operator would, by their bare names: the functions a type with no operator of its own gives
+    /// for them instead, such as `Instant`'s `since`. Operators and the members of the well-known contexts, such as
+    /// `compare`, are not among them.
+    let private attachedTaking (env: TypeEnv) (state: InferState) (ownTy: Ty) (input: Ty) : Identifier list =
+        let wellKnown = [ WellKnownContexts.equality; WellKnownContexts.ordering; WellKnownContexts.hashing ] |> List.map _.Member
+        TypeResolution.attachedTypeNames ownTy
+        |> List.collect (fun typeName ->
+            env.Names
+            |> Map.toList
+            |> List.choose (fun (name, scheme) ->
+                match name.Split('.', 2) with
+                | [| owner; bare |] when owner = typeName && System.Char.IsLetter bare[0] && not (List.contains bare wellKnown) && compares state ownTy input scheme ->
+                    Some bare
+                | _ -> None))
+        |> List.distinct
+
+    /// The error for `expr`, the arithmetic operator `op` (or prefix `-`), with the operands `input`, when its left
+    /// operand's type, `leftTy`, which `definition` finds the operator by, is a type of its own that is no number and
+    /// that nothing has given `op`: neither a definition attached under its name nor an instance of the context it reads. Without it, the
+    /// operator would be the built-in one, on `int`, and the error a bare mismatch with `int`. Where the type attaches
+    /// definitions that take the operands, as `Instant` does `since`, it names them, which are the way to write it: an
+    /// operator reads a context whose members give a value of the operands' type, which `Instant`'s `-` would not.
+    /// Otherwise it says how to give the type the operator.
+    let lacking (env: TypeEnv) (state: InferState) (expr: Expression) (op: string) (leftTy: Ty) (input: Ty) : Diagnostic option =
+        match Unifier.unalias (resolveSoFar state leftTy) with
+        | SizedNumberType _ -> None
+        | TyNominal(id, _, _, _) as own when not (Unifier.isError own) -> Some (id.Name, own)
+        | _ -> None
+        |> Option.map (fun (typeName, own) ->
+            let tyText = Unifier.tyToDisplayString Ascii own
+            let instance =
+                match OperatorContexts.smallest state (ArithmeticOperators.memberOf op) with
+                | Some context -> $", or load an instance, `use {context}({tyText})(...)`"
+                | None -> ""
+            let message =
+                if op = NegateSyntax.builtIn then
+                    $"'{tyText}' has no prefix `-`: attach `{ArithmeticOperators.negate}`, as in `def {typeName}.{ArithmeticOperators.negate} = ...`{instance}"
+                else
+                    match attachedTaking env state own input with
+                    | [] -> $"'{tyText}' has no `{op}`: attach one, as in ``def {typeName}.`{op}` = ...``{instance}"
+                    | found ->
+                        let listed = found |> List.map (fun name -> $"`{name}`") |> String.concat ", "
+                        $"'{tyText}' has no `{op}`: it attaches {listed} for these operands, as in `x \\{found.Head}(y)`"
+            Diagnostics.at DiagnosticCodes.TypeMismatch expr.Span message |> Diagnostics.about (NumericLiterals.written op))
+
     /// The error, at `span`, for the spare operator `op` (`^`, `<>`, `+=`, ...) on `left`, of the type `leftTy`, which
     /// nothing gives it a meaning on. `+=` is not assignment, so on a name that `isCell` says is a cell, the error says
     /// what is.
@@ -137,6 +183,9 @@ module internal OperatorCalls =
         | _ ->
         match definition instanceMember attached env state expr operandTy operandTy with
         | Some (callee, scheme, instance) -> Ok (infer state expr callee scheme instance operandTy)
+        | None ->
+        match lacking env state expr NegateSyntax.builtIn operandTy operandTy with
+        | Some error -> Error [ error ]
         | None ->
             ArithmeticOperators.check state expr NegateSyntax.builtIn operandTy operandTy operandTy numberTy
             |> Result.map (fun negated -> operandTy, negated)
