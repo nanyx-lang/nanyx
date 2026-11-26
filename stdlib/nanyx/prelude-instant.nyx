@@ -11,7 +11,8 @@
   reaches about 292 years either side of it. `Clock`'s `now` gives one. The time between two is
   their difference, exactly, and a time added to one moves it: `now() - start` and `now() + 5s`.
   [`Instant.since`], [`Instant.plus`] and [`Instant.minus`] are the same by name, and `minus` moves
-  one back, `now() \minus(5s)`, which `-` doesn't, as it is the time between two. It is written as
+  one back, `now() \minus(5s)`, which `-` doesn't, as it is the time between two. [`Instant.shift`]
+  moves one by a time that may be negative either way: `now() \shift(-5s)`. It is written as
   ISO 8601 writes it, in UTC: `"{i}"` is `2026-11-25T18:20:57Z`.
 export type Instant = private int
 
@@ -34,6 +35,12 @@ export def Instant.plus: Instant, Time(int) -> Instant = { Instant(nanos), time 
   moving one back is by name only.
 export def Instant.minus: Instant, Time(int) -> Instant = { Instant(nanos), time ->
   Instant(nanos - time // 1ns)
+}
+
+--| The instant `time` from `i`: on for a positive time and back for a negative one, as a time
+  worked out at run time may be either. `now() \shift(-5s)` is five seconds ago.
+export def Instant.shift: Instant, Time(int) -> Instant = { Instant(nanos), time ->
+  Instant(nanos + time // 1ns)
 }
 
 --| The time from `earlier` to `i`, exactly, as [`Instant.since`] gives it: `now() - start`.

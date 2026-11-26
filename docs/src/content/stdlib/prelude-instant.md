@@ -36,7 +36,8 @@ A point in time: a number of nanoseconds since the start of 1970, UTC (Unix time
 reaches about 292 years either side of it. `Clock`'s `now` gives one. The time between two is
 their difference, exactly, and a time added to one moves it: `now() - start` and `now() + 5s`.
 [`Instant.since`](#instantsince), [`Instant.plus`](#instantplus) and [`Instant.minus`](#instantminus) are the same by name, and `minus` moves
-one back, `now() \minus(5s)`, which `-` doesn't, as it is the time between two. It is written as
+one back, `now() \minus(5s)`, which `-` doesn't, as it is the time between two. [`Instant.shift`](#instantshift)
+moves one by a time that may be negative either way: `now() \shift(-5s)`. It is written as
 ISO 8601 writes it, in UTC: `"{i}"` is `2026-11-25T18:20:57Z`.
 
 ## `Instant.epoch`
@@ -73,6 +74,15 @@ def Instant.minus: Instant, Time(int) -> Instant
 
 The instant `time` before `i`: `now() \minus(1d)`. `-` is the time between two instants, so
 moving one back is by name only.
+
+## `Instant.shift`
+
+```nanyx fragment
+def Instant.shift: Instant, Time(int) -> Instant
+```
+
+The instant `time` from `i`: on for a positive time and back for a negative one, as a time
+worked out at run time may be either. `now() \shift(-5s)` is five seconds ago.
 
 ## `` Instant.`-` ``
 

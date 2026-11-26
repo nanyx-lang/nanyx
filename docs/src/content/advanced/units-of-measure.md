@@ -312,6 +312,7 @@ instant is moved and measured with times, by the operators and functions attache
 | `i - j` | `Time(int)`: the same, as an operator |
 | `i \plus(t)`, `i + t` | `Instant`: `i` moved on by a `Time(int)` `t` |
 | `i \minus(t)` | `Instant`: `i` moved back by `t` |
+| `i \shift(t)` | `Instant`: `i` moved by `t`, on if it is positive and back if it is negative, as `i \shift(-5s)` |
 | `Instant.epoch` | `Instant`: the start of 1970 |
 
 ```nanyx
@@ -329,6 +330,6 @@ match Instant.fromIsoString("2026-11-25T19:20:57.25+01:00")
 ```
 
 An instant prints as its UTC date and time, with a fraction of a second only when it isn't whole. `-` between two
-instants is the time between them, so an instant is moved back by name, `i \minus(t)`: a type attaches one `-`, and
-`i - 5s` is an error. `5s + i`, with the time on the left, is one too, as the operator is the one its left operand's type
-has.
+instants is the time between them, so an instant is moved back by name, `i \minus(t)` or `i \shift(-t)`: a type
+attaches one `-`, and `i - 5s` is an error. `5s + i`, with the time on the left, is one too, as the operator is the one
+its left operand's type has.
