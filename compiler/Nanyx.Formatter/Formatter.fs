@@ -643,13 +643,13 @@ let format (options: Options) (parsed: SourceModule) : string =
                 let _, runEnd, _, _ = List.last run
                 runStart, runEnd, runFirst, fun () -> importDoc runStart runEnd imports)
         // An attribute line belongs to the item after it, so nothing comes between them. `@partial` is written on the
-        // line of the module declaration it marks, and `@baseUnit` on the line of the unit.
+        // line of the module declaration it marks, and `@baseUnit` and `@storageUnit` on the line of the unit.
         |> List.foldBack
             (fun (childStart, childEnd, first: TopLevelItem, build) children ->
                 match children with
                 | (_, nextEnd, next: TopLevelItem, build') :: rest when isAttribute first ->
                     let between =
-                        if TopLevelItem.isPartialDeclaration first next || UnitSyntax.isBaseUnitDeclaration first next then text " "
+                        if TopLevelItem.isPartialDeclaration first next || UnitSyntax.isUnitAttributeDeclaration first next then text " "
                         else hard
                     (childStart, nextEnd, next, fun () -> cat [ build (); between; build' () ]) :: rest
                 | _ -> (childStart, childEnd, first, build) :: children)
@@ -680,7 +680,8 @@ let format (options: Options) (parsed: SourceModule) : string =
                   (match derived with Some t -> cat [ text " = "; typeExpr t ] | None -> Doc.empty) ]
         | UnitDecl(isExport, n, dimension, multiple) ->
             let export = if isExport then "export " else ""
-            cat [ text $"{export}{UnitSyntax.unitKeyword} {Names.written n}: {Names.written dimension}"
+            cat [ text $"{export}{UnitSyntax.unitKeyword} {Names.written n}: "
+                  typeExpr dimension
                   (match multiple with Some value -> cat [ text " = "; expr full value ] | None -> Doc.empty) ]
 
     let code = Doc.render options.LineWidth (topLevel true headerEnd source.Length parsed.Items)

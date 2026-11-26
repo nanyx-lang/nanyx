@@ -37,8 +37,8 @@ module InterpolationHoles =
     let arrayFunction = "__arrayToString"
 
     /// The prelude functions the derived `toString` of a measured value stored as an `int` or as a `float` calls, with
-    /// its number of base units, its units' names and scales, largest first, and what is written around a number of
-    /// base units.
+    /// its number of default storage units, its units' names and scales, largest first, and what is written around a
+    /// number of default storage units.
     let measuredIntFunction = "__measuredIntToString"
     let measuredFloatFunction = "__measuredFloatToString"
 

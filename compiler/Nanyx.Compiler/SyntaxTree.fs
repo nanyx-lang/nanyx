@@ -211,13 +211,14 @@ module SyntaxTree =
         match item.Kind with
         | Def definition -> definitionWrittenTypes item.Span definition |> List.map fst
         | ModuleBlock(_, items) -> items |> List.collect topLevelTypes
+        // A dimension's storage and what a derived one names, and a unit's dimension.
+        | DimensionDecl(_, _, storage, derived) -> Option.toList storage @ Option.toList derived
+        | UnitDecl(_, _, dimension, _) -> [ dimension ]
         | Expr _
         | ModuleDecl _
         | Import _
         | ReExport _
-        | Attribute _
-        | DimensionDecl _
-        | UnitDecl _ -> []
+        | Attribute _ -> []
 
     /// Every type written in `module'`, item by item, in module blocks too, each with what it is written as: an item's
     /// own, then those written in the expressions of its value, in the order `expressionsWithin` gives them.

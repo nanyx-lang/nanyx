@@ -1,12 +1,12 @@
-/// Numbers with units at run time (#2798): each is its number of its dimension's base units, in the storage it is
-/// typed with.
+/// Numbers with units at run time (#2798): each is its number of its dimension's default storage units, in the storage
+/// it is typed with.
 module TranspilerWasmTests.Features.Units.Run
 
 open Xunit
 open TranspilerWasmTestHelpers
 
 [<Fact>]
-let ``Run - a number with a unit is its number of base units, in its storage`` () =
+let ``Run - a number with a unit is its number of default storage units, in its storage`` () =
     let source =
         normalized """dimension Time
 
@@ -38,4 +38,4 @@ dbg(50.5KB)
 """
     runSource source
     |> withoutDbgLocations
-    |> assertRan "Time(500000000.0)\nTime(500000000)\nTime(500000000.0)\nTime(500000000)\nTime(-1500000.0)\nLength(0.005)\nBytes(50500)\n"
+    |> assertRan "Time(500000000.0)\nTime(500000000)\nTime(500000000.0)\nTime(500000000)\nTime(-1500000.0)\nLength(5.0)\nBytes(50500)\n"

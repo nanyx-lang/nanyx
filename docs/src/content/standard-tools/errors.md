@@ -2634,36 +2634,38 @@ def initial: char = "Ab"  -- error NYX0284: A char is one Unicode scalar value, 
 
 To fix it, write one character, or use a `string` where the value is more than one.
 
-# NYX0286: Dimension without a base unit
+# NYX0286: Dimension whose units aren't defined from one
 
-A dimension has no base unit, the unit its values are stored in, or a unit is neither its dimension's base unit nor a
-multiple of another unit ([Units of measure](../advanced/units-of-measure#dimensions-and-units)).
+A dimension's units are defined from one unit of it, the one that is no multiple of another. A dimension has no units,
+two of its units are no multiple of another, or a unit of a dimension declared in another module is no multiple of a
+unit of it ([Units of measure](../advanced/units-of-measure#dimensions-and-units)).
 
 ```nanyx
-dimension Time  -- error NYX0286: 'Time' has no base unit, the unit its values are stored in: ...
+dimension Time  -- error NYX0286: 'Time' has no units: ...
 ```
 
-To fix it, mark one unit of the dimension `@baseUnit`, as in `@baseUnit unit ns: Time`, and define every other unit as
+To fix it, declare one unit of the dimension with no multiple, as in `unit ns: Time`, and define every other unit as
 a multiple of a unit of the dimension, as `unit ms: Time = 1_000_000ns` is.
 
-# NYX0287: Base unit that can't be one
+# NYX0287: Unit attribute that can't apply
 
-A unit is marked `@baseUnit` where it can't be the base unit: its dimension has a base unit already, it is defined as
-a multiple of another unit, or its dimension is declared in another module, which declares the dimension's base unit.
+A unit is marked `@baseUnit` or `@storageUnit` where the mark can't apply: its dimension has a unit marked so already,
+or its dimension is declared in another module, which decides its default storage and display units.
 
 ```nanyx
 dimension Time
 
 @baseUnit unit ns: Time
-@baseUnit unit ps: Time  -- error NYX0287: 'Time' has a base unit already: ...
+@baseUnit unit s: Time = 1_000_000_000ns  -- error NYX0287: 'Time' has a unit marked `@baseUnit` already: ...
 ```
 
-To fix it, keep one base unit for each dimension, in the dimension's own module, and define the others as multiples:
-`unit ps: Time = 0.001ns`.
+To fix it, mark one default display unit and at most one default storage unit for each dimension, in the dimension's
+own module.
 
 # NYX0288: Units defined in a circle
 
-A unit is defined as a multiple of itself, directly or through other units, so it is no multiple of the base unit.
+A unit is defined as a multiple of itself, directly or through other units, so it is no multiple of the unit the
+others are defined from.
 
 ```nanyx
 dimension Time
@@ -2673,12 +2675,13 @@ unit a: Time = 2b  -- error NYX0288: 'a' is defined as a multiple of itself, thr
 unit b: Time = 3a  -- error NYX0288: 'b' is defined as a multiple of itself, through 'a', ...
 ```
 
-To fix it, define one of the units as a multiple of another that is not defined through it, such as the base unit.
+To fix it, define one of the units as a multiple of another that is not defined through it, such as the one the
+others are defined from.
 
 # NYX0289: Unit defined in another dimension's units
 
-A unit is defined as a multiple of a unit of another dimension. A unit of a dimension is a multiple of the dimension's
-base unit, so it is defined in that dimension's units.
+A unit is defined as a multiple of a unit of another dimension. A unit of a dimension is a multiple of another unit of
+the dimension, so it is defined in that dimension's units.
 
 ```nanyx
 dimension Time
@@ -2814,8 +2817,9 @@ To fix it, write dimensions on both sides of `*` and `/`, or leave the plain num
 
 # NYX0297: Unit of a derived dimension that its parts' units don't define
 
-A unit of a derived dimension is declared with no definition, or marked `@baseUnit`. A derived dimension's values are
-stored in its parts' base units, so it has no base unit of its own: each of its units is defined from its parts' units.
+A unit of a derived dimension is declared with no definition, or marked `@baseUnit` or `@storageUnit`. A derived
+dimension's values are stored in its parts' default storage units, so it has no default storage or display unit of its
+own: each of its units is defined from its parts' units.
 
 ```nanyx
 dimension Length
@@ -2824,7 +2828,7 @@ dimension Length
 
 dimension Speed = Length / Time
 
-unit kmh: Speed  -- error NYX0297: 'Speed' is a derived dimension, whose units are multiples of its parts' base units: ...
+unit kmh: Speed  -- error NYX0297: 'Speed' is a derived dimension, whose units are multiples of its parts' default storage units: ...
 ```
 
 To fix it, define the unit from its parts' units, multiplied and divided: `unit kmh: Speed = 1km / 1hr`.
@@ -2844,6 +2848,39 @@ unit instant: Speed = 1m / 0s  -- error NYX0298: `0s` is nothing, so 'instant' w
 ```
 
 To fix it, define it from a number of units that isn't zero.
+
+# NYX0299: Dimension with no unit to store it in
+
+A dimension's values are stored as a number of its default storage unit: the largest unit that every unit declared
+with the dimension is a whole number of. No declared unit is one, so there is none to store its values in
+([Units of measure](../advanced/units-of-measure#dimensions-and-units)). An inch is 25.4 millimetres, so neither is a
+whole number of the other.
+
+```nanyx
+dimension Distance  -- error NYX0299: No unit of 'Distance' is one that every other is a whole number of, ...
+
+unit mm: Distance
+unit inch: Distance = 25.4mm
+```
+
+To fix it, declare the unit the message names, which every unit of the dimension is a whole number of:
+`unit tenthMm: Distance = 0.2mm`.
+
+# NYX0300: Unit that is no whole number of the storage unit
+
+A unit is no whole number of its dimension's default storage unit, where it must be one: the dimension marks its
+default storage unit `@storageUnit`, or is declared in another module, so a unit declared here mustn't change what a
+value of it holds ([Units of measure](../advanced/units-of-measure#dimensions-and-units)).
+
+```nanyx
+dimension Clock
+
+@storageUnit unit ns: Clock
+unit ps: Clock = 0.001ns  -- error NYX0300: 'ps' is 1/1000 of 'ns', the default storage unit of 'Clock' that `@storageUnit` marks, ...
+```
+
+To fix it, define the unit as a whole number of the default storage unit, or, in the dimension's own module, mark a
+smaller unit `@storageUnit`, or none, to have the compiler work it out.
 
 # NYX0310: Test that isn't a test's type
 

@@ -207,7 +207,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         match Units.unitNamed state expr.Span unitName with
         | Error error -> Error [ error ]
         | Ok info ->
-            let storage, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
+            let storage, next = NumericLiterals.typeOf (recordUnitReference expr info state) expr.Span (Some expr.Id) literal
             let next =
                 match Units.constrainedStorage next info.Dimension with
                 | Some constrained -> addConstraintAt expr.Span storage constrained next

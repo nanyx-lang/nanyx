@@ -6,11 +6,11 @@ open NyxCompiler.InferState
 /// Instances of `ToString`, `Eq` and `Hash` the compiler derives from a type's structure, part by part (see "Printing values"
 /// and "Common contexts" on the docs' Contexts page).
 ///
-/// A tag union, a tuple, a record, a list, a map or a set has no `toString` attached, so a hole of such a
-/// type, or a call that requires `ToString` of it, finds an instance written from its parts: `#some(a)` is written
-/// `#some(` then its payload then `)`, and the payload is written through its own `ToString`, whichever that is. A
-/// measured value is one too: its number of base units, written in the largest of its dimension's units it is a whole
-/// number of (see the docs' Units of measure page).
+/// A tag union, a tuple, a record, a list, a map or a set has no `toString` attached, so a hole of such a type, or a
+/// call that requires `ToString` of it, finds an instance written from its parts: `#some(a)` is written `#some(` then
+/// its payload then `)`, and the payload is written through its own `ToString`, whichever that is. A measured value is
+/// one too: its number of default storage units, written in the largest of its dimension's units it is a whole number
+/// of (see the docs' Units of measure page).
 ///
 /// The instance is an ordinary definition the compiler writes, one for each type, as the user would have written it:
 ///
@@ -81,8 +81,8 @@ module internal StructuralInstances =
         /// An array's element type. `Eq` and `ToString` are derived for an array, as for a set; `Hash` is not.
         | ArrayShape of Ty
         /// A measured value's dimension and storage, and the units of the dimension the module sees, the largest first
-        /// (see `Units.seenOf`), with the base units of a derived dimension's parts after them, which `derive` fills in.
-        /// Only `ToString` is derived for one: it is compared and hashed as its storage.
+        /// (see `Units.seenOf`), with the default storage units of a derived dimension's parts after them, which
+        /// `derive` fills in. Only `ToString` is derived for one: it is compared and hashed as its storage.
         | MeasureShape of Dimension * storage: Ty * units: UnitInfo list
 
     let private isTuple (fields: Map<string, Ty>) = not fields.IsEmpty && WellKnownContexts.isTuple fields
@@ -264,31 +264,34 @@ module internal StructuralInstances =
     let private partName (index: int) = $"__p{index}"
 
 
-    /// The text a derived `toString` writes for `value`, a measured value of `dimension` stored as `storage`: its number
-    /// of base units in the largest of `units` it is a whole number of, by a prelude function, where the storage is an
-    /// `int` or a `float`, or a type that converts to one. Zero, a value no unit fits and a value of any other storage,
-    /// one of a type variable's, are written in the base unit, through the storage's own `ToString`, or as `dbg` writes
-    /// them, `Time(500)`, if the module sees no base unit. A value of a derived dimension is written in the largest of
-    /// its own units it is a whole number of, `90kmh`, as one of a dimension is, and otherwise in its parts' base units,
-    /// multiplied and divided: `10.4m/ns`.
+    /// The text a derived `toString` writes for `value`, a measured value of `dimension` stored as `storage`: its
+    /// number of default storage units in the largest of `units` it is a whole number of, by a prelude function, where
+    /// the storage is an `int` or a `float`, or a type that converts to one. Zero is written in the dimension's default
+    /// display unit, `0s`. A value no unit fits and a value of any other storage, one of a type variable's, are written
+    /// in the default storage unit, through the storage's own `ToString`, or as `dbg` writes them, `Time(500)`, if the
+    /// module sees no default storage unit. A value of a derived dimension is written in the largest of its own units
+    /// it is a whole number of, `90kmh`, as one of a dimension is, and otherwise, zero too, in its parts' default
+    /// storage units, multiplied and divided: `10.4m/ns`.
     let private measuredText (span: SourceSpan) (dimension: Dimension) (storage: Ty) (units: UnitInfo list) (value: Expression) : Expression =
         let expr = Expression.at span
         let call (callee: Identifier) (args: Expression list) = expr (FunctionCall(callee, None, args))
         let text (s: string) = expr (LiteralExpr (StringLit s))
         let stored = call Units.storageIntrinsic [ value ]
-        let baseOf (id: NominalId) = units |> List.tryFind (fun info -> UnitInfo.isBase info && info.Dimension = Dimension.ofBase id)
+        let storageOf (id: NominalId) = units |> List.tryFind (fun info -> UnitInfo.isStorage info && info.Dimension = Dimension.ofBase id)
         let before, after =
-            match units |> List.tryFind (fun info -> UnitInfo.isBase info && info.Dimension = dimension) with
-            | _ when Dimension.isDerived dimension && dimension |> List.forall (fst >> baseOf >> Option.isSome) ->
-                "", Dimension.writtenWith (fun id -> (baseOf id).Value.Name) "*" "/" dimension
-            | Some baseUnit when not (Dimension.isDerived dimension) -> "", baseUnit.Name
+            match units |> List.tryFind (fun info -> UnitInfo.isStorage info && info.Dimension = dimension) with
+            | _ when Dimension.isDerived dimension && dimension |> List.forall (fst >> storageOf >> Option.isSome) ->
+                "", Dimension.writtenWith (fun id -> (storageOf id).Value.Name) "*" "/" dimension
+            | Some storageUnit when not (Dimension.isDerived dimension) -> "", storageUnit.Name
             | _ -> $"{Dimension.text dimension}(", ")"
+        let display = units |> List.tryFind (fun info -> info.IsDisplay && info.Dimension = dimension) |> Option.map _.Name |> Option.defaultValue ""
         let units = units |> List.filter (fun info -> info.Dimension = dimension)
         let inUnits (helper: Identifier) (number: Expression) (scales: (UnitInfo * Expression) list) =
             call helper [
                 number
                 expr (ListExpr (scales |> List.map (fun (info, _) -> text info.Name)))
                 expr (ListExpr (scales |> List.map snd))
+                text display
                 text before
                 text after ]
         let whole () =
@@ -526,9 +529,9 @@ module internal StructuralInstances =
             let shape =
                 match shape with
                 | MeasureShape([ dimension, 1 ], storage, _) -> MeasureShape([ dimension, 1 ], storage, Units.seenOf state [ dimension, 1 ])
-                // A derived dimension is written in its own units, or else in the base units of its parts.
+                // A derived dimension is written in its own units, or else in the default storage units of its parts.
                 | MeasureShape(dimension, storage, _) ->
-                    let bases = dimension |> List.collect (fun (id, _) -> Units.seenOf state (Dimension.ofBase id)) |> List.filter UnitInfo.isBase
+                    let bases = dimension |> List.collect (fun (id, _) -> Units.seenOf state (Dimension.ofBase id)) |> List.filter UnitInfo.isStorage
                     MeasureShape(dimension, storage, Units.seenOf state dimension @ bases)
                 | _ -> shape
             let names = ContextInference.varNames ty

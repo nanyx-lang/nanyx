@@ -4,7 +4,7 @@ open System.Numerics
 open Parser.Program
 
 /// An exact fraction, in lowest terms with a positive denominator, so that two equal fractions are equal records: how
-/// many base units a unit of measure is (see `UnitInfo.Scale`).
+/// many default storage units a unit of measure is (see `UnitInfo.Scale`).
 type Rational = { Numerator: bigint; Denominator: bigint }
 
 module Rational =
@@ -33,5 +33,29 @@ module Rational =
     /// Whether `r` is a whole number.
     let isWhole (r: Rational) = r.Denominator.IsOne
 
+    /// `r` raised to the power `power`, which may be negative if `r` is not zero.
+    let power (r: Rational) (power: int) : Rational =
+        let raised = make (BigInteger.Pow(r.Numerator, abs power)) (BigInteger.Pow(r.Denominator, abs power))
+        if power < 0 then divide one raised else raised
+
+    /// The largest number that `a` and `b`, both above zero, are each a whole number of: the greatest common divisor of
+    /// `1/2` and `3/4` is `1/4`.
+    let greatestCommonDivisor (a: Rational) (b: Rational) : Rational =
+        make (BigInteger.GreatestCommonDivisor(a.Numerator * b.Denominator, b.Numerator * a.Denominator)) (a.Denominator * b.Denominator)
+
     /// `r` as it is written: `1000`, or `1/1000`.
     let text (r: Rational) = if isWhole r then string r.Numerator else $"{r.Numerator}/{r.Denominator}"
+
+    /// `r` written as a decimal, `0.2`, if it is one with an end; none for `1/3`.
+    let decimalText (r: Rational) : string option =
+        let rec digits (places: int) (scaled: bigint) =
+            if (scaled % r.Denominator).IsZero then Some (places, scaled / r.Denominator)
+            elif places > 64 then None
+            else digits (places + 1) (scaled * 10I)
+        digits 0 r.Numerator
+        |> Option.map (fun (places, number) ->
+            if places = 0 then string number
+            else
+                let sign = if number.Sign < 0 then "-" else ""
+                let written = (BigInteger.Abs number).ToString().PadLeft(places + 1, '0')
+                $"{sign}{written.Substring(0, written.Length - places)}.{written.Substring(written.Length - places)}")

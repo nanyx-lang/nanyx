@@ -72,7 +72,8 @@ let private refusal (scope: Scope) (file: string) (source: string) (symbol: Symb
         | Parameter
         | PatternVariable
         | TypeDefinition
-        | ContextMember -> None
+        | ContextMember
+        | UnitOfMeasure -> None
         | ImportedModule when symbol.Declaration.File = file && not (hasAlias source symbol) ->
             Some "It is imported without an alias: add `as` and a name to rename it"
         | ImportedModule -> None
@@ -150,8 +151,10 @@ let prepare (scope: Scope) (file: string) (source: string) (result: CompileResul
     let source = RefactoringText.normalised source
     subjectAt scope file source result offset |> Option.map (Result.map (fun (subject, span) -> { Name = nameOf subject; Span = span }))
 
-/// Why `name` can't be the new name of `subject`, if it can't.
-let private invalidName (subject: Subject) (name: string) =
+/// Why `name` can't be the new name of `subject`, if it can't, where `units` are the units in scope. A unit's must be one
+/// a number can be written with, `2km`: a name that starts with a letter, but not `e` or `E` and a digit, which writes
+/// an exponent (`2e5`), and no other unit's.
+let private invalidName (units: Set<string>) (subject: Subject) (name: string) =
     let invalidPart (part: string) =
         if not (Names.isIdentifier part) then Some $"`{name}` is not a name"
         elif Keywords.reserved.Contains part then Some $"`{name}` is a keyword"
@@ -161,6 +164,11 @@ let private invalidName (subject: Subject) (name: string) =
     | ModuleName _ -> name.Split '.' |> Array.tryPick invalidPart
     | Named symbol when symbol.Kind = TypeDefinition && invalidPart name = None && Names.isTypeVariable name ->
         Some $"`{name}` would be a type variable, not a type's name"
+    | Named symbol when symbol.Kind = UnitOfMeasure && invalidPart name = None ->
+        if not (System.Char.IsLetter name[0]) || ((name[0] = 'e' || name[0] = 'E') && name.Length > 1 && System.Char.IsAsciiDigit name[1]) then
+            Some $"A number can't be written with `{name}`: a unit's name starts with a letter, and `e` and a digit write an exponent"
+        elif units.Contains name then Some $"`{name}` is a unit already"
+        else None
     | _ -> invalidPart name
 
 /// Where each name in `result`, the compile of the file `path`, refers to: the file and start of the name, and the
@@ -306,7 +314,8 @@ let editsIn
     | Some (Error reason) -> Error reason
     | Some (Ok (subject, _)) when nameOf subject = newName -> Ok { Edits = []; Files = [] }
     | Some (Ok (subject, _)) ->
-        match invalidName subject newName, planned subject newName files with
+        let units = root |> Option.bind (fun root -> root.Result.Typed) |> Option.map (fun typed -> typed.Units.Keys |> Set.ofSeq) |> Option.defaultValue Set.empty
+        match invalidName units subject newName, planned subject newName files with
         | Some reason, _
         | None, Error reason -> Error reason
         | None, Ok (edits, renamedFiles) ->

@@ -255,7 +255,9 @@ let private unitDeclaration (c: Cursor) (start: int) : TopLevelItem list =
             DimensionDecl(isExport, declared, storage, derived)
         else
             c.Expect Colon |> ignore
-            let dimension, _ = identifierWithSpan c
+            let dimension =
+                let name, span = identifierWithSpan c
+                TypeExpr.at span (TypeName name)
             // A number of another unit, `1_000us`, or numbers of units multiplied and divided on one line, read from
             // the left, as a unit of a derived dimension is: `1km / 1hr` (see `UnitSyntax`).
             let unitLiteral () =
@@ -277,7 +279,9 @@ let private unitDeclaration (c: Cursor) (start: int) : TopLevelItem list =
             UnitDecl(isExport, declared, dimension, multiple)
     if not (lineEnds c) then c.Fail "the end of the line"
     c.NoteDocumentable start nameSpan.Start
-    [ TopLevelItem.at (c.SpanFrom start) kind ]
+    let item = TopLevelItem.at (c.SpanFrom start) kind
+    c.Declare MeasureDeclaration item.Id [ declared, nameSpan ]
+    [ item ]
 
 /// A module's item, as the items it stands for: one, or the defs a destructuring def desugars into. In a module block
 /// (`inBlock`) there is no module declaration, pattern or destructuring def.

@@ -630,7 +630,8 @@ let internal declareSymbol (declarer: Declarer) (holder: NodeId) (name: string) 
                 match declarer with
                 // A def's value declares only that def, whose name a module block has qualified since.
                 | DefValue
-                | TypeDefBody -> List.tryHead names
+                | TypeDefBody
+                | MeasureDeclaration -> List.tryHead names
                 | LambdaParameters
                 | ArmBody
                 | RecordTypeFields
@@ -767,6 +768,16 @@ let internal recordTypeReference (typeExpr: TypeExpr) (info: TypeDefInfo) (state
         { state with
             References = state.References |> Map.add typeExpr.Id symbol
             ImportReferences = importReferenceOf typeExpr.Id typeExpr.Span symbol state }
+    | None -> state
+
+/// Records that `expr`, a number with a unit such as `2km`, is written with the unit `info`, if it declares a symbol, and
+/// the import it came through if it was imported.
+let internal recordUnitReference (expr: Expression) (info: UnitInfo) (state: InferState) =
+    match info.Symbol with
+    | Some symbol ->
+        { state with
+            References = state.References |> Map.add expr.Id symbol
+            ImportReferences = importReferenceOf expr.Id expr.Span symbol state }
     | None -> state
 
 /// Records that `expr`, a call such as `Point(x = 1)`, makes a value of the type definition `info`, if it declares a

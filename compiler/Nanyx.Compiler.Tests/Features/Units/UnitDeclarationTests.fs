@@ -1,5 +1,6 @@
-/// The checks of dimension and unit declarations (#2622): a dimension is a type, each has one base unit, every other
-/// unit is an exact multiple of one of the same dimension, and units are exported and imported as types are.
+/// The checks of dimension and unit declarations (#2622): a dimension is a type, each has one unit that is no multiple
+/// of another, every other unit is an exact multiple of one of the same dimension, and units are exported and imported
+/// as types are.
 module Nanyx.Compiler.Tests.Features.UnitDeclarations
 
 open Xunit
@@ -19,7 +20,7 @@ let private reported (source: string) =
 let private time =
     "dimension Time\n@baseUnit unit ns: Time\nunit us: Time = 1_000ns\nunit ms: Time = 1_000us\nunit s: Time = 1_000ms\n"
 
-/// The scale of each unit compiling `source` declares, to its dimension's base unit, as text.
+/// The scale of each unit compiling `source` declares, to its dimension's default storage unit, as text.
 let private scales (source: string) =
     let result = Compiler.compile (withFinalNewline source)
     Assert.Empty(result.Diagnostics)
@@ -31,13 +32,14 @@ let ``Dimensions and units that are declared rightly have no errors`` () =
     Assert.Empty(reported source)
 
 [<Fact>]
-let ``Each unit's scale to its dimension's base unit is exact`` () =
+let ``Each unit's scale to its dimension's default storage unit is exact`` () =
     let found = scales (time + "dimension Length(float)\n@baseUnit unit m: Length\nunit mm: Length = 0.001m\nunit km: Length = 1_000m\nunit um: Length = 0.001mm\nunit half: Length = 0.5km")
     Assert.Equal("1", found["ns"])
     Assert.Equal("1000000000", found["s"])
-    Assert.Equal("1/1000", found["mm"])
-    Assert.Equal("1/1000000", found["um"])
-    Assert.Equal("500", found["half"])
+    Assert.Equal("1", found["um"])
+    Assert.Equal("1000", found["mm"])
+    Assert.Equal("1000000", found["m"])
+    Assert.Equal("500000000", found["half"])
 
 [<Fact>]
 let ``A dimension is a type, generic in its storage unless it is constrained`` () =
@@ -49,24 +51,28 @@ let ``A dimension is a type, generic in its storage unless it is constrained`` (
     Assert.Empty(typed.TypeDefs["Bytes"].Parameters)
 
 [<Fact>]
-let ``A dimension with no base unit is NYX0286 at the dimension`` () =
+let ``A dimension with no units is NYX0286 at the dimension`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.DimensionWithoutBaseUnit.Code, "dimension Time" ],
+        [ DiagnosticCodes.UnitsNotFromOne.Code, "dimension Time" ],
         reported "dimension Time\n")
 
 [<Fact>]
-let ``A unit that is neither a base unit nor a multiple is NYX0286 at the unit`` () =
+let ``A second unit that is no multiple of another is NYX0286 at the unit`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.DimensionWithoutBaseUnit.Code, "unit q: Time" ],
+        [ DiagnosticCodes.UnitsNotFromOne.Code, "unit q: Time" ],
         reported (time + "unit q: Time"))
+    let _, message, _ = onlyDiagnostic (withFinalNewline (time + "unit q: Time"))
+    Assert.Equal(
+        "'q' is no multiple of another unit, but 'ns' is the one the units of 'Time' are defined from: define 'q' as a multiple of a unit of 'Time', as `unit ms: Time = 1_000us` is",
+        message)
 
 [<Fact>]
-let ``A second base unit, and a base unit that is a multiple, are NYX0287`` () =
+let ``A second @baseUnit or @storageUnit of a dimension is NYX0287 at the unit`` () =
+    let code = DiagnosticCodes.MisplacedUnitAttribute.Code
+    Assert.Equal<(string * string) list>([ code, "unit ms: Time = 1_000us" ], reported (time.Replace("unit ms", "@baseUnit unit ms")))
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.MisplacedBaseUnit.Code, "unit ps: Time" ], reported (time + "@baseUnit unit ps: Time"))
-    Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.MisplacedBaseUnit.Code, "1_000ps" ],
-        reported "dimension Time\n@baseUnit unit ns: Time = 1_000ps\nunit ps: Time = 0.001ns")
+        [ code, "unit us: Time = 1_000ns" ],
+        reported (time.Replace("@baseUnit unit ns", "@storageUnit unit ns").Replace("unit us", "@storageUnit unit us")))
 
 [<Fact>]
 let ``Units defined in a circle are NYX0288 at each of them`` () =
@@ -133,17 +139,21 @@ let ``An import that selects names brings in only the units it selects`` () =
         reportedIn main (compileImporting timeModule main))
 
 [<Fact>]
-let ``A module adds units to an imported dimension, but not its base unit`` () =
-    let main = "import mod\nunit ps: Time = 0.001ns\nunit min: Time = 60_000ms\n"
+let ``A module adds units to an imported dimension, but doesn't mark them`` () =
+    let main = "import mod\nunit tock: Time = 20ns\nunit min: Time = 60_000ms\n"
     let result = compileImporting timeModule main
     Assert.Empty(result.Diagnostics)
-    Assert.Equal("1/1000", Rational.text result.Typed.Value.Units["ps"].Scale)
+    Assert.Equal("20", Rational.text result.Typed.Value.Units["tock"].Scale)
     Assert.Equal("60000000000", Rational.text result.Typed.Value.Units["min"].Scale)
-    let base' = "import mod\n@baseUnit unit ps: Time\n"
+    for attribute in [ "@baseUnit"; "@storageUnit" ] do
+        let marked = $"import mod\n{attribute} unit tock: Time = 20ns\n"
+        Assert.Equal<(string * string) list>(
+            [ DiagnosticCodes.MisplacedUnitAttribute.Code, "unit tock: Time = 20ns" ], reportedIn marked (compileImporting timeModule marked))
+    let first = "import mod\nunit ps: Time\n"
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.MisplacedBaseUnit.Code, "unit ps: Time" ], reportedIn base' (compileImporting timeModule base'))
+        [ DiagnosticCodes.UnitsNotFromOne.Code, "unit ps: Time" ], reportedIn first (compileImporting timeModule first))
 
-/// A module `name` that exports a dimension `dimension` with the base unit `ms`.
+/// A module `name` that exports a dimension `dimension` with the default storage unit `ms`.
 let private withMs (name: string) (dimension: string) =
     $"module {name}\nexport dimension {dimension}\n@baseUnit export unit ms: {dimension}\nexport unit other{name}: {dimension} = 2ms\n"
 

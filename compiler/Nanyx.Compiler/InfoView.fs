@@ -313,7 +313,8 @@ let private isLocal (symbol: Symbol) =
     | TopLevelValue
     | ImportedModule
     | TypeDefinition
-    | ContextMember -> false
+    | ContextMember
+    | UnitOfMeasure -> false
 
 /// The type of a top-level def or import in scope, after the contexts it requires, as hover writes it, with the types
 /// and contexts it names named by `rename`.

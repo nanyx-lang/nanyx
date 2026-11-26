@@ -124,6 +124,10 @@ let private typeSignature (typed: TypedModule) (symbol: Symbol) (info: TypeDefIn
 
 /// The compile of the standard-library module `moduleName`, as an import of it checks it: from the checked library (see
 /// `Compiler.compileStandardLibraryModuleReporting`).
+/// Whether `symbol` of `typed` is a dimension's, which its `dimension` line documents (see `unitEntries`).
+let private isDimension (typed: TypedModule) (symbol: Symbol) =
+    Definition.typeDefinitionOf typed symbol |> Option.exists _.IsDimension
+
 let internal compile (moduleName: string) : CompileResult =
     Compiler.compileStandardLibraryModuleReporting CompileListener.none moduleName
 
@@ -141,7 +145,9 @@ and internal exportsIn (files: string list) (typed: TypedModule) (docOf: Symbol 
         symbol.IsExported
         && (symbol.Kind = TopLevelValue || symbol.Kind = TypeDefinition)
         && files.Contains symbol.Declaration.File
-        && not (ReservedNames.isHidden symbol))
+        && not (ReservedNames.isHidden symbol)
+        // A dimension is written as its `dimension` line declares it (see `unitEntries`), not as the type it is.
+        && not (isDimension typed symbol))
     |> Seq.sortBy (fun symbol -> symbol.Declaration.File, symbol.Declaration.Start)
     |> Seq.map (fun symbol ->
         let export =
@@ -182,21 +188,22 @@ let private unitEntries (file: string) (docOf: SourceSpan -> string option) : En
         let entry (written: string) (item: TopLevelItem) (name: string) =
             declaredIn item name
             |> Option.map (fun declaration -> { Name = name; Declaration = declaration; Written = written; Doc = docOf declaration; Members = [] })
+        let marked = UnitSyntax.unitsWithAttributes items
         items
-        |> List.mapi (fun index item -> (if index = 0 then None else Some items[index - 1]), item)
-        |> List.choose (fun (before, item) ->
+        |> List.choose (fun item ->
             match item.Kind with
             | DimensionDecl(true, name, storage, derived) ->
                 let storage = storage |> Option.map (fun storage -> $"({textOf storage.Span})") |> Option.defaultValue ""
                 let derived = derived |> Option.map (fun derived -> $" = {textOf derived.Span}") |> Option.defaultValue ""
                 entry $"{UnitSyntax.dimensionKeyword} {name}{storage}{derived}" item name
             | UnitDecl(true, name, dimension, multiple) ->
-                let baseUnit =
-                    match before with
-                    | Some attribute when UnitSyntax.isBaseUnitDeclaration attribute item -> $"@{UnitSyntax.baseUnitAttribute} "
-                    | _ -> ""
+                let attributes =
+                    marked
+                    |> List.tryFind (fun (unit, _) -> obj.ReferenceEquals(unit, item))
+                    |> Option.map (snd >> List.map (fun attribute -> $"@{attribute} ") >> String.concat "")
+                    |> Option.defaultValue ""
                 let multiple = multiple |> Option.map (fun multiple -> $" = {textOf multiple.Span}") |> Option.defaultValue ""
-                entry $"{baseUnit}{UnitSyntax.unitKeyword} {name}: {dimension}{multiple}" item name
+                entry $"{attributes}{UnitSyntax.unitKeyword} {name}: {textOf dimension.Span}{multiple}" item name
             | _ -> None)
     | _ -> []
 
@@ -407,7 +414,9 @@ let private nominalTypes (compiled: Documented list) : string =
             let files = Set.ofList documented.Files
             typed.Symbols
             |> Map.values
-            |> Seq.filter (fun symbol -> symbol.IsExported && symbol.Kind = TypeDefinition && files.Contains symbol.Declaration.File && not (ReservedNames.isHidden symbol))
+            |> Seq.filter (fun symbol ->
+                symbol.IsExported && symbol.Kind = TypeDefinition && files.Contains symbol.Declaration.File && not (ReservedNames.isHidden symbol)
+                && not (isDimension typed symbol))
             |> Seq.choose (fun symbol ->
                 Definition.typeDefinitionOf typed symbol
                 |> Option.filter _.IsNominal

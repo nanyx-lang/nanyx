@@ -19,7 +19,7 @@ namespace Nanyx.LanguageServer.Handlers;
 /// <c>module name</c> and the module's doc comment. On a dimension, in a type or its own declaration, it shows the
 /// dimension's declaration and the units that make values of it, from the smallest to the largest; so does a measured
 /// value's type. On the unit of a number with a unit, <c>ms</c> in <c>500ms</c>, or a unit's declaration, it shows the
-/// unit's declaration, how many of its dimension's base units it is, and the dimension's units.
+/// unit's declaration, how many of its dimension's default storage units it is, and the dimension's units.
 /// </summary>
 public sealed class HoverHandler : HoverHandlerBase
 {

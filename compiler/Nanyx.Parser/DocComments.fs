@@ -91,7 +91,9 @@ module DocComments =
                 | RecordTypeFields -> names
                 | LambdaParameters
                 | ArmBody
-                | NamedFieldValue -> [])
+                | NamedFieldValue
+                // A `dimension` or `unit` line is documented as an item (see `unitDeclarations`).
+                | MeasureDeclaration -> [])
             |> List.map (fun (_, span) -> DocumentsDeclaration span, span.Start)
         let rec typeDefBodies (item: TopLevelItem) =
             match item.Kind with
