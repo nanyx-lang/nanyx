@@ -2,7 +2,9 @@
   what it waits for, a subtask or a stream's or a future's end, to one waitable set the instance
   shares, and waits on the host (`nanyx/host.async`) until the event for it has come. When every task
   is waiting, the scheduler makes the host's wait, [`componentWait`], which waits on that set, and
-  keeps each event's code for the task that waits on it. A task cancelled while it waits for a
+  keeps each event's code for the task that waits on it. It waits through the compiler's `wait`
+  (`nanyx:component`), which, when `run` is lifted with the callback ABI, returns to the host rather
+  than block, and gives the event the host calls back with when the scheduler makes the wait again. A task cancelled while it waits for a
   subtask cancels the subtask (`[subtask-cancel]`), so a `race`'s loser stops what it waits on.
 
   The set and the events not yet taken are kept in the host's block (`hostState`): the set at 40,
@@ -15,8 +17,14 @@ import (
   nanyx/host.async as (cancelled, waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
-  abi as (Output, blocked, returned, subtaskDrop, waitableJoin, waitableSetNew, waitableSetWait)
+  abi as (Output, blocked, returned, subtaskDrop, waitableJoin, waitableSetNew)
 )
+
+--| Waits on the set, as `[waitable-set-wait]` does, and gives the event's code, its waitable and
+  its value written at the address given; or gives 0, no event, when the compiler's scheduler
+  returns to the host instead, and the event comes when it makes this wait again.
+@extern("nanyx:component", "wait")
+def waitOnSet: [HostRuntime] I32, I32 -> I32
 
 @extern("$root", "[subtask-cancel]")
 def subtaskCancel: [HostRuntime] I32 -> I32
@@ -41,13 +49,17 @@ def sharedSet: [HostRuntime] () -> I32 = { _ ->
   is never needed: a sleep is a subtask in the set, as a request is.
 export def componentWait: [HostRuntime] I32 -> () = { _ ->
   def event = allocate(8)
-  ignore(waitableSetWait(sharedSet(), event))
+  if waitOnSet(sharedSet(), event) != 0 then keep(readI32(event), readI32(event + 4)) else ()
+  free(event)
+}
+
+--| Keeps `code`, an event's, for the task that waits on `waitable`.
+def keep: [HostRuntime] I32, I32 -> () = { waitable, code ->
   def cell = allocate(12)
   writeI32(cell, readI32(field(44)))
-  writeI32(cell + 4, readI32(event))
-  writeI32(cell + 8, readI32(event + 4))
+  writeI32(cell + 4, waitable)
+  writeI32(cell + 8, code)
   writeI32(field(44), cell)
-  free(event)
 }
 
 --| The code of the event kept for `waitable`, which it takes out of the list after `at`, the address

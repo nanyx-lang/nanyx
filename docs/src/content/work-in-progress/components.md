@@ -244,16 +244,17 @@ the format is settled, with wit-component's output to test it.
   - The host package writes this "start, then wait" pair once per kind of call. It is the same code that #1890's
     scheduler later splits in two.
 - **After [#1890](https://github.com/nanyx-lang/nanyx/issues/1890)'s state machines**, an `Async` entry is lifted
-  `[async-lift]` with the scheduler as its `[callback][async-lift]`.
+  `[async-lift]` with the scheduler as its `[callback][async-lift]`. `run` is
+  ([Running with the callback ABI](../deep-dives/components#running-with-the-callback-abi)); `handle` is still the wrapper below.
   - A call that waits becomes an `[async-lower]` import, or an async `stream.read` or `stream.write`, whose subtask the
     task joins to the instance's waitable set. This is built for every wait in a function that requires `Async`
     ([Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)); `Console`'s and
     `FileSystem`'s functions don't, so theirs still block.
   - When every task is waiting, the scheduler returns WAIT. When the callback gets an event, the scheduler resumes the
-    task that was waiting on it.
-  - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), which
-    is built ([Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)), and
-    `TASK_CANCELLED` arriving at the callback is how the host cancels the entry.
+    task that was waiting on it. Built for `run`.
+  - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), and
+    `TASK_CANCELLED` arriving at the callback is how the host cancels the entry. Both are built
+    ([Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)), the second for `run`.
 - **Stage 1 doesn't depend on #1890 or #2164.** A synchronously lifted component is the same program model as today.
 - **`wasi:http/service` amends this for its entry (settled 2026-11-22).** Its `handle` is lifted async with the
   callback ABI from stage 3 on, not synchronously: the host reads the response's body from a stream only after

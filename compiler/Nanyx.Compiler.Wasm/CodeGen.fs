@@ -918,12 +918,15 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     // How many probes the module has numbered (see `EmitContext.ProbeId`).
     let probes = ref 0
 
+    // A component's `run` is lifted with the callback ABI, so its start function can stop, and is a state machine when
+    // it calls one (see `ComponentCallback`); any other start function runs them to the end.
+    let startCanStop = options.Component = Some CliRun
     // The functions that can stop and carry on later (see `TaskLowering`). The getter of a cached value runs the
     // function that builds it to the end, so it is the function that builds it that can be a state machine.
     let machines =
         definitionFunctions @ Option.toList startFunction
         |> List.map (fun func -> if cachedNames.Contains func.Name then { func with Name = CoreIrCachedValues.buildName func.Name } else func)
-        |> CoreIrSplitPoints.stateMachines CoreIrLowerInput.startFunctionName
+        |> CoreIrSplitPoints.stateMachines (if startCanStop then "" else CoreIrLowerInput.startFunctionName)
     CoreIrSplitPoints.checkFunctionValues CoreIrLowerInput.startFunctionName (definitionFunctions @ Option.toList startFunction)
 
     let context: CoreIrEmit.EmitContext =
@@ -997,6 +1000,14 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     let renderedStartFunction, startDirective =
         match startFunction with
+        | Some func when machines.Contains func.Name ->
+            let emitted = CoreIrEmit.emitFunction context func None
+            for helper in emitted.Helpers do
+                usedHelpers.Add helper |> ignore
+            functionsTouchMemory <- functionsTouchMemory || emitted.UsesMemory
+            let waiterType = indirectTypeName [ "i32"; "i32" ] "i32"
+            let entry = ComponentCallback.functions func.Name (resumeType func.Result) waiterType (CoreIrCachedValues.teardown cachedValues)
+            emitted.Text, entry
         | Some func ->
             // A module with probes asks the runtime whether it is probing before anything else runs.
             let before =

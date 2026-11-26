@@ -27,9 +27,9 @@ entry the module exports, a `ComponentEntry`, which the world says (`ComponentEn
 `wasi:http/service`, and `CliRun` for any other.
 
 - **The entry is exported under the world's name for it,** not run when the module is instantiated:
-  - `CliRun` is `wasi:cli/run@0.3.0#run`. It calls the start function, if the program has one, and returns 0, which is
-    `ok`. `run` is an `async func` in WIT, lifted synchronously: the instance blocks in each call it makes, as it does
-    under `nanyx run`.
+  - `CliRun` is `wasi:cli/run@0.3.0#run`, lifted async with a callback (`[async-lift]` and `[callback][async-lift]`),
+    which gives `ok` with `task.return` once the program is done. While every task waits on the host, `run` returns to
+    the host rather than block the instance ([Running with the callback ABI](#running-with-the-callback-abi)).
   - `HttpHandler` is `wasi:http/handler@0.3.0#handle`, lifted async with a callback ([The handler](#the-handler)).
 - **`cabi_realloc` is exported,** for the host to allocate in the module's memory through. It is the program's own
   allocator: a new block of the size asked for, with the old block's bytes copied in and the old block freed. The
@@ -80,10 +80,37 @@ lifted async, with the callback ABI (`[async-lift]` and `[callback][async-lift]`
    a write blocks, as `fd_write` does, and drops it; writes `ok(none)` to the trailers' future and drops it; frees the
    copy; lowers backpressure; and returns EXIT.
 
-The program runs synchronously, as under `CliRun`: a call it waits on is waited on where it is made, and the callback
-is only called if the host cancels the task, which traps. The start function runs afresh for each request an instance
-is given: it sets the program's cached values up and tears them down again, so nothing the program computes is kept
-from one request to the next.
+The program runs synchronously, as `run` did before it was lifted with a callback: a call it waits on is waited on where
+it is made, and the callback is only called if the host cancels the task, which traps. The start function runs afresh
+for each request an instance is given: it sets the program's cached values up and tears them down again, so nothing the
+program computes is kept from one request to the next.
+
+## Running with the callback ABI
+
+Under `CliRun`, the start function is a state machine when it calls one (`CoreIrSplitPoints.stateMachines`, given no start
+function to leave out), and its task, the main task, is one the scheduler runs as it runs the others
+(`ComponentCallback`). A program whose start function never stops is run, given `ok` and done with EXIT at once.
+
+1. `run` calls the start function. When it stops, its frame goes to the main task, which goes on the queue, and the
+   scheduler runs the tasks in turn, as `runOthers` does, resuming the start function's frame when the main task's turn
+   comes.
+2. When every task waits on the host, the scheduler makes the host's wait with `Callback.atTop` set. The component
+   root's `componentWait` waits on its shared set through `wait`, a foreign function of `nanyx:component` that the module
+   defines itself (`ComponentAbi.externs`): with `atTop` set, `wait` keeps the set and gives no event, rather than
+   block in `[waitable-set-wait]`, and the scheduler returns WAIT, with the set, to the host.
+3. The host calls the callback with an event when one comes. The callback keeps it and makes the host's wait the
+   scheduler last made again; `wait` gives it the event, so `componentWait` keeps it for the task waiting on it, as
+   when it waited itself. Then the scheduler runs again, from 2.
+4. When the start function finishes, the scheduler tears the program's cached values down, gives `ok` with
+   `[task-return]run`, and returns EXIT.
+
+`TASK_CANCELLED` at the callback cancels the main task, and so every task, whose waits on a subtask cancel it
+([below](#waiting-while-other-tasks-run)), while a stream's read or write goes on until the host has taken it; the
+program carries on to its end, as a `race`'s loser does, and `run` gives its result. Only the scheduler sets `atTop`, around its own wait: under any other entry, `wait` is
+`[waitable-set-wait]`. A wait on the host under code that runs the tasks to the end, a cached value's getter, would block
+there too, which an `async func` may; but a cached value can't require a context, so its tasks can't wait on the host.
+`ComponentCallbackTests.fs` and `ComponentCancellationTests.fs` run core modules on a fake host that calls `run` and its
+callback as Wasmtime does.
 
 # The componentizer
 
@@ -188,8 +215,10 @@ A request writes its body, waits for its response, and reads its body, while the
 [tasks](./async#tasks-and-scopes) run, and so does a sleep, and so does the HTTP host's component root as it reads the
 request it serves. Its futures, the trailers it sends and the ones that say a body was read, are written so too.
 `nanyx.wasi/waits` joins the subtask or the stream's end it waits on to one waitable set the instance shares, and waits
-on the host (`nanyx/host.async`'s `waitOnHost`) until the event for it has come. When every task is waiting, the scheduler makes the host's wait, `componentWait`, which waits on that set (`[waitable-set-wait]`)
-and keeps the event's code, in a list in the host's block, for the task that waits on that waitable; that task takes it
+on the host (`nanyx/host.async`'s `waitOnHost`) until the event for it has come. When every task is waiting, the
+scheduler makes the host's wait, `componentWait`, which waits on that set, through the compiler's `nanyx:component`
+`wait` ([Running with the callback ABI](#running-with-the-callback-abi)), and keeps the event's code, in a list in the
+host's block, for the task that waits on that waitable; that task takes it
 when it looks again. The set's handle is at offset 40 of the host's block and the list's first cell at 44, which the
 component roots leave free. A stream's write waits so in `writeAllAsync`, and a read or a future's write in
 `settledAsync`. Every other wait blocks: each async-lowered call that returns BLOCKED, a write to stdout or a file,

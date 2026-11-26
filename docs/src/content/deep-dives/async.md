@@ -55,7 +55,8 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   waits for a task or for a scope's tasks (below), or calls a function that is a state machine itself (`CoreIrSplitPoints.stateMachines`, over the module once it is counted).
   Each such call is a split point, numbered from 1 in the order the code is written, so the states inside any
   expression are a range. The start function and the getter of a cached value run state machines without being one
-  (below). A function that can't stop is compiled as before.
+  (below), except that a component's start function, under `run` lifted with the callback ABI, is a state machine
+  ([Components](./components#running-with-the-callback-abi)). A function that can't stop is compiled as before.
 - **Stopping.** A call that stops sets `__nanyx_suspending`, leaves its frame in `__nanyx_suspended`, and returns a value
   no one reads. After each split point the caller checks the flag. When it is set, the caller copies the variables it
   keeps there into a frame of its own, on the heap: those in scope that the code after it reads, which counting's own
@@ -97,7 +98,7 @@ for hasn't finished: a task, a scope's tasks, or the host (below); a call that c
   `loop(f, n - 1, f(acc))`, the count the tail call takes of `f` comes before the call of `f`, which drops the reference
   it read `f` with, though the return probe stands between the two.
 - **Running one to the end.** Code that calls a state machine without being one, the start function, the getter of a
-  cached value and a component's export, runs it to the end (`TaskLowering.blockOn`): while it stops, the scheduler
+  cached value and a component's own export, runs it to the end (`TaskLowering.blockOn`): while it stops, the scheduler
   runs the other tasks until its turn comes again (below), and then resumes it.
 - **Testing it.** A wait stops only when what it waits for isn't done, so `WasmOptions.YieldAtEveryWait` (`nanyx run
   --yield-at-every-wait`, for working on the compiler) makes every call of a function value that can wait stop once

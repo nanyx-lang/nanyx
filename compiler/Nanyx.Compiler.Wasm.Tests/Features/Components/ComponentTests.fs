@@ -34,9 +34,10 @@ let private preamble (bytes: byte array) = bytes |> Array.take 8
 let private componentPreamble = [| 0x00uy; 0x61uy; 0x73uy; 0x6duy; 0x0duy; 0x00uy; 0x01uy; 0x00uy |]
 
 [<Fact>]
-let ``A component's core module exports its entry as wasi:cli/run's run, and cabi_realloc, and runs nothing when instantiated`` () =
+let ``A component's core module exports its entry as wasi:cli/run's run, lifted with a callback, and cabi_realloc, and runs nothing when instantiated`` () =
     let wat = transpileWatWith componentOptions (normalized "dbg(1)\n")
-    Assert.Contains("""(export "wasi:cli/run@0.3.0#run")""", wat)
+    Assert.Contains("""(export "[async-lift]wasi:cli/run@0.3.0#run")""", wat)
+    Assert.Contains("""(export "[callback][async-lift]wasi:cli/run@0.3.0#run")""", wat)
     Assert.Contains("""(export "cabi_realloc")""", wat)
     Assert.DoesNotContain("(start ", wat)
 
@@ -44,12 +45,13 @@ let ``A component's core module exports its entry as wasi:cli/run's run, and cab
 let ``A component's core module writes and exits through wasi:cli alone, not WASI preview 1`` () =
     // `println` is a foreign function of preview 1's `fd_write`, which the module defines itself on `wasi:cli`.
     let wat = transpileWatWith componentOptions (normalized "dbg(1)\nprintln(\"hi\")\n")
-    Assert.Equal<Set<string>>(set [ "$root"; "wasi:cli/exit@0.3.0"; "wasi:cli/stderr@0.3.0"; "wasi:cli/stdout@0.3.0" ], importedModules wat)
+    // `run`'s `task.return` comes from `[export]wasi:cli/run`, as wit-component names it.
+    Assert.Equal<Set<string>>(set [ "$root"; "[export]wasi:cli/run@0.3.0"; "wasi:cli/exit@0.3.0"; "wasi:cli/stderr@0.3.0"; "wasi:cli/stdout@0.3.0" ], importedModules wat)
 
 [<Fact>]
 let ``A program with no top-level code still has an entry`` () =
     let wat = transpileWatWith componentOptions (normalized "def double = { x -> x * 2 }\n")
-    Assert.Contains("""(export "wasi:cli/run@0.3.0#run")""", wat)
+    Assert.Contains("""(export "[async-lift]wasi:cli/run@0.3.0#run")""", wat)
 
 [<Theory>]
 [<InlineData("dbg(1)\nprintln(\"hi\")\n")>]
