@@ -320,6 +320,10 @@ module Solving =
     /// an error earlier in the module, reported where it is, does not make every later constraint seem not to fit.
     let agreeing (constraints: ConstraintSet) : ConstraintSet = (solvedSoFar constraints).Kept
 
+    /// Whether solving `constraints` as `solve` does fails anywhere in `span`, without writing out the failures' messages.
+    let failsWithin (span: SourceSpan) (constraints: ConstraintSet) : bool =
+        (solvedSoFar constraints).Failures |> List.exists (fun (_, at, _) -> SourceSpan.contains span at)
+
     /// Solves `constraints` as `solveDetailed` does, giving each failure's message and where it is, for the type checker
     /// as it goes (see `solvedSoFar`). A failure found in a list this one extends is given first, before those found in
     /// the constraints in front of it.
