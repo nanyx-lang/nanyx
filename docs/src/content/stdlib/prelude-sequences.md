@@ -389,6 +389,18 @@ def seq.fold: [c, d] ([c] seq(a)), b, ([d] (b, a) -> b) -> b
 `step` applied to `initial` and the first element, then to that result and the second, and so
 on, pulling the whole of `s` now. Stack-safe, but an endless sequence never ends.
 
+## `seq.foldWhile`
+
+```nanyx fragment
+def seq.foldWhile: [c, d] ([c] seq(a)), b, ([d] (b, a) -> #continue(b) | #stop(b)) -> b
+```
+
+[`seq.fold`](#sequencefold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next element,
+or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`, or after
+the last element. It pulls no element after a `#stop`, so it ends on an endless sequence that
+stops: `(1..) \seq.foldWhile(0, { total, n -> if total + n > 10 then #stop(total) else
+#continue(total + n) })` is `10`.
+
 ## `seq.reduce`
 
 ```nanyx fragment

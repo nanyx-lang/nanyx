@@ -78,6 +78,50 @@ let ``A module block's imports are its own`` () =
     Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "abs(-2)" ], codesAt (blockImport + "def other = abs(-2)\n"))
 
 [<Fact>]
+let ``A block is named by its short name in a file that declares a module`` () =
+    let source =
+        normalized """module money
+
+module coins =
+  export type Coin = protected (pence: int)
+  export def penny: Coin = Coin(pence = 1)
+  def secret = 42
+
+def two: coins.Coin = coins.penny
+def full: money.coins.Coin = money.coins.penny
+"""
+    Assert.Empty(codesAt source)
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.NotExported.Code, "coins.secret" ],
+        codesAt (source + "def s = coins.secret\n"))
+
+[<Fact>]
+let ``A module block's import of another block is its own`` () =
+    let sibling =
+        normalized """module steps =
+  export def step = 1
+
+module tally =
+  import steps
+  export def total = step + 1
+
+def u = step
+"""
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "step" ], codesAt sibling)
+    let nested =
+        normalized """module tally =
+  module steps =
+    export def step = 1
+
+  import steps
+  export def total = step + 1
+
+def u = step
+"""
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.OutsideModuleBlock.Code, "step" ], codesAt nested)
+    Assert.Empty(codesAt (sibling.Replace("def u = step", "import steps\n\ndef u = step")))
+
+[<Fact>]
 let ``A module block can import the block beside it, but not reach it without an import`` () =
     let other = "module prices =\n  import money\n  export def price: Money = Money.new(5)\n"
     Assert.Empty(codesAt (moneyBlock + other))

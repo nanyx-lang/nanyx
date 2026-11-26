@@ -8,6 +8,40 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.48.0
+
+*26 November 2026*
+
+`assert`, the first piece of testing, and a crash's report handed to the runtime as data. The playground compiles in
+the background and underlines mistakes as you type, and a component's own export may wait.
+
+**Language**
+
+- `assert(condition)` crashes when its condition is false, with the `assert` as written and the values in it, each side
+  of a comparison and each name it reads, printed as `dbg` prints them. It needs no context, takes no message, and
+  checks in release builds too ([assert](../stdlib/console#assert)).
+- `match a, b` can give one pattern for all the values, as `match (a, b)` can: `| _ -> …` matches them all, and
+  `| t -> …` binds their tuple ([Tuples](../tour/pattern-matching#tuples)).
+
+**Tools**
+
+- The [playground](../standard-tools/playground) compiles in a worker, so the page keeps responding while the compiler
+  loads and while a program compiles. It underlines mistakes as you type, with the error's code and message on hover,
+  and its **WebAssembly** button shows the WebAssembly text a program compiles to.
+- A missing context is named with its type arguments, `Missing context 'Ord(a)'`, in the headline as in the message
+  ([NYX0205](../standard-tools/errors#nyx0205)).
+- A served program's request that crashes is logged with the file and line of the program's code it crashed at, and
+  its message ([Crash stacks](../deep-dives/crash-stacks#the-crash-report)).
+
+**Fixes**
+
+- A `@component` export whose type requires `Async` builds, as an `async func` in its WIT, and may wait: it returns to
+  the host while it waits and gives its result when it is done. It failed to build
+  ([Components](../deep-dives/components#exports-that-wait)).
+- A context a module declares itself, with the name and members of one the host provides, as
+  `context Random = (bits: () -> int)`, is no longer taken to be available because the host's are: a call that needs
+  it reports it missing.
+
 # 0.47.0
 
 *26 November 2026*

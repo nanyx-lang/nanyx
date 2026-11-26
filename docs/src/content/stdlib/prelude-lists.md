@@ -274,7 +274,19 @@ Whether `test` holds for any element (so `false` for an empty list).
 def list.foldBack: [c] list(a), b, ([c] (b, a) -> b) -> b
 ```
 
-[`list.fold`](#listfold) from the last element to the first.
+[`list.fold`](#listfold) from the last element to the first:
+`list.foldBack(["a", "b", "c"], "", { acc, x -> acc ++ x })` is `"cba"`.
+
+## `list.foldWhile`
+
+```nanyx fragment
+def list.foldWhile: [c] list(a), b, ([c] (b, a) -> #continue(b) | #stop(b)) -> b
+```
+
+[`list.fold`](#listfold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next element,
+or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`, or after
+the last element. `step` isn't called again after a `#stop`: `list.foldWhile([1, 2, 3, 4, 5], 0,
+{ total, x -> if total + x > 6 then #stop(total) else #continue(total + x) })` is `6`.
 
 ## `list.append`
 

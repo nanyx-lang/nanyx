@@ -22,8 +22,7 @@ library, and the packages the compiler ships, but no package from the index. `Ra
 
 As you type, the editor underlines what the compiler finds wrong, an error in red and a warning in yellow; hover over
 it to see the error's code and message. **WebAssembly**, in the toolbar, shows the WebAssembly text the program compiles
-to in the output's place, following the code as you change it, until you press it again. Both come with the playground's
-first compiler release after 0.47.0.
+to in the output's place, following the code as you change it, until you press it again.
 
 The page keeps what you write in the browser's storage, so reloading it loses nothing.
 

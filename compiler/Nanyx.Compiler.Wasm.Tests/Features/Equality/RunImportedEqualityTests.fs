@@ -39,3 +39,35 @@ def main = {
 }
 """
     runFile (System.IO.Path.Combine(directory.Path, "main.nyx")) |> assertRan "true\ntrue\ntrue\nfalse\n"
+
+[<Fact>]
+let ``Run - an imported type's inferred == is passed to a function that requires Eq`` () =
+    // `Obj.==` is inferred to require `Eq(a)`, with no type written (#2814).
+    use directory = new TempDirectory()
+    directory.Write
+        "objs.nyx"
+        """module objs
+
+export type Obj(a) = protected (members: list((string, a)))
+
+export def Obj.make = { members: list((string, a)) -> Obj(members = members) }
+
+export def Obj.`==` = { x: Obj(a), y: Obj(a) ->
+  list.all(x.members, { m -> list.contains(y.members, m) }) and x.members.length == y.members.length
+}
+"""
+    directory.Write
+        "main.nyx"
+        """import objs as (Obj)
+
+def sameT: [Eq(t)] t, t -> bool = { a, b -> a == b }
+
+@entry
+def main = {
+  def p = Obj.make([("a", 1), ("b", 2)])
+  def q = Obj.make([("b", 2), ("a", 1)])
+  println(sameT(p, q))
+  println(sameT(p, Obj.make([("a", 1)])))
+}
+"""
+    runFile (System.IO.Path.Combine(directory.Path, "main.nyx")) |> assertRan "true\nfalse\n"
