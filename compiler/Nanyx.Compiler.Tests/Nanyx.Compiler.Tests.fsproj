@@ -50,6 +50,7 @@
     <Compile Include="Features\Units\AttachedMeasuredOperatorTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
     <Compile Include="Features\Contexts\AppendContextTests.fs" />
+    <Compile Include="Features\Contexts\MissingContextNameTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeTests.fs" />
     <Compile Include="Features\Contexts\AssociatedTypeContextTests.fs" />
     <Compile Include="Features\Contexts\TypedContextTests.fs" />

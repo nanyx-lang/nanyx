@@ -5,6 +5,34 @@ module internal NyxCompiler.WrittenContexts
 open Parser.Program
 open NyxCompiler.InferState
 
+/// The associated types of the context `ctxName` at `argTys`, each by its name with the argument it is at.
+let associatedArguments (state: InferState) (ctxName: Identifier) (argTys: Ty list) : (string * Ty) list =
+    match state.TypeDefs |> Map.tryFind ctxName with
+    | Some info when not info.AssociatedTypes.IsEmpty && argTys.Length = info.Parameters.Length ->
+        List.zip info.AssociatedTypes (List.skip (argTys.Length - info.AssociatedTypes.Length) argTys)
+    | _ -> []
+
+/// The instance of `ctxName` at `argTys` as a message writes it: `ToString(Time(int))`, `Ord(a)`, and an associated
+/// type something fixes by name, `Iter(Bag, elem = string)`. A context at no arguments is only its name.
+let instanceText (state: InferState) (ctxName: Identifier) (argTys: Ty list) =
+    let associated = associatedArguments state ctxName argTys
+    let positional = argTys |> List.truncate (argTys.Length - associated.Length) |> List.map (resolveSoFar state >> Unifier.tyToString)
+    let named =
+        associated
+        |> List.map (fun (name, ty) -> name, resolveSoFar state ty)
+        |> List.filter (snd >> TypeEnv.freeTyVars >> Set.isEmpty)
+        |> List.map (fun (name, ty) -> $"{name} = {Unifier.tyToStringIn state.TypeDefs ty}")
+    match positional @ named with
+    | [] -> ctxName
+    | written -> $"""{ctxName}({String.concat ", " written})"""
+
+/// The context `ctxName` a call requires at `argTys`, as an error names it: written with the arguments (see
+/// `instanceText`), unless one still holds a type variable nothing has named yet, which would mean nothing to the
+/// reader, as `ToString(t2)`; then only its name.
+let missingText (state: InferState) (ctxName: Identifier) (argTys: Ty list) =
+    let unnamed = argTys |> List.exists (resolveSoFar state >> TypePrinting.varsInPrintOrder >> List.exists (fun var -> var.Name.IsNone))
+    if unnamed then ctxName else instanceText state ctxName argTys
+
 /// Whether `name` is a scoped context (`scoped context Memory = ()`).
 let isScoped (state: InferState) (name: Identifier) =
     state.TypeDefs |> Map.tryFind name |> Option.exists _.IsScoped

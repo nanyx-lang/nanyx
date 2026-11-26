@@ -77,7 +77,7 @@ module internal OrderingOperators =
             | Ok (Some called) -> Ok called
             | Ok None ->
             match ordering.Lacks (fun _ -> false) ty with
-            | Some reason -> Error (error ordering.Context expr.Span (cannotUse ordering op ty reason + advice ty))
+            | Some reason -> Error (error ordering.Context ty expr.Span (cannotUse ordering op ty reason + advice ty))
             | None when (comparedVars ty).IsEmpty || not (isDeclared ordering next) -> Ok next
             | None -> Ok (pendingOperator ordering env next expr op ty)
 
