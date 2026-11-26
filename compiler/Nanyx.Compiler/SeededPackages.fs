@@ -47,11 +47,18 @@ module SeededPackages =
             |> Option.bind (fun manifest -> SemanticVersion.tryParse manifest.Version)
             |> Option.map (fun version -> { Name = name; Version = version; Sha256 = ""; Source = ShippedPackages.directoryOf name }))
 
+    /// The compiler's own copy of each package it ships, as `store` would have it seeded, but neither packed nor
+    /// unpacked into its cache, and with no SHA-256: what a store reads them as when nothing it builds is locked or
+    /// downloaded, as while they are packed, and in the compiler built for the browser, which would otherwise pack them
+    /// on a page (see `inMemory`).
+    let private listedUnpacked (store: PackageStore) : Result<Seeded, string list> =
+        Result.Ok { Index = PackageStore.shippedIndex store; Copies = ownCopies () }
+
     /// Each package the compiler ships, packed, with its manifest; or why one can't be. They depend only on the packages
     /// the compiler ships, which are read from the compiler's own copies (see `ownCopies`), so they pack the same whatever
     /// `store` they are packed for.
     let private packWith (store: PackageStore) : Result<(Manifest * byte array) list, string list> =
-        let unseeded = { store with Seed = fun _ -> Result.Ok { Index = PackageStore.shippedIndex store; Copies = ownCopies () } }
+        let unseeded = { store with Seed = listedUnpacked }
         ShippedPackages.names ()
         |> List.map (fun name ->
             Package.findIn unseeded (ShippedPackages.directoryOf name)
@@ -199,3 +206,9 @@ module SeededPackages =
     /// packages the compiler ships with `seed`.
     let store (cache: string) (index: string) (github: GitHubFetcher) : PackageStore =
         { Cache = cache; Index = index; GitHub = github; Seed = seed }
+
+    /// A store whose cache is `cache` and whose index is `index`, which fetches from GitHub with `github`, and which reads
+    /// the packages the compiler ships from the compiler's own copies without seeding them: for the compiler built for
+    /// the browser, whose page locks and downloads nothing, so packing them there would cost the page for nothing.
+    let inMemory (cache: string) (index: string) (github: GitHubFetcher) : PackageStore =
+        { Cache = cache; Index = index; GitHub = github; Seed = listedUnpacked }
