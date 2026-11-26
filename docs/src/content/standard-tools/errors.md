@@ -1294,7 +1294,7 @@ def size = { n: int -> if n > 10 then "big" }  -- error NYX0201: This `if` has n
 ```
 
 A match arm for a tag that the value's union doesn't have can never match, so it is reported too, with the union's
-tags and the one it most likely means:
+tags and the one it most likely means, of those no other arm handles:
 
 ```nanyx
 def o: #some(int) | #none = #none
@@ -1302,7 +1302,6 @@ def o: #some(int) | #none = #none
 def r =
   match o
     | #some(n) -> n
-    | #none -> 0
     | #nothing -> 2  -- error NYX0201: This arm can never match: the value is a '#some(int) | #none', whose tags are #some and #none, so it has no #nothing: did you mean #none?
 ```
 

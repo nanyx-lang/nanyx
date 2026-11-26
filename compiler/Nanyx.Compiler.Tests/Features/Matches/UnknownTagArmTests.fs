@@ -12,7 +12,6 @@ let ``An arm for a tag a closed union doesn't have is an error at its pattern, s
 def r =
   match o
     | #some(n) -> n
-    | #none -> 0
     | #nothing -> 2"""
     let code, message, text = onlyDiagnostic source
     Assert.Equal("NYX0201", code)
@@ -124,3 +123,18 @@ def check =
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     let fix = Assert.Single(diagnostic.Fixes)
     Assert.Equal("#nil", (Assert.Single(fix.Edits)).NewText)
+
+// A cell made with `#none` and matched as an option was told its `#some` arm meant `#none`, which another arm handles.
+[<Fact>]
+let ``The error suggests no tag another arm already handles`` () =
+    let source =
+        withFinalNewline """def nothing = #none
+
+def r =
+  match nothing
+    | #some(n) -> n
+    | #none -> 0"""
+    let diagnostic = single (Compiler.compile source)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.Equal("This arm can never match: the value is a '#none', whose only tag is #none, so it has no #some", diagnostic.Message)
+    Assert.Empty(diagnostic.Fixes)

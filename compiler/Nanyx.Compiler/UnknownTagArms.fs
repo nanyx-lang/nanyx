@@ -37,12 +37,14 @@ module internal UnknownTagArms =
             let best = scored |> List.map snd |> List.min
             scored |> List.filter (fun (_, d) -> d = best) |> List.map fst
 
-    let private unknownTag (ty: Ty) (tags: string list) (span: SourceSpan) (tagName: string) : Diagnostic =
+    /// The error at `span` for an arm for `tagName`, which `ty`, whose tags are `tags`, doesn't have. It suggests a tag
+    /// of `tags` but those other arms name already, `handled`: one is not what an arm for another tag means.
+    let private unknownTag (ty: Ty) (tags: string list) (handled: Set<string>) (span: SourceSpan) (tagName: string) : Diagnostic =
         let listed =
             match tags |> List.map (sprintf "#%s") with
             | [ only ] -> $"whose only tag is {only}"
             | many -> "whose tags are " + String.concat ", " (List.truncate (many.Length - 1) many) + " and " + List.last many
-        let suggestions = suggest tags tagName |> List.map (sprintf "#%s")
+        let suggestions = suggest (tags |> List.filter (handled.Contains >> not)) tagName |> List.map (sprintf "#%s")
         let question =
             match suggestions with
             | [] -> ""
@@ -54,26 +56,42 @@ module internal UnknownTagArms =
                 |> List.map (fun suggestion -> { Title = $"Write `{suggestion}`"; Edits = [ { Span = nameSpan span tagName; NewText = suggestion } ] }) }
 
     /// The errors for tag patterns in `pattern`, matched against a value of type `ty`, that name a tag `ty` doesn't
-    /// have, looking into the payloads of the tags it does have.
-    let rec private check (ty: Ty) (pattern: Pattern) : Diagnostic list =
+    /// have, looking into the payloads of the tags it does have. `handled` are the tags the other arms name there.
+    let rec private check (handled: Set<string>) (ty: Ty) (pattern: Pattern) : Diagnostic list =
         match pattern.Kind with
         | TagPattern(tagName, payload) ->
             match closedTags ty with
             | Some tags ->
                 match tags |> List.tryFind (fst >> (=) tagName) with
-                | None -> [ unknownTag ty (List.map fst tags) pattern.Span tagName ]
+                | None -> [ unknownTag ty (List.map fst tags) handled pattern.Span tagName ]
                 | Some (_, payloadTy) ->
                     match payload, payloadTy with
-                    | Some payload, Some payloadTy -> check payloadTy payload
+                    | Some payload, Some payloadTy -> check Set.empty payloadTy payload
                     | _ -> []
             | None -> []
-        | AndPattern parts -> parts |> List.collect (check ty)
+        | AndPattern parts -> parts |> List.collect (check handled ty)
+        | _ -> []
+
+    /// The tags `pattern` names at the top: its own, or its parts'.
+    let rec private tagsOf (pattern: Pattern) : string list =
+        match pattern.Kind with
+        | TagPattern(tagName, _) -> [ tagName ]
+        | AndPattern parts -> parts |> List.collect tagsOf
         | _ -> []
 
     /// The errors for the tag patterns of `arms` that name a tag the scrutinee at their position, of the type in
     /// `scrutineeTypes` resolved before the arms add their constraints, can't have.
     let ofArms (scrutineeTypes: Ty list) (arms: MatchArm list) : Diagnostic list =
+        // The tags the arms name at each position, but the arm at `armIndex`.
+        let handledBesides armIndex index =
+            arms
+            |> List.indexed
+            |> List.filter (fst >> (<>) armIndex)
+            |> List.collect (fun (_, (patterns, _)) -> List.tryItem index patterns |> Option.map tagsOf |> Option.defaultValue [])
+            |> Set.ofList
         arms
-        |> List.collect (fun (patterns, _) ->
+        |> List.indexed
+        |> List.collect (fun (armIndex, (patterns, _)) ->
             List.zip (List.truncate scrutineeTypes.Length patterns) (List.truncate patterns.Length scrutineeTypes)
-            |> List.collect (fun (pattern, ty) -> check ty pattern))
+            |> List.indexed
+            |> List.collect (fun (index, (pattern, ty)) -> check (handledBesides armIndex index) ty pattern))

@@ -117,15 +117,16 @@ println("after")
 
 [<Fact>]
 let ``Run - a lambda that cannot be compiled because of a deferred error reports it when a function value calls it`` () =
-    // The read of `x.value` can't be compiled, as the error left `x`'s fields open, so the lambda `memory` calls only
-    // reports the error: it still takes and returns what its type says, as `memory` calls it through a function value.
+    // The set can't be compiled, as the value set is not of the cell's type, so the lambda `memory` calls only reports
+    // the error: it still takes and returns what its type says, as `memory` calls it through a function value. The
+    // cell's type is written, so that the match is of a union, whose arms fit it (#2160).
     let source =
         normalized """import nanyx/mref
 
 def cycle: int -> int = { n ->
   memory {
-    def a = MRef.new(#none)
-    MRef.set(a, #some((value = n)))
+    def a: MRef(#some(value: int) | #none) = MRef.new(#none)
+    MRef.set(a, #some((value = "{n}")))
     match MRef.get(a)
       | #some(x) -> x.value
       | #none -> 0
@@ -140,7 +141,7 @@ def main = {
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("", outcome.StandardOutput)
-    Assert.Contains(":6:17: error NYX0201: Type mismatch: '#some(value: int)' vs '#none' (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(":6:17: error NYX0201: Type mismatch: 'string' vs 'int' (deferred from compile time)", outcome.StandardError)
     Assert.DoesNotContain("Runtime error", outcome.StandardError)
 
 /// A package whose @entry reaches a deferred error, with another file that has one it never reaches.
