@@ -36,6 +36,17 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   package's release ([Releases](./releases#the-shipped-packages)). The compiler still reads them from `packages/`
   beside it: resolving them from the index, as any package is, is the rest of
   [#2699](https://github.com/nanyx-lang/nanyx/issues/2699).
+- **The compiler seeds them into the package cache.** `SeededPackages.seed` packs each shipped package as the release
+  packs it, which gives the same bytes on any machine ([The package index](./package-index#the-cache)), unpacks it into
+  the cache at `<name>/<version>`, as a download is, and lists it with its SHA-256 in an index of its own in the cache,
+  `.shipped/<version>/<fingerprint>` (`PackageStore.shippedIndex`), laid out as the package index is. The fingerprint is
+  of the shipped packages' sources (`ShippedPackages.fingerprint`), so a compiler built from other sources seeds its
+  own. `PackageIndex.listing` lists the seeded version with those the package index has, and alone when the index
+  can't be read, so a build offline finds it. Where the index records the version with another SHA-256, the seeded copy
+  is the one listed, with the warning `NYX0303`; where the cache already holds another copy of the version, which is
+  never changed, seeding says to delete it. Seeding writes the index beside its place and moves it there, so a process
+  never reads one another is still writing. The tests' store is seeded; builds start seeding when they resolve shipped packages as
+  index packages ([#2701](https://github.com/nanyx-lang/nanyx/issues/2701)).
 - **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest (`HostPackages.tryShipped`)
   rather than keeping a table of hosts; `HostPackages.console` is the host a script runs under. The program's package
   records the host's package (`PackageModules.HostPackage`; for a script or a module given as source,
