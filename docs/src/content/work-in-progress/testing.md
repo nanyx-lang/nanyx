@@ -16,6 +16,22 @@ Other parts of the design already say what testing must do:
 
 This page fills in the rest: how a test is written, how it fails, and how the runner reports it.
 
+# Decided
+
+Settled with the maintainer on 26 November 2026 ([#2936](https://github.com/nanyx-lang/nanyx/issues/2936)):
+
+- **Crash boundaries aren't a prerequisite.** The runtime runs each test in a fresh instance, as it answers each
+  request in one for the HTTP host ([One instance per test](#one-instance-per-test)). The language-level `isolate` on
+  [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#isolate-a-crash-boundary-as-a-value) waits for
+  a use the runner can't cover.
+- **The test host is a shipped package,** `nanyx.test.host`, beside the console and HTTP hosts. Its root imports the
+  runtime's `nanyx:test`, as the HTTP host's imports `nanyx:serve`, to learn which test to run.
+- **What it needs first is crash reports as data:** a crash's message, place and stack, which today reach the runtime
+  only partly, the message as text on stderr.
+- **The test host provides `Console` and `Random` only,** as [Contexts](#contexts) says. `Async` with a virtual-time
+  `Clock` comes later.
+- **`assert` checks in release builds too, and takes no message.**
+
 # Writing a test
 
 A test is a definition marked with the `@test` [attribute](../tour/attributes). Its name is the definition's name, usually a sentence in backticks, and the module it is in groups it with the module's other tests:
@@ -150,7 +166,7 @@ It exits with 0 if every test passes and 1 if any fails, or if the tests could n
 
 ## One instance per test
 
-A crash ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a module that exports each test as a function, and creates a fresh instance of that module for each test. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each.
+A crash ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a module that exports each test as a function, and creates a fresh instance of that module for each test, as `nanyx run` creates one for each request a program under the HTTP host answers. The test host's root learns which test it runs through the runtime's `nanyx:test`, and the crash report the runtime gets from a failed instance is what the runner prints. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each.
 
 A test that runs for longer than a time limit fails, with a message that says so; `--timeout` sets the limit.
 
@@ -174,6 +190,8 @@ These fit the design but are not part of the first version:
 - **Parametrised tests.** A loop inside a test covers this for now, and `assert` prints the loop variable when the expression reads it.
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
+- **Virtual time.** The test host providing `Async` and a `Clock` whose `sleep` advances at once, with tasks run in a
+  fixed order, so tests of `sleep`, `race` and timeouts run instantly and the same way every time.
 - **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
 - **A file system in memory.** A ready-made `FileSystem`, which a test loads with `use`, that holds its files in memory, so a test can write files and read them back without faking each member by hand.
 - **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the docs' ([compilation](../deep-dives/compilation#docs-examples)); `nanyx test` could do the same for a package's.
@@ -187,9 +205,18 @@ These fit the design but are not part of the first version:
 - **Roc**: `expect`, built into the language, and `roc test`.
 - **F#** and **Kotlin**: tests named with sentences in backticks, ``` ``adds two points`` ``` and `` `adds two points` ``.
 
+# Plan
+
+| Stage | Issue |
+|---|---|
+| 1. Crash reports as data: message, span and stack | [#2933](https://github.com/nanyx-lang/nanyx/issues/2933) |
+| 2. `assert` | [#2934](https://github.com/nanyx-lang/nanyx/issues/2934) |
+| 3. `@test` and test builds | [#2930](https://github.com/nanyx-lang/nanyx/issues/2930) |
+| 4. `nanyx test`, `nanyx.test.host` and `nanyx:test` | [#2931](https://github.com/nanyx-lang/nanyx/issues/2931) |
+| 5. A context the test host lacks, and `@test(#io)` | [#2935](https://github.com/nanyx-lang/nanyx/issues/2935) |
+| 6. Virtual time, editors, `@test(#crashes)` and later items | [#2932](https://github.com/nanyx-lang/nanyx/issues/2932) |
+
 # Open questions
 
-- **`assert` in release builds.** Should a release build keep every `assert`, as Rust's `assert!` does, or should there also be a debug-only form, like Rust's `debug_assert!`?
-- **A message.** Should `assert` take an optional message, `assert(ok, "the cache was warm")`, or are the printed values always enough?
 - **Dots in test names.** A name in backticks cannot hold a dot, because dots separate the parts of a qualified name, so a test cannot be called `` `parses 1.5` ``. Is that worth lifting for tests?
 - **Private definitions in test files.** Should a file selected by `tests` be able to reach the private definitions of a module it names, as Go's tests in the same package can?
