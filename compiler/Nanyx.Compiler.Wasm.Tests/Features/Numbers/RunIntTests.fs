@@ -25,7 +25,6 @@ def main = {
   println("{sum([1, 2, 3_000_000_000])}")
   match #some(9_000_000_000)
   | #some(n) -> println("{n}")
-  | #none -> println("none")
   for [10, 20] ++ [4_000_000_000] | n -> println("{n}")
   def add = { a: int -> a + big }
   println("{add(1)}")

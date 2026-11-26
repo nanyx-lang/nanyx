@@ -213,7 +213,6 @@ for [[1], [2, 3]] | xs ->
   dbg(xs)
 match #some((1, "x"))
   | #some(pair) -> dbg(pair)
-  | #none -> (0, "")
 """
     |> printsAs """
 [main.nyx:3] [1]
