@@ -589,9 +589,11 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
                 match typeExpr.Kind with
                 | TypeWithContext((first :: _) as written, inner) ->
                     match Unifier.unalias (fst (typeExprToTy state inner)) with
-                    | TyFunc _
-                    | TyVar _ -> None
+                    | TyFunc _ -> None
                     | FunctionContexts.CarryingNominal _ -> None
+                    | TyVar _ as ty ->
+                        Some (Diagnostics.at DiagnosticCodes.ContextsOnValueType (SourceSpan.between first.Span (List.last written).Span)
+                                  $"'{Unifier.tyToString ty}' is a type variable, and a type variable doesn't carry contexts: write them on the function that requires them")
                     | TyNominal _ as ty ->
                         Some (Diagnostics.at DiagnosticCodes.ContextsOnValueType (SourceSpan.between first.Span (List.last written).Span)
                                   $"'{Unifier.tyToString ty}' doesn't take contexts: only a function type does, or a type declared with a context variable, as in `type Stream(a) = [k] protected (...)`")

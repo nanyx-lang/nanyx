@@ -2109,6 +2109,13 @@ values belong to a scoped context's scope says so on its declaration, not where 
 def count: [Console] int = 3  -- error NYX0253: Only a function type carries contexts, and 'int' isn't one: write them on the function that requires them
 ```
 
+A type variable carries no contexts either: `(val: [ToString(a)] a)` doesn't make a value that brings its own
+`ToString(a)`. A function that needs `ToString(a)` requires it, as in `[ToString(a)] (a) -> string`.
+
+```nanyx
+type Printable(a) = protected (val: [ToString(a)] a)  -- error NYX0253: 'a' is a type variable, and a type variable doesn't carry contexts: write them on the function that requires them
+```
+
 To fix it, write the contexts on the function that requires them, or leave them out.
 
 # NYX0254: Attached definition already in scope for its type
