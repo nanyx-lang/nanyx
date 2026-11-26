@@ -77,6 +77,23 @@ let ``A #! line, comments and blank lines can come among the directives`` () =
     Assert.Equal(Some(Some Severity.Error), directives.Linters.Value.Severities |> Map.tryFind "default/unusedBindings")
     Assert.Equal<string list>([ "default/unusedBindings" ], codesOf (compile source))
 
+[<Theory>]
+[<InlineData("::install nanyx.json 0.2.0", "nanyx.json", "version 0.2.0")>]
+[<InlineData("::install nanyx.regex", "nanyx.regex", "shipped")>]
+[<InlineData("::install acme.util ../util", "acme.util", "path ../util")>]
+let ``A script names a package it uses with ::install, at a version, by its name, or by its directory`` (directive: string, package: string, place: string) =
+    match Script.settings (Parser.Program.Header.Directives.read "" (directive + "\n")) with
+    | [ _, Result.Ok(DependencySetting(name, found)) ] ->
+        Assert.Equal(package, name.Text)
+        let foundText =
+            match found with
+            | DirectivePlace.AtVersion version -> $"version {version.Text}"
+            | DirectivePlace.AtPath path -> $"path {path.Text}"
+            | DirectivePlace.AtGitHub reference -> $"github {reference.Text}"
+            | DirectivePlace.Shipped -> "shipped"
+        Assert.Equal(place, foundText)
+    | settings -> failwith $"Expected one package, not {settings}"
+
 /// The one error the directives at the top of `source` have, with the text it is at.
 let private directiveError (source: string) =
     let source = "-- A script.\n" + source + "\n"
@@ -95,8 +112,10 @@ let private directiveError (source: string) =
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings error", "NYX0009", "error", "'error' is not a value")>]
 [<InlineData("::linter nanyx.lint\n::lint unusedBindings", "NYX0009", "::lint unusedBindings", "`::lint` takes a rule of the linter above it and a severity")>]
 [<InlineData("::format lineWidth", "NYX0009", "::format lineWidth", "`::format` takes a setting and its value")>]
-[<InlineData("::colour red", "NYX0009", "colour", "Nanyx has no directive of this name: the directives are `::host`, `::dependency`, `::linter`, `::lint` and `::format`")>]
+[<InlineData("::colour red", "NYX0009", "colour", "Nanyx has no directive of this name: the directives are `::host`, `::install`, `::linter`, `::lint` and `::format`")>]
 [<InlineData("::", "NYX0009", "::", "`::` has no directive's name after it")>]
+// `::install` was `::dependency`, which is no longer a name of it.
+[<InlineData("::dependency acme.util ../util", "NYX0009", "dependency", "Nanyx has no directive of this name: the directives are `::host`, `::install`, `::linter`, `::lint` and `::format`")>]
 let ``A directive written wrong is an error at the word it is about`` (directive: string, code: string, at: string, message: string) =
     let diagnostic, text = directiveError directive
     Assert.Equal(code, diagnostic.Code)
@@ -119,8 +138,8 @@ let ``A ::lint with no ::linter above it is an error whose fix turns on the offi
 [<InlineData("::formatter.lineWidth = 80", "::format lineWidth 80")>]
 [<InlineData("::host.acme.server = { path = \"../server\" }", "::host acme.server ../server")>]
 [<InlineData("::host.nanyx.cli.host = \"0.28.0\"", "::host nanyx.cli.host 0.28.0")>]
-[<InlineData("::dependencies.acme.util = { path = \"util\" }", "::dependency acme.util ./util")>]
-[<InlineData("::dependencies.acme.json = \"1.2.0\"", "::dependency acme.json 1.2.0")>]
+[<InlineData("::dependencies.acme.util = { path = \"util\" }", "::install acme.util ./util")>]
+[<InlineData("::dependencies.acme.json = \"1.2.0\"", "::install acme.json 1.2.0")>]
 let ``A directive in the old form is an error whose fix writes it as it is written now`` (old: string, now: string) =
     let source = "-- A script.\n" + old + "\n"
     let diagnostic = Assert.Single((Script.read "" source).Diagnostics)

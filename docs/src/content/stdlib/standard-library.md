@@ -39,7 +39,7 @@ ships it, and the console host's prelude brings its names into every module of a
 - [console](./console) — reading from and writing to the terminal (`nanyx.cli/console`)
 - [env](./env) — a program's arguments, environment variables and exit code (`nanyx.cli/env`)
 
-The file system's interface package, `nanyx.fs`, is shipped too. A program names it with `::dependency nanyx.fs`, or
+The file system's interface package, `nanyx.fs`, is shipped too. A program names it with `::install nanyx.fs`, or
 in its manifest's `dependencies`, and imports its modules; the console host provides `FileSystem`:
 
 - [filesystem](./filesystem) — the `FileSystem` context and `FsError` (`nanyx.fs/filesystem`)

@@ -580,7 +580,7 @@ internal static partial class CliCommands
 
     /// <summary>
     /// Downloads into the package cache the packages from the index that the script <paramref name="inputFile"/> pins
-    /// with its <c>::dependency</c> lines, and the packages they depend on (see <c>Script.pull</c>); false, with each
+    /// with its <c>::install</c> lines, and the packages they depend on (see <c>Script.pull</c>); false, with each
     /// error reported, if they can't be. With <paramref name="listPulled"/>, each package is listed on stdout, as
     /// <c>nanyx pull</c> lists them. A file that isn't there is left for its compile to report.
     /// </summary>

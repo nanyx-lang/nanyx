@@ -9,7 +9,7 @@ open TranspilerWasmTestHelpers
 
 /// The directives and imports of a script that uses `nanyx.fs`.
 let private header =
-    """::dependency nanyx.fs
+    """::install nanyx.fs
 
 import (
   nanyx.fs/dir as dir
@@ -185,7 +185,7 @@ export def setting: [FileSystem] string -> string = { name ->
     Directory.CreateDirectory(Path.Combine(directory.Path, "settings")) |> ignore
     File.WriteAllText(Path.Combine(directory.Path, "settings", "colour"), "blue")
     let main =
-        """::dependency acme.config ./config
+        """::install acme.config ./config
 
 import acme.config/config
 

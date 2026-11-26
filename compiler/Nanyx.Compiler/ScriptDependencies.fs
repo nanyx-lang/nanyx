@@ -2,8 +2,8 @@ namespace NyxCompiler
 
 open System.IO
 
-/// The packages from the index a script depends on. A script has no lockfile: each `::dependency` that names a package
-/// from the index writes the exact version it uses, `::dependency nanyx.json 0.1.0`, and that version is its pin. The
+/// The packages from the index a script depends on. A script has no lockfile: each `::install` that names a package
+/// from the index writes the exact version it uses, `::install nanyx.json 0.1.0`, and that version is its pin. The
 /// packages its pins depend on are chosen as a package's are (see `Resolution`). `nanyx run` and `nanyx pull` on a
 /// script download them into the cache (`pull`), and a build reads them from the cache alone (`cached`), as a
 /// package's build reads what its lockfile locks.

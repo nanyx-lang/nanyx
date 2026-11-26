@@ -5,7 +5,7 @@
   first, so they pipe: `"a1b22" \Regex.find(digits)`. [`Regex.isMatch`] says whether a regex matches anywhere in a text,
   [`Regex.find`] finds the first match, [`Regex.findAll`] each in turn, [`Regex.replace`] and
   [`Regex.replaceWith`] replace them, and [`Regex.split`] splits a text where they are. A program
-  names `nanyx.regex` in its manifest's `dependencies`, or a script in a `::dependency` line, and
+  names `nanyx.regex` in its manifest's `dependencies`, or a script in a `::install` line, and
   imports it as `import nanyx.regex/regex`.
 
   A pattern is usually written as a raw, single-quoted string, `'\d+'`, so its backslashes need no

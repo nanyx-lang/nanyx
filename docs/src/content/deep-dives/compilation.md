@@ -137,7 +137,7 @@ assembled too.
 
 Every ` ```nanyx ` block on every page of the docs, the [language tour](../tour/variables)'s and every other section's,
 is a test case: `RunDocExampleTests.fs` in `Nanyx.Compiler.Wasm.Tests` reads the pages under `docs/src/content`, and
-compiles and runs each block in the test process, as `nanyx run` would run it as a script. Packages from the index that a block names, such as `::dependency nanyx.json 0.1.0`, are read
+compiles and runs each block in the test process, as `nanyx run` would run it as a script. Packages from the index that a block names, such as `::install nanyx.json 0.1.0`, are read
 from an index on disk that the tests make (`testStore` in `TestHelpers.fs`), from the `.nyxpkg` files of their releases
 in `Nanyx.Compiler.Wasm.Tests/Packages`, so no example needs the network. A standard-library page's generated reference is left out (see
 [Standard library implementation](./standard-library-implementation#its-pages-on-the-docs-site)), and so is the

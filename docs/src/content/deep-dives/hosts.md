@@ -29,7 +29,7 @@ in progress.
   package's file, the language server's included, passes `@entry` to that host's `run`, and the host's imports resolve
   in its own package. `--host` on `run`, `build` and `check` replaces it with a host the compiler ships or the
   directory of one (`Package.withHost`); on a script it is a usage error.
-- **A script chooses its host.** `Script.read` reads a script's `::host` and `::dependency` directives into the
+- **A script chooses its host.** `Script.read` reads a script's `::host` and `::install` directives into the
   entries a manifest's `host` and `dependencies` would be (`Manifest.hostEntry`, `Manifest.dependencyEntries`), so they
   are checked as a manifest's are, with the same errors, at the word each is about. `Package.scriptModules` reads the packages
   they name, the console host when there is no `::host`, into a module table for the script's build
@@ -130,7 +130,7 @@ in progress.
 - **`FileSystem`** is declared in the shipped package `nanyx.fs`, which the console host depends on; its prelude
   re-exports `FileSystem`, with `Path` and `FsError`, the types its members name: a program module sees `run`'s
   parameter type, so it must be able to name the members' types. A program reaches its functions by importing
-  `nanyx.fs`'s modules, with `::dependency nanyx.fs` or a manifest's `dependencies`. `FileSystem`'s members are named
+  `nanyx.fs`'s modules, with `::install nanyx.fs` or a manifest's `dependencies`. `FileSystem`'s members are named
   for what they do on their own (`readFile`, `writeFile`, `pathExists`, `listDirectory`, ...), since the prelude makes
   them ambient names. `listDirectory` gives names in any order, and `dir.list` sorts and joins them, so another host
   has less to do.

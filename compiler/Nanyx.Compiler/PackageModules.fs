@@ -33,7 +33,7 @@ type PackageModules =
       /// with the full path of the file it is fetched to. They are among `Modules`, but not `Files`: they are not the
       /// package's own source files, and they may import only the standard library.
       Referenced: (string * string) list
-      /// Whether this is a script's build, whose `::host` and `::dependency` directives say what a manifest would (see
+      /// Whether this is a script's build, whose `::host` and `::install` directives say what a manifest would (see
       /// `Script`): it has no files of its own, and every file of the build that is in no package it depends on is the
       /// program's, its imports found by their paths.
       Script: bool
@@ -274,10 +274,10 @@ module PackageModules =
         | Some modules, ModuleImport name ->
             match ownerOf modules importer with
             | Some owner -> resolveModule modules owner item name
-            // A script's file imports a public module of a package its `::dependency` lines name after the package's name.
+            // A script's file imports a public module of a package its `::install` lines name after the package's name.
             | None when modules.Script && modules.Dependencies |> List.exists (fun dependency -> name.StartsWith(dependency.Package + "/")) ->
                 resolveModule modules modules item name
-            // And a file from GitHub its `::dependency` lines name by its module name.
+            // And a file from GitHub its `::install` lines name by its module name.
             | None when modules.Script && modules.Referenced |> List.exists (fst >> (=) name) ->
                 resolveModule modules modules item name
             | None -> FileImports.resolvePath (Path.GetDirectoryName importer) item

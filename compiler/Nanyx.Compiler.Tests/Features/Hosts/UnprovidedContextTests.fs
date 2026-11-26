@@ -55,7 +55,7 @@ let private callers =
 let ``A library's function requiring a context the host doesn't provide is an error at its call`` () =
     for caller, line in callers do
         let source = withFinalNewline $"""::host acme.quiet.host ./quiet
-::dependency acme.lib ./lib
+::install acme.lib ./lib
 
 import acme.lib/lib
 
@@ -70,7 +70,7 @@ import acme.lib/lib
 [<Fact>]
 let ``A library's function requiring FileSystem is an error at its call under a host that doesn't provide it`` () =
     let source = withFinalNewline """::host acme.quiet.host ./quiet
-::dependency acme.lib ./lib
+::install acme.lib ./lib
 
 import acme.lib/lib
 

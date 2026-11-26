@@ -10,7 +10,7 @@ every module of a program. Import the module under its own name, `import nanyx.f
 `/` between its parts on every system, so a program's paths read the same wherever it runs:
 
 ```nanyx
-::dependency nanyx.fs
+::install nanyx.fs
 
 import nanyx.fs/path as path
 

@@ -6,13 +6,13 @@ order: 15.5
 
 `Http` is in the HTTP interface package, `nanyx.http`, which the compiler ships. The console host provides it,
 and its prelude brings `Http`, `HttpError`, `Request`, `Method` and `Response` into every module of a program; the
-functions that use it are in [`http`](./http). A script names the package with `::dependency nanyx.http`, and a
+functions that use it are in [`http`](./http). A script names the package with `::install nanyx.http`, and a
 package lists it in its manifest's `dependencies` at the compiler's version. Any function that makes requests declares
 `[Async, Http]` in its type, as a library's do, since a request waits for its answer: a library gets `Http`, and
 `HttpError`, by importing `nanyx.http/client`, and `Async` by importing `nanyx/async`.
 
 ```nanyx fragment
-::dependency nanyx.http
+::install nanyx.http
 
 import nanyx.http/http as http
 

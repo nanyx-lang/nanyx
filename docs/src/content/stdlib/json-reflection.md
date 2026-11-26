@@ -14,7 +14,7 @@ A record is an object, a tag with no payload its name, a tag with one an object 
 `#none` is left out:
 
 ```nanyx
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 
 import nanyx.json/json as json
 
@@ -54,7 +54,7 @@ A failure is a tag of its own, which `json.describe` writes: `#invalidJson` for 
 a value that doesn't fit the type, and `#cannotEncode` for a part of a value that JSON can't hold, each with where:
 
 ```nanyx
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 
 import nanyx.json/json as json
 

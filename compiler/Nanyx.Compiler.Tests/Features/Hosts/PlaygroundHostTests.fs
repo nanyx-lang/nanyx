@@ -31,7 +31,7 @@ def main = {
 let ``An entry that requires Env doesn't fit the playground host, which says what it provides`` () =
     let source =
         withFinalNewline """::host nanyx.playground.host
-::dependency nanyx.cli
+::install nanyx.cli
 
 import nanyx.cli/env as (Env)
 
@@ -51,7 +51,7 @@ def main: [Console, Env] () -> () = { println("hi") }"""
 let ``A program that uses FileSystem under the playground host is an error naming the host`` () =
     let source =
         withFinalNewline """::host nanyx.playground.host
-::dependency nanyx.fs
+::install nanyx.fs
 
 import nanyx.fs/file as file
 import nanyx.fs/path as path
@@ -88,7 +88,7 @@ let ``A script that names its host runs under it, whatever the default`` () =
 [<Fact>]
 let ``A script with dependencies and no host runs under the default host`` () =
     let source =
-        withFinalNewline """::dependency nanyx.fs
+        withFinalNewline """::install nanyx.fs
 
 import nanyx.fs/file as file
 import nanyx.fs/path as path

@@ -7,13 +7,13 @@ order: 15.1
 `FileSystem` is in the file system's interface package, `nanyx.fs`, which the compiler ships. The console host
 provides it, and its prelude brings `FileSystem`, `Path` and `FsError` into every module of a program; the
 functions that use it are in [`file`](./file) and [`dir`](./dir), and paths are made with [`path`](./path). A
-script names the package with `::dependency nanyx.fs`, and a package lists it in its manifest's `dependencies` at the
+script names the package with `::install nanyx.fs`, and a package lists it in its manifest's `dependencies` at the
 compiler's version. Any function that reads or writes files declares `[Async, FileSystem]` in its type, as a
 library's do, since a call waits for the file system: a library gets `FileSystem`, and `FsError`, by importing
 `nanyx.fs/filesystem`, and `Async` by importing `nanyx/async`.
 
 ```nanyx
-::dependency nanyx.fs
+::install nanyx.fs
 
 import (
   nanyx.fs/file as file

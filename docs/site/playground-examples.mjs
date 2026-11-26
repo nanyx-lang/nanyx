@@ -124,7 +124,7 @@ function consoleOnlyNames() {
 /**
  * Whether a program needs a host other than the playground's, which the playground can't run, so it gets no playground
  * link: whether it names a host with `::host` (but for `::host nanyx.playground.host`); or depends on a package from the
- * index, `::dependency nanyx.json 0.2.0`, which the playground can't download; or imports or depends on a module
+ * index, `::install nanyx.json 0.2.0`, which the playground can't download; or imports or depends on a module
  * that only the console host can run, such as `nanyx.fs`'s; or uses, outside a comment, a name that only the console
  * host's prelude brings in, such as `args`, `exit` or `FileSystem`, and that it doesn't declare itself. What the
  * console host brings in and the playground's doesn't is read from the two hosts' preludes (`packages/nanyx.cli.host`
@@ -139,10 +139,10 @@ export function needsAnotherHost(code) {
     const host = /^::host\s+(\S+)/.exec(line);
     if (host && host[1] !== "nanyx.playground.host") return true;
     // A package from the index, which the playground can't download; the packages the compiler ships, it has.
-    const dependency = /^::dependency\s+(\S+)\s+\d/.exec(line);
+    const dependency = /^::install\s+(\S+)\s+\d/.exec(line);
     if (dependency && !existsSync(join(repository, "packages", dependency[1]))) return true;
     // An import, a dependency, or a line of an `import (...)` group.
-    const imported = /^(::dependency|import)\s/.test(line) || /^\s+[\w.]+\/[\w/]+(\s|$)/.test(line);
+    const imported = /^(::install|import)\s/.test(line) || /^\s+[\w.]+\/[\w/]+(\s|$)/.test(line);
     if (imported && [...imports].some((module) => new RegExp(`(^|\\s|\\()${module.replace(/\./g, "\\.")}(\\/|\\s|$)`).test(line))) return true;
   }
   // A name the program declares itself, such as its own `type Request`, is its own.

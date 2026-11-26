@@ -259,7 +259,7 @@ compiler's minor version as the oldest the package builds with, `nanyx = "0.42"`
 - It writes a manifest, `<name>.nyxp`, beside the files, named by `--name` or by the directory, at version `0.1.0`,
   whose `sources` select the files it migrated.
 - Each `::` [directive](../getting-started/files-and-projects#directives) becomes the manifest entry it stands for,
-  and is removed from its file, with the `#!` line: `::dependency acme.util ../util` becomes
+  and is removed from its file, with the `#!` line: `::install acme.util ../util` becomes
   `(package = "acme.util", path = "../util")` in `dependencies`, and each `::lint` goes into the `settings` of the
   linter above it.
 - A script with top-level statements becomes `module main`, and its statements move into an `@entry` def, with the
@@ -300,7 +300,7 @@ Then it downloads into the package cache each package the lockfile locks that is
 the SHA-256 the lockfile records, checks that each dependency of a package is there, as a build would, and lists them:
 `acme.util 0.3.0 (../util)`, `acme.web 1.2.0 (downloaded)`.
 
-Given a script, `nanyx pull script.nyx` downloads the exact version each of its `::dependency` lines pins, and the
+Given a script, `nanyx pull script.nyx` downloads the exact version each of its `::install` lines pins, and the
 packages those depend on, the newest each accepts, checking each against the SHA-256 the index records, and lists them:
 `acme.web 1.2.0`. A script has no lockfile: the versions it writes are its pins. `nanyx run` does the same for a script
 before it runs it.

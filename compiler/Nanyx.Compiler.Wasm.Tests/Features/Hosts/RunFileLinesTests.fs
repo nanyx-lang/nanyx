@@ -9,7 +9,7 @@ open TranspilerWasmTestHelpers
 
 /// The directives and imports of a script that uses `nanyx.fs`.
 let private header =
-    """::dependency nanyx.fs
+    """::install nanyx.fs
 
 import (
   nanyx.fs/file as file

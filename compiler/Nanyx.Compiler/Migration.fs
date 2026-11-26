@@ -47,7 +47,7 @@ module Migration =
         | DataTag(name, _) -> "#" + name
         | _ -> DataValue.describe value
 
-    /// Where the package a `::host` or `::dependency` directive names is found, as the manifest says it: a directory
+    /// Where the package a `::host` or `::install` directive names is found, as the manifest says it: a directory
     /// relative to the script, `scriptDirectory`; the compiler's, for a package named with no place; a version; or a
     /// GitHub reference, pinned to the `rev` it gives, if any. Or what is wrong with the version or the reference.
     let private sourceOf (scriptDirectory: string) (place: DirectivePlace) : Result<DependencySource, string> =

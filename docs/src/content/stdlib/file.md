@@ -9,7 +9,7 @@ under its own name, `import nanyx.fs/file as file`, to call them as `file.read`,
 gives what went wrong as an `FsError`, which a `match` takes apart:
 
 ```nanyx
-::dependency nanyx.fs
+::install nanyx.fs
 
 import (
   nanyx.fs/file as file

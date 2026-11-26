@@ -581,7 +581,7 @@ module Manifest =
         | _, problems -> Result.Error problems
 
     /// The packages and the files from GitHub `value` lists, written as a manifest's `dependencies` is, each `path`
-    /// relative to `root`, with what is wrong with them, as `check` reports it: how a script's `::dependency` directives
+    /// relative to `root`, with what is wrong with them, as `check` reports it: how a script's `::install` directives
     /// are read (see `Script`).
     let internal dependencyEntries (root: string) (value: DataValue) : Dependency list * FileReference list * Diagnostic list =
         let problems = Problems()

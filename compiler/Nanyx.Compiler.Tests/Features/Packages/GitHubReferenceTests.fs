@@ -273,7 +273,7 @@ let ``No pin is offered when the commit can't be found`` () =
 
 [<Fact>]
 let ``A script's dependency directive names a file on GitHub`` () =
-    let source = withFinalNewline $"""::dependency retry github:acme/snippets/retry.nyx@{commit}
+    let source = withFinalNewline $"""::install retry github:acme/snippets/retry.nyx@{commit}
 
 import retry
 
@@ -287,7 +287,7 @@ println(twice(2))"""
 
 [<Fact>]
 let ``A script's dependency directive names a package on GitHub`` () =
-    let source = withFinalNewline $"""::dependency acme.web github:acme/web@{commit}
+    let source = withFinalNewline $"""::install acme.web github:acme/web@{commit}
 
 import acme.web/http
 
@@ -298,7 +298,7 @@ println(status)"""
 
 [<Fact>]
 let ``A script's GitHub reference must be pinned to a commit`` () =
-    let source = withFinalNewline """::dependency retry github:acme/snippets/retry.nyx@v1.0
+    let source = withFinalNewline """::install retry github:acme/snippets/retry.nyx@v1.0
 
 println(twice(2))"""
     let directives = Script.read "script.nyx" source

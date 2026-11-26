@@ -17,11 +17,11 @@ nanyx install nanyx.json
 ```
 
 `nanyx install` adds `(package = "nanyx.json", version = "0.2")` to the manifest's `dependencies`, locks the newest
-0.2 version in `nanyx.lock` and downloads it. A script names the exact version it uses in a `::dependency` line
+0.2 version in `nanyx.lock` and downloads it. A script names the exact version it uses in a `::install` line
 instead, which `nanyx run` downloads:
 
 ```nanyx fragment
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 ```
 
 Import its module under a name, `json`, so that its `print` doesn't clash with the console's.
@@ -33,7 +33,7 @@ Import its module under a name, `json`, so that its `print` doesn't clash with t
 it needs:
 
 ```nanyx
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 
 import nanyx.json/json as json
 
@@ -92,7 +92,7 @@ a part that can't be written, a function or a nominal type whose structure it ca
 written in an unspecified order for now, as an object's keys are:
 
 ```nanyx
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 
 import nanyx.json/json as json
 
@@ -129,7 +129,7 @@ time, each with `try`, `json.decoderFor(type T)` reads a part by walking its typ
 decoder; encoders from `nanyx.json/encode` go the other way, run by `json.encodeWith`:
 
 ```nanyx
-::dependency nanyx.json 0.4.2
+::install nanyx.json 0.4.2
 
 import (
   nanyx.json/encode as encode
