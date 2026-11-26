@@ -8,9 +8,6 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
-  # Temporary, to run the workflow on its branch before it is on main; removed before merging.
-  push:
-    branches: [richard/timing-tests-nightly]
 
 permissions:
   contents: read
