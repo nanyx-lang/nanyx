@@ -8,6 +8,53 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.42.0
+
+*26 November 2026*
+
+A release that finishes the first round of units of measure. Dimensions multiply and divide, the prelude has `Instant`
+for a point in time with ISO 8601 dates, and units have a page of their own,
+[Units of measure](../advanced/units-of-measure). Type checking is faster, most of all in a module with a type error.
+Two changes break code: they are marked below.
+
+**Language**
+
+- Dimensions multiply and divide: `Length(float) / Time(float)` is a type, `*` and `/` of measured values give it, and
+  `dimension Speed = Length / Time` names it. A derived dimension's parts stored differently is
+  [NYX0295](../standard-tools/errors#nyx0295), a part that is no dimension [NYX0296](../standard-tools/errors#nyx0296),
+  and a unit declared for a derived dimension [NYX0297](../standard-tools/errors#nyx0297)
+  ([Units of measure](../advanced/units-of-measure)).
+- A doc comment on a `dimension` or a `unit` documents it, and the standard library's reference lists them.
+
+**Standard library**
+
+- The prelude declares `Instant`, a point in time. `since`, `plus`, `minus` and `epoch` move and measure it, with no
+  operators. `toIsoString`, which is its `toString`, `toIsoDate` and `fromIsoString` write it as ISO 8601 and read it
+  back ([prelude-instant](../stdlib/prelude-instant)).
+- `now()` gives an `Instant` and `ticks()` a `Time(int)`. **This breaks code** that used either as a number of
+  milliseconds, or that writes a `Clock` whose `now` gives an `int`: write `now() \since(start)` for a duration,
+  and compare times with units, `ticks() - start >= 50ms` ([clock](../stdlib/clock)).
+- An HTTP request's `timeout` is a `Time(int)`, `30s` by default. **This breaks code** that sets it to a number of
+  milliseconds: write `timeout = 10s`.
+
+**Performance**
+
+- The type checker no longer solves every def again from the start after a constraint it set aside, as in the prelude,
+  or after a type error. Checking the standard library takes about a third less time, and a module with an error
+  checks in time in proportion to its length.
+
+**Fixes**
+
+- A division passed straight to a function, `println(7 / 2)` or `println(1s / 1ms)`, no longer reports a missing
+  `ToString`.
+- An arithmetic operator on a type that has none says so, and names what the type attaches for its operands instead:
+  `now() - start` points to `since`, and `now() + 5s` to `plus` and `minus`. Before, it was a mismatch with `int`.
+- Dividing a `float` storage by an `int` one, `1.5s / 1ms`, reports the storages' mismatch only.
+- A number with no unit passed for a generic measured value is reported once.
+- A program runs on a thread with room for its own stack limit, so a program that recurses too deep stops with the
+  "ran out of stack" error on Windows too, rather than ending the process.
+- The runtime hosts' `sleep` never wakes before the time it is given.
+
 # 0.41.0
 
 *25 November 2026*
