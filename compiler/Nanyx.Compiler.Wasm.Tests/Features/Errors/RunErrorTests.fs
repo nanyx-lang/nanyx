@@ -415,3 +415,12 @@ println("never")
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
     Assert.Contains(":4:15: error: the value matched here has no known type, because of an error deferred from compile time", outcome.StandardError)
+
+[<Fact>]
+let ``Run - a deferred error names its file from the package's root, as a crash's place does`` () =
+    let main = "module main\n\n@entry\ndef main = {\n  println(\"before\")\n  def m: int = \"x\"\n  println(m)\n}\n"
+    let outcome, _ = nanyxOnPackage [ "main.nyx", main ] [ "run"; "{package}" ]
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.Contains("\nsrc/main.nyx:6:16: error NYX0201: Type mismatch: 'string' vs 'int' (deferred from compile time)\n", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Contains("main (src/main.nyx:6)", outcome.StandardError)

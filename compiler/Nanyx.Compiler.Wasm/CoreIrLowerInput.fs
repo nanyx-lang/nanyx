@@ -50,10 +50,17 @@ type ContextArgument =
 /// What a call to `dbg` compiles to.
 type DbgBuild =
     /// A debug build's: it prints the value after where it was called, `[main.nyx:12] `, with the file named from this
-    /// directory, the package's root (see `shownFile`).
+    /// directory, the package's root (see `PackageModules.shownFile`).
     | PrintedFrom of root: string option
     /// A release build's: `dbg(x)` is `x`, which prints nothing.
     | Stripped
+
+module DbgBuild =
+    /// The root a debug build names its files from; none for a release build, which names none.
+    let sourceRoot (build: DbgBuild) =
+        match build with
+        | PrintedFrom root -> root
+        | Stripped -> None
 
 /// What the lowering reads from the typed module.
 type LowerInput =

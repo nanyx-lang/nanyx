@@ -26,7 +26,9 @@ type MatchTools =
       /// Lowers an arm's body in tail position, adapted to the `match`'s type.
       Branch: Scope -> Expression -> IrType -> Expr
       /// Lowers an expression to a value that is not a `Let`, and passes that on.
-      Complex: Scope -> Expression -> (Expr -> Expr) -> Expr }
+      Complex: Scope -> Expression -> (Expr -> Expr) -> Expr
+      /// The root the program names its files from (see `PackageModules.shownFile`).
+      SourceRoot: string option }
 
 /// Lowers the `match` `expr` of `values` against `arms`, its value passed to `k`.
 let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Expression list) (arms: (Parser.Program.Pattern list * Expression) list) (k: Expr -> Expr) : Expr =
@@ -134,7 +136,7 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
         // A value of no known type cannot be matched. The values are evaluated in order up to it, for what they do
         // (it most likely stops the program itself, through the deferred error that left its type unknown), and
         // if the program is still running then, it stops there.
-        let stop = Expr.make (Crash [ Interpolation.unknownScrutineeMessage values.[unknown].Span ]) ty
+        let stop = Expr.make (Crash [ Interpolation.unknownScrutineeMessage tools.SourceRoot values.[unknown].Span ]) ty
         values
         |> List.take (unknown + 1)
         |> List.rev

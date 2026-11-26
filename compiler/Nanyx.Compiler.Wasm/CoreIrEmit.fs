@@ -46,7 +46,7 @@ type EmitContext =
       /// Whether the module is compiled with memory checks (see `WasmAllocator.MemoryChecks`), which count the records
       /// updated in place.
       CheckMemory: bool
-      /// The name a program shows for the source file at this path, as a span names it (see `CoreIr.shownFile`), when
+      /// The name a program shows for the source file at this path, as a span names it (see `PackageModules.shownFile`), when
       /// the code is marked with the places it was made from (see `placeMarker`); none when it isn't.
       ShownFile: (string -> string) option
       /// Whether the function of this name takes over the argument it is given at this place, rather than borrowing it

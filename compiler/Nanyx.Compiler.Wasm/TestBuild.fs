@@ -7,9 +7,9 @@ open NyxCompiler
 open Transpiler.Wasm.CodeGen
 
 /// The module, in the binary format, of a test build whose root `typed` is, compiled with `options`, listing the root's
-/// `Tests`, each test's place from 1 and its file named as `options.SourceRoot` names files (see `CoreIr.shownFile`).
+/// `Tests`, each test's place from 1 and its file named as `options.SourceRoot` names files (see `PackageModules.shownFile`).
 let assemble (options: WasmOptions) (typed: TypedModule) : byte array =
     let wat, _ = transpileTypedModuleWithOptions options typed
-    let shown = CoreIr.shownFile options.SourceRoot
+    let shown = NyxCompiler.PackageModules.shownFile options.SourceRoot
     WasmBinary.assemble wat
     |> WasmBinary.withTests (typed.Tests |> List.map (fun test -> test.Module, test.Name, shown test.Span.File, test.Span.StartLine + 1, test.Span.StartColumn + 1))
