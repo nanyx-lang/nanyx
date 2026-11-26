@@ -2510,7 +2510,7 @@ members of a union, and write the type a type variable stands for.
 # NYX0278: Component import called outside a component
 
 A program calls a def marked `@import`, a function another component exports, in a program that isn't built as a
-component: `nanyx run`, `nanyx wasm`, or `nanyx build --core`. Only the component `nanyx build` writes imports the
+component: `nanyx run`, `nanyx test`, `nanyx wasm`, or `nanyx build --core`. Only the component `nanyx build` writes imports the
 function, and a runtime that runs it gives the other component's
 ([Components](../deep-dives/components#a-programs-own-imports)). It is reported at the def.
 
@@ -2818,8 +2818,8 @@ To fix it, write dimensions on both sides of `*` and `/`, or leave the plain num
 # NYX0297: Unit of a derived dimension that its parts' units don't define
 
 A unit of a derived dimension is declared with no definition, or marked `@baseUnit` or `@storageUnit`. A derived
-dimension's values are stored in its parts' default storage units, so it has no default storage or display unit of its
-own: each of its units is defined from its parts' units.
+dimension's values are stored in its parts' default storage units and displayed in their default display units, so it
+has no default storage or display unit of its own: each of its units is defined from its parts' units.
 
 ```nanyx
 dimension Length

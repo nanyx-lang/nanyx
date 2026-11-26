@@ -80,9 +80,9 @@ module internal StructuralInstances =
         | SetShape of Ty
         /// An array's element type. `Eq` and `ToString` are derived for an array, as for a set; `Hash` is not.
         | ArrayShape of Ty
-        /// A measured value's dimension and storage, and the units of the dimension the module sees, the largest first
-        /// (see `Units.seenOf`), with the default storage units of a derived dimension's parts after them, which
-        /// `derive` fills in. Only `ToString` is derived for one: it is compared and hashed as its storage.
+        /// A measured value's dimension and storage, and the units the module sees that it is written in, which `derive`
+        /// fills in: a dimension's, the largest first (see `Units.seenOf`), and a derived dimension's parts' default
+        /// storage and display units. Only `ToString` is derived for one: it is compared and hashed as its storage.
         | MeasureShape of Dimension * storage: Ty * units: UnitInfo list
 
     let private isTuple (fields: Map<string, Ty>) = not fields.IsEmpty && WellKnownContexts.isTuple fields
@@ -264,50 +264,75 @@ module internal StructuralInstances =
     let private partName (index: int) = $"__p{index}"
 
 
-    /// The text a derived `toString` writes for `value`, a measured value of `dimension` stored as `storage`: its
-    /// number of default storage units in the largest of `units` it is a whole number of, by a prelude function, where
-    /// the storage is an `int` or a `float`, or a type that converts to one. Zero is written in the dimension's default
-    /// display unit, `0s`. A value no unit fits and a value of any other storage, one of a type variable's, are written
-    /// in the default storage unit, through the storage's own `ToString`, or as `dbg` writes them, `Time(500)`, if the
-    /// module sees no default storage unit. A value of a derived dimension is written in the largest of its own units
-    /// it is a whole number of, `90kmh`, as one of a dimension is, and otherwise, zero too, in its parts' default
-    /// storage units, multiplied and divided: `10.4m/ns`.
+    /// The text a derived `toString` writes for `value`, a measured value of `dimension` stored as `storage`, by a
+    /// prelude function, where the storage is an `int` or a `float`, or a type that converts to one: its number of
+    /// default storage units, in the largest of `units` it is a whole number of for an integer, and in the largest its
+    /// magnitude is at least 1 of for a float. Zero is written in the dimension's default display unit, `0s`. An
+    /// integer no unit fits and a value of any other storage, one of a type variable's, are written in the default
+    /// storage unit, through the storage's own `ToString`, or as `dbg` writes them, `Time(500)`, if the module sees no
+    /// default storage unit. A value of a derived dimension is written in its parts' default display units, multiplied
+    /// and divided, `10.4m/s`, and never in its own units: an integer that is no whole number of them in its parts'
+    /// default storage units, `1500mm*mm`, and any value as `dbg` writes it if the module sees no default display unit
+    /// of a part.
     let private measuredText (span: SourceSpan) (dimension: Dimension) (storage: Ty) (units: UnitInfo list) (value: Expression) : Expression =
         let expr = Expression.at span
         let call (callee: Identifier) (args: Expression list) = expr (FunctionCall(callee, None, args))
         let text (s: string) = expr (LiteralExpr (StringLit s))
+        let integer (n: bigint) = expr (LiteralExpr (IntLit n))
         let stored = call Units.storageIntrinsic [ value ]
-        let storageOf (id: NominalId) = units |> List.tryFind (fun info -> UnitInfo.isStorage info && info.Dimension = Dimension.ofBase id)
+        let partUnit (pick: UnitInfo -> bool) (id: NominalId) = units |> List.tryFind (fun info -> pick info && info.Dimension = Dimension.ofBase id)
+        let storageOf = partUnit UnitInfo.isStorage
+        let displayOf = partUnit _.IsDisplay
         let before, after =
             match units |> List.tryFind (fun info -> UnitInfo.isStorage info && info.Dimension = dimension) with
             | _ when Dimension.isDerived dimension && dimension |> List.forall (fst >> storageOf >> Option.isSome) ->
                 "", Dimension.writtenWith (fun id -> (storageOf id).Value.Name) "*" "/" dimension
             | Some storageUnit when not (Dimension.isDerived dimension) -> "", storageUnit.Name
             | _ -> $"{Dimension.text dimension}(", ")"
-        let display = units |> List.tryFind (fun info -> info.IsDisplay && info.Dimension = dimension) |> Option.map _.Name |> Option.defaultValue ""
-        let units = units |> List.filter (fun info -> info.Dimension = dimension)
-        let inUnits (helper: Identifier) (number: Expression) (scales: (UnitInfo * Expression) list) =
+        // The value as an `int` or as a `float`, through the prelude's conversion to one where its storage has one that
+        // loses nothing.
+        let asInt, asFloat =
+            match Unifier.unalias storage with
+            | TyPrimitive "int" -> Some stored, None
+            | SizedIntegerType integer when SizedInteger.bits integer < 64 -> Some (call $"{SizedInteger.name integer}.toInt" [ stored ]), None
+            | TyPrimitive "float" -> None, Some stored
+            | TyPrimitive "F32" -> None, Some (call "F32.toFloat" [ stored ])
+            | _ -> None, None
+        let inUnits (helper: Identifier) (number: Expression) (names: string list) (scales: Expression list) (display: string) =
             call helper [
                 number
-                expr (ListExpr (scales |> List.map (fun (info, _) -> text info.Name)))
-                expr (ListExpr (scales |> List.map snd))
+                expr (ListExpr (names |> List.map text))
+                expr (ListExpr scales)
                 text display
                 text before
                 text after ]
-        let whole () =
-            units
-            |> List.filter (fun info -> Rational.isWhole info.Scale)
-            |> List.map (fun info -> info, expr (LiteralExpr (IntLit info.Scale.Numerator)))
-        let fractional () =
-            units |> List.map (fun info -> info, expr (LiteralExpr (FloatLit (Rational.toFloat info.Scale))))
-        match Unifier.unalias storage with
-        | TyPrimitive "int" -> inUnits InterpolationHoles.measuredIntFunction stored (whole ())
-        // A sized integer whose every value is an `int`, through the prelude's conversion to one.
-        | SizedIntegerType integer when SizedInteger.bits integer < 64 ->
-            inUnits InterpolationHoles.measuredIntFunction (call $"{SizedInteger.name integer}.toInt" [ stored ]) (whole ())
-        | TyPrimitive "float" -> inUnits InterpolationHoles.measuredFloatFunction stored (fractional ())
-        | TyPrimitive "F32" -> inUnits InterpolationHoles.measuredFloatFunction (call "F32.toFloat" [ stored ]) (fractional ())
-        | _ -> expr (InterpolatedString [ StringText before; StringExpr (call InterpolationHoles.holeFunction [ stored ]); StringText after ])
+        let asStored () = expr (InterpolatedString [ StringText before; StringExpr (call InterpolationHoles.holeFunction [ stored ]); StringText after ])
+        if Dimension.isDerived dimension then
+            match dimension |> List.choose (fun (id, power) -> displayOf id |> Option.map (fun info -> info.Scale, power)) with
+            | displayed when displayed.Length = dimension.Length ->
+                let name = Dimension.writtenWith (fun id -> (displayOf id).Value.Name) "*" "/" dimension
+                let scale = displayed |> List.fold (fun scale (part, power) -> Rational.multiply scale (Rational.power part power)) Rational.one
+                match asInt, asFloat with
+                | Some number, _ ->
+                    call InterpolationHoles.measuredRatioFunction [
+                        number; text name; integer scale.Numerator; integer scale.Denominator; text before; text after ]
+                // Multiplied by how many display units a storage unit is, which rounds less than dividing by the scale.
+                | _, Some number ->
+                    let inDisplayUnits = expr (BinaryOp("*", None, number, expr (LiteralExpr (FloatLit (Rational.toFloat (Rational.divide Rational.one scale))))))
+                    inUnits InterpolationHoles.measuredFloatFunction inDisplayUnits [ name ] [ expr (LiteralExpr (FloatLit 1.0)) ] name
+                | None, None -> asStored ()
+            | _ -> asStored ()
+        else
+            let display = units |> List.tryFind (fun info -> info.IsDisplay && info.Dimension = dimension) |> Option.map _.Name |> Option.defaultValue ""
+            let units = units |> List.filter (fun info -> info.Dimension = dimension)
+            match asInt, asFloat with
+            | Some number, _ ->
+                let whole = units |> List.filter (fun info -> Rational.isWhole info.Scale)
+                inUnits InterpolationHoles.measuredIntFunction number (whole |> List.map _.Name) (whole |> List.map (fun info -> integer info.Scale.Numerator)) display
+            | _, Some number ->
+                let scales = units |> List.map (fun info -> expr (LiteralExpr (FloatLit (Rational.toFloat info.Scale))))
+                inUnits InterpolationHoles.measuredFloatFunction number (units |> List.map _.Name) scales display
+            | None, None -> asStored ()
 
     /// The text a derived `toString` writes for a value of the type `shape` is, read from `value`.
     let private toStringBody (span: SourceSpan) (shape: Shape) : Expression =
@@ -529,10 +554,11 @@ module internal StructuralInstances =
             let shape =
                 match shape with
                 | MeasureShape([ dimension, 1 ], storage, _) -> MeasureShape([ dimension, 1 ], storage, Units.seenOf state [ dimension, 1 ])
-                // A derived dimension is written in its own units, or else in the default storage units of its parts.
+                // A derived dimension is written in the default display units of its parts, or else in their default
+                // storage units.
                 | MeasureShape(dimension, storage, _) ->
-                    let bases = dimension |> List.collect (fun (id, _) -> Units.seenOf state (Dimension.ofBase id)) |> List.filter UnitInfo.isStorage
-                    MeasureShape(dimension, storage, Units.seenOf state dimension @ bases)
+                    let parts = dimension |> List.collect (fun (id, _) -> Units.seenOf state (Dimension.ofBase id))
+                    MeasureShape(dimension, storage, parts |> List.filter (fun info -> UnitInfo.isStorage info || info.IsDisplay))
                 | _ -> shape
             let names = ContextInference.varNames ty
             let state = namingUnseen names ty state
