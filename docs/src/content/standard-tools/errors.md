@@ -2818,8 +2818,8 @@ To fix it, write dimensions on both sides of `*` and `/`, or leave the plain num
 # NYX0297: Unit of a derived dimension that its parts' units don't define
 
 A unit of a derived dimension is declared with no definition, or marked `@baseUnit` or `@storageUnit`. A derived
-dimension's values are stored in its parts' default storage units, so it has no default storage or display unit of its
-own: each of its units is defined from its parts' units.
+dimension's values are stored in its parts' default storage units and displayed in their default display units, so it
+has no default storage or display unit of its own: each of its units is defined from its parts' units.
 
 ```nanyx
 dimension Length

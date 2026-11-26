@@ -1,6 +1,5 @@
-/// Units of a derived dimension at run time (#2858): a number with one is its number of the parts' base units, and a
-/// value of the dimension stored as a `float` is written in the largest of its units the module sees that its magnitude is
-/// at least 1 of.
+/// Units of a derived dimension at run time (#2858): a number with one is its number of the parts' default storage units,
+/// and a value of the dimension is written in its parts' default display units, never its own (#2974).
 module TranspilerWasmTests.Features.Units.RunDerivedUnit
 
 open System.IO
@@ -18,7 +17,7 @@ dimension Speed = Length / Time
 """
 
 [<Fact>]
-let ``Run - a value of a derived dimension is written in its own units`` () =
+let ``Run - a value of a derived dimension is written in its parts' display units, not its own`` () =
     let source =
         speed
         + """unit kmh: Speed = 1km / 1hr
@@ -30,10 +29,10 @@ println(36.0km / 0.5hr)
 println(100.0m / 9.58s)
 println(fast / 1.0kmh)
 """
-    runSource (normalized source) |> assertRan "90.0kmh\n90.1kmh\n72.0kmh\n37.57828810020877kmh\n90.0\n"
+    runSource (normalized source) |> assertRan "25.0m/s\n25.027777777777775m/s\n20.0m/s\n10.438413361169102m/s\n90.0\n"
 
 [<Fact>]
-let ``Run - the largest unit a speed is at least 1 of is the one it is written in`` () =
+let ``Run - a speed is written in metres a second, whichever of its own units are seen`` () =
     let source =
         speed
         + """unit kmh: Speed = 1km / 1hr
@@ -43,12 +42,11 @@ println(90.0kmh)
 println(1.0kmh)
 println(90.0kmh + 10.0mps)
 """
-    // A metre a second is the larger unit: 90 kilometres an hour is 25 of them, and a sum of the two, worked out with
-    // floats that round, is written in it as well. One kilometre an hour is under 1 of them.
-    runSource (normalized source) |> assertRan "25.0mps\n1.0kmh\n35.0mps\n"
+    // A sum of the two, worked out with floats that round, is a whole number of metres a second.
+    runSource (normalized source) |> assertRan "25.0m/s\n0.2777777777777778m/s\n35.0m/s\n"
 
 [<Fact>]
-let ``Run - a derived dimension's units imported from another module write its values`` () =
+let ``Run - a derived dimension's units imported from another module make its values`` () =
     let lib =
         """export dimension Length
 
@@ -71,4 +69,4 @@ println(60.0mph)
     File.WriteAllText(Path.Combine(directory.Path, "speeds.nyx"), normalized lib)
     let mainPath = Path.Combine(directory.Path, "main.nyx")
     File.WriteAllText(mainPath, normalized main)
-    runFile mainPath |> assertRan "55.92340730136006mph\n60.0mph\n"
+    runFile mainPath |> assertRan "25.0m/s\n26.8224m/s\n"

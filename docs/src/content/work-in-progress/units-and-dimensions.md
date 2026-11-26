@@ -16,8 +16,8 @@ Derived dimensions written with `*` and `/` are built: [Derived dimensions](../a
 describes them, and [Units of measure](../deep-dives/units#derived-dimensions) in Deep dives says how. A storage is
 written on each part, `Length(float) / Time(float)`, since a part is already a type the parser reads and a type printed
 that way reads back as the same type. A derived dimension has units of its own, defined from its parts' units,
-`unit kmh: Speed = 1km / 1hr`, and a value of one prints in the largest of them it is a whole number of, or in its
-parts' default storage units when none fits ([Units of a derived
+`unit kmh: Speed = 1km / 1hr`, which make values of it, and a value of one prints in its parts' default display units,
+`1.0m/s` ([Units of a derived
 dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). What is still open:
 
 - **Dimension variables.** `def square: d -> d^2` (spelling open) needs unification that solves equations such as
