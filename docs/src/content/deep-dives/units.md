@@ -4,7 +4,8 @@ description: "How the compiler reads and checks dimensions, units and numbers wi
 order: 22
 ---
 
-[Units and dimensions](../work-in-progress/units-and-dimensions) in Work in progress has the design. This page says what
+[Units of measure](../advanced/units-of-measure) describes the language, and [Units and
+dimensions](../work-in-progress/units-and-dimensions) in Work in progress what is still open. This page says what
 the compiler does with it today: it reads all of it, checks the declarations of dimensions and units, reads dimensions
 in types, types numbers with units, types arithmetic on measured values, writes them as text, and reads derived
 dimensions, `Length / Time`, written with `*` and `/`. Dimension variables and a spelling for exponents are a later
@@ -84,7 +85,7 @@ with no unit is never a measured value. `dbg` writes a measured value as its dim
 # Arithmetic
 
 `MeasuredArithmetic.read` types an arithmetic operator with a measured operand as the operator on the storages, which is
-what it is at run time, and gives the result its dimension as the Arithmetic table on the design page says: `Infer`
+what it is at run time, and gives the result its dimension as the table in [Arithmetic](../advanced/units-of-measure#arithmetic) says: `Infer`
 types the operator on operands of the storages' types, through the storage's own `+` (built in for a number type, the
 instance's member for a generic storage), and wraps the result. So `t / 2` on a `Time(a)` is a `Time` of what `/`
 gives on an `a`, its `fraction`, and `t / u` that `fraction` itself; the backend compiles the storage's operator on the
