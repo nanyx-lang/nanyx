@@ -39,6 +39,20 @@ fails before it is merged. What a release PR must change is in `AGENTS.md`, unde
 
 The binaries aren't signed, so macOS quarantines a browser download until the user removes the flag.
 
+# The shipped packages
+
+Each release also publishes the [packages the compiler ships](./shipped-packages) to the
+[package index](./package-index), as any package is published: the publish job packs each directory under `packages/`
+with the `nanyx` it has just built, `nanyx pack`, and the release attaches each `<name>-<version>.nyxpkg` beside the
+binaries. The job fails, before anything is released, if a package doesn't pack or if fewer packages are packed at the
+compiler's version than `packages/` holds.
+
+The index registers each shipped package with this repository, and its sync reads the version from the release's tag
+after its `compiler/` prefix, records each package's asset, its SHA-256 and its manifest's `nanyx`, and runs the same
+checks as on any release. So a release reaches the index within the hour, and needs no token for the index's
+repository. Each shipped manifest gives `repository = "nanyx-lang/nanyx"`, which the sync checks against the
+registration, and a `nanyx` of the compiler's major and minor version.
+
 # Scoop
 
 The bucket is the [`nanyx-lang/scoop-nanyx`](https://github.com/nanyx-lang/scoop-nanyx) repository, with one

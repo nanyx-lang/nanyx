@@ -342,6 +342,33 @@ jobs:
           echo "$output"
           [ "$output" = "Hello, World!" ]
 
+      # The packages the compiler ships, each packed as the release publishes it to the package index: the release
+      # carries <name>-<version>.nyxpkg beside the binaries, and the index's sync records it from there, as it does any
+      # package's release. Packed by the binary just built, so a package it can't pack, or a manifest whose version isn't
+      # the compiler's, fails the job before anything is released.
+      - name: Pack the shipped packages
+        if: matrix.rid == 'linux-x64'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist/packages
+          for package in ../packages/*/; do
+            ./publish/linux-x64/nanyx pack --out dist/packages "$package"
+          done
+          expected=$(find ../packages -mindepth 1 -maxdepth 1 -type d | wc -l)
+          packed=$(find dist/packages -name "*-$VERSION.nyxpkg" | wc -l)
+          if [ "$packed" != "$expected" ]; then
+            echo "::error::Packed $packed packages at $VERSION, but packages/ holds $expected: each shipped manifest's version must be the compiler's"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.rid == 'linux-x64'
+        with:
+          name: nanyx-packages
+          path: compiler/dist/packages/*.nyxpkg
+          if-no-files-found: error
+
       - name: Package
         id: package
         run: |
@@ -366,8 +393,8 @@ jobs:
           if-no-files-found: error
 
   # Merging a version bump is the release: main publishes the binaries it just built and tested
-  # as compiler/<version>, with the browser build, nanyx-browser.zip, unless that tag already exists. Nothing is rebuilt
-  # for a release.
+  # as compiler/<version>, with the browser build, nanyx-browser.zip, and the shipped packages' .nyxpkg files, which the
+  # package index's sync records from the release, unless that tag already exists. Nothing is rebuilt for a release.
   release:
     name: Release
     needs: [test, wasm-test, browser-test, publish]
@@ -410,7 +437,7 @@ jobs:
           name: release-notes
           path: notes
 
-      - name: Tag the commit and attach the binaries to a GitHub release
+      - name: Tag the commit and attach the binaries and the shipped packages to a GitHub release
         if: steps.check.outputs.release == 'true'
         uses: softprops/action-gh-release@v2
         with:

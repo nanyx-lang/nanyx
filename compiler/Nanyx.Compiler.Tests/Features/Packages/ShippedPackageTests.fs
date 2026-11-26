@@ -104,3 +104,18 @@ let ``A shipped package's file is named after its package, wherever the compiler
     let file = Path.Combine(ShippedPackages.directoryOf Hosts.consolePackage, "src", "cli.host.nyx")
     Assert.Equal(Some "nanyx.cli.host/src/cli.host.nyx", ShippedPackages.tryDisplay file)
     Assert.Equal(None, ShippedPackages.tryDisplay (Path.GetFullPath "main.nyx"))
+
+[<Fact>]
+let ``Every shipped package is published from this repository, at the compiler's version, needing the compiler's release`` () =
+    // A release publishes each one to the package index, whose sync records the releases of the repository a manifest
+    // names, so each names this one, and the oldest compiler it builds with is the one it ships with.
+    let manifests =
+        ShippedPackages.names ()
+        |> List.map (fun name ->
+            let manifest = manifestOf name
+            name, manifest.Version, manifest.Repository |> Option.map string, manifest.Nanyx |> Option.map string)
+    let expected =
+        ShippedPackages.names ()
+        |> List.map (fun name -> name, Toolchain.version, Some "nanyx-lang/nanyx", Some(NewPackage.nanyxOf Toolchain.version))
+    Assert.Equal<(string * string * string option * string option) list>(expected, manifests)
+    Assert.Equal(7, manifests.Length)
