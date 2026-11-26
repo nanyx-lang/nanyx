@@ -146,9 +146,12 @@ module internal OperatorCalls =
                 else
                     match attachedTaking env state own input with
                     | [] -> $"'{tyText}' has no `{op}`: attach one, as in ``def {typeName}.`{op}` = ...``{instance}"
+                    | [ one ] -> $"'{tyText}' has no `{op}`: it attaches `{one}` for these operands, as in `x \\{one}(y)`"
                     | found ->
-                        let listed = found |> List.map (fun name -> $"`{name}`") |> String.concat ", "
-                        $"'{tyText}' has no `{op}`: it attaches {listed} for these operands, as in `x \\{found.Head}(y)`"
+                        let named = found |> List.map (fun name -> $"`{name}`")
+                        let listed = String.concat ", " (List.take (named.Length - 1) named) + " and " + List.last named
+                        let written = found |> List.map (fun name -> $"`x \\{name}(y)`") |> String.concat " or "
+                        $"'{tyText}' has no `{op}`: it attaches {listed} for these operands, as in {written}"
             Diagnostics.at DiagnosticCodes.TypeMismatch expr.Span message |> Diagnostics.about (NumericLiterals.written op))
 
     /// The error, at `span`, for the spare operator `op` (`^`, `<>`, `+=`, ...) on `left`, of the type `leftTy`, which

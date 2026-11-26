@@ -598,7 +598,13 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
                 | Some (Ok reading) ->
                     operatorOn { leftExpr with Type = reading.Left } { rightExpr with Type = reading.Right } nextState
                     |> Result.map (fun (typed, next) -> { typed with Type = reading.Result typed.Type }, next)
-                | Some (Error error) -> Error [ error ]
+                // On a type of its own beside a measured value, as `now() + 5s` is, that the type has no operator is
+                // the error, naming what it attaches for the operands instead (see `OperatorCalls.lacking`).
+                | Some (Error error) ->
+                    let leftTy = resolveSoFar nextState leftExpr.Type
+                    match OperatorCalls.lacking env nextState expr op leftTy (inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]) with
+                    | Some lacking when (tryResolveAttachedFunction env leftTy op).IsNone -> Error [ lacking ]
+                    | _ -> Error [ error ]
                 | None -> operatorOn leftExpr rightExpr nextState
             | _ -> operatorOn leftExpr rightExpr nextState
 

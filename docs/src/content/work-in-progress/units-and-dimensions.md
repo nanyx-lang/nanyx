@@ -227,7 +227,7 @@ An instant is moved and measured by functions attached to it, not by operators:
 two values of one type, so no attached `-` makes two instants a `Time`. A rule in the compiler for one library type
 would be a special case, so operators on `Instant` wait for a general answer to [affine
 quantities](#step-2-derived-dimensions), below. Until then, `now() - start` is an error that names `since`, the function `Instant`
-attaches for two instants.
+attaches for two instants, and `now() + 5s` one that names `plus` and `minus`.
 
 An instant is written as ISO 8601 writes it, in UTC, and read from it: `Instant.toIsoString`, which is its `toString`,
 gives `2026-11-25T18:20:57Z`, with a fraction of a second only when it isn't whole (`…57.25Z`); `Instant.toIsoDate` the
