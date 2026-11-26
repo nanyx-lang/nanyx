@@ -103,3 +103,7 @@ println((x ** minusOne).n)
     Assert.Equal("8 0.5\n", outcome.StandardOutput)
     Assert.Equal(1, outcome.ExitCode)
     Assert.StartsWith("crash: a negative power of a ", withoutStack outcome.StandardError)
+
+[<Fact>]
+let ``Run - a division of literals passed straight to println prints its fraction`` () =
+    runSource (normalized "println(7 / 2)\nprintln(1s / 1ms)\nprintln(1s // 1ms)\n") |> assertRan "3.5\n1000.0\n1000\n"
