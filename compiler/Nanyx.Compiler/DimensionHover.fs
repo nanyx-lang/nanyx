@@ -39,11 +39,13 @@ let unitsNote (typed: TypedModule) (dimension: Dimension) : string option =
     match unitsOf typed dimension with
     | [] -> None
     | units ->
-        // A unit from the smaller half, as `ms` is of `Time`'s, which a value is often written in.
+        // A unit from the smaller half, as `ms` is of `Time`'s, which a value is often written in. A number that is no
+        // whole number of base units in it is written as a decimal, `500.0kmh`, which a literal of an integer is not.
         let example = units[max 0 ((units.Length - 1) / 2 - 1)]
+        let number = if Rational.isWhole (Rational.multiply (Rational.make 500I 1I) example.Scale) then "500" else "500.0"
         Some $"""Units: {units |> List.map listed |> String.concat ", "}
 
-Write a value as `500{example.Name}`."""
+Write a value as `{number}{example.Name}`."""
 
 /// What a hover says of a derived dimension the module can write no unit of.
 let private noUnitsNote =

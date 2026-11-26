@@ -71,7 +71,7 @@ public sealed class UnitHoverTests : LanguageServerTestBase
             """);
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        const string lengthUnits = "Units: `mm = 0.001m`, `m` (base), `km = 1_000m`\n\nWrite a value as `500mm`.";
+        const string lengthUnits = "Units: `mm = 0.001m`, `m` (base), `km = 1_000m`\n\nWrite a value as `500.0mm`.";
         var dimension = await HoverAt(uri, 0, 12);
         Assert.Equal($"```nanyx\ndimension Length\n```\n\n{lengthUnits}", dimension?.Contents.MarkupContent?.Value);
 
@@ -88,6 +88,34 @@ public sealed class UnitHoverTests : LanguageServerTestBase
         // The dimension in a type of the module's own.
         var inType = await HoverAt(uri, 6, 10);
         Assert.Equal($"```nanyx\ndimension Length\n```\n\n{lengthUnits}", inType?.Contents.MarkupContent?.Value);
+    }
+
+    [Fact]
+    public async Task The_value_a_hover_says_to_write_compiles()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("hover-hinted-values.nyx"));
+        Open(uri, """
+            dimension Length
+
+            @baseUnit unit m: Length
+            unit mm: Length = 0.001m
+            unit km: Length = 1_000m
+
+            dimension Speed = Length / Time
+
+            unit kmh: Speed = 1km / 1hr
+
+            def time = 500ms
+            def length = 500.0mm
+            def speed = 500.0kmh
+
+            """);
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // Each hint is what a value of its dimension is written as above.
+        Assert.EndsWith("Write a value as `500ms`.", (await HoverAt(uri, 10, 5))?.Contents.MarkupContent?.Value);
+        Assert.EndsWith("Write a value as `500.0mm`.", (await HoverAt(uri, 11, 5))?.Contents.MarkupContent?.Value);
+        Assert.EndsWith("Write a value as `500.0kmh`.", (await HoverAt(uri, 12, 5))?.Contents.MarkupContent?.Value);
     }
 
     [Fact]
@@ -110,7 +138,7 @@ public sealed class UnitHoverTests : LanguageServerTestBase
             """);
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        const string speedUnits = "Units: `kmh = 1km / 1hr`, `mps = 1m / 1s`\n\nWrite a value as `500kmh`.";
+        const string speedUnits = "Units: `kmh = 1km / 1hr`, `mps = 1m / 1s`\n\nWrite a value as `500.0kmh`.";
         var speed = await HoverAt(uri, 5, 12);
         Assert.Equal($"```nanyx\ndimension Speed = Length / Time\n```\n\n{speedUnits}", speed?.Contents.MarkupContent?.Value);
 
