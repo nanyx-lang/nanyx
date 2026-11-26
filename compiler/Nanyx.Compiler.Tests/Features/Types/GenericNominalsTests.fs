@@ -36,6 +36,24 @@ def pair = (Box(v = 1), Box(v = "s"))
         shown typed [ "b"; "get"; "n"; "wrap"; "open"; "pair" ])
 
 [<Fact>]
+let ``A generic record type's constructor is used at a different type each time`` () =
+    let source =
+        """
+type Bag(a) = (items: list(a))
+
+def Bag.size: Bag(a) -> int = { b -> list.length(b.items) }
+
+def x = Bag.size(Bag(items = ["a"]))
+def y = Bag.size(Bag(items = [4, 5]))
+def strings = Bag(items = ["a"])
+def ints = Bag(items = [4, 5])
+"""
+    let typed = compileClean (normalized source)
+    Assert.Equal<(string * string) list>(
+        [ "x", "int"; "y", "int"; "strings", "Bag(string)"; "ints", "Bag(int)" ],
+        shown typed [ "x"; "y"; "strings"; "ints" ])
+
+[<Fact>]
 let ``A generic protected type can be the type of a record's field and a function's result`` () =
     let source =
         """
