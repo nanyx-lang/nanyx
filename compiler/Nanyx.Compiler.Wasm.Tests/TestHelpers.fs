@@ -239,6 +239,18 @@ let private command (arguments: string list) : Shell -> int =
             | "--name" :: name :: path -> name, path
             | path -> null, path
         fun shell -> CliCommands.MigrateIn(shell, name, Array.ofList path)
+    | "test" :: rest ->
+        // Each `--<name> <value>` among `named` before any `--`, and the arguments without them.
+        let rec valued (named: string list) (found: Map<string, string>) (kept: string list) (rest: string list) =
+            match rest with
+            | "--" :: _ -> found, List.rev kept @ rest
+            | name :: value :: rest when List.contains name named -> valued named (Map.add name value found) kept rest
+            | argument :: rest -> valued named found (argument :: kept) rest
+            | [] -> found, List.rev kept
+        let given, rest = valued [ "--filter"; "--seed"; "--timeout" ] Map.empty [] rest
+        let value name = given |> Map.tryFind name |> Option.toObj
+        let _, release, timings, _, path = options (null, false, false, null, []) rest
+        fun shell -> CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings)
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)
