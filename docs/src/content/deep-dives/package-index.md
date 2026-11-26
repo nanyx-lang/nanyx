@@ -87,9 +87,11 @@ the index warns that it is unlisted (`NYX0051`).
 
 `version` is the format's version. Each entry is a package from the index: its exact version, the SHA-256 of its
 `.nyxpkg`, and the names of the packages it depends on, each locked too. Entries are sorted by name, one to a line, so
-two branches that lock different packages rarely conflict. Only packages from the index are locked: a path dependency's
-source changes with the code around it, a shipped package's version is the compiler's, and a dependency on GitHub is
-pinned by its commit in the manifest. A package's dependencies named by version are resolved and locked with the
+two branches that lock different packages rarely conflict. Only packages from the index are locked, the packages the
+compiler ships among them: a path dependency's source changes with the code around it, and a dependency on GitHub is
+pinned by its commit in the manifest. A package the lockfile doesn't lock yet, whose requirement the version the
+compiler seeded accepts, is read from that copy until the next resolution locks it, which reports it with no line of
+its own, so a package needs no `nanyx pull` to build under the host the compiler ships. A package's dependencies named by version are resolved and locked with the
 package that reads the lockfile; a dependency's own lockfile isn't read.
 
 # The cache

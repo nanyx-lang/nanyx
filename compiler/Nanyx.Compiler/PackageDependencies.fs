@@ -64,13 +64,16 @@ module PackageDependencies =
     let rec private reached (packages: Package list) : Package list =
         packages |> List.collect (fun package -> package :: reached package.Dependencies) |> List.distinctBy _.Manifest.Path
 
-    /// The lines that say how `after` differs from `before`: a package locked anew, at another version, or no longer.
-    let private changes (before: Lockfile) (after: Lockfile) : string list =
+    /// The lines that say how `after` differs from `before`: a package locked anew, at another version, or no longer. A
+    /// package the compiler ships, locked anew at the version it seeded into `store`, goes without saying, so that a
+    /// package's first build doesn't list the host and the packages it brings.
+    let private changes (store: PackageStore) (before: Lockfile) (after: Lockfile) : string list =
         let locked =
             after.Packages
             |> List.choose (fun package ->
                 match Lockfile.tryFind package.Name before with
                 | Some earlier when earlier.Version = package.Version -> None
+                | None when PackageStore.seededCopy store package.Name |> Option.exists (fun copy -> copy.Version = package.Version) -> None
                 | Some earlier -> Some $"Locked {package.Name} {package.Version}, in place of {earlier.Version}"
                 | None -> Some $"Locked {package.Name} {package.Version}")
         let unlocked =
@@ -98,7 +101,7 @@ module PackageDependencies =
                 Result.Ok(
                     Some
                         { Lockfile = resolved.Lockfile
-                          Lines = changes lockfile resolved.Lockfile
+                          Lines = changes store lockfile resolved.Lockfile
                           Warnings = (resolved.Unlisted |> List.map (fun (name, version) -> Resolution.lockedUnlisted name version)) @ resolved.Warnings }
                 )
             | Result.Error(Conflict diagnostic) -> Result.Error(NoVersions diagnostic)

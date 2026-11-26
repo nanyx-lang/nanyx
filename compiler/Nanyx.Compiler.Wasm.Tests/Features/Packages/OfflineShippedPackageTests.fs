@@ -34,7 +34,7 @@ let ``A package under the HTTP host builds with no network`` () =
     directory.Write
         "server/server.nyxp"
         $"""(package = (name = "acme.server", version = "0.1.0", sources = ["src/**/*.nyx"]), host = (package = "nanyx.http.host", version = "{Toolchain.version}"))"""
-    directory.Write "server/src/main.nyx" "module main\n\n@entry\ndef serve = { request -> #ok(\"hi\") }\n"
+    directory.Write "server/src/main.nyx" "module main\n\n@entry\ndef main: Request -> Response = { _ -> Response.text(200, \"hi\") }\n"
     let outcome = nanyxInStore (offline directory) (Path.Combine(directory.Path, "server")) [ "check" ]
     Assert.Equal("", outcome.StandardError)
     Assert.Equal(0, outcome.ExitCode)

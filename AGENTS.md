@@ -131,8 +131,8 @@ those files workable. Problems with the code's structure are tracked as GitHub i
 - **The shipped packages move with the version.** A package the compiler ships is named at the compiler's own version,
   so the PR that bumps `<Version>` also sets that version in every manifest under `packages/` (the package's own
   `version` and each shipped dependency's), in `examples/`, and in the docs that name a shipped package's version
-  (`git grep '<old version>' packages examples docs/src/content`). Without it, every package fails with `NYX0029` and
-  the release job never runs. A shipped manifest's `nanyx`, the compilers it builds with, moves too: a library's is the
+  (`git grep '<old version>' packages examples docs/src/content`). Without it, the hosts' `nanyx` refuses the new
+  compiler (`NYX0052`) and the release job never runs. A shipped manifest's `nanyx`, the compilers it builds with, moves too: a library's is the
   new version's major and minor, `0.43` for `0.43.0`, and a host's or a host library's is that version only, `=0.43.0`,
   since they use the compiler's internals. A test checks both.
 - **A release publishes the shipped packages.** The release attaches each shipped package's `<name>-<version>.nyxpkg`

@@ -144,6 +144,11 @@ module Package =
     /// it: by `--host`, or as a script's host.
     let private atCompilerVersion = VersionRequirement.at (SemanticVersion.tryParse Toolchain.version |> Option.get)
 
+    /// What a manifest asks for a package from the index as: a dependency, or its host.
+    type private Requested =
+        | ADependency
+        | AHost
+
     /// Where a package from the index is read from: the cache, which never changes, so its checked modules can be kept
     /// beside it; or the compiler's own copy of a package it seeded into the cache, whose checked modules it has already
     /// (see `PackageStore.seededCopy`).
@@ -163,7 +168,7 @@ module Package =
     /// seeded, if `requirement` accepts its version, so that a package needs no `nanyx pull` to build with the packages
     /// the compiler ships, and the next one locks it. Or why it can't be read: it isn't locked, the version locked isn't
     /// one it accepts, or that version isn't in the cache, which `nanyx pull` fills.
-    let private locked (lookup: Lookup) (name: string) (span: SourceSpan) (requirement: VersionRequirement) : Result<Found, Problem list> =
+    let private locked (lookup: Lookup) (what: Requested) (name: string) (span: SourceSpan) (requirement: VersionRequirement) : Result<Found, Problem list> =
         let error code message = Result.Error [ AtManifest(Diagnostics.at code span message |> Diagnostics.about name) ]
         let seeded = PackageStore.seededCopy lookup.Store name
         match Lockfile.tryFind name lookup.Locked with
@@ -171,9 +176,15 @@ module Package =
             match seeded with
             | Some copy when VersionRequirement.accepts requirement copy.Version -> Result.Ok(Seeded copy)
             | _ ->
-                error
-                    DiagnosticCodes.DependencyNotLocked
-                    $"The dependency '{name}' {requirement} is not locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version and lock it"
+                match what with
+                | ADependency ->
+                    error
+                        DiagnosticCodes.DependencyNotLocked
+                        $"The dependency '{name}' {requirement} is not locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version and lock it"
+                | AHost ->
+                    error
+                        DiagnosticCodes.DependencyNotLocked
+                        $"The host '{name}' {requirement} is neither one the compiler ships nor locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version from the package index and lock it, or give the directory it is in, as in `host = (package = \"{name}\", path = \"../{name}\")`"
         | Some locked when not (VersionRequirement.accepts requirement locked.Version) ->
             error
                 DiagnosticCodes.InvalidManifestValue
@@ -231,7 +242,7 @@ module Package =
             let directory =
                 match entry.Path, entry.Version with
                 | Some directory, _ -> Result.Ok directory
-                | None, Some requirement -> locked lookup entry.Package entry.Span requirement |> Result.map directoryOf
+                | None, Some requirement -> locked lookup AHost entry.Package entry.Span requirement |> Result.map directoryOf
                 | None, None -> error $"The host '{entry.Package}' has no `version` or `path`"
             match directory |> Result.map (fun directory -> directory, Manifest.manifestIn directory) with
             | Result.Error problems -> Result.Error problems
@@ -262,7 +273,7 @@ module Package =
             | OnGitHub reference ->
                 lookup.Store.GitHub.FetchTree reference.Repository reference.Commit
                 |> Result.mapError (fun failure -> [ notFetched dependency.SourceSpan $"The dependency '{dependency.Name}'" failure ])
-            | FromIndex requirement -> locked lookup dependency.Name dependency.SourceSpan requirement |> Result.map directoryOf
+            | FromIndex requirement -> locked lookup ADependency dependency.Name dependency.SourceSpan requirement |> Result.map directoryOf
             | AtPath directory -> Result.Ok directory
         let read (dependency: Dependency) (directory: string) =
             match Manifest.manifestIn directory with
