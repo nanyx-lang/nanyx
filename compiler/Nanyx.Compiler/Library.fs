@@ -363,9 +363,12 @@ module Compiler =
                         | _ -> false
                     Attributes.applyAttributes host testBuild desugaredAst
                     |> Result.map (fun (desugared, entries, components) ->
-                        // A module's statements run as an entry point of their own (see `Scripts`).
+                        // A module's statements run as an entry point of their own (see `Scripts`), but in a test build,
+                        // which runs its tests and nothing else.
                         let desugared, script =
                             match origin, entries with
+                            | (SourceFile _ | InMemory), _ when testBuild ->
+                                desugared |> List.filter (function Kind (Expr _) -> false | _ -> true), None
                             | (SourceFile _ | InMemory), _ when host.IsSome -> Scripts.asEntry host.Value (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
                             | _ -> desugared, None
                         // Each module-level def that starts a task is a scope for its tasks (see `TaskScopes`).
@@ -893,7 +896,9 @@ module Compiler =
                 | None, Ok importPath ->
                     match checkImport (SourceFile importPath) (fun () -> checkedModules.ReadFile importPath) with
                     | Ok (_, imported) as checkedImport ->
-                        match FileImports.importedFile item imported.Name imported.Syntax with
+                        // A test build's root imports a script to run its tests, whose statements a test build leaves out.
+                        let isTestRoot = checkedModules.Package |> Option.bind _.TestRoot |> Option.exists (PackageModules.samePath fullPath)
+                        match FileImports.importedFile item imported.Name imported.Syntax |> List.filter (fun diag -> not (isTestRoot && diag.Code = DiagnosticCodes.EntrypointImported.Code)) with
                         | [] -> checkedImport
                         | diags -> Error diags
                     | failed -> failed
