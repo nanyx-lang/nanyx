@@ -28,12 +28,6 @@ let private runIn (directory: string) (options: string list) (source: string) =
         StandardOutput = outcome.StandardOutput.ReplaceLineEndings "\n"
         StandardError = outcome.StandardError.ReplaceLineEndings "\n" }
 
-/// Asserts that `outcome` ran cleanly and printed `expected`.
-let private assertPrinted (expected: string) (outcome: RunOutcome) =
-    Assert.Equal("", outcome.StandardError)
-    Assert.Equal(expected.ReplaceLineEndings "\n", outcome.StandardOutput)
-    Assert.Equal(0, outcome.ExitCode)
-
 /// `path` as a program writes it in a string literal: with `/`.
 let private written (path: string) = path.Replace('\\', '/')
 
