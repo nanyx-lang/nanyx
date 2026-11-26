@@ -14,7 +14,9 @@ made and how it reaches users. The package managers still to come are issues: a 
 # The binaries
 
 The `Compiler` workflow (`.github/workflows/compiler.yml`) publishes `nanyx` for five runtime identifiers:
-`win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`. Each build is self-contained and a single file, so
+`win-x64`, `linux-x64`, `linux-arm64`, `osx-x64` and `osx-arm64`. It builds them on a push to `main`, and on a run of
+a branch only when the branch's version is new, with no `compiler/<version>` tag yet, as a release PR's is. Its
+`Version` job reads the version and looks for the tag, and the publish jobs wait for it. Each build is self-contained and a single file, so
 no .NET runtime is needed, and is packed as `nanyx-<version>-<rid>.zip` on Windows and `nanyx-<version>-<rid>.tar.gz`
 elsewhere. An archive holds the executable, `nanyx.exe` or `nanyx` (with its executable bit set), and beside it the
 files the compiler reads from there: the checked standard library and `packages/`, the
@@ -27,15 +29,15 @@ so an archive without its packages, or whose embedded Wasmtime library didn't su
 # The release
 
 Merging a change to the compiler's `<Version>` on `main` is the release. The `Release` job, which runs only on `main`
-and after the tests, the browser test and the publish jobs, tags the commit `compiler/<version>` and attaches the
+and after the tests, the browser test, the `Version` job and the publish jobs, tags the commit `compiler/<version>` and attaches the
 archives it has just built and tested to a GitHub release named `Compiler <version>`, with the browser build,
 `nanyx-browser.zip`, that the docs site's playground runs ([Playground](./playground#the-measurement)). When that tag
 already exists, it does nothing, and releases are queued, not raced, so a second push of the same version sees the
 first one's tag. Nothing is rebuilt for a release.
 
 The release's notes are the version's section of the [Changelog](../overview/changelog), with its relative links made
-absolute. The publish job reads the section on every run, not only on `main`, so a version bump without its section
-fails before it is merged. What a release PR must change is in `AGENTS.md`, under "Releasing the compiler".
+absolute. The `Version` job reads the section on every run whose version is new, on a branch as on `main`, so a version
+bump without its section fails before it is merged. What a release PR must change is in `AGENTS.md`, under "Releasing the compiler".
 
 The binaries aren't signed, so macOS quarantines a browser download until the user removes the flag.
 
