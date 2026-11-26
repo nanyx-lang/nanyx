@@ -24,11 +24,11 @@ module PackageArchive =
 
     /// An error at each dependency of `manifest` that would not be there once the package is unpacked elsewhere: one
     /// found by its path, and one on GitHub (see `Manifest.publishErrors`). A packed package depends only on packages from
-    /// the index and on those the compiler ships.
+    /// the index, the packages the compiler ships among them.
     let packErrors (manifest: Manifest) : Diagnostic list =
         let byPath =
             manifest.Dependencies
-            |> List.filter (fun dependency -> match dependency.Source with AtPath _ -> true | Shipped | FromIndex _ | OnGitHub _ -> false)
+            |> List.filter (fun dependency -> match dependency.Source with AtPath _ -> true | FromIndex _ | OnGitHub _ -> false)
             |> List.map (fun dependency ->
                 Diagnostics.at
                     DiagnosticCodes.InvalidManifestValue

@@ -31,7 +31,7 @@ let private indexListing (package: TempPackage) (name: string) (versions: (strin
 let ``Seeding packs each shipped package into an index in the cache, and unpacks it there, as the release packs it`` () =
     use package = new TempPackage([])
     let store = storeOf package
-    let index = okOf (SeededPackages.seed store)
+    let index = (okOf (SeededPackages.seed store)).Index
     Assert.Equal(PackageStore.shippedIndex store, index)
     for name in ShippedPackages.names () do
         let version = SemanticVersion.tryParse Toolchain.version |> Option.get
@@ -40,7 +40,7 @@ let ``Seeding packs each shipped package into an index in the cache, and unpacks
         Assert.True(File.Exists(Path.Combine(PackageStore.directoryOf store name version, name + Manifest.extension)), $"{name} isn't in the cache")
     // Seeding again finds it seeded, and packs nothing.
     let written = Directory.GetLastWriteTimeUtc index
-    Assert.Equal(index, okOf (SeededPackages.seed store))
+    Assert.Equal(index, (okOf (SeededPackages.seed store)).Index)
     Assert.Equal(written, Directory.GetLastWriteTimeUtc index)
 
 [<Fact>]
@@ -48,7 +48,7 @@ let ``A seeded package is listed though the package index can't be read, so a bu
     use package = new TempPackage([])
     // An index that isn't there can't be read, as one can't be offline.
     let store = { storeOf package with Index = package.Path "unreachable" }
-    okOf (SeededPackages.seed store) |> ignore
+    (okOf (SeededPackages.seed store)).Index |> ignore
     let listed, warnings = listedIn store "nanyx.cli"
     Assert.Equal<string list>([ Toolchain.version ], listed |> List.map fst)
     Assert.Empty(warnings)
@@ -57,7 +57,7 @@ let ``A seeded package is listed though the package index can't be read, so a bu
 let ``A seeded package is listed with the versions the package index has of it`` () =
     use package = new TempPackage([])
     let store = storeOf package
-    okOf (SeededPackages.seed store) |> ignore
+    (okOf (SeededPackages.seed store)).Index |> ignore
     let seeded = packedSha256 store "nanyx.cli"
     indexListing package "nanyx.cli" [ "0.1.0", String.replicate 64 "a"; Toolchain.version, seeded ]
     Assert.Equal<(string * string) list * string list>(([ "0.1.0", String.replicate 64 "a"; Toolchain.version, seeded ], []), listedIn store "nanyx.cli")
@@ -68,7 +68,7 @@ let ``A seeded package is listed with the versions the package index has of it``
 let ``Where the package index records the shipped version with another SHA-256, the seeded one is listed, with a warning`` () =
     use package = new TempPackage([])
     let store = storeOf package
-    okOf (SeededPackages.seed store) |> ignore
+    (okOf (SeededPackages.seed store)).Index |> ignore
     indexListing package "nanyx.cli" [ Toolchain.version, String.replicate 64 "b" ]
     let _, listed, warnings = okOf (PackageIndex.listing store "nanyx.cli" |> Result.mapError List.singleton)
     Assert.Equal(packedSha256 store "nanyx.cli", (List.exactlyOne listed).Sha256)
@@ -110,12 +110,30 @@ let ``A store that can't be seeded can't list a package, and says why`` () =
 [<Fact>]
 let ``A process that finds a cache seeded for this compiler packs nothing`` () =
     use package = new TempPackage([])
-    okOf (SeededPackages.seed (storeOf package)) |> ignore
+    (okOf (SeededPackages.seed (storeOf package))).Index |> ignore
     Assert.Equal(1, SeededPackages.timesWritten (storeOf package))
     // A new process, with a store of its own over the same cache, as every `nanyx` run after the first is: it would
     // pack the packages only to write the index, which it finds written.
     SeededPackages.forgetSeeding ()
-    let index = okOf (SeededPackages.seed (storeOf package))
+    let index = (okOf (SeededPackages.seed (storeOf package))).Index
     Assert.Equal(1, SeededPackages.timesWritten (storeOf package))
     Assert.Equal(PackageStore.shippedIndex (storeOf package), index)
     Assert.Equal<string list>([ Toolchain.version ], fst (listedIn (storeOf package) "nanyx.cli") |> List.map fst)
+
+[<Fact>]
+let ``A package under a shipped host is read from the compiler's own copy, so no shipped module is checked from its source`` () =
+    use package =
+        new TempPackage(
+            [ "demo/demo.nyxp", $"""(package = (name = "demo", version = "0.1.0"), {consoleHostEntry})"""
+              "demo/src/main.nyx", "module main\n\n@entry\ndef main = {\n  println(\"Hello, World!\")\n}\n" ])
+    let store = storeOf package
+    let found = okOf (Package.findIn store (package.Path "demo"))
+    // The host is the copy the compiler seeded, whose files are its own, not the cache's.
+    Assert.Equal(Some(ShippedPackages.directoryOf Hosts.consolePackage), found.HostPackage |> Option.map _.Manifest.Root)
+    let recording = Recording()
+    let build = Package.buildReporting recording found
+    Assert.Empty(build.Diagnostics)
+    let checkedFromSource =
+        recording.Events
+        |> List.filter (fun event -> event.StartsWith "start " && (event.Contains ShippedPackages.directory || event.Contains store.Cache))
+    Assert.Empty(checkedFromSource)

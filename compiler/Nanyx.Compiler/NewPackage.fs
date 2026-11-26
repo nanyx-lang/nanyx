@@ -15,7 +15,7 @@ module NewPackage =
     /// `toolVersion` of the compiler making it or a later one, the official linter is on with every rule at its default,
     /// and the console host runs it. Both are that release too.
     let manifest (name: string) (toolVersion: string) =
-        let shipped package = Manifest.entryText toolVersion "" package Shipped
+        let shipped package = $"(package = {Manifest.quotedString package}, version = {Manifest.quotedString toolVersion})"
         $"""(
   package = (name = {Manifest.quotedString name}, version = "0.1.0", sources = ["src/**/*.nyx"], nanyx = "{nanyxOf toolVersion}")
   linters = [{shipped "nanyx.lint"}]

@@ -126,6 +126,9 @@ module VersionRequirement =
             else
                 None
 
+    /// The versions compatible with `version`, written as `version` is: `1.2.0`.
+    let at (version: SemanticVersion) : VersionRequirement = { Minimum = version; Written = string version }
+
     /// Whether `version` satisfies `requirement` (see `VersionRequirement`).
     let accepts (requirement: VersionRequirement) (version: SemanticVersion) : bool =
         let minimum = requirement.Minimum

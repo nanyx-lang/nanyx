@@ -166,7 +166,7 @@ module PackageDependencies =
                         |> List.map (fun dependency ->
                             let name, version = dependency.Manifest.Name, dependency.Manifest.Version
                             let where =
-                                if ShippedPackages.isShipped name && dependency.Manifest.Root = ShippedPackages.directoryOf name then
+                                if PackageStore.seededCopy store name |> Option.exists (fun copy -> PackageModules.samePath copy.Source dependency.Manifest.Root) then
                                     "shipped with the compiler"
                                 elif PackageModules.samePath dependency.Manifest.Root (PackageStore.directoryOf store name (SemanticVersion.tryParse version).Value) then
                                     if wasCached |> List.exists (fun cached -> cached.Name = name && string cached.Version = version) then "in the cache" else "downloaded"
@@ -218,8 +218,8 @@ module PackageDependencies =
         | _, Result.Error messages -> Result.Error(LockErrors messages)
 
     /// Where `nanyx install` finds the package `name`: in `directory` (a full path), which must hold a package of that
-    /// name; at `version`; shipped with the compiler, when no version is given; or else at the newest version the index
-    /// of `store` has that can be chosen, written as that version, `1.4.2`, which accepts the versions compatible with it.
+    /// name; at `version`; or else at the newest version `store` lists that can be chosen (see `Resolution.newest`),
+    /// written as that version, `1.4.2`, which accepts the versions compatible with it.
     let private sourceOf (store: PackageStore) (name: string) (version: string option) (directory: string option) : Result<DependencySource, string> =
         match directory, version with
         | Some _, Some _ -> Result.Error "`--path` and `--version` were both given: give a dependency's directory or its version, not both"
@@ -234,7 +234,6 @@ module PackageDependencies =
             match VersionRequirement.tryParse version with
             | Some requirement -> Result.Ok(FromIndex requirement)
             | None -> Result.Error $"'{version}' is not a version, which must be {VersionRequirement.rule}"
-        | None, None when ShippedPackages.isShipped name -> Result.Ok DependencySource.Shipped
         | None, None ->
             Resolution.newest store name
             |> Result.bind (function
@@ -243,7 +242,7 @@ module PackageDependencies =
 
     /// Adds the package `name` to the dependencies of the package whose manifest is at `manifestPath`, found as
     /// `sourceOf` says, from `store`. A package the compiler ships is named at the compiler's `toolVersion`. Gives the
-    /// manifest's new text and, for a package named by its version, the lockfile that locks it; or why it can't be added:
+    /// manifest's new text and, for a package from the index, the lockfile that locks it; or why it can't be added:
     /// a name the manifest refuses, one already listed, a directory that holds another package, or a version no
     /// resolution can choose.
     let install (toolVersion: string) (store: PackageStore) (manifestPath: string) (name: string) (version: string option) (directory: string option) : Result<Installed, LockFailure> =
@@ -259,9 +258,9 @@ module PackageDependencies =
                 | None -> sourceOf store name version directory |> Result.map (fun source -> text, fields, source))
             |> Result.mapError (List.singleton >> LockErrors)
             |> Result.bind (fun (text, fields, source) ->
-                let entry = Manifest.entryText toolVersion (Path.GetDirectoryName manifestPath) name source
+                let entry = Manifest.entryText (Path.GetDirectoryName manifestPath) name source
                 let manifest = withEntry text fields entry
                 match source with
-                | FromIndex _ when not (ShippedPackages.isShipped name) ->
+                | FromIndex _ ->
                     lockFor store manifestPath manifest |> Result.map (fun lockfile -> { Manifest = manifest; Lockfile = lockfile })
                 | _ -> Result.Ok { Manifest = manifest; Lockfile = None })

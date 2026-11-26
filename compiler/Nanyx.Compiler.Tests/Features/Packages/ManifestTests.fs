@@ -196,13 +196,12 @@ let ``A value of the wrong kind is an error saying what it must be`` () =
     )
 
 [<Fact>]
-let ``An unknown linter, rule, severity or host is an error`` () =
+let ``An unknown linter, rule or severity is an error`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.InvalidManifestValue.Code, "There is no linter 'acme.lint': the linters are 'nanyx.lint'"
           DiagnosticCodes.UnknownManifestField.Code,
           "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'resultOnlyTypeVariable', 'unusedResults', 'uselessExpressions', 'unawaitedTask', 'shadowedPreludeNames', 'semicolons', 'unconstructibleType', 'unusedContexts', 'repeatedPulls', 'unusedAllows', 'linterFailed'"
-          DiagnosticCodes.InvalidManifestValue.Code, "The rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\""
-          DiagnosticCodes.InvalidManifestValue.Code, "The compiler ships no package 'acme.host': give the path of a host the compiler doesn't ship, as `host = (package = \"acme.host\", path = \"../acme.host\")`" ],
+          DiagnosticCodes.InvalidManifestValue.Code, "The rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\"" ],
         errorsOf
             $"""
 (
@@ -211,7 +210,6 @@ let ``An unknown linter, rule, severity or host is an error`` () =
     (package = "acme.lint", version = "1.0.0")
     (package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (noSuchRule = #error, unusedBindings = "error")))
   ]
-  host = (package = "acme.host", version = "1.0.0")
 )
 """
     )
@@ -232,42 +230,41 @@ let ``A host's settings must be a record`` () =
     )
 
 [<Fact>]
-let ``A linter or host must be named at the version the compiler ships, exactly`` () =
+let ``A linter must be named at the version the compiler ships, exactly, since the compiler runs it`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.VersionNotShipped.Code,
-          $"The compiler ships 'nanyx.lint' {Toolchain.version}, not 0.1.0: name a package the compiler ships at its version exactly"
-          DiagnosticCodes.VersionNotShipped.Code,
-          $"The compiler ships 'nanyx.cli.host' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly" ],
+          $"The compiler ships 'nanyx.lint' {Toolchain.version}, not 0.1.0: name a package the compiler ships at its version exactly" ],
         errorsOf
             """
 (
   package = (name = "demo", version = "0.1.0")
   linters = [(package = "nanyx.lint", version = "0.1.0")]
-  host = (package = "nanyx.cli.host", version = "99.0.0")
 )
 """
     )
 
 [<Fact>]
-let ``A dependency the compiler ships is named at its version, and found beside the compiler`` () =
+let ``A host or a dependency the compiler ships is named at a version, as any package from the index is`` () =
     let manifest =
-        okOf $"""(package = (name = "demo", version = "0.1.0"), dependencies = [(package = "nanyx.cli", version = "{Toolchain.version}")])"""
-    Assert.Equal<(string * DependencySource) list>(
-        [ "nanyx.cli", Shipped ],
-        manifest.Dependencies |> List.map (fun dependency -> dependency.Name, dependency.Source))
+        okOf
+            """
+(
+  package = (name = "demo", version = "0.1.0")
+  dependencies = [(package = "nanyx.cli", version = "0.42.0")]
+  host = (package = "nanyx.cli.host", version = "99.0.0")
+)
+"""
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.VersionNotShipped.Code,
-          $"The compiler ships 'nanyx.cli' {Toolchain.version}, not 99.0.0: name a package the compiler ships at its version exactly"
-          DiagnosticCodes.InvalidManifestValue.Code,
-          "The dependency 'acme.util' is found by its path, so it has no version: give one or the other" ],
+        [ "nanyx.cli", "0.42.0" ],
+        manifest.Dependencies |> List.map (fun dependency -> dependency.Name, match dependency.Source with FromIndex requirement -> string requirement | other -> string other))
+    Assert.Equal(Some("nanyx.cli.host", Some "99.0.0"), manifest.Host |> Option.map (fun host -> host.Package, host.Version |> Option.map string))
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.InvalidManifestValue.Code, "The dependency 'acme.util' is found by its path, so it has no version: give one or the other" ],
         errorsOf
             """
 (
   package = (name = "demo", version = "0.1.0")
-  dependencies = [
-    (package = "nanyx.cli", version = "99.0.0")
-    (package = "acme.util", path = "../util", version = "1.0.0")
-  ]
+  dependencies = [(package = "acme.util", path = "../util", version = "1.0.0")]
 )
 """
     )
@@ -298,7 +295,7 @@ let ``The compiler's version is its release, with no commit`` () =
 [<Fact>]
 let ``An entry is written with its strings escaped`` () =
     let reference = { Repository = { Owner = "acme"; Name = "web" }; File = None; Commit = "v\"1\\2" }
-    Assert.Equal("""(package = "acme.web", github = "acme/web", rev = "v\"1\\2")""", Manifest.entryText Toolchain.version "" "acme.web" (OnGitHub reference))
+    Assert.Equal("""(package = "acme.web", github = "acme/web", rev = "v\"1\\2")""", Manifest.entryText "" "acme.web" (OnGitHub reference))
 [<Fact>]
 let ``A package's nanyx is the oldest compiler it builds with, which the JSON of the manifest gives`` () =
     let manifest = okOf """(package = (name = "acme.demo", version = "0.1.0", sources = ["src/**/*.nyx"], nanyx = "0.32"))"""

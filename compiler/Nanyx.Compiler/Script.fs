@@ -249,10 +249,11 @@ module Script =
 
     /// What is wrong with the package `package` a `::install` names, found at `place`, as a script names it: a package
     /// from the index needs the exact version the script uses, since a script has no lockfile and the version its
-    /// directive writes is its pin. One with no version is offered the newest the index of `store` has.
+    /// directive writes is its pin. One with no version is the version of it the compiler ships, if it ships one (see
+    /// `PackageStore.seededCopy`); one it doesn't is offered the newest `store` lists.
     let private unpinned (store: PackageStore) (package: DirectiveWord) (place: DirectivePlace) : Diagnostic list =
         match place with
-        | Shipped when not (ShippedPackages.isShipped package.Text) ->
+        | Shipped when (PackageStore.seededCopy store package.Text).IsNone ->
             let newest = newestIn store package.Text
             let example = newest |> Option.map string |> Option.defaultValue "1.2.0"
             let found = match newest with Some version -> $": the newest in the index is {version}" | None -> ""
@@ -267,20 +268,21 @@ module Script =
             | None -> [ diagnostic ]
         // One that isn't a version at all is the manifest's error, as `version = "1.x"` would be.
         | AtVersion version when
-            not (ShippedPackages.isShipped package.Text)
-            && (SemanticVersion.tryParse version.Text).IsNone
+            (SemanticVersion.tryParse version.Text).IsNone
             && (VersionRequirement.tryParse version.Text).IsSome
             ->
             [ invalid version.Span $"A script names the exact version of '{package.Text}' it uses, as in `1.2.0`, not the versions it accepts, '{version.Text}': it has no lockfile, so the version it writes is the one it uses" ]
         | _ -> []
 
-    /// The packages from the index among `dependencies`, a script's, each with the exact version its directive pins.
-    let private pinsOf (dependencies: Dependency list) : (string * SemanticVersion) list =
-        dependencies
-        |> List.choose (fun dependency ->
-            match dependency.Source with
-            | FromIndex requirement -> Some(dependency.Name, requirement.Minimum)
-            | _ -> None)
+    /// The packages from the index among `dependencies`, a script's, and its `host`, each with the exact version its
+    /// directive pins.
+    let private pinsOf (host: HostEntry option) (dependencies: Dependency list) : (string * SemanticVersion) list =
+        (host |> Option.bind (fun host -> host.Version |> Option.map (fun version -> host.Package, version.Minimum)) |> Option.toList)
+        @ (dependencies
+           |> List.choose (fun dependency ->
+               match dependency.Source with
+               | FromIndex requirement -> Some(dependency.Name, requirement.Minimum)
+               | _ -> None))
 
     /// The build the `::host` and `::install` directives of `settings` make, if there are any, for the script at
     /// `filePath`, whose imports by path, and the directories its directives give, are relative to its directory, with
@@ -291,7 +293,7 @@ module Script =
         let root = if filePath = "" then Directory.GetCurrentDirectory() else Path.GetDirectoryName filePath
         let notShipped (package: DirectiveWord) place =
             match place with
-            | Shipped when not (ShippedPackages.isShipped package.Text) ->
+            | Shipped when (PackageStore.seededCopy store package.Text).IsNone ->
                 let last = package.Text.Substring(package.Text.LastIndexOf '.' + 1)
                 [ invalid package.Span $"The compiler ships no package '{package.Text}': give the directory it is in, as in `../{last}`" ]
             | _ -> []
@@ -335,7 +337,7 @@ module Script =
                 else
                     [], [], []
             let locked, lockErrors =
-                match ScriptDependencies.cached store script (pinsOf dependencies) with
+                match ScriptDependencies.cached store script (pinsOf host dependencies) with
                 | Result.Ok locked -> locked, []
                 | Result.Error messages -> Lockfile.empty, messages |> List.map (Diagnostics.at DiagnosticCodes.PackageNotDownloaded first.Span)
             match twice @ unshipped @ hostErrors @ dependencyErrors @ lockErrors with
@@ -375,14 +377,15 @@ module Script =
         readFromUnder Hosts.consolePackage store filePath source
 
     /// What `nanyx pull` does for the script at `filePath`, whose text is `source`: downloads into the cache of `store`
-    /// each package from the index its `::install` lines pin, and the packages they depend on (see
+    /// each package from the index its `::host` and `::install` lines pin, and the packages they depend on (see
     /// `ScriptDependencies.pull`), giving a line for each and a warning for each pin the index has unlisted, or what
     /// went wrong. A directive written wrong is left for the build to report.
     let pull (store: PackageStore) (filePath: string) (source: string) : Result<Pulled, string list> =
         let pins =
             settings (Directives.read filePath source)
             |> List.choose (function
-                | _, Result.Ok(DependencySetting(package, AtVersion version)) when not (ShippedPackages.isShipped package.Text) ->
+                | _, Result.Ok(HostSetting(package, AtVersion version))
+                | _, Result.Ok(DependencySetting(package, AtVersion version)) ->
                     SemanticVersion.tryParse version.Text |> Option.map (fun version -> package.Text, version)
                 | _ -> None)
         ScriptDependencies.pull store filePath pins

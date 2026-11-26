@@ -28,15 +28,24 @@ type Pulled =
 /// the lockfile that records them.
 module Resolution =
     /// The dependencies a resolution for the package `manifest` describes has to satisfy: those it names by their
-    /// version, and those of each package it finds on disk or on GitHub, which share its lockfile. A package found
-    /// that way that can't be read is left out, for the build to report.
+    /// version, its host's, if it names one by its version, and those of each package it finds on disk or on GitHub,
+    /// which share its lockfile. A package found that way that can't be read is left out, for the build to report.
     let requirements (store: PackageStore) (manifest: Manifest) : RootRequirement list =
         let visited = HashSet<string>()
         let rec from (manifest: Manifest) : RootRequirement list =
             if not (visited.Add manifest.Path) then
                 []
             else
-                manifest.Dependencies
+                let host =
+                    match manifest.Host with
+                    | Some { Package = host; Version = Some requirement } -> [ { From = manifest.Name; Package = host; Requirement = requirement } ]
+                    | Some { Path = Some directory } ->
+                        match Manifest.tryReadIn directory with
+                        | Some found -> from found
+                        | None -> []
+                    | _ -> []
+                host
+                @ (manifest.Dependencies
                 |> List.collect (fun dependency ->
                     let onDisk (directory: string) =
                         match Manifest.tryReadIn directory with
@@ -48,8 +57,7 @@ module Resolution =
                     | OnGitHub reference ->
                         match store.GitHub.FetchTree reference.Repository reference.Commit with
                         | Result.Ok directory -> onDisk directory
-                        | Result.Error _ -> []
-                    | Shipped -> [])
+                        | Result.Error _ -> []))
         from manifest
 
     /// The requirement the index writes as `written`: as a manifest writes it, `2.1`, or with a caret, `^2.1`, which
@@ -63,10 +71,7 @@ module Resolution =
     /// `indexed` as the solver reads it: why it can't be chosen, if it can't. An unlisted version can be, when `locked` is
     /// what the lockfile locks of its package, since a build that already locks it keeps it.
     let private candidate (locked: SemanticVersion option) (indexed: IndexedVersion) : SolverVersion =
-        let dependencies =
-            indexed.Dependencies
-            |> List.filter (fst >> ShippedPackages.isShipped >> not)
-            |> List.map (fun (name, written) -> name, requirementOf written)
+        let dependencies = indexed.Dependencies |> List.map (fun (name, written) -> name, requirementOf written)
         let needsNewer =
             match indexed.Nanyx |> Option.bind CompilerRequirement.tryParse, running with
             | Some requirement, Some running when not (CompilerRequirement.accepts requirement running) -> Some(NeedsCompiler(requirement, Toolchain.version))
@@ -106,14 +111,11 @@ module Resolution =
         let listings = Dictionary<string, IndexedVersion list>()
         let warnings = ResizeArray<Diagnostic>()
         let versions (name: string) =
-            if ShippedPackages.isShipped name then
-                Result.Ok None
-            else
-                PackageIndex.listing store name
-                |> Result.map (fun (_, listed, listingWarnings) ->
-                    listings.[name] <- listed
-                    warnings.AddRange listingWarnings
-                    Some(listed |> onlyPinned pinned name _.Version |> List.map (candidate (locked.TryFind name))))
+            PackageIndex.listing store name
+            |> Result.map (fun (_, listed, listingWarnings) ->
+                listings.[name] <- listed
+                warnings.AddRange listingWarnings
+                Some(listed |> onlyPinned pinned name _.Version |> List.map (candidate (locked.TryFind name))))
         let input =
             { Root = root
               Requirements = requirements
@@ -192,11 +194,11 @@ module Resolution =
                 |> List.map (fun name -> $"'{locked.Name}' {locked.Version} depends on '{name}', which it doesn't lock"))
         List.distinct (required @ reached)
 
-    /// The newest version of `name` in the index of `store` that a new resolution could choose, if there is one; or why
-    /// the index can't be read.
+    /// The newest version of `name` that `store` lists (see `PackageIndex.listing`) and a new resolution could choose, if
+    /// there is one; or why the index can't be read.
     let newest (store: PackageStore) (name: string) : Result<SemanticVersion option, string> =
-        PackageIndex.versions store.Index name
-        |> Result.map (fun (_, listed) ->
+        PackageIndex.listing store name
+        |> Result.map (fun (_, listed, _) ->
             listed
             |> List.map (candidate None)
             |> List.filter (fun version -> version.Unusable.IsNone && version.Version.PreRelease.IsEmpty)
