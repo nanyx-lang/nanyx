@@ -53,7 +53,9 @@ response, so a page the client router swaps in isn't isolated: the playground's 
 (`clientRouter={false}`), and every link to it loads it afresh with `data-astro-reload`: the header's, and in the docs'
 markdown, each link to `/playground` (`rehypePlaygroundReload`) and the tour's "Open in the playground" links. Under
 those headers the page loads only what is from the site itself, and its scripts, the editor among them, are bundled
-into the site's. A page that isn't isolated says that its programs can't read input.
+into the site's. The compiler's worker, which the site bundles as `/_astro/compile-worker-*.js`, is served with the same
+headers, since an isolated page can only start a worker whose script says it is isolated too. A page that isn't
+isolated says that its programs can't read input.
 
 **The editor.** CodeMirror 6, with a highlighter of its own (`StreamLanguage`) for comments, strings, numbers, tags,
 attributes, directives and type names, whose keywords are the TextMate grammar's

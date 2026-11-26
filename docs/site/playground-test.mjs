@@ -45,7 +45,10 @@ const types = {
   ".woff2": "font/woff2",
 };
 
-/** Serves `dist` with clean URLs, and the playground's route with the headers `vercel.json` gives it. */
+/**
+ * Serves `dist` with clean URLs, and the playground's route, and the compiler's worker its page starts, with the headers
+ * `vercel.json` gives them.
+ */
 const server = createServer((request, response) => {
   const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
   const candidates = [pathname, pathname + ".html", join(pathname, "index.html")];
@@ -57,7 +60,7 @@ const server = createServer((request, response) => {
     return;
   }
   const headers = { "Content-Type": types[extname(file)] ?? "application/octet-stream" };
-  if (pathname === "/playground" || pathname.startsWith("/playground/")) {
+  if (pathname === "/playground" || pathname.startsWith("/playground/") || pathname.startsWith("/_astro/compile-worker-")) {
     headers["Cross-Origin-Opener-Policy"] = "same-origin";
     headers["Cross-Origin-Embedder-Policy"] = "require-corp";
   }
