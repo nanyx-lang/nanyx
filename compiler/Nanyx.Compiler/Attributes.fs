@@ -40,6 +40,9 @@ module Attributes =
                     expr (IfExpr(isPosition, expr (FunctionCall(test, None, [])), otherwise)))
                 (List.indexed tests)
                 (Expression.at span UnitExpr)
+        // Its type is written, not inferred: a def made up here and left unannotated loses the contexts its tests are
+        // inferred to require, and the backend then finds `Console`'s members out of scope in it (NYX0302). The test
+        // host's contexts are the most a test may require (see `TestChecks`), so writing them all costs nothing.
         let typeExpr kind = TypeExpr.at span kind
         let contexts = Hosts.testContexts |> List.map (TypeName >> typeExpr)
         let signature = typeExpr (TypeWithContext(contexts, typeExpr (TypeFunc(typeExpr (TypeName "int"), typeExpr TypeUnit))))
