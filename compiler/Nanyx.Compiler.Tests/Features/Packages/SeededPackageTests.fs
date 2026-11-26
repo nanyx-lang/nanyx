@@ -92,3 +92,30 @@ let ``Seeding refuses a cache that holds another copy of a shipped package's ver
     let error = List.exactlyOne (errorsOf (SeededPackages.seed store))
     Assert.StartsWith($"The package cache holds a 'nanyx.cli' {Toolchain.version}, in '{cached}', that isn't the one this compiler ships: its ", error)
     Assert.EndsWith("delete that directory, and the next build puts this compiler's copy there", error)
+
+[<Fact>]
+let ``Listing a package seeds the store first, as the store it was made with says`` () =
+    use package = new TempPackage([])
+    let store = storeOf package
+    Assert.False(Directory.Exists(PackageStore.shippedIndex store))
+    Assert.Equal<string list>([ Toolchain.version ], fst (listedIn store "nanyx.cli") |> List.map fst)
+    Assert.True(Directory.Exists(PackageStore.shippedIndex store))
+
+[<Fact>]
+let ``A store that can't be seeded can't list a package, and says why`` () =
+    use package = new TempPackage([])
+    let store = { storeOf package with Seed = fun _ -> Result.Error [ "the cache is read-only" ] }
+    Assert.Equal(Result.Error "the cache is read-only", PackageIndex.listing store "acme.web" |> Result.map ignore)
+
+[<Fact>]
+let ``A process that finds a cache seeded for this compiler packs nothing`` () =
+    use package = new TempPackage([])
+    okOf (SeededPackages.seed (storeOf package)) |> ignore
+    Assert.Equal(1, SeededPackages.timesWritten (storeOf package))
+    // A new process, with a store of its own over the same cache, as every `nanyx` run after the first is: it would
+    // pack the packages only to write the index, which it finds written.
+    SeededPackages.forgetSeeding ()
+    let index = okOf (SeededPackages.seed (storeOf package))
+    Assert.Equal(1, SeededPackages.timesWritten (storeOf package))
+    Assert.Equal(PackageStore.shippedIndex (storeOf package), index)
+    Assert.Equal<string list>([ Toolchain.version ], fst (listedIn (storeOf package) "nanyx.cli") |> List.map fst)

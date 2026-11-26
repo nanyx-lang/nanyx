@@ -41,7 +41,7 @@ def main = {
 /// The package's diagnostics, each as its code, the file it is in and its message.
 let private buildOf (files: (string * string) list) =
     use package = new TempPackage(("acme.web.nyxp", manifest) :: files |> List.map (fun (path, text) -> path, text.ReplaceLineEndings "\n"))
-    match Package.find package.Root with
+    match Package.findIn (SeededPackages.user ()) package.Root with
     | Result.Ok found ->
         (Package.build found).Diagnostics
         |> List.map (fun diagnostic ->
@@ -103,7 +103,7 @@ let ``Compiling the file that imports a module that doesn't parse reports the mo
               "src/main.nyx", (main "greetings").ReplaceLineEndings "\n" ]
         )
     let mainFile = package.Path "src/main.nyx"
-    let result = Package.compileSourceWith Linters.none mainFile (File.ReadAllText mainFile)
+    let result = Package.compileSourceWith (SeededPackages.user ()) Linters.none mainFile (File.ReadAllText mainFile)
     let diagnostic = Assert.Single result.Diagnostics
     Assert.Equal(DiagnosticCodes.SyntaxError.Code, diagnostic.Code)
     Assert.Equal(Some (Path.GetFullPath(package.Path "src/greetings.nyx")), diagnostic.Span |> Option.map _.File)
@@ -177,7 +177,7 @@ let ``A source file compiled on its own finds the package's modules`` () =
               "src/lib/greetings.nyx", (greetings "greetings").ReplaceLineEndings "\n"
               "src/main.nyx", (main "acme.web/greetings").ReplaceLineEndings "\n" ])
     let mainPath = package.Path "src/main.nyx"
-    Assert.Empty((Script.compileSource mainPath (File.ReadAllText mainPath)).Diagnostics)
+    Assert.Empty((Script.compileSourceIn (SeededPackages.user ()) mainPath (File.ReadAllText mainPath)).Diagnostics)
 
 [<Fact>]
 let ``A file under a manifest but not among its sources is compiled as a script`` () =
@@ -193,4 +193,4 @@ import "./util" as util
 def two = util.one + 1
 """.ReplaceLineEndings "\n" ])
     let runPath = package.Path "scripts/run.nyx"
-    Assert.Empty((Script.compileSource runPath (File.ReadAllText runPath)).Diagnostics)
+    Assert.Empty((Script.compileSourceIn (SeededPackages.user ()) runPath (File.ReadAllText runPath)).Diagnostics)

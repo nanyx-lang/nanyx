@@ -33,7 +33,7 @@ let private fetcherFor (package: TempPackage) =
 
 /// A store whose GitHub is `fetcher`, with an empty cache in `package`.
 let private storeWith (package: TempPackage) (fetcher: GitHubFetcher) =
-    { Cache = package.Path "cache"; Index = package.Path "index"; GitHub = fetcher }
+    { Cache = package.Path "cache"; Index = package.Path "index"; GitHub = fetcher; Seed = SeededPackages.seed }
 
 let private storeFor (package: TempPackage) = storeWith package (fetcherFor package)
 
@@ -282,7 +282,7 @@ println(twice(2))"""
     let directives = Script.readFrom (storeFor package) (package.Path "script.nyx") source
     Assert.Empty(directives.Diagnostics)
     let result =
-        Script.compileSourceReading CompileListener.none System.IO.File.ReadAllText directives Linters.none (package.Path "script.nyx") source
+        Script.compileSourceReading (SeededPackages.user ()) CompileListener.none System.IO.File.ReadAllText directives Linters.none (package.Path "script.nyx") source
     Assert.Empty(result.Diagnostics)
 
 [<Fact>]
@@ -301,6 +301,6 @@ let ``A script's GitHub reference must be pinned to a commit`` () =
     let source = withFinalNewline """::install retry github:acme/snippets/retry.nyx@v1.0
 
 println(twice(2))"""
-    let directives = Script.read "script.nyx" source
+    let directives = Script.readFrom (SeededPackages.user ()) "script.nyx" source
     let error = directives.Diagnostics |> List.exactlyOne
     Assert.Equal(DiagnosticCodes.GitHubReferenceNotPinned.Code, error.Code)

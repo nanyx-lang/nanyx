@@ -387,13 +387,10 @@ module Script =
                 | _ -> None)
         ScriptDependencies.pull store filePath pins
 
-    /// `readFrom` the user's store.
-    let read (filePath: string) (source: string) : ScriptDirectives = readFrom (PackageStore.user ()) filePath source
-
-    /// The host the script at `filePath` runs under, as its `::host` names it; none for a script with no directives,
-    /// which runs under the console host.
-    let hostOf (filePath: string) : Host option =
-        (read filePath (File.ReadAllText filePath)).Build |> Option.bind _.Host
+    /// The host the script at `filePath` runs under, as its `::host` names it, found in `store`; none for a script with
+    /// no directives, which runs under the console host.
+    let hostOf (store: PackageStore) (filePath: string) : Host option =
+        (readFrom store filePath (File.ReadAllText filePath)).Build |> Option.bind _.Host
 
     /// `result` with the problems with `directives` before its own diagnostics. An error in a directive is not
     /// deferred: it stops a debug run too.
@@ -405,8 +402,10 @@ module Script =
     /// Compiles `source` as the file at `filePath` with the linters `options` gives, in the build `directives` make, if
     /// they make one: under the host its `::host` names, importing from the packages its `::install` lines name. Otherwise
     /// it is compiled as `Package.compileSourceReading` compiles it. Each module's check is reported to `listener`, and
-    /// each other file it needs is read by `readFile`.
+    /// each other file it needs is read by `readFile`. A source file of a package finds the packages it depends on in
+    /// `store`.
     let compileSourceReading
+        (store: PackageStore)
         (listener: CompileListener)
         (readFile: string -> string)
         (directives: ScriptDirectives)
@@ -416,7 +415,7 @@ module Script =
         : CompileResult =
         match directives.Build with
         | Some build -> Compiler.compileSourceInReporting listener readFile build options (Path.GetFullPath filePath) source
-        | None -> Package.compileSourceReading listener readFile options filePath source
+        | None -> Package.compileSourceReading store listener readFile options filePath source
 
     /// Compiles `source` as the script at `filePath`, with the linters its directives turn on (none if they turn none
     /// on), under the host and with the dependencies they name, as `nanyx run` does. A source file of a package is
@@ -424,32 +423,24 @@ module Script =
     /// each module's check is reported to `listener`.
     let compileSourceReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
         let directives = readFrom store filePath source
-        compileSourceReading listener File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
+        compileSourceReading store listener File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
         |> withDirectives directives
 
-    /// `compileSourceReportingIn` the user's store.
-    let compileSourceReporting (listener: CompileListener) (filePath: string) (source: string) : CompileResult =
-        compileSourceReportingIn (PackageStore.user ()) listener filePath source
+    /// `compileSourceReportingIn`, telling nobody.
+    let compileSourceIn (store: PackageStore) (filePath: string) (source: string) : CompileResult =
+        compileSourceReportingIn store CompileListener.none filePath source
 
-    /// `compileSourceReporting`, telling nobody.
-    let compileSource (filePath: string) (source: string) : CompileResult =
-        compileSourceReporting CompileListener.none filePath source
-
-    /// `compileSource`, for a script that runs under the shipped host `defaultHost` unless its `::host` names another,
+    /// `compileSourceIn`, for a script that runs under the shipped host `defaultHost` unless its `::host` names another,
     /// with the packages its directives name found in `store`: as the compiler built for the browser compiles a page's
     /// program, under the playground host.
     let compileUnder (defaultHost: string) (store: PackageStore) (filePath: string) (source: string) : CompileResult =
         let directives = readFromUnder defaultHost store filePath source
-        compileSourceReading CompileListener.none File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
+        compileSourceReading store CompileListener.none File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
         |> withDirectives directives
 
     /// `compileSourceReportingIn` for the file at `filePath` as it is on disk.
     let compileFileReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
         if File.Exists filePath then compileSourceReportingIn store listener filePath (File.ReadAllText filePath) else Compiler.compileFile filePath
 
-    /// `compileFileReportingIn` the user's store.
-    let compileFileReporting (listener: CompileListener) (filePath: string) : CompileResult =
-        compileFileReportingIn (PackageStore.user ()) listener filePath
-
-    /// `compileFileReporting`, telling nobody.
-    let compileFile (filePath: string) : CompileResult = compileFileReporting CompileListener.none filePath
+    /// `compileFileReportingIn`, telling nobody.
+    let compileFileIn (store: PackageStore) (filePath: string) : CompileResult = compileFileReportingIn store CompileListener.none filePath

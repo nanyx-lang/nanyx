@@ -87,10 +87,7 @@ let private symbolAt (file: string) (result: CompileResult) (offset: int) =
 let private touches (offset: int) (span: SourceSpan) = span.Start <= offset && offset <= span.End
 
 /// The package the file at `file` is a source file of, if it is in one.
-let private packageOf (file: string) =
-    match NyxCompiler.Package.modulesFor file with
-    | Ok (Some modules) -> Some modules.Package
-    | _ -> None
+let private packageOf (file: string) = NyxCompiler.Package.nameFor file
 
 /// What is named at `offset` in `source`, the text of the root module of `result` compiled as `file`, with where it is
 /// written, or why it can't be renamed in `scope`: a module where its `module` line or an import of it names it, a

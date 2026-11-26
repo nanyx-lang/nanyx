@@ -57,7 +57,7 @@ let private renamedIn (files: (string * string) list) (file: string) (text: stri
     use package = new TempPackage(("app.nyxp", manifest) :: (files |> List.map (fun (name, text) -> $"src/{name}", text)))
     let path = Path.GetFullPath(package.Path $"src/{file}")
     let compile (readFile: string -> string) =
-        (Package.compilePackageReading readFile path).Value
+        (Package.compilePackageReading (SeededPackages.user ()) readFile path).Value
         |> List.map (fun (file, result) -> { Rename.Path = Path.GetFullPath file; Rename.Source = readFile file; Rename.Result = result })
     let files = compile File.ReadAllText
     for file in files do

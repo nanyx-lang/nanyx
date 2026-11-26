@@ -27,21 +27,21 @@ let ``A package is found from a directory under it, with its sources and entry``
               "src/main.nyx", entrySource
               "src/lib/util.nyx", "module util\n\nexport def one = 1\n"
               "scripts/other.nyx", (withFinalNewline """println("not a source")""") ])
-    let found = okOf (Package.find (package.Path "src/lib"))
+    let found = okOf (Package.findIn (SeededPackages.user ()) (package.Path "src/lib"))
     Assert.Equal<string list>([ package.Path "src/lib/util.nyx"; package.Path "src/main.nyx" ] |> List.map Path.GetFullPath |> List.sort, found.Sources)
     Assert.Equal(Some(Path.GetFullPath(package.Path "src/main.nyx")), found.Entry)
 
 [<Fact>]
 let ``A package with two entries is an error naming both`` () =
     use package = new TempPackage([ "demo.nyxp", manifest ""; "a.nyx", entrySource; "b.nyx", entrySource ])
-    let error = Assert.Single(errorsOf (Package.find package.Root))
+    let error = Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) package.Root))
     Assert.Contains("'a.nyx' and 'b.nyx'", error)
 
 [<Fact>]
 let ``A manifest with the old .nyxpack extension is not a manifest`` () =
     use package = new TempPackage([ "demo.nyxpack", manifest ""; "main.nyx", entrySource ])
-    Assert.Contains("There is no .nyxp manifest in", Assert.Single(errorsOf (Package.find package.Root)))
-    Assert.Contains("is neither a directory nor a .nyxp manifest", Assert.Single(errorsOf (Package.find (package.Path "demo.nyxpack"))))
+    Assert.Contains("There is no .nyxp manifest in", Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) package.Root)))
+    Assert.Contains("is neither a directory nor a .nyxp manifest", Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) (package.Path "demo.nyxpack"))))
 
 [<Fact>]
 let ``A file under a manifest that does not read has the manifest's errors, not its imports'`` () =
@@ -50,7 +50,7 @@ let ``A file under a manifest that does not read has the manifest's errors, not 
             [ "shop.nyxp", "[package]\nname = \"shop\"\n"
               "src/main.nyx", "module main\n\nimport shop.catalogue\n\n@entry\ndef main = {\n  println(\"hi\")\n}\n" ])
     let mainPath = package.Path "src/main.nyx"
-    let result = Script.compileFile mainPath
+    let result = Script.compileFileIn (SeededPackages.user ()) mainPath
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.TomlManifest.Code, diagnostic.Code)
     Assert.Equal(Path.GetFullPath(package.Path "shop.nyxp"), diagnostic.Span.Value.File)
@@ -62,7 +62,7 @@ let ``A build tells its caller each source file as it starts on it, in order`` (
             [ "demo.nyxp", manifest ""
               "src/main.nyx", "module main\n\nimport util\n\n@entry\ndef main = {\n  println(\"{one}\")\n}\n"
               "src/util.nyx", "module util\n\nexport def one = 1\n" ])
-    let found = okOf (Package.find package.Root)
+    let found = okOf (Package.findIn (SeededPackages.user ()) package.Root)
     let started = Collections.Generic.List<string>()
     let listener =
         { new CompileListener with
@@ -77,7 +77,7 @@ let ``A build tells its caller each source file as it starts on it, in order`` (
 [<Fact>]
 let ``Without linters no linter runs`` () =
     use package = new TempPackage([ "demo.nyxp", manifest ""; "main.nyx", entrySource ])
-    let build = Package.build (okOf (Package.find package.Root))
+    let build = Package.build (okOf (Package.findIn (SeededPackages.user ()) package.Root))
     Assert.Empty(build.Diagnostics)
     Assert.True((Package.entryResult build).IsSome)
 
@@ -87,7 +87,7 @@ let ``The manifest's linters check every source file at the severities it sets``
         new TempPackage(
             [ "demo.nyxp", (manifest $"""linters = [(package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (unusedBindings = #error)))]""")
               "main.nyx", entrySource ])
-    let build = Package.build (okOf (Package.find package.Root))
+    let build = Package.build (okOf (Package.findIn (SeededPackages.user ()) package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)
     Assert.Equal("default/unusedBindings", diagnostic.Code)
     Assert.Equal(Severity.Error, diagnostic.Severity)
@@ -95,7 +95,7 @@ let ``The manifest's linters check every source file at the severities it sets``
 
 [<Fact>]
 let ``The example package builds cleanly`` () =
-    let build = Package.build (okOf (Package.find (Path.Combine(repositoryRoot, "examples", "greeter"))))
+    let build = Package.build (okOf (Package.findIn (SeededPackages.user ()) (Path.Combine(repositoryRoot, "examples", "greeter"))))
     Assert.Empty(build.Diagnostics)
     Assert.True((Package.entryResult build).IsSome)
 
@@ -112,7 +112,7 @@ let private greeterGotWrong (construct: string) =
 [<Fact>]
 let ``A package that names an aliased import's nominal type without the alias does not build`` () =
     use package = new TempPackage(greeterGotWrong "Person")
-    let build = Package.build (okOf (Package.find package.Root))
+    let build = Package.build (okOf (Package.findIn (SeededPackages.user ()) package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)
     Assert.Equal(DiagnosticCodes.UnknownFunction.Code, diagnostic.Code)
     Assert.True(diagnostic.Span.IsSome && diagnostic.Span.Value.File.EndsWith "main.nyx")
@@ -120,6 +120,6 @@ let ``A package that names an aliased import's nominal type without the alias do
 [<Fact>]
 let ``A package that builds another module's nominal type from its shape does not build`` () =
     use package = new TempPackage(greeterGotWrong "greetings.Person")
-    let build = Package.build (okOf (Package.find package.Root))
+    let build = Package.build (okOf (Package.findIn (SeededPackages.user ()) package.Root))
     let diagnostic = Assert.Single(build.Diagnostics)
     Assert.Equal(DiagnosticCodes.NominalConstructedOutsideItsModule.Code, diagnostic.Code)

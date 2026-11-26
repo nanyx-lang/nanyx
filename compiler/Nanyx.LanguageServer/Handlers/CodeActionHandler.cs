@@ -238,7 +238,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
     private FSharpFunc<FSharpList<Tuple<string, string>>, FSharpList<NyxCompiler.CompileResult>> RecompileFiles(DocumentUri uri, OpenDocument document) =>
         FuncConvert.FromFunc((FSharpList<Tuple<string, string>> texts) =>
             ListModule.OfSeq(
-                texts is [var only] && only.Item1 == document.FileName && (document.FileName.Length == 0 || NyxCompiler.PackageModule.sourceFilesOf(document.FileName) is null)
+                texts is [var only] && only.Item1 == document.FileName && (document.FileName.Length == 0 || NyxCompiler.PackageModule.sourceFilesOf(NyxCompiler.SeededPackages.user(), document.FileName) is null)
                     ? [_documents.Compile(uri, only.Item2).Compiled ?? throw new InvalidOperationException("The compiler failed on the refactored text")]
                     : _documents.RecompilePackage(document.FileName, texts.Select(text => (text.Item1, text.Item2)).ToList())
                         ?? throw new InvalidOperationException("The compiler failed on the refactored package")));

@@ -44,13 +44,13 @@ def run = {{ () -> {body} }}"""
 
 /// The diagnostics of building the package in `app`.
 let private buildDiagnostics (package: TempPackage) =
-    (Package.build (okOf (Package.find (package.Path "app")))).Diagnostics
+    (Package.build (okOf (Package.findIn (SeededPackages.user ()) (package.Path "app")))).Diagnostics
 
 [<Fact>]
 let ``A public module of a dependency is imported by the package's name and the module's`` () =
     use package =
         new TempPackage(util @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
-    let found = okOf (Package.find (package.Path "app"))
+    let found = okOf (Package.findIn (SeededPackages.user ()) (package.Path "app"))
     Assert.Equal<string list>([ "acme.util" ], found.Dependencies |> List.map _.Manifest.Name)
     Assert.Equal<string list>([ "strings" ], (Package.modules found).Dependencies.Head.PublicModules)
     let build = Package.build found
@@ -80,13 +80,13 @@ let ``A dependency without a path is an error`` () =
 [<Fact>]
 let ``A dependency must be a directory with a manifest`` () =
     use package = new TempPackage([ app [ "acme.util", "missing" ]; mainImporting "nanyx/math" "println(abs(1))" ])
-    let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
+    let error = Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) (package.Path "app")))
     Assert.EndsWith($"""error NYX0023: The dependency 'acme.util' can't be read: '{Path.GetFullPath(package.Path "missing")}' is not a directory""", error)
 
 [<Fact>]
 let ``A dependency's package must have the name the dependant gives it`` () =
     use package = new TempPackage(util @ [ app [ "acme.tools", "util" ]; mainImporting "nanyx/math" "println(abs(1))" ])
-    let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
+    let error = Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) (package.Path "app")))
     Assert.EndsWith(
         $"""error NYX0023: The package in '{Path.GetFullPath(package.Path "util")}' is named 'acme.util', not 'acme.tools': make the names match""",
         error)
@@ -108,10 +108,10 @@ let ``A library that exports no module is an error at its package`` () =
         new TempPackage([ "util/util.nyxp", manifest "acme.util" [] ] @ internalOnly @ [ app [ "acme.util", "util" ]; mainImporting "nanyx/math" "println(abs(1))" ])
     let message =
         "'acme.util' is a library, since its manifest names no host, but it exports no module: export at least one, by declaring it with `export module`"
-    Assert.EndsWith($"util.nyxp:2:13: error NYX0033: {message}", Assert.Single(errorsOf (Package.find (package.Path "util"))))
-    Assert.EndsWith($"error NYX0033: {message}", Assert.Single(errorsOf (Package.find (package.Path "app"))))
+    Assert.EndsWith($"util.nyxp:2:13: error NYX0033: {message}", Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) (package.Path "util"))))
+    Assert.EndsWith($"error NYX0033: {message}", Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) (package.Path "app"))))
     let manifestPath = package.Path "util/util.nyxp"
-    let error = Assert.Single((Package.compileManifest manifestPath (File.ReadAllText manifestPath)).Diagnostics)
+    let error = Assert.Single((Package.compileManifestFrom (SeededPackages.user ()) manifestPath (File.ReadAllText manifestPath)).Diagnostics)
     Assert.Equal(DiagnosticCodes.LibraryExportsNothing.Code, error.Code)
     Assert.Equal(message, error.Message)
 
@@ -124,7 +124,7 @@ let ``An application needn't export a module`` () =
 let ``A module a file declares with export module is public`` () =
     use package =
         new TempPackage(util @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
-    let util = (Package.modules (okOf (Package.find (package.Path "app")))).Dependencies.Head
+    let util = (Package.modules (okOf (Package.findIn (SeededPackages.user ()) (package.Path "app")))).Dependencies.Head
     Assert.Equal<string list>([ "strings" ], util.PublicModules)
     Assert.Equal<string list>([ "secrets"; "strings" ], util.Modules.Keys |> List.ofSeq)
 
@@ -176,7 +176,7 @@ export def louder = { s: string -> s }""" ]
             util @ copy @ middle
             @ [ app [ "acme.util", "util"; "acme.middle", "middle" ]
                 mainImporting "nanyx/math" "println(abs(1))" ])
-    let error = Assert.Single(errorsOf (Package.find (package.Path "app")))
+    let error = Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) (package.Path "app")))
     Assert.Contains(
         $"""error NYX0028: The build reaches the package 'acme.util' by two paths, '{Path.GetFullPath(package.Path "util")}' and '{Path.GetFullPath(package.Path "copy")}'""",
         error)
@@ -212,7 +212,7 @@ let ``Packages can't depend on each other in a cycle`` () =
               "a/main.nyx", withFinalNewline "export module main\n\nexport def x = 1"
               "b/b.nyxp", manifest "acme.b" [ "acme.a", "a" ]
               "b/other.nyx", withFinalNewline "export module other\n\nexport def y = 1" ])
-    let error = Assert.Single(errorsOf (Package.find (package.Path "a")))
+    let error = Assert.Single(errorsOf (Package.findIn (SeededPackages.user ()) (package.Path "a")))
     Assert.EndsWith("error NYX0027: Packages can't depend on each other in a cycle: 'acme.a' -> 'acme.b' -> 'acme.a'", error)
 
 [<Fact>]
@@ -220,5 +220,5 @@ let ``A file of the package compiled on its own, as an editor compiles it, resol
     use package =
         new TempPackage(util @ [ app [ "acme.util", "util" ]; mainImporting "acme.util/strings" "ignore(shout(\"hi\"))" ])
     let mainPath = package.Path "app/main.nyx"
-    let result = Package.compileSourceWith Linters.none mainPath (File.ReadAllText mainPath)
+    let result = Package.compileSourceWith (SeededPackages.user ()) Linters.none mainPath (File.ReadAllText mainPath)
     Assert.Empty(result.Diagnostics)

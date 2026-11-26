@@ -10,7 +10,7 @@ open Nanyx.Compiler.Tests.TestSupport
 let private diagnosticsOf (source: string) =
     use directory = new TempPackage([ "main.nyx", source ])
     let path = directory.Path "main.nyx"
-    (Script.compileSource path source).Diagnostics
+    (Script.compileSourceIn (SeededPackages.user ()) path source).Diagnostics
 
 [<Fact>]
 let ``A console program that prints, draws random numbers and reads the clock compiles unchanged under the playground host, with the host's linters clean`` () =

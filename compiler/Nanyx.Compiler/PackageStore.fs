@@ -4,7 +4,7 @@ open System
 open System.IO
 
 /// Where a build finds what it doesn't have on disk beside it: the per-user cache of downloaded packages, the package
-/// index it downloads them from, and how it fetches from GitHub.
+/// index it downloads them from, how it fetches from GitHub, and how the packages the compiler ships are seeded into it.
 type PackageStore =
     { /// The cache's directory, which holds each downloaded package, unpacked, at `<name>/<version>/`. A package in it
       /// is never changed.
@@ -12,7 +12,12 @@ type PackageStore =
       /// The package index: an https address, or a directory on disk, that holds its `config.json`.
       Index: string
       /// How references to GitHub are fetched.
-      GitHub: GitHubFetcher }
+      GitHub: GitHubFetcher
+      /// Seeds the packages the compiler ships into the store, the first time it is asked, and gives the index of them
+      /// it seeded (`shippedIndex`); or why it can't (see `SeededPackages.seed`). Every store is made with one, so a
+      /// build that reads the packages the compiler ships finds them seeded: seeding packs them, which needs the
+      /// compiler's later modules, so it is passed in where a store is made.
+      Seed: PackageStore -> Result<string, string list> }
 
 module PackageStore =
     /// The index nanyx-lang publishes.
@@ -26,8 +31,9 @@ module PackageStore =
         | directory -> Path.GetFullPath directory
 
     /// The user's store, as a build reads it: their cache, the index `NANYX_INDEX` names, if it is set, or else
-    /// nanyx-lang's, and GitHub as far as `nanyx pull` has fetched from it into the cache (see `GitHub.cached`).
-    let user () : PackageStore =
+    /// nanyx-lang's, GitHub as far as `nanyx pull` has fetched from it into the cache (see `GitHub.cached`), and the
+    /// packages the compiler ships seeded by `seed` (see `SeededPackages.user`).
+    let user (seed: PackageStore -> Result<string, string list>) : PackageStore =
         let cache = defaultCache ()
         { Cache = cache
           Index =
@@ -35,7 +41,8 @@ module PackageStore =
             | null
             | "" -> defaultIndex
             | index -> index
-          GitHub = GitHub.cached cache }
+          GitHub = GitHub.cached cache
+          Seed = seed }
 
     /// `store`, fetching from GitHub what isn't in its cache yet: as `nanyx pull` reads it.
     let downloading (store: PackageStore) : PackageStore = { store with GitHub = GitHub.downloading store.Cache }

@@ -137,31 +137,31 @@ module PackageIndex =
 
     /// The versions of the package `name` that `store` lists, oldest first, with where the index file that lists them
     /// is, which a version's relative `url` is relative to: those its index lists and, for a package the compiler ships,
-    /// the version it seeded in the store's cache (see `PackageStore.shippedIndex`), whose `url` is where it is on disk.
-    /// The seeded version is listed when the index can't be read, so that a build offline finds it; when the index lists
-    /// it with another SHA-256, the seeded one is the one this compiler builds with, and the warning (`NYX0303`) with the
-    /// versions says so. Or why the index can't be read, for a package the compiler doesn't ship.
+    /// the version it seeded in the store's cache, seeding it first if it hasn't (`PackageStore.Seed`), whose `url` is
+    /// where it is on disk. The seeded version is listed when the index can't be read, so that a build offline finds it;
+    /// when the index lists it with another SHA-256, the seeded one is the one this compiler builds with, and the warning
+    /// (`NYX0303`) with the versions says so. Or why the index can't be read, for a package the compiler doesn't ship, or
+    /// why the packages it ships can't be seeded.
     let listing (store: PackageStore) (name: string) : Result<string * IndexedVersion list * Diagnostic list, string> =
-        let seededIndex = PackageStore.shippedIndex store
-        let seeded =
-            if Directory.Exists seededIndex then
+        store.Seed store
+        |> Result.mapError (String.concat "\n")
+        |> Result.bind (fun seededIndex ->
+            let seeded =
                 match versions seededIndex name with
                 | Result.Ok(file, listed) -> listed |> List.map (fun version -> { version with Url = resolve file version.Url })
                 | Result.Error _ -> []
-            else
-                []
-        match seeded, versions store.Index name with
-        | [], remote -> remote |> Result.map (fun (file, listed) -> file, listed, [])
-        | seeded, Result.Error _ -> Result.Ok(seededIndex, seeded, [])
-        | seeded, Result.Ok(file, remote) ->
-            let differing =
-                seeded
-                |> List.choose (fun shipped ->
-                    remote
-                    |> List.tryFind (fun indexed -> indexed.Version = shipped.Version && indexed.Sha256 <> shipped.Sha256)
-                    |> Option.map (fun indexed -> shippedDiffers name shipped.Version shipped.Sha256 indexed.Sha256))
-            let isSeeded (version: IndexedVersion) = seeded |> List.exists (fun shipped -> shipped.Version = version.Version)
-            Result.Ok(file, remote |> List.filter (isSeeded >> not) |> List.append seeded |> List.sortBy _.Version, differing)
+            match seeded, versions store.Index name with
+            | [], remote -> remote |> Result.map (fun (file, listed) -> file, listed, [])
+            | seeded, Result.Error _ -> Result.Ok(seededIndex, seeded, [])
+            | seeded, Result.Ok(file, remote) ->
+                let differing =
+                    seeded
+                    |> List.choose (fun shipped ->
+                        remote
+                        |> List.tryFind (fun indexed -> indexed.Version = shipped.Version && indexed.Sha256 <> shipped.Sha256)
+                        |> Option.map (fun indexed -> shippedDiffers name shipped.Version shipped.Sha256 indexed.Sha256))
+                let isSeeded (version: IndexedVersion) = seeded |> List.exists (fun shipped -> shipped.Version = version.Version)
+                Result.Ok(file, remote |> List.filter (isSeeded >> not) |> List.append seeded |> List.sortBy _.Version, differing))
 
     /// The directory `locked` is unpacked in, in the cache of `store`: downloaded from the store's index, if it isn't
     /// there yet, and checked against the lockfile's SHA-256 before it is unpacked. Or why it can't be: the index

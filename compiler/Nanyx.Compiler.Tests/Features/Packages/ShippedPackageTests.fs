@@ -84,7 +84,7 @@ let ``A library uses Console by depending on the console's interface package and
     let diagnosticsOf (dependencies: string) =
         use package = new TempPackage(library dependencies)
         let file = package.Path "src/greet.nyx"
-        (Package.compileSourceWith Linters.none file (File.ReadAllText file)).Diagnostics
+        (Package.compileSourceWith (SeededPackages.user ()) Linters.none file (File.ReadAllText file)).Diagnostics
     Assert.Empty(diagnosticsOf $"""[(package = "nanyx.cli", version = "{Toolchain.version}")]""")
     // A library sees no host's prelude, so without the dependency it can't name the package.
     let diagnostic = Assert.Single(diagnosticsOf "[]")

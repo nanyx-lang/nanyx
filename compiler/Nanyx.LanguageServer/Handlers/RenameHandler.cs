@@ -158,7 +158,7 @@ public sealed class PrepareRenameHandler : PrepareRenameHandlerBase
 
     /// <summary>Where a rename in <paramref name="file"/> looks for uses: its package's files, or the module alone.</summary>
     private static Rename.Scope ScopeOf(string file) =>
-        file.Length != 0 && PackageModule.sourceFilesOf(file) is { } files
+        file.Length != 0 && PackageModule.sourceFilesOf(NyxCompiler.SeededPackages.user(), file) is { } files
             ? Rename.Scope.NewPackage(files.Value)
             : Rename.Scope.Module;
 

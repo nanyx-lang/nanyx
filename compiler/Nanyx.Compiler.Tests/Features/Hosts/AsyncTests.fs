@@ -20,7 +20,7 @@ let private compiledFile (source: string) =
 )
 """
     use package = new TempPackage([ "app.nyxp", manifest; "src/main.nyx", source ])
-    Package.compileSourceWith Linters.none (package.Path "src/main.nyx") source
+    Package.compileSourceWith (SeededPackages.user ()) Linters.none (package.Path "src/main.nyx") source
 
 /// The type a hover shows for the def `name` in `source`, compiled as `compiledFile` compiles it, with no diagnostics.
 let private hoveredTypeOf (name: string) (source: string) =

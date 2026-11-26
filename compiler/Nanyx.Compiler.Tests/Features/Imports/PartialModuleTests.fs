@@ -43,7 +43,7 @@ let private buildOf (files: (string * string) list) =
     let manifest = withFinalNewline $"""(package = (name = "demo", version = "0.1.0", sources = ["src/**/*.nyx"]), {consoleHostEntry})"""
     use package = new TempPackage(("demo.nyxp", manifest) :: (files |> List.map (fun (path, text) -> "src/" + path, text.ReplaceLineEndings "\n")))
     let shown (span: Parser.Program.SourceSpan) = Path.GetRelativePath(package.Root, span.File).Replace('\\', '/')
-    match Package.find package.Root with
+    match Package.findIn (SeededPackages.user ()) package.Root with
     | Result.Ok found ->
         (Package.build found).Diagnostics
         |> List.map (fun diagnostic ->

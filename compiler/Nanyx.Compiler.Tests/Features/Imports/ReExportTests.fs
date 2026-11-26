@@ -176,7 +176,7 @@ def main = {
             :: ("src/main.nyx", main.ReplaceLineEndings "\n")
             :: (wholeModules |> List.take 2 |> List.map (fun (file, text) -> "src/" + file, text))
         )
-    match Package.find package.Root with
+    match Package.findIn (SeededPackages.user ()) package.Root with
     | Result.Ok found -> Assert.Empty((Package.build found).Diagnostics)
     | Result.Error errors -> failwith (String.concat "\n" errors)
 

@@ -46,8 +46,13 @@ become packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   can't be read, so a build offline finds it. Where the index records the version with another SHA-256, the seeded copy
   is the one listed, with the warning `NYX0303`; where the cache already holds another copy of the version, which is
   never changed, seeding says to delete it. Seeding writes the index beside its place and moves it there, so a process
-  never reads one another is still writing. The tests' store is seeded; builds start seeding when they resolve shipped packages as
-  index packages ([#2701](https://github.com/nanyx-lang/nanyx/issues/2701)).
+  never reads one another is still writing.
+- **Every store seeds.** A `PackageStore` is made with the function that seeds it, `Seed`: seeding packs, which needs
+  modules compiled after the ones that read the store, so it is passed in where a store is made, and a store can't be
+  made without one. `SeededPackages.user` is the user's store, which the CLI, the language server and the tests use, and
+  `SeededPackages.store` one at a cache and an index of the caller's. `PackageIndex.listing` seeds the store before it
+  lists anything. A process seeds each store once, and packs the shipped packages once for every store it seeds. Builds
+  resolve the shipped packages as index packages once [#2701](https://github.com/nanyx-lang/nanyx/issues/2701) is done.
 - **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest (`HostPackages.tryShipped`)
   rather than keeping a table of hosts; `HostPackages.console` is the host a script runs under. The program's package
   records the host's package (`PackageModules.HostPackage`; for a script or a module given as source,

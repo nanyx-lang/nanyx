@@ -41,7 +41,7 @@ def told: [Logger] () -> () = { log(far \show) }"""
 /// file `file` declares or refers to: the file's name, the name's text and where it starts, in that order.
 let private referencesFrom (file: string) (text: string) (occurrence: int) (within: int) =
     use package = new TempPackage([ "app.nyxp", manifest; "src/shapes.nyx", shapes; "src/main.nyx", main; "src/report.nyx", report ])
-    let results = (Package.compilePackageReading File.ReadAllText (package.Path "src/main.nyx")).Value
+    let results = (Package.compilePackageReading (SeededPackages.user ()) File.ReadAllText (package.Path "src/main.nyx")).Value
     for _, result in results do
         Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
     let path = Path.GetFullPath(package.Path $"src/{file}")
@@ -87,4 +87,4 @@ let ``A file in no package has no package to search`` () =
     withTempDir (fun dir ->
         let path = Path.Combine(dir, "loose.nyx")
         File.WriteAllText(path, "def x = 1\n")
-        Assert.True((Package.compilePackageReading File.ReadAllText path).IsNone))
+        Assert.True((Package.compilePackageReading (SeededPackages.user ()) File.ReadAllText path).IsNone))

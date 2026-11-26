@@ -208,7 +208,7 @@ let ``A module that imports one writing a type parameter the old way compiles, a
     let main = "module main\n\nimport app/old\n\ndef xs: list(int) = none(type int)\n"
     use package =
         new TempPackage([ "app.nyxp", """(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))"""; "src/old.nyx", old; "src/main.nyx", main ])
-    let results = (Package.compilePackageReading System.IO.File.ReadAllText (package.Path "src/main.nyx")).Value
+    let results = (Package.compilePackageReading (SeededPackages.user ()) System.IO.File.ReadAllText (package.Path "src/main.nyx")).Value
     let codesOf (name: string) =
         results |> List.find (fun (file, _) -> System.IO.Path.GetFileName file = name) |> snd |> _.Diagnostics |> List.map _.Code
     Assert.Equal<string list>([], codesOf "main.nyx")

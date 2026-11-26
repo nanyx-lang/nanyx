@@ -268,6 +268,7 @@ public sealed class DocumentStore
             var read = new Dictionary<string, string>(FilePaths);
             var stopwatch = Stopwatch.StartNew();
             var results = PackageModule.compilePackageReading(
+                SeededPackages.user(),
                 Microsoft.FSharp.Core.FuncConvert.FromFunc((string other) =>
                     edited is not null && edited.TryGetValue(other, out var text) ? read[other] = text : ReadFile(other, read)),
                 file);
@@ -335,19 +336,20 @@ public sealed class DocumentStore
         if (path is not null && path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase))
         {
             // A package's manifest is data, not a module: it is checked, not compiled.
-            return new OpenDocument(text, path, PackageModule.compileManifest(path, text), null) { Sources = read };
+            return new OpenDocument(text, path, PackageModule.compileManifestFrom(SeededPackages.user(), path, text), null) { Sources = read };
         }
 
         try
         {
-            var directives = Script.read(path ?? string.Empty, text);
+            var store = SeededPackages.user();
+            var directives = Script.readFrom(store, path ?? string.Empty, text);
             var linters = _settings.LinterOptionsFor(path, directives);
             var stopwatch = Stopwatch.StartNew();
             var timings = new CompileTimings();
             var result = path is null
                 ? Compiler.compileReporting(timings, linters, text)
                 : Compiler.compileStandardLibraryFileReporting(timings, linters, path, text)?.Value
-                    ?? Script.compileSourceReading(timings, Microsoft.FSharp.Core.FuncConvert.FromFunc((string file) => ReadFile(file, read)), directives, linters, path, text);
+                    ?? Script.compileSourceReading(store, timings, Microsoft.FSharp.Core.FuncConvert.FromFunc((string file) => ReadFile(file, read)), directives, linters, path, text);
             LogCompiled(uri, stopwatch.Elapsed, timings);
             return new OpenDocument(text, path ?? string.Empty, Script.withDirectives(directives, result), null) { Sources = read };
         }
