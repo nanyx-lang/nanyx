@@ -760,6 +760,33 @@ module NegateSyntax =
 module DbgSyntax =
     let builtIn = "dbg"
 
+/// `assert(condition)`: built in, as `dbg` is, and called by that name where nothing else is named `assert`. Once the
+/// condition is typed, the compiler writes each call as a call to `checked`, which carries what its message needs:
+/// where it is and its source text, then, for each value the message shows, its label and the expression, which is the
+/// same node as in the condition, so that the backend evaluates it once (see the compiler's `Asserts`).
+module AssertSyntax =
+    let builtIn = "assert"
+    let checked = "__assert"
+
+    /// The condition of an `assert` as written.
+    let (|Call|_|) (kind: ExpressionKind) =
+        match kind with
+        | FunctionCall(name, _, [ condition ]) when name = builtIn -> Some condition
+        | _ -> None
+
+    /// The condition, the header of the message, and each value it shows with its label, of an `assert` the compiler
+    /// has written as a call to `checked`.
+    let (|Checked|_|) (kind: ExpressionKind) =
+        let rec shown (args: Expression list) =
+            match args with
+            | { Kind = LiteralExpr(StringLit label) } :: value :: rest -> shown rest |> Option.map (fun others -> (label, value) :: others)
+            | [] -> Some []
+            | _ -> None
+        match kind with
+        | FunctionCall(name, _, condition :: { Kind = LiteralExpr(StringLit header) } :: values) when name = checked ->
+            shown values |> Option.map (fun values -> condition, header, values)
+        | _ -> None
+
 /// `def (x, y) = value` or `def Money(pence) = m` (see the parser's `Destructuring`): the whole value is bound to a
 /// temporary named from where the def is written, as `__tuple_3_1`, and each name the pattern binds to its part of it.
 module DestructuringSyntax =

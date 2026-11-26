@@ -54,6 +54,30 @@ A value is printed as you would write it in code, from its type, whatever `toStr
 
 A record's fields are printed in alphabetical order. A map's entries and a set's elements are printed in the order the map or set holds them, after its type's name. A nominal type is printed by its name around its shape, in its own module or any other.
 
+# assert
+
+`assert` is built into the language too, and needs no context:
+
+```nanyx fragment
+assert: bool -> ()
+```
+
+It does nothing when its condition is `true`. When it is `false`, the program crashes, with where the `assert` is, the
+`assert` as written, and the values in it, each printed as `dbg` prints it: for a comparison, each side that isn't
+written out in full, then each name the condition reads:
+
+```nanyx fragment
+def p = Point(x = 1, y = 2)
+assert(scale(p, 2) == Point(x = 2, y = 4))
+-- Crashes: main.nyx:2:1: assert(scale(p, 2) == Point(x = 2, y = 4))
+--   scale(p, 2) = (x = 2, y = 5)
+--   p = (x = 1, y = 2)
+```
+
+Each value is the one the condition used: the side `scale(p, 2)` is computed once. A name bound inside the condition, a
+lambda's parameter as in `xs \all { x -> x > 0 }`, isn't shown. `assert` takes no message: the values are its message.
+Unlike `dbg`, a release build keeps every `assert`.
+
 # Reference
 
 <!-- The reference below is generated from the doc comments in stdlib/ and packages/ by `nanyx stdlib-docs`: edit those, not this. -->

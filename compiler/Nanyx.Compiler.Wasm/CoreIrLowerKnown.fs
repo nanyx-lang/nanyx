@@ -152,7 +152,8 @@ let usedOf (ids: Set<int>) (body: Expr) : Set<int> =
         | Atom a
         | MakeTag(_, a)
         | Field(a, _) -> atom a
-        | Dbg(_, text) -> atom text
+        | Dbg(_, text)
+        | CrashWith text -> atom text
         | Prim(_, atoms)
         | Call(_, atoms)
         | MakeList atoms

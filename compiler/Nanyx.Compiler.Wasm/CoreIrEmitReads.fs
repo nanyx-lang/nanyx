@@ -24,6 +24,7 @@ let marked (kind: ExprKind) =
     | Interpolate _
     | Dbg _
     | Crash _
+    | CrashWith _
     | Probe _ -> true
     | Atom _
     | Field _
@@ -63,7 +64,8 @@ let rec tempsUsedBy (expr: Expr) : Var list =
     | Assign(_, atom)
     | SetField(_, _, atom)
     | If(atom, _, _) -> ofAtoms [ atom ]
-    | Dbg(_, text) -> ofAtoms [ text ]
+    | Dbg(_, text)
+    | CrashWith text -> ofAtoms [ text ]
     | ForEach loop -> ofAtoms (ForLoop.sourceAtoms loop)
     | Dup(_, body)
     | Drop(_, body)

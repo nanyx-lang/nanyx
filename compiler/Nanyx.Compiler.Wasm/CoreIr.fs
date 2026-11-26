@@ -235,6 +235,9 @@ and ExprKind =
     /// An error deferred to run time, or a crash: writes these messages to stderr and ends the program, with a trap in
     /// `Helpers.crashed`, from which the runtime reports the stack.
     | Crash of string list
+    /// A crash whose message is made as the program runs, an `assert`'s that shows its values (see `AssertSyntax`):
+    /// writes the string to stderr and ends the program, as `Crash` does.
+    | CrashWith of Atom
     /// A debug build's probe (see `CoreIrProbes`): tells the runtime the program is at the start of a function, a
     /// statement, or a function's end, at the expression's place, and, if the runtime asks, writes each of these locals
     /// that is still alive there. It is unit, and uses none of its locals: a probe never keeps a value alive.
@@ -745,6 +748,7 @@ module Expr =
         | Dbg _
         | FloatConstant _
         | Crash _
+        | CrashWith _
         | Probe _ -> []
 
     /// `e` with `f` applied to each expression directly inside it, those `children` gives, in the same order. Mapping
@@ -785,6 +789,7 @@ module Expr =
             | Dbg _
             | FloatConstant _
             | Crash _
+            | CrashWith _
             | Probe _ -> e.Kind
         { e with Kind = kind }
 
@@ -903,6 +908,7 @@ module Print =
         | Dbg(site, text) -> $"dbg({site.Prefix.Trim()}, {atom text})"
         | FloatConstant value -> string value
         | Crash messages -> $"""crash({messages |> String.concat ""})"""
+        | CrashWith message -> $"crash({atom message})"
         | Probe(kind, locals) -> $"""probe {kind}({locals |> List.map _.Var.Name |> String.concat ", "})"""
         | ForEach loop ->
             let inner = indent + "  "

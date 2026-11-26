@@ -126,6 +126,7 @@ let collect (functions: Function list) : ModuleFacts =
             atom text
             usesDbgHelpers.Value <- true
         | Crash messages -> strings.AddRange messages
+        | CrashWith message -> atom message
         // A local's name is written beside its text, from the data segment.
         | Probe(_, locals) ->
             usesProbes.Value <- true

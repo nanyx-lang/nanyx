@@ -634,6 +634,8 @@ type private FunctionEmitter(context: EmitContext) =
             // after it, which is never reached, lets the code stand wherever a value is expected.
             let writes = messages |> List.map (fun message -> $"i32.const {context.StringOffset message}\n    call ${helper Helpers.writeStderr}")
             writes @ [ $"call ${helper Helpers.crashed}"; "unreachable" ] |> String.concat "\n    "
+        | CrashWith message ->
+            join "\n    " [ atoms [ message ]; $"call ${helper Helpers.writeStderr}"; $"call ${helper Helpers.crashed}"; "unreachable" ]
         | ForEach loop -> this.ForLoop loop (fun atom -> atoms [ atom ])
         | While loop -> this.WhileLoop loop
         | Call(name, args) ->

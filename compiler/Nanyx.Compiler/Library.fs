@@ -663,6 +663,12 @@ module Compiler =
                 let resolvedTypes, resolvedTypeDefs, resolvedItems = resolveTypes subst types state.ContextRequirements state.TypeDefs items
                 let own, placed = moduleFromTypedItems defer (StructuralInstances.callTargets state) state.OperatorCalls state.OperatorInstances state.ReadAs state.BuiltInProperties state.WorkflowBlocks resolvedItems
                 let own = own |> ModuleLinking.writeBlockAliases state |> ModuleLinking.writeMemberAliases state |> ModuleLinking.writeAttachedNames state |> writeCells state |> writeContextNames state |> nameIgnoredParameters state.ExprTypes subst
+                // Each `assert` is written out with its message's source text and values (see `Asserts`).
+                let isFunction (node: NodeId) =
+                    match state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst >> Unifier.unalias) with
+                    | Some (TyFunc _) -> true
+                    | _ -> false
+                let own = Asserts.writeOut source state isFunction own
                 // A script's entry point is a def of its own, with the values that need a context in it (see `Scripts`),
                 // which the call of the host's `run` names: typed as the entry point's lambda is.
                 let own, resolvedTypes, state =
