@@ -1848,8 +1848,8 @@ module main
 def main = { name: string -> println("Hello, {name}!") }  -- error NYX0237: It doesn't fit the host 'nanyx.cli.host/cli.host' ...
 ```
 
-The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, and names each
-context the entry point requires that the host doesn't provide. To fix it, give the entry point the shape the host
+The error is reported at `@entry`, and shows the type the host expects and the type the entry point has, with the
+contexts it requires, and names each context the entry point requires that the host doesn't provide. To fix it, give the entry point the shape the host
 expects: for a command-line program, a function that takes nothing.
 
 # NYX0238: HostRuntime required outside a host
