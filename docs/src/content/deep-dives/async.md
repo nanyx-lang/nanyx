@@ -270,7 +270,9 @@ Nothing starts it: like `Console`, the host provides it.
   a host's code that waits looks at it (`nanyx/host.async`'s `cancelled`) and gives back `#cancelled`, or, for a sleep,
   returns. A task waiting on the host that is cancelled meanwhile carries on once at once, without the host's wait: the
   frame of its wait keeps whether the task was cancelled when it stopped, and its resume entry stops again only while
-  that is unchanged and the host hasn't waited, so it waits again for real if its code waits again. `race` is
+  that is unchanged and the host hasn't waited, so it waits again for real if its code waits again. In a component, a
+  task woken so while it waits for a subtask, a sleep or a request, cancels the subtask, and gives back then
+  ([Components](./components#waiting-while-other-tasks-run)). `race` is
   `nanyx/async`'s: in a scope of its own (`Async.concurrent`), it starts each contestant, waits until one has given back its value
   (`Intrinsics.scopeWaitAny`, a split point), cancels the others, and awaits the winner; the scope waits for the losers.
   The contestants may need different contexts: a list's elements that are functions join as a function that may need

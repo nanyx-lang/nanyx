@@ -249,7 +249,8 @@ the format is settled, with wit-component's output to test it.
     task joins to the instance's waitable set.
   - When every task is waiting, the scheduler returns WAIT. When the callback gets an event, the scheduler resumes the
     task that was waiting on it.
-  - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), and
+  - `start!` and `race` need nothing more from the host. Cancelling a task cancels its subtasks (`subtask.cancel`), which
+    is built ([Waiting while other tasks run](../deep-dives/components#waiting-while-other-tasks-run)), and
     `TASK_CANCELLED` arriving at the callback is how the host cancels the entry.
 - **Stage 1 doesn't depend on #1890 or #2164.** A synchronously lifted component is the same program model as today.
 - **`wasi:http/service` amends this for its entry (settled 2026-11-22).** Its `handle` is lifted async with the

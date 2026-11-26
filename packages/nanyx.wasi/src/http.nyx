@@ -9,7 +9,7 @@ import (
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/text
-  abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, settled, takeString, writableEnd, writeAll)
+  abi as (Output, aligned8, freeOptionalString, listFrom, readableEnd, returned, settled, takeString, writableEnd, writeAll)
   nanyx.http/client as (HttpError)
   nanyx.http/request as (Method, Request)
   nanyx.http/response as (Response)
@@ -348,7 +348,7 @@ def writeConsumed: [HostRuntime] I32 -> () = { writer ->
 
 --| Sends `request` through `wasi:http/client`, and gives its response, or why there is none. The
   program's other tasks run while it is in flight. In a cancelled task it gives `#cancelled`: at once
-  if the task was cancelled before, and else once the request is answered.
+  if the task was cancelled before, and else once the request in flight is cancelled.
 export def sendThroughWasi
   : [Async, HostRuntime] Request -> #some(Response) | HttpError
   = { request ->
@@ -403,15 +403,16 @@ def sendWith
     if hasBody then writeBody(writableEnd(body), request.body) else ()
 
     writeNoTrailers(writableEnd(trailers))
-    awaitCallAsync(status)
+    def ended = awaitCallAsync(status)
     sentFutureDropReadable(sent)
 
-    def answered = if readByte(answer) == 0
-      then #some(responseOf(readI32(answer + 8)))
-      else httpErrorAt(answer + 8)
+    -- A request cancelled in flight wrote no answer. One answered before its task was cancelled is dropped.
+    def answered = if ended != returned
+      then #cancelled
+      else if readByte(answer) == 0
+        then #some(responseOf(readI32(answer + 8)))
+        else httpErrorAt(answer + 8)
 
     free(result)
-    -- A request can't be abandoned in flight: one whose task was cancelled meanwhile is answered, and the answer
-    -- dropped.
     if cancelled() then #cancelled else answered
   }

@@ -1,0 +1,20 @@
+module main
+
+--| Sleeps for `time`, then gives `name`.
+def after: [Async, Clock] string, Time(int) -> string = { name, time ->
+  sleep(time)
+  name
+}
+
+@entry
+def main = {
+  def started = ticks()
+  def winner = race([{ after("the hare", 50ms) }, { after("the tortoise", 60s) }])
+  println("{winner} wins")
+
+  -- The race waits for the tortoise, which is cancelled: its sleep stops then, not a minute later.
+  if ticks() - started < 10s then
+    println("the tortoise stops when it loses")
+  else
+    println("the race waited for the tortoise")
+}

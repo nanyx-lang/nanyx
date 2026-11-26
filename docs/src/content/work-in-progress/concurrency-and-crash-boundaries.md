@@ -110,8 +110,6 @@ Cancellation arrives as a value at the next point where a task waits, as decided
 
 - **`timeout`,** which gives `#some(a) | #timedOut`, cancelling the task when time runs out: `race` against a sleep does
   it today, so it is a convenience.
-- **A request in flight in a component.** The component roots finish a request whose task was cancelled before they give
-  back `#cancelled`; the canonical ABI's `subtask.cancel` would let them stop waiting at once, as the runtime's do.
 - **What else cancels a task.** Only `race` does today; a crash boundary or a process that ends may too (below).
 
 ## How it runs
