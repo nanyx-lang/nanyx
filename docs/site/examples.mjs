@@ -232,6 +232,7 @@ export const examplePackages = [
   { directory: "greeter", title: "Greeter", description: "A package of two files, with the official linter turned on." },
   { directory: "hello.server", title: "Hello server", description: "A package under the HTTP host, which serves its @entry." },
   { directory: "sleepers", title: "Sleepers", description: "A package whose tasks take turns while they sleep." },
+  { directory: "racers", title: "Racers", description: "A package whose race cancels the loser's sleep as soon as the winner wakes." },
 ];
 
 /** Every example in display order, with its page order and group. */

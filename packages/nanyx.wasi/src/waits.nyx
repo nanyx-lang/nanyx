@@ -2,7 +2,8 @@
   what it waits for, a subtask or a stream's or a future's end, to one waitable set the instance
   shares, and waits on the host (`nanyx/host.async`) until the event for it has come. When every task
   is waiting, the scheduler makes the host's wait, [`componentWait`], which waits on that set, and
-  keeps each event's code for the task that waits on it.
+  keeps each event's code for the task that waits on it. A task cancelled while it waits for a
+  subtask cancels the subtask (`[subtask-cancel]`), so a `race`'s loser stops what it waits on.
 
   The set and the events not yet taken are kept in the host's block (`hostState`): the set at 40,
   and at 44 the first of a list of the events, each a block of the next, the waitable and the code.
@@ -11,11 +12,14 @@ export module waits
 
 import (
   nanyx/async as (Async)
-  nanyx/host.async as (waitOnHost)
+  nanyx/host.async as (cancelled, waitOnHost)
   nanyx/host.memory
   nanyx/host.runtime
   abi as (blocked, returned, subtaskDrop, waitableJoin, waitableSetNew, waitableSetWait)
 )
+
+@extern("$root", "[subtask-cancel]")
+def subtaskCancel: [HostRuntime] I32 -> I32
 
 --| Where the host's block keeps `at`'s field: the shared set at 40, the list of events at 44.
 def field: [HostRuntime] I32 -> I32 = { at ->
@@ -86,12 +90,39 @@ export def settledAsync: [Async, HostRuntime] I32, I32 -> I32 = { handle, status
 }
 
 --| Waits until the async call that gave `status` has returned, while the program's other tasks
-  run: at once if it has, and else until the subtask the status names has, which it then drops.
-export def awaitCallAsync: [Async, HostRuntime] I32 -> () = { status ->
-  if status % 16 < returned then awaitReturn(status // 16) else ()
+  run, and gives the state it ended in: [`returned`] at once if it has, and else what the subtask
+  the status names ended in, which it then drops. In a task cancelled meanwhile, the subtask is
+  cancelled, and the state is one of the canonical ABI's cancelled states, 3 or 4, unless it had
+  returned already.
+export def awaitCallAsync: [Async, HostRuntime] I32 -> I32 = { status ->
+  if status % 16 < returned then awaitReturn(status // 16) else returned
 }
 
---| Waits until the subtask `subtask` has returned, and drops it.
-def awaitReturn: [Async, HostRuntime] I32 -> () = { subtask ->
-  if awaitEvent(subtask) >= returned then subtaskDrop(subtask) else awaitReturn(subtask)
+--| Waits until the subtask `subtask` has returned, or been cancelled, and drops it.
+def awaitReturn: [Async, HostRuntime] I32 -> I32 = { subtask ->
+  waitableJoin(subtask, sharedSet())
+  def state = subtaskEventOf(subtask)
+  waitableJoin(subtask, 0)
+
+  if state >= returned then
+    subtaskDrop(subtask)
+    state
+  else
+    awaitReturn(subtask)
+}
+
+--| The state of the next event for `subtask`, once the shared set's wait has kept one; or, in a
+  task cancelled meanwhile, the state the subtask ends in once it is cancelled. It is taken out of
+  the shared set first, which `[subtask-cancel]` requires, and it may have returned already, which
+  it then says.
+def subtaskEventOf: [Async, HostRuntime] I32 -> I32 = { subtask ->
+  match takeAfter(field(44), subtask)
+    | #some(code) -> code
+    | #none ->
+      if cancelled() then
+        waitableJoin(subtask, 0)
+        subtaskCancel(subtask)
+      else
+        waitOnHost(componentWait, -1)
+        subtaskEventOf(subtask)
 }
