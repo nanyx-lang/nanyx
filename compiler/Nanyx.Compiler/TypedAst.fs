@@ -413,6 +413,17 @@ type ComponentExport =
       /// Whether it can wait: the type written for it requires `Async`. It is then an `async func`.
       Waits: bool }
 
+/// A definition marked `@test`, which a test build runs (see `TypedModule.Tests`).
+type Test =
+    { /// The module it is defined in, which groups it with the module's other tests.
+      Module: string
+      /// Its name in that module: a test is reported as `` geometry.`adds points` ``.
+      Name: string
+      /// The name the program knows it by: its own in its module, or the one an import inlines it under.
+      Definition: string
+      /// Where it is written.
+      Span: SourceSpan }
+
 /// A member of an ambient context (one the runtime supplies, as the host's prelude's definitions are its `Console`) and the
 /// top-level definition that stands in for it (see `TypedModule.AmbientMembers`).
 type AmbientMember =
@@ -562,6 +573,9 @@ type TypedModule =
       /// The definitions a component built from the module exports: its own marked `@component`, and those of the
       /// modules it imports, by the names they are inlined under (see `ComponentExport`).
       ComponentExports: ComponentExport list
+      /// The module's tests, its own marked `@test` and those of the modules it imports, by the names they are inlined
+      /// under (see `Test`).
+      Tests: Test list
       ImportedFiles: Map<SymbolId, ImportedFile>
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty>

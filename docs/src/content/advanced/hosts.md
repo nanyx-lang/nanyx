@@ -161,6 +161,14 @@ script runs under it with `::host nanyx.playground.host`. The package ships the 
 worker and passes what it prints, and what its `dbg`s print, to the page. Reading a line waits for a line typed in the
 page, and gives `#endOfInput` once the input has ended.
 
+# The test host
+
+The test host, `nanyx.test.host`, runs one test of a program's: a test build runs under it in place of the program's own
+host, and its entry point runs the test at the index the host gives it ([Test builds](../deep-dives/test-builds)). It
+provides `Console`, whose output it gives the runtime and whose input is empty, and `Random`, seeded with the runtime's
+seed as [`random.seeded`](../stdlib/random) seeds it, and nothing else, so a test that requires any other context loads
+it with `use` (`NYX0312`). How tests are run is on [Testing](../work-in-progress/testing).
+
 # Where `dbg` prints
 
 [`dbg`](../stdlib/console#dbg) needs no context, so it works under every host, but where what it prints goes is the
@@ -364,6 +372,7 @@ The compiler ships the packages every program needs beside itself, in a `package
 - `nanyx.http`, the interface package of HTTP, which declares `Http`, `Request`, `Response` and the functions on them;
 - `nanyx.http.host`, the HTTP host;
 - `nanyx.wasi`, the [host library](#host-libraries) the console and HTTP hosts are written on: WASI's random source and clocks, the runtime's `nanyx:http`, and the component model's canonical ABI and WASI 0.3 interfaces their component roots use;
-- `nanyx.playground.host`, the playground host, which runs a console program in a web page.
+- `nanyx.playground.host`, the playground host, which runs a console program in a web page;
+- `nanyx.test.host`, the test host, which runs one test of a program's in a test build.
 
 A package the compiler ships is a package from the [package index](../tour/packages#package-dependencies) like any other: a manifest names it at a version, and the lockfile locks it with its SHA-256. The compiler seeds the version it ships into the package cache, so that version needs no download, and a build with no network finds it. A host, and the host library hosts are written on, build with the compiler they ship with only. In a `::host` or `::install` directive a package the compiler ships needs no version at all, `::install nanyx.cli`, which is the version it ships. The standard library, `nanyx/...`, is built into the compiler and is never listed as a dependency.

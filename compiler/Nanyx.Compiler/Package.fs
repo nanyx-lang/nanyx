@@ -11,6 +11,9 @@ type Package =
     { Manifest: Manifest
       /// Full paths, in order.
       Sources: string list
+      /// The files its manifest's `tests` select, as full paths in order: part of the package in a test build only (see
+      /// `testBuild`).
+      TestFiles: string list
       Entry: string option
       /// In the order its manifest lists them.
       Dependencies: Package list
@@ -22,7 +25,9 @@ type Package =
       /// The host's package, whose modules the host's import resolves in.
       HostPackage: Package option
       /// For a package in the package cache, the file its checked modules are kept in (see `CheckedPackages`).
-      CheckedFile: string option }
+      CheckedFile: string option
+      /// Whether it is built as a test build builds it (see `Package.withTests`).
+      TestBuild: bool }
 
 /// What building a package found: each source file's compile, and every diagnostic once. Each module is checked once
 /// for the whole build, though a file imported by another is compiled as part of both.
@@ -40,6 +45,14 @@ module Package =
         let matcher = Matcher(StringComparison.OrdinalIgnoreCase)
         matcher.AddIncludePatterns manifest.Sources
         matcher.GetResultsInFullPath manifest.Root |> Seq.map Path.GetFullPath |> Seq.sort |> List.ofSeq
+
+    /// The files the manifest's `tests` select, as full paths in order: none when it has no `tests`.
+    let testFiles (manifest: Manifest) : string list =
+        if manifest.Tests.IsEmpty then []
+        else
+            let matcher = Matcher(StringComparison.OrdinalIgnoreCase)
+            matcher.AddIncludePatterns manifest.Tests
+            matcher.GetResultsInFullPath manifest.Root |> Seq.map Path.GetFullPath |> Seq.sort |> List.ofSeq
 
     /// Whether the manifest's `sources` select the file at the full path `filePath`, which need not exist yet.
     let private selects (manifest: Manifest) (filePath: string) =
@@ -204,7 +217,14 @@ module Package =
     /// build has read so far.
     let rec private ofManifestIn (lookup: Lookup) (reached: Reached) (chain: (string * string) list) (manifest: Manifest) : Result<Package, Problem list> =
         let files = sources manifest
+        let tests = testFiles manifest
         let display (file: string) = Path.GetRelativePath(manifest.Root, file)
+        // A test file is part of the package in a test build only, so it can't be one of its sources too.
+        let testsAmongSources =
+            match tests |> List.filter (fun file -> files |> List.contains file) with
+            | [] -> []
+            | both ->
+                [ AboutPackage(DiagnosticCodes.InvalidManifestValue, $"""'{manifest.Path}' selects {both |> List.map (display >> sprintf "'%s'") |> Diagnostics.listed} with both `sources` and `tests`, but a test file is part of the package only in a test build: select it with one of them""") ]
         let entry =
             if files.IsEmpty then
                 Result.Error [ AboutPackage(DiagnosticCodes.NoSourceFiles, $"""'{manifest.Path}' selects its sources with {manifest.Sources |> List.map (sprintf "'%s'") |> Diagnostics.listed}, which match no file""") ]
@@ -217,19 +237,21 @@ module Package =
         let exports = exportErrors manifest files |> List.map AtManifest
         let referenced = referencedFiles lookup.Store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
         match entry, dependenciesIn lookup reached ((manifest.Path, manifest.Name) :: chain) manifest.Dependencies, hostIn lookup reached manifest.Host with
-        | Result.Ok entry, Result.Ok dependencies, Result.Ok host when exports.IsEmpty && referenced.IsOk ->
+        | Result.Ok entry, Result.Ok dependencies, Result.Ok host when exports.IsEmpty && referenced.IsOk && testsAmongSources.IsEmpty ->
             Result.Ok
                 { Manifest = manifest
                   Sources = files
+                  TestFiles = tests
                   Entry = entry
                   Dependencies = dependencies
                   ReferencedFiles = Result.defaultValue [] referenced
                   Host = host |> Option.map fst
                   HostPackage = host |> Option.map snd
-                  CheckedFile = None }
+                  CheckedFile = None
+                  TestBuild = false }
         | entry, dependencies, host ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
-            Result.Error(errorsOf entry @ exports @ errorsOf referenced @ errorsOf dependencies @ errorsOf host)
+            Result.Error(errorsOf entry @ exports @ testsAmongSources @ errorsOf referenced @ errorsOf dependencies @ errorsOf host)
 
     /// The host `entry` names, if there is one, read from the manifest of its package, which must declare it a host (see
     /// `HostPackages`), with that package: one from the index, found as a dependency from the index is (see `locked`), or
@@ -424,6 +446,10 @@ module Package =
                 directive.Span
                 $"{name} is a directive for a script, but this file is in a package: say it in the package's manifest, '{manifestPath}'")
 
+    /// The full path of the root a test build of the package `manifest` describes is compiled as (see `testResult`): no
+    /// file of the package's, but compiled as if it were in its directory.
+    let testRootIn (manifest: Manifest) = Path.Combine(manifest.Root, "__tests.nyx")
+
     /// The modules of `package`, by the names its source files declare, with those of the packages it depends on and
     /// of its host's package.
     let rec modules (package: Package) : PackageModules =
@@ -432,7 +458,8 @@ module Package =
             HostPackage = package.HostPackage |> Option.map modules
             CheckedFile = package.CheckedFile
             HostLibrary = package.Manifest.HostLibrary
-            DeclaresHost = package.Manifest.Declares.IsSome }
+            DeclaresHost = package.Manifest.Declares.IsSome
+            TestRoot = if package.TestBuild then Some (testRootIn package.Manifest) else None }
         |> PackageModules.withReferenced package.ReferencedFiles
 
     /// The name of the package the file at `filePath` is a source file of, if it is in one whose manifest reads.
@@ -465,11 +492,13 @@ module Package =
                     | Result.Ok dependencies -> dependencies
                     | Result.Error _ -> []
                 let host = match hostIn lookup reached manifest.Host with Result.Ok host -> host | Result.Error _ -> None
-                let files = sources manifest
+                // An editor compiles a test file as a test build does: as one of the package's files.
+                let files = sources manifest @ testFiles manifest
                 let modules =
                     modules
                         { Manifest = manifest
                           Sources = files
+                          TestFiles = []
                           Entry = None
                           Dependencies = dependencies
                           ReferencedFiles =
@@ -477,7 +506,8 @@ module Package =
                             |> Result.defaultValue []
                           Host = host |> Option.map fst
                           HostPackage = host |> Option.map snd
-                          CheckedFile = None }
+                          CheckedFile = None
+                          TestBuild = false }
                 Result.Ok(Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] }))
             | Result.Ok _ -> Result.Ok None
         | _ -> Result.Ok None
@@ -624,6 +654,59 @@ module Package =
 
     /// `buildReporting`, telling nobody.
     let build (package: Package) : PackageBuild = buildReporting CompileListener.none package
+
+    /// `package` as a test build has it: its test files among its sources, so that they are compiled, and that its
+    /// modules and theirs can import each other, each of the program's modules giving the build's root a way to run its
+    /// tests (see `PackageModules.TestRoot`).
+    let withTests (package: Package) : Package =
+        { package with Sources = package.Sources @ package.TestFiles; TestBuild = true }
+
+    /// Checks every source file and every test file of `package` (see `withTests`), as `build` checks its sources,
+    /// under the test host, found in `store`, in place of its own; or why the test host can't be read.
+    let testBuild (store: PackageStore) (package: Package) : Result<PackageBuild, string> =
+        withTests package |> withHost store package.Manifest.Root Hosts.testPackage |> Result.map build
+
+    /// The modules of the package `build` built that mark a def `@test`, by name, in the order of its files, each with
+    /// how many it marks.
+    let testModules (build: PackageBuild) : (string * int) list =
+        build.Results
+        |> List.choose (fun (_, result) ->
+            match result.ModuleName, result.Typed with
+            | Some name, Some typed ->
+                match typed.Tests |> List.filter (fun test -> test.Module = name) with
+                | [] -> None
+                | own -> Some (name, own.Length)
+            | _ -> None)
+        |> List.distinctBy fst
+
+    /// The source of the root a test build is compiled from: a module that imports each of `modules`, each with how many
+    /// tests it has, and whose `@entry` runs the test at the index the test host gives it, counting through each
+    /// module's tests in turn, by calling its `Attributes.testDispatcher`.
+    let testRootSource (modules: (string * int) list) =
+        let imports = modules |> List.mapi (fun index (name, _) -> $"import {name} as __test{index}\n") |> String.concat ""
+        let starts = modules |> List.scan (fun start (_, count) -> start + count) 0
+        let arms =
+            modules
+            |> List.mapi (fun index (_, count) ->
+                let start = starts.[index]
+                $"if index < {start + count} then __test{index}.{Attributes.testDispatcher}(index - {start}) else ")
+            |> String.concat ""
+        $"{imports}\n@entry\ndef run = {{ index -> {arms}() }}\n"
+
+    /// The compile of the root a test build of the package `build` built (see `testBuild`) is compiled from, if its
+    /// modules have tests: no file of the package's, compiled as `testRootIn` from `testRootSource`. Its `Typed.Tests`
+    /// are every test of the package, in the order its `@entry` counts them.
+    let testResult (build: PackageBuild) : CompileResult option =
+        match testModules build with
+        | [] -> None
+        | counted ->
+            let path = testRootIn build.Package.Manifest
+            // It is compiled as a file of the package, so its imports name the package's modules.
+            let packageModules = modules build.Package
+            let packageModules = { packageModules with Files = packageModules.Files @ [ path ] }
+            let result = Compiler.compileSourceIn packageModules Linters.none path (testRootSource counted)
+            let inOrder (tests: Test list) = counted |> List.collect (fun (name, _) -> tests |> List.filter (fun test -> test.Module = name))
+            Some { result with Typed = result.Typed |> Option.map (fun typed -> { typed with Tests = inOrder typed.Tests }) }
 
     /// `package` as a component build builds it, if its host has a component root: with that root's `run` in place of
     /// its host's (see `Host.AsComponent`).

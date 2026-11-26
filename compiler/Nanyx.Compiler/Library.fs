@@ -354,7 +354,14 @@ module Compiler =
                 match WorkflowDesugaring.desugarWithDiagnostics (importedKeywordKinds (importsOf moduleBlocks items)) items with
                 | _, (_ :: _ as errors), _, _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
                 | desugaredAst, [], memberPlaces, lowered, delayCalls ->
-                    Attributes.applyAttributes host desugaredAst
+                    // A test build's program files, but its root, run their tests through the dispatcher it gives
+                    // them, and have no entry point.
+                    let testBuild =
+                        match origin, checkedModules.Package with
+                        | SourceFile path, Some ({ TestRoot = Some root } as package) ->
+                            PackageModules.isProgramFile package path && not (PackageModules.samePath path root)
+                        | _ -> false
+                    Attributes.applyAttributes host testBuild desugaredAst
                     |> Result.map (fun (desugared, entries, components) ->
                         // A module's statements run as an entry point of their own (see `Scripts`).
                         let desugared, script =
@@ -406,6 +413,7 @@ module Compiler =
                   HostImport = host |> Option.map _.Import
                   CarriedAmbientMembers = []
                   ComponentExports = []
+                  Tests = []
                   UnqualifiedSources = Map.empty
                   ImportedFiles = Map.empty
                   ReExports = []
@@ -653,7 +661,20 @@ module Compiler =
                         components.Exports
                         components.Imports
                     @ unprovidedErrors
-                let moduleDiagnostics = componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ taskErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
+                // A test is a test's type, needs only the contexts the test host provides, and only a test refers to it.
+                let testErrors =
+                    TestChecks.errors
+                        components.Tests
+                        (fun name -> types |> Map.tryFind name |> Option.map (Unifier.apply subst))
+                        (fun name ->
+                            ownTopLevel
+                            |> List.tryFind (fun symbol -> symbol.Name = name)
+                            |> Option.bind (fun symbol -> contextTypes |> Map.tryFind symbol.Id)
+                            |> Option.defaultValue [])
+                        state.References
+                        state.Symbols
+                        desugared
+                let moduleDiagnostics = testErrors @ componentRootErrors @ componentErrors @ Hosts.reservedExternErrors isHost origin desugared @ blockReExportErrors @ nameErrors @ patternErrors @ associatedErrors @ CustomPatterns.withoutUnknownNoMatch patternErrors inferErrors @ mismatchErrors @ runtimeErrors @ taskErrors @ (if key = preludeKey then OperatorContexts.ambiguityErrors state else [])
                 // A warning doesn't stop the module running or being imported (see `CheckedModule.Warnings`).
                 let moduleErrors, moduleWarnings = moduleDiagnostics |> List.partition Diagnostics.isError
                 // Each error that can be is compiled to a trap where it was found, for a debug build to run.
@@ -692,6 +713,13 @@ module Compiler =
                     |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
                     |> Set.union state.ScriptEntryValues
                 let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
+                // The module's name, which its component exports' interface and its tests are named by: the name its file
+                // declares, or else its file's, or `main` when it has none.
+                let moduleName =
+                    FileImports.declaredName moduleBlocks desugared
+                    |> Option.orElse (Some (System.IO.Path.GetFileNameWithoutExtension(checkedModules.FileName origin)))
+                    |> Option.filter (fun name -> ComponentInterface.witName name <> "")
+                    |> Option.defaultValue "main"
                 let inlined =
                     merged.Inlined @ merged.PreludeInlined
                     |> List.filter (function
@@ -754,12 +782,6 @@ module Compiler =
                           AmbientContexts = Contexts.ambientContexts state |> Set.toList
                           AmbientMembers = ambientMembers state merged.CarriedAmbientMembers
                           ComponentExports =
-                            // A file that declares no module name is named by its file, or `main` when it has none.
-                            let moduleName =
-                                FileImports.declaredName moduleBlocks desugared
-                                |> Option.orElse (Some (System.IO.Path.GetFileNameWithoutExtension(checkedModules.FileName origin)))
-                                |> Option.filter (fun name -> ComponentInterface.witName name <> "")
-                                |> Option.defaultValue "main"
                             let calledThroughProvide = provided |> List.map _.Name |> Set.ofList
                             let own =
                                 components.Exports
@@ -774,6 +796,9 @@ module Compiler =
                                            |> Option.bind (fun symbol -> contextTypes |> Map.tryFind symbol.Id)
                                            |> Option.exists ComponentInterface.requiresAsync })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
+                          Tests =
+                            let own = components.Tests |> List.map (fun (name, span) -> { Module = moduleName; Name = name; Definition = name; Span = span })
+                            own @ merged.Tests |> List.distinctBy (fun test -> test.Module, test.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.
                           InlinedExprTypes = Map.empty

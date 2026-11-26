@@ -57,7 +57,7 @@ A [name in backticks](../tour/naming-conventions#names-in-backticks) can be any 
 
 A test takes no arguments and returns `()`. It passes if it finishes, and fails if it crashes: an `assert` that does not hold, a [deferred error](#deferred-errors), a non-exhaustive match or any other crash.
 
-Tests are only compiled into a test build. `nanyx run` and `nanyx build` leave them out, so code that is not a test cannot refer to one, and doing so is an error. Linters do not report a test as unused.
+Tests are only compiled into a test build. `nanyx run` and `nanyx build` leave them out, so code that is not a test cannot refer to one, and doing so is an error (`NYX0311`). Linters do not report a test as unused. This is built: see [Test builds](../deep-dives/test-builds).
 
 ## Tests beside the code
 
@@ -126,9 +126,12 @@ def `loads the defaults when there is no config file` = {
 A test that needs a context it does not load is a compile-time error, as an entry is that needs a context its host doesn't provide:
 
 ```text
-error: the test `loads the defaults when there is no config file` requires context `FileSystem`, which the test host does not provide
-  load a fake with `use FileSystem(...)`, or mark the test `@test(#io)` to use the real one
+error NYX0312: Context the test host doesn't provide
+  = The test 'loads the defaults when there is no config file' requires the context 'FileSystem', which the test host does not provide: load an instance of it, such as a fake, with `use` in the test
 ```
+
+The check is built, with the test host's `Console` and `Random`; `@test(#io)`
+([#2935](https://github.com/nanyx-lang/nanyx/issues/2935)) adds its advice to the message.
 
 So a unit test never touches the file system, the clock or the environment unless it says so, and the compiler checks that. This is the check [Hosts](./hosts#the-test-runner-is-a-host) wants: the same program runs under a test host with no IO.
 
@@ -171,7 +174,7 @@ It exits with 0 if every test passes and 1 if any fails, or if the tests could n
 
 ## One instance per test
 
-A crash ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a module that exports each test as a function, and creates a fresh instance of that module for each test, as `nanyx run` creates one for each request a program under the HTTP host answers. The test host's root learns which test it runs through the runtime's `nanyx:test`, and the crash report the runtime gets from a failed instance is what the runner prints. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each.
+A crash ends the WebAssembly instance it happens in, so tests cannot share one: the first failure would stop the rest. Instead, the runner compiles the package once, to a test build whose entry point runs the test at the index it is given, and creates a fresh instance of that module for each test, as `nanyx run` creates one for each request a program under the HTTP host answers. The test host's `run` asks the runtime's `nanyx:test` which index to run and calls the entry point with it, so the host, not the runtime, calls the test, under the contexts it provides. The crash report the runtime gets from a failed instance is what the runner prints. Creating an instance from a compiled module is cheap, and it gives each test its own memory, so no state leaks from one test to the next. Tests can later run in parallel, an instance each. The test build and the host are built: see [Test builds](../deep-dives/test-builds#running-one).
 
 A test that runs for longer than a time limit fails, with a message that says so; `--timeout` sets the limit.
 
@@ -216,7 +219,7 @@ These fit the design but are not part of the first version:
 |---|---|
 | 1. Crash reports as data: message, span and stack | [#2933](https://github.com/nanyx-lang/nanyx/issues/2933) |
 | 2. `assert` | [#2934](https://github.com/nanyx-lang/nanyx/issues/2934) |
-| 3. `@test` and test builds | [#2930](https://github.com/nanyx-lang/nanyx/issues/2930) |
+| 3. `@test` and test builds: built ([Test builds](../deep-dives/test-builds)) | [#2930](https://github.com/nanyx-lang/nanyx/issues/2930) |
 | 4. `nanyx test`, `nanyx.test.host` and `nanyx:test` | [#2931](https://github.com/nanyx-lang/nanyx/issues/2931) |
 | 5. A context the test host lacks, and `@test(#io)` | [#2935](https://github.com/nanyx-lang/nanyx/issues/2935) |
 | 6. Virtual time, editors, `@test(#crashes)` and later items | [#2932](https://github.com/nanyx-lang/nanyx/issues/2932) |

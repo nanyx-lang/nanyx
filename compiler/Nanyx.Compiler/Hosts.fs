@@ -96,6 +96,14 @@ module Hosts =
     /// script runs under in the compiler built for the browser (`Nanyx.Browser`), unless it names another.
     let playgroundPackage = "nanyx.playground.host"
 
+    /// The package of the test host the compiler ships, which a test build runs one test of a program's under (see
+    /// `Package.testBuild`).
+    let testPackage = "nanyx.test.host"
+
+    /// The contexts the test host provides a test, by name: what its `run` passes a test build's entry point. A test
+    /// may require only these (see `TestChecks`).
+    let testContexts = [ "Console"; "Random" ]
+
     /// The module of the foreign functions a component's core module defines itself for its host's component root,
     /// reserved for it: `argument` and `result`, through which a `wasi:http/service` component's root takes the request
     /// it answers and gives the response (see the Components page of the docs). Only a host's package, or a host library

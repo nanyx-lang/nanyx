@@ -240,6 +240,11 @@ module DiagnosticCodes =
     let UnitOfDerivedDimension = code 297 "Unit of a derived dimension that its parts' units don't define" Severity.Error
     let UnitWorthNothing = code 298 "Unit worth nothing" Severity.Error
 
+    // Tests.
+    let NotATest = code 310 "Test that isn't a test's type" Severity.Error
+    let ReferenceToTest = code 311 "Reference to a test" Severity.Error
+    let TestContextNotProvided = code 312 "Context the test host doesn't provide" Severity.Error
+
     // Generating code.
     let UnsupportedByBackend = code 301 "Not supported by the WebAssembly backend" Severity.Error
     /// A broken invariant of the backend: a bug in the compiler, not a feature it does not compile yet.
@@ -273,6 +278,7 @@ module DiagnosticCodes =
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
           DimensionWithoutBaseUnit; MisplacedBaseUnit; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
           NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing
+          NotATest; ReferenceToTest; TestContextNotProvided
           UnsupportedByBackend; BackendInternalError ]
 
     /// The section of the docs' error reference about the compiler code `code`, such as

@@ -350,7 +350,7 @@ module UnusedImports =
 /// The official linter's `unusedPrivateDefinitions` rule: a top-level def, type or context the module does not export,
 /// or a member of such a context, that nothing refers to. Only the module can name what it does not export, so with no
 /// references it is dead. A reference from within the definition itself (a function calling itself, a type naming
-/// itself) is not a use. Left alone: `@entry`'s def, which the runtime calls; a def an instance built from attached
+/// itself) is not a use. Left alone: `@entry`'s def, which the runtime calls; a `@test`, which a test build runs; a def an instance built from attached
 /// definitions picks up (`InstanceSynthesized`); and names starting with `_`. A `module name =` block's defs that it
 /// does not export are private to the block, and are reported the same way.
 module UnusedPrivateDefinitions =
@@ -360,7 +360,7 @@ module UnusedPrivateDefinitions =
           DefaultSeverity = Severity.Warning
           Unnecessary = true
           Description =
-            "A top-level def, type or context that the module does not export, or a member of such a context, that nothing in the module uses. `@entry`'s def, defs an instance picks up from a type's attached definitions, and names starting with `_` are not reported." }
+            "A top-level def, type or context that the module does not export, or a member of such a context, that nothing in the module uses. `@entry`'s def, a `@test`, defs an instance picks up from a type's attached definitions, and names starting with `_` are not reported." }
 
     /// The definitions the module writes, each the item that writes it, a `module name =` block's among them.
     let rec private definitionsOf (items: TopLevelItem list) : TopLevelItem list =
@@ -401,9 +401,21 @@ module UnusedPrivateDefinitions =
         | PatternVariable
         | ImportedModule -> "It is never used"
 
+    /// The names of the defs marked `@test` in `items`, a `module name =` block's among them.
+    let rec private testsIn (items: TopLevelItem list) : Set<string> =
+        items
+        |> List.pairwise
+        |> List.choose (fun (first, second) ->
+            match first.Kind, second.Kind with
+            | Attribute(name, _), Def (ValueDef(_, defName, _, _)) when name = Attributes.testAttribute -> Some defName
+            | _ -> None)
+        |> Set.ofList
+        |> Set.union (items |> List.choose (fun item -> match item.Kind with ModuleBlock(_, inner) -> Some (testsIn inner) | _ -> None) |> Set.unionMany)
+
     let lint (model: SemanticModel) : Report list =
         let definitions = definitionsOf model.Syntax
         let picked = synthesizedMembers model
+        let tests = testsIn model.Syntax
         // The span of each expression and type as written, so that a reference from within a definition to itself is
         // told apart: a def that calls itself, a type that names itself. Nodes desugaring made are not among them, and
         // their references count as uses: the call to `@entry`'s def that `applyAttributes` adds is one.
@@ -445,7 +457,7 @@ module UnusedPrivateDefinitions =
         |> Seq.choose (fun symbol -> definitionOf symbol |> Option.map (fun definition -> symbol, definition))
         |> Seq.filter (fun (symbol, definition) ->
             not (isUsed symbol definition)
-            && not (symbol.Kind = TopLevelValue && picked.Contains symbol.Name))
+            && not (symbol.Kind = TopLevelValue && (picked.Contains symbol.Name || tests.Contains symbol.Name)))
         |> Seq.sortBy (fun (symbol, _) -> symbol.Declaration.Start)
         |> Seq.map (fun (symbol, definition) ->
             { Rule = rule.Id

@@ -235,3 +235,61 @@ let ``A pattern given arguments of the wrong type, or too few, is a type mismatc
     let code, _, text = onlyDiagnostic source
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
     Assert.Equal("1", text)
+/// The texts the unknown-pattern errors of compiling `source` are at.
+let private unknownPatternsIn (source: string) =
+    let source = source.ReplaceLineEndings "\n"
+    (Compiler.compile source).Diagnostics
+    |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.UnknownPattern.Code)
+    |> List.map (spanOf >> textAt source)
+
+[<Fact>]
+let ``A pattern declared in a block isn't in scope before its declaration`` () =
+    let source =
+        """
+def f = { x: int ->
+  def early =
+    match x
+      | #Big -> "big"
+      | _ -> "small"
+  pattern int -> #Big | _ = { n -> if n > 10 then #Big else _ }
+  def late =
+    match x
+      | #Big -> "big"
+      | _ -> "small"
+  early ++ late
+}
+"""
+    Assert.Equal<string list>([ "#Big" ], unknownPatternsIn source)
+
+[<Fact>]
+let ``A pattern declared in a block isn't in scope outside it`` () =
+    let source =
+        """
+def f = { x: int ->
+  pattern int -> #Big | _ = { n -> if n > 10 then #Big else _ }
+  x
+}
+
+def g = { x: int ->
+  match x
+    | #Big -> "big"
+    | _ -> "small"
+}
+"""
+    Assert.Equal<string list>([ "#Big" ], unknownPatternsIn source)
+
+[<Fact>]
+let ``A pattern declared in a block hides an outer one that returns its tags`` () =
+    let source =
+        $"""
+{evenOdd}
+
+def f = {{ x: int ->
+  pattern int -> #Even | #Odd = {{ n -> if n > 0 then #Even else #Odd }}
+  match x
+    | #Even -> 1
+    | #Odd -> 0
+}}
+"""
+    let result = Compiler.compile (source.ReplaceLineEndings "\n")
+    Assert.Empty(result.Diagnostics |> List.filter Diagnostics.isError)

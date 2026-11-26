@@ -57,3 +57,22 @@ def describe = { s ->
 let ``A pattern tag's arguments are spaced as a call's are`` () =
     "def f = { | #SplitOn( \",\" )( a,b ) -> a | _ -> \"\" }\n"
     |> formatsTo "def f = {\n  | #SplitOn(\",\")(a, b) -> a\n  | _ -> \"\"\n}"
+
+[<Fact>]
+let ``A pattern declared in a block keeps its form`` () =
+    unchanged (
+        """
+def classify = { input ->
+  pattern string -> #Num(int) | #Skip = { s ->
+    | "" -> #Skip
+    | _ -> #Num(1)
+  }
+
+  match input
+    | #Skip -> "skip"
+    | #Num(n) -> "num"
+}
+"""
+            .TrimStart('\n')
+            .ReplaceLineEndings "\n"
+    )

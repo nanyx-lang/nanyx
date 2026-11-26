@@ -1,6 +1,6 @@
 /// The recursive-descent parser's lambdas, blocks, match arms and statements: the forms of a lambda, a def's value
-/// written as an indented block, a match's arms, and the statements of a block (`def`, `rec`, `mut`, `use` and
-/// expression statements, several on a line after `;`), read from the layout pass's tokens. A block's `import`s, local
+/// written as an indented block, a match's arms, and the statements of a block (`def`, `rec`, `mut`, `use`, `pattern`
+/// and expression statements, several on a line after `;`), read from the layout pass's tokens. A block's `import`s, local
 /// types and attributes are read by the top level, through `Forward`.
 module Parser.Program.DescentBlocks
 
@@ -14,6 +14,11 @@ open Parser.Program.DescentExpressions
 let internal skipLayout (c: Cursor) =
     while (match c.At 0 with Code _ -> false | _ -> true) do
         c.Index <- c.Index + 1
+
+/// After a type's `=`, which may end its line: the body may start the line after.
+let internal afterEquals (c: Cursor) =
+    c.Expect Equals |> ignore
+    c.Across(fun c -> c.Token.IsSome) |> ignore
 
 /// Whether the first code token at or after the cursor, past any layout tokens, is `kind`.
 let internal nextCodeIs (c: Cursor) (kind: TokenKind) =
@@ -61,7 +66,7 @@ let private defType (c: Cursor) : TypeExpr option =
         Some(DescentTypes.typeSignature c)
     else None
 
-/// A statement: `def`, `export def`, `rec`, `mut`, or an expression.
+/// A statement: `def`, `export def`, `rec`, `mut`, `pattern`, or an expression.
 let rec statement (c: Cursor) : Statement =
     let start = c.Start
     match c.Token with
@@ -85,6 +90,8 @@ let rec statement (c: Cursor) : Statement =
             if not c.OnSameLine then raise NoMatch
             statementFrom c start (ImportStatement(Forward.importItems.Value c))
         | "type" | "context" -> typeDefinitionStatement c start
+        | "pattern" -> patternStatement c start
+        | "export" when (match c.At 1 with Code next -> c.Text next = PatternSyntax.keyword | _ -> false) -> patternStatement c start
         | "export" when (match c.At 1 with Code next -> c.Text next = "type" || c.Text next = "context" || c.Text next = "scoped" | _ -> false) ->
             typeDefinitionStatement c start
         | "export" | "mut" ->
@@ -318,6 +325,40 @@ and private definition (c: Cursor) (start: int) (isExport: bool) =
     c.Declare DefValue value.Id [ name, nameSpan ]
     c.NoteDocumentable start nameSpan.Start
     statementFrom c start (DefStatement(isExport, name, typeOpt, value))
+
+/// `pattern T -> #A | #B = { ... }`, from `start`, where an `export` before it starts: a custom pattern, as the def of
+/// its function, whose name is made up from its type (see `PatternSyntax`); whether it is exported, that name, its type
+/// and its body. A block declares one as the top level does.
+and internal patternDeclaration (c: Cursor) (start: int) : bool * Identifier * TypeExpr * Expression =
+    let isExport = c.IsKeyword "export"
+    if isExport then c.Take() |> ignore
+    c.Expect(Keyword, PatternSyntax.keyword) |> ignore
+    let signatureStart = c.Start
+    let signature = DescentTypes.typeSignature c
+    let span = c.SpanFrom signatureStart
+    let shape =
+        match signature with
+        | PatternSyntax.Signature s ->
+            match s.Results |> List.tryFind (fst >> PatternSyntax.isPatternTag >> not) with
+            | Some(tag, _) ->
+                c.Report signatureStart $"A pattern's tags are capitalised, which tells them apart from other tags: write `#{System.Char.ToUpperInvariant tag[0]}{tag.Substring 1}`"
+            | None -> s
+        | _ ->
+            c.Report signatureStart "A pattern's type ends in the tags it returns, as in `pattern int -> #Even | #Odd`, with `| _` after them if it can fail to match"
+    afterEquals c
+    let body = DescentExpressions.defValue c
+    let name = PatternSyntax.defName (PatternSyntax.shape shape)
+    c.Declare DefValue body.Id [ name, span ]
+    c.NoteDocumentable start span.Start
+    isExport, name, signature, body
+
+/// A pattern declared in a function's block, which is local to it: one written `export` is an error, as only a module
+/// exports.
+and private patternStatement (c: Cursor) (start: int) =
+    if c.IsKeyword "export" then
+        c.Report start "A pattern declared in a function's block is local to it, so it can't be exported: declare it at the top level, or in a module block, to export it"
+    let _, name, signature, body = patternDeclaration c start
+    statementFrom c start (DefStatement(false, name, Some signature, body))
 
 /// `rec name = value` or `mut name = value`: a def whose value is a call to the built-in `builtIn` with the value
 /// written, spanning the value for `rec` and the declaration for `mut` (see `RecSyntax` and `MutSyntax`).

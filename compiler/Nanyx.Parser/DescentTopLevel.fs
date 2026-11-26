@@ -143,11 +143,6 @@ let private bodyWithWhere (c: Cursor) : TypeExpr =
         TypeExpr.at (endingAt predicate.Span (c.SpanFrom start)) (TypeWhere(body, predicate))
     else body
 
-/// After a type's `=`, which may end its line: the body may start the line after.
-let private afterEquals (c: Cursor) =
-    c.Expect Equals |> ignore
-    c.Across(fun c -> c.Token.IsSome) |> ignore
-
 /// A type's or a context's definition: `export scoped context Name(a) = protected ...` or
 /// `export type Name(a) = [Tx] private ...`. Its body declares its name.
 let typeDefinition (c: Cursor) : Definition =
@@ -387,7 +382,7 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
         | None -> c.Report start "A `use` belongs in a block, where it loads an instance for the rest of the block: put it in the body of a def such as `def main = { ... }`"
     elif c.IsKeyword "type" || c.IsKeyword "context" || (c.IsKeyword "export" && (nextText = "type" || nextText = "context" || nextText = "scoped")) || (c.Is(Name, "scoped") && (nextText = "export" || nextText = "context")) then
         single (Def(typeDefinition c))
-    elif not inBlock && (c.IsKeyword "pattern" || (c.IsKeyword "export" && nextText = "pattern")) then
+    elif c.IsKeyword "pattern" || (c.IsKeyword "export" && nextText = "pattern") then
         patternDefinition c start
     elif isDef then valueDefinition c start
     // `mut x = 0`, a cell, which can't be at the top level: a def of it, as in a block, for the checker to report.
@@ -399,29 +394,9 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
         let value = DescentControl.statementValue c
         single (Expr value)
 
-/// `pattern T -> #A | #B = { ... }`: a custom pattern, as the def of its function, whose name is made up from its type
-/// (see `PatternSyntax`).
+/// A custom pattern at the top level or in a module block (see `DescentBlocks.patternDeclaration`).
 and private patternDefinition (c: Cursor) (start: int) : TopLevelItem list =
-    let isExport = c.IsKeyword "export"
-    if isExport then c.Take() |> ignore
-    c.Expect(Keyword, PatternSyntax.keyword) |> ignore
-    let signatureStart = c.Start
-    let signature = DescentTypes.typeSignature c
-    let span = c.SpanFrom signatureStart
-    let shape =
-        match signature with
-        | PatternSyntax.Signature s ->
-            match s.Results |> List.tryFind (fst >> PatternSyntax.isPatternTag >> not) with
-            | Some(tag, _) ->
-                c.Report signatureStart $"A pattern's tags are capitalised, which tells them apart from other tags: write `#{Char.ToUpperInvariant tag[0]}{tag.Substring 1}`"
-            | None -> s
-        | _ ->
-            c.Report signatureStart "A pattern's type ends in the tags it returns, as in `pattern int -> #Even | #Odd`, with `| _` after them if it can fail to match"
-    afterEquals c
-    let body = DescentExpressions.defValue c
-    let name = PatternSyntax.defName (PatternSyntax.shape shape)
-    c.Declare DefValue body.Id [ name, span ]
-    c.NoteDocumentable start span.Start
+    let isExport, name, signature, body = patternDeclaration c start
     [ TopLevelItem.at (c.SpanFrom start) (Def(ValueDef(isExport, name, Some signature, body))) ]
 
 /// `def name: T = value`, or with nothing after its type on the line, a foreign function's declaration, whose value is

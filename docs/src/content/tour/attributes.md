@@ -108,6 +108,26 @@ def area: float, float -> float
 Only a component can call it, so `nanyx run` reports an error where a program calls one. See
 [Components](../deep-dives/components#a-programs-own-imports).
 
+## `@test`
+
+Marks a def as a test: a block, which takes no arguments and gives back `()`, that checks what it is about with
+`assert`. It can sit beside the code it tests, where it sees the module's private definitions, or in a file the
+manifest's `tests` selects ([Test files](./packages#test-files)).
+
+```nanyx fragment
+def double: int -> int = { n -> n * 2 }
+
+@test
+def `doubles` = {
+  assert(double(2) == 4)
+}
+```
+
+Tests are part of a test build alone, and every other build leaves them out, so only another test may refer to one
+(`NYX0311`), and linters don't report a test as unused. A def of another type is an error (`NYX0310`), and so is a
+test that requires a context the test host doesn't provide it (`NYX0312`): it loads a fake with `use`. The design of
+`nanyx test`, which runs them, is on [Testing](../work-in-progress/testing).
+
 ## `@allow(...)`
 
 Lets a definition break [linter](../standard-tools/official-linter) rules: before a def, a local one too, or a top-level type, it suppresses the diagnostics of the rules it names inside that definition. Each rule is written as its linter and its name, with no spaces around the `/`, and several are separated by commas. It is the only attribute a block can hold.

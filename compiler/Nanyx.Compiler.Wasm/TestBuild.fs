@@ -1,0 +1,15 @@
+/// A test build's module (see `NyxCompiler.Package.testResult`): its program, whose entry point runs the test at the
+/// index its host gives it, with each test listed at its index in the `nanyx.tests` section (see `WasmBinary.withTests`),
+/// so that the runtime can choose one by its name, and say where it is.
+module Transpiler.Wasm.TestBuild
+
+open NyxCompiler
+open Transpiler.Wasm.CodeGen
+
+/// The module, in the binary format, of a test build whose root `typed` is, compiled with `options`, listing the root's
+/// `Tests`, each test's place from 1 and its file named as `options.SourceRoot` names files (see `CoreIr.shownFile`).
+let assemble (options: WasmOptions) (typed: TypedModule) : byte array =
+    let wat, _ = transpileTypedModuleWithOptions options typed
+    let shown = CoreIr.shownFile options.SourceRoot
+    WasmBinary.assemble wat
+    |> WasmBinary.withTests (typed.Tests |> List.map (fun test -> test.Module, test.Name, shown test.Span.File, test.Span.StartLine + 1, test.Span.StartColumn + 1))
