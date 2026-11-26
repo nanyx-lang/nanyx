@@ -142,6 +142,26 @@ let ``A checkout with CRLF line endings and a byte-order mark packs to the same 
     Assert.Equal(3uy, crlf[centralDirectory + 5])
 
 [<Fact>]
+let ``Packing doesn't depend on when the files were written or the order they were made in`` () =
+    let packed (files: (string * string) list) (written: System.DateTime) =
+        use package = new TempPackage(files)
+        for path, _ in files do
+            File.SetLastWriteTimeUtc(package.Path path, written)
+        okOf (PackageArchive.pack (okOf (Package.ofManifestFrom (storeOf package) (package.Path "util/acme.util.nyxp"))))
+    let first = packed util (System.DateTime(2001, 2, 3, 4, 5, 6, System.DateTimeKind.Utc))
+    Assert.Equal<byte array>(first, packed (List.rev util) System.DateTime.UtcNow)
+
+[<Fact>]
+let ``A packed package's bytes depend only on its files, not on how the machine's zlib compresses`` () =
+    // Each entry is stored, not compressed: deflate's output differs between builds of .NET and of zlib, so a package
+    // packed by one compiler's release and by the same compiler built elsewhere would differ, and so would their SHA-256s.
+    let bytes = okOf (packRewritten System.Text.Encoding.UTF8.GetBytes)
+    use zip = new ZipArchive(new MemoryStream(bytes))
+    Assert.All(zip.Entries, fun entry -> Assert.Equal(entry.Length, entry.CompressedLength))
+    // Pinned, so that a change to how a package is packed is a decision, not an accident.
+    Assert.Equal("2b2a4b14ab37d33a32755aabf842c08d024c47527f04f52a2f7d80b9511047d3", PackageArchive.sha256 bytes)
+
+[<Fact>]
 let ``A package whose file isn't UTF-8 can't be packed`` () =
     let latin1 (text: string) = System.Text.Encoding.Latin1.GetBytes(text.Replace("!", "\u00e9"))
     let errors = errorsOf (packRewritten latin1) |> List.map _.Message
