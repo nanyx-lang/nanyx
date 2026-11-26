@@ -261,14 +261,23 @@ let private unitDeclaration (c: Cursor) (start: int) : TopLevelItem list =
         else
             c.Expect Colon |> ignore
             let dimension, _ = identifierWithSpan c
+            // A number of another unit, `1_000us`, or numbers of units multiplied and divided on one line, read from
+            // the left, as a unit of a derived dimension is: `1km / 1hr` (see `UnitSyntax`).
+            let unitLiteral () =
+                if not (c.Is Number) then c.Fail "a number with a unit, such as `1_000us`"
+                let literalStart = c.Start
+                match DescentLiterals.literal c with
+                | UnitLit _ as literal, span -> Expression.at span (LiteralExpr literal)
+                | _ -> c.Report literalStart "A unit is a number of another unit, with no space between the number and the unit, as in `unit ms: Time = 1_000us`"
             let multiple =
                 if c.Is Equals then
                     c.Take() |> ignore
-                    if not (c.Is Number) then c.Fail "a number with a unit, such as `1_000us`"
-                    let literalStart = c.Start
-                    match DescentLiterals.literal c with
-                    | UnitLit _ as literal, span -> Some(Expression.at span (LiteralExpr literal))
-                    | _ -> c.Report literalStart "A unit is a number of another unit, with no space between the number and the unit, as in `unit ms: Time = 1_000us`"
+                    let mutable result = unitLiteral ()
+                    while (c.Is(Operator, UnitSyntax.times) || c.Is(Operator, UnitSyntax.over)) && c.OnSameLine do
+                        let op = c.Take()
+                        let right = unitLiteral ()
+                        result <- Expression.at (SourceSpan.between result.Span right.Span) (BinaryOp(c.Text op, Some (c.SpanOf op), result, right))
+                    Some result
                 else None
             UnitDecl(isExport, declared, dimension, multiple)
     if not (lineEnds c) then c.Fail "the end of the line"

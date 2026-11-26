@@ -2783,10 +2783,10 @@ def f: Length / int -> int = { _ -> 1 }  -- error NYX0296: 'int' is no dimension
 
 To fix it, write dimensions on both sides of `*` and `/`, or leave the plain number out of the type.
 
-# NYX0297: Unit of a derived dimension
+# NYX0297: Unit of a derived dimension that its parts' units don't define
 
-A unit is declared on a derived dimension. A derived dimension has no units of its own: a value of it is written in its
-parts' units, as `100m / 9.58s` is, and printed in their base units.
+A unit of a derived dimension is declared with no definition, or marked `@baseUnit`. A derived dimension's values are
+stored in its parts' base units, so it has no base unit of its own: each of its units is defined from its parts' units.
 
 ```nanyx
 dimension Length
@@ -2795,10 +2795,26 @@ dimension Length
 
 dimension Speed = Length / Time
 
-unit kph: Speed = 1m  -- error NYX0297: 'Speed' is a derived dimension, which has no units of its own: ...
+unit kmh: Speed  -- error NYX0297: 'Speed' is a derived dimension, whose units are multiples of its parts' base units: ...
 ```
 
-To fix it, write a value of it as a quotient of its parts' units: `1km / 1hr`.
+To fix it, define the unit from its parts' units, multiplied and divided: `unit kmh: Speed = 1km / 1hr`.
+
+# NYX0298: Unit worth nothing
+
+A unit is defined as nothing, as `0ms` is, or divided by nothing. No number of it would be a quantity.
+
+```nanyx
+dimension Length
+
+@baseUnit unit m: Length
+
+dimension Speed = Length / Time
+
+unit instant: Speed = 1m / 0s  -- error NYX0298: `0s` is nothing, so 'instant' would be no quantity at all: ...
+```
+
+To fix it, define it from a number of units that isn't zero.
 
 # NYX0301: Not supported by the WebAssembly backend
 

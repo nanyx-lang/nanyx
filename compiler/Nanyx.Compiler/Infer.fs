@@ -209,7 +209,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 match Units.constrainedStorage next info.Dimension with
                 | Some constrained -> addConstraintAt expr.Span storage constrained next
                 | None -> next
-            Ok (mkTypedExpr expr (TyMeasure(Dimension.ofBase info.Dimension, storage)) None None None, next)
+            Ok (mkTypedExpr expr (TyMeasure(info.Dimension, storage)) None None None, next)
     | LiteralExpr literal ->
         let ty, next = NumericLiterals.typeOf state expr.Span (Some expr.Id) literal
         Ok (mkTypedExpr expr ty None None None, next)

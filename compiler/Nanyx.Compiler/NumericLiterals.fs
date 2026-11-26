@@ -314,10 +314,18 @@ module internal NumericLiterals =
     /// storage's range doesn't fit it.
     let private storedAs (state: InferState) (span: SourceSpan) (number: WrittenNumber) (unitName: Identifier) (ty: Ty) : Result<Literal, Diagnostic> =
         let value = inBaseUnits state number unitName
+        // A derived dimension has no base unit of its own: its base unit is its parts', multiplied and divided, `m/ns`.
+        let baseOf (dimension: Dimension) =
+            state.Units |> Map.tryFindKey (fun _ other -> other.Dimension = dimension && UnitInfo.isBase other)
+        let partBase (id: NominalId) = baseOf (Dimension.ofBase id)
         let baseUnit =
             state.Units
             |> Map.tryFind unitName
-            |> Option.bind (fun info -> state.Units |> Map.tryFindKey (fun _ other -> other.Dimension = info.Dimension && UnitInfo.isBase other))
+            |> Option.bind (fun info ->
+                if not (Dimension.isDerived info.Dimension) then baseOf info.Dimension
+                elif info.Dimension |> List.forall (fst >> partBase >> Option.isSome) then
+                    Some (Dimension.writtenWith (partBase >> Option.get) "*" "/" info.Dimension)
+                else None)
             |> Option.defaultValue "base unit"
         let written = UnitSyntax.written number unitName
         match Unifier.unalias ty with

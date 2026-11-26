@@ -273,12 +273,19 @@ export def __measuredIntToString: int, list(string), list(int), string, string -
 
 --| What the derived `toString` of a measured value stored as a `float` calls: as
   [`__measuredIntToString`], `x` written in the first of the units `names` that it is a whole
-  number of, as a whole number, so `1.5s` is written `1500ms`. A number of base units is written
-  as a `float` is.
+  number of, as a whole number, so `1.5s` is written `1500ms`. A number within a millionth of a
+  millionth of a whole one is that whole one, as arithmetic on a `float` rounds: `90.0kmh + 10.0mps`
+  is written `126kmh`, though a kilometre an hour is no whole number of a speed's base units. A
+  number of base units is written as a `float` is.
 export def __measuredFloatToString: float, list(string), list(float), string, string -> string = {
   | x, [name, ...names], [scale, ...scales], before, after ->
-    if x != 0.0 and x / scale % 1.0 == 0.0 and x / scale > -1.0e15 and x / scale < 1.0e15
-      then "{float.toInt(x / scale, #truncate)}{name}"
+    def count = x / scale
+    def whole = wholeOf(count, #round)
+    def near = (if whole < 0.0 then -whole else whole) * 1.0e-12
+
+    if whole != 0.0 and count - whole <= near and whole - count <= near and whole > -1.0e15 and
+      whole < 1.0e15
+      then "{float.toInt(whole, #truncate)}{name}"
       else __measuredFloatToString(x, names, scales, before, after)
   | x, _, _, before, after -> "{before}{x}{after}"
 }
