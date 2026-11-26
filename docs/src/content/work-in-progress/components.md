@@ -269,6 +269,10 @@ the format is settled, with wit-component's output to test it.
   [A program's own exports](../deep-dives/components#a-programs-own-exports). The HTTP host's component roots have no
   `provide` yet, so under that host an export that requires a context is `NYX0237`.
 
+- **`Console` and `FileSystem` in a component wait by blocking** (settled 2026-11-26). Their functions don't require
+  `Async`, so a write to stdout, a read of stdin and a file's calls block the instance, as they block its thread on the
+  core root. Letting them run while other tasks do waits for async streams
+  ([Concurrency and crash boundaries](./concurrency-and-crash-boundaries)).
 - **Requests at once in one instance.** An instance serves one request at a time, and others in turn. Whether requests
   may interleave in one instance, and so share its memory and crashes, once the callback ABI lets them, belongs with
   tasks and processes on [Concurrency and crash boundaries](./concurrency-and-crash-boundaries#3-tasks-and-processes).
