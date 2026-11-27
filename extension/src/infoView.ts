@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/node";
 import { ContextLines, contextLinesMode } from "./contextLines";
+import { isDocsLink } from "./docsSite";
 import { HighlightedCode, Highlighter } from "./highlighter";
 import { movedThrough, rangeMovedThrough } from "./pinnedPosition";
 
@@ -374,8 +375,10 @@ export async function openLocation(location: LspLocation): Promise<void> {
 }
 
 /**
- * Opens a link in an item's documentation. A doc comment's link to a name is the URI of its file with the line and
- * column (`file:///a.nyx#L3,5`), which opens at that place; any other link opens as VS Code opens links.
+ * Opens a link in an item's documentation or a message's code. A doc comment's link to a name is the URI of its file
+ * with the line and column (`file:///a.nyx#L3,5`), which opens at that place. A link to the docs site opens in VS
+ * Code's Simple Browser, unless `nanyx.infoView.openDocsIn` is `browser` or Simple Browser is disabled. Any other link
+ * opens as VS Code opens links.
  */
 async function openLink(href: string): Promise<void> {
   const uri = vscode.Uri.parse(href);
@@ -385,9 +388,16 @@ async function openLink(href: string): Promise<void> {
     const character = Number(place[2]) - 1;
     const range = { start: { line, character }, end: { line, character } };
     await openLocation({ uri: uri.with({ fragment: "" }).toString(), range });
+  } else if (isDocsLink(href) && openDocsIn() === "editor" && (await vscode.commands.getCommands(true)).includes("simpleBrowser.show")) {
+    await vscode.commands.executeCommand("simpleBrowser.show", href);
   } else {
     await vscode.commands.executeCommand("vscode.open", uri);
   }
+}
+
+/** Where a link to the docs site opens, from the `nanyx.infoView.openDocsIn` setting. */
+function openDocsIn(): "editor" | "browser" {
+  return vscode.workspace.getConfiguration("nanyx").get<"editor" | "browser">("infoView.openDocsIn", "editor");
 }
 
 /**
