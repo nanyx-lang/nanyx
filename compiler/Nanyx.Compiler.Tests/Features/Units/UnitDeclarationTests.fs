@@ -156,3 +156,26 @@ let ``Two imports that bring in units of one name are NYX0105 where the name is 
     Assert.Empty(reportedAtIn selecting (compileImportingAll modules selecting))
     let own = "import a\nimport b\nunit ms: Time = 1othera\ndef x = 500ms\n"
     Assert.Empty(reportedAtIn own (compileImportingAll modules own))
+
+[<Fact>]
+let ``A unit of a float dimension past a float's largest is NYX0313 at the unit, and no value is Infinity (#3114)`` () =
+    // `tiny` is the default storage unit, so `m` is 1e320 of it.
+    let source = "dimension Length(float)\n@baseUnit unit m: Length\nunit tiny: Length = 1.0e-320m\ndef a = 1.0m"
+    let code, message, text = onlyDiagnostic (withFinalNewline source)
+    Assert.Equal(DiagnosticCodes.UnitPastStorage.Code, code)
+    Assert.Equal("unit m: Length", text)
+    Assert.Equal(
+        "'m' is about 1.0e320 of 'tiny', the default storage unit of 'Length', more than its storage, 'float', holds, so no value of it could be stored: define the units of 'Length' closer in size",
+        message)
+
+[<Fact>]
+let ``Each unit of an int dimension past an int's largest is NYX0313 at the unit, and no literal is out of range for it (#3114)`` () =
+    let units = [ 1..64 ] |> List.map (fun n -> $"unit u{n}: Big = 2u{n - 1}") |> String.concat "\n"
+    let source = $"dimension Big(int)\n@baseUnit unit u0: Big\n{units}\ndef a = 1u0"
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.UnitPastStorage.Code, "unit u63: Big = 2u62"; DiagnosticCodes.UnitPastStorage.Code, "unit u64: Big = 2u63" ],
+        reportedAt source)
+    let messages = (Compiler.compile (withFinalNewline source)).Diagnostics |> List.map _.Message
+    Assert.Equal(
+        "'u63' is 9223372036854775808 of 'u0', the default storage unit of 'Big', more than its storage, 'int', holds, so no value of it could be stored: define the units of 'Big' closer in size, or store it as a `float`",
+        messages.Head)

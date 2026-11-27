@@ -2931,6 +2931,22 @@ unit ps: Clock = 0.001ns  -- error NYX0300: 'ps' is 1/1000 of 'ns', the default 
 To fix it, define the unit as a whole number of the default storage unit, or, in the dimension's own module, mark a
 smaller unit `@storageUnit`, or none, to have the compiler work it out.
 
+# NYX0313: Unit more than its dimension's storage holds
+
+A unit is more of its dimension's default storage unit than the dimension's storage can hold: past a `float`'s largest,
+about 1.8e308, or an `int`'s, 9223372036854775807. Every value of the dimension is held as a number of its default
+storage unit ([Units of measure](../advanced/units-of-measure#dimensions-and-units)), so no value of such a unit could
+be. A unit much smaller than the others makes them so, since it is then the default storage unit.
+
+```nanyx
+dimension Length(float)
+
+@baseUnit unit m: Length  -- error NYX0313: 'm' is about 1.0e320 of 'tiny', the default storage unit of 'Length', ...
+unit tiny: Length = 1.0e-320m
+```
+
+To fix it, define the dimension's units closer in size, or, for a dimension stored as an integer, store it as a `float`.
+
 # NYX0304: Call with the wrong number of arguments
 
 A call gives a function more or fewer arguments than it takes. A pipe's value counts as the first of them.
