@@ -77,7 +77,7 @@ async function activate(context) {
     const values = new dbgView_1.DbgView(() => client);
     dbgView = values;
     const explorer = new testController_1.TestExplorer(() => compiler, log, values);
-    const live = new liveMode_1.LiveMode(context.workspaceState, () => compiler, () => client, values);
+    const live = new liveMode_1.LiveMode(context.workspaceState, () => compiler, () => client, values, explorer);
     liveMode = live;
     testExplorer = explorer;
     context.subscriptions.push(view, library, values, explorer, live, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {

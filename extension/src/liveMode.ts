@@ -7,7 +7,8 @@ import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/node";
 import { HitReader } from "./dbgValues";
 import { DbgView } from "./dbgView";
-import { endedText, isOn, LiveInfo, liveArguments, LiveTarget, packageDirectoryOf, Row, rowsOf, targetOf } from "./live";
+import { endedText, isOn, LiveInfo, liveArguments, LiveTarget, LiveTests, packageDirectoryOf, Row, rowsOf, targetOf, testsOn } from "./live";
+import { TestExplorer } from "./testController";
 
 /** The command that turns live mode on or off for the active file's script or package. */
 export const COMMAND_TOGGLE_LIVE = "nanyx.toggleLiveMode";
@@ -37,6 +38,9 @@ export class LiveMode implements vscode.Disposable, vscode.TreeDataProvider<Row>
   readonly onDidChangeTreeData = this.changed.event;
   private readonly infos = new Map<string, LiveInfo>();
   private readonly running = new Map<string, Running>();
+  /** The live test runs still going, by file, and how each file's last one went. */
+  private readonly testRuns = new Map<string, vscode.CancellationTokenSource>();
+  private readonly lastTests = new Map<string, { passed: number; failed: number }>();
   private readonly disposables: vscode.Disposable[] = [];
   private view: vscode.TreeView<Row> | undefined;
 
@@ -44,7 +48,8 @@ export class LiveMode implements vscode.Disposable, vscode.TreeDataProvider<Row>
     private readonly state: vscode.Memento,
     private readonly compiler: () => string | undefined,
     private readonly client: () => LanguageClient | undefined,
-    private readonly dbg: DbgView
+    private readonly dbg: DbgView,
+    private readonly tests: TestExplorer
   ) {
     this.view = vscode.window.createTreeView("nanyx.live", { treeDataProvider: this });
     this.disposables.push(
@@ -60,6 +65,7 @@ export class LiveMode implements vscode.Disposable, vscode.TreeDataProvider<Row>
 
   dispose(): void {
     this.running.forEach((run) => run.process.kill());
+    this.testRuns.forEach((cancel) => cancel.cancel());
     this.disposables.forEach((disposable) => disposable.dispose());
   }
 
@@ -121,7 +127,9 @@ export class LiveMode implements vscode.Disposable, vscode.TreeDataProvider<Row>
       return [{ label: "Open a .nyx file", tooltip: "Live mode re-runs a script, or a package's @entry, on every save." }];
     }
     const info = this.infos.get(active.target.key);
-    return rowsOf(active.target, info, isOn(info, this.setting(active.target)));
+    const setting = this.setting(active.target);
+    const tests = this.testsOf(active.document.fileName);
+    return rowsOf(active.target, info, isOn(info, setting), tests, testsOn(tests, setting));
   }
 
   /** Turns live mode on or off for the active file's script or package, and runs it once when it is turned on. */
@@ -131,19 +139,56 @@ export class LiveMode implements vscode.Disposable, vscode.TreeDataProvider<Row>
       void vscode.window.showInformationMessage("Live mode is for a .nyx file: open one first.");
       return;
     }
-    await this.refresh();
+    await Promise.all([this.refresh(), this.tests.refresh()]);
     const info = this.infos.get(active.target.key);
-    if (!info || info.entry === null) {
-      void vscode.window.showInformationMessage(`${active.target.name} has no entry point to run.`);
+    const file = active.document.fileName;
+    const tests = this.testsOf(file);
+    const hasEntry = info !== undefined && info.entry !== null;
+    if (!hasEntry && tests.count === 0) {
+      void vscode.window.showInformationMessage(`${active.target.name} has no entry point or tests to run.`);
       return;
     }
-    const on = !isOn(info, this.setting(active.target));
+    const setting = this.setting(active.target);
+    const on = !(isOn(info, setting) || testsOn(tests, setting));
     await this.state.update(settingsKey, { ...this.state.get<Record<string, boolean>>(settingsKey, {}), [active.target.key]: on });
     this.changed.fire();
     if (on) {
-      void this.run(active.target);
+      if (hasEntry) {
+        void this.run(active.target);
+      }
+      if (tests.count > 0) {
+        void this.runTests(file);
+      }
     } else {
       this.running.get(active.target.key)?.process.kill();
+      this.testRuns.get(file)?.cancel();
+    }
+  }
+
+  /** The tests written in `file`, as the Testing view last listed them, and how its last live run of them went. */
+  private testsOf(file: string): LiveTests {
+    return { ...this.tests.testsOf(file), last: this.lastTests.get(file) };
+  }
+
+  /** Re-runs the tests written in `file`, after stopping a live run of them still going, within the time limit. */
+  private async runTests(file: string): Promise<void> {
+    this.testRuns.get(file)?.cancel();
+    const cancel = new vscode.CancellationTokenSource();
+    this.testRuns.set(file, cancel);
+    const limit = vscode.workspace.getConfiguration("nanyx").get<number>("live.timeLimit", 10);
+    const timer = setTimeout(() => cancel.cancel(), limit * 1000);
+    try {
+      const counts = await this.tests.liveRun(file, cancel.token);
+      if (counts && !cancel.token.isCancellationRequested) {
+        this.lastTests.set(file, counts);
+      }
+    } finally {
+      clearTimeout(timer);
+      if (this.testRuns.get(file) === cancel) {
+        this.testRuns.delete(file);
+      }
+      cancel.dispose();
+      this.changed.fire();
     }
   }
 
@@ -158,10 +203,19 @@ export class LiveMode implements vscode.Disposable, vscode.TreeDataProvider<Row>
     if (info && (target.kind === "script" || info.entry !== null)) {
       this.infos.set(target.key, info);
     }
+    // The tests are listed again first, since the save may have added or removed some.
+    await this.tests.refresh();
     this.changed.fire();
-    if (isOn(this.infos.get(target.key), this.setting(target))) {
-      await this.run(target);
+    const setting = this.setting(target);
+    const runs: Promise<void>[] = [];
+    if (isOn(this.infos.get(target.key), setting)) {
+      runs.push(this.run(target));
     }
+    // A file's own tests: the tests of the modules that import it aren't re-run (#3157).
+    if (testsOn(this.testsOf(document.fileName), setting)) {
+      runs.push(this.runTests(document.fileName));
+    }
+    await Promise.all(runs);
   }
 
   /** Runs `target` live, after stopping a run of it still going. */

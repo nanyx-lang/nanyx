@@ -245,6 +245,9 @@ module DiagnosticCodes =
     let ArgumentCount = code 304 "Call with the wrong number of arguments" Severity.Error
     let NotAFunction = code 305 "Call of a value that isn't a function" Severity.Error
 
+    // Units, continued.
+    let UnitPastStorage = code 306 "Unit more than its dimension's storage holds" Severity.Error
+
     // Tests.
     let NotATest = code 310 "Test that isn't a test's type" Severity.Error
     let ReferenceToTest = code 311 "Reference to a test" Severity.Error
@@ -283,7 +286,7 @@ module DiagnosticCodes =
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
           UnitsNotFromOne; MisplacedUnitAttribute; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
           NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing; UnitNotWholeStorageUnits
-          ArgumentCount; NotAFunction
+          ArgumentCount; NotAFunction; UnitPastStorage
           NotATest; ReferenceToTest; TestContextNotProvided
           UnsupportedByBackend; BackendInternalError ]
 

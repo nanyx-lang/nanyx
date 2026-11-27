@@ -102,3 +102,28 @@ let ``A local def written twice in a block still shadows the first`` () =
   x
 }"""
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+
+[<Fact>]
+let ``A dimension declared twice is reported at the second, pointing back at the first, and keeps the first's storage (#3115)`` () =
+    let result =
+        Compiler.compile """dimension Length(float)
+@baseUnit unit m: Length
+dimension Length(int)
+def a = 1.5m"""
+    let diagnostic = Assert.Single(result.Diagnostics)
+    Assert.Equal(DiagnosticCodes.DuplicateDefinition.Code, diagnostic.Code)
+    Assert.Equal("The dimension 'Length' is already defined in this module", diagnostic.Message)
+    Assert.Equal((2, 10), (diagnostic.Span.Value.StartLine, diagnostic.Span.Value.StartColumn))
+    let related, label = Assert.Single(diagnostic.Related)
+    Assert.Equal((0, 10), (related.StartLine, related.StartColumn))
+    Assert.Equal("'Length' is first defined here", label)
+
+[<Fact>]
+let ``A dimension of a type's name is a duplicate, as a type of a dimension's is (#3115)`` () =
+    let codes (source: string) = (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, diagnostic.Message)
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.DuplicateDefinition.Code, "The dimension 'Length' is already defined in this module" ],
+        codes "type Length = (n: int)\ndimension Length\n")
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.DuplicateDefinition.Code, "The type 'Length' is already defined in this module" ],
+        codes "dimension Length\n@baseUnit unit m: Length\ntype Length = (n: int)\n")
