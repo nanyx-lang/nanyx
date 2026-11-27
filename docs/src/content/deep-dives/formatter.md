@@ -31,7 +31,9 @@ the syntax tree. The tree itself does not change, so the type checker and code g
 attaches each comment to a node:
 
 - A comment on the same line after code is a *trailing* comment of the last node that ends on that line before it,
-  and stays on that line.
+  and stays on that line. A construct written on one line that the layout breaks keeps its comment on its first line:
+  the comment is put before it, and ends the first line the construct is laid out on (`CommentPlacement.Sequence`).
+  A comment after a lambda's `{` or `->`, before its body, stays there (`LambdaPrinter.lambdaDoc`).
 - A comment on a line of its own is a *leading* comment of the next node that starts after it, and is printed on its
   own line, at that node's indent, before it.
 - A comment with no following node in its block (the end of a file, a match or a lambda body) is printed at the end

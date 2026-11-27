@@ -79,7 +79,16 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
             match trailing with
             | Some i when after.IsEmpty ->
                 placed[i] <- true
-                entries.Add(StackItem(cat [ doc; Doc.trailingComment (fst comments[i]) ], isImport))
+                let comment = Doc.trailingComment (fst comments[i])
+                // A child written on one line keeps its comment on its first line: a comment ends the line it is put
+                // on, so before the child it ends at the first line break the layout gives the child, as after the
+                // `{` of a def whose body goes on lines of its own (#1633).
+                let oneLine = sourceText.LineOf childStart = sourceText.LineOf (childEnd - 1)
+                let commented =
+                    match fst comments[i] with
+                    | WrittenComment _ when oneLine -> cat [ comment; doc ]
+                    | _ -> cat [ doc; comment ]
+                entries.Add(StackItem(commented, isImport))
             | _ ->
                 entries.Add(StackItem(doc, isImport))
                 for i in after do
@@ -107,6 +116,9 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
               if sourceText.LineOf span.Start = sourceText.LineOf (max 0 (lastEnd - 1)) then Doc.trailingComment comment
               else cat [ Doc.hardLine; Doc.comment comment ] ]
 
+    /// The text and span of the comment at `index`, which stays unplaced.
+    member _.Comment(index: int) = comments[index]
+
     /// Marks the comment at `index` placed, and gives its text and span.
     member _.Place(index: int) =
         placed[index] <- true
@@ -114,7 +126,8 @@ type CommentPlacement(parsed: SourceModule, indentSize: int, sourceText: SourceT
 
     /// Children laid out one per line between the offsets `start` and `finish`, each given as its start and end offsets
     /// and a function building its document. The comments among them are put back: a comment after a child on its
-    /// last line, before the next child, stays at the end of that line, and any other on a line of its own. A comment
+    /// last line, before the next child, stays at the end of that line (the child's first line, if the child was
+    /// written on one line and the layout breaks it), and any other on a line of its own. A comment
     /// inside a child that the child does not place itself goes on a line of its own before it, or after it when the
     /// child placed comments that come before it, so that comments stay in order.
     ///

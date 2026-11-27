@@ -75,6 +75,24 @@ type LambdaPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
                 | [] when takesUnit -> cat [ text "{ ()"; resultDoc; text " ->" ]
                 | [] when contextNames.IsEmpty -> text "{"
                 | _ -> cat [ text "{ "; commaJoin (contextNameDocs @ List.map parameterDoc parameters); resultDoc; text " ->" ]
+            // A comment on the lambda's first line before its body, `{ -- why`, stays after the `{` or `->`, the lambda broken
+            // over lines (#1633).
+            let bodyStart =
+                match body.Kind with
+                | Block (first :: _) -> first.Span.Start
+                | _ -> body.Span.Start
+            let headComment =
+                if sourceText.Valid e.Span && sourceText.LineOf e.Span.Start < sourceText.LineOf (e.Span.End - 1) then
+                    placement.UnplacedIn(e.Span.Start, bodyStart)
+                    |> List.tryFind (fun i ->
+                        let start = (snd (placement.Comment i)).Start
+                        sourceText.LineOf start = sourceText.LineOf e.Span.Start)
+                else
+                    None
+            let head =
+                match headComment with
+                | Some i -> cat [ head; Doc.trailingComment (fst (placement.Place i)) ]
+                | None -> head
             // A body on its own line is read as a statement, which can't take a range, so where the layout is ours to
             // choose, a body that would need parentheses there stays on the `->`'s line instead, as does a block of just
             // that body in parentheses.

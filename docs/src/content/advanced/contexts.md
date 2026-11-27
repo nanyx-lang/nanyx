@@ -24,9 +24,9 @@ def needsPlain: [Plain] () -> () = {
   commit()
 }
 
-def viaTx: [Tx] () -> () = {
+def viaTx: [Tx] () -> () = { -- a Tx serves for a Plain
   needsPlain()
-} -- a Tx serves for a Plain
+}
 
 def main = {
   use Tx(commit = { println("committed") })
