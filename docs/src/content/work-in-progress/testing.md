@@ -140,8 +140,9 @@ The tests run in a core module, as `nanyx run`'s program does, so a test that re
 
 Built ([#3078](https://github.com/nanyx-lang/nanyx/issues/3078)): `@test(#crashes)` passes a test only if it crashes,
 and `@test(#crashes("text"))` only if the crash's message contains the text; with `#io`, `@test(#io, #crashes)` (see
-[`@test`](../tour/attributes#test)). A crash is what `crash`, `orCrash` and a failed `assert` do. A deferred error,
-a match that doesn't handle every case among them, a runtime error and a timeout fail the test as they fail any
+[`@test`](../tour/attributes#test)). A crash is what `crash`, `orCrash` and a failed `assert` do. A deferred compile
+error never counts: a match that doesn't handle every case is one, `NYX0203`, which the compiler defers to run time as it
+does a type error, so it fails the test, as a runtime error and a timeout do
 ([Test builds](../deep-dives/test-builds#tests-that-expect-a-crash)).
 
 # Left for later
