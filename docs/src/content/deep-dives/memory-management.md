@@ -268,7 +268,8 @@ apart, each by the module it came from, and only the IR reads them (`TypedModule
 
 Lambda lifting runs on the syntax tree first (`LambdaLifting.fs`): a lambda becomes a top-level function that
 takes a closure block as its environment, and the lambda is replaced by a closure over it, a call to the markers
-`ClosureSyntax.fs` names. The IR lowers a lifted function where a closure over it is made, since only there are the
+`ClosureSyntax.fs` names. What a lambda captures is `LambdaCaptures.capturedFrom`, which the editor's hover reads too
+(`LambdaCaptureHover`), so what hover says a lambda captures is what its closure holds. The IR lowers a lifted function where a closure over it is made, since only there are the
 types of what it captures known. A lambda written in a generic definition is specialised along with it
 (`__lambda_0__int`), and the wrapper that lets a top-level function be passed as a value is lowered for each type it
 is passed at. So a lifted function is always lowered at concrete types, and lifting stays on the syntax tree: moving it
