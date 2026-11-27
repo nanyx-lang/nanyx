@@ -60,6 +60,9 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     protected Task _serverTask = Task.CompletedTask;
     protected LanguageClient _client = null!;
 
+    /// <summary>Whether the last <see cref="StartAsync"/> failed, so that stopping doesn't wait on a server that isn't there.</summary>
+    private bool _startFailed;
+
     /// <summary>The test's own folder for its files, made by the first <see cref="TempPath"/>, deleted after the test.</summary>
     private string? _tempDirectory;
 
@@ -107,7 +110,9 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     /// <summary>Starts a server, with a client that also has what <paramref name="configureClient"/> gives it.</summary>
     protected async Task StartAsync(ServerSettings settings, string? workspaceFolder = null, Action<LanguageClientOptions>? configureClient = null)
     {
+        var sinceStart = System.Diagnostics.Stopwatch.StartNew();
         await StandardLibraryChecked.Value;
+        var sinceWarmUp = System.Diagnostics.Stopwatch.StartNew();
         _cancellation.CancelAfter(Timeout);
 
         var clientToServer = new Pipe();
@@ -147,10 +152,51 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
             configureClient?.Invoke(options);
         });
 
-        await _client.Initialize(_cancellation.Token);
+        // When the timeout fires and when the server's task ends, for a failed start to say which came first (#3004).
+        TimeSpan? timedOut = null;
+        TimeSpan? serverEnded = null;
+        using var timing = _cancellation.Token.Register(() => timedOut = sinceWarmUp.Elapsed);
+        var serverTask = _serverTask;
+        _ = serverTask.ContinueWith(_ => serverEnded = sinceWarmUp.Elapsed, TaskScheduler.Default);
+        try
+        {
+            await _client.Initialize(_cancellation.Token);
+        }
+        catch (Exception ex)
+        {
+            _startFailed = true;
+            throw new InvalidOperationException(
+                WhyNotStarted(timedOut, serverEnded, serverTask, sinceStart.Elapsed, sinceWarmUp.Elapsed), ex);
+        }
 
         // Starting a server is slow on a busy CI runner, so the test's own requests get the whole timeout after it.
         _cancellation.CancelAfter(Timeout);
+    }
+
+    /// <summary>
+    /// Why a server didn't start: whether the test's timeout fired first or the server's task ended first, and how, with how
+    /// long the start took since <see cref="StartAsync"/> began and since the warm-up, and how busy the thread pool was.
+    /// </summary>
+    private static string WhyNotStarted(TimeSpan? timedOut, TimeSpan? serverEnded, Task serverTask, TimeSpan sinceStart, TimeSpan sinceWarmUp)
+    {
+        static string At(TimeSpan? time) => time is { } elapsed ? $"{elapsed.TotalMilliseconds:F0} ms after the warm-up" : "not yet";
+        var server = serverTask.Status switch
+        {
+            TaskStatus.Faulted => $"faulted ({serverTask.Exception?.GetBaseException()})",
+            TaskStatus.Canceled => "was cancelled",
+            TaskStatus.RanToCompletion => "completed",
+            _ => "was still running",
+        };
+        var first = (timedOut, serverEnded) switch
+        {
+            ({ } timeout, { } ended) => ended < timeout ? "the server's task ended first" : "the timeout came first",
+            ({ }, null) => "the timeout came first",
+            (null, { }) => "the server's task ended first",
+            _ => "neither the timeout nor the server's task had ended",
+        };
+        return $"The server didn't start: {first}. The timeout: {At(timedOut)}. The server's task {server}, ended: {At(serverEnded)}. " +
+            $"Started {sinceStart.TotalMilliseconds:F0} ms ago, {sinceWarmUp.TotalMilliseconds:F0} ms after the warm-up. " +
+            $"Thread pool: {ThreadPool.ThreadCount} threads, {ThreadPool.PendingWorkItemCount} work items waiting.";
     }
 
     public async Task DisposeAsync()
@@ -164,6 +210,14 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
 
     private async Task StopAsync()
     {
+        if (_startFailed)
+        {
+            // A server that didn't start may not answer a shutdown, and waiting for it, or for its task, would hide why
+            // it didn't start behind what the wait threw.
+            _client.Dispose();
+            return;
+        }
+
         // Shutdown() sends the shutdown request followed by the exit notification.
         await _client.Shutdown();
         await _serverTask;
