@@ -153,3 +153,70 @@ println(StringTrie["a" => 1, "b" => 2] == StringTrie["a" => 1, "b" => 3])
 println([StringTrie["a" => 1, "b" => 2]] == [StringTrie["b" => 2, "a" => 1]])
 """
     |> assertRan "true\ntrue\nfalse\nfalse\ntrue\ntrue\nfalse\ntrue\n"
+
+[<Fact>]
+let ``Run - a string trie reads keys of several bytes a character`` () =
+    runSource
+        """
+import nanyx/trie
+
+def t = StringTrie["héllo" => 1, "hé" => 2, "日本" => 3, "h" => 4]
+
+println("{StringTrie.get(t, "héllo")} {StringTrie.get(t, "hé")} {StringTrie.get(t, "he")} {StringTrie.get(t, "日本")}")
+println("{StringTrie.hasPrefix(t, "hél")} {StringTrie.hasPrefix(t, "日")} {StringTrie.hasPrefix(t, "本")}")
+println("{StringTrie.longestPrefixOf(t, "hélp")} {StringTrie.longestPrefixOf(t, "日本語")} {StringTrie.longestPrefixOf(t, "日")}")
+"""
+    |> assertRan "#some(1) #some(2) #none #some(3)\ntrue true false\n#some(hé, 2) #some(日本, 3) #none\n"
+
+let private lookingUp =
+    normalized """import nanyx/text
+import nanyx/trie
+
+def key: int -> string = { n -> string.repeat("aé", n) }
+
+def made: int -> StringTrie(int) = { n -> StringTrie[key(n) => n, "a" => 1, "b" => 2] }
+
+def gets: int, StringTrie(int), string, int -> int = { times, t, k, acc ->
+  if times == 0 then acc else gets(times - 1, t, k, acc + someOr(StringTrie.get(t, k), 0))
+}
+
+def prefixes: int, StringTrie(int), string, int -> int = { times, t, k, acc ->
+  if times == 0
+    then acc
+    else prefixes(times - 1, t, k, if StringTrie.hasPrefix(t, k) then acc + 1 else acc)
+}
+
+def longest: int, StringTrie(int), string, int -> int = { times, t, k, acc ->
+  if times == 0
+    then acc
+    else match StringTrie.longestPrefixOf(t, k)
+      | #some(p, _) -> longest(times - 1, t, k, acc + string.length(p))
+      | #none -> longest(times - 1, t, k, acc)
+}
+
+def built: int -> int = { n -> StringTrie.length(made(n)) + string.length(key(n)) }
+
+def got: int -> int = { n -> gets(100, made(n), key(n), 0) }
+
+def checked: int -> int = { n -> prefixes(100, made(n), key(n), 0) }
+
+def matched: int -> int = { n -> longest(100, made(n), key(n) ++ "z", 0) }
+"""
+
+[<Fact>]
+let ``A string trie's lookups allocate nothing for the key's characters`` () =
+    // #2211: a lookup made a list of the key's characters first, with `string.chars`, before it walked the trie. It now
+    // reads the key by position, so all it allocates is each level's `map.get` result, one a character, and its own
+    // result: a `get` of a key of 2 characters made 4 blocks, and makes 2.
+    use program = instantiateWasm lookingUp []
+    let perLookup (name: string) (n: int) =
+        let made, _ = allocationsOf program "built" n
+        let looked, result = allocationsOf program name n
+        (looked - made) / 100, result
+    for n in [ 1; 50 ] do
+        let characters = 2 * n
+        let keyLength = 3 * n
+        for name, expected, own in [ "got", 100 * n, 1; "checked", 100, 1; "matched", 100 * keyLength, 6 ] do
+            let blocks, result = perLookup name n
+            Assert.Equal(expected, result)
+            Assert.InRange(blocks, 0, characters + own)
