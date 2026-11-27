@@ -141,6 +141,7 @@
     <Compile Include="LinterResultRules.fs" />
     <Compile Include="LinterTaskRules.fs" />
     <Compile Include="LinterRepeatedPulls.fs" />
+    <Compile Include="LinterRedundantTypeNames.fs" />
     <Compile Include="Linters.fs" />
     <Compile Include="ImportFixes.fs" />
     <Compile Include="ExpressionRewrites.fs" />

@@ -57,13 +57,16 @@ type SemanticModel =
       CalleeTypes: Map<NodeId, Ty>
       /// The types of the defs the imports bring in, with the contexts they require, by their symbols.
       ImportedContextTypes: Map<SymbolId, Ty * Ty list>
+      /// The pipes whose target is written with a type's name that the name without it reaches as well, by the pipe's
+      /// node: `xs \list.map` where `xs` is a list (see `InferState.RedundantTypeNames`).
+      RedundantTypeNames: Set<NodeId>
       /// The module's doc comments, each with what it documents, found from the parse only when a rule asks.
       DocComments: Lazy<DocComment list> }
 
 module SemanticModel =
     /// The model of a type-checked module, from the file it was compiled as (empty for source compiled directly), its
     /// text, the module as parsed, the expressions made up for its nodes, its doc comments, and what checking it found.
-    let ofTyped (file: string) (source: string) (syntax: Module) (lowered: Map<NodeId, NodeId list>) (docComments: Lazy<FileDocComments>) (typed: TypedModule) =
+    let ofTyped (file: string) (source: string) (syntax: Module) (lowered: Map<NodeId, NodeId list>) (docComments: Lazy<FileDocComments>) (redundantTypeNames: Set<NodeId>) (typed: TypedModule) =
         let source = source.Replace("\r\n", "\n").Replace("\r", "\n")
         { File = file
           Syntax = syntax
@@ -81,6 +84,7 @@ module SemanticModel =
           ContextProviders = typed.ContextProviders
           CalleeTypes = typed.CalleeTypes
           ImportedContextTypes = typed.ImportedContextTypes
+          RedundantTypeNames = redundantTypeNames
           DocComments = lazy docComments.Value.Comments }
 
 /// Something one of a linter's rules found. The host turns it into a diagnostic with the rule's code and

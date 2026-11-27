@@ -200,7 +200,7 @@ let ``An unknown linter, rule or severity is an error`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.InvalidManifestValue.Code, "There is no linter 'acme.lint': the linters are 'nanyx.lint'"
           DiagnosticCodes.UnknownManifestField.Code,
-          "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'resultOnlyTypeVariable', 'unusedResults', 'uselessExpressions', 'unawaitedTask', 'shadowedPreludeNames', 'semicolons', 'unconstructibleType', 'unusedContexts', 'repeatedPulls', 'unusedAllows', 'linterFailed'"
+          "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'resultOnlyTypeVariable', 'unusedResults', 'uselessExpressions', 'unawaitedTask', 'shadowedPreludeNames', 'semicolons', 'unconstructibleType', 'unusedContexts', 'repeatedPulls', 'redundantTypeName', 'unusedAllows', 'linterFailed'"
           DiagnosticCodes.InvalidManifestValue.Code, "The rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\"" ],
         errorsOf
             $"""

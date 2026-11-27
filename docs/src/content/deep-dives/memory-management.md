@@ -441,6 +441,14 @@ allocation `reusing` a token.
   is in some branches of an `if` or `match` and not others, each branch that has one writes into the block, and each
   that has none frees it first (`FreeToken`), so the block is used or freed once on every path, as in Perceus.
   Filtering a list held once keeps the cells of the elements it keeps.
+- **A record rebuilt from its own fields.** `P(x = p.x + 1, y = p.y, z = p.z + n)` reads `p`'s fields and builds a
+  record of the same size, with no arm to take `p` apart. Before counting, `CoreIrReuseFields.fs` makes it one: where
+  a chain reads a field of a record that the rest of the chain uses only to read fields of, and builds a record of its
+  size, the reads become a `match` on the record that binds the fields it reads, and each read is that name. The arm
+  then releases the record and builds into its block, as above, so a step function written this way, or the standard
+  library's `Queue.enqueue` and `Queue.dequeue`, allocates no record for each step
+  ([#2209](https://github.com/nanyx-lang/nanyx/issues/2209)). A temporary bound before the match and used in its arm is
+  made a local, as the inliner makes one, since a temporary is evaluated in the chain it is bound in.
 - **`with` updates in place.** `updateRecord` takes its record over, counted after the new values, which may read
   its fields. Its code computes the new values into locals, then releases the record: when the count was one, it
   drops the old value of each field on the heap it replaces and stores the new ones into the same block; otherwise

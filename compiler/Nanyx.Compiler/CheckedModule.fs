@@ -66,6 +66,8 @@ type internal CheckedModule =
       Subst: Subst
       /// The types inference recorded by node, unresolved: only the root module's are resolved (see `compileChecked`).
       RawExprTypes: Map<NodeId, Ty>
+      /// The pipes whose type name says nothing (see `InferState.RedundantTypeNames`), for the linters.
+      RedundantTypeNames: Set<NodeId>
       RawCalleeTypes: Map<NodeId, Ty>
       RawSymbolTypes: Map<SymbolId, Ty>
       /// The symbols of the module's own exported definitions, by name: not those of what it imports.
