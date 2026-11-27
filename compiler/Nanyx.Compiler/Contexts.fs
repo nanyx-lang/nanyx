@@ -538,8 +538,7 @@ let private recordMemberCall (call: NodeId option) (env: TypeEnv) (name: Identif
 /// pattern can't require one at all.
 let internal undeclaredContext (state: InferState) (defName: Identifier) (ctxName: Identifier) (what: string) (span: SourceSpan) =
     match state.WrittenTypes |> Map.tryFind defName with
-    | _ when (PatternSyntax.shapeOf defName).IsSome ->
-        Diagnostics.at DiagnosticCodes.PatternRequiresContexts span $"{what} the context '{ctxName}', but a pattern is pure: nothing in its body can require a context"
+    | _ when PatternPurity.isPattern defName -> PatternPurity.requires what ctxName span
     | Some { Kind = TypeWithContext([], _) } ->
         Diagnostics.at DiagnosticCodes.UndeclaredContext span
             $"{what} the context '{ctxName}', but the type of '{defName}' says with [] that it requires no contexts: load an instance with `use`, or call something that requires none"

@@ -145,12 +145,13 @@ let private declares (state: InferState) (defName: Identifier) (context: Identif
 /// context `context` where nothing supplies it. Something does in a lambda, which requires the context where it is
 /// called, and in a def's body, where the def writes the context or, writing no type, is inferred to require it (see
 /// `LambdaContexts.record`). A top-level value and a script's statements never have one: only a call that supplies the
-/// context, as `memory { ... }` does `Memory`.
+/// context, as `memory { ... }` does `Memory`. A custom pattern's body can't require one at all (see `PatternPurity`).
 let private unsuppliedAt (state: InferState) (subject: string) (instead: string) (context: Identifier) (span: SourceSpan) =
     let supplier = if context = MemoryCells.context then "a `memory { ... }` block" else "a call that supplies it"
     if LambdaContexts.withinLambda state || state.EscapedContexts.Contains context then None
     else
         match state.ContextScope with
+        | DefScope(defName, _) when PatternPurity.isPattern defName -> Some (PatternPurity.requires $"{subject} requires" context span)
         | DefScope(_, true) -> None
         | DefScope(defName, false) when declares state defName context -> None
         | DefScope(defName, false) ->

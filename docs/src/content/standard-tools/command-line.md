@@ -8,7 +8,7 @@ order: 0
 and is the language server for editors. `nanyx --help` lists its commands, and `nanyx <command> --help` describes one.
 
 ```text
-nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [--dbg-to <file>] [<file.nyx | package>] [--] [<arguments>]
+nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [--dbg-to <file>] [--files-in-memory] [<file.nyx | package>] [--] [<arguments>]
 nanyx check [--timings] [--host <host>] [<file.nyx | package>]
 nanyx build [--out <path>] [--release] [--core] [--wat] [--locked] [--timings] [--host <host>] [<package>]
 nanyx wasm <file.nyx> [--out <path>] [--release] [--wat]
@@ -87,6 +87,7 @@ program is answered with a 500, and the reason is written to standard error. See
 | `--allow-dir <directory>` | Lets the program read and write `<directory>`, and what is in it, as well as the current directory. The program reaches it by its absolute path: `nanyx run --allow-dir ../data tool.nyx`, run in `/home/ada/tool`, lets `tool.nyx` read `path.of("/home/ada/data/input.txt")`. A directory that isn't there is an error. |
 | `--check-memory` | Checks the program's memory as it runs: it stops with exit code 70 at a block freed twice or an object used after it was freed, and fails with exit code 1 if the program finishes with memory it never freed. |
 | `--memory` | Checks the program's memory as `--check-memory` does, and once the program stops, however it stops, writes a report to standard error (see below). |
+| `--files-in-memory` | Runs the program with its files in memory, over the real ones: it reads a real file until it writes, appends to or deletes it, and then what it left; a directory's listing has what it made and not what it deleted; and nothing it does reaches the disk (see [`filesystem.overlay`](../stdlib/filesystem)). The program is built from its host's root for this, the console host's `cli.host.memory` ([Writing a host](../advanced/hosts#writing-a-host)), and a program built without the flag is unchanged. A host with no such root is an error. The editor's live mode runs a program so. |
 | `--profile <file>` | Samples the run with Wasmtime's guest profiler, every 10 ms, and writes the profile to `<file>` in the Firefox profiler's format, to open at [profiler.firefox.com](https://profiler.firefox.com). Its functions have the names the program gives them, and the file and line each is defined on. The run is of the code `run` always runs, which has no [debug probes](../deep-dives/debug-probes). It can't be given with `--check-memory` or `--memory`, nor for a program that is served. |
 | `--dbg-to <file>` | Writes each [`dbg`](../stdlib/console#dbg) the program reaches to `<file>`, made anew, and none to standard error: one JSON object a line, written as it is reached, with its `file`, a full path, its `line` and `column`, from 1, its `value` as `dbg` writes it, and its `seq`, counted from 0. It is for an editor, which reads the file as it grows and shows each value where its `dbg` is written, as the [VS Code extension](./vs-code-extension#dbg-values) does. A served program writes its `dbg`s to its log, with the request, whether or not it is given. |
 | `--timings` | Writes how long each module took to check (see [Timings](#timings)). |

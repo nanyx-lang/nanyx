@@ -307,3 +307,17 @@ println("{work()}")"""
     Assert.Equal<(string * string) list>(
         [ "work", "() -> int"; "starter", "[Async] () -> int" ],
         TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type))
+
+[<Fact>]
+let ``A type nested 3,000 deep is written by check's types, lenses and hover on a thread of the main thread's stack (#3119)`` () =
+    let depth = 3000
+    let written = String.replicate depth "list(" + "int" + String.replicate depth ")"
+    let source = $"def f: {written} -> int = {{ x -> 1 }}\n"
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    // Windows gives its main thread 1 MB, which `nanyx check` and the language server run on.
+    let onMainStack (action: unit -> 'T) = Nanyx.LargeStack.runWithStack (1024 * 1024) action
+    let expected = $"{written} -> int"
+    Assert.Equal<(string * string) list>([ "f", expected ], onMainStack (fun () -> TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type)))
+    Assert.Equal(Some $"def f: {expected}", onMainStack (fun () -> Hover.typeAt Ascii result (source.IndexOf "f:") |> Option.map _.Type))
+    Assert.Empty(onMainStack (fun () -> TypeHints.typeLenses Ascii "" result))

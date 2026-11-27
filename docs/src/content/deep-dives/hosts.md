@@ -151,6 +151,14 @@ in progress.
   length)`, which opens the file, reads the chunk with `fd_pread` and closes it again, so a sequence abandoned before
   its end holds no file, and pulling a sequence again reads the same lines again. The host's `readFileChunk` gives an
   error, not an empty chunk, for an offset past the file's end, so a file cut short between chunks is caught.
+- **Files in memory.** The console host's manifest declares a third root, `filesInMemory = "cli.host.memory"`
+  (`HostPackages.filesInMemoryField`, `Host.FilesInMemory`), whose `run` calls `cli.host`'s `provide` with the entry
+  inside `nanyx.fs`'s `filesystem.overlay`: a `FileSystem` over the real one that keeps a map of what the program wrote,
+  made and deleted, and reads through to the real files for the rest. `nanyx run --files-in-memory` builds the program
+  under `Host.InMemory`, the host with that root in place of its own, as a component build swaps in its component root
+  (`Package.inMemory` for a package, `Script.compileFileRehostedReportingIn` for a script). It is chosen when the program
+  is built, not by an import of the runtime's own or a variable read at run time, so that a program built without it is
+  unchanged, and still runs under any WebAssembly runtime.
 - **`Async`** marks a function that can wait. It is declared in the standard library's `nanyx/async` as
   `protected ()`, so no `use` outside that module can make one, and it has no members. Both hosts provide it: each
   prelude re-exports it, and each `run` requires it in its own type, `[HostRuntime, Async]`, and passes it to the

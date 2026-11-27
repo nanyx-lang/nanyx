@@ -161,3 +161,112 @@ def `saves the port` = {
     let outcome = nanyxIn directory.Path [ "test"; "main.nyx" ]
     Assert.True(outcome.ExitCode = 0, outcome.StandardOutput + outcome.StandardError)
     Assert.Contains("1 passed", outcome.StandardOutput)
+
+// `filesystem.overlay` runs a block with a `FileSystem` over the real one that keeps what the block writes in memory
+// (#2055): reads see the real files, and nothing reaches the disk.
+
+/// The overlay's run of the operations, over real files that start as the disk run's do.
+let private overlaid =
+    """println(string.join(filesystem.overlay(operations), "\n"))"""
+
+[<Fact>]
+let ``Each member of an overlay gives what the console host's gives on disk, over the same real files`` () =
+    use disk = new TempDirectory()
+    writeStart disk
+    let onDisk = linesOf disk.Path """println(string.join(operations(), "\n"))"""
+
+    use real = new TempDirectory()
+    writeStart real
+    let overOverlay = linesOf real.Path overlaid
+    let differing =
+        List.zip onDisk overOverlay
+        |> List.filter (fun (disk, overlay) -> disk <> overlay)
+        |> List.map (fun (disk, overlay) -> $"on disk: {disk} / overlay: {overlay}")
+    Assert.Equal(onDisk.Length, overOverlay.Length)
+    Assert.Equal<string list>([], differing)
+
+[<Fact>]
+let ``An overlay leaves the real files as they were, whatever its block writes, appends, makes or deletes`` () =
+    use real = new TempDirectory()
+    writeStart real
+    linesOf real.Path overlaid |> ignore
+
+    let entries =
+        Directory.GetFileSystemEntries(real.Path, "*", SearchOption.AllDirectories)
+        |> Array.map (fun entry -> Path.GetRelativePath(real.Path, entry).Replace('\\', '/'))
+        |> Array.sort
+        |> List.ofArray
+    Assert.Equal<string list>([ "a.txt"; "main.nyx"; "sub"; "sub/b.txt" ], entries)
+    Assert.Equal("alpha", File.ReadAllText(Path.Combine(real.Path, "a.txt")))
+
+[<Fact>]
+let ``A real file an overlay deletes is gone from its listing and its reads, and still on disk`` () =
+    use real = new TempDirectory()
+    writeStart real
+    real.Write "sub/c.txt" "gamma"
+    let lines =
+        linesOf
+            real.Path
+            """println(string.join(filesystem.overlay({
+  [
+    "{file.delete(at("sub/b.txt"))}"
+    "{dir.list(at("sub"))}"
+    "{file.read(at("sub/b.txt"))}"
+    "{file.exists(at("sub/b.txt"))}"
+    "{file.write(at("sub/b.txt"), "again")}"
+    "{file.read(at("sub/b.txt"))}"
+    "{dir.list(at("sub"))}"
+  ]
+}), "\n"))"""
+    Assert.Equal<string list>(
+        [ "#ok"; "#some([sub/c.txt])"; "#notFound"; "false"; "#ok"; "#some(again)"; "#some([sub/b.txt, sub/c.txt])" ],
+        lines)
+    Assert.Equal("beta", File.ReadAllText(Path.Combine(real.Path, "sub", "b.txt")))
+
+/// A script that reads `a.txt`, writes it and `made.txt`, and reads them back.
+let private writing =
+    """::install nanyx.fs
+
+import (
+  nanyx.fs/file as file
+  nanyx.fs/path as path
+)
+
+println(file.read(path.of("a.txt")))
+println(file.write(path.of("a.txt"), "changed"))
+println(file.append(path.of("made.txt"), "made"))
+println(file.read(path.of("a.txt")))
+println(file.read(path.of("made.txt")))
+"""
+
+[<Fact>]
+let ``nanyx run --files-in-memory reads the real files and keeps what the program writes off the disk`` () =
+    use directory = new TempDirectory()
+    directory.Write "a.txt" "alpha"
+    directory.Write "main.nyx" writing
+    let outcome = nanyxIn directory.Path [ "run"; "--files-in-memory"; "main.nyx" ]
+    Assert.Equal("", outcome.StandardError)
+    Assert.Equal("#some(alpha)\n#ok\n#ok\n#some(changed)\n#some(made)\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+    Assert.Equal("alpha", File.ReadAllText(Path.Combine(directory.Path, "a.txt")))
+    Assert.False(File.Exists(Path.Combine(directory.Path, "made.txt")))
+
+[<Fact>]
+let ``Without --files-in-memory, what the program writes reaches the disk`` () =
+    use directory = new TempDirectory()
+    directory.Write "a.txt" "alpha"
+    directory.Write "main.nyx" writing
+    let outcome = nanyxIn directory.Path [ "run"; "main.nyx" ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal("changed", File.ReadAllText(Path.Combine(directory.Path, "a.txt")))
+    Assert.Equal("made", File.ReadAllText(Path.Combine(directory.Path, "made.txt")))
+
+[<Fact>]
+let ``--files-in-memory under a host with no root for it is a usage error, and the program doesn't run`` () =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" "::host nanyx.playground.host\n\nprintln(\"ran\")\n"
+    let outcome = nanyxIn directory.Path [ "run"; "--files-in-memory"; "main.nyx" ]
+    Assert.Equal(2, outcome.ExitCode)
+    Assert.Equal(
+        "error: --files-in-memory needs a host that can run a program with its files in memory, and the host 'nanyx.playground.host' can't: a host declares the root that does it with `filesInMemory` in its manifest.\n",
+        outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal("", outcome.StandardOutput)

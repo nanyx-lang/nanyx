@@ -29,6 +29,10 @@ module HostPackages =
     /// `library = "nanyx:console/library"`.
     let libraryField = "library"
 
+    /// The field of a host's declaration that names the root whose `run` runs the entry point with its files in memory:
+    /// `filesInMemory = "cli.host.memory"` (see `Host.InMemory`).
+    let filesInMemoryField = "filesInMemory"
+
     /// The field of a host's declaration that gives the settings it takes, each with its default:
     /// `settings = (port = 3000)`.
     let settingsField = "settings"
@@ -57,7 +61,7 @@ module HostPackages =
                             | Some { DataField.Value = { DataValue.Data = DataRecord built } } ->
                                 Option.map2 (fun componentRoot world -> { Root = componentRoot; World = world; Library = text built libraryField; CoreRoot = root }) (text built rootField) (text built worldField)
                             | _ -> None
-                        { Package = name; Module = root; Prelude = text host preludeField; Directory = directory; Settings = settings; Component = built })
+                        { Package = name; Module = root; Prelude = text host preludeField; Directory = directory; Settings = settings; Component = built; FilesInMemory = text host filesInMemoryField })
                 | _ -> None
             | _ -> None
         | _ -> None

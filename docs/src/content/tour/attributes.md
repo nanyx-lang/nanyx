@@ -155,6 +155,9 @@ def `saves the new port` = {
 }
 ```
 
+[`filesystem.overlay`](../stdlib/filesystem) is the same over the real files, for a `@test(#io)` that reads the
+package's own sample files: it reads them as they are, and keeps what the test writes in memory.
+
 `@test(#io)` runs a test with the console host's real `Console`, `Env` and `FileSystem`, for a test that is
 meant to read the package's files or the environment. It runs in the package's directory, or the script's, and what it
 prints is still kept:

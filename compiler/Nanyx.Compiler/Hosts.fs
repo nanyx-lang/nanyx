@@ -36,7 +36,10 @@ type Host =
       Settings: Parser.Program.DataValues.DataField list
       /// The root it builds a component from, if it has one. A host whose `Module` is this root is the host as a
       /// component build sees it (see `asComponent`).
-      Component: HostComponent option }
+      Component: HostComponent option
+      /// The root whose `run` runs the entry point with its files in memory, over the real ones, if it has one: what
+      /// `nanyx run --files-in-memory` builds a program from (see `InMemory`).
+      FilesInMemory: string option }
 
     /// The host's root module as an import names it: `nanyx.cli.host/cli.host`.
     member host.Import = $"{host.Package}/{host.Module}"
@@ -46,6 +49,10 @@ type Host =
 
     /// The host as a component build sees it, if it has a component root: its `run` is the component root's.
     member host.AsComponent = host.Component |> Option.map (fun built -> { host with Module = built.Root })
+
+    /// The host as `nanyx run --files-in-memory` sees it, if it has a root for that: its `run` is that root's, which keeps
+    /// what the program writes in memory. A program built without it is built from the host's own root, unchanged.
+    member host.InMemory = host.FilesInMemory |> Option.map (fun root -> { host with Module = root })
 
     /// Whether this is the host as a component build sees it (see `AsComponent`).
     member host.IsComponent = host.Component |> Option.exists (fun built -> built.Root = host.Module)

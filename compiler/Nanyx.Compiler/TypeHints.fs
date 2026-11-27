@@ -147,6 +147,8 @@ let private ownSymbols (file: string) (typed: TypedModule) : Symbol list =
 /// the types in each are named together with the def's own type, so a parameter's `α` is the `α` of the def's
 /// signature. An annotated def is named with the rest but gets no lens.
 let private hints (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list * TypeHint list =
+    // A type is written a level at a time, and can nest thousands deep, as checking it does (#3119).
+    Nanyx.LargeStack.run <| fun () ->
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         let own = ownSymbols file typed
@@ -242,6 +244,8 @@ let inlayHintsWithTopLevel (names: TypeNotation) (file: string) (result: Compile
 /// after the contexts it requires, as a hover on its name shows it, with made-up type variables named by `names`, as
 /// `nanyx check` prints them. `file` is as for `typeLenses`. Empty when the module did not type-check.
 let topLevelTypes (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
+    // A type is written a level at a time, and can nest thousands deep, as checking it does (#3119).
+    Nanyx.LargeStack.run <| fun () ->
     match result.Typed with
     | Some typed ->
         ownSymbols file typed

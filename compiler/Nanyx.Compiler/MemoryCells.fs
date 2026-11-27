@@ -72,6 +72,23 @@ let recordUse (env: TypeEnv) (state: InferState) (name: Identifier) : InferState
         | None -> state
     | _ -> state
 
+/// The error for `what` (which ends "requires", say) at `span`, where `name`, as `env` binds it, is a cell made outside
+/// the custom pattern whose body `state` is in. A pattern is pure, so it can't read or change one: its result could
+/// change between matches of the same value, and how often it ran would show (#3112). A cell made in the pattern's
+/// body, in a `memory` block of its own, is its own.
+let outsidePattern (env: TypeEnv) (state: InferState) (name: Identifier) (what: string) (span: SourceSpan) : Diagnostic list =
+    match state.ContextScope with
+    | DefScope(defName, _) when PatternPurity.isPattern defName ->
+        let declaredAt (symbol: SymbolId) = state.Symbols.TryFind symbol |> Option.map _.Declaration.Start
+        let symbolOf (name: Identifier) = TypeEnv.tryFind name env |> Option.bind _.Symbol
+        match symbolOf name |> Option.filter state.Cells.ContainsKey with
+        | Some cell ->
+            match declaredAt cell, symbolOf defName |> Option.bind declaredAt with
+            | Some cellAt, Some patternAt when cellAt > patternAt -> []
+            | _ -> [ PatternPurity.requires what context span ]
+        | None -> []
+    | _ -> []
+
 /// Records that the local def `symbol` is a cell, of the scope of the `memory` block `env` is in. One made outside a
 /// block, which is an error, has a scope of its own, and its uses need no `Memory` (see `recordUse`).
 let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
@@ -101,13 +118,16 @@ let inferMut (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * I
 let inferAssign (infer: TypeEnv -> InferState -> Expression -> Result<TypedExpr * InferState, Diagnostic list>) (env: TypeEnv) (state: InferState) (expr: Expression) (target: Expression) (value: Expression) =
     match target.Kind with
     | IdentifierExpr name when isCell env state name ->
-        infer env state target
-        |> Result.bind (fun (typedTarget, afterTarget) ->
-            infer env afterTarget value
-            |> Result.map (fun (typedValue, next) ->
-                let assigned = addAssignableConstraintAt expr.Span typedValue.Type typedTarget.Type next
-                mkTypedExpr expr (TyPrimitive "unit") None None None,
-                { assigned with CellAssignments = assigned.CellAssignments.Add expr.Span }))
+        match outsidePattern env state name $"Changing the cell '{name}' with `:=` requires" expr.Span with
+        | _ :: _ as errors -> Error errors
+        | [] ->
+            infer env state target
+            |> Result.bind (fun (typedTarget, afterTarget) ->
+                infer env afterTarget value
+                |> Result.map (fun (typedValue, next) ->
+                    let assigned = addAssignableConstraintAt expr.Span typedValue.Type typedTarget.Type next
+                    mkTypedExpr expr (TyPrimitive "unit") None None None,
+                    { assigned with CellAssignments = assigned.CellAssignments.Add expr.Span }))
     | IdentifierExpr name when env.Names.ContainsKey name ->
         Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span $"`:=` changes only a cell, a name declared with `mut`" |> Diagnostics.about name ]
     | _ -> Error [ Diagnostics.at DiagnosticCodes.NotACell target.Span "Only a cell can be assigned with `:=`: a name declared with `mut name = value`" ]

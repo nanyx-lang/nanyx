@@ -294,9 +294,12 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                     | _ -> ty, next
                 // A function named as a value is checked as a call to it would be, at the type it is passed as.
                 checkComparisonsAt env next expr name expr.Span ty
-                |> Result.map (fun next ->
-                    let symbol = scheme.Symbol |> Option.bind next.Symbols.TryFind
-                    mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name |> LambdaContexts.recordNamed symbol ty)
+                |> Result.bind (fun next ->
+                    match MemoryCells.outsidePattern env next name $"Reading the cell '{name}' requires" expr.Span with
+                    | _ :: _ as errors -> Error errors
+                    | [] ->
+                        let symbol = scheme.Symbol |> Option.bind next.Symbols.TryFind
+                        Ok (mkTypedExpr expr ty None None None, MemoryCells.recordUse env next name |> LambdaContexts.recordNamed symbol ty))
         | None ->
             // A def attached to a context available here, by its bare name.
             match AttachedContextDefs.qualifiedFor env state name expr.Span with

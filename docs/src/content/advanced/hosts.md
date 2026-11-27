@@ -222,6 +222,14 @@ also names the world they are built in, which imports what its other world does 
 `library = "nanyx:console/library"`, beside `world`. Without one, building a library component under the host is an
 error.
 
+A host may also have a root that runs a program with its files in memory, which
+[`nanyx run --files-in-memory`](../standard-tools/command-line#nanyx-run), as the editor's live mode runs a program,
+builds the program from in place of `root`: `filesInMemory = "shout.host.memory"`, beside `root`. It exports `run` as
+the root does, and runs the entry point with a `FileSystem` that keeps what the program writes in memory, over the real
+files, as `nanyx.fs`'s [`filesystem.overlay`](../stdlib/filesystem) does. The console host's is `cli.host.memory`,
+whose `run` calls `cli.host`'s `provide` with the entry inside `filesystem.overlay`. A program built without the flag
+is built from `root` as always, and has none of it. Without one, `--files-in-memory` under the host is an error.
+
 A host's roots may also export `provide`, which takes a function of the shape `run` does, calls it under the contexts
 the host provides, and gives back what it returns: `export def provide: [HostRuntime] ([Log] () -> a) -> a`. A
 component's export that requires contexts, an [`@component`](../tour/attributes#component) def such as
