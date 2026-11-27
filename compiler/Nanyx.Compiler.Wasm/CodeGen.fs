@@ -558,8 +558,11 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
         || match typed.Types |> Map.tryFind name |> Option.map Unifier.unalias with
            | Some (TyFunc(_, _, contexts)) -> not (Unifier.writtenContexts contexts).IsEmpty
            | _ -> false
+    // The module's types, and the contexts of the modules it imports that it doesn't name itself, which a definition
+    // inlined from one of them may require (see `TypedModule.InlinedTypeDefs`).
+    let typeDefs = typed.InlinedTypeDefs |> Map.fold (fun acc name info -> acc |> Map.add name info) typed.TypeDefs
     // The members of each context, as a function value that requires the context takes them.
-    let contextLayouts = contextLayoutsOf typed.TypeDefs (fst (extractTypeLayouts module'))
+    let contextLayouts = contextLayoutsOf typeDefs (fst (extractTypeLayouts module'))
     // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them, and
     // a local function those of the parameterised contexts it requires too, which its lambda's type leaves out (see
     // `localContextOf`). Those are keyed as the local writes them (`Eq_b_==`), as a lifted local has them in scope (see
@@ -674,14 +677,14 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
               Externs = externs
               ExprTypes =
                 allExprTypes
-                |> carryPlainContexts typed.TypeDefs functionContextTypes (functionWrappers |> Map.toList |> List.map (fun (function', wrapper) -> wrapper, function') |> Map.ofList) module'
+                |> carryPlainContexts typeDefs functionContextTypes (functionWrappers |> Map.toList |> List.map (fun (function', wrapper) -> wrapper, function') |> Map.ofList) module'
                 |> withLocalContexts
               CalleeTypes = typed.InlinedCalleeTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) typed.CalleeTypes
               AssociatedArguments = typed.AssociatedArguments
               DefinitionTypes = typed.Types
               ContextParameters =
                 functionContextRequirements
-                |> Map.map (fun name _ -> coreIrContextParameters defs functionContextTypes typeLayouts functionContextRequirements typed.TypeDefs typed.Types allExprTypes name)
+                |> Map.map (fun name _ -> coreIrContextParameters defs functionContextTypes typeLayouts functionContextRequirements typeDefs typed.Types allExprTypes name)
               ContextArguments =
                 fun name callId scopeKeys passed ->
                     try
@@ -728,7 +731,7 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
               Dbg = if options.Release then CoreIrLowerInput.Stripped else CoreIrLowerInput.PrintedFrom options.SourceRoot
               Probes = options.Probes
               TypeIds = CoreIrTypeIds.TypeIds()
-              TypeDefinitions = typed.TypeDefs }
+              TypeDefinitions = typeDefs }
         try CoreIrLowerModule.lowerModule input (emitFromCoreIr functionContextRequirements probeContext Set.empty >> ignore)
         // What the passes after the lowering make has no place, even after a lowering that stopped part way.
         finally CoreIr.Places.Current <- None
