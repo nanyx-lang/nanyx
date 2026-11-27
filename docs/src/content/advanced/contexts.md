@@ -495,6 +495,8 @@ def joinAll: [Iter(c, elem = string)] c -> string = { items ->
 
 Naming a member the context doesn't have, or one that isn't a type, as in `Iter(c, next = int)`, is NYX0267.
 
+The same form binds an associated type to a type variable, `[Iter(c, elem = a)] c, a -> a`, and that is how hover, the info view, `nanyx check` and the error messages write one that the type uses, so it never reads as a type's name. `headOr` above shows as `[Iter(c, elem = a)] c, a -> a`, its variable the next letter the signature doesn't use, and `def divide = { x, y -> x / y }` as `[Num(α, fraction = β)] α, α -> β`, in the Greek letters of an inferred type. Each associated type gets its own variable, so a type that requires `Iter` twice binds two. One the type doesn't use is left out: `countAll` shows as `[Iter(c)] c -> int`. Only how a type is shown changes: a signature can still write the bare `elem`, or `Iter(c).elem`.
+
 An associated type is one of the function's type variables like any other, so a context the function needs of it is written in its type too. Interpolating an element, comparing two with `==`, adding them with `+` or passing one to a function that requires a context of it needs `ToString(elem)`, `Eq(elem)`, `Add(elem)` or that context in the list, and leaving it out is NYX0205, with a fix that adds it. A function that doesn't write its type infers them, as it does for its other variables.
 
 ```nanyx fragment

@@ -258,11 +258,18 @@ instance is chosen by the arguments but its associated types, and fixes those (`
 from attached definitions fixes them by its members' types, as `int.fromString` fixes the `failure` of `FromString(int)`, or by
 an attached alias, `type Bag.elem = int`, and leaving one unfixed or fixing it two ways is an error.
 
-A type is written back for a reader as a signature writes it. Given the module's type definitions
-(`Unifier.tyToDisplayStringIn`, `Signatures.typesWithContexts`), the printer (`TypePrinting.printTy`) leaves out an
-associated argument that is the signature's own variable of that name, `[Iter(c)]`, and writes any other by name,
-`Iter(c, elem = string)` or, for one inference leaves open, `Iter(a, elem = b)`. Hover, `nanyx check`, the type lenses,
-the stdlib reference and the refactorings that write a type do so, and so does a diagnostic (`Unifier.tyToStringIn`): a
+A type is written back for a reader with each associated type it uses bound by name in its context, never bare: a
+signature's `[Iter(c)] c, elem -> elem` is written `[Iter(c, elem = a)] c, a -> a`, as the bare `elem` would read as a
+type's name. Given the module's type definitions (`Unifier.tyToDisplayStringIn`, `Signatures.typesWithContexts`),
+`Unifier.associatedRenaming` gives a signature's variable named after an associated type, where the type uses it
+elsewhere too, the next Latin letter the type doesn't use, as `displayRenaming` names a variable in `Source`, whatever the
+notation; one inference leaves open is named with the rest, `[Num(α, fraction = β)] α, α -> β`. Each variable gets its
+own name, so two `Iter`s bind two. The printer (`TypePrinting.printTy`) writes each associated argument by name,
+`Iter(c, elem = string)`, but for a variable of that associated type's name, which is then one the type uses nowhere
+else, so it is left out: `[Iter(c)] c -> int`. Source can still write the bare `elem` and `Iter(c).elem`; only the
+printed form changes. Hover, the info view (its Context flow too, which names a def's contexts together with its type),
+`nanyx check`, the type lenses, the stdlib reference and the refactorings that write a type do so, and so does a
+diagnostic (`Unifier.tyToStringIn`, `Unifier.messageText`): a
 mismatch found when the module's constraints are solved is written once its type definitions are known, and a message
 inference makes is written with the type definitions it has so far. A message made without them (`Unifier.tyToString`),
 as by a check that has no state to hand, still writes the arguments positionally.
