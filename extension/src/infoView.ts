@@ -72,7 +72,7 @@ interface InfoViewMessage {
  * The view draws a rule between one scope and the next.
  */
 interface InfoViewScope {
-  kind: "messages" | "expression" | "type" | "lambda" | "function" | "typeDefinition" | "module";
+  kind: "messages" | "expression" | "type" | "lambda" | "definition" | "function" | "typeDefinition" | "module";
   /** What kind of code the heading is, where it doesn't say: `expression`, `type`, `type variable`, `lambda`. */
   label?: string;
   /** The scope's code (`x + 1`, `{ message -> … } (line 30)`, `for xs | x -> … (line 4)`, `def greet`), or the messages' title. */
