@@ -335,35 +335,42 @@ let private carried (context: Ty) =
     | TyVar _ -> true
     | _ -> isInstance context
 
-/// Each local function that requires parameterised contexts or context variables, written or inferred, by its lambda's
-/// node: the contexts as the type checker writes them (`TypedModule.LocalContexts`), its lambda's type, and the
-/// contexts in that type's variables. The type checker keeps them out of the lambda's type, so they are put there for
-/// the backend: a function value carries their members.
+/// The local function `local` whose value is `lambda`, if it requires parameterised contexts or context variables,
+/// written or inferred: its symbol, the contexts as the type checker writes them (`TypedModule.LocalContexts`), its
+/// lambda's type, and the contexts in that type's variables. The type checker keeps them out of the lambda's type, so
+/// they are put there for the backend: a function value carries their members.
+let private localContextOf (typed: TypedModule) (checkedTypes: Map<NodeId, Ty>) (local: LambdaLifting.LocalDefinition) (lambda: Expression) =
+    match checkedTypes |> Map.tryFind lambda.Id with
+    | Some lambdaTy ->
+        typed.Symbols
+        |> Map.values
+        |> Seq.filter (fun symbol -> symbol.Kind = LocalValue && symbol.Name = local.Name && SourceSpan.contains local.Statement symbol.Declaration)
+        |> Seq.sortBy _.Declaration.Start
+        |> Seq.tryHead
+        |> Option.bind (fun symbol ->
+            // A context the def writes is its alias, `Show(Point)` with its members; one inferred is applied.
+            let applied (context: Ty) =
+                match context with
+                | TyAlias(name, args, _) -> TyApply(name, args)
+                | other -> other
+            match typed.LocalContexts |> Map.tryFind symbol.Id, typed.ContextTypes |> Map.tryFind symbol.Id |> Option.map (List.map applied), typed.SymbolTypes |> Map.tryFind symbol.Id with
+            | Some written, Some contexts, Some symbolTy when written.Length = contexts.Length && List.exists carried contexts ->
+                try
+                    let bindings = CoreIrLowerTypes.bindScheme Map.empty symbolTy lambdaTy
+                    Some (symbol.Id, written, lambdaTy, contexts |> List.map (CoreIrLowerTypes.substitute bindings))
+                with CoreIrLowerTypes.CannotLower _ -> None
+            | _ -> None)
+    | None -> None
+
+/// Each local function that requires parameterised contexts or context variables, by its lambda's node (see
+/// `localContextOf`).
 let private localContextsOf (typed: TypedModule) (checkedTypes: Map<NodeId, Ty>) (liftedOrigins: Map<string, LambdaLifting.LiftedOrigin>) =
-    let localSymbols = typed.Symbols |> Map.values |> Seq.filter (fun symbol -> symbol.Kind = LocalValue) |> List.ofSeq
     liftedOrigins
     |> Map.values
     |> Seq.choose (fun origin ->
-        match origin.Local, checkedTypes |> Map.tryFind origin.Lambda.Id with
-        | Some local, Some lambdaTy ->
-            localSymbols
-            |> List.filter (fun symbol -> symbol.Name = local.Name && SourceSpan.contains local.Statement symbol.Declaration)
-            |> List.sortBy _.Declaration.Start
-            |> List.tryHead
-            |> Option.bind (fun symbol ->
-                // A context the def writes is its alias, `Show(Point)` with its members; one inferred is applied.
-                let applied (context: Ty) =
-                    match context with
-                    | TyAlias(name, args, _) -> TyApply(name, args)
-                    | other -> other
-                match typed.LocalContexts |> Map.tryFind symbol.Id, typed.ContextTypes |> Map.tryFind symbol.Id |> Option.map (List.map applied), typed.SymbolTypes |> Map.tryFind symbol.Id with
-                | Some written, Some contexts, Some symbolTy when written.Length = contexts.Length && List.exists carried contexts ->
-                    try
-                        let bindings = CoreIrLowerTypes.bindScheme Map.empty symbolTy lambdaTy
-                        Some (origin.Lambda.Id, (symbol.Id, written, lambdaTy, contexts |> List.map (CoreIrLowerTypes.substitute bindings)))
-                    with CoreIrLowerTypes.CannotLower _ -> None
-                | _ -> None)
-        | _ -> None)
+        origin.Local
+        |> Option.bind (fun local -> localContextOf typed checkedTypes local origin.Lambda)
+        |> Option.map (fun found -> origin.Lambda.Id, found))
     |> Map.ofSeq
 
 /// The other names a function can call the members of the contexts it requires by, each with the key it stands
@@ -545,11 +552,22 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
            | _ -> false
     // The members of each context, as a function value that requires the context takes them.
     let contextLayouts = contextLayoutsOf typed.TypeDefs (fst (extractTypeLayouts module'))
-    // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them.
-    let passedMembers (lambda: Expression) =
-        match checkedTypes |> Map.tryFind lambda.Id with
-        | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst |> Set.ofList
-        | _ -> Set.empty
+    // A lambda is passed the members of the contexts its type requires at each call, so it does not capture them, and
+    // a local function those of the parameterised contexts it requires too, which its lambda's type leaves out (see
+    // `localContextOf`). Those are keyed as the local writes them (`Eq_b_==`), as a lifted local has them in scope (see
+    // `CoreIrLowerInstances.byWrittenKeys`), since a key needs the type variable's name: a lambda inside the local
+    // captures them from it by those keys (#2813).
+    let passedMembers (local: LambdaLifting.LocalDefinition option) (lambda: Expression) =
+        let ofType =
+            match checkedTypes |> Map.tryFind lambda.Id with
+            | Some (TyFunc(_, _, contexts)) -> CoreIrLowerTypes.contextMembersOf contextLayouts contexts |> List.map fst
+            | _ -> []
+        let ofLocal =
+            local
+            |> Option.bind (fun local -> localContextOf typed checkedTypes local lambda)
+            |> Option.map (fun (_, written, _, _) -> CoreIrLowerInstances.writtenKeys contextLayouts written)
+            |> Option.defaultValue []
+        ofType @ ofLocal |> Set.ofList
     let module', liftedOrigins, functionWrappers, useKeys, useBindingContexts = LambdaLifting.lift (externs |> Map.map (fun _ declared -> declared.Parameters.Length)) synthesizedMembers memberCaptures requiresContexts passedMembers typed.UseContexts (typed.AmbientMembers |> List.map _.Definition) module'
     let localContexts = localContextsOf typed checkedTypes liftedOrigins
     let withLocalContexts (exprTypes: Map<NodeId, Ty>) =

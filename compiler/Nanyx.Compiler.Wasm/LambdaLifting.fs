@@ -124,14 +124,14 @@ let private annotateFromMemberType (memberType: TypeExpr option) (args: (string 
 /// are passed members. It captures the locals the members of each `use` in scope are evaluated into as well, those it
 /// may call, and loads them again with a `use` of its own, and so the members of the parameterised contexts a lambda
 /// around it is passed. But it captures none of the members `passedMembers` gives for it, by key: those of the
-/// contexts its type requires, which each call passes it instead.
+/// contexts its type requires, and a local function's parameterised ones, which each call passes it instead.
 ///
 /// `useContexts` is the instance of a parameterised context each `use` loads, by the node of its value (see
 /// `TypedModule.UseContexts`): its members are keyed by it, and read from the value one by one. A `use` left behind
 /// binds such a member by its key's text, and the key of each such name is returned too. So is the plain context each
 /// local a `use` binding is evaluated into binds a member of, where the `use` names it (`use Proc(...)`), by the local's
 /// name: two plain contexts may have members of the same name.
-let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKey list>) (requiresContexts: string -> bool) (passedMembers: Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (ambientDefinitions: string list) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> * Map<string, string> =
+let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCaptures: Map<string, ContextMemberKey list>) (requiresContexts: string -> bool) (passedMembers: LocalDefinition option -> Expression -> Set<ContextMemberKey>) (useContexts: Map<NodeId, TypeExpr>) (ambientDefinitions: string list) (module': Module) : Module * Map<string, LiftedOrigin> * Map<string, string> * Map<string, ContextMemberKey> * Map<string, string> =
     let lifted = System.Collections.Generic.List<TopLevelItem>()
     let origins = System.Collections.Generic.Dictionary<string, LiftedOrigin>()
     let wrappers = System.Collections.Generic.Dictionary<string, string>()
@@ -287,8 +287,8 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
     /// The lifted function's lambda: the environment parameter first, then the captured names bound
     /// from the environment's fields ahead of the original body, and the members of the `use`s in scope loaded
     /// again from their captured locals. It is reported where `lambda` was written.
-    let liftedLambda (lambda: Expression) (args: (string * TypeExpr option) list) (captured: string list) (body: Expression) =
-        let passed = passedMembers lambda
+    let liftedLambda (local: LocalDefinition option) (lambda: Expression) (args: (string * TypeExpr option) list) (captured: string list) (body: Expression) =
+        let passed = passedMembers local lambda
         // A member the lambda is passed is found by its name too, so a `use` around it of the same context at other
         // type arguments doesn't bind that name over it (#2570).
         let passedNames = passed |> Seq.choose (function InstanceMember(_, memberName) -> Some memberName | NamedMember _ -> None) |> Set.ofSeq
@@ -367,11 +367,12 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
                     let parameterNames = args |> List.map fst |> Set.ofList
                     let innerScope = Set.union parameterNames (boundNames body |> Set.ofList) |> Set.add name
                     let liftedBody = liftExpr (Set.union scope innerScope) body |> redirectSelfReferences name liftedName
+                    let local = Some { Name = name; Statement = statement.Span }
                     let captured =
                         capturedFrom scope (parameterNames |> Set.add name |> Set.add liftedName) (innerScope |> Set.add liftedName |> Set.add ClosureSyntax.envParameter) liftedBody
-                        |> withMembers (passedMembers lambda) body liftedBody
-                    lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda lambda args captured liftedBody))))
-                    origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda; Local = Some { Name = name; Statement = statement.Span } }
+                        |> withMembers (passedMembers local lambda) body liftedBody
+                    lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, liftedName, None, liftedLambda local lambda args captured liftedBody))))
+                    origins.[liftedName] <- { Owner = owner; LocalName = Some name; Captured = captured; Source = None; Lambda = lambda; Local = local }
                     [ keep (DefStatement(isExport, name, None, closureOf lambda liftedName captured)) ]
                 | DefStatement(isExport, name, typeOpt, Kind (RecSyntax.Call rhs)) ->
                     [ keep (DefStatement(isExport, name, typeOpt, recur rhs)) ]
@@ -501,7 +502,7 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
         // so one captures them as it captures a `use`'s, from the parameters they come in: by key, and by name where no
         // other has that name.
         let instanceMembers =
-            let keys = passedMembers lambda |> Set.toList |> List.choose (function InstanceMember(_, memberName) as key -> Some (key, memberName) | NamedMember _ -> None)
+            let keys = passedMembers local lambda |> Set.toList |> List.choose (function InstanceMember(_, memberName) as key -> Some (key, memberName) | NamedMember _ -> None)
             keys
             |> List.map (fun (key, memberName) ->
                 let unique = keys |> List.filter (snd >> (=) memberName) |> List.length = 1
@@ -514,11 +515,11 @@ let lift (externArities: Map<string, int>) (synthesized: Set<string>) (memberCap
         useMembers <- outerUseMembers
         let captured =
             capturedFrom scope parameterNames innerScope liftedBody
-            |> withMembers (passedMembers lambda) body liftedBody
+            |> withMembers (passedMembers local lambda) body liftedBody
         let name = $"__lambda_{counter}"
         counter <- counter + 1
-        if not (passedMembers lambda).IsEmpty then passesMembers <- true
-        lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, name, None, liftedLambda lambda args captured liftedBody))))
+        if not (passedMembers local lambda).IsEmpty then passesMembers <- true
+        lifted.Add(TopLevelItem.synthetic (Def (ValueDef(false, name, None, liftedLambda local lambda args captured liftedBody))))
         origins.[name] <- { Owner = owner; LocalName = None; Captured = captured; Source = Some lambda; Lambda = lambda; Local = local }
         closureOf lambda name captured
 
