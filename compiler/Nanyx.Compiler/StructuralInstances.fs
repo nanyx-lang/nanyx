@@ -3,7 +3,7 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.InferState
 
-/// Instances of `ToString`, `Eq` and `Hash` the compiler derives from a type's structure, part by part (see "Printing values"
+/// Instances of `ToString`, `Eq`, `Hash` and `Ord` the compiler derives from a type's structure, part by part (see "Printing values"
 /// and "Common contexts" on the docs' Contexts page).
 ///
 /// A tag union, a tuple, a record, a list, a map or a set has no `toString` attached, so a hole of such a type, or a
@@ -60,6 +60,7 @@ module internal StructuralInstances =
     let private memberOf (ctxName: Identifier) =
         if ctxName = EqualityOperators.context then EqualityOperators.equals
         elif ctxName = WellKnownContexts.hashing.Context then WellKnownContexts.hashing.Member
+        elif ctxName = WellKnownContexts.ordering.Context then WellKnownContexts.ordering.Member
         else InterpolationHoles.memberName
 
     /// What a type is built from, as far as writing a value of it goes.
@@ -183,11 +184,19 @@ module internal StructuralInstances =
         | TyMeasure(dimension, storage) -> Some (MeasureShape(dimension, storage, []))
         | _ -> shapeOf ty
 
+    /// What `ty` is built from, as far as ordering two values of it goes: only a tuple and a list are, since a
+    /// record's fields and a union's tags have no order of their own.
+    let private orderedShapeOf (ty: Ty) : Shape option =
+        match shapeOf ty with
+        | Some (TupleShape _ | ListShape _ as shape) -> Some shape
+        | _ -> None
+
     /// The shape an instance of `ctxName` is derived from: `Hash` as `Eq`, so that values a derived `==` finds equal have
     /// the same hash.
     let private shapeFor (ctxName: Identifier) =
         if ctxName = EqualityOperators.context || ctxName = WellKnownContexts.hashing.Context then comparedShapeOf
         elif ctxName = InterpolationHoles.context then writtenShapeOf
+        elif ctxName = WellKnownContexts.ordering.Context then orderedShapeOf
         else shapeOf
 
     let private partsOf (shape: Shape) : Ty list =
@@ -492,6 +501,37 @@ module internal StructuralInstances =
         | ArrayShape _
         | MeasureShape _ -> invalidOp "Hash is never derived for an array, an open union or a measured value (see WellKnownContexts.hashing)"
 
+    /// The prelude functions that order two values through their `Ord`, and two lists through their elements'.
+    let private compareOf, listCompare = "__compareOf", "__listCompare"
+
+    /// The tags an order is given as.
+    let private orderTags = [ "less"; "equal"; "greater" ]
+
+    /// How `value` and `other`, two values of the type `shape` is, are ordered, as a derived `compare` works it out: a
+    /// tuple position by position, each part with `__compareOf`, which finds the part's own, going on to the next while they
+    /// are `#equal`; a list element by element with `__listCompare`, which does the same (#2748).
+    let private compareBody (span: SourceSpan) (shape: Shape) : Expression =
+        let expr = Expression.at span
+        let name (identifier: Identifier) = expr (IdentifierExpr identifier)
+        let pattern = Pattern.at span
+        let compare (left: Expression) (right: Expression) = expr (FunctionCall(compareOf, None, [ left; right ]))
+        let positions (partName: int -> Identifier) (count: int) = pattern (TuplePattern(List.init count (partName >> IdentifierPattern >> pattern), false))
+        let value, other = name valueName, name otherName
+        match shape with
+        | TupleShape items ->
+            let orderAt (index: int) = compare (name (partName index)) (name (otherPartName index))
+            let ordered =
+                List.init (items.Length - 1) id
+                |> List.rev
+                |> List.fold
+                    (fun later index ->
+                        let decided = $"__order{index}"
+                        expr (Match([ orderAt index ], [ [ pattern (TagPattern("equal", None)) ], later; [ pattern (IdentifierPattern decided) ], name decided ])))
+                    (orderAt (items.Length - 1))
+            expr (Match([ value; other ], [ [ positions partName items.Length; positions otherPartName items.Length ], ordered ]))
+        | ListShape _ -> expr (FunctionCall(listCompare, None, [ value; other ]))
+        | _ -> invalidOp "Ord is derived only for a tuple or a list (see orderedShapeOf)"
+
     /// The definition the compiler writes for the instance of `ctxName` of the type written `written`, which
     /// requires `ctxName` of each of `varNames`: its name is `name`, and it is reported at `span`.
     let private definition (span: SourceSpan) (ctxName: Identifier) (name: Identifier) (written: TypeExpr) (varNames: string list) (shape: Shape) : TopLevelItem =
@@ -503,6 +543,10 @@ module internal StructuralInstances =
                 expr (Lambda([ valueName, None; otherName, None ], equalsBody span shape, false))
             elif ctxName = WellKnownContexts.hashing.Context then
                 typeExpr (TypeFunc(written, typeExpr (TypeName "int"))), expr (Lambda([ valueName, None ], hashBody span shape, false))
+            elif ctxName = WellKnownContexts.ordering.Context then
+                let order = typeExpr (TypeUnion(orderTags |> List.map (fun tag -> typeExpr (TypeTag(tag, None)))))
+                typeExpr (TypeFunc(typeExpr (TypeTuple [ written; written ]), order)),
+                expr (Lambda([ valueName, None; otherName, None ], compareBody span shape, false))
             else
                 typeExpr (TypeFunc(written, typeExpr (TypeName "string"))), expr (Lambda([ valueName, None ], toStringBody span shape, false))
         let annotation =
@@ -571,6 +615,7 @@ module internal StructuralInstances =
                     let prefix =
                         if ctxName = EqualityOperators.context then EqualityOperators.builtInFunction
                         elif ctxName = WellKnownContexts.hashing.Context then WellKnownContexts.hashing.BuiltInFunction
+                        elif ctxName = WellKnownContexts.ordering.Context then WellKnownContexts.ordering.BuiltInFunction
                         else "__toString"
                     let name = $"{prefix}_{NodeId.next ()}"
                     let item = definition span ctxName name written (vars |> List.map (fun var -> names.[var.Id])) shape

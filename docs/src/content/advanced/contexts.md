@@ -603,6 +603,8 @@ def Version.compare: Version, Version -> #less | #equal | #greater = { a, b ->
 
 As with `==`, only a nominal type can attach `compare`. The built-in types have theirs attached as functions, `int.compare` and `float.compare` among them, but their order is always the compiler's own.
 
+A tuple or a list that holds such a type is ordered through its `compare`: `<` on two `(Version, int)` tuples orders by `Version.compare` and then by the `int`, and so does `<` on two `list(list(Version))`, element by element. That holds for a list whose element type is only settled later in the def, too. A tuple that holds a record or a tag with no `compare` of its own still has no order.
+
 A function that orders values of one of its type variables requires `Ord` of it, `def largest: [Ord(a)] list(a) -> #some(a) | #emptyList`, and one that does not write its type has it inferred: `def larger = { x, y -> if x > y then x else y }` is `[Ord(a)] a, a -> a`. `Ord` does not require `Eq`; a type that attaches both should keep them consistent.
 
 ## Hash(a)
