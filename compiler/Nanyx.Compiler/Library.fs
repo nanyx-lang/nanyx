@@ -616,13 +616,17 @@ module Compiler =
                         match state.ArgumentSpans |> Map.tryFind span with
                         | Some reported -> text, reported.Value, kind
                         | None -> text, span, kind)
-                    // So is a mismatch of a construct's branches, at the one that doesn't fit (see `BranchSpans`).
+                    // So is a mismatch of a construct's branches, at the one that doesn't fit, with the branches before it
+                    // as related locations (see `BranchSpans`).
                     |> List.map (fun (text, span, kind) ->
                         match state.BranchSpans |> Map.tryFind span |> Option.bind _.Value with
-                        | Some (branch, said) -> Option.defaultValue text said, branch, kind
-                        | None -> text, span, kind)
-                    |> List.sortBy (fun (_, span, _) -> span.Start)
-                    |> List.map (fun (text, span, kind) ->
+                        | Some (branch, said, related) -> Option.defaultValue text said, branch, kind, related
+                        | None -> text, span, kind, [])
+                    |> List.sortBy (fun (_, span, _, _) -> span.Start)
+                    |> List.map (fun (text, span, kind, related) ->
+                        let withRelated (diagnostic: Diagnostic) =
+                            related |> List.fold (fun diagnostic (at, label) -> Diagnostics.withRelated at (Unifier.messageText state.TypeDefs label) diagnostic) diagnostic
+                        withRelated <|
                         let message = Unifier.messageText state.TypeDefs text |> CharLiterals.withHint kind
                         match entries |> List.tryFind (fun entry -> entry.Argument = span), provided |> List.tryFind (fun export -> export.Argument = span) with
                         // A keyword's call that calls a local in the keyword's def's place says so (see `HiddenKeywords`).
