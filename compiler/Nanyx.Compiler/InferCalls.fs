@@ -194,6 +194,10 @@ let rec internal inferCall
     // One argument given for several is inferred to see whether it is a tuple of them, and what inferring it found is
     // dropped.
     let typeOfArgument arg = inferExpr env state arg |> Result.toOption |> Option.map (fun (typed, _) -> typed.Type)
+    // So is a call of a value that is no function (see `NotAFunction`).
+    match TypeEnv.tryFind name env |> Option.bind (fun scheme -> NotAFunction.check state name scheme.Type calleeSpan args) with
+    | Some error -> Error [ error ]
+    | None ->
     let argumentCount =
         TypeEnv.tryFind name env
         |> Option.bind (fun scheme -> ArgumentCount.check state expr name scheme.Type calleeSpan args typeOfArgument |> Option.map (fun error -> scheme, error))
