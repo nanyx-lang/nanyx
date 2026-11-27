@@ -729,7 +729,7 @@ module Compiler =
                     match state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst >> Unifier.unalias) with
                     | Some (TyFunc _) -> true
                     | _ -> false
-                let own = Asserts.writeOut source sourceRoot state isFunction own
+                let own = Asserts.writeOut (normalizeSource source) sourceRoot state isFunction own
                 // A script's entry point is a def of its own, with the values that need a context in it (see `Scripts`),
                 // which the call of the host's `run` names: typed as the entry point's lambda is.
                 let own, resolvedTypes, state =
