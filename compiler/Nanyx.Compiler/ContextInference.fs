@@ -436,10 +436,12 @@ module internal ContextInference =
     /// type were written: `def f = { x -> describe(x) }` requires `Show` of its parameter's type, and a call to it finds
     /// an instance for the type it is called with. `before` are the calls that were waiting for an instance before the
     /// def's value was inferred; the rest are its value's. A call of the value's whose arguments are not all variables
-    /// of the def's own type is left to the def around it, and so are a well-known context's operator, as `==` (see
-    /// `InferState.LocalComparisons`), and an interpolation hole's. A call to a function that requires a well-known
-    /// context, as `eq(x, y)` for `eq: [Eq(a)]`, is taken (#2813). A call is taken whether the def around it writes its
-    /// type or not: in one that does, it was left to the end of the module.
+    /// of the def's own type is left to the def around it, and so is an interpolation hole's. A call to a function that
+    /// requires a well-known context, as `eq(x, y)` for `eq: [Eq(a)]`, is taken (#2813), and so is a well-known
+    /// context's operator on one of the def's own variables, as `a == b`, which then calls the member of the instance
+    /// the def is passed (#2809). One on a structure of them, as `[a] == [b]`, is left to the def around it (see
+    /// `InferState.LocalComparisons`). A call is taken whether the def around it writes its type or not: in one that
+    /// does, it was left to the end of the module.
     let resolveLocal (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) (before: PendingContextInstance list) (state: InferState) : InferState =
         let earlier = before |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
         let candidates =
@@ -447,7 +449,6 @@ module internal ContextInference =
             |> List.filter (fun p ->
                 not (earlier.Contains (p.Call, p.Index))
                 && not p.ChecksOnly
-                && not (WellKnownContexts.isOperatorPending p)
                 && not (InterpolationHoles.isHole p.Callee))
         if candidates.IsEmpty || scheme.Quantified.IsEmpty then state
         else
@@ -477,6 +478,15 @@ module internal ContextInference =
                             PendingContextInstances = left
                             HoleScopes = state.HoleScopes |> Map.filter (fun call _ -> leftCalls.Contains call || not (takenCalls |> Set.exists (fst >> (=) call))) }
                         symbol name contexts (Some signature)
+                // An operator on the def's own variables, as `a == b` in `def same = { a, b -> a == b }`, calls the
+                // member of the instance the def is now passed, as it does in a top-level def that writes no type, so
+                // that a type's own `==` is the one it calls (#2809).
+                let operators = taken |> List.map fst
+                let inputOf ty = TypeResolution.inputTypeFromArgs [ ty; ty ]
+                let registered =
+                    registered
+                    |> EqualityOperators.callMembers inputOf (operators |> List.filter EqualityOperators.isPending)
+                    |> OrderingOperators.callHelpers inputOf (operators |> List.filter OrderingOperators.isPending)
                 match symbol with
                 | Some symbol ->
                     let contextTys = required |> List.map (fun (ctxName, vars) -> TyApply(ctxName, vars |> List.map TyVar))

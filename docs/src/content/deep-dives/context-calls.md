@@ -125,7 +125,11 @@ passes the instance the type checker found for it there, as a call to a top-leve
   around it that has them: the top-level def, a lambda, or a local function. A local function inside another captures
   them from that one, which captured them from the function around it in turn. An inferred local function that calls a
   function that requires a well-known context, such as `Eq`, at a variable of its own requires the context too, as it
-  does any other (`ContextInference.resolveLocal`). A generic local function used in another one, at that one's own
+  does any other (`ContextInference.resolveLocal`), and so does one that uses a well-known context's operator on one of
+  its variables, as `a == b` or `a < b`: the operator then calls the member of the instance the function is passed, as
+  a top-level def's does (`EqualityOperators.callMembers`), so that a type's own `==` or `compare` is the one used
+  ([#2809](https://github.com/nanyx-lang/nanyx/issues/2809)). An operator on a structure of its variables, as
+  `[a] == [b]`, is still the compiler's own at each type the function is specialised at (`InferState.LocalComparisons`). A generic local function used in another one, at that one's own
   variables, as `eq` is in `def twice = { v -> eq(v, v) }`, is used at each type the other is used at: its closure is
   made at those types where it is defined, and the other's closure captures it at them
   (`CoreIrLowerLocals.usesWithBindings`), however deep the local functions are nested. Inlining makes these members
