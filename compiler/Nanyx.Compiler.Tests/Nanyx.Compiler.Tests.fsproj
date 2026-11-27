@@ -37,6 +37,7 @@
     <Compile Include="Features\Blocks\BlockFreeNamesTests.fs" />
     <Compile Include="Features\Calls\ArgumentCountTests.fs" />
     <Compile Include="Features\Calls\NamedArgumentTests.fs" />
+    <Compile Include="Features\Calls\NotAFunctionTests.fs" />
     <Compile Include="Features\Calls\CallCheckTimeTests.fs" />
     <Compile Include="Features\Calls\FunctionFieldCallTests.fs" />
     <Compile Include="Features\Calls\BuiltInCallTests.fs" />
@@ -85,6 +86,7 @@
     <Compile Include="Features\Contexts\ContextVariableCallTimeTests.fs" />
     <Compile Include="Features\Contexts\PointFreeContextTests.fs" />
     <Compile Include="Features\Contexts\LambdaContextTests.fs" />
+    <Compile Include="Features\Contexts\InferredContextVariableNameTests.fs" />
     <Compile Include="Features\Contexts\LambdaSuppliedContextTests.fs" />
     <Compile Include="Features\Contexts\ExpectedFunctionContextTests.fs" />
     <Compile Include="Features\Contexts\LocalRecContextTests.fs" />
@@ -276,6 +278,7 @@
     <Compile Include="Features\Types\ProtectedShapesTests.fs" />
     <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
+    <Compile Include="Features\Types\FieldNameErrorTests.fs" />
     <Compile Include="Features\Types\FieldSuggestionTests.fs" />
     <Compile Include="Features\Types\TagNotInUnionTests.fs" />
     <Compile Include="Features\Types\RecordFieldOrderTests.fs" />

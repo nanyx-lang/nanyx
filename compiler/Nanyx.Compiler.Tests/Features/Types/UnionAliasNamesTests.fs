@@ -146,6 +146,6 @@ def main = {
         )
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
-    let info = InfoView.at Unicode "" result (offsetOf source "found\n}" 0 0)
+    let info = InfoView.at Unicode "" source result (offsetOf source "found\n}" 0 0)
     let found = info.Scopes |> List.collect _.Names |> List.find (fun name -> name.Name = "found")
     Assert.Equal(Some "#some(int) | Err", found.Type)

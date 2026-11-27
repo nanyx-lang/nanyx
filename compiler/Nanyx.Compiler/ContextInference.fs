@@ -259,9 +259,10 @@ module internal ContextInference =
         |> Map.fold (fun all ctxName used -> all |> Map.add ctxName (Set.union used (all |> Map.tryFind ctxName |> Option.defaultValue Set.empty))) checkedRests
 
     /// The context variables the unannotated top-level def `defName`, of type `defTy`, was found to use (see
-    /// `ContextVariables.require`) that nothing bound, each given a name as an annotation would have written it, and
-    /// `state` with the names given. `def apply = { f, x -> f(x) }` is `[c] ([c] a -> b), a -> b`. Each name is a letter
-    /// from `c` on that the def's type does not use already.
+    /// `ContextVariables.require`) that nothing bound, each given a name, and `state` with the names given. A call and
+    /// an import find the variables by these names. Each is one no annotation can write, `'1`, `'2`, ... (see
+    /// `TyVar.inferredContextName`), that the def's type does not use already; a reader sees a letter in its place:
+    /// `def apply = { f, x -> f(x) }` is `[κ] ([κ] α -> β), α -> β` (see `Unifier.displayRenaming`).
     let nameContextVariables (defName: Identifier) (defTy: Ty) (state: InferState) : Identifier list * InferState =
         match state.InferredContextVars |> Map.tryFind defName with
         | None -> [], state
@@ -276,21 +277,21 @@ module internal ContextInference =
                 |> List.choose (function TyVar v -> Some v | _ -> None)
                 |> List.distinctBy _.Id
             let taken = (varsInOrder (Unifier.apply subst defTy) |> List.choose _.Name) @ (state.TypeVars.Keys |> Seq.choose (function WrittenVar name -> Some name | ScopeOf _ -> None) |> List.ofSeq) |> Set.ofList
-            let letters = [ for letter in "cdefghijklmnopqrstuvwxyzab" do if not (taken.Contains (string letter)) then string letter ]
+            let free = Seq.initInfinite ((+) 1 >> TyVar.inferredContextName) |> Seq.filter (taken.Contains >> not) |> Seq.truncate unbound.Length |> List.ofSeq
             let names, _, named =
                 unbound
-                |> List.fold (fun (names, letters, current: InferState) var ->
-                    match var.Name, letters with
-                    | Some name, _ -> names @ [ name ], letters, current
-                    | None, letter :: rest ->
-                        let namedVar = TyVar.ordinary current.NextId (Some letter)
+                |> List.fold (fun (names, free, current: InferState) var ->
+                    match var.Name, free with
+                    | Some name, _ -> names @ [ name ], free, current
+                    | None, name :: rest ->
+                        let namedVar = TyVar.ordinary current.NextId (Some name)
                         let next =
                             { current with
                                 NextId = current.NextId + 1
-                                TypeVars = current.TypeVars |> Map.add (WrittenVar letter) namedVar
+                                TypeVars = current.TypeVars |> Map.add (WrittenVar name) namedVar
                                 Constraints = (TyVar var, TyVar namedVar, Equal, SourceSpan.none) :: current.Constraints }
-                        names @ [ letter ], rest, next
-                    | None, [] -> names, [], current) ([], letters, state)
+                        names @ [ name ], rest, next
+                    | None, [] -> names, [], current) ([], free, state)
             names, named
 
     /// `instances` with the call `pending` names finding its context as `instance`.
@@ -439,9 +440,10 @@ module internal ContextInference =
     /// of the def's own type is left to the def around it, and so is an interpolation hole's. A call to a function that
     /// requires a well-known context, as `eq(x, y)` for `eq: [Eq(a)]`, is taken (#2813), and so is a well-known
     /// context's operator on one of the def's own variables, as `a == b`, which then calls the member of the instance
-    /// the def is passed (#2809). One on a structure of them, as `[a] == [b]`, is left to the def around it (see
-    /// `InferState.LocalComparisons`). A call is taken whether the def around it writes its type or not: in one that
-    /// does, it was left to the end of the module.
+    /// the def is passed (#2809). One on a structure of them, as `[a] == [b]`, is left to the def around it, but the def
+    /// requires the context of each variable it compares, and the def around it derives the structure's instance from
+    /// those (`InferState.LocalStructureInstances`, #3055). A call is taken whether the def around it writes its type
+    /// or not: in one that does, it was left to the end of the module.
     let resolveLocal (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) (before: PendingContextInstance list) (state: InferState) : InferState =
         let earlier = before |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
         let candidates =
@@ -457,10 +459,25 @@ module internal ContextInference =
                 let vars = p.ArgTys |> List.map (Unifier.applySolved subst >> function TyVar v when scheme.Quantified.Contains v.Id -> Some v | _ -> None)
                 if vars |> List.forall Option.isSome then Some (p, vars |> List.map Option.get) else None
             let taken = candidates |> List.rev |> List.choose ownVars
+            // An operator on a structure of the def's own variables, as `[a] == [b]`, is left to the def around it,
+            // which derives the structure's instance from those of the variables (see `InferState.LocalStructureInstances`):
+            // the def requires the context of each variable it compares (#3055).
+            let structures =
+                let takenCalls = taken |> List.map (fun (p, _) -> p.Call, p.Index) |> Set.ofList
+                candidates
+                |> List.rev
+                |> List.filter (fun p ->
+                    not (takenCalls.Contains (p.Call, p.Index))
+                    && (EqualityOperators.isPending p || OrderingOperators.isPending p))
+                |> List.collect (fun p ->
+                    p.ArgTys
+                    |> List.collect (Unifier.applySolved subst >> WellKnownContexts.comparedVars)
+                    |> List.filter (fun v -> scheme.Quantified.Contains v.Id)
+                    |> List.map (fun v -> p.Context, [ v ]))
             let key (ctxName: Identifier, vars: TyVar list) = ctxName, vars |> List.map _.Id
-            let required = taken |> List.map (fun (p, vars) -> p.Context, vars) |> List.distinctBy key
+            let required = (taken |> List.map (fun (p, vars) -> p.Context, vars)) @ structures |> List.distinctBy key
             match annotation scheme.Type required with
-            | Some (contexts, signature) when not taken.IsEmpty ->
+            | Some (contexts, signature) when not required.IsEmpty ->
                 let instances =
                     taken
                     |> List.fold (fun instances (p, vars) ->
@@ -487,6 +504,14 @@ module internal ContextInference =
                     registered
                     |> EqualityOperators.callMembers inputOf (operators |> List.filter EqualityOperators.isPending)
                     |> OrderingOperators.callHelpers inputOf (operators |> List.filter OrderingOperators.isPending)
+                let registered =
+                    structures
+                    |> List.distinctBy key
+                    |> List.fold (fun (current: InferState) (ctxName, vars) ->
+                        let context = contexts.[required |> List.findIndex (fun required -> key required = key (ctxName, vars))]
+                        let v = List.head vars
+                        let byContext = current.LocalStructureInstances |> Map.tryFind v.Id |> Option.defaultValue Map.empty
+                        { current with LocalStructureInstances = current.LocalStructureInstances |> Map.add v.Id (byContext |> Map.add ctxName context) }) registered
                 match symbol with
                 | Some symbol ->
                     let contextTys = required |> List.map (fun (ctxName, vars) -> TyApply(ctxName, vars |> List.map TyVar))

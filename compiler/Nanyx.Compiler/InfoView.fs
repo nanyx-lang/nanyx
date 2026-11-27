@@ -48,16 +48,22 @@ type ScopeKind =
     /// The module.
     | ModuleScope
 
-/// A scope around the position. `Heading` names it: a lambda by its parameters (`{ message -> … }`), a def by its name
-/// (`def greet`), the module by its declared name (`module library.lending`). `Span` is what the heading links to: the
-/// lambda, the def's name, or the module's declaration (none if it has none). `Type` is a lambda's type, with the
+/// How the info view heads a scope: `Code`, which it writes as code, after `Label`, which says what kind of code it is
+/// where the code doesn't: `lambda { message -> … }`, `expression x + 1`, but `def greet`, `for xs | x -> …`.
+type Heading = { Label: string option; Code: string }
+
+/// A scope around the position. `Heading` names it: a lambda by its parameters (`{ message -> … }`), or as it is
+/// written where its parameters are made up, as a shorthand lambda's are (`{ * 2 }`); a `for` loop's lambda as the
+/// loop is written (`for xs | x -> …`); a def by its name (`def greet`), a custom pattern by its tags
+/// (`pattern #Even | #Odd`), the module by its declared name (`module library.lending`). `Span` is what the heading
+/// links to: the lambda, the `for` loop, the def's name, or the module's declaration (none if it has none). `Type` is a lambda's type, with the
 /// contexts it carries, or a def's signature, as hover writes them, and `Declared` says whether the def writes its type;
 /// `Symbol` is the def's, whose doc comment the info view shows. `Names` are the parameters, locals and pattern variables it declares, nearest the position first, and for
 /// the module its top-level defs and imports, its own first, then by name, less intrinsics. `Contexts` are those it
 /// provides: a `use` in it, a def's signature or what a def was inferred to require, or the module's runtime.
 type Scope =
     { Kind: ScopeKind
-      Heading: string
+      Heading: Heading
       Span: SourceSpan
       Type: string option
       Declared: bool
@@ -73,9 +79,21 @@ type Info = { Scopes: Scope list; TypeNames: (string * Symbol) list }
 
 /// The expression the info view describes at the top, as hover writes it: `Name` is the name it is, if it is one, as
 /// hover writes it before the type, and else its text; `Type` is its type there, after the contexts a def requires,
-/// named as the code there can name them. `Span` is where it is written, and `Symbol` what a name refers to or
-/// declares, whose doc comment the info view shows.
-type Described = { Name: string; Type: string; Span: SourceSpan; Symbol: Symbol option }
+/// named as the code there can name them. `Heading` heads its scope with its text, `expression x + 1`, cut as a
+/// heading's code is (see `headingCode`). `Span` is where it is written, and what the heading links to, and `Symbol`
+/// what a name refers to or declares, whose doc comment the info view shows.
+type Described = { Name: string; Type: string; Heading: Heading; Span: SourceSpan; Symbol: Symbol option }
+
+/// The most of a heading's code the info view writes; longer code is cut (see `headingCode`).
+let private headingLength = 40
+
+/// `written`, code as a heading writes it: on one line, with its runs of white space made one space, and cut with `…`
+/// past `headingLength` characters, or where `more` says code follows that the heading leaves out.
+let internal headingCode (more: bool) (written: string) : string =
+    let oneLine = System.Text.RegularExpressions.Regex.Replace(written.Trim(), @"\s+", " ")
+    if oneLine.Length > headingLength then oneLine.Substring(0, headingLength - 1).TrimEnd() + " …"
+    elif more then oneLine + " …"
+    else oneLine
 
 /// The value defs whose statements contain `offset`, innermost first, each as its name, its annotation, the span of its
 /// statement and its value.
@@ -187,11 +205,41 @@ let private lambdasAround (syntax: Module) (offset: int) : Expression list =
         | Lambda _ -> not (SourceSpan.isNone expr.Span) && not (defValues.Contains expr.Id) && not (memoryBlocks.Contains expr.Id)
         | _ -> false)
 
-/// The heading of the scope of `lambda`: its parameters, `{ message -> … }`, or `{ … }` if it has none.
-let private lambdaHeading (lambda: Expression) : string =
-    match lambda.Kind with
-    | Lambda(parameters, _, _) when not parameters.IsEmpty -> $"""{{ {parameters |> List.map fst |> String.concat ", "} -> … }}"""
-    | _ -> "{ … }"
+/// The heading of a `for` loop, `call`, written in `source`, whose lambda is `loop` and its body `body`: the loop as
+/// written up to the body of its arm, `for xs | x -> …`, up to its arms where they have several bodies, `for xs | …`,
+/// or up to the body after its arrow, `for 1..10 -> …`.
+let private forHeading (source: string) (call: Expression) (loop: Expression) (body: Expression) : string =
+    let upTo (finish: int) = SourceSpan.textIn source { call.Span with End = finish }
+    match body.Kind with
+    | Match(_, arms) when body.Span = loop.Span ->
+        match arms |> List.map snd |> List.distinctBy _.Id with
+        | [ armBody ] -> headingCode true (upTo armBody.Span.Start)
+        | _ -> headingCode true (upTo loop.Span.Start + " |")
+    | _ -> headingCode true (upTo body.Span.Start)
+
+/// Whether `name`, the `index`th parameter of a lambda (counted from 0), is one the parser made up: a shorthand
+/// lambda's, or the one in place of a pattern (see `ImplicitNames`).
+let private isMadeUp (index: int) (name: Identifier) =
+    name = implicitArgument || name = implicitSecondArgument || name = patternArgument (index + 1)
+
+/// The heading of the scope of `lambda`, written in `source`, and the span it links to. The lambda of a `for` loop
+/// among `around` is headed as the loop is written (see `forHeading`) and links to the loop. Any other is a lambda:
+/// written as it is where the parser made up a parameter, `{ * 2 }`, and else by its parameters, `{ message -> … }`,
+/// or `{ … }` if it has none.
+let private lambdaHeading (source: string) (around: Expression list) (lambda: Expression) : Heading * SourceSpan =
+    let loop =
+        around
+        |> List.tryPick (fun expr ->
+            match expr.Kind with
+            | ForSyntax.Call(_, loop, _, body) when loop.Id = lambda.Id -> Some (expr, body)
+            | _ -> None)
+    let asLambda code = { Label = Some "lambda"; Code = code }, lambda.Span
+    match loop, lambda.Kind with
+    | Some (call, body), _ -> { Label = None; Code = forHeading source call lambda body }, call.Span
+    | None, Lambda(parameters, _, _) when parameters |> List.indexed |> List.exists (fun (index, (name, _)) -> isMadeUp index name) ->
+        asLambda (headingCode false (SourceSpan.textIn source lambda.Span))
+    | None, Lambda(parameters, _, _) when not parameters.IsEmpty -> asLambda $"""{{ {parameters |> List.map fst |> String.concat ", "} -> … }}"""
+    | _ -> asLambda "{ … }"
 
 /// Where an instance of `ctxName` the compiler builds from `members` (each member's name and the definition it is)
 /// comes from: the compiler's own, a definition derived from the type's parts, or definitions attached to the type,
@@ -315,7 +363,7 @@ let rec private splitAs (groups: 'a list list) (written: string list) : string l
 let private moduleScope (syntax: Module) : Scope =
     let declared = syntax |> List.tryPick (fun item -> match item.Kind with ModuleDecl(_, name) -> Some (name, item.Span) | _ -> None)
     { Kind = ModuleScope
-      Heading = match declared with Some (name, _) -> $"module {name}" | None -> "this module"
+      Heading = { Label = None; Code = match declared with Some (name, _) -> $"module {name}" | None -> "this module" }
       Span = declared |> Option.map snd |> Option.defaultValue SourceSpan.none
       Type = None
       Declared = false
@@ -324,13 +372,13 @@ let private moduleScope (syntax: Module) : Scope =
       Contexts = [] }
 
 /// What the info view shows at `offset` in the compiled root module, compiled as `file` (empty for source compiled
-/// directly), with made-up type variables named by `names`. The locals' types, the lambdas' and the contexts are named
+/// directly) from `source`, with made-up type variables named by `names`. The locals' types, the lambdas' and the contexts are named
 /// together, so an `α` in a parameter's type is the `α` of a context; a local
 /// def that writes its contexts shows them before its type. Every type and context is named as the code at `offset`
 /// can name it (see `Signatures.relativeAt`): `Point` inside `module Points`. A name or context belongs to the innermost lambda or def
 /// whose value it is declared or provided in, and to the module if there is none. Empty when the module did not
 /// type-check.
-let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int) : Info =
+let at (names: TypeNotation) (file: string) (source: string) (result: CompileResult) (offset: int) : Info =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         let rename = Signatures.relativeAt typed.TypeDefs syntax offset
@@ -376,12 +424,14 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
                 contextsWritten
         // The lambdas and defs around the position, innermost first, each with the span its names and contexts are in:
         // a def's value, since its name is declared in the scope around it.
+        let around = Hover.expressionsAt offset syntax
         let enclosing =
             (List.map2
                 (fun (lambda: Expression) typeWritten ->
+                    let heading, headed = lambdaHeading source around lambda
                     { Kind = LambdaScope
-                      Heading = lambdaHeading lambda
-                      Span = lambda.Span
+                      Heading = heading
+                      Span = headed
                       Type = List.tryHead typeWritten
                       Declared = false
                       Symbol = None
@@ -393,7 +443,12 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
             @ (defs
                |> List.map (fun (symbol, (name, annotation, _, value)) ->
                    { Kind = FunctionScope
-                     Heading = $"def {name}"
+                     Heading =
+                       { Label = None
+                         Code =
+                           match Signatures.patternName name with
+                           | Some tags -> $"{PatternSyntax.keyword} {tags}"
+                           | None -> $"def {name}" }
                      Span = symbol.Declaration
                      Type = topLevelType names rename typed symbol
                      Declared = annotation.IsSome
@@ -436,6 +491,7 @@ let expressionAt (names: TypeNotation) (source: string) (result: CompileResult) 
             let rename = Signatures.relativeAt typed.TypeDefs syntax span.Start
             { Name = symbol |> Option.map _.Name |> Option.defaultValue (SourceSpan.textIn source span)
               Type = Hover.typeWrittenAt names rename typed symbol ty
+              Heading = { Label = Some "expression"; Code = headingCode false (SourceSpan.textIn source span) }
               Span = span
               Symbol = symbol })
     | _ -> None

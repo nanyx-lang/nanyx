@@ -27,6 +27,23 @@ let typesWithContexts (typeDefs: Map<string, TypeDefInfo>) (names: TypeNotation)
 let typeWithContexts (typeDefs: Map<string, TypeDefInfo>) (names: TypeNotation) (ty: Ty) (contexts: Ty list) =
     fst (typesWithContexts typeDefs names ty contexts [])
 
+/// The name a reader knows the custom pattern whose def is named `name` by, its tags: `#Num`, or `#Even | #Odd`. None
+/// if `name` is not a pattern's (see `PatternSyntax`).
+let patternName (name: string) : string option =
+    Parser.Program.PatternSyntax.shapeOf name |> Option.map (fun shape -> shape.Tags |> List.map (fun tag -> $"#{tag}") |> String.concat " | ")
+
+/// The declaration of the custom pattern whose def is named `name`, as it was written, `typeWritten` being the def's
+/// type as written for a reader: `pattern string -> #Num(float) | _`, with `_` for the tag a partial pattern returns
+/// when it doesn't match. None if `name` is not a pattern's.
+let patternDeclaration (name: string) (typeWritten: string) : string option =
+    Parser.Program.PatternSyntax.shapeOf name
+    |> Option.map (fun shape ->
+        // A partial pattern with one tag and no payload is a function that returns a `bool` (see `CustomPatterns`).
+        let results =
+            if shape.ReturnsBool && typeWritten.EndsWith "bool" then typeWritten.Substring(0, typeWritten.Length - "bool".Length) + $"#{shape.Tags.Head} | _"
+            else typeWritten.Replace("#" + Parser.Program.PatternSyntax.noMatchTag, "_")
+        $"{Parser.Program.PatternSyntax.keyword} {results}")
+
 /// `ty` with the name of each type and context it names replaced by `written`, given a test for the definitions that
 /// define the same type and the name it has.
 let private renamed (written: (TypeDefInfo -> bool) -> string -> string) (ty: Ty) : Ty =

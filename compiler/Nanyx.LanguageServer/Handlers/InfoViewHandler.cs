@@ -35,19 +35,22 @@ public sealed record InfoViewResult
 
 /// <summary>
 /// A scope at the position. <see cref="Kind"/> is one of <c>messages</c> (first, only when the position's line has a
-/// diagnostic, with its <see cref="Messages"/> and no sections), <c>expression</c> (next, headed <c>Selection</c> or
-/// <c>At the cursor</c>, with the section <c>expression</c>, only when there is an expression there that no scope below
-/// shows), <c>lambda</c> (<c>type</c>, <c>names</c>,
-/// <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>, <c>contexts</c>, <c>flow</c>) and <c>module</c>
-/// (always last, with <c>names</c> and <c>contexts</c>); a lambda or function scope comes once for each lambda or def
-/// around the position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the scope and
-/// <see cref="Location"/> is where it links: a lambda by its parameters and line, a def by its name, the module by its
-/// declared name. <see cref="Documentation"/> is the module's doc comment. <see cref="Collapsed"/> says whether a client
-/// shows it closed at first: the module, and the scopes after the third, not counting the messages and the expression.
+/// diagnostic, with its <see cref="Messages"/> and no sections), <c>expression</c> (next, with the section
+/// <c>expression</c>, only when there is an expression there that no scope below shows), <c>lambda</c> (<c>type</c>,
+/// <c>names</c>, <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>, <c>contexts</c>, <c>flow</c>) and
+/// <c>module</c> (always last, with <c>names</c> and <c>contexts</c>); a lambda or function scope comes once for each
+/// lambda or def around the position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the
+/// scope, as code but for the messages', after <see cref="Label"/>, which says what kind of code it is where it
+/// doesn't, and <see cref="Location"/> is where it links (see <c>InfoView.Heading</c>): the expression by its
+/// text, a lambda by its parameters and line, a <c>for</c> loop's as the loop is written, with its line, a def by its
+/// name, the module by its declared name. <see cref="Documentation"/> is the module's doc comment.
+/// <see cref="Collapsed"/> says whether a client shows it closed at first: the module, and the scopes after the third,
+/// not counting the messages and the expression.
 /// </summary>
 public sealed record InfoViewScope
 {
     public required string Kind { get; init; }
+    public string? Label { get; init; }
     public required string Heading { get; init; }
     public Location? Location { get; init; }
     public string? Documentation { get; init; }
@@ -189,7 +192,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         if (document.LastGood is { Compiled: { } compiled } lastGood && document.NearestInLastGood(offset) is { } nearest)
         {
             fileName = lastGood.FileName;
-            info = InfoView.at(_settings.TypeNotation, lastGood.FileName, compiled, nearest);
+            info = InfoView.at(_settings.TypeNotation, lastGood.FileName, lastGood.Positions.NormalizedText, compiled, nearest);
             if (SelectedInLastGood(request, document, offset) is { } selected)
             {
                 expression = InfoView.expressionAt(_settings.TypeNotation, lastGood.Positions.NormalizedText, compiled, selected)?.Value;
@@ -205,14 +208,21 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         string Signature(string name, string type) => LaidOut(request.Width, name, type);
         string? DocOf(NyxCompiler.Symbol symbol) => docs?.ForSymbol(symbol)?.Value;
 
-        InfoViewItem Name(InfoView.ScopedName name) => new()
+        // A custom pattern's def is written as the pattern was declared, whose keyword links to the declaration (see
+        // `Signatures.patternDeclaration`).
+        InfoViewItem AsDeclared(string name, string? type, InfoViewItem item, string? detail) =>
+            type is not null && NyxCompiler.Signatures.patternDeclaration(name, type)?.Value is { } pattern
+                ? item with { Text = pattern, Name = new InfoViewName(0, Parser.Program.PatternSyntax.keyword.Length), Detail = detail }
+                : item;
+
+        InfoViewItem Name(InfoView.ScopedName name) => AsDeclared(name.Name, name.Type?.Value, new()
         {
             Text = name.Type?.Value is { } type ? Signature(name.Name, type) : name.Name,
             Name = new InfoViewName(0, name.Name.Length),
             Detail = Describe(name.Kind),
             Location = Locate(name.Declaration),
             Documentation = DocOf(name.Symbol)
-        };
+        }, "pattern");
 
         InfoViewItem Context(InfoView.ScopedContext context) => new()
         {
@@ -229,7 +239,9 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             scopes.Add(new InfoViewScope
             {
                 Kind = "expression",
-                Heading = request.Selection is { } range && range.Start != range.End ? "Selection" : "At the cursor",
+                Label = expression.Heading.Label?.Value,
+                Heading = expression.Heading.Code,
+                Location = Locate(expression.Span),
                 Sections =
                 [
                     new InfoViewSection
@@ -238,12 +250,12 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                         Title = "Expression",
                         Items =
                         [
-                            new InfoViewItem
+                            AsDeclared(expression.Name, expression.Type, new InfoViewItem
                             {
                                 Text = Signature(expression.Name, expression.Type),
                                 Location = Locate(expression.Span),
                                 Documentation = expression.Symbol?.Value is { } symbol ? DocOf(symbol) : null
-                            }
+                            }, null) with { Name = null }
                         ]
                     }
                 ]
@@ -266,14 +278,14 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             }
 
             string kind;
-            string heading = scope.Heading;
+            string heading = scope.Heading.Code;
             string? documentation = null;
             if (scope.Kind.IsLambdaScope)
             {
                 kind = "lambda";
                 if (Locate(scope.Span) is { } at)
                 {
-                    heading = $"{scope.Heading} (line {at.Range.Start.Line + 1})";
+                    heading = $"{heading} (line {at.Range.Start.Line + 1})";
                 }
 
                 Add("type", "Type", scope.Type?.Value is { } type ? [new InfoViewItem { Text = type, Location = Locate(scope.Span) }] : []);
@@ -283,15 +295,16 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             else if (scope.Kind.IsFunctionScope)
             {
                 kind = "function";
+                var detail = scope.Declared ? "declared" : "inferred";
                 var signature = scope.Type?.Value is { } type
-                    ? new InfoViewItem
+                    ? AsDeclared(scope.Symbol?.Value.Name ?? "", type, new InfoViewItem
                     {
                         Text = Signature(scope.Symbol?.Value.Name ?? "", type),
                         Name = scope.Symbol?.Value is { } named ? new InfoViewName(0, named.Name.Length) : null,
-                        Detail = scope.Declared ? "declared" : "inferred",
+                        Detail = detail,
                         Location = Locate(scope.Span),
                         Documentation = scope.Symbol?.Value is { } def ? DocOf(def) : null
-                    }
+                    }, detail)
                     : null;
                 Add("signature", "Signature", signature is null ? [] : [signature]);
                 Add("names", "Parameters and locals", names);
@@ -313,6 +326,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             scopes.Add(new InfoViewScope
             {
                 Kind = kind,
+                Label = scope.Heading.Label?.Value,
                 Heading = heading,
                 Location = Locate(scope.Span),
                 Documentation = documentation,

@@ -224,7 +224,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 0, 20, selection: new Range(0, 15, 0, 20));
 
-        Assert.Equal(("expression", "Selection"), (view.Scopes[0].Kind, view.Scopes[0].Heading));
+        Assert.Equal(("expression", "expression", "x + 1", new Range(0, 15, 0, 20)), (view.Scopes[0].Kind, view.Scopes[0].Label, view.Scopes[0].Heading, view.Scopes[0].Location?.Range));
         var selected = Assert.Single(Section(view, "expression", "expression"));
         Assert.Equal(("x + 1: int", new Range(0, 15, 0, 20)), (selected.Text, selected.Location?.Range));
         // The spaces around a selection are left out.
@@ -255,7 +255,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 0, 15, selection: new Range(0, 15, 0, 15));
 
-        Assert.Equal(("expression", "At the cursor"), (view.Scopes[0].Kind, view.Scopes[0].Heading));
+        Assert.Equal(("expression", "expression", "x"), (view.Scopes[0].Kind, view.Scopes[0].Label, view.Scopes[0].Heading));
         var atCursor = Assert.Single(Section(view, "expression", "expression"));
         Assert.Equal(("x: int", new Range(0, 15, 0, 16)), (atCursor.Text, atCursor.Location?.Range));
         // The parameter it names is still shown where it is declared.
@@ -299,7 +299,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 1, 1);
 
-        Assert.Equal([("expression", "At the cursor"), ("module", "this module")], view.Scopes.Select(scope => (scope.Kind, scope.Heading)));
+        Assert.Equal([("expression", "one"), ("module", "this module")], view.Scopes.Select(scope => (scope.Kind, scope.Heading)));
         Assert.Equal("one: int", Assert.Single(Section(view, "expression", "expression")).Text);
         // The module's contexts are the ones the runtime supplies, from the host's prelude.
         Assert.Equal(["names", "contexts"], view.Scopes[1].Sections.Select(section => section.Id));
@@ -330,10 +330,11 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         Assert.Equal(
             [
-                ("expression", "At the cursor", false), ("lambda", "{ x -> … } (line 5)", false), ("function", "def report", false),
+                ("expression", "log", false), ("lambda", "{ x -> … } (line 5)", false), ("function", "def report", false),
                 ("function", "def run", false), ("module", "this module", true)
             ],
             view.Scopes.Select(scope => (scope.Kind, scope.Heading, scope.Collapsed)));
+        Assert.Equal(["expression", "lambda", null, null, null], view.Scopes.Select(scope => scope.Label));
         var lambda = view.Scopes[1];
         Assert.Equal(new Range(4, 10, 7, 5), lambda.Location?.Range);
         Assert.Equal(["type", "names"], lambda.Sections.Select(section => section.Id));
@@ -355,6 +356,80 @@ public sealed class InfoViewTests : LanguageServerTestBase
             run.Sections.Where(section => section.Id != "flow").Select(section => (section.Id, section.Items.Select(item => item.Text).ToArray())));
         Assert.Equal("declared", run.Sections[0].Items[0].Detail);
         Assert.Contains(view.Scopes[^1].Sections[0].Items, item => item.Text.StartsWith("apply:"));
+    }
+
+    [Fact]
+    public async Task Info_view_heads_the_expression_with_its_code_on_one_line_cut_when_long()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-ExpressionHeading");
+
+        Open(uri, """
+            def emit: string -> () = { s -> () }
+            def main = {
+              emit("a")
+              def total = [1, 2, 3]
+                \list.map { n -> n * 1000 + n * 100 + n * 10 }
+              total
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var atName = await InfoViewAt(uri, 2, 3);
+        Assert.Equal(("expression", "emit", new Range(2, 2, 2, 6)), (atName.Scopes[0].Label, atName.Scopes[0].Heading, atName.Scopes[0].Location?.Range));
+        // Selected or at the cursor, the expression is headed the same way.
+        var selected = await InfoViewAt(uri, 2, 11, selection: new Range(2, 2, 2, 11));
+        Assert.Equal(("expression", """emit("a")"""), (selected.Scopes[0].Label, selected.Scopes[0].Heading));
+        // A long expression is written on one line and cut.
+        var long_ = await InfoViewAt(uri, 4, 50, selection: new Range(3, 14, 4, 50));
+        Assert.Equal("[1, 2, 3] \\list.map { n -> n * 1000 + n …", long_.Scopes[0].Heading);
+        Assert.DoesNotContain(
+            new[] { atName, selected, long_ }.SelectMany(view => view.Scopes),
+            scope => scope.Heading is "At the cursor" or "Selection");
+    }
+
+    [Fact]
+    public async Task Info_view_heads_a_for_loops_lambda_as_the_loop_is_written()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-ForHeading");
+
+        Open(uri, """
+            def emit: string -> () = { s -> () }
+            def main = {
+              for ["a", "b"] | c ->
+                emit(c)
+              for [1, 2], ["x", "y"] | n, s -> emit(s)
+              for 1..3 -> emit("again")
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var inLoop = await InfoViewAt(uri, 3, 10);
+        var loop = inLoop.Scopes.Single(scope => scope.Kind == "lambda");
+        Assert.Equal(((string?)null, """for ["a", "b"] | c -> … (line 3)""", new Range(2, 2, 3, 11)), (loop.Label, loop.Heading, loop.Location?.Range));
+        Assert.Equal(["c: string"], Section(inLoop, "lambda", "names").Select(item => item.Text));
+        Assert.Equal(
+            """for [1, 2], ["x", "y"] | n, s -> … (line 5)""",
+            (await InfoViewAt(uri, 4, 39)).Scopes.Single(scope => scope.Kind == "lambda").Heading);
+        Assert.Equal("for 1..3 -> … (line 6)", (await InfoViewAt(uri, 5, 16)).Scopes.Single(scope => scope.Kind == "lambda").Heading);
+        Assert.DoesNotContain(inLoop.Scopes, scope => scope.Heading.Contains("__for_element"));
+    }
+
+    [Fact]
+    public async Task Info_view_heads_a_shorthand_lambda_as_it_is_written()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-ShorthandHeading");
+
+        Open(uri, """
+            def doubled = [1, 2] \list.map { * 2 }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 0, 35);
+        var lambda = view.Scopes.Single(scope => scope.Kind == "lambda");
+        Assert.Equal(("lambda", "{ * 2 } (line 1)"), (lambda.Label, lambda.Heading));
     }
 
     [Fact]
@@ -628,5 +703,59 @@ public sealed class InfoViewTests : LanguageServerTestBase
             ["Point"],
             made.Links!.Select(found => made.Text.Substring(found.Start, found.Length)));
         Assert.Equal(made.Text.IndexOf("#some(Point)") + "#some(".Length, made.Links![0].Start);
+    }
+
+    [Fact]
+    public async Task Info_view_writes_a_custom_pattern_as_it_was_declared()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Patterns");
+
+        Open(uri, """
+            pattern int -> #Even | _ = { n -> n % 2 == 0 }
+
+            def parse: string -> float = { s ->
+              pattern string -> #Num(float) | _ = { t ->
+                match t \float.fromString
+                  | #some(f) -> #Num(f)
+                  | _ -> _
+              }
+              pattern string -> #Op((float, float) -> float) | _ = { t ->
+                if t == "+" then #Op({ a, b -> a + b }) else _
+              }
+              match s
+                | #Num(f) -> f
+                | _ -> 0.0
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 13, 11);
+
+        // Each local pattern is written as declared, its keyword linking to the declaration, nearest first.
+        Assert.Equal(
+            [
+                ("pattern string -> #Op((float, float) -> float) | _", "pattern", new Range(8, 10, 8, 52)),
+                ("pattern string -> #Num(float) | _", "pattern", new Range(3, 10, 3, 35)),
+                ("s: string", "parameter", new Range(2, 31, 2, 32))
+            ],
+            Section(view, "function", "names").Select(item => (item.Text, item.Detail, item.Location?.Range)));
+        Assert.All(
+            Section(view, "function", "names").Where(item => item.Detail == "pattern"),
+            item => Assert.Equal(new InfoViewName(0, "pattern".Length), item.Name));
+        // A partial pattern of one tag, whose function returns a `bool`, is written with its tag.
+        var topLevel = Section(view, "module", "names");
+        Assert.Contains(("pattern int -> #Even | _", "pattern"), topLevel.Select(item => (item.Text, item.Detail)));
+        Assert.DoesNotContain(view.Scopes.SelectMany(scope => scope.Sections).SelectMany(section => section.Items), item => item.Text.Contains("__"));
+
+        // Inside a pattern's body, its scope is headed by its tags, and its signature is its declaration.
+        var inPattern = await InfoViewAt(uri, 5, 20);
+        var scope = inPattern.Scopes.First(scope => scope.Kind == "function");
+        Assert.Equal("pattern #Num", scope.Heading);
+        var signature = Assert.Single(Section(inPattern, "function", "signature"));
+        Assert.Equal(("pattern string -> #Num(float) | _", "declared"), (signature.Text, signature.Detail));
+
+        // The tag a match arm uses is the pattern, written as declared.
+        Assert.Equal("pattern string -> #Num(float) | _", Assert.Single(Section(await InfoViewAt(uri, 12, 7), "expression", "expression")).Text);
     }
 }

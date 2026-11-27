@@ -110,17 +110,50 @@ let private withContextsAt (typed: TypedModule) (symbol: Symbol) (ty: Ty) : Ty *
     | _ -> ty, []
 
 /// What a hover on a name shows, `typeWritten` being its type as written for a reader: a top-level def as its
-/// declaration would write it, `def name: type`, any other value as `name: type`.
+/// declaration would write it, `def name: type`, a custom pattern's def as the pattern's declaration,
+/// `pattern int -> #Even | #Odd` (see `Signatures.patternDeclaration`), any other value as `name: type`.
 let private declared (symbol: Symbol) (typeWritten: string) =
-    match symbol.Kind with
-    | TopLevelValue -> $"def {symbol.Name}: {typeWritten}"
-    | LocalValue
-    | Parameter
-    | PatternVariable
-    | ContextMember -> $"{symbol.Name}: {typeWritten}"
-    | ImportedModule
-    | TypeDefinition
-    | UnitOfMeasure -> typeWritten
+    match Signatures.patternDeclaration symbol.Name typeWritten, symbol.Kind with
+    | Some pattern, _ -> pattern
+    | None, TopLevelValue -> $"def {symbol.Name}: {typeWritten}"
+    | None, LocalValue
+    | None, Parameter
+    | None, PatternVariable
+    | None, ContextMember -> $"{symbol.Name}: {typeWritten}"
+    | None, ImportedModule
+    | None, TypeDefinition
+    | None, UnitOfMeasure -> typeWritten
+
+/// The custom pattern whose tag an arm of a match around `offset` uses where `offset` is, as its def's symbol and type,
+/// and the span of the tag, `#Num` in `#Num(f)`: the pattern in scope there that returns the tag, the one of narrowest
+/// scope if several do, as a local pattern shadows a top-level one.
+let private patternUseAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty * Symbol * SourceSpan) option =
+    let tagAt (pattern: Pattern) =
+        let parts = match pattern.Kind with AndPattern parts -> parts | _ -> [ pattern ]
+        parts
+        |> List.tryPick (fun part ->
+            match part.Kind with
+            | TagPattern(tag, _)
+            | ArgumentTagPattern(tag, _, _) when PatternSyntax.isPatternTag tag ->
+                let tagSpan = { part.Span with End = part.Span.Start + 1 + tag.Length }
+                if contains offset tagSpan then Some (tag, tagSpan) else None
+            | _ -> None)
+    let used =
+        expressionsAt offset syntax
+        |> List.tryPick (fun expr ->
+            match expr.Kind with
+            | Match(_, arms)
+            | Except(_, arms) -> arms |> List.tryPick (fst >> List.tryPick tagAt)
+            | _ -> None)
+    used
+    |> Option.bind (fun (tag, span) ->
+        typed.Scopes
+        |> Map.toSeq
+        |> Seq.filter (fun (_, scope) -> scope.Start <= offset && offset < scope.End)
+        |> Seq.map (fun (id, scope) -> typed.Symbols.[id], scope)
+        |> Seq.filter (fun (symbol, _) -> PatternSyntax.shapeOf symbol.Name |> Option.exists (fun shape -> List.contains tag shape.Tags))
+        |> Seq.sortBy (fun (_, scope) -> scope.End - scope.Start)
+        |> Seq.tryPick (fun (symbol, _) -> declaredType typed symbol |> Option.map (fun (ty, _) -> ty, symbol, span)))
 
 /// What hover describes at `offset` in the compiled root module, as `typeAt` finds it: its type there, the symbol of
 /// the name it is, if it is one, and its span.
@@ -136,6 +169,8 @@ let internal hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty
     let candidates =
         // A declaration's name is written as it is, so it comes before any expression of the same span.
         (declarations |> List.map (fun (ty, symbol, span) -> ty, symbol, span, System.Int32.MaxValue, 0))
+        // So is a custom pattern's tag in a match arm, which names the pattern.
+        @ (patternUseAt syntax typed offset |> Option.toList |> List.map (fun (ty, symbol, span) -> ty, Some symbol, span, System.Int32.MaxValue, 0))
         @ (expressionsAt offset syntax
         |> List.mapi (fun depth expr ->
             let callee =
@@ -194,7 +229,7 @@ let private hoverOf (names: TypeNotation) (typed: TypedModule) (ty: Ty, symbol: 
 /// The hover for the expression at `offset` in the compiled root module: the type of the narrowest expression
 /// there that has one, or of the function itself on a call's function name or an operator, where it is
 /// instantiated at that call, or of what a declaration's own name declares (a def, a parameter, a pattern variable),
-/// or of what a `_` in a type was inferred to be, with made-up type variables named by `names`. On a name, the
+/// or of the custom pattern whose tag a match arm uses (see `patternUseAt`), or of what a `_` in a type was inferred to be, with made-up type variables named by `names`. On a name, the
 /// declaration's own or one that refers to it, the type comes after the name (see `declared`), and a def shows the
 /// contexts it requires too: a top-level def, the module's own or an imported one, and a local def that writes them.
 /// `None` when the module did not type-check or nothing typed is at `offset`.

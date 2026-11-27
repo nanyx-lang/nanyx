@@ -20,6 +20,9 @@ type MismatchKind =
     /// field only the first has and the second record's type, then the field only the second has and the first's.
     /// Each type is named as its alias if it was written as one: `P`.
     | MisspelledField of onlyLeft: string * rightRecord: string * onlyRight: string * leftRecord: string
+    /// Two records whose fields differ otherwise: the fields only the first has, and those only the second has. A
+    /// field written with one of those names is where the mismatch is reported (see `MisspelledFields.writtenField`).
+    | FieldsDiffer of onlyLeft: string list * onlyRight: string list
 
 /// What a mismatch says, with the types it names written by the function it is given: `Unifier.tyToString`, or one
 /// that writes them with the names a module knows them by (see `Unifier.tyToDisplayStringIn`).
@@ -428,14 +431,28 @@ module Unifier =
     /// the first time, and each end goes round its own part again with a suffix: `α₁`, `ω₁` (`a1`, `z1`).
     ///
     /// The rests in `unnamedRests` are given no name and no letter, so they print as a bare spread.
+    ///
+    /// The context variables the compiler inferred (see `TyVar.inferredContextName`) are named before the others, from
+    /// their own letter on, `κ` (`c` in ASCII and source), and the others are kept clear of their names:
+    /// `[κ] ([κ] α -> β), α -> β`.
     let private displayRenaming (notation: TypeNotation) (unnamedRests: Set<int>) (ty: Ty) : Subst =
-        let alphabet, suffix =
+        let alphabet, suffix, contextStart =
             match notation with
-            | Unicode -> greekLetters, subscript
+            | Unicode -> greekLetters, subscript, 'κ'
             | Ascii
-            | Source -> latinLetters, string
+            | Source -> latinLetters, string, 'c'
         let vars = varsInPrintOrder ty
-        let taken = vars |> List.choose (fun v -> v.Name) |> Set.ofList
+        let inferredContexts, vars = vars |> List.partition TyVar.isInferredContext
+        let written = vars |> List.choose (fun v -> v.Name) |> Set.ofList
+        let contextNames =
+            let start = alphabet.IndexOf contextStart
+            let letters = alphabet.Substring start + alphabet.Substring(0, start)
+            Seq.initInfinite (fun i ->
+                let round = i / letters.Length
+                if round = 0 then string letters[i] else $"{letters[i % letters.Length]}{suffix round}")
+            |> Seq.filter (written.Contains >> not)
+        let contextRenaming = Seq.zip inferredContexts contextNames |> List.ofSeq
+        let taken = contextRenaming |> List.map snd |> Set.ofList |> Set.union written
         // The letters an annotation took are left out before the alphabet is shared between its two ends.
         let letters =
             match alphabet |> String.filter (fun letter -> not (taken.Contains (string letter))) with
@@ -464,6 +481,7 @@ module Unifier =
         let free = Seq.filter (fun name -> not (taken.Contains name))
         // Each made-up variable is replaced by a primitive that prints as its new name.
         Seq.append (Seq.zip ordinary (free fromFront)) (Seq.zip rest (free fromBack))
+        |> Seq.append contextRenaming
         |> Seq.map (fun (v, name) -> v.Id, TyPrimitive name)
         |> Seq.append (unnamedRests |> Seq.map (fun id -> id, TyPrimitive ""))
         |> Map.ofSeq
@@ -523,10 +541,18 @@ module Unifier =
 
     /// Names for the variables the compiler made up in `tys`, the types one message writes, shared by all of them: a
     /// rest of an open record or union is `r`, then `r1`, `r2`, ..., and any other `a`, `b`, `c`, ..., then `a1`, ..., in
-    /// the order the message writes them, skipping the names the variables an annotation named have.
+    /// the order the message writes them, skipping the names the variables an annotation named have. A context variable
+    /// the compiler inferred (see `TyVar.inferredContextName`) is named first, `c`, `d`, ..., as `displayRenaming` names it.
     let private messageRenaming (tys: Ty list) : Subst =
         let vars = tys |> List.collect varsInPrintOrder |> List.distinctBy (fun v -> v.Id)
-        let taken = vars |> List.choose (fun v -> v.Name) |> Set.ofList
+        let inferredContexts, vars = vars |> List.partition TyVar.isInferredContext
+        let written = vars |> List.choose (fun v -> v.Name) |> Set.ofList
+        let contextLetters = TyVar.inferredContextLetters
+        let contextNames =
+            Seq.initInfinite (fun i -> if i < contextLetters.Length then string contextLetters[i] else $"{contextLetters[i % contextLetters.Length]}{i / contextLetters.Length}")
+            |> Seq.filter (written.Contains >> not)
+        let contextRenaming = Seq.zip inferredContexts contextNames |> List.ofSeq
+        let taken = contextRenaming |> List.map snd |> Set.ofList |> Set.union written
         let rests = tys |> List.map (restVarIds true) |> Set.unionMany
         let free (names: seq<string>) = names |> Seq.filter (fun name -> not (taken.Contains name))
         let letters = latinLetters |> String.filter (fun letter -> letter <> 'r')
@@ -535,6 +561,7 @@ module Unifier =
         let made = vars |> List.filter (fun v -> v.Name.IsNone)
         let rest, ordinary = made |> List.partition (fun v -> rests.Contains v.Id)
         Seq.append (Seq.zip ordinary ordinaryNames) (Seq.zip rest restNames)
+        |> Seq.append contextRenaming
         |> Seq.map (fun (v, name) -> v.Id, TyVar { v with Name = Some name })
         |> Map.ofSeq
 
@@ -760,7 +787,7 @@ module Unifier =
                         | [ onlyLeft ], [ onlyRight ] when NameSuggestions.closest [ onlyRight ] onlyLeft = [ onlyRight ] ->
                             let named ty = match aliasNames.TryGetValue ty with | true, name -> name | _ -> $"'{tyToString ty}'"
                             MisspelledField(onlyLeft, named right, onlyRight, named left)
-                        | _ -> TypesDiffer
+                        | onlyLeft, onlyRight -> FieldsDiffer(onlyLeft, onlyRight)
                     Error (recordKeyMessage lKeys rKeys left right, origin, kind)
             // Two references to recursive aliases are compared by what they stand for, taking them to agree while that
             // is checked: unfolded, they may hold the same two references again, which agree if nothing else differs.
@@ -887,7 +914,7 @@ module Unifier =
                             match l with
                             | TyOpenRecord _ -> openKeys, keySet fields
                             | _ -> keySet fields, openKeys
-                        Error (recordKeyMessage lKeys rKeys l r, origin, TypesDiffer)
+                        Error (recordKeyMessage lKeys rKeys l r, origin, FieldsDiffer(Set.toList (lKeys - rKeys), Set.toList (rKeys - lKeys)))
                 // Two open records: each row is the other's extra fields and a row they share, as with two open unions.
                 | TyOpenRecord(lFields, lRow), TyOpenRecord(rFields, rRow) ->
                     let lKeys = keySet lFields
@@ -898,7 +925,7 @@ module Unifier =
                         |> Seq.toList
                     if lRow.Id = rRow.Id then
                         if lKeys = rKeys then loop subst (pairs @ rest)
-                        else Error (recordKeyMessage lKeys rKeys l r, origin, TypesDiffer)
+                        else Error (recordKeyMessage lKeys rKeys l r, origin, FieldsDiffer(Set.toList (lKeys - rKeys), Set.toList (rKeys - lKeys)))
                     else
                         let shared = match freshRest () with TyVar v -> v | _ -> failwith "unreachable"
                         let rowOf (extras: Map<string, Ty>) =

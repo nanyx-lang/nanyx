@@ -1001,7 +1001,14 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
         // settles, as in `[]`): it is written with the compiler's own `ToString` at each type the function is
         // specialised at, as a hole of the variable itself is (see `InterpolationHoles.resolvePending`).
         let instanceOf (var: TyVar) =
-            match instanceInScope scopeEnv current pending.Context [ TyVar var ] |> Option.orElseWith (fun () -> ownInstance pending.Context var |> Option.map (fun written -> written, FromInference)) with
+            // Or, for a variable of a local function that writes no type, the instance it was found to require of it.
+            let ofLocal () =
+                current.LocalStructureInstances |> Map.tryFind var.Id |> Option.bind (Map.tryFind pending.Context) |> Option.map (fun written -> written, FromInference)
+            match
+                instanceInScope scopeEnv current pending.Context [ TyVar var ]
+                |> Option.orElseWith (fun () -> ownInstance pending.Context var |> Option.map (fun written -> written, FromInference))
+                |> Option.orElseWith ofLocal
+            with
             | Some inScope -> Some (InstanceInScope inScope)
             | None when not (rigid.Contains var.Id)
                          && pending.Context = InterpolationHoles.context
@@ -1023,7 +1030,17 @@ let internal resolvePendingInstances (env: TypeEnv) (state: InferState) (name: I
                 derivedComparison scopeEnv rigid instanceOf pending.Call pending.Span ty current
             Some (EqualityOperators.resolvePending hasInstanceIn derive defScheme current pending argTys)
         elif OrderingOperators.isPending pending then
-            Some (OrderingOperators.resolvePending (orderingInstance pending.Callee pending.Span) hasInstanceIn defScheme current pending argTys)
+            // A structure of variables, `list(a)`, is ordered by the instance derived from those of its variables, as
+            // `==` on one is (#3055).
+            let ordering: WellKnownContexts.InstanceOf = fun env state ty ->
+                match orderingInstance pending.Callee pending.Span env state ty with
+                | Ok (None, _) when not (TypeEnv.freeTyVars ty).IsEmpty ->
+                    match derivedEquality scopeEnv state rigid instanceOf WellKnownContexts.ordering WellKnownContexts.BuiltIn pending.Callee (NodeId.next ()) pending.Span ty with
+                    | Some (Ok (instance, next)) -> Ok (Some instance, next)
+                    | Some (Error errors) -> Error errors
+                    | None -> Ok (None, state)
+                | found -> found
+            Some (OrderingOperators.resolvePending ordering hasInstanceIn defScheme current pending argTys)
         // A value that turned out never to give one has every context, as at a call (see `resolveCallInstances`).
         elif argTys |> List.exists Unifier.isBottom then
             if pending.Context = InterpolationHoles.context && (TypeEnv.tryFind InterpolationHoles.builtInFunction env).IsSome then

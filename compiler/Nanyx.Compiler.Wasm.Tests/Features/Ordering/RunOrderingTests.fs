@@ -211,3 +211,10 @@ def check = {
 check()
 """
     runSource source |> assertRan "false\ntrue\n"
+
+[<Fact>]
+let ``A def that writes no type orders a list of its own variable by the elements' own compare`` () =
+    // A declared `[Ord(t)]` def did already; one that writes no type ordered the elements as the compiler's own (#3055).
+    runSource
+        "type Rev = protected (n: int)\n\ndef Rev.compare: Rev, Rev -> #less | #equal | #greater = { a, b -> int.compare(b.n, a.n) }\n\ndef lessTop = { a, b -> [a] < [b] }\n\ndef lessDeclared: [Ord(t)] t, t -> bool = { a, b -> [a] < [b] }\n\n@entry\ndef main = {\n  def less = { a, b -> (a, 1) < (b, 1) }\n  println(lessTop(Rev(n = 1), Rev(n = 2)))\n  println(lessDeclared(Rev(n = 1), Rev(n = 2)))\n  println(less(Rev(n = 1), Rev(n = 2)))\n  println(lessTop(1, 2))\n  println(less(1, 2))\n}\n"
+    |> assertRan "false\nfalse\nfalse\ntrue\ntrue\n"
