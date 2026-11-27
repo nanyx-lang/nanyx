@@ -168,7 +168,7 @@ let lower (tools: TypeMatchTools) (scope: Scope) (expr: Expression) (value: Expr
                     { Patterns = [ matched ]; Body = tools.Branch { scope with Vars = vars } body ty }
                 let lowered = chosen |> List.map lowerArm
                 let catchesAll = lowered |> List.exists (fun arm -> arm.Patterns = [ PWildcard ])
-                let trap = { Patterns = [ PWildcard ]; Body = Expr.make (Crash [ "No arm of this match on a type matches it" ]) ty }
+                let trap = { Patterns = [ PWildcard ]; Body = Expr.make (Crash([ "No arm of this match on a type matches it" ], false)) ty }
                 let described = Expr.make (Call(describeFunction, [ AVar typeVar ])) description
                 bindLocal tools "__description" described (fun descriptionVar ->
                     k (Expr.make (Match([ descriptionVar ], lowered @ (if catchesAll then [] else [ trap ]))) ty))))
@@ -325,7 +325,7 @@ let describingFunction (tools: TypeMatchTools) (functionName: string) : Function
     while next < tools.TypeIds.Count do
         arms.Add { Patterns = [ PInt(int64 next) ]; Body = descriptionOf tools (tools.TypeIds.At next) }
         next <- next + 1
-    arms.Add { Patterns = [ PWildcard ]; Body = Expr.make (Crash [ "A type that has no description" ]) description }
+    arms.Add { Patterns = [ PWildcard ]; Body = Expr.make (Crash([ "A type that has no description" ], false)) description }
     { Name = functionName
       Source = functionName
       TypeArguments = []

@@ -19,9 +19,9 @@ let fractional (bindTemp: Expr -> (Atom -> Expr) -> Expr) (atoms: Atom list) (ty
 let negativePower (name: string) (argTys: IrType list) (ty: IrType) : Expr option =
     match argTys with
     | [ _ ] when name = Intrinsics.toFloat && IrType.isNumber ty && not (IrType.isFloat ty) ->
-        Some (Expr.make (Crash [ $"crash: a negative power of a '{IrType.show ty}', which is an integer type\n" ]) ty)
+        Some (Expr.make (Crash([ $"crash: a negative power of a '{IrType.show ty}', which is an integer type\n" ], false)) ty)
     | [ fraction ] when name = Intrinsics.toFloat && fraction <> ty && not (List.forall IrType.isNumber [ fraction; ty ]) ->
-        Some (Expr.make (Crash [ $"crash: a negative power of a '{IrType.show ty}', whose `/` gives a '{IrType.show fraction}'\n" ]) ty)
+        Some (Expr.make (Crash([ $"crash: a negative power of a '{IrType.show ty}', whose `/` gives a '{IrType.show fraction}'\n" ], false)) ty)
     | _ -> None
 
 /// Whether the call of the intrinsic `name` with `atoms`, which gives a value of `ty`, is `__pow`'s conversion of a

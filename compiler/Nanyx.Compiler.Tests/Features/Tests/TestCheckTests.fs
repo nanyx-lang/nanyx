@@ -40,16 +40,29 @@ let ``A test may require Console and Random, which the test host provides`` () =
     Assert.Equal(1, typed.Tests.Length)
 
 [<Fact>]
-let ``@test takes no argument but #io`` () =
-    let code, message, place = onlyDiagnostic "@test(#fast)\ndef `adds` = {\n  assert(1 + 1 == 2)\n}\n"
-    Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, code)
-    Assert.Equal("#fast", place)
-    Assert.StartsWith("It takes no argument, or `#io`", message)
+let ``@test takes no argument but #io, #crashes, #crashes with a text, or #io with one of them`` () =
+    for argument in [ "#fast"; "#crashes(1)"; "(#io, #io)"; "(#crashes, #crashes(\"x\"))"; "#io(\"x\")" ] do
+        let code, message, place = onlyDiagnostic $"@test({argument})\ndef `adds` = {{\n  assert(1 + 1 == 2)\n}}\n"
+        Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, code)
+        Assert.Contains(place, argument)
+        Assert.StartsWith("It takes no argument; `#io`, to run the test with the console host's real", message)
+
+[<Fact>]
+let ``@test(#crashes) and @test(#crashes("text")) mark a test that expects a crash, with #io or not`` () =
+    let typed =
+        compileClean
+            "@test(#crashes)\ndef `any` = {\n  crash(\"x\")\n}\n\n@test(#crashes(\"too big\"))\ndef `some` = {\n  crash(\"too big\")\n}\n\n@test(#io, #crashes)\ndef `io first` = {\n  crash(\"x\")\n}\n\n@test(#crashes(\"y\"), #io)\ndef `io last` = {\n  crash(\"y\")\n}\n"
+    Assert.Equal<(string * bool * ExpectedCrash option) list>(
+        [ "any", false, Some AnyCrash
+          "some", false, Some(CrashContaining "too big")
+          "io first", true, Some AnyCrash
+          "io last", true, Some(CrashContaining "y") ],
+        typed.Tests |> List.map (fun test -> test.Name, test.Io, test.Crashes))
 
 [<Fact>]
 let ``A test marked @test(#io) may require Env, and is one of the module's tests`` () =
     let typed = compileClean "@test(#io)\ndef `reads the arguments` = {\n  assert(args() == [])\n}\n"
-    Assert.Equal<(string * bool) list>([ "reads the arguments", true ], typed.Tests |> List.map (fun test -> test.Name, test.Io))
+    Assert.Equal<(string * bool * ExpectedCrash option) list>([ "reads the arguments", true, None ], typed.Tests |> List.map (fun test -> test.Name, test.Io, test.Crashes))
 
 [<Fact>]
 let ``NYX0312 for a context @test(#io) provides says to mark the test so, and its fix does`` () =

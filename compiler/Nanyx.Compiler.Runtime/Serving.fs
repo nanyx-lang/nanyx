@@ -79,7 +79,7 @@ module WasmServer =
                         response.Value <- Some((caller.GetMemory "memory").GetSpan(int64 address, length).ToArray())))
                 Probing.define linker table None
                 let reported = ref None
-                CrashImport.define linker reported
+                CrashImport.define linker reported (ref false)
                 // What the handler's `dbg` prints goes to the server's log, with the request, and never into the response.
                 Probing.defineDbg linker (fun hit ->
                     report $"dbg ({what}): {hit}"
