@@ -2,14 +2,14 @@
 /// written, and the values in it, printed as `dbg` prints them.
 module TranspilerWasmTests.Features.Asserts.RunAssert
 
+open System.IO
 open Xunit
 open Transpiler.Wasm.CodeGen
 open TranspilerWasmTestHelpers
 
-/// The crash `source` stops at, which runs it up to an `assert` that fails: what it printed before, and its message
-/// from where the `assert` is written, without the file's path and the stack.
-let private failing (source: string) =
-    let outcome = runSource (normalized source)
+/// The crash `outcome` stopped at, from a run up to an `assert` that fails: what it printed before, and its message from
+/// where the `assert` is written, without the file's path and the stack.
+let private crashOf (outcome: RunOutcome) =
     Assert.Equal(1, outcome.ExitCode)
     let error = outcome.StandardError.ReplaceLineEndings "\n"
     let start = error.IndexOf "main.nyx:"
@@ -18,6 +18,9 @@ let private failing (source: string) =
     let lines = error.Substring(start + "main.nyx:".Length).Split('\n')
     let shown = lines |> Array.skip 1 |> Array.takeWhile (fun line -> line.StartsWith "  " && line.Contains " = ")
     outcome.StandardOutput, (Array.append [| lines[0] |] shown |> Array.map (fun line -> line + "\n") |> String.concat "")
+
+/// The crash `source` stops at (see `crashOf`).
+let private failing (source: string) = crashOf (runSource (normalized source))
 
 [<Fact>]
 let ``Run - an assert that holds does nothing`` () =
@@ -81,6 +84,21 @@ def main: [Console] () -> () = { assert(next() == 3) }
 main()
 """
     Assert.Equal(("computed\n", "6:34: assert(next() == 3)\n  next() = 2\n"), failing source)
+
+[<Fact>]
+let ``Run - a failed assert in a file with CRLF line endings shows its own text and its sides'`` () =
+    // The parser measures spans with the line endings made `\n`, so the text is taken from the source made so (#3040).
+    let source =
+        """def divide = { x, y -> x / y }
+
+def x = 1
+assert(x == 2)
+"""
+    use directory = new TempDirectory()
+    // Named `main.nyx`, as `runSource` names its file, and written with CRLF, which `TempDirectory.Write` would undo.
+    let path = Path.Combine(directory.Path, "main.nyx")
+    File.WriteAllText(path, (normalized source).Replace("\n", "\r\n"))
+    Assert.Equal(("", "4:1: assert(x == 2)\n  x = 1\n"), crashOf (runFile path))
 
 [<Fact>]
 let ``A release build keeps an assert`` () =
