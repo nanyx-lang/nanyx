@@ -148,8 +148,11 @@ let ``Calling a local function that orders with records is an error at the call`
 [<Fact>]
 let ``A def that calls a local function ordering its own type variable requires Ord of it`` () =
     let typed = compileClean "def g = { v, w ->\n  def lt = { x, y -> x < y }\n  lt(v, w)\n}\ndef b = g(1, 2)\n"
-    match inferredContexts typed with
-    | [ TyApply("Ord", [ TyVar _ ]) ] -> ()
+    // `lt` requires `Ord` of its own variable too, and is passed it (#2809).
+    let inferredOf (name: string) =
+        typed.InferredContextTypes |> Map.toList |> List.filter (fun (symbol, _) -> typed.Symbols.[symbol].Name = name) |> List.map snd
+    match inferredOf "g", inferredOf "lt" with
+    | [ [ TyApply("Ord", [ TyVar _ ]) ] ], [ [ TyApply("Ord", [ TyVar _ ]) ] ] -> ()
     | other -> failwith $"Unexpected inferred contexts: %A{other}"
 
 [<Fact>]
