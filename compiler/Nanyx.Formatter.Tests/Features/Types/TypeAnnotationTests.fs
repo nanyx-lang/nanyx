@@ -74,3 +74,20 @@ let ``A comment between a def's signature and its = keeps the = on a line of its
 
   -- and more
   = { x, k -> x * k + x }"""
+
+/// Where a function type whose first parameter is an unparenthesised tag union is written, as `{}` in each: the union
+/// is the first parameter, and the formatter writes it in brackets, which say the same (#1627). In a context's member or
+/// a type alias, a `,` there would end the member or the case, so it is written in brackets already.
+let tagUnionParameterPlaces: obj array list =
+    [ [| "export def orCrash: {} = {\n  | #some(v), _ -> v\n  | _, message -> crash(message)\n}" |]
+      // As in the prelude, where #1627 was seen: after other defs, some of which require contexts.
+      [| "export def crash: string -> never = { message ->\n  crash(message)\n}\n\nexport def mapSome: [c] (#some(a) | r), ([c] a -> b) -> #some(b) | r = {\n  | #some(v), f -> #some(f(v))\n  | other, _ -> other\n}\n\nexport def orCrash: {} = {\n  | #some(v), _ -> v\n  | _, message -> crash(message)\n}" |]
+      [| "module results =\n  export def orCrash: {} = {\n    | #some(v), _ -> v\n    | _, message -> crash(message)\n  }" |]
+      [| "def main = {\n  def orCrash: {} = {\n    | #some(v), _ -> v\n    | _, message -> crash(message)\n  }\n\n  orCrash(#some(1), \"none\")\n}" |] ]
+
+[<Theory>]
+[<MemberData(nameof tagUnionParameterPlaces)>]
+let ``A tag union as a function type's first parameter is written in brackets, wherever the type is`` (place: string) =
+    let written = "#some(a) | r, string -> a"
+    let bracketed = "(#some(a) | r), string -> a"
+    place.Replace("{}", written) |> formatsTo (place.Replace("{}", bracketed))
