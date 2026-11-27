@@ -168,7 +168,9 @@ host, and its entry point runs the test at the index the host gives it ([Test bu
 provides `Console`, whose output it gives the runtime and whose input is empty, `Random`, seeded with the runtime's
 seed as [`random.seeded`](../stdlib/random) seeds it, and `Async`, and nothing else, so a test that requires any other
 context loads it with `use` (`NYX0312`). A test marked [`@test(#io)`](../tour/attributes#test) has the console host's
-real `Console`, `Env` and `FileSystem` instead, written in the host library `nanyx.wasi`.
+real `Console`, `Env` and `FileSystem` instead, written in the host library `nanyx.wasi`. Its `filesInMemory` root,
+`test.host.memory`, which [`nanyx test --files-in-memory`](../standard-tools/command-line#nanyx-test) builds tests from,
+keeps such a test's files in memory over the real ones.
 
 # Where `dbg` prints
 
