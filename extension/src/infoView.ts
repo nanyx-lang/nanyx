@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/node";
 import { ContextLines, contextLinesMode } from "./contextLines";
 import { HighlightedCode, Highlighter } from "./highlighter";
+import { movedThrough } from "./pinnedPosition";
 
 /** The language server's request for what the compiler knows at a position (see `InfoViewHandler` in the compiler). */
 const INFO_VIEW_REQUEST = "nanyx/infoView";
@@ -89,7 +90,7 @@ interface Target {
  * secondary side bar. It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or
  * the document does, once it has stayed put for a moment, and again when the server has compiled the document. Every item that has a place links to it, and shows the doc
  * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
- * while you edit elsewhere. While it is visible and not pinned, it highlights in the editor what the server says to: on
+ * while you edit elsewhere, moving it with the edits above it and unpinning it when its text is deleted. While it is visible and not pinned, it highlights in the editor what the server says to: on
  * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts. The code it shows is
  * highlighted as the editor highlights it, in the current theme's colours (see `Highlighter`). The view tells the server
  * how many characters fit across it, so that a signature too long for it is laid out as the formatter lays out a def's,
@@ -138,6 +139,7 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
     vscode.window.onDidChangeActiveTextEditor(() => this.schedule(), undefined, this.listeners);
     vscode.workspace.onDidChangeTextDocument((event) => {
       if (event.document.languageId === "nanyx") {
+        this.followEdits(event);
         this.schedule();
       }
     }, undefined, this.listeners);
@@ -227,6 +229,19 @@ export class InfoView implements vscode.WebviewViewProvider, vscode.Disposable {
     } else if (message.type === "openLink" && message.href) {
       void openLink(message.href);
     }
+  }
+
+  /**
+   * Moves the pinned position with `event`'s edits to its document, so that it stays on the text it was on, and unpins
+   * it if they replace that text (see `movedThrough`).
+   */
+  private followEdits(event: vscode.TextDocumentChangeEvent): void {
+    if (this.pinned === undefined || event.document.uri.toString() !== this.pinned.uri.toString()) {
+      return;
+    }
+    const changes = event.contentChanges.map((change) => ({ start: change.range.start, end: change.range.end, text: change.text }));
+    const position = movedThrough(this.pinned.position, changes);
+    this.pinned = position && { uri: this.pinned.uri, position: new vscode.Position(position.line, position.character) };
   }
 
   /** The cursor in the active Nanyx editor, if there is one. */

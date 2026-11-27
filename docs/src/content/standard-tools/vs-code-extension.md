@@ -267,7 +267,8 @@ name of a type or context with a definition, wherever the code writes it, to tha
 `#some(Point)`). A type with no name to follow, such as `int -> string`, has no link. Click a message's code, such as
 `error NYX0201`, to go to where it is reported. **Pin**
 keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
-again. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
+again. The pinned position moves with your edits, as the text it is on does: a line added above it, or text typed before
+it on its line, leaves the view on the same expression. Deleting the text it is on unpins the view. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
 the file does not parse, the view shows what the compiler knew the last time it did. It needs a compiler
 newer than 0.23.0.
 
