@@ -223,3 +223,20 @@ let ``The fix puts a value that isn't a call in parentheses before pulling it in
     let fixedSource = applyFix (normalized source) fix
     Assert.Contains("  def lines = (if flag then numbers() else numbers()) \\seq.toList\n", fixedSource)
     Assert.Empty(repeatedPulls fixedSource)
+
+[<Theory>]
+// A pull, `xs` given to a function that gives back something else, in each way a call is written (#3034).
+[<InlineData("def first = seq.contains(xs, 2)\n  ignore(first)\n  seq.length(xs)", "xs")>]
+[<InlineData("def first = xs \\seq.contains(2)\n  ignore(first)\n  seq.length(xs)", "xs")>]
+[<InlineData("def total = seq.fold(xs, 0, { a, b -> a + b })\n  total + seq.length(xs)", "xs")>]
+[<InlineData("def total = seq.fold(xs, 0) { a, b -> a + b }\n  total + seq.length(xs)", "xs")>]
+// A sequence made from `xs`, pulled, then `xs` pulled again: the first pull is the pull of what was made from it.
+[<InlineData("def ys = seq.map(xs, { x -> x + 1 })\n  seq.length(ys) + seq.length(xs)", "ys")>]
+[<InlineData("def ys = seq.map(xs) { x -> x + 1 }\n  seq.length(ys) + seq.length(xs)", "ys")>]
+[<InlineData("def ys = seq.take(xs, 2)\n  seq.length(ys) + seq.length(xs)", "ys")>]
+[<InlineData("def ys = xs \\seq.take(2)\n  seq.length(ys) + seq.length(xs)", "ys")>]
+let ``A call pulls the sequence it is given however its arguments are written`` (body: string, firstPull: string) =
+    let source = numbers + $"def main: [Log] () -> int = {{ () ->\n  def xs = numbers()\n  {body}\n}}\n"
+    let diagnostic = Assert.Single(repeatedPulls source)
+    Assert.Equal(again "xs", diagnostic.Message)
+    Assert.Equal<string list>([ firstPull ], diagnostic.Related |> List.map (fst >> textAt (normalized source)))
