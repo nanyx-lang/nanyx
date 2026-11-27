@@ -4,11 +4,15 @@ description: "How a debug build tells the runtime where it is, keeps a shadow st
 order: 16
 ---
 
-A program `nanyx run` runs has debug probes: at the start of each function, at each statement and at each place a
-function ends, its code can call the runtime, which keeps a shadow stack from them and can ask for the locals of the
-frame it is in. They are the foundation of the debugger, which is planned on [Debugging](../work-in-progress/debugging).
-A release build has none, and nor does a debug build written to a file by `nanyx build` or `nanyx wasm`, which another
-WebAssembly runtime, without the imports below, may run (`WasmOptions.Probes`).
+A program built with debug probes calls the runtime at the start of each function, at each statement and at each
+place a function ends, and the runtime keeps a shadow stack from them and can ask for the locals of the frame it is in.
+They are the foundation of the debugger, which is planned on [Debugging](../work-in-progress/debugging). Only code that
+listens to them asks for them (`WasmOptions.Probes`): the debugger will, when it attaches to a run, and the tests do.
+Nothing else listens, so no command builds with them: `nanyx run` and `nanyx test` compile without them, as a release
+build does, and so do `nanyx build` and `nanyx wasm`, whose module another WebAssembly runtime, without the imports
+below, may run. The probes made most of a program's code: `examples/shop.nyx`, compiled as `nanyx run` compiles it, is
+2.69 MB of WebAssembly text with them and 0.93 MB without
+([#2225](https://github.com/nanyx-lang/nanyx/issues/2225)).
 
 # Probes in the core IR
 

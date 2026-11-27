@@ -26,8 +26,7 @@ let ``The corpus has the files, the docs' code blocks and the tests' sources`` (
 [<Fact>]
 let ``Every file of the standard library and the packages parses`` () =
     let failures =
-        Corpus.all.Value
-        |> List.map (fun piece -> piece, parseModuleWithTrivia piece.Name piece.Source)
+        parses.Value
         |> List.filter (fun (piece, _) -> piece.Origin = SourceFile && (piece.Name.StartsWith "stdlib" || piece.Name.StartsWith "packages"))
         |> List.choose (fun (piece, parse) ->
             match parse with
@@ -96,7 +95,12 @@ let ``The lexer reads every piece that parses without an error, and finds the co
 [<Fact>]
 let ``The parser reads the whole corpus the same way every time`` () =
     let pieces = Corpus.all.Value
-    let found = Differential.differences parseModuleWithTrivia parseModuleWithTrivia pieces
+    // The first reading of each piece is the one the other tests share, so the corpus is parsed once more here, not twice.
+    let first = System.Collections.Generic.Dictionary<string * string, Result<SourceModule, ParseError>>()
+    for piece, parse in parses.Value do
+        first.TryAdd((piece.Name, piece.Source), parse) |> ignore
+    let firstReading: Differential.ModuleParser = fun name source -> first[(name, source)]
+    let found = Differential.differences firstReading parseModuleWithTrivia pieces
     Assert.True(found.IsEmpty, Differential.report 10 pieces.Length found)
 
 /// The pieces whose block structure the layout pass reads differently from the tree on purpose, each named by its file

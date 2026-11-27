@@ -11,9 +11,11 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 
 # Decisions
 
-- **The debugger is built on probes, not DWARF.** A debug build calls a host import at each statement boundary and at
-  each function's entry and return, and the runtime keeps a shadow stack from them and asks a frame for its locals
-  ([Debug probes](../deep-dives/debug-probes)). The runtime will stop at breakpoints and speak the Debug Adapter
+- **The debugger is built on probes, not DWARF.** A build with probes calls a host import at each statement boundary
+  and at each function's entry and return, and the runtime keeps a shadow stack from them and asks a frame for its
+  locals ([Debug probes](../deep-dives/debug-probes)). Only the debugger listens to them, so it compiles the program
+  with them when it attaches to a run; `nanyx run` and `nanyx test` build without them, and no flag asks for them
+  ([#2225](https://github.com/nanyx-lang/nanyx/issues/2225)). The runtime will stop at breakpoints and speak the Debug Adapter
   Protocol to VS Code. Everything is code the project owns: it works on Windows, any host can answer the import, and
   values show the way Nanyx writes them. DWARF line tables may come later, for native profilers and crash dumps, but
   describing Nanyx's values to LLDB isn't planned.
