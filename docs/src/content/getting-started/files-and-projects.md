@@ -62,7 +62,7 @@ println("Hello!")
 
 A script has no lockfile, so a package from the index is named at the exact version it uses, `1.2.0`, not the versions
 it accepts, `1.2`: the directive is the pin. Named with no version it is an error, whose fix writes the newest version
-the index has. `nanyx run` downloads each version a script pins into the package cache, with the packages it depends
+the index has. The editor asks the index for it when the fix is asked for, not as the name is typed. `nanyx run` downloads each version a script pins into the package cache, with the packages it depends
 on, the newest each accepts, and checks each download against the SHA-256 the index records, as `nanyx pull script.nyx`
 does; `nanyx check` and the editor read them from the cache. Once the cache holds every package the script needs,
 `nanyx run` reads nothing from the index, so a script runs without a network; `nanyx pull script.nyx` reads the index

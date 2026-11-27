@@ -59,6 +59,44 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_package_named_with_no_version_offers_its_newest_version_when_its_fixes_are_asked_for()
+    {
+        // An index that lists two versions of acme.core, which the compile doesn't read (#2223).
+        var config = TempPath("index", "config.json");
+        var index = Path.GetDirectoryName(config)!;
+        File.WriteAllText(config, """{ "format": 1, "index": "index/" }""");
+        var listing = Path.Combine(index, "index", "acme", "acme.core.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(listing)!);
+        File.WriteAllText(listing, """
+            { "name": "acme.core", "versions": [
+              { "version": "1.0.0", "url": "a.nyxpkg", "sha256": "0", "dependencies": {} },
+              { "version": "1.2.0", "url": "b.nyxpkg", "sha256": "0", "dependencies": {} } ] }
+            """);
+        var user = NyxCompiler.SeededPackages.user();
+        var store = new NyxCompiler.PackageStore(user.Cache, index, user.GitHub, user.Seed);
+        await RestartWithAsync(TestSettings with { Packages = () => store });
+        var path = TempPath("script.nyx");
+        var uri = DocumentUri.FromFileSystemPath(path);
+        const string text = "::install acme.core\n\nprintln(1)\n";
+
+        // A script with a directive is built against its packages, which seeds the compiler's own into a new cache
+        // first: seconds, and on a loaded CI runner more than the timeout. It is done here first, and the server is
+        // given a minute at least, or three times what it took here.
+        AllowFor(TimeSpan.FromSeconds(60));
+        var reading = System.Diagnostics.Stopwatch.StartNew();
+        NyxCompiler.Script.readFromWithoutIndex(store, path, text);
+        AllowFor(TimeSpan.FromTicks(Math.Max(TimeSpan.FromSeconds(60).Ticks, (3 * reading.Elapsed).Ticks)));
+
+        Open(uri, text);
+        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!, d => d.Code?.String == NyxCompiler.DiagnosticCodes.InvalidDirective.Code);
+        Assert.DoesNotContain("newest", diagnostic.Message.String);
+
+        var use = Assert.Single(await CodeActionsIn(uri, diagnostic.Range), action => action.Kind == CodeActionKind.QuickFix);
+        Assert.Equal(("Use acme.core 1.2.0", true), (use.Title, use.IsPreferred));
+        Assert.Equal("::install acme.core 1.2.0\n\nprintln(1)\n", Applied(text, Assert.Single(use.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_fix_after_an_import_whose_file_has_errors_is_its_own_diagnostics()
     {
         // The import's errors are published as one diagnostic at the import, so the published diagnostics are fewer
