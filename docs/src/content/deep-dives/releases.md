@@ -53,8 +53,8 @@ The index registers each shipped package with this repository, and its sync read
 after its `compiler/` prefix, records each package's asset, its SHA-256 and its manifest's `nanyx`, and runs the same
 checks as on any release. So a release reaches the index within the hour, and needs no token for the index's
 repository. Each shipped manifest gives `repository = "nanyx-lang/nanyx"`, which the sync checks against the
-registration, and a `nanyx`: the compiler's major and minor version for a library, `0.49`, and the compiler's version
-only for a host or a host library, `=0.49.1`, since they use the compiler's internals. The resolver never chooses one
+registration, and a `nanyx`: the compiler's major and minor version for a library, `0.50`, and the compiler's version
+only for a host or a host library, `=0.50.0`, since they use the compiler's internals. The resolver never chooses one
 of those for another compiler.
 
 # Scoop
