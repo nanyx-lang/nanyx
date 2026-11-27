@@ -371,10 +371,11 @@ module internal WellKnownContexts =
     /// one of the variables of the def it is in. A type `wellKnown` lacks for is an error. A variable of the type the
     /// def around it writes (`defScheme` gives a def's type) must be one that def requires `wellKnown` of
     /// (`hasInstance`, in the environment the operator is written in). Any other variable is one of a local function
-    /// generic in it that compares a structure of it, as `[a] == [b]`: such a function requires no context for it, and
-    /// the backend works at each type the function is specialised at. (One that compares values of the variable itself
-    /// requires the context, see `ContextInference.resolveLocal`.) The operator is the compiler's own, so it finds no
-    /// instance; one that fails failed to check, and the def around it carries on.
+    /// generic in it that has no instance of it, as the rest of a union it compares: such a function is passed no
+    /// context for it, and the backend works at each type the function is specialised at. (One that compares values of
+    /// the variable, or of a structure of it, requires the context, see `ContextInference.resolveLocal`.) The operator
+    /// is the compiler's own, so it finds no instance; one that fails failed to check, and the def around it carries
+    /// on.
     let checkPending
         (wellKnown: WellKnownContext)
         (hasInstance: TypeEnv -> Ty -> bool)

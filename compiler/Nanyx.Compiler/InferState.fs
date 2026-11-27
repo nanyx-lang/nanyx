@@ -238,11 +238,12 @@ type InferState =
             /// its type it is in, if it is in one. A `==` or `!=` among them has its place here too, for its `Eq`
             /// (see `EqualityOperators`).
             HoleScopes: Map<NodeId, TypeEnv * Identifier option>;
-            /// The type variables each local function compares or orders structures of, as `[a] == [b]`, among those it
-            /// is generic in, by the function's symbol and then by the well-known context it needs of them (`Eq`, `Ord`):
-            /// a call to it needs that context of the types they are at the call (see `WellKnownContexts.checkLocalCall`).
-            /// One that compares values of the variable itself requires the context instead (see
-            /// `ContextInference.resolveLocal`).
+            /// The type variables each local function compares or orders values of, among those it is generic in, by the
+            /// function's symbol and then by the well-known context it needs of them (`Eq`, `Ord`): a call to it needs
+            /// that context of the types they are at the call (see `WellKnownContexts.checkLocalCall`). The function
+            /// requires the context of a variable it compares values or structures of (see
+            /// `ContextInference.resolveLocal`), which a call passes it; one it is passed nothing for is the rest of a
+            /// union it compares, as `r` in `#none | r`, which the call only checks.
             LocalComparisons: Map<SymbolId, Map<Identifier, Set<int>>>;
             /// The rests of the unions in its type each top-level function compares values of (`r` in `#none | r`),
             /// by the function's symbol and then by the well-known context it needs of them, each by its place among
@@ -253,6 +254,12 @@ type InferState =
             /// The parameterised contexts each unannotated top-level def requires, as types over its own type's
             /// variables (`Show(a)` as `TyApply("Show", [a])`), by the def's symbol.
             InferredContextTypes: Map<SymbolId, Ty list>;
+            /// The instance a local function that writes no type was found to require of each of its variables it
+            /// compares or orders a structure of, as `[a] == [b]` does, by the variable's id and then by the context:
+            /// the context as the function's inferred type writes it. The operator is left to the def around the
+            /// function, which derives the structure's instance from these (see
+            /// `ContextInstances.resolvePendingInstances`, #3055).
+            LocalStructureInstances: Map<int, Map<Identifier, TypeExpr>>;
             /// The contexts each local def that writes its type requires, as written, by the def's symbol: what
             /// `ContextRequirements` holds for it by name only until its block ends, and a def of the same name
             /// elsewhere can stand for.
@@ -514,6 +521,7 @@ let emptyState =
             LocalComparisons = Map.empty;
             CheckedRests = Map.empty;
             InferredContextTypes = Map.empty;
+            LocalStructureInstances = Map.empty;
             LocalContextRequirements = Map.empty;
             LocalContextSignatures = Map.empty;
             LocalContextVariables = Map.empty;
