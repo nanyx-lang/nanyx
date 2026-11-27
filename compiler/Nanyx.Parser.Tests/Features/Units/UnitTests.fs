@@ -68,8 +68,9 @@ let ``A number without a unit is the literal it always was`` () =
 
 [<Fact>]
 let ``An exponent comes after a fraction in a unit literal, as in a float`` () =
-    Assert.True(isError (parseModule "def x = 1e5"))
-    Assert.True(isError (parseModule "def x = 1e3ms"))
+    // `1e5` and `1e3ms` don't read as numbers, so the parser runs out of source looking for the rest of the def.
+    Assert.Equal(("Unexpected end of the file", ""), parseErrorOf "def x = 1e5")
+    Assert.Equal(("Unexpected end of the file", ""), parseErrorOf "def x = 1e3ms")
 
 [<Fact>]
 let ``A misplaced underscore in a unit literal is reported`` () =
