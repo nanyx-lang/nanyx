@@ -64,7 +64,8 @@ let private narrowEnv (state: InferState) (target: Ty) (narrowed: Ty) (env: Type
 
 /// `state` with the type the match that ends `body`, a lambda's, gives expected to be `expected`, the lambda's
 /// declared result, so that its arms are checked against it narrowed (see `infer`), and so the record or tuple literal
-/// that ends it, so that its fields are checked against the record's (see `ExpectedLiterals.intoRecordFields`).
+/// that ends it, so that its fields are checked against the record's (see `ExpectedLiterals.intoRecordFields`), and the
+/// square-bracket literal that ends it, so that it builds the result's type (see `ExpectedLiterals.expectLiteralResult`).
 let rec expectResult (body: Expression) (expected: Ty) (state: InferState) : InferState =
     match body.Kind with
     | Match _
@@ -74,7 +75,7 @@ let rec expectResult (body: Expression) (expected: Ty) (state: InferState) : Inf
         match SyntaxTree.blockValue statements with
         | Some last -> expectResult last expected state
         | None -> state
-    | _ -> state
+    | _ -> ExpectedLiterals.expectLiteralResult body expected state
 
 /// The error for a pattern of a `Type` match that isn't one of its description's tags.
 let private wrongPattern (span: SourceSpan) (detail: string) =

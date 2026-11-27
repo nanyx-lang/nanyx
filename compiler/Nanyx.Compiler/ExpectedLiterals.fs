@@ -37,6 +37,17 @@ let blockResultOf (state: InferState) (expr: Expression) : Ty option =
 let expectedOrBlockResultOf (state: InferState) (expr: Expression) : Ty option =
     state.ExpectedTypes |> Map.tryFind expr.Id |> Option.orElse (blockResultOf state expr)
 
+/// `state` with the square-bracket literal that ends `body`, a lambda's, checked against `expected`, the lambda's
+/// result: it builds that type, if it is one with a `fromArray` (see `CollectionLiterals`, #1868).
+let rec expectLiteralResult (body: Expression) (expected: Ty) (state: InferState) : InferState =
+    match body.Kind with
+    | Block statements ->
+        match SyntaxTree.blockValue statements with
+        | Some last -> expectLiteralResult last expected state
+        | None -> state
+    | _ when (CollectionSyntax.segments body).IsSome -> expect expected state body
+    | _ -> state
+
 /// The type `expr` is checked against, as far as `state` has settled it, aliases looked through, if what it is written in
 /// expects one.
 let private expectedOf (state: InferState) (expr: Expression) : Ty option =

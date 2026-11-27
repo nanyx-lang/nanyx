@@ -161,8 +161,14 @@ let rec internal inferExpr (env: TypeEnv) (state: InferState) (expr: Expression)
     | None ->
     let outer = state.Origin
     let origin = if SourceSpan.isNone expr.Span then outer else expr.Span
+    // A square-bracket literal checked against a type with a `fromArray` builds it, wherever the type it is checked
+    // against comes from (see `ExpectedLiterals`).
+    let targeted =
+        ExpectedLiterals.expectedOrBlockResultOf state expr
+        |> Option.bind (CollectionLiterals.targeted inferExpr env { state with Origin = origin } expr)
     let inferred =
-        inferExprKind env { state with Origin = origin } expr
+        targeted
+        |> Option.defaultWith (fun () -> inferExprKind env { state with Origin = origin } expr)
         |> Result.bind (fun (typedExpr, next) ->
             match expr.Kind with
             // A call to a function that requires a parameterised context finds its instance once its arguments are typed.

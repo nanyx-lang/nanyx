@@ -141,6 +141,20 @@ def `loads the defaults when there is no config file` = {
 }
 ```
 
+For code that reads and writes files, [`filesystem.inMemory`](../stdlib/filesystem) runs a block with a `FileSystem`
+that holds its files in memory, starting from the files it is given, so a test writes files and reads them back without
+faking each member, and nothing reaches the disk:
+
+```nanyx fragment
+@test
+def `saves the new port` = {
+  filesystem.inMemory([("app.toml", "port = 8080")], {
+    assert(config.save("app.toml", Config(port = 9090)) == #ok)
+    assert(file.read(path.of("app.toml")) == #some("port = 9090"))
+  })
+}
+```
+
 `@test(#io)` runs a test with the console host's real `Console`, `Env` and `FileSystem`, for a test that is
 meant to read the package's files or the environment. It runs in the package's directory, or the script's, and what it
 prints is still kept:

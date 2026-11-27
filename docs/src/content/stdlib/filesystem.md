@@ -91,4 +91,18 @@ calls the functions of [`file`](file) and [`dir`](dir), which are written on the
 - `listDirectory`: The names of what the directory at `at` holds, in no order, without `.` and `..`.
 - `createDirectory`: Makes the directory `at`, in a directory that is there already.
 
+## `inMemory`
+
+```nanyx fragment
+def inMemory: [c] list((string, string)), ([c, FileSystem] () -> a) -> a
+```
+
+What a test's `body` gives, run with a `FileSystem` that holds its files in memory, starting with
+`files`, each a path and its text: the directories they are in are there too, and so is `.`. A file
+`body` writes is there for it to read back, and nothing reaches the disk, so a test of code that
+reads and writes files needs neither `@test(#io)` nor a fake of each member. Each member gives the
+`FsError` the console host does for the same thing, but for two differences: there is no current
+directory besides `.`, so a relative path and an absolute one never name the same file, and nothing
+is out of reach, so there is no `#permissionDenied`.
+
 <!-- End of the generated reference. -->

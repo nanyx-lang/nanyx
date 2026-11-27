@@ -11,6 +11,7 @@ export module filesystem
 import (
   nanyx/async as (Async)
   nanyx.fs/path as (Path)
+  nanyx.fs/path as path
 )
 
 --| Why a file or directory couldn't be read, written, deleted or made: there is nothing at the path;
@@ -52,3 +53,173 @@ export context FileSystem = (
   --| Makes the directory `at`, in a directory that is there already.
   createDirectory: [Async] Path -> #ok | FsError
 )
+
+--| What a test's `body` gives, run with a `FileSystem` that holds its files in memory, starting with
+  `files`, each a path and its text: the directories they are in are there too, and so is `.`. A file
+  `body` writes is there for it to read back, and nothing reaches the disk, so a test of code that
+  reads and writes files needs neither `@test(#io)` nor a fake of each member. Each member gives the
+  `FsError` the console host does for the same thing, but for two differences: there is no current
+  directory besides `.`, so a relative path and an absolute one never name the same file, and nothing
+  is out of reach, so there is no `#permissionDenied`.
+export def inMemory: [c] list((string, string)), ([c, FileSystem] () -> a) -> a = { files, body ->
+  memory {
+    mut store = files \fold(
+      map.empty
+      { held, file ->
+        match file
+          | (at, text) -> stored(held, path.of(at), #file(text))
+      }
+    )
+
+    use FileSystem(
+      readFile = { at -> textIn(store, at) }
+      readFileBytes = { at ->
+        match textIn(store, at)
+          | #some(text) -> #some(string.toUtf8(text))
+          | e -> e
+      }
+      readFileChunk = { at, offset, length ->
+        match textIn(store, at)
+          | #some(text) ->
+            def size = string.length(text)
+
+            if offset > size
+              then #other("it is shorter than it was: it ends at byte {size}, before {offset}")
+              else #some(string.substring(text, start = offset, length = length))
+          | e -> e
+      }
+      writeFile = { at, text ->
+        match written(store, at, { _ -> text })
+          | #some(held) ->
+            store := held
+            #ok
+          | e -> e
+      }
+      appendFile = { at, text ->
+        match written(store, at, { before -> before ++ text })
+          | #some(held) ->
+            store := held
+            #ok
+          | e -> e
+      }
+      pathExists = { at ->
+        match entryIn(store, at)
+          | #file(_) -> true
+          | #directory -> true
+          | _ -> false
+      }
+      deleteFile = { at ->
+        match entryIn(store, at)
+          | #file(_) ->
+            store := map.remove(store, Path.toString(at))
+            #ok
+          | #directory -> #isDirectory
+          | e -> e
+      }
+      listDirectory = { at ->
+        match entryIn(store, at)
+          | #directory -> #some(namesIn(store, at))
+          | #file(_) -> #notDirectory
+          | e -> e
+      }
+      createDirectory = { at ->
+        match entryIn(store, at)
+          | #file(_) -> #alreadyExists
+          | #directory -> #alreadyExists
+          | #notFound ->
+            match directoryAbove(store, at)
+              | #ok ->
+                store := map.insert(store, Path.toString(at), #directory)
+                #ok
+              | e -> e
+          | e -> e
+      }
+    )
+
+    body()
+  }
+}
+
+--| What a file system in memory holds at a path: a file and its text, or a directory.
+type Held = #file(string) | #directory
+
+--| `held` with `entry` at `at`, and a directory at each directory above it that has nothing.
+def stored: map(string, Held), Path, Held -> map(string, Held) = { held, at, entry ->
+  def above = match path.parent(at)
+    | #some(up) -> (if map.containsKey(held, Path.toString(up))
+      then held
+      else stored(held, up, #directory))
+    | #none -> held
+
+  map.insert(above, Path.toString(at), entry)
+}
+
+--| Whether `at` is a directory that is always there: `.`, a root, or a path that ends in `..`, which
+  has no name of its own to be held under.
+def implicitDirectory: Path -> bool = { at ->
+  path.fileName(at) == #none
+}
+
+--| What `held` has at `at`: a file, a directory, `#notFound`, or `#notDirectory` when a directory it
+  would be in is a file.
+def entryIn: map(string, Held), Path -> #file(string) | #directory | FsError = { held, at ->
+  if implicitDirectory(at) then #directory else
+    match map.get(held, Path.toString(at))
+      | #some(#file(text)) -> #file(text)
+      | #some(#directory) -> #directory
+      | #notFound ->
+        match directoryAbove(held, at)
+          | #ok -> #notFound
+          | e -> e
+}
+
+--| Whether the directory `at` is in is there in `held`: `#ok`, or `#notFound`, or `#notDirectory`
+  when it is a file.
+def directoryAbove: map(string, Held), Path -> #ok | FsError = { held, at ->
+  match path.parent(at)
+    | #some(up) ->
+      match entryIn(held, up)
+        | #directory -> #ok
+        | #file(_) -> #notDirectory
+        | e -> e
+    | #none -> #ok
+}
+
+--| The text of the file at `at` in `held`.
+def textIn: map(string, Held), Path -> #some(string) | FsError = { held, at ->
+  match entryIn(held, at)
+    | #file(text) -> #some(text)
+    | #directory -> #isDirectory
+    | e -> e
+}
+
+--| `held` with the file at `at` holding what `change` makes of the text it held, `""` when there was
+  none, or why it can't be written.
+def written
+  : map(string, Held), Path, (string -> string) -> #some(map(string, Held)) | FsError
+  = { held, at, change ->
+    match entryIn(held, at)
+      | #file(text) -> #some(map.insert(held, Path.toString(at), #file(change(text))))
+      | #directory -> #isDirectory
+      | #notFound ->
+        match directoryAbove(held, at)
+          | #ok -> #some(map.insert(held, Path.toString(at), #file(change(""))))
+          | e -> e
+      | e -> e
+  }
+
+--| The names of what the directory `at` holds in `held`.
+def namesIn: map(string, Held), Path -> list(string) = { held, at ->
+  map.keys(held) \filterMap(
+    { key ->
+      def inner = path.of(key)
+
+      match path.parent(inner)
+        | #some(up) ->
+          match path.fileName(inner)
+            | #some(name) -> (if Path.toString(up) == Path.toString(at) then #some(name) else #skip)
+            | #none -> #skip
+        | #none -> #skip
+    }
+  )
+}
