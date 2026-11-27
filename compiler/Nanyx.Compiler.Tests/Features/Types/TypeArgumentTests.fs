@@ -152,20 +152,20 @@ def p: Point = viaTyped("abc")
     let typed = compileClean source
     Assert.Equal("Point", Unifier.tyToString typed.Types.["p"])
 
-/// The warning compiling `source` gives for a type parameter written the old way, and `source` with its fix applied.
+/// The error compiling `source` gives for a type parameter written the old way, and `source` with its fix applied.
 let private oldForm (source: string) =
     let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
     Assert.Equal(DiagnosticCodes.OldFormTypeParameter.Code, diagnostic.Code)
-    Assert.Equal(Severity.Warning, diagnostic.Severity)
+    Assert.Equal(Severity.Error, diagnostic.Severity)
     let fix = Assert.Single(diagnostic.Fixes)
     diagnostic, applyFix source fix, fix.Title
 
 [<Fact>]
-let ``A positional type parameter written type a still compiles, with a warning whose fix writes Type(a)`` () =
+let ``A positional type parameter written type a is an error whose fix writes Type(a)`` () =
     let source = normalized "context Decode(a) = (decode: string -> a)\n\ndef f: [Decode(a)] type a, string -> a = { t, text -> decode(text) }\n"
     let diagnostic, fixedSource, title = oldForm source
     Assert.Equal(
-        "A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`. `type a` will be an error in a later release",
+        "A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`, not `type a`",
         diagnostic.Message
     )
     Assert.Equal("Write `Type(a)`", title)
@@ -174,7 +174,7 @@ let ``A positional type parameter written type a still compiles, with a warning 
     Assert.Equal("Type(a), string -> a", Unifier.tyToString typed.Types.["f"])
 
 [<Fact>]
-let ``A named type parameter written into: type still compiles, with a warning whose fix writes into: Type(into)`` () =
+let ``A named type parameter written into: type is an error whose fix writes into: Type(into)`` () =
     let source =
         normalized "context Decode(a) = (decode: string -> a)\n\ndef f: [Decode(into)] (string, into: type) -> into = { text, into -> decode(text) }\n"
     let diagnostic, fixedSource, title = oldForm source
@@ -184,26 +184,26 @@ let ``A named type parameter written into: type still compiles, with a warning w
     compileClean fixedSource |> ignore
 
 [<Fact>]
-let ``A type parameter written the old way in a function type's parameter gets the warning too`` () =
+let ``A type parameter written the old way in a function type's parameter is the error too`` () =
     let source = normalized "def build: ((type a) -> list(a)) -> list(a) = { f -> f(type a) }\n"
     let _, fixedSource, _ = oldForm source
     Assert.Contains("def build: ((Type(a)) -> list(a)) -> list(a) = { f -> f(type a) }", fixedSource)
     compileClean fixedSource |> ignore
 
 [<Fact>]
-let ``A program that writes type parameters the old way still runs as before`` () =
+let ``A type parameter written the old way is read as Type(a), so that it is the only error`` () =
     let source = withDecode "\ndef old: [Decode(a)] type a, string -> a = { t, text -> decode(text) }\n\ndef p = old(type Point, \"abc\")\n"
     let result = Compiler.compile source
     Assert.Equal<string list>([ DiagnosticCodes.OldFormTypeParameter.Code ], result.Diagnostics |> List.map _.Code)
     Assert.Equal("Point", Unifier.tyToString result.Typed.Value.Types.["p"])
 
 [<Fact>]
-let ``A built-in type's name written the old way is only the error, without the warning`` () =
+let ``A built-in type's name written the old way is only the error about the name`` () =
     let result = Compiler.compile (withDecode "\ndef f: (string, list: type) -> int = { text, list -> 1 }\n")
     Assert.Equal<string list>([ DiagnosticCodes.InvalidTypeParameter.Code ], result.Diagnostics |> List.map _.Code)
 
 [<Fact>]
-let ``A module that imports one writing a type parameter the old way compiles, and only that one reports the warning`` () =
+let ``A module that imports one writing a type parameter the old way reports its error, as any error of an import`` () =
     let old = "module old\n\nexport def none: type a -> list(a) = { t -> [] }\n"
     let main = "module main\n\nimport app/old\n\ndef xs: list(int) = none(type int)\n"
     use package =
@@ -211,5 +211,5 @@ let ``A module that imports one writing a type parameter the old way compiles, a
     let results = (Package.compilePackageReading (SeededPackages.user ()) System.IO.File.ReadAllText (package.Path "src/main.nyx")).Value
     let codesOf (name: string) =
         results |> List.find (fun (file, _) -> System.IO.Path.GetFileName file = name) |> snd |> _.Diagnostics |> List.map _.Code
-    Assert.Equal<string list>([], codesOf "main.nyx")
+    Assert.Equal<string list>([ DiagnosticCodes.OldFormTypeParameter.Code ], codesOf "main.nyx")
     Assert.Equal<string list>([ DiagnosticCodes.OldFormTypeParameter.Code ], codesOf "old.nyx")
