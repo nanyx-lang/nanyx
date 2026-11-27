@@ -144,9 +144,11 @@ module ImportFixes =
             | _ -> None)
 
     /// The fixes for the unknown name written at `span`, each import that would bring it into scope (see `addFrom`), and
-    /// what keeps each that isn't offered from being one.
+    /// what keeps each that isn't offered from being one. `packageMap` is each name `packageExports` export, with the
+    /// paths of the modules that export it.
     let private fixesFor
         (packageExports: (string * Set<string>) list)
+        (packageMap: Map<string, string list>)
         (standardExports: Map<string, string list>)
         (source: string)
         (syntax: Module)
@@ -158,12 +160,6 @@ module ImportFixes =
         else
             // An import that selects names brings in only those, so another can be added to it.
             let existing = importItems syntax |> List.filter (fun item -> item.Selection.IsNone) |> List.map (fun item -> item.Source, item.Alias) |> Set.ofList
-            let packageMap =
-                packageExports
-                |> List.collect (fun (path, names) -> names |> Set.toList |> List.map (fun exported -> exported, path))
-                |> List.groupBy fst
-                |> List.map (fun (exported, paths) -> exported, paths |> List.map snd)
-                |> Map.ofList
             let exportsOf (path: string) =
                 match packageExports |> List.tryFind (fst >> (=) path) with
                 | Some (_, names) -> names
@@ -202,16 +198,25 @@ module ImportFixes =
     /// `diagnostics` with a fix for each import that would bring an unknown name into scope, given the modules of the
     /// file's package and of those it depends on that it may import, each by its import path with the names it exports
     /// (`packageExports`, see `PackageExports.importable`), and the standard-library modules that export each name
-    /// (`standardExports`). An import that would make another name ambiguous is not offered: the diagnostic's message
+    /// (`standardExports`). The package's modules are read only for an unknown name: a file a compile reads is one its
+    /// module depends on, and the language server compiles it again whenever that file changes (#2222). An import that would make another name ambiguous is not offered: the diagnostic's message
     /// says why. The names are those of the module `syntax`, whose text is `source` (with its line endings made `\n`, as
     /// for the offsets of spans); a diagnostic about another module gets none.
     let addFrom
-        (packageExports: (string * Set<string>) list)
+        (packageExports: Lazy<(string * Set<string>) list>)
         (standardExports: Map<string, string list>)
         (source: string)
         (syntax: Module)
         (diagnostics: Diagnostic list)
         : Diagnostic list =
+        // Each name the package's modules export, with the paths of those that export it, made once for every diagnostic.
+        let packageMap =
+            lazy
+                (packageExports.Value
+                 |> List.collect (fun (path, names) -> names |> Set.toList |> List.map (fun exported -> exported, path))
+                 |> List.groupBy fst
+                 |> List.map (fun (exported, paths) -> exported, paths |> List.map snd)
+                 |> Map.ofList)
         let file = syntax |> List.tryPick (fun item -> if SourceSpan.isNone item.Span then None else Some item.Span.File)
         let isUnknownName (diagnostic: Diagnostic) =
             [ DiagnosticCodes.UnknownIdentifier; DiagnosticCodes.UnknownFunction; DiagnosticCodes.UnknownType; DiagnosticCodes.UnknownContext ]
@@ -220,7 +225,7 @@ module ImportFixes =
         |> List.map (fun diagnostic ->
             match diagnostic.Span with
             | Some span when isUnknownName diagnostic && Some span.File = file && span.End <= source.Length ->
-                let fixes, refused = fixesFor packageExports standardExports source syntax span
+                let fixes, refused = fixesFor packageExports.Value packageMap.Value standardExports source syntax span
                 let message = refused |> List.fold (fun (message: string) reason -> $"{message.TrimEnd '.'}. {reason}") diagnostic.Message
                 { diagnostic with Message = message; Fixes = diagnostic.Fixes @ fixes }
             | _ -> diagnostic)

@@ -1299,9 +1299,10 @@ module Compiler =
                 else
                     // A name another module of the package, or of a package it depends on, exports gets its import too.
                     let packageExports =
-                        match checkedModules.Package, origin with
-                        | Some package, SourceFile path when PackageModules.contains package path -> PackageExports.importable package checkedModules.ReadFile path
-                        | _ -> []
+                        lazy
+                            (match checkedModules.Package, origin with
+                             | Some package, SourceFile path when PackageModules.contains package path -> PackageExports.importable package checkedModules.ReadFile path
+                             | _ -> [])
                     imported
                     @ (ImportFixes.addFrom packageExports CheckedLibrary.standardLibraryExportPaths.Value (normalizeSource source) checkedModule.Syntax checkedModule.Errors
                        |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax)
