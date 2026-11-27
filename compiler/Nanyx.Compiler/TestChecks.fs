@@ -10,7 +10,7 @@ module TestChecks =
     let private ioContexts = Set.ofList Hosts.ioTestContexts
 
     /// The name a context of a def's requirements is written by: `Console`, `Async`.
-    let private contextName (context: Ty) =
+    let internal contextName (context: Ty) =
         match context with
         | TyNominal({ Name = name }, _, _, _)
         | TyAlias(name, _, _)
