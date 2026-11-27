@@ -197,7 +197,7 @@ let private inlineCall
         let site =
             match item.Kind with
             | Def (ValueDef(_, _, _, value))
-            | Expr value -> IntroduceLocal.findIn source used.Span (IntroduceLocal.BeforeItem item) None value
+            | Expr value -> SelectedExpression.findIn source used.Span (SelectedExpression.BeforeItem item) None value
             | _ -> None
         // Names the item uses or declares outside the function, which a hoisted def would hide or clash with.
         let namesAround =
@@ -208,7 +208,7 @@ let private inlineCall
         match site, hoistedNames |> List.tryFind namesAround.Contains with
         | _, Some name -> Error $"Its `{name}` would hide or clash with a name where it is called"
         | Some (_, _, Some reason), _ -> Error $"{reason}: its statements would run always before the statement"
-        | Some (_, IntroduceLocal.BeforeStatement statement, None), _ ->
+        | Some (_, SelectedExpression.BeforeStatement statement, None), _ ->
             let lineStart, indent = lineOf source statement.Span.Start
             if source.Substring(lineStart, statement.Span.Start - lineStart).Trim() <> "" then Error "The statement that holds it is not on a line of its own"
             else
@@ -267,7 +267,7 @@ let at
                     match inlined.Value.Kind with
                     | Lambda _ -> false
                     | _ -> requiresAContext typed (within inlined.Value)
-                let isFunction = match inlined.Value.Kind with Lambda _ -> IntroduceLocal.isWritten source inlined.Value | _ -> false
+                let isFunction = match inlined.Value.Kind with Lambda _ -> SelectedExpression.isWritten source inlined.Value | _ -> false
                 if uses |> List.exists (fun used -> SourceSpan.contains inlined.Value.Span used.Span) then refused "It is recursive"
                 elif requiresAContext then refused "It calls a function that requires a context, which inlining would run at another time"
                 else

@@ -1,6 +1,6 @@
-/// What the info view shows at a position in the compiled root module: each scope around it, from the innermost lambda
-/// out to the module, with the names it declares and the contexts it provides. Positions are character offsets into the
-/// source as the parser saw it, as for `Hover`.
+/// What the info view shows at a position in the compiled root module: the expression selected or at the cursor, with
+/// its type, and each scope around it, from the innermost lambda out to the module, with the names it declares and the
+/// contexts it provides. Positions are character offsets into the source as the parser saw it, as for `Hover`.
 module NyxCompiler.InfoView
 
 open Parser.Program
@@ -70,6 +70,12 @@ type Scope =
 /// each by the name the view writes it by, with the definition's symbol, for the view to link where it writes them (see
 /// `Signatures.typeNamesAt`).
 type Info = { Scopes: Scope list; TypeNames: (string * Symbol) list }
+
+/// The expression the info view describes at the top, as hover writes it: `Name` is the name it is, if it is one, as
+/// hover writes it before the type, and else its text; `Type` is its type there, after the contexts a def requires,
+/// named as the code there can name them. `Span` is where it is written, and `Symbol` what a name refers to or
+/// declares, whose doc comment the info view shows.
+type Described = { Name: string; Type: string; Span: SourceSpan; Symbol: Symbol option }
 
 /// The value defs whose statements contain `offset`, innermost first, each as its name, its annotation, the span of its
 /// statement and its value.
@@ -409,4 +415,28 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
             @ [ { moduleScope syntax with Names = namesIn None @ topLevel; Contexts = contextsIn None } ]
           TypeNames = Signatures.typeNamesAt typed.TypeDefs typed.Symbols syntax offset }
     | _ -> { Scopes = []; TypeNames = [] }
+
+/// The expression the info view describes at `selection` in the compiled root module, parsed from `source`, with
+/// made-up type variables named by `names`. For a selection, the expression written exactly at it, less the spaces
+/// around it, the outermost if several are (see `SelectedExpression.at`); for an empty one, what hover describes where
+/// it is (see `Hover.typeAt`): the innermost expression there, or the name a declaration declares. None where the
+/// selection is not a single expression, nothing typed is there, or the module did not type-check.
+let expressionAt (names: TypeNotation) (source: string) (result: CompileResult) (selection: SourceSpan) : Described option =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        let found =
+            if selection.End > selection.Start then
+                SelectedExpression.at source syntax selection
+                |> Option.bind (fun (expr, _, _) ->
+                    let name = match expr.Kind with IdentifierExpr _ -> referenced typed expr | _ -> None
+                    typed.ExprTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> ty, name, expr.Span))
+            else Hover.hoveredAt syntax typed selection.Start
+        found
+        |> Option.map (fun (ty, symbol, span) ->
+            let rename = Signatures.relativeAt typed.TypeDefs syntax span.Start
+            { Name = symbol |> Option.map _.Name |> Option.defaultValue (SourceSpan.textIn source span)
+              Type = Hover.typeWrittenAt names rename typed symbol ty
+              Span = span
+              Symbol = symbol })
+    | _ -> None
 

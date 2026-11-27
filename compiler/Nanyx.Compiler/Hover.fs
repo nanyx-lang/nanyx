@@ -124,7 +124,7 @@ let private declared (symbol: Symbol) (typeWritten: string) =
 
 /// What hover describes at `offset` in the compiled root module, as `typeAt` finds it: its type there, the symbol of
 /// the name it is, if it is one, and its span.
-let private hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty * Symbol option * SourceSpan) option =
+let internal hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty * Symbol option * SourceSpan) option =
     let referenced (expr: Expression) = WrittenReferences.symbolOf typed expr.Id
     // Only the module's own declarations have types recorded, so no imported one is found here.
     let declarations =
@@ -167,14 +167,19 @@ let private hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty 
             candidates |> List.minBy (fun (_, _, span, depth, rank) -> span.End - span.Start, -depth, rank)
         Some (ty, symbol, span)
 
-/// `ty`, the type `symbol` has where it is hovered, as hover writes it: after the contexts it requires there (see
-/// `withContextsAt`) and the name (see `declared`).
-let private writtenAt (names: TypeNotation) (typed: TypedModule) (symbol: Symbol option) (ty: Ty) =
+/// `ty`, the type `symbol` has where it is hovered, as hover writes it after the name: after the contexts it requires
+/// there (see `withContextsAt`), with the types and contexts it names named by `rename` (see `Signatures.relativeAt`).
+let internal typeWrittenAt (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (symbol: Symbol option) (ty: Ty) =
     let ty, contexts =
         match symbol with
         | Some symbol -> withContextsAt typed symbol ty
         | None -> ty, []
-    let typeWritten = Signatures.typeWithContexts typed.TypeDefs names ty contexts
+    Signatures.typeWithContexts typed.TypeDefs names (rename ty) (List.map rename contexts)
+
+/// `ty`, the type `symbol` has where it is hovered, as hover writes it: after the contexts it requires there (see
+/// `withContextsAt`) and the name (see `declared`).
+let private writtenAt (names: TypeNotation) (typed: TypedModule) (symbol: Symbol option) (ty: Ty) =
+    let typeWritten = typeWrittenAt names id typed symbol ty
     symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten
 
 /// The hover for what `hoveredAt` found (see `typeAt`). A measured value's says what units make values of its

@@ -194,11 +194,16 @@ editor, or press Ctrl+1, to carry on typing. You can drag the **Nanyx** tab to t
 and VS Code remembers where you put it. The extension needs VS Code 1.106 or later.
 
 It is organised by scope, innermost first, with a rule between one scope and the next: the cursor line's messages, if
-it has any, each lambda around the cursor, each definition around it (a local one as well as a top-level one), and the
-module. Each scope's heading names it and links to it: a lambda by its parameters and line, `{ message -> … } (line 4)`,
-a definition by its name, `def greet`, the module by its name. Click the heading's arrow to open or close a scope. The
-module starts closed, and so does every scope after the third, not counting the messages, since the side bar is narrow.
-A `memory` block or a `use` is part of the scope it is in.
+it has any, the expression you selected or the one at the cursor, each lambda around the cursor, each definition around
+it (a local one as well as a top-level one), and the module. Each scope's heading names it and links to it: a lambda by
+its parameters and line, `{ message -> … } (line 4)`, a definition by its name, `def greet`, the module by its name.
+Click the heading's arrow to open or close a scope. The module starts closed, and so does every scope after the third,
+not counting the messages and the expression, since the side bar is narrow. A `memory` block or a `use` is part of the
+scope it is in.
+
+The view shows nothing twice. An item that repeats one a scope further down shows, the same text naming the same thing
+at the same place, is left out, and the one further down is kept, where it has its context. With the cursor on a
+definition's name, its signature shows once, in the definition's own scope, marked `declared` or `inferred`.
 
 Types and contexts are named as the code at the cursor would name them, so a signature reads as you would write it:
 inside `module Points`, which declares `Point`, it is `Point`, not `Points.Point`; elsewhere in the file it is `Point`
@@ -216,7 +221,12 @@ view, such as a long parameter's, wraps.
   linking to its entry in the [errors reference](errors), and its headline, `Type mismatch`, linking to where it is
   reported. Under that, its notes, such as `= 'float' vs 'int'`, and the advice after `help:`; each other place that
   explains it, such as where a name was first defined, linked; and a button for each of its fixes, which makes the fix
-  as its quick fix does. With no message on the line, the view starts at the innermost scope.
+  as its quick fix does. With no message on the line, the view starts at the expression, or the innermost scope.
+- **Selection**, or **At the cursor** with nothing selected: the type of what you selected or clicked on, as hover
+  writes it. Select an expression to read its type: selecting `x + 1` in `def f = { x -> x + 1 }` shows
+  `x + 1: int`, with the spaces around the selection left out. A selection that is not a whole expression, such as
+  `x +`, or that runs across two statements, shows nothing here. With nothing selected it is the innermost expression at
+  the cursor, as hover finds it: on `x`, `x: int`. A name's doc comment shows under it.
 - **A lambda**: its type, with the contexts it carries, such as `[Log] int -> ()`; its parameters, locals and pattern
   variables, each with its type, nearest first; and each `use` in it, with the context it gives.
 - **A definition**: its signature, marked `declared` if it writes its type and `inferred` if not, with its doc
@@ -259,9 +269,11 @@ to it: a definition's, local's or parameter's name to where it is declared, a de
 definition, a context's name to the `use` or signature that gives it, a call in the context flow to the call, and the
 name of a type or context with a definition, wherever the code writes it, to that definition (`Point` in
 `#some(Point)`). A type with no name to follow, such as `int -> string`, has no link. **Pin**
-keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
-again. The pinned position moves with your edits, as the text it is on does: a line added above it, or text typed before
-it on its line, leaves the view on the same expression. Deleting the text it is on unpins the view. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
+keeps the view on the cursor's current position, and the selection there, while you move around and edit elsewhere;
+**Unpin** follows the cursor again. The pinned position and selection move with your edits, as the text they are on
+does: a line added above them, or text typed before them on their line, leaves the view on the same expression. Text
+typed at the end of the selection goes after it. Deleting the text the position is on unpins the view; deleting the
+text at either end of the selection leaves the view on the position alone. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
 the file does not parse, the view shows what the compiler knew the last time it did. It needs a compiler
 newer than 0.23.0.
 

@@ -81,7 +81,7 @@ let at
             |> List.collect within
             |> List.filter (fun expr ->
                 (match expr.Kind with Lambda _ -> true | _ -> false)
-                && IntroduceLocal.isWritten source expr
+                && SelectedExpression.isWritten source expr
                 && expr.Span.Start <= offset
                 && offset <= expr.Span.End)
             |> List.sortBy (fun expr -> expr.Span.End - expr.Span.Start)

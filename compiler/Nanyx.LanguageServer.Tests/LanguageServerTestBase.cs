@@ -338,13 +338,14 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     }
 
 
-    protected async Task<InfoViewResult> InfoViewAt(DocumentUri uri, int line, int character, int? width = null)
+    protected async Task<InfoViewResult> InfoViewAt(DocumentUri uri, int line, int character, int? width = null, Range? selection = null)
     {
         var result = await _client
             .SendRequest(InfoViewHandler.Method, new InfoViewParams
             {
                 TextDocument = new TextDocumentIdentifier(uri),
                 Position = new Position(line, character),
+                Selection = selection,
                 Width = width
             })
             .Returning<InfoViewResult?>(_cancellation.Token);

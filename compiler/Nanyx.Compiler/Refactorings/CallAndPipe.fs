@@ -45,7 +45,7 @@ let rec private asPipe (source: string) (name: string -> string) (call: Expressi
             match rest with
             | [] -> ""
             // A lambda alone is written after the name, as a trailing lambda is.
-            | [ { Kind = Lambda _ } as lambda ] when IntroduceLocal.isWritten source lambda -> $" {textOf source lambda}"
+            | [ { Kind = Lambda _ } as lambda ] when SelectedExpression.isWritten source lambda -> $" {textOf source lambda}"
             | _ -> $"""({rest |> List.map (textOf source) |> String.concat ", "})"""
         $"{value} \\{name called}{arguments}"
     | _ -> textOf source call

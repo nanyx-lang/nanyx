@@ -48,9 +48,11 @@ const DEBOUNCE_MILLISECONDS = 150;
  * does. It is the webview view `nanyx.infoView`, in the `nanyx` view container that `package.json` contributes to the
  * secondary side bar. It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or
  * the document does, once it has stayed put for a moment, and again when the server has compiled the document. When the
- * cursor's line has messages, it shows them first, each in full, with a button for each fix. Every item that has a place links to it, and shows the doc
- * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
- * while you edit elsewhere, moving it with the edits above it and unpinning it when its text is deleted. While it is visible and not pinned, it highlights in the editor what the server says to: on
+ * cursor's line has messages, it shows them first, each in full, with a button for each fix. Then it shows the selected
+ * expression with its type, or with nothing selected the one at the cursor, unless a scope below already shows it. Every item that has a place links to it, and shows the doc
+ * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position,
+ * and the selection there, while you edit elsewhere, moving them with the edits above them and unpinning it when its
+ * text is deleted. While it is visible and not pinned, it highlights in the editor what the server says to: on
  * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts. The code it shows is
  * highlighted as the editor highlights it, in the current theme's colours (see `Highlighter`). The view tells the server
  * how many characters fit across it, so that a signature too long for it is laid out as the formatter lays out a def's,
@@ -188,8 +190,9 @@ class InfoView {
         }
     }
     /**
-     * Moves the pinned position with `event`'s edits to its document, so that it stays on the text it was on, and unpins
-     * it if they replace that text (see `movedThrough`).
+     * Moves the pinned position and selection with `event`'s edits to its document, so that they stay on the text they
+     * were on, and unpins it if they replace the position's text (see `movedThrough`). A selection whose text they replace
+     * is left empty, at the position.
      */
     followEdits(event) {
         if (this.pinned === undefined || event.document.uri.toString() !== this.pinned.uri.toString()) {
@@ -197,13 +200,25 @@ class InfoView {
         }
         const changes = event.contentChanges.map((change) => ({ start: change.range.start, end: change.range.end, text: change.text }));
         const position = (0, pinnedPosition_1.movedThrough)(this.pinned.position, changes);
-        this.pinned = position && { uri: this.pinned.uri, position: new vscode.Position(position.line, position.character) };
+        if (position === undefined) {
+            this.pinned = undefined;
+            return;
+        }
+        const at = new vscode.Position(position.line, position.character);
+        const range = (0, pinnedPosition_1.rangeMovedThrough)(this.pinned.selection, changes);
+        this.pinned = {
+            uri: this.pinned.uri,
+            position: at,
+            selection: range
+                ? new vscode.Range(range.start.line, range.start.character, range.end.line, range.end.character)
+                : new vscode.Range(at, at)
+        };
     }
-    /** The cursor in the active Nanyx editor, if there is one. */
+    /** The cursor in the active Nanyx editor, and its selection, if there is one. */
     cursor() {
         const editor = vscode.window.activeTextEditor;
         return editor && editor.document.languageId === "nanyx"
-            ? { uri: editor.document.uri, position: editor.selection.active }
+            ? { uri: editor.document.uri, position: editor.selection.active, selection: new vscode.Range(editor.selection.start, editor.selection.end) }
             : undefined;
     }
     schedule() {
@@ -234,6 +249,7 @@ class InfoView {
                 const result = await client.sendRequest(INFO_VIEW_REQUEST, {
                     textDocument: { uri: client.code2ProtocolConverter.asUri(target.uri) },
                     position: client.code2ProtocolConverter.asPosition(target.position),
+                    selection: client.code2ProtocolConverter.asRange(target.selection),
                     width: this.columns
                 });
                 shown = result
@@ -301,8 +317,8 @@ async function withRenderedDocumentation(scopes) {
     })));
 }
 /**
- * The scopes with their code highlighted: each heading but the messages', and the text of each item, and of the items
- * under it. The messages are prose.
+ * The scopes with their code highlighted: each heading but the messages' and the expression's, and the text of each
+ * item, and of the items under it. Those headings, and the messages, are prose.
  */
 async function withHighlightedCode(highlighter, scopes) {
     const highlighted = async (item) => ({
@@ -312,7 +328,7 @@ async function withHighlightedCode(highlighter, scopes) {
     });
     return Promise.all(scopes.map(async (scope) => ({
         ...scope,
-        headingCode: scope.kind === "messages" ? undefined : await highlighter.highlight(scope.heading),
+        headingCode: scope.kind === "messages" || scope.kind === "expression" ? undefined : await highlighter.highlight(scope.heading),
         sections: await Promise.all(scope.sections.map(async (section) => ({
             ...section,
             items: await Promise.all(section.items.map(highlighted))
