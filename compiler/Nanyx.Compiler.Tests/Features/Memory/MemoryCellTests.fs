@@ -39,7 +39,8 @@ def longest: list(string) -> string = { names ->
 }
 """
     Assert.Equal("list(int) -> int", Unifier.tyToString types.["sum"])
-    Assert.Equal("list(int) -> (int, int)", Unifier.tyToString types.["count"])
+    // `count` loops over anything `Iterable` (see `Loops.inferFor`).
+    Assert.Matches(@"^t\d+ -> \(int, int\)$", Unifier.tyToString types.["count"])
     Assert.Equal("list(string) -> string", Unifier.tyToString types.["longest"])
 
 [<Fact>]
