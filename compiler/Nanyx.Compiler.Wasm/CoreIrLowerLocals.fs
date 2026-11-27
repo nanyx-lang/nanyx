@@ -69,7 +69,7 @@ let private genericLocalsIn (tools: LocalTools) (bindings: Map<int, Ty>) (expr: 
 /// captures `name` counts, as `ClosureSyntax.usesThroughClosures` counts it. `visited` are the lifted lambdas already
 /// looked in, which a local function that calls itself would look in again.
 let rec private usesWithBindings (tools: LocalTools) (visited: Set<string>) (bindings: Map<int, Ty>) (name: string) (expr: Expression) : (Expression * Map<int, Ty>) list =
-    let found = ClosureSyntax.references expr
+    let found = LambdaCaptures.references expr
     let closures =
         found
         |> List.choose (fun (_, node) ->

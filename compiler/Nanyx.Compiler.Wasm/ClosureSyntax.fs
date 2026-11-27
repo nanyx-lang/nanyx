@@ -29,26 +29,11 @@ let (|Closure|_|) (kind: ExpressionKind) =
         Some (target, captured)
     | _ -> None
 
-/// Every name an expression refers to, with the node that refers to it: identifiers, callees and pipe targets.
-let rec references (expr: Expression) : (string * Expression) list =
-    match expr.Kind with
-    | IdentifierExpr name -> [ name, expr ]
-    | FunctionCall(name, _, args) -> (name, expr) :: (args |> List.collect references)
-    | Pipe(value, name, _, args) -> (name, expr) :: references value @ (args |> List.collect references)
-    | Except(value, arms) -> references { expr with Kind = Match([ value ], arms) }
-    // Each arm's patterns, then its body.
-    | Match(values, arms) ->
-        (values |> List.collect references)
-        @ (arms |> List.collect (fun (patterns, body) -> (patterns |> List.collect Pattern.expressions |> List.collect references) @ references body))
-    | _ ->
-        let children, statements = SyntaxTree.childrenOf expr
-        (children @ (statements |> List.collect SyntaxTree.ofStatement)) |> List.collect references
-
 /// The nodes in `expr`, after lifting, that use the local `name`: each reference to it, and, for a closure that captures
 /// it, the uses in the lifted function the closure is over (its definition, which `definitionOf` finds), which binds it
 /// under the same name. The capture itself is not a use.
 let rec usesThroughClosures (definitionOf: string -> Expression option) (name: string) (expr: Expression) : Expression list =
-    let found = references expr
+    let found = LambdaCaptures.references expr
     let closures =
         found
         |> List.choose (fun (_, node) ->
