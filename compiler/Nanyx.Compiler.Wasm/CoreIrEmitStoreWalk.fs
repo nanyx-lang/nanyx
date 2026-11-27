@@ -6,38 +6,10 @@ open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrEmitLocals
 
-/// The parts of a map's or a set's store a `for` loop's walk reads (see `StoreWalk` and `Maps.storeOf`), from its IR
-/// type: a node's payload, `(leafBits, leaves, nodeBits, nodes)`.
-module private StoreLayout =
-    /// The payload of the walk's store's `#node`.
-    let payload (walk: StoreWalk) : IrType =
-        match IrType.unfold walk.StoreType with
-        | IrTags tags ->
-            tags |> List.tryFind (fst >> (=) "node") |> Option.bind snd |> Option.defaultWith (fun () -> internalError "a store without a #node")
-        | other -> internalError $"a store of type '{IrType.show other}'"
-
-    /// The fields of a node's payload.
-    let fields (walk: StoreWalk) =
-        match payload walk with
-        | IrRecord fields when fields.Length = 4 -> fields
-        | other -> internalError $"a store's #node of '{IrType.show other}'"
-
-    /// The type of a bucket, a list of entries.
-    let bucket (walk: StoreWalk) =
-        match snd (fields walk).[1] with
-        | IrArray bucket -> bucket
-        | other -> internalError $"a node's buckets of '{IrType.show other}'"
-
-    /// The type of an entry, a key and its value.
-    let entry (walk: StoreWalk) =
-        match bucket walk with
-        | IrList entry -> entry
-        | other -> internalError $"a bucket of '{IrType.show other}'"
-
 /// The code that moves the cursor on to the next entry of the bucket it is in.
 let advance (touching: string -> string) (stream: ForStream) (walk: StoreWalk) : string list =
     let cursor = localName stream.Cursor
-    [ $"local.get ${cursor}"; touching $"i32.load offset={CoreIrLayout.tailOffset (StoreLayout.entry walk)}"; $"local.set ${cursor}" ]
+    [ $"local.get ${cursor}"; touching $"i32.load offset={CoreIrLayout.tailOffset (CoreIrLayout.StoreLayout.entry walk.StoreType)}"; $"local.set ${cursor}" ]
 
 let private indent (by: int) (lines: string list) = lines |> List.map (fun line -> String.replicate by " " + line)
 
@@ -45,7 +17,7 @@ let private indent (by: int) (lines: string list) = lines |> List.map (fun line 
 type private Walk(touching: string -> string, stream: ForStream, walk: StoreWalk) =
     let local (var: Var) = localName var
     let load (ty: IrType) (offset: int) = touching (CoreIrLayout.load ty offset)
-    let fields = StoreLayout.fields walk
+    let fields = CoreIrLayout.StoreLayout.fields walk.StoreType
 
     member _.Cursor = local stream.Cursor
     member _.Pending = local walk.Pending
@@ -67,11 +39,11 @@ type private Walk(touching: string -> string, stream: ForStream, walk: StoreWalk
     member this.Bits(slot: int) = [ this.Field slot; "i32.wrap_i64" ]
 
     /// The payload of the node whose cell is on the stack.
-    member _.PayloadOf = load (StoreLayout.payload walk) CoreIrLayout.payloadOffset
+    member _.PayloadOf = load (CoreIrLayout.StoreLayout.payload walk.StoreType) CoreIrLayout.payloadOffset
 
     /// The element of the array on the stack at the index on the stack: a bucket's list, or a node's cell.
     member _.ElementAt =
-        [ "i32.const 4"; "i32.mul"; "i32.add"; touching $"i32.load offset={CoreIrLayout.arrayElementOffset (StoreLayout.bucket walk) 0}" ]
+        [ "i32.const 4"; "i32.mul"; "i32.add"; touching $"i32.load offset={CoreIrLayout.arrayElementOffset (CoreIrLayout.StoreLayout.bucket walk.StoreType) 0}" ]
 
     /// `LeafEnd` set: how many buckets come before the next node it goes into, or all of them.
     member this.LeafEndSet =
@@ -280,10 +252,10 @@ let next (touching: string -> string) (depth: int) (done': string) (stream: ForS
       "end"
       // The entry, or a set's element, the bucket's cell holds.
       $"local.get ${w.Cursor}"
-      w.Load (StoreLayout.entry walk) 0
+      w.Load (CoreIrLayout.StoreLayout.entry walk.StoreType) 0
       yield!
           (if walk.Keys then
-               match StoreLayout.entry walk with
+               match CoreIrLayout.StoreLayout.entry walk.StoreType with
                | IrRecord fields -> [ w.Load stream.Element.Type (CoreIrLayout.fieldOffset fields 0) ]
                | other -> internalError $"a set's entry of '{IrType.show other}'"
            else [])

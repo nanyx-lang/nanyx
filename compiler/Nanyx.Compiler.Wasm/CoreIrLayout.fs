@@ -97,3 +97,32 @@ let closureOffsets (captured: IrType list) = offsets (IrWord :: captured)
 
 /// How many bytes a closure block over captures of `captured` takes.
 let closureSize (captured: IrType list) = totalSize (IrWord :: captured)
+
+/// The parts of a map's or a set's store, of the IR type `storeTy`, that a `for` loop's walk reads (see `StoreWalk` in
+/// `CoreIr.fs` and `Maps.storeOf`): a node's payload, `(leafBits, leaves, nodeBits, nodes)`. The lowering reads the type
+/// of an entry from it, and the emitter the offsets of the parts.
+module StoreLayout =
+    /// The payload of the store's `#node`.
+    let payload (storeTy: IrType) : IrType =
+        match IrType.unfold storeTy with
+        | IrTags tags ->
+            tags |> List.tryFind (fst >> (=) Maps.nodeTag) |> Option.bind snd |> Option.defaultWith (fun () -> internalError "a store without a #node")
+        | other -> internalError $"a store of type '{IrType.show other}'"
+
+    /// The fields of a node's payload.
+    let fields (storeTy: IrType) =
+        match payload storeTy with
+        | IrRecord fields when fields.Length = 4 -> fields
+        | other -> internalError $"a store's #node of '{IrType.show other}'"
+
+    /// The type of a bucket, a list of entries.
+    let bucket (storeTy: IrType) =
+        match snd (fields storeTy).[1] with
+        | IrArray bucket -> bucket
+        | other -> internalError $"a node's buckets of '{IrType.show other}'"
+
+    /// The type of an entry, a key and its value.
+    let entry (storeTy: IrType) =
+        match bucket storeTy with
+        | IrList entry -> entry
+        | other -> internalError $"a bucket of '{IrType.show other}'"
