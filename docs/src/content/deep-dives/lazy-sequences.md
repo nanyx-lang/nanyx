@@ -7,7 +7,8 @@ order: 19
 What sequences do is described in [Sequences and queries](../advanced/sequences-and-queries),
 [Ranges](../tour/ranges), [Workflows](../advanced/workflows#yield-and-sequences) and
 [prelude: sequences](../stdlib/prelude-sequences). This page gives the design behind them and says how the compiler
-builds them. What is still open is in issues: a shorter way to write such a parameter
+builds them. What is still open is in issues: inferring `Iterable` for a def that loops over its parameter in a
+sequence's block ([#3093](https://github.com/nanyx-lang/nanyx/issues/3093)), a shorter way to write such a parameter
 ([#2775](https://github.com/nanyx-lang/nanyx/issues/2775)), `seq.cache`
 ([#2705](https://github.com/nanyx-lang/nanyx/issues/2705)), a range of chars
 ([#2731](https://github.com/nanyx-lang/nanyx/issues/2731)), a `for` over only unbounded ranges
@@ -181,7 +182,8 @@ plain `for` loop's are: the checker reads `__toSeq(items)` as `__seqItself(items
 its steps need, when the items are a sequence or a type nothing has settled (`Loops.walksAsSequence`), and through
 their `Iterable` otherwise, so a list, an array, a set or a map is walked by its `toSeq`. A step is checked outside the
 def it is written in, so it can't add `Iterable` to what an unannotated def requires: a def that loops over its
-parameter in a sequence's block takes a sequence, unless its signature requires `Iterable` of it. `seq` is an ordinary prelude
+parameter in a sequence's block takes a sequence, unless its signature requires `Iterable` of it
+([#3093](https://github.com/nanyx-lang/nanyx/issues/3093)). `seq` is an ordinary prelude
 function, `seq.delay` by another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the whole
 carries what any branch's sequence does. There is no `yield` in a `while` loop: a `while` needs a cell, and a sequence
 that reads one can't leave its `memory` block anyway.
