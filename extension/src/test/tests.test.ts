@@ -71,6 +71,7 @@ test("a run of all of a package's tests, of a module's, or of tests by name has 
   assert.deepEqual(runArguments("/p", { kind: "tests", names: ["geometry.adds", "shapes.squares"] }), [
     "test", "/p", "--format", "json", "--test", "geometry.adds\nshapes.squares"
   ]);
+  assert.deepEqual(runArguments("/p", { kind: "all" }, true), ["test", "/p", "--format", "json", "--files-in-memory"]);
 });
 
 test("what is chosen becomes a run of all tests, one module's, or tests by name", () => {

@@ -1,6 +1,8 @@
 module TranspilerWasmTests.Features.Types.RunMutuallyRecursiveTypes
 
 open Xunit
+open NyxCompiler
+open Transpiler.Wasm.CoreIr
 open TranspilerWasmTestHelpers
 
 // Types that name each other, closed together as a group (#3186). Each program runs with its memory checked, so a value
@@ -134,3 +136,30 @@ match zeroOf(type Statement)
 """
     runSource (source.ReplaceLineEndings "\n")
     |> assertRan "Statement(expr = Expr(id = 1, body =  of num or block), label = 'top')\n(expr = (body = #num(0), id = 0), label = none)\n"
+
+/// The number of parts `ty` is made of, itself included.
+let rec private irSize (ty: IrType) : int =
+    1
+    + match ty with
+      | IrRecursive(_, bodies) -> bodies |> List.sumBy irSize
+      | IrTags tags -> tags |> List.sumBy (snd >> Option.map irSize >> Option.defaultValue 0)
+      | IrRecord fields -> fields |> List.sumBy (snd >> irSize)
+      | IrList element
+      | IrArray element -> irSize element
+      | IrFunction(input, output, members, _) -> irSize input + irSize output + (members |> List.sumBy (snd >> irSize))
+      | _ -> 0
+
+// Each type of a group was lowered again inside each other one it holds, so a group's IR type grew with the number of
+// paths through it (#3209).
+[<Fact>]
+let ``A group of types that each hold all the others lowers to an IR type the size of their definitions`` () =
+    let names = [ "A"; "B"; "C"; "D"; "E"; "F"; "G"; "H" ]
+    let definition name =
+        let others = names |> List.filter ((<>) name) |> List.map (sprintf "list(%s)") |> String.concat ", "
+        $"type {name} = #{name.ToLowerInvariant()} | #holds({others})"
+    let source = (names |> List.map definition |> String.concat "\n\n") + "\n\ndef a: A = #a\n"
+    let result = Compiler.compile source
+    Assert.Empty(result.Diagnostics)
+    let layouts: Transpiler.Wasm.ContextLayouts = { Plain = Map.empty; Parameterised = Map.empty; Waiting = Set.empty }
+    let size = irSize (Transpiler.Wasm.CoreIrLowerTypes.toIrTypeIn layouts result.Typed.Value.Types.["a"])
+    Assert.True(size < 200, $"The IR type of 'A' has {size} parts")

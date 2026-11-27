@@ -569,7 +569,17 @@ and private inferOperator (env: TypeEnv) (state: InferState) (expr: Expression) 
             // The operator on operands of these types, which `MeasuredArithmetic` may have read as their storages.
             let operatorOn (leftExpr: TypedExpr) (rightExpr: TypedExpr) (nextState: InferState) =
                 let arithmetic = match expr.Kind with BinaryOp(op, _, _, _) -> ArithmeticOperators.isOperator op | _ -> false
-                let nextState, constrained = NumericLiterals.atOperator arithmetic leftExpr.Type rightExpr.Type nextState
+                // An operand of `++` that holds `undefined`, as `e` of `list(undefined)` does in `[1, 2] ++ e`, is given
+                // where the other's type is expected, rather than made it: it is only a lower bound, and `undefined`
+                // binds no variable the other has, as the literals' own (#3129).
+                let holdsBottom ty = Unifier.holdsBottom (resolveSoFar nextState ty)
+                let nextState, constrained =
+                    match expr.Kind with
+                    | BinaryOp(op, _, _, _) when
+                        op = AppendOperator.operator && (holdsBottom leftExpr.Type <> holdsBottom rightExpr.Type) ->
+                        let given, expected = if holdsBottom leftExpr.Type then leftExpr.Type, rightExpr.Type else rightExpr.Type, leftExpr.Type
+                        nextState, addAssignableConstraint given expected nextState
+                    | _ -> NumericLiterals.atOperator arithmetic leftExpr.Type rightExpr.Type nextState
                 let input = inputTypeFromArgs [ leftExpr.Type; rightExpr.Type ]
                 // Inside an attached `==`, `==` on its own type compares by structure rather than calling itself.
                 let attached (name: Identifier) =

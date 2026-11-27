@@ -212,6 +212,7 @@ can't be deferred, such as a syntax error, stops the build, and no test runs.
 | `--filter <text>` | Runs only the tests whose full name, as `` geometry.`adds points` ``, contains the text. |
 | `--test <name>` | Runs only the test of that full name, exactly, as the report writes it or without its backticks. Several names go one on each line, a form mainly for tools such as an editor: in a shell, ``--test $'geometry.adds\nshapes.squares'``. A name that names no test is an error, which exits with 2. |
 | `--module <name>` | Runs only the tests of that module. A module with no tests is an error, which exits with 2. |
+| `--files-in-memory` | Runs each `@test(#io)` test with its files in memory, over the real ones, as [`nanyx run --files-in-memory`](#nanyx-run) runs a program: it reads the real files, and nothing it writes, appends, makes or deletes reaches the disk. Its `Console` and `Env` are still the real ones. The tests are built from the test host's root for this, `test.host.memory`, and a test build without the flag is built as before. The editor's live mode runs tests so. |
 | `--list` | Lists the tests that would run, each with where it is written, and runs none. |
 | `--seed <number>` | Seeds each test's `Random` with the number. Without it, the seed is chosen at random, and printed when a test fails. |
 | `--timeout <seconds>` | How long a test may run before it is stopped, and fails: 10 seconds by default. |

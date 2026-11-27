@@ -254,3 +254,21 @@ let ``A test that isn't #io has the test host's Async, and runs code that starts
     let outcome = testing [] [ "src/tasks.nyx", tasks ]
     Assert.Equal("Running 1 test in tested\n\nPASS tasks.`doubles in a task`\n\n1 passed\n", outcome.StandardOutput.ReplaceLineEndings "\n")
     Assert.Equal(0, outcome.ExitCode)
+
+/// A script whose `#io` test reads a real file, writes another and reads it back.
+let private writingTest =
+    "::install nanyx.fs\n\nimport (\n  nanyx.fs/file as file\n  nanyx.fs/path as path\n)\n\n@test(#io)\ndef `writes and reads back` = {\n  assert(file.read(path.of(\"given.txt\")) == #some(\"real\"))\n  assert(file.write(path.of(\"out.txt\"), \"hello\") == #ok)\n  assert(file.read(path.of(\"out.txt\")) == #some(\"hello\"))\n}\n"
+
+[<Fact>]
+let ``nanyx test --files-in-memory runs an #io test over the real files, and keeps what it writes off the disk (#3195)`` () =
+    use directory = new TempDirectory()
+    directory.Write "given.txt" "real"
+    directory.Write "main.nyx" writingTest
+    let outcome = nanyxIn directory.Path [ "test"; "--files-in-memory"; "main.nyx" ]
+    Assert.True(outcome.ExitCode = 0, outcome.StandardOutput + outcome.StandardError)
+    Assert.Contains("1 passed", outcome.StandardOutput)
+    Assert.False(System.IO.File.Exists(System.IO.Path.Combine(directory.Path, "out.txt")))
+
+    let written = nanyxIn directory.Path [ "test"; "main.nyx" ]
+    Assert.True(written.ExitCode = 0, written.StandardOutput + written.StandardError)
+    Assert.Equal("hello", System.IO.File.ReadAllText(System.IO.Path.Combine(directory.Path, "out.txt")))

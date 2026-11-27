@@ -138,9 +138,12 @@ function testId(root, name) {
 function listArguments(target) {
     return ["test", target, "--list", "--format", "json"];
 }
-/** The arguments of `nanyx test` that run `selection` of `target`, a package's directory or a script, reporting as JSON. */
-function runArguments(target, selection) {
-    const args = ["test", target, "--format", "json"];
+/**
+ * The arguments of `nanyx test` that run `selection` of `target`, a package's directory or a script, reporting as JSON,
+ * with an `#io` test's files in memory when `filesInMemory`, as live mode runs tests.
+ */
+function runArguments(target, selection, filesInMemory = false) {
+    const args = ["test", target, "--format", "json", ...(filesInMemory ? ["--files-in-memory"] : [])];
     switch (selection.kind) {
         case "all":
             return args;

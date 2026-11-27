@@ -42,7 +42,15 @@ module internal AppendOperator =
         let tys = [ leftTy; rightTy ] |> List.map (resolveSoFar state)
         let declaredVar = tys |> List.tryPick (function TyVar({ Name = Some _ } as v) -> Some v | _ -> None)
         let areVariables = tys |> List.forall (function TyVar { Name = None } -> true | _ -> false)
-        let resultTy = List.zip [ leftTy; rightTy ] tys |> List.tryFind (snd >> isBuiltIn) |> Option.map fst |> Option.defaultValue leftTy
+        // An operand that holds `undefined`, as `[]` of `list(undefined)` does, joins the other as what it stands for:
+        // `[1, 2] ++ e` is a `list(int)` (#3129).
+        let resultTy =
+            let builtIn = List.zip [ leftTy; rightTy ] tys |> List.filter (snd >> isBuiltIn)
+            builtIn
+            |> List.tryFind (snd >> Unifier.holdsBottom >> not)
+            |> Option.orElse (List.tryHead builtIn)
+            |> Option.map fst
+            |> Option.defaultValue leftTy
         match tys |> List.tryFind isKnownNotJoined, OperatorContexts.smallest state operator, declaredVar, state.ContextScope with
         | Some ty, _, _, _ ->
             let tyText = Unifier.tyToDisplayString Ascii ty

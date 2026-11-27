@@ -204,9 +204,12 @@ export function listArguments(target: string): string[] {
   return ["test", target, "--list", "--format", "json"];
 }
 
-/** The arguments of `nanyx test` that run `selection` of `target`, a package's directory or a script, reporting as JSON. */
-export function runArguments(target: string, selection: Selection): string[] {
-  const args = ["test", target, "--format", "json"];
+/**
+ * The arguments of `nanyx test` that run `selection` of `target`, a package's directory or a script, reporting as JSON,
+ * with an `#io` test's files in memory when `filesInMemory`, as live mode runs tests.
+ */
+export function runArguments(target: string, selection: Selection, filesInMemory = false): string[] {
+  const args = ["test", target, "--format", "json", ...(filesInMemory ? ["--files-in-memory"] : [])];
   switch (selection.kind) {
     case "all":
       return args;

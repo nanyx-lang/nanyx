@@ -1,0 +1,193 @@
+--| The syntax tree of a module as its source writes it, which a linter is given to check.
+
+  The tree is the module before the compiler desugars it, with its attributes, so that a rule
+  reports what the user wrote and a fix edits it. Each node is a record of its `id`, its `span` and
+  its `kind`: the `id` is what [`Analysis`](analysis) answers questions about, such as the type of
+  an expression or the symbol a name refers to, and the `kind` is a union a rule matches on.
+  Constructs the compiler desugars before checking, such as a `for` loop, appear as the calls they
+  are desugared to.
+export module syntax
+
+--| Identifies a node of the tree, for the questions [`Analysis`](analysis) answers about it.
+export type NodeId = int
+
+--| Where a node is written: offsets into the module's text, its line endings made `\n` (`end` is
+  one past the last character), and the zero-based line and column of `start`.
+export type Span = (
+  start: int
+  end: int
+  line: int
+  column: int
+)
+
+--| A literal value as written. A number with a unit straight after it, `500ms`, is a `#measure` of
+  the number as written and the unit's name.
+export type Literal =
+  | #string(string)
+  | #int(int)
+  | #float(float)
+  | #bool(bool)
+  | #measure(number: string, unit: string)
+
+--| Where an import comes from: a module by its name, `nanyx/text`, or a file by its path.
+export type ImportSource = #module(string) | #path(string)
+
+--| One module an import brings in: where from, the alias it is given, the names `as (a, b)`
+  selects, each where it is written, and where the import is written.
+export type Import = (
+  source: ImportSource
+  alias: #some(string) | #none
+  selection: #some(list((string, Span))) | #none
+  span: Span
+)
+
+--| What a type definition's declaration says beside its body: that it is exported, a context,
+  private, protected or scoped, the scope of the scoped context its values belong to, where its
+  `private` or `protected` is written, and a context's associated types.
+export type TypeModifier =
+  | #export
+  | #context
+  | #private
+  | #protected
+  | #scoped(Span)
+  | #inScopeOf(list((string, Span)))
+  | #kindAt(Span)
+  | #associatedTypes(list(string))
+
+--| A node of the module: an item at its top level, a statement of a block, an expression, a
+  pattern or a type written in it.
+export type TopLevelItem = (id: NodeId, span: Span, kind: TopLevelItemKind)
+
+--| What a top-level item is.
+export type TopLevelItemKind =
+  | #moduleDeclaration(isExport: bool, name: string)
+  | #moduleBlock(name: string, items: list(TopLevelItem))
+  | #def(isExport: bool, name: string, annotation: #some(TypeExpr) | #none, value: Expr)
+  | #typeDef(TypeDefinition)
+  | #import(list(Import))
+  | #reExport(Import)
+  | #expr(Expr)
+  | #attribute(name: string, argument: #some(Expr) | #none)
+  | #dimension(isExport: bool, name: string, storage: #some(TypeExpr) | #none, derived: #some(TypeExpr) | #none)
+  | #unitDeclaration(isExport: bool, name: string, dimension: TypeExpr, multiple: #some(Expr) | #none)
+
+--| A type definition: its name, its modifiers, its parameters, each with its constraint if it
+  writes one, and its body.
+export type TypeDefinition = (
+  name: string
+  modifiers: list(TypeModifier)
+  parameters: list((string, (#some(TypeExpr) | #none)))
+  body: TypeExpr
+)
+
+--| A statement of a block.
+export type Statement = (id: NodeId, span: Span, kind: StatementKind)
+
+--| What a statement is.
+export type StatementKind =
+  | #def(isExport: bool, name: string, annotation: #some(TypeExpr) | #none, value: Expr)
+  | #typeDef(TypeDefinition)
+  | #import(list(Import))
+  | #use(Expr)
+  | #expr(Expr)
+  | #attribute(name: string, argument: #some(Expr) | #none)
+
+--| An expression. The span of a `#call`, `#pipe` or `#member` is the whole expression's, and its
+  `nameSpan` the name's.
+export type Expr = (id: NodeId, span: Span, kind: ExprKind)
+
+--| What an expression is.
+export type ExprKind =
+  | #literal(Literal)
+  | #unit
+  | #name(string)
+  | #call(name: string, nameSpan: #some(Span) | #none, arguments: list(Expr))
+  | #lambda(parameters: list((string, (#some(TypeExpr) | #none))), body: Expr, takesUnit: bool)
+  | #contextNames(names: list((string, (#some(TypeExpr) | #none), Span)), body: Expr)
+  | #binary(operator: string, operatorSpan: #some(Span) | #none, left: Expr, right: Expr)
+  | #pipe(value: Expr, name: string, nameSpan: #some(Span) | #none, arguments: list(Expr))
+  | #block(list(Statement))
+  | #match(values: list(Expr), arms: list(MatchArm))
+  | #except(value: Expr, arms: list(MatchArm))
+  | #tuple(list(Expr))
+  | #record(list(RecordField))
+  | #list(list(Expr))
+  | #tag(name: string, payload: #some(Expr) | #none)
+  | #if(condition: Expr, whenTrue: Expr, whenFalse: Expr)
+  | #member(target: Expr, field: string, fieldSpan: #some(Span) | #none)
+  | #contextMember(context: TypeExpr, member: string)
+  | #contextCall(context: TypeExpr, member: string, arguments: list(Expr))
+  | #typeValue(TypeExpr)
+  | #useIn(value: Expr, body: Expr)
+  | #bind(keyword: string, value: Expr)
+  | #return(Expr)
+  | #interpolated(list(StringPart))
+
+--| An arm of a `match`: its patterns, one for each value matched, and its body.
+export type MatchArm = (patterns: list(Pattern), body: Expr)
+
+--| A field of a record literal: `name = value`, or a value by its position.
+export type RecordField = #named(string, Expr) | #positional(Expr)
+
+--| A part of an interpolated string: text as written, or an expression in braces.
+export type StringPart = #text(string) | #expr(Expr)
+
+--| A pattern.
+export type Pattern = (id: NodeId, span: Span, kind: PatternKind)
+
+--| What a pattern is. A list pattern's `rest` is the pattern after `...` at its end, and a
+  `#listMiddle` has its `...` between the patterns before it and those after.
+export type PatternKind =
+  | #literal(Literal)
+  | #name(string)
+  | #wildcard
+  | #unit
+  | #else
+  | #tuple(items: list(Pattern), hasRest: bool)
+  | #constructor(name: string, patterns: list(Pattern))
+  | #members(members: list((string, Pattern)), hasRest: bool)
+  | #list(items: list(Pattern), rest: #some(Pattern) | #none)
+  | #listMiddle(before: list(Pattern), after: list(Pattern))
+  | #range(from: Expr, to: Expr)
+  | #guard(Expr)
+  | #tag(name: string, payload: #some(Pattern) | #none)
+  | #argumentTag(name: string, arguments: Expr, payload: #some(Pattern) | #none)
+  | #and(list(Pattern))
+
+--| A type as written.
+export type TypeExpr = (id: NodeId, span: Span, kind: TypeExprKind)
+
+--| What a written type is.
+export type TypeExprKind =
+  | #name(string)
+  | #variable(string)
+  | #hole
+  | #unit
+  | #tuple(list(TypeExpr))
+  | #record(list(TypeField))
+  | #openRecord(fields: list(TypeField), rest: #some(string) | #none)
+  | #apply(name: string, arguments: list(TypeExpr))
+  | #function(input: TypeExpr, output: TypeExpr)
+  | #tag(name: string, payload: #some(TypeExpr) | #none)
+  | #union(list(TypeExpr))
+  | #intersection(list(TypeExpr))
+  | #contexts(list(TypeExpr))
+  | #withContexts(contexts: list(TypeExpr), inner: TypeExpr)
+  | #constraint(name: string, inner: TypeExpr, predicate: Expr)
+  | #where(inner: TypeExpr, predicate: Expr)
+  | #typeOf(Expr)
+  | #typeKeyword
+  | #namedArgument(name: string, value: TypeExpr)
+  | #associated(context: TypeExpr, name: string)
+  | #typeArgument(TypeExpr)
+  | #product(TypeExpr, TypeExpr)
+  | #quotient(TypeExpr, TypeExpr)
+
+--| A field of a record type: a named field, with whether it is `mut`, its type and its default
+  value, or an attribute written before the field after it.
+export type TypeField =
+  | #field(name: string, isMutable: bool, annotation: #some(TypeExpr) | #none, default: #some(Expr) | #none)
+  | #attribute(name: string, argument: #some(Expr) | #none, span: Span)
+
+--| A module: its top-level items in the order written.
+export type Module = list(TopLevelItem)

@@ -1,0 +1,95 @@
+--| What the test host's roots share: the runtime's `nanyx:test` functions, and running a test the
+  runtime asks for, `#io` or not. `test.host` and `test.host.memory` export only their `run`, written
+  on these, so that a test build sees no function of the host's that requires a context its prelude
+  doesn't name.
+module test.runs
+
+import (
+  nanyx/async as (Async)
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx/random as random
+  nanyx/random as (Random)
+  nanyx.cli/console as (Console, IoError)
+  nanyx.cli/env as (Env)
+  nanyx.fs/filesystem as (FileSystem)
+)
+
+@extern("nanyx:test", "index")
+def testIndex: [HostRuntime] () -> I32
+
+@extern("nanyx:test", "io")
+def testIo: [HostRuntime] () -> I32
+
+@extern("nanyx:test", "seed")
+def testSeed: [HostRuntime] () -> I64
+
+@extern("nanyx:test", "write")
+def testWrite: [HostRuntime] I32, I32 -> ()
+
+@extern("nanyx:test", "writeError")
+def testWriteError: [HostRuntime] I32, I32 -> ()
+
+--| Gives `text` to the runtime through `write`, which reads it from the module's memory.
+def writeWith: [HostRuntime] ([HostRuntime] I32, I32 -> ()), string -> () = { write, text ->
+  write(addressOf(text), byteLength(text))
+  keepAlive(text)
+}
+
+--| A stand-in for a context a test that isn't marked `@test(#io)` doesn't have, which it can't reach:
+  the compiler reports a test that requires one (`NYX0312`).
+def notIo: string -> undefined = { context ->
+  crash(
+    "{context} is the real one only in a test marked `@test(#io)`: mark the test so, or load a fake {context} with `use` in it"
+  )
+}
+
+--| Whether the test the runtime asks for is marked `@test(#io)`.
+export def isIo: [HostRuntime] () -> bool = {
+  testIo() != 0
+}
+
+--| Runs `entry` given the index of the test the runtime asks for, with a `Random` seeded with the
+  runtime's seed, in the contexts it is given. What `entry` returns is ignored.
+export def seededTest
+  : [HostRuntime, Async, Console, Env, FileSystem]
+    ([Async, Console, Env, FileSystem, Random] int -> a) -> ()
+  = { entry ->
+    def index = I32.toInt(testIndex())
+    random.seeded(testSeed(), { _ -> ignore(entry(index)) })
+  }
+
+--| Runs a test that isn't `#io` (see [`seededTest`]): with a `Console` whose output goes to the
+  runtime and whose input is empty, and an `Env` and a `FileSystem` whose members crash, which
+  `NYX0312` keeps any such test from reaching.
+export def isolated
+  : [HostRuntime, Async] ([Async, Console, Env, FileSystem, Random] int -> a) -> ()
+  = { entry ->
+    use Console(
+      write = { text -> writeWith(testWrite, text) }
+      writeError = { text -> writeWith(testWriteError, text) }
+      readLine = { _ -> #endOfInput }
+      readToEnd = { _ -> #some("") }
+      flush = { _ -> () }
+    )
+
+    use Env(
+      args = { _ -> notIo("Env") }
+      variable = { _ -> notIo("Env") }
+      exit = { _ -> notIo("Env") }
+    )
+
+    use FileSystem(
+      readFile = { _ -> notIo("FileSystem") }
+      readFileBytes = { _ -> notIo("FileSystem") }
+      readFileChunk = { _, _, _ -> notIo("FileSystem") }
+      writeFile = { _, _ -> notIo("FileSystem") }
+      appendFile = { _, _ -> notIo("FileSystem") }
+      pathExists = { _ -> notIo("FileSystem") }
+      deleteFile = { _ -> notIo("FileSystem") }
+      listDirectory = { _ -> notIo("FileSystem") }
+      createDirectory = { _ -> notIo("FileSystem") }
+    )
+
+    seededTest(entry)
+  }

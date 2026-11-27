@@ -77,6 +77,8 @@ let ``The playground host is shipped beside the compiler, and depends only on th
 let ``The test host is shipped beside the compiler, and depends on the console's interface package, the file system's and the host library it runs @test(#io) tests with`` () =
     let host = (manifestOf Hosts.testPackage).Declares.Value
     Assert.Equal(("test.host", Some "test.prelude"), (host.Module, host.Prelude))
+    // And the root `nanyx test --files-in-memory` builds a test build from (#3195).
+    Assert.Equal(Some "test.host.memory", host.FilesInMemory)
     let manifest = manifestOf Hosts.testPackage
     Assert.Equal((Hosts.testPackage, Toolchain.version), (manifest.Name, manifest.Version))
     Assert.Equal<string list>([ "nanyx.cli"; "nanyx.fs"; "nanyx.wasi" ], manifest.Dependencies |> List.map _.Name)
@@ -131,4 +133,4 @@ let ``Every shipped package is published from this repository, at the compiler's
                 else NewPackage.nanyxOf Toolchain.version
             name, Toolchain.version, Some "nanyx-lang/nanyx", Some nanyx)
     Assert.Equal<(string * string * string option * string option) list>(expected, manifests)
-    Assert.Equal(8, manifests.Length)
+    Assert.Equal(9, manifests.Length)
