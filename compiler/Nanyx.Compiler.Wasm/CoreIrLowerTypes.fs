@@ -31,6 +31,12 @@ let makeMember = "__make"
 /// Whether `ty` holds a type whose values are boxed (see `boxedTy`).
 let rec holdsBoxed (ty: Ty) = ty = boxedTy || Ty.children ty |> List.exists holdsBoxed
 
+/// The call of the prelude's `toList` on a value of `collection`, a map or a set, whose entries or elements are of
+/// `elementTy`: the name `callee` gives the function at its type, and the type of the list it gives.
+let storeListCall (callee: string -> Ty -> string) (collection: Ty) (elementTy: Ty) : string * Ty =
+    let listTy = Lists.ofType elementTy
+    callee (match collection with Sets.SetType _ -> Sets.toList | _ -> Maps.toList) (TyFunc(collection, listTy, [])), listTy
+
 let rec substitute (subst: Map<int, Ty>) (ty: Ty) : Ty =
     let go = substitute subst
     match ty with

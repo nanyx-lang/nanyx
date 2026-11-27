@@ -24,13 +24,11 @@ let storeAsList
     (iterable: Expression)
     : (Atom -> Expr) option =
     match sourceTypeOf iterable with
-    | Some (Maps.MapType(key, value) as ty) ->
-        Some (ty, Maps.toList, TyRecord(Map.ofList [ "0", key; "1", value ], FieldOrder.none))
-    | Some (Sets.SetType element as ty) -> Some (ty, Sets.toList, element)
+    | Some (Maps.MapType(key, value) as ty) -> Some (ty, Maps.entryType key value)
+    | Some (Sets.SetType element as ty) -> Some (ty, element)
     | _ -> None
-    |> Option.map (fun (ty, toList, elementTy) ->
-        let listTy = Lists.ofType elementTy
-        let name = callee toList (TyFunc(ty, listTy, []))
+    |> Option.map (fun (ty, elementTy) ->
+        let name, listTy = storeListCall callee ty elementTy
         fun (store: Atom) -> Expr.make (Call(name, [ store ])) (toIrType listTy))
 
 /// `for xs, ys | arms`: the body runs for each step, with each iterable's element in a local the body names by its
