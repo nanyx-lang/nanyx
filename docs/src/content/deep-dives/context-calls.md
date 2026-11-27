@@ -117,8 +117,17 @@ passes the instance the type checker found for it there, as a call to a top-leve
   context's declaration at the call's types, so that a generic member, such as the compiler's own `==` of `Eq(int)`,
   is passed at that type ([#2809](https://github.com/nanyx-lang/nanyx/issues/2809)). In its body, the function has each member by the
   key the type writes too (`Show_b_show`), or that the type checker writes for one it inferred
-  (`TypedModule.LocalContexts`), which the calls in it find it by. Inlining makes these members direct calls
-  where they are known, as it does any closure's.
+  (`TypedModule.LocalContexts`), which the calls in it find it by. A lambda inside it captures them from it by those
+  keys, as a lambda inside a lambda captures the members that one is passed, so that it can call a function that
+  requires the context at the function's own variable, as `{ t -> eq(s, t) }` does in
+  `def outer = { s -> { t -> eq(s, t) } }` (`passedMembers` in `CodeGen.fs`,
+  [#2813](https://github.com/nanyx-lang/nanyx/issues/2813)). An inferred local function that calls a function that
+  requires a well-known context, such as `Eq`, at a variable of its own requires the context too, as it does any other
+  (`ContextInference.resolveLocal`). A generic local function that is used only at another local function's own
+  variables, as `eq` is in `def twice = { v -> eq(v, v) }`, isn't lowered at those where it is defined, where a context
+  it requires would have no members: the other function's closure captures it at each type that one is lowered at, and
+  the closure bound where it is defined is at unit (`CoreIrLowerLocals.genericLocal`). Inlining makes these members
+  direct calls where they are known, as it does any closure's.
 - A top-level function named as a value is a closure over a wrapper that takes the members its value's type requires
   and captures the others, found where it is named.
 - A def with context variables, such as `[c]` in `run: [c] ([c] () -> string) -> string`, is specialised on the
