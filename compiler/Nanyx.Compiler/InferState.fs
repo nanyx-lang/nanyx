@@ -135,8 +135,16 @@ type OpenMatch =
 
 /// The instance a lambda names with `context l`: the context, each of its members as the lambda's body has it where
 /// the body starts, the node of the body (the `ContextNames` the parser makes), and for `Memory`, the scope of the
-/// `memory` block it is. `use l` loads those members again, and makes the block's scope the one a `mut` takes.
-type ContextName = { Context: Identifier; Members: (Identifier * TypeScheme) list; Body: NodeId; Scope: Ty option }
+/// `memory` block it is. `use l` loads those members again, and makes the block's scope the one a `mut` takes. For a
+/// parameterised context, `Instance` is the instance the lambda is given, which `use l` puts in scope again as the
+/// nearest; for a context with no members, `Supplied` is what supplies it, which `use l` makes so again (#1870).
+type ContextName =
+    { Context: Identifier
+      Members: (Identifier * TypeScheme) list
+      Body: NodeId
+      Scope: Ty option
+      Instance: InstanceBinding option
+      Supplied: (NominalId * ContextProvider) option }
 
 /// What the variable an annotation stands for is kept under while the annotation is read (see `InferState.TypeVars`).
 type TypeVarKey =

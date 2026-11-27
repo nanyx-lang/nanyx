@@ -76,3 +76,27 @@ def main = {
 main()
 """
     runSource source |> assertRan "handler: from inner\ntick\n"
+
+[<Fact>]
+let ``Run - a def shadows its Show(int) with a use, then loads its own again with use s`` () =
+    // An instance of a parameterised context can be named too (#1870).
+    let source =
+        """context Show(a) = (show: a -> string)
+
+def describe: [Show(int)] int -> string = { n -> Show(int).show(n) }
+
+def run: [Show(int), Console] int -> () = { context s: Show(int), n ->
+  use Show(int)(show = { m -> "shadowed {m}" })
+  println(describe(n))
+  use s
+  println(describe(n))
+}
+
+def main = {
+  use Show(int)(show = { m -> "#{m}" })
+  run(4)
+}
+
+main()
+"""
+    runSource source |> assertRan "shadowed 4\n#4\n"

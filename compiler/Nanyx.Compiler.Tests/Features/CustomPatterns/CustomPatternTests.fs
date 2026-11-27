@@ -379,7 +379,7 @@ let ``The fix for a pattern's argument that is a call binds it with a def before
     compileClean fixedSource |> ignore
 
 [<Theory>]
-[<InlineData("pattern string -> #Num(float) | _ = { s -> 3 }", "'int' vs '_'")>]
+[<InlineData("pattern string -> #Num(float) | _ = { s -> 3 }", "'int' vs '#Num(float) | _'")>]
 [<InlineData("pattern string -> #Word(string) | _ = { s -> if s == \"\" then _ else #num(1.0) }",
              "'#num(float) | _' vs '#Word(string) | _'")>]
 let ``A mismatch in a pattern's body writes its no-match case as _`` (source: string, expected: string) =
