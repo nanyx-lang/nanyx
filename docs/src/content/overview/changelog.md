@@ -13,8 +13,14 @@ release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/re
 *27 November 2026*
 
 The editor runs your code as you write it: `dbg` values show at the end of their lines, and live mode re-runs a program
-on every save, with its files kept in memory. Parsing is several times faster, and errors name type variables as hover
-does. Nothing needs edits, but an error message that showed a type variable as `a` now shows it as `α`.
+on every save, with its files kept in memory. Parsing is several times faster, types can name each other, and errors
+name type variables as hover does. Nothing needs edits, but an error message that showed a type variable as `a` now
+shows it as `α`.
+
+**Language**
+
+- Type definitions can name each other, as a syntax tree's node types do: aliases and nominal types whose every cycle
+  passes through a tag's payload or a nominal type ([Recursive types](../tour/types#recursive-types)).
 
 **Standard library**
 
@@ -59,6 +65,7 @@ does. Nothing needs edits, but an error message that showed a type variable as `
   [NYX0262](../standard-tools/errors#nyx0262), and a `mut` outside a `memory` block reports only its own error.
 - `Instant.fromIsoString` gives `#notIso` for a year or fraction of too many digits, where it crashed.
 - `nanyx check`, hover and the editor's hints no longer overflow the stack writing a deeply nested type on Windows.
+- Building a value from a type description of a recursive record alias works, where it was an internal error.
 
 # 0.52.1
 
