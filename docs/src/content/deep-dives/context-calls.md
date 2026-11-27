@@ -121,12 +121,14 @@ passes the instance the type checker found for it there, as a call to a top-leve
   keys, as a lambda inside a lambda captures the members that one is passed, so that it can call a function that
   requires the context at the function's own variable, as `{ t -> eq(s, t) }` does in
   `def outer = { s -> { t -> eq(s, t) } }` (`passedMembers` in `CodeGen.fs`,
-  [#2813](https://github.com/nanyx-lang/nanyx/issues/2813)). An inferred local function that calls a function that
-  requires a well-known context, such as `Eq`, at a variable of its own requires the context too, as it does any other
-  (`ContextInference.resolveLocal`). A generic local function that is used only at another local function's own
-  variables, as `eq` is in `def twice = { v -> eq(v, v) }`, isn't lowered at those where it is defined, where a context
-  it requires would have no members: the other function's closure captures it at each type that one is lowered at, and
-  the closure bound where it is defined is at unit (`CoreIrLowerLocals.genericLocal`). Inlining makes these members
+  [#2813](https://github.com/nanyx-lang/nanyx/issues/2813)). So a lambda captures members from the innermost function
+  around it that has them: the top-level def, a lambda, or a local function. A local function inside another captures
+  them from that one, which captured them from the function around it in turn. An inferred local function that calls a
+  function that requires a well-known context, such as `Eq`, at a variable of its own requires the context too, as it
+  does any other (`ContextInference.resolveLocal`). A generic local function used in another one, at that one's own
+  variables, as `eq` is in `def twice = { v -> eq(v, v) }`, is used at each type the other is used at: its closure is
+  made at those types where it is defined, and the other's closure captures it at them
+  (`CoreIrLowerLocals.usesWithBindings`), however deep the local functions are nested. Inlining makes these members
   direct calls where they are known, as it does any closure's.
 - A top-level function named as a value is a closure over a wrapper that takes the members its value's type requires
   and captures the others, found where it is named.
