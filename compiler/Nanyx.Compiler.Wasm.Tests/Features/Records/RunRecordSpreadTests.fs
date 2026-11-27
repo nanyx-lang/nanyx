@@ -45,3 +45,18 @@ def main = {
 main()
 """
     runSource (source.ReplaceLineEndings "\n") |> assertRan "a\nb\nc\n3 c\n"
+
+[<Fact>]
+let ``Run - a spread of an open record sets its known fields and keeps the others`` () =
+    // The record made is of the open record's own type, so the fields it doesn't know of come through (#1866).
+    runSource
+        """
+def moveRight: (x: int, ...r) -> (x: int, ...r) = { p -> (...p, x = p.x + 1) }
+
+def moved = moveRight(x = 1, y = 2, label = "a")
+def again = moveRight(x = 10, name = "b")
+
+println("{moved.label} is at {moved.x}, {moved.y}")
+println("{again.name} is at {again.x}")
+"""
+    |> assertRan "a is at 2, 2\nb is at 11\n"
