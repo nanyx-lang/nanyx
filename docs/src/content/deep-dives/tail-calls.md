@@ -75,8 +75,7 @@ Nanyx has no `defer`; these are the constructs, each with a test in `RunTailCall
   of another def that starts tasks in the same module, whose tasks join the caller's scope and which stays a tail call
   (see `TaskScopes`).
 - **`use C(...) in body`** runs nothing when it ends: the instance is only in scope for `body`, so `body` is in tail
-  position. So does a scoped context's `use`, the one `memory` makes included; it is the region's freeing that
-  `memory` adds.
+  position.
 - **Reference counting** drops a variable after its last use, but never after a tail call (see above).
 
 # Checking tail position
