@@ -376,19 +376,28 @@ module Script =
     let readFrom (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
         readFromUnder Hosts.consolePackage store filePath source
 
+    /// The packages from the index the script at `filePath`, whose text is `source`, pins with its `::host` and
+    /// `::install` lines, each at the exact version it names. A directive written wrong is left for the build to report.
+    let private directivePins (filePath: string) (source: string) : (string * SemanticVersion) list =
+        settings (Directives.read filePath source)
+        |> List.choose (function
+            | _, Result.Ok(HostSetting(package, AtVersion version))
+            | _, Result.Ok(DependencySetting(package, AtVersion version)) ->
+                SemanticVersion.tryParse version.Text |> Option.map (fun version -> package.Text, version)
+            | _ -> None)
+
     /// What `nanyx pull` does for the script at `filePath`, whose text is `source`: downloads into the cache of `store`
     /// each package from the index its `::host` and `::install` lines pin, and the packages they depend on (see
     /// `ScriptDependencies.pull`), giving a line for each and a warning for each pin the index has unlisted, or what
     /// went wrong. A directive written wrong is left for the build to report.
     let pull (store: PackageStore) (filePath: string) (source: string) : Result<Pulled, string list> =
-        let pins =
-            settings (Directives.read filePath source)
-            |> List.choose (function
-                | _, Result.Ok(HostSetting(package, AtVersion version))
-                | _, Result.Ok(DependencySetting(package, AtVersion version)) ->
-                    SemanticVersion.tryParse version.Text |> Option.map (fun version -> package.Text, version)
-                | _ -> None)
-        ScriptDependencies.pull store filePath pins
+        ScriptDependencies.pull store filePath (directivePins filePath source)
+
+    /// What `nanyx run` does before it builds the script at `filePath`, whose text is `source`: `pull`, unless the
+    /// cache of `store` holds every package the build uses, when it reads nothing from the index (see
+    /// `ScriptDependencies.pullUnlessCached`).
+    let pullForRun (store: PackageStore) (filePath: string) (source: string) : Result<Pulled, string list> =
+        ScriptDependencies.pullUnlessCached store filePath (directivePins filePath source)
 
     /// The host the script at `filePath` runs under, as its `::host` names it, found in `store`; none for a script with
     /// no directives, which runs under the console host.
