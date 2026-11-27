@@ -157,7 +157,9 @@ and private recordField (c: Cursor) : RecordField =
     let named () =
         let fieldName, nameSpan = name c
         c.Expect Equals |> ignore
+        DebugLog.lines.Add(sprintf "N%d" c.Index)
         let value = expression Crossing c
+        DebugLog.lines.Add(sprintf "R%d" c.Index)
         c.Declare NamedFieldValue value.Id [ fieldName, nameSpan ]
         NamedField(fieldName, value)
     // `named` takes a name and then expects `=`: where a name has no `=` after it, it would fail there, and is not tried.
@@ -480,6 +482,7 @@ and private accessed (c: Cursor) : Operand =
         | None ->
             let start = c.Start
             let expr = primary c
+            DebugLog.lines.Add(sprintf "A%d" c.Index)
             expr, c.SpanFrom start
     // The made-up argument's first `.field` is written where the argument would be, not straight after it.
     let mutable first = madeUp.IsSome
@@ -578,6 +581,7 @@ and private withPipes (lines: Lines) (c: Cursor) (value: Operand) : Operand =
 
 /// An operand: a primary expression after any `not` and `-` before it, and the pipes after it.
 and private operand (lines: Lines) (c: Cursor) : Operand =
+    DebugLog.lines.Add(sprintf "O%d" c.Index)
     let prefixes = ResizeArray()
     let mutable going = true
     while going do
@@ -644,6 +648,7 @@ and private operatorAt (lines: Lines) (c: Cursor) : BinaryOperator option =
 /// by precedence climbing. Two operators of one precedence that don't group the same way, or don't
 /// group, can't be written side by side.
 and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOperator option) : Operand =
+    DebugLog.lines.Add(sprintf "C%d" c.Index)
     let mutable left = operand lines c
     let mutable previous = parent
     let mutable going = true
@@ -703,6 +708,7 @@ and private climb (lines: Lines) (c: Cursor) (minimum: int) (parent: BinaryOpera
 
 /// An expression, which may go on across lines (`Crossing`) or ends at the end of its line (`Inline`).
 and expression (lines: Lines) (c: Cursor) : Expression =
+    DebugLog.lines.Add(sprintf "E%d" c.Index)
     if c.IsKeyword "match" then Forward.keywordExpression.Value c else
     let start = c.Start
     let operators = climb lines c 0 None
