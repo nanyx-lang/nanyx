@@ -1191,7 +1191,8 @@ To fix it, write the code.
 
 # NYX0113: Duplicate definition
 
-A module defines a name twice.
+A module defines a name twice. Values and types are named apart, so a def and a type may share a name, but a dimension
+is a type: it shares its name with no other type or dimension.
 
 ```nanyx
 def total = 1
