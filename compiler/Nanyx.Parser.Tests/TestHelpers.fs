@@ -45,6 +45,12 @@ let parseErrorOf (source: string) =
         (if lineEnd < 0 then rest else rest.Substring(0, lineEnd))
     | Result.Ok parsed -> failwith $"Expected a parse error, got %A{parsed}"
 
+/// The message of the error parsing `source` gives, and the text of its span.
+let parseErrorAt (source: string) =
+    match parseModuleFileWithNames "t.nyx" source with
+    | Result.Error error -> error.Message, textOf source error.Span
+    | Result.Ok parsed -> failwith $"Expected a parse error, got %A{parsed}"
+
 let private testRootDir = __SOURCE_DIRECTORY__
 let private featureRootDir = Path.Combine(testRootDir, "Features")
 

@@ -170,6 +170,10 @@ type Cursor(file: string, source: string, laid: Laid array) =
     member _.Report (offset: int) (message: string) : 'a =
         raise (Reported { Message = message; Span = lines.Span file offset (min source.Length (offset + 1)); Found = None })
 
+    /// Reports the mistake `message` at the text from `start` to `finish` (see `Reported`).
+    member _.ReportBetween (start: int) (finish: int) (message: string) : 'a =
+        raise (Reported { Message = message; Span = lines.Span file start finish; Found = None })
+
     /// Reports `expected` at `token`, which is not it: the message says what was expected, and the error names the
     /// token found (see `ParseError.Found`).
     member _.ReportFound (token: Token) (expected: string) : 'a =
