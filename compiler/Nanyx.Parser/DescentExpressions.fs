@@ -494,12 +494,16 @@ and private accessed (c: Cursor) : Operand =
             digits, c.SpanOf token
         | _ -> name c
     let mutable going = true
+    // Not `c.AttemptIf(..., field)`: in the browser, .NET's WebAssembly runtime read the primary again after that
+    // `AttemptIf` that didn't run `field`, taking the name on the next line, where every other runtime didn't (#3152).
     while going do
-        match c.AttemptIf((c.Adjacent || first) && c.Is Dot, field) with
-        | Some(fieldName, fieldSpan) ->
-            text <- SourceSpan.between text fieldSpan
-            expr <- Expression.at text (MemberAccess(expr, fieldName, Some fieldSpan))
-        | None -> going <- false
+        if (c.Adjacent || first) && c.Is Dot then
+            match c.Attempt field with
+            | Some(fieldName, fieldSpan) ->
+                text <- SourceSpan.between text fieldSpan
+                expr <- Expression.at text (MemberAccess(expr, fieldName, Some fieldSpan))
+            | None -> going <- false
+        else going <- false
     if c.IsKeyword "with" && c.OnSameLine then withUpdates c (expr, text) else expr, text
 
 /// `record with x = 1, y = 2`, or with the updates in brackets, `record with (x = 1)`: a call to the built-in "__with"
