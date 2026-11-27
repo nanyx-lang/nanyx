@@ -401,7 +401,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         | _ -> finalState
                     // The def's number literals that nothing has settled are of their default types before its
                     // annotation is checked against its value (see `NumericLiterals`).
-                    let finalState = NumericLiterals.settle (fun _ -> true) finalState
+                    let finalState = Fractions.settleLiterals (fun _ -> true) finalState
                     state <-
                         finalState
                         |> recordSymbolType symbol declaredTy
@@ -653,7 +653,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
 
     // Each number literal is checked against its type, now that every type is known (see `NumericLiterals`), and each
     // `/` on a type that settles gives its fraction (see `Fractions`).
-    state <- Fractions.settle (NumericLiterals.settle (fun _ -> true) state)
+    state <- Fractions.settle (Fractions.settleLiterals (fun _ -> true) state)
     let checkedLiterals, literalErrors = NumericLiterals.check state
     state <- checkedLiterals
     errors <- errors @ literalErrors

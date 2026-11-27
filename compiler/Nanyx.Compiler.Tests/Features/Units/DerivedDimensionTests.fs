@@ -27,6 +27,12 @@ let ``A quotient is of the storage's fraction, so dividing ints is not rounded``
     Assert.Equal<string list>([ "Length(float) / Time(float)"; "1 / Time(float)" ], typesAfter length "def a = 100m / 3s\ndef b = 1.0 / 2.0s" [ "a"; "b" ])
 
 [<Fact>]
+let ``A literal beside a quotient of literals in the same def takes the quotient's fraction (#3134)`` () =
+    Assert.Equal<string list>(
+        [ "Length(float) / (Time(float) * Time(float))"; "Length(float)" ],
+        typesAfter length "def x = 10m / 2s / 1s\ndef w = (10m / 2s) * 1s" [ "x"; "w" ])
+
+[<Fact>]
 let ``Derived dimensions are written in annotations with * and /, the storage on each part`` () =
     Assert.Equal<string list>(
         [ "Length(float), Time(float) -> Length(float) / Time(float)"; "Time(a) * Time(a) -> Time(a) * Time(a)" ],

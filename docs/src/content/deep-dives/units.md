@@ -103,9 +103,9 @@ literal's is. A constrained dimension's literal is of the dimension's storage. O
 number of default storage units (`NumericLiterals.inStorageUnits`) is whole and fits one, however it is written, so
 `500ms` and `0.5s` both are, and a `float` when it isn't, as `0.25ns` and `90kmh` are (`NumericLiterals.defaultType`).
 Literals with units that are of one storage are a `float` together if one of them is, or a plain `float` literal is of
-it, so that `2.0 * 1.5s` and `[0.5s, 0.25ns]` agree (`NumericLiterals.sharedDefaults`). A literal of one storage whose
-other operand is a derived quotient of literals in the same expression, as in `1m / 1s / 1s`, is defaulted with them,
-before the quotient's `fraction` is known, so it can disagree with it; a def of the quotient avoids that.
+it, so that `2.0 * 1.5s` and `[0.5s, 0.25ns]` agree (`NumericLiterals.sharedDefaults`). A literal of the storage a `/`
+gives, as the last `1s` of `10m / 2s / 1s` is, is defaulted after the others and the fractions they make
+(`Fractions.settleLiterals`), so it takes the quotient's `fraction`: a `float` once `10m` and `2s` are `int`.
 
 Once every type is known, `NumericLiterals.check` works out each one's number of default storage units exactly, the
 written number
