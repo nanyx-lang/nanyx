@@ -117,8 +117,19 @@ passes the instance the type checker found for it there, as a call to a top-leve
   context's declaration at the call's types, so that a generic member, such as the compiler's own `==` of `Eq(int)`,
   is passed at that type ([#2809](https://github.com/nanyx-lang/nanyx/issues/2809)). In its body, the function has each member by the
   key the type writes too (`Show_b_show`), or that the type checker writes for one it inferred
-  (`TypedModule.LocalContexts`), which the calls in it find it by. Inlining makes these members direct calls
-  where they are known, as it does any closure's.
+  (`TypedModule.LocalContexts`), which the calls in it find it by. A lambda inside it captures them from it by those
+  keys, as a lambda inside a lambda captures the members that one is passed, so that it can call a function that
+  requires the context at the function's own variable, as `{ t -> eq(s, t) }` does in
+  `def outer = { s -> { t -> eq(s, t) } }` (`passedMembers` in `CodeGen.fs`,
+  [#2813](https://github.com/nanyx-lang/nanyx/issues/2813)). So a lambda captures members from the innermost function
+  around it that has them: the top-level def, a lambda, or a local function. A local function inside another captures
+  them from that one, which captured them from the function around it in turn. An inferred local function that calls a
+  function that requires a well-known context, such as `Eq`, at a variable of its own requires the context too, as it
+  does any other (`ContextInference.resolveLocal`). A generic local function used in another one, at that one's own
+  variables, as `eq` is in `def twice = { v -> eq(v, v) }`, is used at each type the other is used at: its closure is
+  made at those types where it is defined, and the other's closure captures it at them
+  (`CoreIrLowerLocals.usesWithBindings`), however deep the local functions are nested. Inlining makes these members
+  direct calls where they are known, as it does any closure's.
 - A top-level function named as a value is a closure over a wrapper that takes the members its value's type requires
   and captures the others, found where it is named.
 - A def with context variables, such as `[c]` in `run: [c] ([c] () -> string) -> string`, is specialised on the
@@ -247,11 +258,18 @@ instance is chosen by the arguments but its associated types, and fixes those (`
 from attached definitions fixes them by its members' types, as `int.fromString` fixes the `failure` of `FromString(int)`, or by
 an attached alias, `type Bag.elem = int`, and leaving one unfixed or fixing it two ways is an error.
 
-A type is written back for a reader as a signature writes it. Given the module's type definitions
-(`Unifier.tyToDisplayStringIn`, `Signatures.typesWithContexts`), the printer (`TypePrinting.printTy`) leaves out an
-associated argument that is the signature's own variable of that name, `[Iter(c)]`, and writes any other by name,
-`Iter(c, elem = string)` or, for one inference leaves open, `Iter(a, elem = b)`. Hover, `nanyx check`, the type lenses,
-the stdlib reference and the refactorings that write a type do so, and so does a diagnostic (`Unifier.tyToStringIn`): a
+A type is written back for a reader with each associated type it uses bound by name in its context, never bare: a
+signature's `[Iter(c)] c, elem -> elem` is written `[Iter(c, elem = a)] c, a -> a`, as the bare `elem` would read as a
+type's name. Given the module's type definitions (`Unifier.tyToDisplayStringIn`, `Signatures.typesWithContexts`),
+`Unifier.associatedRenaming` gives a signature's variable named after an associated type, where the type uses it
+elsewhere too, the next Latin letter the type doesn't use, as `displayRenaming` names a variable in `Source`, whatever the
+notation; one inference leaves open is named with the rest, `[Num(α, fraction = β)] α, α -> β`. Each variable gets its
+own name, so two `Iter`s bind two. The printer (`TypePrinting.printTy`) writes each associated argument by name,
+`Iter(c, elem = string)`, but for a variable of that associated type's name, which is then one the type uses nowhere
+else, so it is left out: `[Iter(c)] c -> int`. Source can still write the bare `elem` and `Iter(c).elem`; only the
+printed form changes. Hover, the info view (its Context flow too, which names a def's contexts together with its type),
+`nanyx check`, the type lenses, the stdlib reference and the refactorings that write a type do so, and so does a
+diagnostic (`Unifier.tyToStringIn`, `Unifier.messageText`): a
 mismatch found when the module's constraints are solved is written once its type definitions are known, and a message
 inference makes is written with the type definitions it has so far. A message made without them (`Unifier.tyToString`),
 as by a check that has no state to hand, still writes the arguments positionally.

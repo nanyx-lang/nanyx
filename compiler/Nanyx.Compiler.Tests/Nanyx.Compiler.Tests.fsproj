@@ -118,6 +118,7 @@
     <Compile Include="Features\Diagnostics\DiagnosticCodeTests.fs" />
     <Compile Include="Features\Diagnostics\DiagnosticSpanTests.fs" />
     <Compile Include="Features\Diagnostics\LookAlikeTests.fs" />
+    <Compile Include="Features\Diagnostics\MismatchVariableNameTests.fs" />
     <Compile Include="Features\Diagnostics\SyntaxErrorTests.fs" />
     <Compile Include="Features\Diagnostics\ErrorPartTests.fs" />
     <Compile Include="Features\Equality\EqualityTests.fs" />
@@ -256,7 +257,6 @@
     <Compile Include="Features\Tooling\ContextFlowTests.fs" />
     <Compile Include="Features\Tooling\DocumentationTests.fs" />
     <Compile Include="Features\Tooling\HoverTests.fs" />
-    <Compile Include="Features\Tooling\InfoViewCallTests.fs" />
     <Compile Include="Features\Tooling\LibrarySearchTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
     <Compile Include="Features\Tooling\PackageReferencesTests.fs" />

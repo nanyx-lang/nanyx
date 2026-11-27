@@ -73,6 +73,7 @@
     <Compile Include="Features\Contexts\RunContextNameTests.fs" />
     <Compile Include="Features\Contexts\RunExpectedTypeInstanceTests.fs" />
     <Compile Include="Features\Contexts\RunLocalInstanceContextTests.fs" />
+    <Compile Include="Features\Contexts\RunLocalContextCallerTests.fs" />
     <Compile Include="Features\Contexts\RunLocalContextVariableTests.fs" />
     <Compile Include="Features\Contexts\RunDefaultContextTests.fs" />
     <Compile Include="Features\Contexts\RunBlockContextTests.fs" />

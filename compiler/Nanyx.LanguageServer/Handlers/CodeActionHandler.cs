@@ -436,7 +436,23 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         OpenDocument document,
         NyxCompiler.Fix fix,
         Diagnostic diagnostic,
-        bool isPreferred)
+        bool isPreferred) =>
+        FixEdit(uri, document, fix) is { } edit
+            ? new CodeAction
+            {
+                Title = fix.Title,
+                Kind = CodeActionKind.QuickFix,
+                Diagnostics = new Container<Diagnostic>(diagnostic),
+                IsPreferred = isPreferred,
+                Edit = edit
+            }
+            : null;
+
+    /// <summary>
+    /// The edit that makes <paramref name="fix"/> to the document, or <c>null</c> if it edits another file: what its
+    /// quick fix, and the info view's link to it, apply.
+    /// </summary>
+    internal static WorkspaceEdit? FixEdit(DocumentUri uri, OpenDocument document, NyxCompiler.Fix fix)
     {
         if (fix.Edits.Any(edit => edit.Span.File != document.FileName))
         {
@@ -448,15 +464,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             Range = document.Positions.ToRange(edit.Span.Start, edit.Span.End),
             NewText = edit.NewText
         });
-
-        return new CodeAction
-        {
-            Title = fix.Title,
-            Kind = CodeActionKind.QuickFix,
-            Diagnostics = new Container<Diagnostic>(diagnostic),
-            IsPreferred = isPreferred,
-            Edit = new WorkspaceEdit { Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>> { [uri] = edits.ToList() } }
-        };
+        return new WorkspaceEdit { Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>> { [uri] = edits.ToList() } };
     }
 
     protected override CodeActionRegistrationOptions CreateRegistrationOptions(

@@ -19,7 +19,7 @@ module internal LambdaArity =
             let spans = state.Declared |> Map.tryFind (lambda.Id, LambdaParameters) |> Option.defaultValue [] |> List.map snd
             let span =
                 match spans with
-                | first :: _ -> { first with End = (List.last spans).End }
+                | first :: _ -> SourceSpan.between first (List.last spans)
                 | [] -> lambda.Span
             // A function is written in the parentheses that make it one parameter.
             let parameter =

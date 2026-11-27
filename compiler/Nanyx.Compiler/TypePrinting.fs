@@ -219,8 +219,9 @@ module TypePrinting =
                 | written -> $"""[{written |> List.map (printTy p false) |> String.concat ", "}] {named}"""
             | _ -> named
         // A context's associated types are written by name, `Iter(c, elem = string)`, and left out where the argument
-        // is the signature's own variable of that name, as a signature writes them: `Iter(c)`. A context a signature
-        // writes is an alias of its members' record, and one inference finds an application.
+        // is a variable of that name, as a signature may write them: `Iter(c)`. A reader's type names it so only where
+        // the type uses it nowhere else (see `Unifier.associatedRenaming`). A context a signature writes is an alias of
+        // its members' record, and one inference finds an application.
         | TyAlias(name, args, _)
         | TyApply(name, args) when (let associated = p.Associated name in not associated.IsEmpty && associated.Length <= args.Length) ->
             let associated = p.Associated name

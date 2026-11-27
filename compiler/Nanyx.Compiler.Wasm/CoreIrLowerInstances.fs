@@ -47,6 +47,20 @@ let foundAt (input: LowerInput) (subst: Map<int, Ty>) (node: NodeId) (scopeKeys:
             |> Option.map (fun argument -> argument, memberTypeOf input.ContextLayouts context memberName))
     | _ -> None
 
+/// The keys of the members of the parameterised contexts `written`, as a local function's type writes them (see
+/// `LiftedLambda`): `Show_b_show` for `[Show(b)]`, the keys `byWrittenKeys` puts its members in scope by too.
+let writtenKeys (layouts: ContextLayouts) (written: TypeExpr list) : ContextMemberKey list =
+    written
+    |> List.collect (fun context ->
+        match context.Kind with
+        | TypeApply(name, _ :: _) ->
+            layouts.Parameterised
+            |> Map.tryFind name
+            |> Option.map snd
+            |> Option.defaultValue []
+            |> List.map (fun (memberName, _) -> contextMemberKey (Some context) memberName)
+        | _ -> [])
+
 /// Each of `members`, those a lifted local function takes by key, of the parameterised contexts it requires, `contexts`
 /// as its closure's type has them, by the other key its body finds it by: the key of the context as the function's type
 /// writes it (`written`, see `LiftedLambda`), `Show_b_show` for the member keyed `Show_Point_show` of `[Show(b)]`. None

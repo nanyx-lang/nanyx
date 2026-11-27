@@ -120,7 +120,9 @@ let liftedCapturing (tools: LiftedTools) (name: string) (parameterNames: string 
     let scope =
         { scope with
             Members = members @ written |> List.fold (fun acc (key, var) -> acc |> Map.add key var) scope.Members
-            Vars = members |> List.fold (fun acc (key, var) -> acc |> Map.add (contextMemberParameter key) var) scope.Vars }
+            // A lambda inside a local function captures its members by the keys the local writes (see
+            // `CodeGen.passedMembers`), so they are named by those too (#2813).
+            Vars = members @ written |> List.fold (fun acc (key, var) -> acc |> Map.add (contextMemberParameter key) var) scope.Vars }
     make (environmentParameter :: valueParameters @ List.map snd members) (tools.ToIrType resultTy) (bind (lowerBody scope body))
 
 /// The wrapper, whose parameters are `parameterNames` (its environment first), that lets the top-level function

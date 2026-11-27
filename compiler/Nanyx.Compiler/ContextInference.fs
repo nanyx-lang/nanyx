@@ -436,8 +436,9 @@ module internal ContextInference =
     /// type were written: `def f = { x -> describe(x) }` requires `Show` of its parameter's type, and a call to it finds
     /// an instance for the type it is called with. `before` are the calls that were waiting for an instance before the
     /// def's value was inferred; the rest are its value's. A call of the value's whose arguments are not all variables
-    /// of the def's own type is left to the def around it, and so are a well-known context's (see
-    /// `InferState.LocalComparisons`) and an interpolation hole's. A call is taken whether the def around it writes its
+    /// of the def's own type is left to the def around it, and so are a well-known context's operator, as `==` (see
+    /// `InferState.LocalComparisons`), and an interpolation hole's. A call to a function that requires a well-known
+    /// context, as `eq(x, y)` for `eq: [Eq(a)]`, is taken (#2813). A call is taken whether the def around it writes its
     /// type or not: in one that does, it was left to the end of the module.
     let resolveLocal (name: Identifier) (symbol: SymbolId option) (scheme: TypeScheme) (before: PendingContextInstance list) (state: InferState) : InferState =
         let earlier = before |> List.map (fun p -> p.Call, p.Index) |> Set.ofList
@@ -446,7 +447,6 @@ module internal ContextInference =
             |> List.filter (fun p ->
                 not (earlier.Contains (p.Call, p.Index))
                 && not p.ChecksOnly
-                && (WellKnownContexts.tryFind p.Context).IsNone
                 && not (WellKnownContexts.isOperatorPending p)
                 && not (InterpolationHoles.isHole p.Callee))
         if candidates.IsEmpty || scheme.Quantified.IsEmpty then state

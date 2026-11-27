@@ -85,15 +85,6 @@ module Unifier =
     /// `ty` as it would be written in a def's annotation (see `TypePrinting.printTy`).
     let tyToString (ty: Ty) : string = TypePrinting.tyToString ty
 
-    /// `ty` as `tyToString` writes it, with a union that holds all the tags of a union alias of `typeDefs` written with
-    /// its name (see `TypePrinting.withUnionAliases`), and a context's associated types written as a signature writes
-    /// them, `Iter(c, elem = string)`: how a diagnostic writes the types it names.
-    let tyToStringIn (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : string =
-        TypePrinting.printTy
-            (TypePrinting.printingFor "..." (TypePrinting.associatedIn typeDefs) (TypePrinting.unionAliasesIn typeDefs) ty)
-            true
-            ty
-
     open TypePrinting
 
     /// The module `origin` is, as a reader knows it: its file's name, or the standard library's module's.
@@ -391,13 +382,9 @@ module Unifier =
         let unnamed = occurrences |> List.filter (fun v -> v.Name.IsNone) |> List.map (fun v -> v.Id) |> Set.ofList
         restVarIds (notation <> Source) ty |> Set.intersect once |> Set.intersect unnamed
 
-    /// The made-up variables of `ty` that are the argument for an associated type of a context it requires and appear
-    /// nowhere else, each named after that associated type where no variable of `ty` has the name yet, so that it is
-    /// left out, as a signature leaves it out: `[Num(a)] a, a -> a` (see `TypePrinting.printTy`).
-    let private associatedNaming (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : Subst =
-        let occurrences = varOccurrences ty
-        let taken = occurrences |> List.choose _.Name |> Set.ofList
-        let once = occurrences |> List.countBy _.Id |> List.filter (snd >> (=) 1) |> List.map fst |> Set.ofList
+    /// The arguments for the associated types of the contexts `ty` requires, in the order they are printed, each with
+    /// the name of its associated type: `elem, int` for `Iter(c, elem = int)`.
+    let private associatedArguments (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : (string * Ty) list =
         // A context is an application, among a function's contexts or written on its own, as a signature's are.
         let rec contextsIn ty =
             let own = match ty with TyApply _ | TyAlias _ -> [ ty ] | _ -> []
@@ -415,6 +402,15 @@ module Unifier =
                     List.zip associated (List.skip (args.Length - associated.Length) args)
                 | _ -> []
             | _ -> [])
+
+    /// The made-up variables of `ty` that are the argument for an associated type of a context it requires and appear
+    /// nowhere else, each named after that associated type where no variable of `ty` has the name yet, so that it is
+    /// left out, as a signature leaves it out: `[Num(a)] a, a -> a` (see `TypePrinting.printTy`).
+    let private associatedNaming (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : Subst =
+        let occurrences = varOccurrences ty
+        let taken = occurrences |> List.choose _.Name |> Set.ofList
+        let once = occurrences |> List.countBy _.Id |> List.filter (snd >> (=) 1) |> List.map fst |> Set.ofList
+        associatedArguments typeDefs ty
         |> List.choose (function
             | name, TyVar v when v.Name.IsNone && once.Contains v.Id && not (taken.Contains name) -> Some (name, v)
             | _ -> None)
@@ -472,6 +468,38 @@ module Unifier =
         |> Seq.append (unnamedRests |> Seq.map (fun id -> id, TyPrimitive ""))
         |> Map.ofSeq
 
+    /// The variables of `ty` that a signature names after the associated type they are the argument for and that `ty`
+    /// uses elsewhere too, as `elem` in `[Iter(c)] c, elem -> elem`, each given a name of its own: the next free letter
+    /// of the Latin alphabet, as a signature's variables are, as `displayRenaming` gives them in `Source`. They are then
+    /// written by name in the context, `[Iter(c, elem = a)] c, a -> a`, not bare, which reads as a type's name. One
+    /// that `ty` uses nowhere else keeps its name, so it is left out: `[Iter(c)] c -> int` (see `TypePrinting.printTy`).
+    let private associatedRenaming (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : Subst =
+        let occurrences = varOccurrences ty
+        let many = occurrences |> List.countBy _.Id |> List.filter (snd >> (<) 1) |> List.map fst |> Set.ofList
+        let renamed =
+            associatedArguments typeDefs ty
+            |> List.choose (function
+                | name, TyVar v when v.Name = Some name && many.Contains v.Id -> Some v
+                | _ -> None)
+            |> List.distinctBy _.Id
+        let ids = renamed |> List.map _.Id |> Set.ofList
+        let kept = occurrences |> List.filter (fun v -> v.Name.IsSome && not (ids.Contains v.Id))
+        let names = displayRenaming Source Set.empty (TyApply("", kept @ (renamed |> List.map (fun v -> { v with Name = None })) |> List.map TyVar))
+        renamed
+        |> List.map (fun v ->
+            match names.[v.Id] with
+            | TyPrimitive name -> v.Id, TyVar { v with Name = Some name }
+            | other -> v.Id, other)
+        |> Map.ofList
+
+    /// `ty` as `tyToString` writes it, with a union that holds all the tags of a union alias of `typeDefs` written with
+    /// its name (see `TypePrinting.withUnionAliases`), and a context's associated types written by name, as a signature
+    /// writes them, `Iter(c, elem = string)`, a signature's variable named after one given a name of its own (see
+    /// `associatedRenaming`): how a diagnostic writes the types it names.
+    let tyToStringIn (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : string =
+        let ty = apply (associatedRenaming typeDefs ty) ty
+        printTy (printingFor "..." (associatedIn typeDefs) (unionAliasesIn typeDefs) ty) true ty
+
     /// `ty` as `tyToString` writes it, with a spread written in `notation`, the associated types of the contexts of
     /// `typeDefs` written by name, and a union that holds all the tags of a union alias of `typeDefs` written with its
     /// name (see `TypePrinting.printTy`).
@@ -481,15 +509,45 @@ module Unifier =
 
     /// `ty` for a reader, in `notation`, with the variables the compiler made up named as `displayRenaming`
     /// describes, a rest that appears nowhere else written as a bare spread: `(name: α, …)`, `#some(α) | …`, and the
-    /// associated types of the contexts of `typeDefs` written by name: `[Iter(c)] c -> elem`, `Iter(c, elem = int)`,
-    /// and the tags of a union alias of `typeDefs` by its name: `#some(string) | FsError`.
+    /// associated types of the contexts of `typeDefs` written by name, each a variable bound in its context where the
+    /// type uses it: `[Iter(c, elem = b)] c, b -> b` (see `associatedRenaming`), `Iter(c, elem = int)`, and the tags of
+    /// a union alias of `typeDefs` by its name: `#some(string) | FsError`.
     let tyToDisplayStringIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (ty: Ty) : string =
+        let ty = apply (associatedRenaming typeDefs ty) ty
         let ty = apply (associatedNaming typeDefs ty) ty
         printIn typeDefs notation (apply (displayRenaming notation (loneRests notation ty) ty) ty)
 
     /// `ty` for a reader, as `tyToDisplayStringIn` writes it, where no context has associated types and no union has an
     /// alias.
     let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string = tyToDisplayStringIn Map.empty notation ty
+
+    /// Names for the variables the compiler made up in `tys`, the types one message writes, shared by all of them: a
+    /// rest of an open record or union is `r`, then `r1`, `r2`, ..., and any other `a`, `b`, `c`, ..., then `a1`, ..., in
+    /// the order the message writes them, skipping the names the variables an annotation named have.
+    let private messageRenaming (tys: Ty list) : Subst =
+        let vars = tys |> List.collect varsInPrintOrder |> List.distinctBy (fun v -> v.Id)
+        let taken = vars |> List.choose (fun v -> v.Name) |> Set.ofList
+        let rests = tys |> List.map (restVarIds true) |> Set.unionMany
+        let free (names: seq<string>) = names |> Seq.filter (fun name -> not (taken.Contains name))
+        let letters = latinLetters |> String.filter (fun letter -> letter <> 'r')
+        let ordinaryNames = Seq.initInfinite (fun i -> if i < letters.Length then string letters[i] else $"{letters[i % letters.Length]}{i / letters.Length}") |> free
+        let restNames = Seq.initInfinite (fun i -> if i = 0 then "r" else $"r{i}") |> free
+        let made = vars |> List.filter (fun v -> v.Name.IsNone)
+        let rest, ordinary = made |> List.partition (fun v -> rests.Contains v.Id)
+        Seq.append (Seq.zip ordinary ordinaryNames) (Seq.zip rest restNames)
+        |> Seq.map (fun (v, name) -> v.Id, TyVar { v with Name = Some name })
+        |> Map.ofSeq
+
+    /// The text of a message `text` writes, given how to write each type it names: as `tyToStringIn typeDefs` writes it,
+    /// with the variables the compiler made up named across all its types (see `messageRenaming`), so that one that
+    /// appears in two of them has one name: `'int' vs '(name: a, ...r)'`, not `'int' vs '(name: t1, ...t6)'` (#2077), as
+    /// is a signature's variable named after an associated type (see `associatedRenaming`).
+    let messageText (typeDefs: Map<string, TypeDefInfo>) (text: (Ty -> string) -> string) : string =
+        let written = ResizeArray<Ty>()
+        text (fun ty -> written.Add ty; "") |> ignore
+        let renaming = messageRenaming (List.ofSeq written)
+        let associated = associatedRenaming typeDefs (TyApply("", written |> Seq.map (apply renaming) |> List.ofSeq))
+        text (fun ty -> tyToStringIn typeDefs (apply associated (apply renaming ty)))
 
     /// The rests of `tys` that are lone (see `loneRests`) in every one of them they appear in.
     let private loneAcross (notation: TypeNotation) (tys: Ty list) : Set<int> =
@@ -504,6 +562,8 @@ module Unifier =
     /// name from an annotation that it would have been given. A rest is a bare spread only where it is lone in
     /// every one of `tys` it appears in, so it is not named in one and not in another.
     let tysToDisplayStringsIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (tys: Ty list) : string list =
+        let associated = associatedRenaming typeDefs (TyApply("", tys))
+        let tys = tys |> List.map (apply associated)
         let named = associatedNaming typeDefs (TyApply("", tys))
         let tys = tys |> List.map (apply named)
         let renamed = displayRenaming notation (loneAcross notation tys) (TyApply("", tys))

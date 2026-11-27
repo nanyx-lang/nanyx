@@ -19,7 +19,9 @@ the server over the real wire protocol. How refactorings are built is in [Refact
 # The info view and the library browser
 
 The info view (`NyxCompiler.InfoView`, `NyxCompiler.ContextFlow`, the server's `nanyx/infoView` request and
-`extension/src/infoView.ts`) is modelled on the infoview in Lean 4's VS Code extension. The library browser and search
+`extension/src/infoView.ts`) is modelled on the infoview in Lean 4's VS Code extension. Its Messages scope reads the
+diagnostics published on the document, each beside the compiler's diagnostic it was made from
+(`ConvertedDiagnostics.Origins`), which gives the suggestions and the fixes. The library browser and search
 by type (`NyxCompiler.LibraryCatalog`, `NyxCompiler.LibrarySearch`, and the `nanyx/libraryModules`,
 `nanyx/libraryModule`, `nanyx/librarySearch` and `nanyx/addImport` requests) read the exports of the checked standard
 library. Each search query is unified against every export; keying the index by a type's shape, for bigger libraries,
