@@ -216,7 +216,8 @@ let private consoleFile = Path.Combine(ShippedPackages.directoryOf "nanyx.cli", 
 let ``The checked library has the shipped packages' modules, with paths beside this compiler`` () =
     let shipped = (CheckedLibrary.read CheckedLibrary.path CheckedLibrary.build).Value.Shipped
     Assert.Equal<string list>(
-        [ "nanyx.cli.host/src/cli.host.nyx"
+        [ "nanyx.cli.host/src/cli.host.memory.nyx"
+          "nanyx.cli.host/src/cli.host.nyx"
           "nanyx.cli.host/src/cli.host.wasi.files.nyx"
           "nanyx.cli.host/src/cli.prelude.nyx"
           "nanyx.cli/src/console.nyx"
