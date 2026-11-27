@@ -548,6 +548,20 @@ let runSourceBothWays (source: string) : RunOutcome * RunOutcome =
         | None -> compiling, compiling
     finally Directory.Delete(directory, true)
 
+/// The script at `inputPath` compiled as `nanyx run` compiles it, its packages pulled first, and written with `options`,
+/// on a large stack as `nanyx run` writes it: the WebAssembly text.
+let transpileScriptWith (options: WasmOptions) (inputPath: string) : string =
+    let mutable compiled = None
+    let compiling =
+        inProcess (Path.GetDirectoryName inputPath) "" [] (fun shell ->
+            if CliCommands.TryPullScript(shell, inputPath) then
+                compiled <- Some(CliCommands.CompileScript(shell, inputPath, false))
+                0
+            else 1)
+    match compiled |> Option.bind (fun result -> result.Typed) with
+    | Some typed -> Nanyx.LargeStack.run (fun () -> transpileTypedModuleWithOptions options typed |> fst)
+    | None -> failwith $"{inputPath} didn't compile:\n{compiling.StandardError}"
+
 let runSourceWith (checkMemory: bool) (standardInput: string) (source: string) : RunOutcome =
     runSourceWithOptions checkMemory true standardInput source
 
@@ -763,6 +777,19 @@ let runHost (arguments: string list) (wat: string) : Result<string, Nanyx.Runtim
         |> Result.map (fun () -> Text.Encoding.UTF8.GetString(output.ToArray()))
     finally
         File.Delete input
+
+/// The options of a debug build with probes (see `WasmOptions.Probes`), which only code that listens to them asks for:
+/// the debugger, when it attaches, and a test. `nanyx run` compiles without them (#2225).
+let probedOptions = { WasmOptions.Default with Places = true; Probes = true; CrashToRuntime = true }
+
+/// `source`, saved as `main.nyx`, compiled with `probedOptions`, on a large stack as `nanyx run` compiles, and run by
+/// the runtime, with nothing listening to its probes: what it writes to stdout.
+let runProbed (source: string) : Result<string, Nanyx.Runtime.RunError> =
+    use directory = new TempDirectory()
+    let path = Path.Combine(directory.Path, "main.nyx")
+    File.WriteAllText(path, source.ReplaceLineEndings "\n")
+    let wat = Nanyx.LargeStack.run (fun () -> transpileWatFileWith probedOptions path)
+    runHost [ "main" ] wat
 
 /// `runHost` for a module compiled with `checkedOptions`: what it writes to stdout, and how many blocks it left
 /// allocated.

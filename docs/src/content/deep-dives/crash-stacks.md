@@ -54,7 +54,7 @@ marker that repeats the one before it is left out.
 code after it starts. It writes them into a custom section, `nanyx.spans` (`WasmBinary.spanTableName` says how it is
 laid out): the names of files and functions, the frames, each a function's name, a file, a line, a column (0 for none)
 and the frame of the call it was inlined at, so that inlined code shares its outer frames, each stretch of code by how
-far after the last it starts, a debug build's probes (see [Debug probes](./debug-probes)), and each function's
+far after the last it starts, the probes of a build with them (see [Debug probes](./debug-probes)), and each function's
 definition, by its name: the frame of the marker `;;@def main.nyx:3` that starts its body, which has no column and a
 profile gives the function (see [Profiling](./command-line#profiling)). The function names the frames fall back on are
 in the name section. A frame is kept once for each place, so two places on one line at different columns are two frames:

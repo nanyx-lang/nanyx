@@ -75,10 +75,11 @@ type WasmOptions =
       /// release builds both have it: the command line turns it on for every program it writes or runs. Off in
       /// `Default`, so that the text a test reads is the code alone.
       Places: bool
-      /// Put debug probes in the code (see `CoreIrProbes`), which import `nanyx:debug` from the runtime: what a debug
-      /// build the runtime runs has, and the debugger is built on. A release build has none, and nor does a module written
-      /// to a file, which another WebAssembly runtime may run. They need `Places`, to say where each probe is. A `dbg`
-      /// in such a module gives what it prints to the runtime's `nanyx:debug` `dbg` too (see `EmitContext.DbgToRuntime`).
+      /// Put debug probes in the code (see `CoreIrProbes`), which import `nanyx:debug` from the runtime: what the
+      /// debugger is built on, and asks for when it attaches. Only code that listens to them asks for them: no command
+      /// builds with them, since nothing listens to a run (#2225). They need `Places`, to say where each probe is. A
+      /// `dbg` in such a module gives what it prints to the runtime's `nanyx:debug` `dbg` too (see
+      /// `EmitContext.DbgToRuntime`).
       Probes: bool
       /// Report a crash's message to the runtime's `nanyx:crash` `report` before the trap that ends the program (see
       /// `CrashReport`), so that the runtime has it as data: what the command line sets for the programs it runs itself.
@@ -86,8 +87,8 @@ type WasmOptions =
       /// as every module does.
       CrashToRuntime: bool
       /// Give what a `dbg` prints to the embedder's `nanyx:debug` `dbg` first, as a module with `Probes` does, but with
-      /// no probes: what a page that runs the program imports, so that `dbg` is kept apart from what the program writes
-      /// to stderr (see `EmitContext.DbgToRuntime`).
+      /// no probes: what the runtime `nanyx run` and `nanyx test` run with gives it, and a page that runs the program,
+      /// so that `dbg` is kept apart from what the program writes to stderr (see `EmitContext.DbgToRuntime`).
       DbgToEmbedder: bool
       /// Export the start function, as `CheckedExports.start`, rather than running it when the module is instantiated, so
       /// that the embedder can reach the module's memory before the program runs, and calls it itself: what a page does,
