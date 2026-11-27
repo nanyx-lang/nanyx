@@ -690,7 +690,9 @@ module WorkflowDesugaring =
         //
         //   seq.append(seq.flatMap(__toSeq(items), { item -> <body, then seq.empty()> }), seq.delay({ <rest of the block> }))
         //
-        // A loop the sequence ends after is the `seq.flatMap` alone.
+        // A loop the sequence ends after is the `seq.flatMap` alone. A body that is one `yield e` and nothing else is
+        // `seq.map(__toSeq(items), { item -> e })`, which passes each element on through one sequence rather than
+        // through the body's own and `seq.flatMap`'s (#2208).
         //
         // The items are anything `Iterable`, as a plain `for` loop's are: a sequence is walked as it is, and anything
         // else is read through its `Iterable` (see `Loops.walksAsSequence`).
@@ -699,13 +701,41 @@ module WorkflowDesugaring =
                 match body.Kind with
                 | Block statements -> statements
                 | _ -> [ Statement.from body (ExprStatement body) ]
-            let bodyChain = desugarChain (statements |> List.collect liftStatementBinds) (endWith sequenceEnd)
-            let each = madeFor expr (FunctionCall(Seqs.flatMapFunction, None, [ madeFor iterable (FunctionCall(ForSyntax.toSeq, None, [ desugarExpr iterable ])); { loop with Kind = Lambda(parameters, bodyChain, false) } ]))
+            let items = madeFor iterable (FunctionCall(ForSyntax.toSeq, None, [ desugarExpr iterable ]))
+            let each =
+                match statements with
+                // The call is made at the body's first `yield`, where an error about the sequence is reported.
+                | [ { Kind = ExprStatement single } ] when (yieldsOnce single).IsSome ->
+                    let firstYield = SyntaxTree.expressionsWithin single |> List.tryFind (fun inner -> match inner.Kind with Bind(keyword, _) -> isYield keyword | _ -> false)
+                    madeFor (firstYield |> Option.defaultValue expr) (FunctionCall(Seqs.mapFunction, None, [ items; { loop with Kind = Lambda(parameters, (yieldsOnce single).Value, false) } ]))
+                | _ ->
+                    let bodyChain = desugarChain (statements |> List.collect liftStatementBinds) (endWith sequenceEnd)
+                    madeFor expr (FunctionCall(Seqs.flatMapFunction, None, [ items; { loop with Kind = Lambda(parameters, bodyChain, false) } ]))
             match desugarChain rest next with
             | restOfBlock when isSequenceEnd restOfBlock -> each
             | restOfBlock ->
                 let delayed = madeFor expr (FunctionCall(Seqs.delayFunction, None, [ madeFor expr (Lambda([], restOfBlock, false)) ]))
                 madeFor expr (FunctionCall(Seqs.appendFunction, None, [ each; delayed ]))
+        // `body`, a loop's, with each `yield e` in it replaced by `e`, where it gives exactly one value each time round:
+        // one `yield`, or an `if` or a `match` each of whose branches is one, the arms a `for` loop's parameters are
+        // matched in among them. None where it can give none, or more than one, or uses another keyword.
+        and yieldsOnce (body: Expression) : Expression option =
+            match body.Kind with
+            | Bind(keyword, value) when isYield keyword && not (usesKeyword value) -> Some (desugarExpr value)
+            | Block [ { Kind = ExprStatement single } ] -> yieldsOnce single
+            // An `if` with no `else` gives none when its condition is false: its `else` is a made-up `()`.
+            | IfExpr(cond, thenExpr, elseExpr) when not (usesKeyword cond) ->
+                match yieldsOnce thenExpr, yieldsOnce elseExpr with
+                | Some thenValue, Some elseValue -> Some { body with Kind = IfExpr(desugarExpr cond, thenValue, elseValue) }
+                | _ -> None
+            | Match(values, arms) when not (values |> List.exists usesKeyword) ->
+                let values, arms = ofMatch body values arms
+                let bodies = arms |> List.map (snd >> yieldsOnce)
+                if bodies |> List.forall Option.isSome then
+                    let arms = List.map2 (fun (patterns, _) value -> patterns |> List.map (Pattern.mapExpressions desugarExpr), Option.get value) arms bodies
+                    Some { body with Kind = Match(values |> List.map desugarExpr, arms) }
+                else None
+            | _ -> None
         // A statement followed by the rest of the chain, as a block made up for them that spans from the statement
         // to the end of the rest. The rest is a made-up `()` with no span when the statement is the last one.
         and chainBlock (statement: Statement) (nextExpr: Expression) (desugared: Statement) =

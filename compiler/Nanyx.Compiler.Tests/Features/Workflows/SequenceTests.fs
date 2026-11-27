@@ -31,17 +31,31 @@ let ``A yield is seq.cons of its value and the rest of the block, and the last y
     | other -> Assert.Fail $"Unexpected value: %A{other}"
 
 [<Fact>]
-let ``A for loop the block ends with is seq.flatMap alone, and one followed by more is appended to it`` () =
+let ``A for loop the block ends with is the loop's sequence alone, and one followed by more is appended to it`` () =
     let bodyOf (name: string) (source: string) =
         match (desugaredDef name source).Kind with
         | FunctionCall("seq", _, [ Kind (Lambda([], Kind (Block [ Kind (ExprStatement body) ]), _)) ]) -> body.Kind
         | other -> failwith $"Unexpected value: %A{other}"
-    match bodyOf "last" "def last = seq {\n  for 1..3 | i -> yield i\n}\n" with
+    // A body that yields more than once is seq.flatMap's.
+    match bodyOf "last" "def last = seq {\n  for 1..3 | i ->\n    yield i\n    yield i\n}\n" with
     | FunctionCall(flatMap, _, [ _; _ ]) when flatMap = Seqs.flatMapFunction -> ()
     | other -> Assert.Fail $"Unexpected loop: %A{other}"
+    // One that yields once each time round is a map (#2208).
     match bodyOf "more" "def more = seq {\n  for 1..3 | i -> yield i\n  yield 4\n}\n" with
-    | FunctionCall(append, _, [ Kind (FunctionCall(flatMap, _, _)); _ ]) when append = Seqs.appendFunction && flatMap = Seqs.flatMapFunction -> ()
+    | FunctionCall(append, _, [ Kind (FunctionCall(map, _, _)); _ ]) when append = Seqs.appendFunction && map = Seqs.mapFunction -> ()
     | other -> Assert.Fail $"Unexpected loop: %A{other}"
+
+[<Fact>]
+let ``A for loop whose body yields once each time round, in each branch of an if or a match, is a map`` () =
+    let bodyOf (name: string) (source: string) =
+        match (desugaredDef name source).Kind with
+        | FunctionCall("seq", _, [ Kind (Lambda([], Kind (Block [ Kind (ExprStatement body) ]), _)) ]) -> body.Kind
+        | other -> failwith $"Unexpected value: %A{other}"
+    let isMap (kind: ExpressionKind) = match kind with FunctionCall(map, _, [ _; _ ]) -> map = Seqs.mapFunction | _ -> false
+    Assert.True(isMap (bodyOf "one" "def one = seq {\n  for 1..3 | i -> yield i\n}\n"))
+    Assert.True(isMap (bodyOf "both" "def both = seq {\n  for 1..3 | i -> if i > 1 then yield i else yield 0\n}\n"))
+    // One that can yield nothing, an `if` with no `else`, is not.
+    Assert.False(isMap (bodyOf "some" "def some = seq {\n  for 1..3 | i -> if i > 1 then yield i\n}\n"))
 
 [<Fact>]
 let ``A lambda with yield in it is a sequence without a builder`` () =

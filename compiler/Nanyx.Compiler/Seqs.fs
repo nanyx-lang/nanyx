@@ -45,12 +45,17 @@ module Seqs =
     /// The prelude's functions a lambda with a `yield` in it is rewritten into calls to (see `WorkflowDesugaring`):
     /// `yield x` with the rest of the block is `seq.cons(x, { rest })`, the block's end `seq.empty()`,
     /// and a `for` loop whose body yields
-    /// `seq.append(seq.flatMap(__toSeq(items), { item -> body }), seq.delay({ rest }))`.
+    /// `seq.append(seq.flatMap(__toSeq(items), { item -> body }), seq.delay({ rest }))`, or `__seqMap` for one that
+    /// yields once each time round.
     let consFunction = $"{typeName}.cons"
     let emptyFunction = $"{typeName}.empty"
     let appendFunction = $"{typeName}.append"
     let flatMapFunction = $"{typeName}.flatMap"
     let delayFunction = $"{typeName}.delay"
+    /// What a `for` loop whose body yields one value each time round is instead: the prelude's `seq.map`, under a name
+    /// of its own, `__seqMap(__toSeq(items), { item -> e })`, which makes one sequence of the items' rather than one
+    /// for each, and which `EmitLambdas` reads as the `yield` it was (#2208).
+    let mapFunction = "__seqMap"
     /// What a `yield x` the sequence ends after is: the prelude's sequence of `x` alone, which makes no rest.
     let lastFunction = "__seqLast"
 
