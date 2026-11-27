@@ -497,16 +497,26 @@ module Package =
                 HostPackage = package.HostPackage |> Option.orElse underTest.HostPackage
                 TestHost = Option.map2 (fun host hostPackage -> host, hostPackage) underTest.Host underTest.HostPackage })
 
-    /// The name of the package the file at `filePath` is a source file or a test file of, if it is in one whose manifest
-    /// reads.
-    let nameFor (filePath: string) : string option =
+    /// The manifest of the package the file at `filePath` is in, if it is under one that reads, with the file's full path.
+    let private manifestOver (filePath: string) : (Manifest * string) option =
         let filePath = Path.GetFullPath filePath
         let directory = Path.GetDirectoryName filePath
         match if Directory.Exists directory then Manifest.tryFind directory else Result.Ok None with
-        | Result.Ok(Some manifestPath) ->
-            match Manifest.read manifestPath with
-            | Result.Ok manifest when selects manifest filePath -> Some manifest.Name
-            | _ -> None
+        | Result.Ok(Some manifestPath) -> Manifest.read manifestPath |> Result.toOption |> Option.map (fun manifest -> manifest, filePath)
+        | _ -> None
+
+    /// The name of the package the file at `filePath` is a source file or a test file of, if it is in one whose manifest
+    /// reads.
+    let nameFor (filePath: string) : string option =
+        match manifestOver filePath with
+        | Some (manifest, filePath) when selects manifest filePath -> Some manifest.Name
+        | _ -> None
+
+    /// The manifest of the package the file at `filePath` is a test file of, if it is one: its `tests` select the file,
+    /// and its `sources` don't. Only a test build has such a file, so `nanyx test` runs its tests as part of the package.
+    let testFileOf (filePath: string) : Manifest option =
+        match manifestOver filePath with
+        | Some (manifest, filePath) when isTestFile manifest filePath -> Some manifest
         | _ -> None
 
     /// The modules of the package the file at `filePath` is a source file or a test file of, if it is one, with those of

@@ -807,11 +807,13 @@ dependencies accept.
 # NYX0045: Package with nothing to run
 
 `nanyx run` is given a package with no `@entry`, so there is nothing to run: a library, whose manifest names no host,
-or an application whose files declare no `@entry`. No example can show it, since it is reported by `nanyx run`, not by
-checking the package.
+or an application whose files declare no `@entry`. `nanyx run` and `nanyx build` report it for a
+[test package](../tour/packages#test-packages) too, and `nanyx run` for a test file, one the manifest's `tests` selects,
+which only a test build has. No example can show it, since it is reported by `nanyx run`, not by checking the package.
 
 To fix it, run an application, or add an `@entry` to one of its files and name the host it runs under in its manifest,
-as `host = (package = "nanyx.cli.host", version = "...")`.
+as `host = (package = "nanyx.cli.host", version = "...")`. Run a test package's tests, or a test file's, with
+`nanyx test`.
 
 # NYX0046: Keyword member whose type doesn't fit its kind
 

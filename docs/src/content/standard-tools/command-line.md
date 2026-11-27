@@ -39,7 +39,9 @@ path that ends in `.nyx` is a script, run or checked on its own (see [Files and 
 ## `nanyx run`
 
 `nanyx run` compiles a program and runs it. Given a `.nyx` file, it runs the file as a script; given a package, or
-nothing, it checks every source file the manifest's `sources` select and runs the package's `@entry`.
+nothing, it checks every source file the manifest's `sources` select and runs the package's `@entry`. A test file, one
+the manifest's `tests` selects, has no program, and running one is an error that says to use `nanyx test`
+([NYX0045](./errors#nyx0045)).
 
 ```bash
 nanyx run hello.nyx     # a script
@@ -167,7 +169,8 @@ accepts the version locked), `nanyx build` and `nanyx run` choose versions again
 
 `nanyx test` runs the tests of a package, the defs marked [`@test`](../tour/attributes#test) beside its code and in the
 files its manifest's [`tests`](../tour/packages#test-files) selects, or of a script, whose top-level statements it
-doesn't run. It builds them once, under the test host, and runs each test in a fresh instance of the build, so a test
+doesn't run. Given a test file, one the manifest's `tests` selects, it runs that file's tests, in its package's test
+build. It builds them once, under the test host, and runs each test in a fresh instance of the build, so a test
 that crashes fails alone, and reports each as it ends:
 
 ```text
