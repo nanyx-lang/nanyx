@@ -297,7 +297,7 @@ module internal StructuralInstances =
             | _ when Dimension.isDerived dimension && dimension |> List.forall (fst >> storageOf >> Option.isSome) ->
                 "", Dimension.writtenWith (fun id -> (storageOf id).Value.Name) "*" "/" dimension
             | Some storageUnit when not (Dimension.isDerived dimension) -> "", storageUnit.Name
-            | _ -> $"{Dimension.text dimension}(", ")"
+            | _ -> $"{Dimension.applied dimension}(", ")"
         // The value as an `int` or as a `float`, through the prelude's conversion to one where its storage has one that
         // loses nothing.
         let asInt, asFloat =
