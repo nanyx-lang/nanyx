@@ -408,6 +408,7 @@ and private bracketed (c: Cursor) : Expression =
 and private primary (c: Cursor) : Expression =
     let start = c.Start
     let token = c.Token.Value
+    DebugLog.lines.Add(sprintf "P%d:%A:%s" c.Index token.Kind (c.Text token))
     let next = match c.At 1 with Code next -> Some next | _ -> None
     let nextAdjacent = next |> Option.exists (fun next -> next.Start = token.End)
     match token.Kind with
