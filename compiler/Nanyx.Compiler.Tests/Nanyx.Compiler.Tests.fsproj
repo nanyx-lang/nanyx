@@ -265,6 +265,7 @@
     <Compile Include="Features\Tooling\LibrarySearchTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
     <Compile Include="Features\Tooling\DbgSiteTests.fs" />
+    <Compile Include="Features\Tooling\LiveModeTests.fs" />
     <Compile Include="Features\Tooling\PackageReferencesTests.fs" />
     <Compile Include="Features\Tooling\SelectedExpressionTests.fs" />
     <Compile Include="Features\Tooling\SymbolsTests.fs" />

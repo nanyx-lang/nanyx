@@ -15,7 +15,7 @@ module internal LambdaArity =
         let resolved = Unifier.unalias (resolveSoFar state expectedInput)
         match args, resolved with
         | _ :: _ :: _, (TyFunc _ | TyPrimitive _ | TyApply _ | TyTag _ | TyUnion _) ->
-            let written (ty: Ty) = Unifier.tyToStringIn state.TypeDefs (resolveSoFar state ty)
+            let written (ty: Ty) = Unifier.typeText state.TypeDefs (resolveSoFar state ty)
             let spans = state.Declared |> Map.tryFind (lambda.Id, LambdaParameters) |> Option.defaultValue [] |> List.map snd
             let span =
                 match spans with

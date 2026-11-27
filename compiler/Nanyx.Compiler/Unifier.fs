@@ -27,8 +27,8 @@ type MismatchKind =
     /// field written with one of those names is where the mismatch is reported (see `MisspelledFields.writtenField`).
     | FieldsDiffer of onlyLeft: string list * onlyRight: string list
 
-/// What a mismatch says, with the types it names written by the function it is given: `Unifier.tyToString`, or one
-/// that writes them with the names a module knows them by (see `Unifier.tyToDisplayStringIn`).
+/// What a mismatch says, with the types it names written by the function it is given: `Unifier.messageText` gives it one
+/// that names them all together for a reader, as hover does.
 type MismatchText = (Ty -> string) -> string
 
 /// A constraint that cannot be satisfied: what is wrong, where (the constraint's span), and what kind of failure it is.
@@ -88,7 +88,9 @@ module Unifier =
     /// See `TypePrinting.writtenContexts`.
     let writtenContexts (contexts: Ty list) = TypePrinting.writtenContexts contexts
 
-    /// `ty` as it would be written in a def's annotation (see `TypePrinting.printTy`).
+    /// `ty` as it would be written in a def's annotation (see `TypePrinting.printTy`), with a variable the compiler made
+    /// up written as `t` and its number, the same each time: what the backend makes names of, and what a test compares
+    /// a type with. A diagnostic names its types for a reader instead (see `messageText` and `typeText`).
     let tyToString (ty: Ty) : string = TypePrinting.tyToString ty
 
     open TypePrinting
@@ -529,14 +531,6 @@ module Unifier =
                 | TyVar v -> TyVar { v with Name = None }
                 | other -> other)
 
-    /// `ty` as `tyToString` writes it, with a union that holds all the tags of a union alias of `typeDefs` written with
-    /// its name (see `TypePrinting.withUnionAliases`), and a context's associated types written by name, as a signature
-    /// writes them, `Iter(c, elem = string)`, a signature's variable named after one given a name of its own (see
-    /// `associatedRenaming`): how a diagnostic writes the types it names.
-    let tyToStringIn (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : string =
-        let ty = apply (associatedRenaming typeDefs ty) ty
-        printTy (printingFor "..." (associatedIn typeDefs) (unionAliasesIn typeDefs) ty) true ty
-
     /// `ty` as `tyToString` writes it, with a spread written in `notation`, the associated types of the contexts of
     /// `typeDefs` written by name, and a union that holds all the tags of a union alias of `typeDefs` written with its
     /// name (see `TypePrinting.printTy`).
@@ -558,43 +552,6 @@ module Unifier =
     /// alias.
     let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string = tyToDisplayStringIn Map.empty notation ty
 
-    /// Names for the variables the compiler made up in `tys`, the types one message writes, shared by all of them: a
-    /// rest of an open record or union is `r`, then `r1`, `r2`, ..., and any other `a`, `b`, `c`, ..., then `a1`, ..., in
-    /// the order the message writes them, skipping the names the variables an annotation named have. A context variable
-    /// the compiler inferred (see `TyVar.inferredContextName`) is named first, `c`, `d`, ..., as `displayRenaming` names it.
-    let private messageRenaming (tys: Ty list) : Subst =
-        let vars = tys |> List.collect varsInPrintOrder |> List.distinctBy (fun v -> v.Id)
-        let inferredContexts, vars = vars |> List.partition TyVar.isInferredContext
-        let written = vars |> List.choose (fun v -> v.Name) |> Set.ofList
-        let contextLetters = TyVar.inferredContextLetters
-        let contextNames =
-            Seq.initInfinite (fun i -> if i < contextLetters.Length then string contextLetters[i] else $"{contextLetters[i % contextLetters.Length]}{i / contextLetters.Length}")
-            |> Seq.filter (written.Contains >> not)
-        let contextRenaming = Seq.zip inferredContexts contextNames |> List.ofSeq
-        let taken = contextRenaming |> List.map snd |> Set.ofList |> Set.union written
-        let rests = tys |> List.map (restVarIds true) |> Set.unionMany
-        let free (names: seq<string>) = names |> Seq.filter (fun name -> not (taken.Contains name))
-        let letters = latinLetters |> String.filter (fun letter -> letter <> 'r')
-        let ordinaryNames = Seq.initInfinite (fun i -> if i < letters.Length then string letters[i] else $"{letters[i % letters.Length]}{i / letters.Length}") |> free
-        let restNames = Seq.initInfinite (fun i -> if i = 0 then "r" else $"r{i}") |> free
-        let made = vars |> List.filter (fun v -> v.Name.IsNone)
-        let rest, ordinary = made |> List.partition (fun v -> rests.Contains v.Id)
-        Seq.append (Seq.zip ordinary ordinaryNames) (Seq.zip rest restNames)
-        |> Seq.append contextRenaming
-        |> Seq.map (fun (v, name) -> v.Id, TyVar { v with Name = Some name })
-        |> Map.ofSeq
-
-    /// The text of a message `text` writes, given how to write each type it names: as `tyToStringIn typeDefs` writes it,
-    /// with the variables the compiler made up named across all its types (see `messageRenaming`), so that one that
-    /// appears in two of them has one name: `'int' vs '(name: a, ...r)'`, not `'int' vs '(name: t1, ...t6)'` (#2077), as
-    /// is a signature's variable named after an associated type (see `associatedRenaming`).
-    let messageText (typeDefs: Map<string, TypeDefInfo>) (text: (Ty -> string) -> string) : string =
-        let written = ResizeArray<Ty>()
-        text (fun ty -> written.Add ty; "") |> ignore
-        let renaming = messageRenaming (List.ofSeq written)
-        let associated = associatedRenaming typeDefs (TyApply("", written |> Seq.map (apply renaming) |> List.ofSeq))
-        text (fun ty -> tyToStringIn typeDefs (apply associated (apply renaming ty)))
-
     /// The rests of `tys` that are lone (see `loneRests`) in every one of them they appear in.
     let private loneAcross (notation: TypeNotation) (tys: Ty list) : Set<int> =
         let loneIn = tys |> List.map (fun ty -> loneRests notation ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)
@@ -614,6 +571,24 @@ module Unifier =
         let tys = tys |> List.map (apply named)
         let renamed = displayRenaming notation (loneAcross notation tys) (TyApply("", tys))
         tys |> List.map (apply renamed >> printIn typeDefs notation)
+
+    /// The text of a message `text` writes, given how to write each type it names: as hover writes them, in `Unicode`,
+    /// with the types named together (see `tysToDisplayStringsIn`), so that a variable the compiler made up is `α` in
+    /// the error and in the hover beside it, and one that appears in two of the types has one name:
+    /// `'int' vs '(name: α, …)'`, not `'int' vs '(name: t1, ...t6)'` (#2077, #3052). `text` is run twice: once to learn
+    /// the types it writes, and once to write them, in the same order.
+    let messageText (typeDefs: Map<string, TypeDefInfo>) (text: (Ty -> string) -> string) : string =
+        let written = ResizeArray<Ty>()
+        text (fun ty -> written.Add ty; "") |> ignore
+        let shown = tysToDisplayStringsIn typeDefs Unicode (List.ofSeq written) |> Array.ofList
+        let mutable next = 0
+        text (fun _ ->
+            let text = shown[next]
+            next <- next + 1
+            text)
+
+    /// `ty` as a diagnostic writes it, alone (see `messageText`).
+    let typeText (typeDefs: Map<string, TypeDefInfo>) (ty: Ty) : string = tyToDisplayStringIn typeDefs Unicode ty
 
     /// Each of `tys` for a reader, as `tysToDisplayStringsIn` writes them, where no context has associated types.
     let tysToDisplayStrings (notation: TypeNotation) (tys: Ty list) : string list = tysToDisplayStringsIn Map.empty notation tys

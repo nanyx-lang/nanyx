@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.40",
+  "version": "0.9.41",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -109,10 +109,19 @@
         {
           "id": "nanyx.library",
           "name": "Library"
+        },
+        {
+          "id": "nanyx.live",
+          "name": "Live mode"
         }
       ]
     },
     "commands": [
+      {
+        "command": "nanyx.toggleLiveMode",
+        "title": "Nanyx: Toggle live mode",
+        "icon": "$(debug-restart)"
+      },
       {
         "command": "nanyx.downloadCompiler",
         "title": "Nanyx: Download the compiler"
@@ -174,12 +183,22 @@
           "command": "nanyx.library.search",
           "when": "view == nanyx.library",
           "group": "navigation"
+        },
+        {
+          "command": "nanyx.toggleLiveMode",
+          "when": "view == nanyx.live",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "nanyx.library.addImport",
           "when": "view == nanyx.library && viewItem == importable",
+          "group": "inline"
+        },
+        {
+          "command": "nanyx.toggleLiveMode",
+          "when": "view == nanyx.live && viewItem == liveSwitch",
           "group": "inline"
         }
       ],
@@ -292,6 +311,12 @@
           ],
           "default": "editor",
           "markdownDescription": "Where the info view opens a link to the docs site, nanyx.dev, such as a message's error code, which links to its entry in the errors reference. Other links open as VS Code opens links."
+        },
+        "nanyx.live.timeLimit": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "markdownDescription": "How many seconds a live run may take before it is stopped, so that a program that never ends doesn't keep a process busy. See **Live mode** in the Nanyx sidebar."
         }
       }
     },

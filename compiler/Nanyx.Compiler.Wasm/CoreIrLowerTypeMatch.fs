@@ -82,7 +82,7 @@ let rec private tagOf (ty: Ty) : string =
     | None, (TyTag _ | TyUnion _) -> TypeValues.unionTag
     | None, TyRecord _ -> TypeValues.recordTag
     | None, (TyNominal _ as nominal) -> tagOf (RecursiveNominals.underlying nominal)
-    | None, other -> cannot $"a description of the type '{Unifier.tyToString other}'"
+    | None, other -> cannot $"a description of the type '{Unifier.typeText Map.empty other}'"
 
 /// What the types the checker never learns in `narrowed`, the type an arm says `a` is, are where `a` is `actual`: none
 /// if the arm doesn't match it.

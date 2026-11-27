@@ -27,6 +27,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files and package m
 - a [library browser](#library), which lists what the standard library exports, and a [search](#searching-the-library) of it by name and by type
 - a run button, which runs the file as `nanyx run` does; a manifest has none
 - the values a run's [`dbg`](../stdlib/console#dbg)s gave, at the end of their lines ([dbg values](#dbg-values))
+- [live mode](#live-mode), which re-runs a program on every save
 - the package's [tests](#testing) in VS Code's **Testing** view, with a **Run test** link above each one
 - in a `.nyxp` manifest, the problems with it as you type, each at the field it is about, and formatting
 
@@ -370,6 +371,34 @@ A test run from the [Testing](#testing) view shows its tests' `dbg` values the s
 lists, and what the tests printed, `dbg`s too, is still in **Test Results**. A `nanyx run` in a terminal of your own
 writes each `dbg` to standard error, as always.
 
+## Live mode
+
+Live mode re-runs a program every time you save, like a notebook: its [`dbg` values](#dbg-values) update in the editor,
+and what it prints is in the **Nanyx Live** output channel, with how the run ended and how long it took. It runs a
+script, or a package's `@entry`; saving any `.nyx` file of a package re-runs the package. A live run is
+[`nanyx run --files-in-memory`](./command-line#nanyx-run): it reads the real files, and keeps what it writes, appends,
+makes and deletes in memory, so a save never changes a file on disk. It is given no input, so `readLine` sees the end
+of input at once.
+
+It is on by itself for a program whose entry point requires none but `Console`, `Async` and `FileSystem`, which the
+compiler knows from its type: re-running it can do nothing outside the editor. A program that needs anything else,
+such as `Http` or `Env`, is re-run only once you turn live mode on for it, and then with those for real, as in a
+terminal; its files are still in memory.
+
+The **Live mode** view in the Nanyx sidebar, beside the Info view and the Library, shows the active file's script or
+package: whether live mode is on, the contexts its entry point needs, that its files are in memory and its input
+empty, and what holds it back, or runs for real once it is on. Its switch, beside the first line or at the top of the
+view, turns live mode on or off for that script or package, and so does **Nanyx: Toggle live mode**; the extension
+remembers the choice for the workspace. A file of a package that isn't its `@entry` file shows the package once its
+`@entry` file has been opened.
+
+A save while a run is still going stops it and starts another, and a run that takes longer than `nanyx.live.timeLimit`
+seconds is stopped, so a program that never ends doesn't keep a process busy.
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `nanyx.live.timeLimit` | 10 | How many seconds a live run may take before it is stopped. |
+
 # Testing
 
 The **Testing** view lists the [tests](../tour/attributes#test) of each package in the workspace, and of each `.nyx`
@@ -392,6 +421,7 @@ test the run would have run is marked errored, with the build's errors. Stopping
 |---------|--------------|
 | **Nanyx: Run the current file** | Saves the file and runs it in a terminal. See [Running a file](#running-a-file). |
 | **Nanyx: Show dbg values** | Lists every value the `dbg` on the cursor's line gave in the last run, in order, and copies the one you choose. See [dbg values](#dbg-values). |
+| **Nanyx: Toggle live mode** | Turns live mode on or off for the active file's script or package. See [Live mode](#live-mode). |
 | **Nanyx: Show info view** | Shows and focuses the view that shows what the compiler knows at the cursor. See [Info view](#info-view). |
 | **Nanyx: Search library by type** | Searches the standard library by name or type, and inserts the match you choose with its import. See [Searching the library](#searching-the-library). |
 | **Nanyx: Download the compiler** | Looks for the newest compiler release straight away and downloads it. |

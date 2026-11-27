@@ -277,10 +277,18 @@ own name, so two `Iter`s bind two. The printer (`TypePrinting.printTy`) writes e
 else, so it is left out: `[Iter(c)] c -> int`. Source can still write the bare `elem` and `Iter(c).elem`; only the
 printed form changes. Hover, the info view (its Context flow too, which names a def's contexts together with its type),
 `nanyx check`, the type lenses, the stdlib reference and the refactorings that write a type do so, and so does a
-diagnostic (`Unifier.tyToStringIn`, `Unifier.messageText`): a
+diagnostic (`Unifier.messageText`, `Unifier.typeText`): a
 mismatch found when the module's constraints are solved is written once its type definitions are known, and a message
-inference makes is written with the type definitions it has so far. A message made without them (`Unifier.tyToString`),
-as by a check that has no state to hand, still writes the arguments positionally.
+inference makes is written with the type definitions it has so far. A message made without them, as by a check that has
+no state to hand, still writes the arguments positionally.
+
+A diagnostic writes its types as hover does, in the same notation, so a variable is `α` in the error and in the hover
+beside it. A message is a function of a printer, `(Ty -> string) -> string`, and the types it names are renamed
+together: `messageText` runs it once with a printer that collects them, names them all at once as
+`tysToDisplayStringsIn` does, and runs it again with a printer that writes each by those names. So a variable in two of
+them has one name, `'α' vs '#some(α)'`, and none is written by the number the compiler gave it, `t17`. A message about
+one type writes it with `typeText`. A variable a signature names keeps its name. `Unifier.tyToString`, which writes
+made-up variables by their numbers, is left for the backend's names and for tests that compare types.
 
 A function's type need not write its associated types, as `elem` in `countAll: [Iter(c)] c -> int`, though its body has
 values of them, whose layout depends on what they are. So the type checker records what each one is at each call, by

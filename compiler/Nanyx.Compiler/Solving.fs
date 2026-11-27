@@ -208,7 +208,7 @@ module Solving =
 
     /// Solves `constraints`, or gives the first that cannot be satisfied, with what was wrong and where.
     let unify (constraints: ConstraintSet) : Result<Subst, string * SourceSpan> =
-        unifyDetailed constraints |> Result.mapError (fun (message, span, _) -> message tyToString, span)
+        unifyDetailed constraints |> Result.mapError (fun (message, span, _) -> messageText Map.empty message, span)
 
     /// Each variable of the expected sides of `constraints`, once: of a call's argument's constraint, those of the
     /// parameter's type, which the argument would have fixed.
@@ -348,4 +348,4 @@ module Solving =
     /// the constraints in front of it.
     let solve (constraints: ConstraintSet) : Subst * (string * SourceSpan) list =
         let known = solvedSoFar constraints
-        known.Subst, known.Failures |> List.map (fun (message, span, _) -> message tyToString, span)
+        known.Subst, known.Failures |> List.map (fun (message, span, _) -> messageText Map.empty message, span)

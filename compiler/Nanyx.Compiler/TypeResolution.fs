@@ -138,7 +138,7 @@ let internal unknownMember (env: TypeEnv) (span: SourceSpan) (receiver: string o
         match receiver with
         | Some name when isRecord ty -> $"The record '{name}' has no member '{memberName}'"
         | None when isRecord ty -> $"The record has no member '{memberName}'"
-        | _ -> $"'{Unifier.tyToString ty}' has no property '{memberName}'"
+        | _ -> $"'{Unifier.typeText Map.empty ty}' has no property '{memberName}'"
     match tryResolveAttachedFunction env ty memberName with
     | Some attached ->
         let piped = receiver |> Option.defaultValue "x"
@@ -593,13 +593,13 @@ let private unknownTypeErrors (state: InferState) (parameters: Set<Identifier>) 
                     | FunctionContexts.CarryingNominal _ -> None
                     | TyVar _ as ty ->
                         Some (Diagnostics.at DiagnosticCodes.ContextsOnValueType (SourceSpan.between first.Span (List.last written).Span)
-                                  $"'{Unifier.tyToString ty}' is a type variable, and a type variable doesn't carry contexts: write them on the function that requires them")
+                                  $"'{Unifier.typeText state.TypeDefs ty}' is a type variable, and a type variable doesn't carry contexts: write them on the function that requires them")
                     | TyNominal _ as ty ->
                         Some (Diagnostics.at DiagnosticCodes.ContextsOnValueType (SourceSpan.between first.Span (List.last written).Span)
-                                  $"'{Unifier.tyToString ty}' doesn't take contexts: only a function type does, or a type declared with a context variable, as in `type Stream(a) = [k] protected (...)`")
+                                  $"'{Unifier.typeText state.TypeDefs ty}' doesn't take contexts: only a function type does, or a type declared with a context variable, as in `type Stream(a) = [k] protected (...)`")
                     | ty ->
                         Some (Diagnostics.at DiagnosticCodes.ContextsOnValueType (SourceSpan.between first.Span (List.last written).Span)
-                                  $"Only a function type carries contexts, and '{Unifier.tyToString ty}' isn't one: write them on the function that requires them")
+                                  $"Only a function type carries contexts, and '{Unifier.typeText state.TypeDefs ty}' isn't one: write them on the function that requires them")
                 | _ -> None)
     // A union has one rest: each variable written after the first is one too many, not dropped.
     let extraRests =

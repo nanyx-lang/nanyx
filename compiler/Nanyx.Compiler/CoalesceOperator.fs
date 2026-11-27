@@ -54,7 +54,7 @@ module internal CoalesceOperator =
                 let nested = someValue (resolveSoFar last typedLeft.Type) |> Option.exists (resolveSoFar last >> isOptionLike)
                 if isOptionLike rightTy && not nested then
                     let message =
-                        $"`??` only unwraps: its right operand is the value to use when the left is not `#some`, but this is '{Unifier.tyToString rightTy}', which is option-like: to fall back to another option, use `orElseSome`, as in `a \\orElseSome {{ b }}`"
+                        $"`??` only unwraps: its right operand is the value to use when the left is not `#some`, but this is '{Unifier.typeText state.TypeDefs rightTy}', which is option-like: to fall back to another option, use `orElseSome`, as in `a \\orElseSome {{ b }}`"
                     Some (Diagnostics.at DiagnosticCodes.OptionLikeFallback right.Span message)
                 else None
             | Error _ -> None

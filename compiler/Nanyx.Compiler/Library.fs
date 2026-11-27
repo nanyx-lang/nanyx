@@ -636,7 +636,7 @@ module Compiler =
                         match entries |> List.tryFind (fun entry -> entry.Argument = span), provided |> List.tryFind (fun export -> export.Argument = span) with
                         // A keyword's call that calls a local in the keyword's def's place says so (see `HiddenKeywords`).
                         | _ when state.HiddenKeywords.ContainsKey span ->
-                            HiddenKeywords.diagnostic (Unifier.apply subst >> Unifier.tyToStringIn state.TypeDefs) state.HiddenKeywords.[span]
+                            HiddenKeywords.diagnostic (Unifier.apply subst >> Unifier.typeText state.TypeDefs) state.HiddenKeywords.[span]
                         | Some entry, _ -> entryMismatch entry
                         | None, Some export -> exportMismatch export
                         | None, None ->

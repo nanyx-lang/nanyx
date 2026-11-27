@@ -173,6 +173,7 @@
     <Compile Include="ImportMerging.fs" />
     <Compile Include="TestChecks.fs" />
     <Compile Include="Library.fs" />
+    <Compile Include="LiveMode.fs" />
     <Compile Include="Downloads.fs" />
     <Compile Include="GitHub.fs" />
     <Compile Include="SemanticVersions.fs" />

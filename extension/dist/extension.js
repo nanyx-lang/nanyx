@@ -42,6 +42,7 @@ const developmentMode_1 = require("./developmentMode");
 const infoView_1 = require("./infoView");
 const library_1 = require("./library");
 const dbgView_1 = require("./dbgView");
+const liveMode_1 = require("./liveMode");
 const run_1 = require("./run");
 const testController_1 = require("./testController");
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
@@ -63,6 +64,7 @@ let infoView;
 let libraryView;
 let testExplorer;
 let dbgView;
+let liveMode;
 let declinedDownload = false;
 let declinedUpdate = false;
 async function activate(context) {
@@ -75,8 +77,10 @@ async function activate(context) {
     const values = new dbgView_1.DbgView(() => client);
     dbgView = values;
     const explorer = new testController_1.TestExplorer(() => compiler, log, values);
+    const live = new liveMode_1.LiveMode(context.workspaceState, () => compiler, () => client, values);
+    liveMode = live;
     testExplorer = explorer;
-    context.subscriptions.push(view, library, values, explorer, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
+    context.subscriptions.push(view, library, values, explorer, live, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
         declinedDownload = false;
         const settings = (0, compiler_1.readSettings)();
         const version = await (0, compiler_1.versionToDownload)(context, settings, log);
@@ -307,6 +311,7 @@ async function restartClient(context, executable) {
         await client.start();
         infoView?.refresh();
         libraryView?.refresh();
+        void liveMode?.refresh();
     }
     catch (error) {
         void vscode.window.showErrorMessage(`Nanyx: the language server failed to start (${messageOf(error)}). See the Nanyx output channel.`);

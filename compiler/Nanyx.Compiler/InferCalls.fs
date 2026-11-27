@@ -530,7 +530,7 @@ let rec internal inferCall
                         match tryResolveAttachedFunction env receiverTy memberName with
                         | Some attached ->
                             $"'{receiver}' is a value, so '{name}' is not a function's name, but '{attached}' is attached to its type: call it with a pipe, as in `{receiver} \\{memberName}(...)`"
-                        | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.tyToStringIn state.TypeDefs receiverTy}' has no '{memberName}' attached"
+                        | None -> $"'{receiver}' is a value, so '{name}' is not a function's name, and '{Unifier.typeText state.TypeDefs receiverTy}' has no '{memberName}' attached"
                     Error [ Diagnostics.at DiagnosticCodes.UnknownFunction calleeSpan message |> Diagnostics.about name ]
                 | None ->
                     // A def attached to a context available here, by its bare name.

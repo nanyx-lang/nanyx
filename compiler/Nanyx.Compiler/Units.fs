@@ -195,7 +195,7 @@ module internal Units =
             | Some storage, Some info when info.IsDimension && not (Unifier.isError info.Underlying) && not (hasNum info.Underlying) ->
                 Some (
                     Diagnostics.at DiagnosticCodes.DimensionStorageNotNumber storage.Span
-                        $"A dimension is stored as a number, but '{Unifier.tyToString info.Underlying}' has no `Num` instance: store '{name}' as a number type, such as `int` or `float`"
+                        $"A dimension is stored as a number, but '{Unifier.typeText state.TypeDefs info.Underlying}' has no `Num` instance: store '{name}' as a number type, such as `int` or `float`"
                     |> Diagnostics.about name)
             | _ -> None)
 

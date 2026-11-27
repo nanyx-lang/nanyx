@@ -12,7 +12,7 @@ Linters run during compilation and emit diagnostics. The official Nanyx style li
 
 Each rule's diagnostics have the code `default/<rule>`, such as `default/unusedBindings`. That is the name to use in [`@allow`](#suppressing-a-rule-in-one-place); in a manifest's `settings` and in a `::lint` directive, a rule is named on its own, `unusedBindings`. Many rules come with a fix, which the editor offers as a quick fix.
 
-The rules that report code which is unused or can never run also tell the editor so, and it draws that code faint, as well as showing the warning: `unusedBindings`, `unusedImports`, `unusedPrivateDefinitions`, `unusedContexts`, `unreachableArms` and `unreachableCode`, marked *faint* in the table below. An exported definition is never drawn faint, whether or not anything uses it, since an export is part of what its package offers. Turning a rule off turns off its faint drawing too.
+The rules that report code which is unused or can never run also tell the editor so, and it draws that code faint, as well as showing the warning: `unusedBindings`, `unusedImports`, `unusedPrivateDefinitions`, `unusedContexts`, `unreachableArms` and `unreachableCode`, marked *faint* in the table below. `redundantTypeName` reports code that is redundant rather than unused: it is a hint, drawn faint with no warning. An exported definition is never drawn faint, whether or not anything uses it, since an export is part of what its package offers. Turning a rule off turns off its faint drawing too.
 
 | Rule | Default | Reports |
 |------|---------|---------|
@@ -27,6 +27,7 @@ The rules that report code which is unused or can never run also tell the editor
 | [`useInBraces`](#use--in-with-a-body-in-braces) | warning | `use ... in { ... }`, whose body is a function, not a block |
 | [`strayDocComments`](#doc-comment-that-documents-nothing) | warning | a doc comment that documents nothing |
 | [`unreachableCode`](#unreachable-code-path) | warning, faint | statements, or a call's arguments, after one that never gives a value or a `return` |
+| [`redundantTypeName`](#redundant-type-name-in-a-pipe) | hint, faint | a pipe's type name, as in `xs \list.map`, that the piped value's type already says |
 | [`nonTailRecursion`](#recursion-not-in-tail-position) | info | a function calling itself other than in tail position |
 | [`unusedResults`](#unused-return-value) | error | a statement whose value is thrown away |
 | [`unawaitedTask`](#task-that-is-never-awaited) | warning | a started task whose result is never read |
@@ -194,6 +195,18 @@ def f: int -> int = { x ->
 The rule (`unreachableCode`) reports the statements of a block that come after one that never gives a value: a statement whose type is [`undefined`](../tour/types#top-and-bottom-types), such as a call to `crash`, a call to a function you have annotated to return `undefined`, or an `if` whose every branch is one of those, and those after a [`return`](../advanced/workflows), which ends the whole block. A `return` in a branch of an `if` or `match` ends the block only on that branch, so it makes nothing after the branch unreachable. It reports the first statement that never runs, through the end of the block, and points at the statement that stops the block. Its fix removes the statements that never run, unless the statement before them is a def, since a block can't end with a def.
 
 Arguments are evaluated left to right, so in `f(crash("a"), g())` neither `g()` nor the call to `f` ever runs. The rule reports the arguments of a call that come after one whose type is `undefined`, once per call, and points at the argument that stops it; in a pipe, `crash("a") \f(g())`, the piped value is the first argument. It has no fix, since leaving the arguments out would change the call.
+
+## Redundant type name in a pipe
+
+```nanyx
+type Person = (name: string)
+
+def people: list(Person) = [Person(name = "Ada")]
+
+def names = people \list.map { p -> p.name } -- Linter hint: `map` is found from the piped value's type, which is a `list`: `list.` can be left out
+```
+
+The rule (`redundantTypeName`) reports the type's name in a pipe to a definition [attached](../advanced/attached-definitions) to that type, where the piped value's type already finds it: `people \map { ... }` calls the same `list.map`. It is a hint, so the editor draws `list.` faint and shows no warning, and its fix removes it. It reports only where leaving the name out calls the same definition: not where the piped value's type is a type variable or a union, not where the value's type has a definition of that name of its own, not for a name written through a module's alias, as in `t.string.trim`, and not where a definition of the bare name, such as a local `map`, is in scope, where the type's name tells a reader which one is meant.
 
 ## Recursion not in tail position
 

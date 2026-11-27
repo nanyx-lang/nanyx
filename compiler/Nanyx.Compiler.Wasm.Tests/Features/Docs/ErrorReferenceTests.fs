@@ -126,3 +126,18 @@ let ``Error reference example reports its section's code`` (line: int) =
         let reported = errors |> List.map _.Code |> List.distinct
         let shown = errors |> List.map (fun error -> $"{error.Code}: {error.Message}") |> String.concat "\n"
         Assert.True((reported = [ sectionAt line ]), $"errors.md:{line} should report only {sectionAt line}, but reported:\n{shown}")
+
+/// What `diagnostic` says: its message and its related locations' labels.
+let private textsOf (diagnostic: Diagnostic) = diagnostic.Message :: (diagnostic.Related |> List.map snd)
+
+[<Theory>]
+[<MemberData(nameof errorExamples)>]
+let ``Error reference example names no type variable by the compiler's number for it (#3052)`` (line: int) =
+    let example = docExamplesOf pagePath |> Map.find line
+    match example.Kind with
+    | Fragment
+    | Skip _
+    | Unformatted -> ()
+    | Program ->
+        let numbered = errorsOf example.Code |> List.collect textsOf |> List.filter (fun text -> Regex.IsMatch(text, @"\bt\d+\b"))
+        Assert.True(numbered.IsEmpty, $"errors.md:{line} names a type variable as the compiler numbers it:\n" + String.concat "\n" numbered)
