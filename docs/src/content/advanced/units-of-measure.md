@@ -68,13 +68,14 @@ println(50.5KB)
   dimension's units ([NYX0288](../standard-tools/errors#nyx0288), [NYX0289](../standard-tools/errors#nyx0289)).
 - **The default storage unit.** A dimension's values are stored as a number of its **default storage unit**: the largest
   unit that every unit declared with the dimension is a whole number of. It is usually the smallest, `mm` above, but
-  not always: with `mm` and `inch = 25.4mm`, an inch is no whole number of millimetres, and the compiler asks for a unit
-  of `0.2mm` ([NYX0299](../standard-tools/errors#nyx0299)). `@storageUnit` marks it by hand,
+  not always: with `mm` and `inch = 25.4mm`, an inch is no whole number of millimetres, so no declared unit is one, and
+  the compiler makes one up, `0.2mm`. It has no name, so a value that is a whole number of no unit is written as an exact
+  decimal of the smallest unit it is one of, `2.6mm`. `@storageUnit` marks it by hand,
   `@storageUnit unit ns: Time`, so that adding a smaller unit is an error rather than a change to what every value
   holds ([NYX0300](../standard-tools/errors#nyx0300)).
 - **The default display unit.** `@baseUnit` marks the unit a dimension is written in when no other unit is chosen, as
   zero is: `0m`. It may be a multiple, as `m` is of `mm`, and is optional: a dimension with no `@baseUnit` is written in
-  its default storage unit. A dimension has at most one of each mark ([NYX0287](../standard-tools/errors#nyx0287)).
+  its default storage unit, or, if that is made up, in the smallest unit it is a decimal of. A dimension has at most one of each mark ([NYX0287](../standard-tools/errors#nyx0287)).
 - **Units are names of their own kind**, apart from values and types: `500ms` means the unit `ms` even where a value
   named `ms` is in scope. `dimension` and `unit` are not reserved words either: they begin a declaration only at the
   start of a top-level line, with a name after them.

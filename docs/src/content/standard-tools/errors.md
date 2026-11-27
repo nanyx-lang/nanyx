@@ -2901,23 +2901,6 @@ unit instant: Speed = 1m / 0s  -- error NYX0298: `0s` is nothing, so 'instant' w
 
 To fix it, define it from a number of units that isn't zero.
 
-# NYX0299: Dimension with no unit to store it in
-
-A dimension's values are stored as a number of its default storage unit: the largest unit that every unit declared
-with the dimension is a whole number of. No declared unit is one, so there is none to store its values in
-([Units of measure](../advanced/units-of-measure#dimensions-and-units)). An inch is 25.4 millimetres, so neither is a
-whole number of the other.
-
-```nanyx
-dimension Distance  -- error NYX0299: No unit of 'Distance' is one that every other is a whole number of, ...
-
-unit mm: Distance
-unit inch: Distance = 25.4mm
-```
-
-To fix it, declare the unit the message names, which every unit of the dimension is a whole number of:
-`unit tenthMm: Distance = 0.2mm`.
-
 # NYX0300: Unit that is no whole number of the storage unit
 
 A unit is no whole number of its dimension's default storage unit, where it must be one: the dimension marks its
