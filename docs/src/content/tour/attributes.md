@@ -124,9 +124,36 @@ def `doubles` = {
 ```
 
 Tests are part of a test build alone, and every other build leaves them out, so only another test may refer to one
-(`NYX0311`), and linters don't report a test as unused. A def of another type is an error (`NYX0310`), and so is a
-test that requires a context the test host doesn't provide it (`NYX0312`): it loads a fake with `use`. The design of
-`nanyx test`, which runs them, is on [Testing](../work-in-progress/testing).
+(`NYX0311`), and linters don't report a test as unused. A def of another type is an error (`NYX0310`).
+[`nanyx test`](../standard-tools/command-line#nanyx-test) runs them.
+
+A test runs under the test host, which provides `Console`, whose output it keeps and shows only for a test that fails,
+and `Random`, seeded so that a test draws the same numbers when it runs with the same seed. A test that requires any
+other context is an error (`NYX0312`), as an entry point is that requires one its host doesn't provide, so a test never
+touches the file system or the environment unless it says so. It loads what it needs with `use`, as a fake that does
+what the test wants:
+
+```nanyx fragment
+@test
+def `loads the defaults when there is no config file` = {
+  use FileSystem(readFile = { _ -> #notFound }, pathExists = { _ -> false })
+  assert(config.load("app.toml") == Config.default)
+}
+```
+
+`@test(#io)` runs a test with the console host's real `Console`, `Env` and `FileSystem`, and `Async`, for a test that is
+meant to read the package's files or the environment. It runs in the package's directory, or the script's, and what it
+prints is still kept:
+
+```nanyx fragment
+@test(#io)
+def `reads the sample config` = {
+  assert(config.load("tests/sample.toml") == #some(Config(port = 8080)))
+}
+```
+
+Where a test lacks only contexts `#io` provides, `NYX0312` says so, and an editor offers to mark the test
+`@test(#io)`.
 
 ## `@allow(...)`
 

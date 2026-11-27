@@ -2924,7 +2924,9 @@ def readsArguments = {  -- error NYX0312: The test 'readsArguments' requires the
 ```
 
 To fix it, load an instance of the context in the test with `use`, such as a fake that records what the code does
-with it, and assert on what it recorded.
+with it, and assert on what it recorded. A test that is meant to read the package's files or the environment can be
+marked `@test(#io)` instead, which runs it with the console host's real `Console`, `Env` and `FileSystem`, and `Async`:
+where every context a test lacks is one of those, the message says so, and an editor offers to mark it.
 
 # NYX0301: Not supported by the WebAssembly backend
 

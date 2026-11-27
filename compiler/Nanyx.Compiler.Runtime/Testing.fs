@@ -21,7 +21,8 @@ type TestRun =
       Index: int
       Test: ListedTest
       Outcome: TestOutcome
-      /// What it printed through its `Console`, and each `dbg` it reached, in the order it wrote them.
+      /// What it printed through its `Console`, and each `dbg` it reached, in the order it wrote them, then, for a test
+      /// marked `@test(#io)`, what its real `Console` wrote to standard output.
       Output: string
       /// What it wrote to its standard error itself, as a crash's message and a deferred error are.
       Errors: string }
@@ -32,6 +33,8 @@ type TestRun =
 /// the next. The functions of `nanyx:test`:
 ///
 /// - `index() -> i32`, the index of the test to run;
+/// - `io() -> i32`, 1 when that test is marked `@test(#io)`, which the host runs with the console host's real
+///   `Console`, `Env` and `FileSystem`, and 0 otherwise;
 /// - `seed() -> i64`, the seed of the test's `Random`;
 /// - `write(text: i32, length: i32)` and `writeError(text: i32, length: i32)`, the `length` bytes of UTF-8 at `text`
 ///   that the test writes to its output and its error output.
@@ -43,9 +46,10 @@ module WasmTester =
     /// How long a test may run before it is stopped, unless the runner is given another limit.
     let defaultTimeout = TimeSpan.FromSeconds 10.0
 
-    /// Defines `nanyx:test` in `linker`, for the test at `index` with `seed`, adding what it writes to `output`.
-    let private define (linker: Linker) (index: int) (seed: int64) (output: StringBuilder) =
+    /// Defines `nanyx:test` in `linker`, for the test at `index`, `test`, with `seed`, adding what it writes to `output`.
+    let private define (linker: Linker) (index: int) (test: ListedTest) (seed: int64) (output: StringBuilder) =
         linker.DefineFunction(moduleName, "index", Func<int>(fun () -> index))
+        linker.DefineFunction(moduleName, "io", Func<int>(fun () -> if test.Io then 1 else 0))
         linker.DefineFunction(moduleName, "seed", Func<int64>(fun () -> seed))
         let write =
             CallerAction<int, int>(fun caller text length ->
@@ -71,11 +75,14 @@ module WasmTester =
         | other -> other
 
     /// Runs the test at `index`, `test`, of the build `module'`, compiled for `engine` with the epoch interruption that
-    /// stops it after `timeout`, its places in `table`, with `seed`, on a thread with the stack a program runs with.
-    let private runOne (engine: Engine) (module': Module) (table: SpanTable option) (seed: int64) (timeout: TimeSpan) (index: int) (test: ListedTest) =
+    /// stops it after `timeout`, its places in `table`, with `seed`, on a thread with the stack a program runs with. A
+    /// test marked `@test(#io)` runs in `directory`, which it may read and write, with the environment variables
+    /// `variables`; any other reaches no directory and sees none.
+    let private runOne (engine: Engine) (module': Module) (table: SpanTable option) (directory: string) (variables: (string * string) list) (seed: int64) (timeout: TimeSpan) (index: int) (test: ListedTest) =
         ProgramStack.run <| fun () ->
             let output = StringBuilder()
             let input = IO.Path.GetTempFileName()
+            let printed = new IO.MemoryStream()
             let errors = new IO.MemoryStream()
             let mutable finish = ignore
             // The store holds the files WASI writes the test's standard streams to until it is disposed, and Windows
@@ -85,14 +92,17 @@ module WasmTester =
                     use linker = new Linker(engine)
                     use store = new Store(engine)
                     linker.DefineWasi()
-                    define linker index seed output
+                    define linker index test seed output
+                    AsyncImport.define linker (AsyncImport.Waits())
                     Probing.define linker table None
                     Probing.defineDbg linker (fun hit ->
                         lock output (fun () -> output.Append(string hit).Append('\n') |> ignore)
                         true)
                     let reported = ref None
                     CrashImport.define linker reported
-                    finish <- WasmRunner.configureIo (Redirected(input, IO.Stream.Null, errors, [])) [ test.FullName ] [] store
+                    // What a `#io` test's `Console` writes goes to its standard output, which is kept with its output.
+                    let variables, directories = if test.Io then variables, [ directory ] else [], []
+                    finish <- WasmRunner.configureIo (Redirected(input, printed, errors, variables)) [ test.FullName ] directories store
                     // The store is interrupted at the next epoch, which the timer starts once the test has had its time.
                     store.SetEpochDeadline 1UL
                     use _ = new Timer((fun _ -> engine.IncrementEpoch()), null, timeout, Timeout.InfiniteTimeSpan)
@@ -110,13 +120,14 @@ module WasmTester =
             { Index = index
               Test = test
               Outcome = outcome
-              Output = lock output (fun () -> output.ToString())
+              Output = lock output (fun () -> output.ToString()) + Encoding.UTF8.GetString(printed.ToArray())
               Errors = Encoding.UTF8.GetString(errors.ToArray()) }
 
     /// Runs the tests of the test build `wasm` (see `TestTable`) that `selected` chooses, one at a time and each in an
     /// instance of its own, with `seed` for their `Random`, stopping each that runs for longer than `timeout`, and gives
-    /// each to `report` as it ends. Gives the runs, in the order of their indexes, or why the build can't be run.
-    let run (wasm: byte array) (selected: ListedTest -> bool) (seed: int64) (timeout: TimeSpan) (report: TestRun -> unit) : Result<TestRun list, RunError> =
+    /// each to `report` as it ends; a `#io` test runs in `directory`, the package's or the script's, with the environment
+    /// variables `variables`. Gives the runs, in the order of their indexes, or why the build can't be run.
+    let run (wasm: byte array) (directory: string) (variables: (string * string) list) (selected: ListedTest -> bool) (seed: int64) (timeout: TimeSpan) (report: TestRun -> unit) : Result<TestRun list, RunError> =
         use engine = ProgramStack.engine (fun config -> config.WithEpochInterruption true)
         match WasmRunner.compile engine (Binary wasm) with
         | Error error -> Error error
@@ -127,7 +138,7 @@ module WasmTester =
             |> List.indexed
             |> List.filter (snd >> selected)
             |> List.map (fun (index, test) ->
-                let run = runOne engine module' table seed timeout index test
+                let run = runOne engine module' table directory variables seed timeout index test
                 report run
                 run)
             |> Ok

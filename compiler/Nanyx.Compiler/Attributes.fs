@@ -4,6 +4,14 @@ open Parser.Program
 
 /// The `@attribute` lines of a module, which the compiler resolves before inference.
 module Attributes =
+    /// A def marked `@test`: its name, where it is written, where its attribute is, and whether the attribute is
+    /// `@test(#io)` (see `ioTestArgument`).
+    type MarkedTest =
+        { Name: string
+          Span: SourceSpan
+          Attribute: SourceSpan
+          Io: bool }
+
     /// The defs of a module marked `@component`, which a component exports, and `@import`, which it imports, each by name
     /// with where it is written; and those marked `@test`.
     type ComponentDefs =
@@ -13,7 +21,7 @@ module Attributes =
           /// `providedExport`): the call of the host's `provide` in it, as an entry point's call of `run` is.
           Provided: EntryPoint list
           /// The defs marked `@test`, which a test build runs (see `testAttribute`).
-          Tests: (string * SourceSpan) list }
+          Tests: MarkedTest list }
 
     /// The attribute that marks a definition as the program's entry point: `@entry def main = { ... }`.
     let entryAttribute = "entry"
@@ -21,6 +29,16 @@ module Attributes =
     /// The attribute that marks a definition as a test, which a test build runs and every other build leaves out:
     /// `` @test def `adds points` = { ... } ``.
     let testAttribute = "test"
+
+    /// The argument of `@test(#io)`, which runs a test with the console host's real `Console`, `Env` and `FileSystem`
+    /// (see `Hosts.ioTestContexts`).
+    let ioTestArgument = "io"
+
+    /// Whether `argument`, an attribute's, is `#io`.
+    let private isIoArgument (argument: Expression) =
+        match argument.Kind with
+        | TagExpr(tag, None) -> tag = ioTestArgument
+        | _ -> false
 
     /// The def a test build adds to each of its program's modules that has tests, which the build's root calls to run
     /// one: exported, `[Console, Random] int -> ()`, requiring the contexts the test host provides (`Hosts.testContexts`),
@@ -446,15 +464,18 @@ module Attributes =
         let components = ResizeArray<string * SourceSpan>()
         let imports = ResizeArray<string * SourceSpan>()
         let provided = ResizeArray<TopLevelItem * EntryPoint>()
-        let tests = ResizeArray<string * SourceSpan>()
+        let tests = ResizeArray<MarkedTest>()
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entries, List.rev externs, List.rev errors
-            | Kind (Attribute(name, Some argument)) :: rest when name = testAttribute ->
-                let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"
+            | Kind (Attribute(name, Some argument)) :: rest when name = testAttribute && not (isIoArgument argument) ->
+                let error =
+                    Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span
+                        $"It takes no argument, or `#{ioTestArgument}`, to run the test with the console host's real `Console`, `Env` and `FileSystem`"
+                    |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
-            | Kind (Attribute(name, None)) :: (Kind (Def (ValueDef(_, defName, _, _))) as def) :: rest when name = testAttribute ->
-                tests.Add((defName, def.Span))
+            | Kind (Attribute(name, argument)) as attribute :: (Kind (Def (ValueDef(_, defName, _, _))) as def) :: rest when name = testAttribute ->
+                tests.Add({ Name = defName; Span = def.Span; Attribute = attribute.Span; Io = argument.IsSome })
                 loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ errors)
             | Kind (Attribute(name, Some argument)) :: rest when name = componentAttribute ->
                 let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"
@@ -552,6 +573,6 @@ module Attributes =
                 let entryImport = match host with Some host when not entries.IsEmpty || provided.Count > 0 -> [ hostImport host ] | _ -> []
                 let wrappers = provided |> Seq.map fst |> List.ofSeq
                 let components = { Exports = List.ofSeq components; Imports = List.ofSeq imports; Provided = provided |> Seq.map snd |> List.ofSeq; Tests = List.ofSeq tests }
-                let dispatcher = if testBuild && tests.Count > 0 then [ dispatcherOf (List.ofSeq tests) ] else []
+                let dispatcher = if testBuild && tests.Count > 0 then [ dispatcherOf (tests |> Seq.map (fun test -> test.Name, test.Span) |> List.ofSeq) ] else []
                 Ok (entryImport @ items @ wrappers @ dispatcher @ List.map snd entries, List.map fst entries, components)
             | errors -> Error errors

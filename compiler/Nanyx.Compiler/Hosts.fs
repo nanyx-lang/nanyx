@@ -104,6 +104,11 @@ module Hosts =
     /// may require only these (see `TestChecks`).
     let testContexts = [ "Console"; "Random" ]
 
+    /// The contexts the test host provides a test marked `@test(#io)`: the console host's real `Console`, `Env` and
+    /// `FileSystem`, `Async`, which `FileSystem`'s members require, and the seeded `Random` (see
+    /// `Attributes.ioTestArgument`).
+    let ioTestContexts = [ "Async"; "Console"; "Env"; "FileSystem"; "Random" ]
+
     /// The module of the foreign functions a component's core module defines itself for its host's component root,
     /// reserved for it: `argument` and `result`, through which a `wasi:http/service` component's root takes the request
     /// it answers and gives the response (see the Components page of the docs). Only a host's package, or a host library

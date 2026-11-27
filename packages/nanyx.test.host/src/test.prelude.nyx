@@ -1,7 +1,9 @@
 --| What every module of a program sees without importing it in a test build, which runs under the
   test host: the test's output, `Console`, with `print`, `println`, `eprint` and `eprintln`, and
-  `Random`, the source of random numbers.
+  `Random`, the source of random numbers; and `Async`, which a test marked `@test(#io)` has, as its
+  `FileSystem` requires it.
 export module test.prelude
 
 export nanyx.cli/console (Console, IoError, print, println, eprint, eprintln)
+export nanyx/async (Async)
 export nanyx/random (Random)

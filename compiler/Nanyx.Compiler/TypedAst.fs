@@ -435,7 +435,10 @@ type Test =
       /// The name the program knows it by: its own in its module, or the one an import inlines it under.
       Definition: string
       /// Where it is written.
-      Span: SourceSpan }
+      Span: SourceSpan
+      /// Whether it is marked `@test(#io)`, and so runs with the console host's real `Console`, `Env` and `FileSystem`
+      /// (see `Hosts.ioTestContexts`).
+      Io: bool }
 
 /// A member of an ambient context (one the runtime supplies, as the host's prelude's definitions are its `Console`) and the
 /// top-level definition that stands in for it (see `TypedModule.AmbientMembers`).

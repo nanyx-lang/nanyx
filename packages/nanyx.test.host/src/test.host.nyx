@@ -9,19 +9,28 @@
   The host provides [`Console`], whose output it gives the runtime, which shows it only for a test
   that fails, and whose input is empty, and [`Random`], seeded with the runtime's seed, as
   [`random.seeded`] seeds it, so a test that draws random numbers draws the same ones each time it
-  runs with that seed. It provides nothing else: a test loads any other context it needs with `use`.
+  runs with that seed. A test marked `@test(#io)` has the console host's real `Console`, `Env` and
+  `FileSystem` instead, with `Async`, in the package's directory, and its output is still kept. A test loads any
+  other context it needs with `use`.
 export module test.host
 
 import (
+  nanyx/async as (Async)
   nanyx/host.memory
   nanyx/host.runtime
   nanyx/random as random
   nanyx/random as (Random)
   nanyx.cli/console as (Console, IoError)
+  nanyx.cli/env as (Env)
+  nanyx.fs/filesystem as (FileSystem)
+  nanyx.wasi/preview1.system as wasiSystem
 )
 
 @extern("nanyx:test", "index")
 def testIndex: [HostRuntime] () -> I32
+
+@extern("nanyx:test", "io")
+def testIo: [HostRuntime] () -> I32
 
 @extern("nanyx:test", "seed")
 def testSeed: [HostRuntime] () -> I64
@@ -38,18 +47,52 @@ def writeWith: [HostRuntime] ([HostRuntime] I32, I32 -> ()), string -> () = { wr
   keepAlive(text)
 }
 
---| Runs the test the runtime asks for: `entry`, the test build's entry point, given the test's index,
-  with a `Console` whose output goes to the runtime and whose input is empty, and a `Random` seeded
-  with the runtime's seed. What `entry` returns is ignored.
-export def run: [HostRuntime] ([Console, Random] int -> a) -> () = { entry ->
-  use Console(
-    write = { text -> writeWith(testWrite, text) }
-    writeError = { text -> writeWith(testWriteError, text) }
-    readLine = { _ -> #endOfInput }
-    readToEnd = { _ -> #some("") }
-    flush = { _ -> () }
+--| A stand-in for a context a test that isn't marked `@test(#io)` doesn't have, which it can't reach:
+  the compiler reports a test that requires one (`NYX0312`).
+def notIo: string -> undefined = { context ->
+  crash(
+    "{context} is the real one only in a test marked `@test(#io)`: mark the test so, or load a fake {context} with `use` in it"
   )
-
-  def index = I32.toInt(testIndex())
-  random.seeded(testSeed(), { _ -> ignore(entry(index)) })
 }
+
+--| Runs the test the runtime asks for: `entry`, the test build's entry point, given the test's index,
+  with a `Random` seeded with the runtime's seed. A test marked `@test(#io)` runs with the console
+  host's real `Console`, `Env` and `FileSystem` (see `nanyx.wasi`'s `preview1.system`); any other,
+  with a `Console` whose output goes to the runtime and whose input is empty. What `entry` returns is
+  ignored.
+export def run
+  : [HostRuntime, Async] ([Async, Console, Env, FileSystem, Random] int -> a) -> ()
+  = { entry ->
+    def index = I32.toInt(testIndex())
+
+    if testIo() == 0 then
+      use Console(
+        write = { text -> writeWith(testWrite, text) }
+        writeError = { text -> writeWith(testWriteError, text) }
+        readLine = { _ -> #endOfInput }
+        readToEnd = { _ -> #some("") }
+        flush = { _ -> () }
+      )
+
+      use Env(
+        args = { _ -> notIo("Env") }
+        variable = { _ -> notIo("Env") }
+        exit = { _ -> notIo("Env") }
+      )
+
+      use FileSystem(
+        readFile = { _ -> notIo("FileSystem") }
+        readFileBytes = { _ -> notIo("FileSystem") }
+        readFileChunk = { _, _, _ -> notIo("FileSystem") }
+        writeFile = { _, _ -> notIo("FileSystem") }
+        appendFile = { _, _ -> notIo("FileSystem") }
+        pathExists = { _ -> notIo("FileSystem") }
+        deleteFile = { _ -> notIo("FileSystem") }
+        listDirectory = { _ -> notIo("FileSystem") }
+        createDirectory = { _ -> notIo("FileSystem") }
+      )
+
+      random.seeded(testSeed(), { _ -> ignore(entry(index)) })
+    else
+      wasiSystem.provide({ _ -> random.seeded(testSeed(), { _ -> ignore(entry(index)) }) })
+  }

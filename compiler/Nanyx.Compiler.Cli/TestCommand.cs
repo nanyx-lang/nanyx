@@ -66,6 +66,7 @@ internal static partial class CliCommands
 
         string name;
         string? packageRoot;
+        string directory;
         FSharpList<Diagnostic> diagnostics;
         bool deferred;
         FSharpOption<CompileResult> root;
@@ -84,6 +85,7 @@ internal static partial class CliCommands
 
             name = shell.DisplayPath(shell.FullPath(single));
             packageRoot = null;
+            directory = Path.GetDirectoryName(shell.FullPath(single))!;
             using var progress = CompileProgress.Start(shell.Error, $"{name} tests", shell.DisplayPath, timings);
             var built = Script.testBuild(shell.Packages, progress.Listener, shell.FullPath(single), File.ReadAllText(shell.FullPath(single)));
             progress.Finish();
@@ -114,11 +116,13 @@ internal static partial class CliCommands
 
             name = package.Manifest.Name;
             packageRoot = package.Manifest.Root;
+            directory = package.Manifest.Root;
             using var progress = CompileProgress.Start(shell.Error, $"{name} tests", shell.DisplayPath, timings);
             var build = built.ResultValue;
             root = PackageModule.testResult(build);
             progress.Finish();
-            diagnostics = root is null ? build.Diagnostics : ListModule.Distinct(ListModule.Append(build.Diagnostics, root.Value.Diagnostics));
+            // A module's errors are reported once, though the root, which imports it, reports them too (see PackageModule.buildReporting).
+            diagnostics = root is null ? build.Diagnostics : ListModule.Distinct(ListModule.Map(FuncConvert.FromFunc<Diagnostic, Diagnostic>(NyxCompiler.Diagnostics.inItsModule), ListModule.Append(build.Diagnostics, root.Value.Diagnostics)));
             deferred = ErrorsDeferred(build);
         }
 
@@ -146,6 +150,8 @@ internal static partial class CliCommands
         var passed = 0;
         var runs = WasmTester.run(
             wasm,
+            directory,
+            EnvironmentOf(shell),
             FuncConvert.FromFunc<ListedTest, bool>(selected.Contains),
             chosenSeed,
             limit,
@@ -191,6 +197,16 @@ internal static partial class CliCommands
     /// geometry.`adds points`.</summary>
     private static string Shown(ListedTest test) => $"{test.Module}.{WrittenName(test.Name)}";
 
+    /// <summary>The environment variables a test marked <c>@test(#io)</c> sees: the shell's.</summary>
+    private static FSharpList<Tuple<string, string>> EnvironmentOf(Shell shell) =>
+        shell.Io is ProgramIo.Redirected redirected
+            ? redirected.variables
+            : ListModule.OfSeq(Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>().Select(entry => Tuple.Create((string)entry.Key, (string?)entry.Value ?? "")));
+
+    /// <summary>" (io)" after the name of a test marked <c>@test(#io)</c>, which ran with the console host's real
+    /// contexts; nothing after any other's.</summary>
+    private static string Io(ListedTest test) => test.Io ? " (io)" : "";
+
     /// <summary>
     /// Writes how <paramref name="run"/> ended to <paramref name="writer"/>: PASS and its name, or FAIL, its name and
     /// where it is written, then why it failed, and what it printed, indented under it.
@@ -199,11 +215,11 @@ internal static partial class CliCommands
     {
         if (run.Outcome.IsPassed)
         {
-            writer.WriteLine($"PASS {Shown(run.Test)}");
+            writer.WriteLine($"PASS {Shown(run.Test)}{Io(run.Test)}");
             return;
         }
 
-        writer.WriteLine($"FAIL {Shown(run.Test)}  {run.Test.File}:{run.Test.Line}:{run.Test.Column}");
+        writer.WriteLine($"FAIL {Shown(run.Test)}{Io(run.Test)}  {run.Test.File}:{run.Test.Line}:{run.Test.Column}");
         var why = new StringWriter();
         why.Write(run.Errors);
         switch (run.Outcome)

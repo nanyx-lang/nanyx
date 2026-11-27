@@ -994,19 +994,31 @@ let assemble (wat: string) : byte array =
 /// The name of the custom section a test build lists its tests in (see `withTests`).
 let testTableName = "nanyx.tests"
 
+/// A test as a test build's module lists it (see `withTests`): its module, its name, the file, line and column it is
+/// written at, each from 1, and whether it is marked `@test(#io)`.
+type ListedTest =
+    { Module: string
+      Name: string
+      File: string
+      Line: int
+      Column: int
+      Io: bool }
+
 /// `wasm`, a test build's module, with the custom section `testTableName` after its others, listing `tests` at the
-/// indexes its entry point runs them at (see `NyxCompiler.Package.testRootSource`): a vector of each test's module, name, file, line and column, the
-/// strings as names are written and the numbers as unsigned LEB128s. The runtime reads it to find a test by its index or
-/// its name, and to say where it is (see `Nanyx.Runtime.TestTable`).
-let withTests (tests: (string * string * string * int * int) list) (wasm: byte array) : byte array =
+/// indexes its entry point runs them at (see `NyxCompiler.Package.testRootSource`): a vector of each test's module,
+/// name, file, line, column and whether it is `#io` (1) or not (0), the strings as names are written and the numbers as
+/// unsigned LEB128s. The runtime reads it to find a test by its index or its name, to say where it is, and to know
+/// which contexts it runs with (see `Nanyx.Runtime.TestTable`).
+let withTests (tests: ListedTest list) (wasm: byte array) : byte array =
     let out = Bytes(wasm)
     let table = Bytes()
     name table testTableName
-    vector table tests (fun out (moduleName, testName, file, line, column) ->
-        name out moduleName
-        name out testName
-        name out file
-        unsigned out (uint64 line)
-        unsigned out (uint64 column))
+    vector table tests (fun out test ->
+        name out test.Module
+        name out test.Name
+        name out test.File
+        unsigned out (uint64 test.Line)
+        unsigned out (uint64 test.Column)
+        unsigned out (if test.Io then 1UL else 0UL))
     section out 0uy table
     out.ToArray()
