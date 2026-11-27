@@ -2,7 +2,7 @@
 title: encode
 description: Writing types of your own as JSON
 order: 15.7
-package: nanyx.json 0.5.0
+package: nanyx.json 0.5.1
 ---
 
 `json.encode(value)` writes a value of any type as JSON text with nothing written for it, by walking its type: see
@@ -15,7 +15,7 @@ Here a shape is written with its kind in a member of its own, as the decoders pa
 writes a tag as an object of one member:
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import (
   nanyx.json/encode as encode
@@ -49,11 +49,11 @@ println(json.encodeWith(sketch, drawing))
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.5.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.5.1, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 Encoders: a value of a type of your own written as JSON, the other way from `json`'s decoders.
 
-An [`Encoder(a)`](json#encoder) is a function from an `a` to a `Json` value, so any such
+An [`Encoder(a)`](json-typed#encoder) is a function from an `a` to a `Json` value, so any such
 function is one. The encoders here write one kind of value each ([`string`](#string), [`int`](#int),
 [`float`](#float), [`bool`](#bool)), and the rest build larger ones from smaller: [`list`](#list), [`dict`](#dict),
 [`optional`](#optional), and [`object`](#object), which writes a record a member at a time, each a [`field`](#field) or an

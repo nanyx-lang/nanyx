@@ -2,7 +2,7 @@
 title: json, reflection
 description: Writing and reading any type as JSON, with no encoder or decoder written for it
 order: 15.55
-package: nanyx.json 0.5.0
+package: nanyx.json 0.5.1
 ---
 
 `json.encode` writes a value of any type as JSON text, and `json.decode` reads text into the type it is given, by
@@ -14,7 +14,7 @@ A record is an object, a tag with no payload its name, a tag with one an object 
 `#none` is left out:
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -54,7 +54,7 @@ A failure is a tag of its own, which `json.describe` writes: `#invalidJson` for 
 a value that doesn't fit the type, and `#cannotEncode` for a part of a value that JSON can't hold, each with where:
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -93,7 +93,7 @@ module that calls it ([#2382](https://github.com/nanyx-lang/nanyx/issues/2382)),
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.5.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.5.1, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 ## `encode`
 
