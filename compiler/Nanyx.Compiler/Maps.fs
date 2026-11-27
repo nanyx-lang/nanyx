@@ -13,6 +13,9 @@ module Maps =
     /// The name of the type a map is held as, `__mapStore(k, v)`, which only the prelude writes.
     let storeName = "__mapStore"
 
+    /// The tag of a store's node, whose payload is its bits and arrays (see `storeOf`).
+    let nodeTag = "node"
+
     /// The type a map from `key` to `value` is held as, its store: a hash trie,
     /// `#empty | #node(int, array(list((k, v))), int, array(__mapStore(k, v)))`. A node holds the keys whose hashes agree
     /// on the bits the nodes above it read, split by the next five: the first `int` has a bit set for each five-bit value
@@ -30,7 +33,7 @@ module Maps =
             TyUnion
                 [ TyTag("empty", None)
                   TyTag(
-                      "node",
+                      nodeTag,
                       Some (
                           tuple
                               [ intTy

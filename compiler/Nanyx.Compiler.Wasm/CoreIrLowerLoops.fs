@@ -68,13 +68,7 @@ let forEach
           Path = local "path" IrInt }
     // What a store's walk gives: a map's entry, or a set's element.
     let storeElement (storeTy: IrType) (keys: bool) =
-        let entry =
-            match IrType.unfold storeTy with
-            | IrTags tags ->
-                match tags |> List.tryFind (fst >> (=) "node") |> Option.bind snd with
-                | Some (IrRecord [ _; _, IrArray (IrList entry); _; _ ]) -> entry
-                | _ -> internalError $"a store of '{IrType.show storeTy}'"
-            | other -> internalError $"a store of '{IrType.show other}'"
+        let entry = CoreIrLayout.StoreLayout.entry storeTy
         match entry with
         | IrRecord((_, key) :: _) when keys -> key
         | _ -> entry
