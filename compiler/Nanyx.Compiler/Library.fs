@@ -274,13 +274,33 @@ module Compiler =
     let private testHostModulesOf (checkedModules: CheckedModules) : PackageModules option =
         checkedModules.Package |> Option.bind _.TestHost |> Option.map snd
 
+    /// In a test build, the application the program depends on, directly or through others, that the file at `path` is
+    /// a source file of, or a file of whose host's package: a test package's tests import an application's modules, which
+    /// keep its host and see its prelude, as they do in its own test build. None in any other build, where a package
+    /// the program depends on is a library.
+    let private applicationOf (checkedModules: CheckedModules) (path: string) : PackageModules option =
+        let rec applications (modules: PackageModules) =
+            modules.Dependencies |> List.collect (fun dependency -> (if dependency.Host.IsSome then [ dependency ] else []) @ applications dependency)
+        let owns (application: PackageModules) =
+            PackageModules.contains application path
+            || application.HostPackage |> Option.exists (fun hostModules -> (PackageModules.ownerOf hostModules path).IsSome)
+        match checkedModules.Package with
+        | Some ({ TestRoot = Some _ } as package) when not (PackageModules.isProgramFile package path) -> applications package |> List.tryFind owns
+        | _ -> None
+
     /// The host of the module from `origin`, with its package's modules: the build's (see `buildHostOf`), but in a test
-    /// build for its root, and for a module of the test host's own package, which run under the test host.
+    /// build for its root, and for a module of the test host's own package, which run under the test host; and for a
+    /// module of an application the program depends on, or of its host's package, which keep its host (see
+    /// `applicationOf`).
     let private hostOf (checkedModules: CheckedModules) (origin: ModuleOrigin) : Host option * PackageModules option =
         match origin, checkedModules.Package with
         | SourceFile path, Some ({ TestHost = Some(testHost, testModules) } as package)
             when package.TestRoot |> Option.exists (PackageModules.samePath path) || (PackageModules.ownerOf testModules path).IsSome ->
             Some testHost, Some testModules
+        | SourceFile path, _ ->
+            match applicationOf checkedModules path with
+            | Some application -> application.Host, application.HostPackage
+            | None -> buildHostOf checkedModules
         | _ -> buildHostOf checkedModules
 
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
@@ -315,12 +335,15 @@ module Compiler =
             || checkedModules.Package
                |> Option.exists (fun package -> package.HostLibrary && package.Files |> List.exists (PackageModules.samePath path))
         // The module's own host: the build's, for a module of the program itself, which sees the host's prelude and may
-        // declare its `@entry`. A file of a package the program depends on, or of the host's package or one it depends on,
-        // is a library's, and a module of the standard library is the standard library's: none.
+        // declare its `@entry`, and in a test build an application's, for one of its modules (see `applicationOf`). A file
+        // of another package the program depends on, or of the host's package or one it depends on, is a library's, and a
+        // module of the standard library is the standard library's: none.
+        let application = match origin with SourceFile path -> applicationOf checkedModules path | _ -> None
         let host =
             match origin with
             | StandardLibraryModule _ -> None
             | SourceFile path when inHostPackage path -> None
+            | SourceFile _ when application.IsSome -> buildHost
             | SourceFile path when checkedModules.Package |> Option.exists (fun package -> not (PackageModules.isProgramFile package path)) -> None
             | SourceFile _
             | InMemory -> buildHost
@@ -378,11 +401,12 @@ module Compiler =
                 | _, (_ :: _ as errors), _, _, _ -> Error (Desugared, syntaxDiagnostics @ errors)
                 | desugaredAst, [], memberPlaces, lowered, delayCalls ->
                     // A test build's program files, but its root, run their tests through the dispatcher it gives
-                    // them, and have no entry point.
+                    // them, and have no entry point; nor has an application's the program depends on.
                     let testBuild =
                         match origin, checkedModules.Package with
                         | SourceFile path, Some ({ TestRoot = Some root } as package) ->
-                            PackageModules.isProgramFile package path && not (PackageModules.samePath path root)
+                            (PackageModules.isProgramFile package path && not (PackageModules.samePath path root))
+                            || application |> Option.exists (fun application -> PackageModules.contains application path)
                         | _ -> false
                     Attributes.applyAttributes host testBuild desugaredAst
                     |> Result.map (fun (desugared, entries, components) ->
@@ -856,7 +880,7 @@ module Compiler =
                                            |> Option.exists ComponentInterface.requiresAsync })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           Tests =
-                            let own = components.Tests |> List.map (fun test -> { Module = moduleName; Name = test.Name; Definition = test.Name; Span = test.Span; Io = test.Io })
+                            let own = components.Tests |> List.map (fun test -> { Module = moduleName; Name = test.Name; Definition = test.Name; Span = test.Span; Io = test.Io; Crashes = test.Crashes })
                             own @ merged.Tests |> List.distinctBy (fun test -> test.Module, test.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.
@@ -1034,8 +1058,10 @@ module Compiler =
             [ checkedModules.Package; snd (buildHostOf checkedModules); testHostModulesOf checkedModules ]
             |> List.choose id
             |> List.tryPick (fun modules -> PackageModules.ownerOf modules path)
+        // A test build checks an application's modules as a test build of it does, not as its checked file has them.
+        let testedApplication = applicationOf checkedModules path |> Option.exists (fun application -> PackageModules.contains application path)
         match owner with
-        | Some({ CheckedFile = Some file } as owner) when checkedModules.Writing <> Some file ->
+        | Some({ CheckedFile = Some file } as owner) when checkedModules.Writing <> Some file && not testedApplication ->
             let package =
                 checkedPackages.GetOrAdd(file, fun file ->
                     lazy (CheckedPackages.tryRead file owner |> Option.orElseWith (fun () -> writeCheckedPackage checkedModules.Listener owner file)))

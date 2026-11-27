@@ -14,6 +14,10 @@ type TestOutcome =
     | Failed of RunError
     /// It was still running when its time ran out, and was stopped.
     | TimedOut of TimeSpan
+    /// It was marked to expect a crash, `@test(#crashes)`, and finished (#3078).
+    | DidNotCrash
+    /// It was marked to expect a crash whose message contains `expected`, and crashed, as `error` says, with another.
+    | CrashedOtherwise of expected: string * error: RunError
 
 /// What running one test of a test build did.
 type TestRun =
@@ -74,6 +78,19 @@ module WasmTester =
         | Trapped(message, stack) -> Trapped(message, withinTest test stack)
         | other -> other
 
+    /// The outcome of `test`, which ended as `ran`, given the crash it expects: one that expects a crash passes by reaching
+    /// one that isn't `deferred`, an error the compiler found, whose message, as it reported it or else as it wrote it
+    /// (`written`), contains the text it expects, if it expects one; it fails if it finishes, and any other way it stops
+    /// fails it as it fails any test (#3078).
+    let private expected (test: ListedTest) (ran: TestOutcome) (deferred: bool) (written: string) =
+        match test.Crashes, ran with
+        | None, _ -> ran
+        | Some _, Passed -> DidNotCrash
+        | Some AnyCrash, Failed(Crashed _) when not deferred -> Passed
+        | Some(CrashContaining text), Failed(Crashed(message, _, _) as error) when not deferred ->
+            if (defaultArg message written).Contains(text, StringComparison.Ordinal) then Passed else CrashedOtherwise(text, error)
+        | Some _, _ -> ran
+
     /// Runs the test at `index`, `test`, of the build `module'`, compiled for `engine` with the epoch interruption that
     /// stops it after `timeout`, its places in `table`, with `seed`, on a thread with the stack a program runs with. A
     /// test marked `@test(#io)` runs in `directory`, which it may read and write, with the environment variables
@@ -85,6 +102,8 @@ module WasmTester =
             let printed = new IO.MemoryStream()
             let errors = new IO.MemoryStream()
             let mutable finish = ignore
+            // Set by a crash that is an error the compiler deferred to run time (see `CrashImport`).
+            let deferred = ref false
             // The store holds the files WASI writes the test's standard streams to until it is disposed, and Windows
             // won't let a file that is open be read or deleted, so they are read and deleted once it is, after the try.
             let outcome =
@@ -99,7 +118,7 @@ module WasmTester =
                         lock output (fun () -> output.Append(string hit).Append('\n') |> ignore)
                         true)
                     let reported = ref None
-                    CrashImport.define linker reported
+                    CrashImport.define linker reported deferred
                     // What a `#io` test's `Console` writes goes to its standard output, which is kept with its output.
                     let variables, directories = if test.Io then variables, [ directory ] else [], []
                     finish <- WasmRunner.configureIo (Redirected(input, printed, errors, variables)) [ test.FullName ] directories store
@@ -117,11 +136,12 @@ module WasmTester =
                 finally
                     finish ()
                     IO.File.Delete input
+            let written = Encoding.UTF8.GetString(errors.ToArray())
             { Index = index
               Test = test
-              Outcome = outcome
+              Outcome = expected test outcome deferred.Value written
               Output = lock output (fun () -> output.ToString()) + Encoding.UTF8.GetString(printed.ToArray())
-              Errors = Encoding.UTF8.GetString(errors.ToArray()) }
+              Errors = written }
 
     /// Runs the tests of the test build `wasm` (see `TestTable`) that `selected` chooses, one at a time and each in an
     /// instance of its own, with `seed` for their `Random`, stopping each that runs for longer than `timeout`, and gives

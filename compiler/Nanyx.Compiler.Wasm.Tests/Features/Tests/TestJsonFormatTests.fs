@@ -95,3 +95,17 @@ let ``A --format that is neither text nor json is refused`` () =
     let outcome = nanyxIn directory.Path [ "test"; "--format"; "xml" ]
     Assert.Equal(2, outcome.ExitCode)
     Assert.Contains("--format is text or json, not 'xml'", outcome.StandardError)
+
+[<Fact>]
+let ``A test that expects a crash says so, and is passed, didNotCrash or crashedOtherwise`` () =
+    let checks =
+        "export module checks\n\n@test(#crashes)\ndef `crashes` = {\n  crash(\"boom\")\n}\n\n@test(#crashes(\"too big\"))\ndef `crashes otherwise` = {\n  crash(\"boom\")\n}\n\n@test(#crashes)\ndef `finishes` = {\n  println(\"done\")\n}\n\n@test\ndef `plain` = {\n  println(\"done\")\n}\n"
+    let _, objects = jsonOf [] [ "src/checks.nyx", checks ]
+    let test (name: string) = objects |> List.find (fun element -> text element "type" = "test" && text element "test" = name)
+    Assert.Equal("passed", text (test "crashes") "outcome")
+    Assert.Equal(0, (test "crashes").GetProperty("crashes").EnumerateObject() |> Seq.length)
+    let otherwise = test "crashes otherwise"
+    Assert.Equal(("crashedOtherwise", "too big", "too big"), (text otherwise "outcome", text otherwise "expected", text (otherwise.GetProperty "crashes") "text"))
+    Assert.Equal("boom", text (otherwise.GetProperty "failure") "message")
+    Assert.Equal("didNotCrash", text (test "finishes") "outcome")
+    Assert.Equal(JsonValueKind.Null, (test "plain").GetProperty("crashes").ValueKind)

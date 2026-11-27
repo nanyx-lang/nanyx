@@ -269,6 +269,10 @@ internal static partial class CliCommands
     /// contexts; nothing after any other's.</summary>
     private static string Io(ListedTest test) => test.Io ? " (io)" : "";
 
+    /// <summary>" (crashes)" after the name of a test marked <c>@test(#crashes)</c> that passed, by crashing as it
+    /// expected (#3078); nothing after any other's.</summary>
+    private static string Crashes(TestRun run) => run.Outcome.IsPassed && FSharpOption<Nanyx.Runtime.ExpectedCrash>.get_IsSome(run.Test.Crashes) ? " (crashes)" : "";
+
     /// <summary>
     /// Writes how <paramref name="run"/> ended to <paramref name="writer"/>: PASS and its name, or FAIL, its name and
     /// where it is written, then why it failed, and what it printed, indented under it.
@@ -277,12 +281,17 @@ internal static partial class CliCommands
     {
         if (run.Outcome.IsPassed)
         {
-            writer.WriteLine($"PASS {Shown(run.Test)}{Io(run.Test)}");
+            writer.WriteLine($"PASS {Shown(run.Test)}{Io(run.Test)}{Crashes(run)}");
             return;
         }
 
         writer.WriteLine($"FAIL {Shown(run.Test)}{Io(run.Test)}  {run.Test.File}:{run.Test.Line}:{run.Test.Column}");
         var why = new StringWriter();
+        if (run.Outcome is TestOutcome.CrashedOtherwise expectedOther)
+        {
+            why.WriteLine($"It was expected to crash with a message that contains \"{expectedOther.expected}\", and crashed with another:");
+        }
+
         why.Write(CrashPlace(run));
         why.Write(run.Errors);
         switch (run.Outcome)
@@ -292,6 +301,12 @@ internal static partial class CliCommands
                 break;
             case TestOutcome.Failed failed:
                 ReportRunError(failed.Item, why);
+                break;
+            case var outcome when outcome.IsDidNotCrash:
+                why.WriteLine("It finished, and was expected to crash");
+                break;
+            case TestOutcome.CrashedOtherwise otherwise:
+                ReportRunError(otherwise.error, why);
                 break;
         }
 
@@ -311,8 +326,13 @@ internal static partial class CliCommands
     /// </summary>
     private static string CrashPlace(TestRun run)
     {
-        if (run.Outcome is TestOutcome.Failed { Item: RunError.Crashed { place: { } place } } && FSharpOption<Tuple<string, int, int>>.get_IsSome(place)
-            && !StartsWithPlace.IsMatch(run.Errors))
+        var crashed = run.Outcome switch
+        {
+            TestOutcome.Failed { Item: RunError.Crashed crash } => crash,
+            TestOutcome.CrashedOtherwise { error: RunError.Crashed crash } => crash,
+            _ => null
+        };
+        if (crashed is { place: { } place } && FSharpOption<Tuple<string, int, int>>.get_IsSome(place) && !StartsWithPlace.IsMatch(run.Errors))
         {
             var (file, line, column) = place.Value;
             return column > 0 ? $"{file}:{line}:{column}: " : $"{file}:{line}: ";

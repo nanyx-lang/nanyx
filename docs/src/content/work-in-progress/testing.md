@@ -75,6 +75,18 @@ A package can also keep tests in files of their own. The `tests` field of the ma
 
 Each test file declares a named module, as every file in a package does. It is part of the package in a test build and is left out of every other build. It can import the package's modules and use what they export, but not their private definitions. If `tests` is left out, a package has no test files, and its tests are the ones beside its code.
 
+## Test packages
+
+Built ([#3095](https://github.com/nanyx-lang/nanyx/issues/3095)): a package whose manifest gives `tests` and no `sources`
+holds only the tests of the packages it depends on, in a sibling folder, as a .NET test project does
+([Test packages](../tour/packages#test-packages)). It has no source files, needs no host and exports nothing; only
+`nanyx test` builds it. It can depend on an application, whose `@entry` is an ordinary def in the test build and whose
+modules keep its host ([Test builds](../deep-dives/test-builds#test-packages)). Its tests import what the package exports,
+so a private helper is still tested beside its code.
+
+An editor checks a file under the manifest's `sources` as one of its package's; a file that only `tests` selects, as all
+of a test package's are, is still checked on its own, as a script ([#3098](https://github.com/nanyx-lang/nanyx/issues/3098)).
+
 ## Scripts
 
 `nanyx test file.nyx` runs the tests in a script. The script's top-level statements are its entry, so they are not run, as a package's `@entry` is not.
@@ -141,16 +153,12 @@ the editor's test explorer and to put a "Run test" link above each `@test`.
 
 ## Expecting a crash
 
-A test cannot catch a crash, but the runner sees one, so `@test` takes an argument that passes a test only if it
-crashes ([#3078](https://github.com/nanyx-lang/nanyx/issues/3078)). It is decided, and not built yet:
-
-- `@test(#crashes)` passes if the test crashes, and `@test(#crashes("too big"))` if it crashes with a message that
-  contains the text. With `#io`, the two are a tuple: `@test(#io, #crashes)`.
-- A crash is what `crash`, `orCrash`, `assert` and a match that doesn't handle the case do. A deferred error isn't one,
-  and fails the test as it does any other, and so do a runtime error, such as division by zero, and a timeout. A
-  deferred error's trap says so to the runtime, through `nanyx:crash`, so the runner tells it apart.
-- A test that finishes fails with "It finished, and was expected to crash"; one that crashes with another message fails
-  naming both. A test that passes shows `(crashes)` after its name, as one marked `#io` shows `(io)`.
+Built ([#3078](https://github.com/nanyx-lang/nanyx/issues/3078)): `@test(#crashes)` passes a test only if it crashes,
+and `@test(#crashes("text"))` only if the crash's message contains the text; with `#io`, `@test(#io, #crashes)` (see
+[`@test`](../tour/attributes#test)). A crash is what `crash`, `orCrash` and a failed `assert` do. A deferred compile
+error never counts: a match that doesn't handle every case is one, `NYX0203`, which the compiler defers to run time as it
+does a type error, so it fails the test, as a runtime error and a timeout do
+([Test builds](../deep-dives/test-builds#tests-that-expect-a-crash)).
 
 # Left for later
 

@@ -84,7 +84,10 @@ the program to act on without reading it back out of stderr: the message, the pl
   while the module is being instantiated, reports it too. The command line sets the option for what it runs itself:
   `nanyx run`, and a served program's instances (`RunProgram`). A module `nanyx build` or `nanyx wasm` writes, a
   component, and the playground's have no such import, and the report's message is then none. Every module still
-  writes the message to stderr itself, so what a crash prints is the same with the option or without.
+  writes the message to stderr itself, so what a crash prints is the same with the option or without. An error deferred
+  to run time calls `nanyx:crash`'s `deferred` first, through `__nanyx_deferred`, so the runtime knows the crash for one
+  the compiler found rather than one the program made, which a test that expects a crash can't pass by
+  ([Test builds](./test-builds#tests-that-expect-a-crash)).
 - **The place** is the file, line and column of the program's own code it crashed in: the innermost frame of the stack outside
   the standard library. So a `crash` or an `orCrash` is placed at the line that called it, not in the prelude. The
   table knows which files are the library's: the code generator writes a `;;@lib prelude.nyx` marker among the
