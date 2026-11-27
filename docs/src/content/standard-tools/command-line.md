@@ -192,9 +192,10 @@ A test may require only `Console` and `Random`, which the test host provides (`N
 [`@test(#io)`](../tour/attributes#test), which runs with the console host's real `Console`, `Env` and `FileSystem`,
 in the package's directory or the script's, with the environment's variables; the report marks it `(io)`.
 
-`nanyx test` exits with 0 when every test passes, and 1 when one fails or the tests can't be built. A type or name
-error in a module with tests, or in a module one imports, stops the build, and no test runs, as an error in a module a
-program imports stops `nanyx run` ([#2967](https://github.com/nanyx-lang/nanyx/issues/2967)).
+`nanyx test` exits with 0 when every test passes, and 1 when one fails or the tests can't be built. It is a debug build,
+as `run` is: a type or name error in any module is reported, and fails only the tests that reach it, with its message,
+while the others pass or fail on their own ([Deferred errors](../tour/error-handling#deferred-errors)). An error that
+can't be deferred, such as a syntax error, stops the build, and no test runs.
 
 | Option | What it does |
 |--------|--------------|

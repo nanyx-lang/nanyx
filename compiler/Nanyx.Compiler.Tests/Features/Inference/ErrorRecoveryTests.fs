@@ -110,11 +110,23 @@ let ``Two errors with the same message in different defs are both deferred`` () 
     Assert.True(result.ErrorsDeferred)
 
 [<Fact>]
-let ``A module that imports one with errors is not typed`` () =
+let ``A module that imports one with deferred errors is typed, and reports them at the import, deferred`` () =
+    // The imported module's errors are deferred, as the module being compiled's are: a debug build runs it, and a call
+    // that reaches the error stops there (#2967). The importer reports them as it did when it failed with them.
     let result = compileImporting "module mod\nexport def foo = missing" "module main\nimport mod\ndef value = foo"
+    Assert.True(result.Typed.IsSome)
+    Assert.False(result.TypeChecked)
+    Assert.True(result.ErrorsDeferred)
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal("'missing' is not in scope", diagnostic.Message)
+    Assert.True(diagnostic.Import.IsSome)
+
+[<Fact>]
+let ``A module that imports one with an error that can't be deferred is not typed`` () =
+    let result = compileImporting "module mod\nexport def foo = (" "module main\nimport mod\ndef value = foo"
     Assert.True(result.Typed.IsNone)
     Assert.False(result.TypeChecked)
-    Assert.Equal("'missing' is not in scope", (Assert.Single result.Diagnostics).Message)
+    Assert.False(result.ErrorsDeferred)
 
 [<Fact>]
 let ``??? is reported as not implemented, deferred, and typed undefined`` () =

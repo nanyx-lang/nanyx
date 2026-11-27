@@ -428,6 +428,7 @@ module Compiler =
                         ScriptEntry = script |> Option.map snd
                         StandardLibraryExports = CheckedLibrary.standardLibraryExportPaths }
                   Errors = []
+                  DeferredImportErrors = []
                   Inlined = []
                   PreludeInlined = []
                   PreludeTypeNames = Set.empty
@@ -462,7 +463,12 @@ module Compiler =
                 |> List.fold (fun (merged: MergedImports) item ->
                     match importModule item with
                     | Error diagnostics -> { merged with Errors = merged.Errors @ diagnostics }
-                    | Ok (importOrigin, imported) -> mergeWritten preludeKey reExportItems importOrigin item imported merged) initial
+                    | Ok (importOrigin, imported) ->
+                        // A module whose errors are all deferred is imported, its errors with it, through this import.
+                        let deferred =
+                            imported.Errors @ imported.ImportedErrors |> List.map (fun diagnostic -> { diagnostic with Import = Some item.Span })
+                        let merged = { merged with DeferredImportErrors = merged.DeferredImportErrors @ deferred }
+                        mergeWritten preludeKey reExportItems importOrigin item imported merged) initial
             // Then the definitions owned by the types the imports bring in, from their modules (see `OwnedDefinitions`).
             // The standard library imports what it uses itself.
             let merged =
@@ -481,7 +487,7 @@ module Compiler =
                             | SourceFile path -> checkedModules.ReadFile path
                             | InMemory -> ""
                         match typecheckImport checkedModules owner readSource (visited.Add key) with
-                        | Ok ownerModule when ownerModule.Errors.IsEmpty ->
+                        | Ok ownerModule when ownerModule.Undeferred.IsEmpty ->
                             match OwnedDefinitions.selection owner ownerModule.Typed.TypeDefs merged.Env merged.State ownerModule.Exports.Keys with
                             | [] -> merged
                             | names ->
@@ -850,6 +856,7 @@ module Compiler =
                           Declared = state.Declared }
                      Errors = moduleErrors
                      Undeferred = undeferred
+                     ImportedErrors = merged.DeferredImportErrors |> List.distinctBy Diagnostics.inItsModule
                      Warnings = moduleWarnings
                      Own = own
                      Inlined = inlined
@@ -898,8 +905,9 @@ module Compiler =
                 // of the one in that module that brought them into it.
                 let throughThis = List.map (fun (diagnostic: Diagnostic) -> { diagnostic with Import = Some item.Span })
                 match typecheckImport checkedModules importOrigin readSource (visited.Add key) with
-                // A module with errors fails each importer with them.
-                | Ok imported when not imported.Errors.IsEmpty -> Error (throughThis imported.Errors)
+                // A module with an error that can't be deferred fails each importer with its errors. One whose errors
+                // are all compiled to traps is imported, and its errors come with it (see `CheckedModule.ImportedErrors`).
+                | Ok imported when not imported.Undeferred.IsEmpty -> Error (throughThis imported.Errors)
                 | Error (_, diagnostics) -> Error (throughThis diagnostics)
                 | Ok imported -> Ok (importOrigin, imported)
         // The import of the host is of its package's modules, and an import in a file of the host's package, or
@@ -1223,8 +1231,12 @@ module Compiler =
                 // A module with syntax errors is reported by those alone: what the items left out of it would have
                 // declared is missing, and the errors that follow from aren't the user's to fix.
                 let syntaxErrors = checkedModule.Errors |> List.filter isSyntaxError
+                // An imported module's errors are reported at the import that brings them in, as they are where that
+                // module can't be imported, and the linters wait for them as for the module's own; they are deferred
+                // (#2967).
+                let imported = checkedModule.ImportedErrors
                 if not syntaxErrors.IsEmpty then syntaxErrors
-                elif checkedModule.Errors.IsEmpty then
+                elif checkedModule.Errors.IsEmpty && imported.IsEmpty then
                     checkedModule.Warnings
                     @ Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments typed)
                 else
@@ -1233,11 +1245,12 @@ module Compiler =
                         match checkedModules.Package, origin with
                         | Some package, SourceFile path when PackageModules.contains package path -> PackageExports.importable package checkedModules.ReadFile path
                         | _ -> []
-                    (ImportFixes.addFrom packageExports CheckedLibrary.standardLibraryExportPaths.Value (normalizeSource source) checkedModule.Syntax checkedModule.Errors
-                     |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax)
+                    imported
+                    @ (ImportFixes.addFrom packageExports CheckedLibrary.standardLibraryExportPaths.Value (normalizeSource source) checkedModule.Syntax checkedModule.Errors
+                       |> MatchArmFixes.place (normalizeSource source) checkedModule.Syntax)
                     @ checkedModule.Warnings
               Typed = Some typed
-              TypeChecked = checkedModule.Errors.IsEmpty
+              TypeChecked = checkedModule.Errors.IsEmpty && checkedModule.ImportedErrors.IsEmpty
               ErrorsDeferred = checkedModule.Undeferred.IsEmpty
               Syntax = Some checkedModule.Syntax
               ModuleName = checkedModule.Name
