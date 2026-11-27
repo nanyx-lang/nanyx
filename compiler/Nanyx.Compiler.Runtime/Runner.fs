@@ -46,10 +46,22 @@ type RunError =
 type ProgramIo =
     /// This process's own stdin, stdout, stderr and environment variables.
     | Inherited
+    /// This process's own stdin, stdout and stderr, and its environment variables with `variables` besides, each a name
+    /// and its value, in place of any of the same name.
+    | InheritedWith of variables: (string * string) list
     /// Stdin is the file `input`. What the program writes to stdout goes to `output`, and
     /// what it writes to stderr goes to `error`, each in the order it was written. The program's environment variables
     /// are `variables`, each a name and its value. Tests use this to run a program in their own process.
     | Redirected of input: string * output: IO.Stream * error: IO.Stream * variables: (string * string) list
+
+module ProgramIo =
+    /// `io` with the environment variable `name` set to `value` for the program, in place of any it had of that name.
+    let withVariable (name: string) (value: string) (io: ProgramIo) : ProgramIo =
+        let set (variables: (string * string) list) = (variables |> List.filter (fun (other, _) -> other <> name)) @ [ name, value ]
+        match io with
+        | Inherited -> InheritedWith [ name, value ]
+        | InheritedWith variables -> InheritedWith(set variables)
+        | Redirected(input, output, error, variables) -> Redirected(input, output, error, set variables)
 
 /// What a program compiled with memory checks left once it stopped: the values of the exported globals asked for, in
 /// order (0 for one the module does not export), and how big its memory had grown, in bytes (0 with none).
@@ -95,6 +107,21 @@ module WasmRunner =
                     .WithInheritedStandardOutput()
                     .WithInheritedStandardError()
                     .WithInheritedEnvironment())
+            ignore
+        | InheritedWith variables ->
+            let added = variables |> List.map fst |> Set.ofList
+            let inherited =
+                Environment.GetEnvironmentVariables()
+                |> Seq.cast<Collections.DictionaryEntry>
+                |> Seq.map (fun entry -> string entry.Key, string entry.Value)
+                |> Seq.filter (fun (name, _) -> not (added.Contains name))
+                |> List.ofSeq
+            store.SetWasiConfiguration(
+                wasi
+                    .WithInheritedStandardInput()
+                    .WithInheritedStandardOutput()
+                    .WithInheritedStandardError()
+                    .WithEnvironmentVariables(inherited @ variables |> List.map (fun (name, value) -> struct (name, value))))
             ignore
         | Redirected(input, output, error, variables) ->
             let outputFile = IO.Path.GetTempFileName()

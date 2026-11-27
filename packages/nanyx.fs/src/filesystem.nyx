@@ -223,3 +223,223 @@ def namesIn: map(string, Held), Path -> list(string) = { held, at ->
     }
   )
 }
+
+--| What `body` gives, run with a `FileSystem` that keeps what `body` writes in memory, over the one in
+  scope: a read sees the real file until `body` writes, appends to or deletes it, and then what
+  `body` left; a directory's listing is the real one's, without what `body` deleted and with what it
+  made; and nothing `body` does reaches the disk. `nanyx run --files-in-memory` runs a program so,
+  as the editor's live mode does, which re-runs a program on every save. Each member gives the
+  `FsError` the one in scope does for the same thing, as a file `body` deleted is `#notFound`.
+export def overlay: [c, FileSystem] ([c, FileSystem] () -> a) -> a = { body ->
+  memory {
+    mut layers = map.empty
+
+    use FileSystem(
+      readFile = { at ->
+        match layered(layers, at)
+          | #file(text) -> #some(text)
+          | #real -> readFile(at)
+          | e -> e
+      }
+      readFileBytes = { at ->
+        match layered(layers, at)
+          | #file(text) -> #some(string.toUtf8(text))
+          | #real -> readFileBytes(at)
+          | e -> e
+      }
+      readFileChunk = { at, offset, length ->
+        match layered(layers, at)
+          | #file(text) -> chunkOf(text, offset, length)
+          | #real -> readFileChunk(at, offset, length)
+          | e -> e
+      }
+      writeFile = { at, text ->
+        match overwritten(layers, at, { _ -> text })
+          | #some(next) ->
+            layers := next
+            #ok
+          | e -> e
+      }
+      appendFile = { at, text ->
+        match overwritten(layers, at, { before -> before ++ text })
+          | #some(next) ->
+            layers := next
+            #ok
+          | e -> e
+      }
+      pathExists = { at ->
+        match layered(layers, at)
+          | #file(_) -> true
+          | #isDirectory -> true
+          | #real -> pathExists(at)
+          | _ -> false
+      }
+      deleteFile = { at ->
+        match kindOf(layers, at)
+          | #file ->
+            layers := map.insert(layers, Path.toString(at), #deleted)
+            #ok
+          | #directory -> #isDirectory
+          | #missing -> missingError(layers, at)
+          | e -> e
+      }
+      listDirectory = { at ->
+        match kindOf(layers, at)
+          | #directory -> listingOf(layers, at)
+          | #file -> #notDirectory
+          | #missing -> missingError(layers, at)
+          | e -> e
+      }
+      createDirectory = { at ->
+        match kindOf(layers, at)
+          | #missing ->
+            match parentKind(layers, at)
+              | #directory ->
+                layers := map.insert(layers, Path.toString(at), #directory)
+                #ok
+              | #file -> #notDirectory
+              | #missing -> #notFound
+              | e -> e
+          | #file -> #alreadyExists
+          | #directory -> #alreadyExists
+          | e -> e
+      }
+    )
+
+    body()
+  }
+}
+
+--| What an overlay keeps of a path: a file and its text, a directory it made, or a file it deleted.
+type Layer = #file(string) | #directory | #deleted
+
+--| What `layers` says of `at`: a file's text, a directory (as `#isDirectory`), a file deleted or
+  under one (as `#notFound`), or `#real` when it keeps nothing of it, and the one in scope says.
+def layered
+  : map(string, Layer), Path -> #file(string) | #isDirectory | #notFound | #real
+  = { layers, at ->
+    match map.get(layers, Path.toString(at))
+      | #some(#file(text)) -> #file(text)
+      | #some(#directory) -> #isDirectory
+      | #some(#deleted) -> #notFound
+      | #notFound -> if deletedAbove(layers, at) then #notFound else #real
+  }
+
+--| Whether a directory `at` is in is a file `layers` deleted.
+def deletedAbove: map(string, Layer), Path -> bool = { layers, at ->
+  match path.parent(at)
+    | #some(up) ->
+      match map.get(layers, Path.toString(up))
+        | #some(#deleted) -> true
+        | _ -> deletedAbove(layers, up)
+    | #none -> false
+}
+
+--| Up to `length` bytes of `text` from byte `offset` on, as the console host reads a chunk of a file.
+def chunkOf: string, int, int -> #some(string) | FsError = { text, offset, length ->
+  def size = string.length(text)
+
+  if offset > size
+    then #other("it is shorter than it was: it ends at byte {size}, before {offset}")
+    else #some(string.substring(text, start = offset, length = length))
+}
+
+--| What is at `at`, as an overlay over the one in scope sees it: a file, a directory, nothing, or
+  why the one in scope can't say.
+def kindOf
+  : [Async, FileSystem] map(string, Layer), Path -> #file | #directory | #missing | FsError
+  = { layers, at ->
+    if implicitDirectory(at) then #directory else
+      match layered(layers, at)
+        | #file(_) -> #file
+        | #isDirectory -> #directory
+        | #notFound -> #missing
+        | #real ->
+          if not pathExists(at) then #missing else
+            match readFileChunk(at, 0, 0)
+              | #isDirectory -> #directory
+              | #some(_) -> #file
+              | #notFound -> #missing
+              | e -> e
+  }
+
+--| What is at the directory `at` is in, as `kindOf` sees it: a root and `.` are directories.
+def parentKind
+  : [Async, FileSystem] map(string, Layer), Path -> #file | #directory | #missing | FsError
+  = { layers, at ->
+    match path.parent(at)
+      | #some(up) -> kindOf(layers, up)
+      | #none -> #directory
+  }
+
+--| The error for `at`, which there is nothing at: `#notDirectory` when a directory it would be in is a
+  file, and `#notFound` otherwise.
+def missingError: [Async, FileSystem] map(string, Layer), Path -> FsError = { layers, at ->
+  match path.parent(at)
+    | #some(up) ->
+      match kindOf(layers, up)
+        | #file -> #notDirectory
+        | #missing -> missingError(layers, up)
+        | _ -> #notFound
+    | #none -> #notFound
+}
+
+--| `layers` with the file at `at` holding what `change` makes of its text, the real file's until
+  then, or `""` for a new file; or why it can't be written.
+def overwritten
+  : [Async, FileSystem]
+    map(string, Layer), Path, (string -> string) -> #some(map(string, Layer)) | FsError
+  = { layers, at, change ->
+    def stored = { text -> #some(map.insert(layers, Path.toString(at), #file(change(text)))) }
+
+    match kindOf(layers, at)
+      | #directory -> #isDirectory
+      | #file ->
+        match layered(layers, at)
+          | #file(text) -> stored(text)
+          | _ ->
+            match readFile(at)
+              | #some(text) -> stored(text)
+              | e -> e
+      | #missing ->
+        match parentKind(layers, at)
+          | #directory -> stored("")
+          | #file -> #notDirectory
+          | #missing -> missingError(layers, at)
+          | e -> e
+      | e -> e
+  }
+
+--| The names in the directory `at`: the real directory's, if there is one, without the files
+  `layers` deleted, and with what it made there.
+def listingOf
+  : [Async, FileSystem] map(string, Layer), Path -> #some(list(string)) | FsError
+  = { layers, at ->
+    def real = match layered(layers, at)
+      | #real -> listDirectory(at)
+      | _ -> #some([])
+
+    match real
+      | #some(names) ->
+        def kept = names \filter(
+          { name -> map.get(layers, Path.toString(path.join(at, name))) != #some(#deleted) }
+        )
+
+        def made = layers \map.toList \filterMap(
+          { entry ->
+            match entry
+              | (key, #deleted) -> #skip
+              | (key, _) ->
+                def inner = path.of(key)
+
+                match (path.parent(inner), path.fileName(inner))
+                  | (#some(up), #some(name)) -> (if Path.toString(up) == Path.toString(at)
+                    then #some(name)
+                    else #skip)
+                  | _ -> #skip
+          }
+        )
+
+        #some(list.distinct(kept ++ made))
+      | e -> e
+  }

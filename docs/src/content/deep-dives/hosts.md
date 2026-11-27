@@ -151,6 +151,12 @@ in progress.
   length)`, which opens the file, reads the chunk with `fd_pread` and closes it again, so a sequence abandoned before
   its end holds no file, and pulling a sequence again reads the same lines again. The host's `readFileChunk` gives an
   error, not an empty chunk, for an offset past the file's end, so a file cut short between chunks is caught.
+- **Files in memory.** `cli.host`'s `run`, and `cli.host.wasi`'s, read the environment variable `NANYX_FILES_IN_MEMORY`
+  through the `Env` that `provide` loads, and run the entry inside `nanyx.fs`'s `filesystem.overlay` when it is `1`: a
+  `FileSystem` over the real one that keeps a map of what the program wrote, made and deleted, and reads through to the
+  real files for the rest. `nanyx run --files-in-memory` sets the variable (`ProgramIo.withVariable`, with
+  `ProgramIo.InheritedWith` for a program that runs with the shell's streams). It is a variable rather than an import of
+  the runtime's own, so that a program built from the host still runs under any WebAssembly runtime.
 - **`Async`** marks a function that can wait. It is declared in the standard library's `nanyx/async` as
   `protected ()`, so no `use` outside that module can make one, and it has no members. Both hosts provide it: each
   prelude re-exports it, and each `run` requires it in its own type, `[HostRuntime, Async]`, and passes it to the
