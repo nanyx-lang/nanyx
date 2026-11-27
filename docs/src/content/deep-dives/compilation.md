@@ -33,6 +33,15 @@ text to the binary format for `nanyx build` and `nanyx wasm` (below).
   as the console runner does; a module written to a file, which another runtime may run, has no such import and always
   writes it itself (`EmitContext.DbgToRuntime`, `Probing.defineDbg`). `WasmOptions.DbgToEmbedder` gives the import
   without the probes, for an embedder such as a page that keeps `dbg` apart from what the program writes.
+- A module's imports are inlined into it, so the backend compiles one module: each import's definitions, and what
+  they inlined in turn, under the names `ModuleLinking.inlinedRenames` gives them. A private definition is named after
+  its module (`helpers.helper`), and an export after the import's alias (`m.helper`), or by its own name when an import
+  brings it in unqualified. In a module that isn't the program's own, as a host's or a library's
+  (`MergedImports.QualifiesImports`), an export brought in unqualified is named after its module too, and the module's
+  references to it are written so (`writeBlockAliases`). Otherwise a host that imports `within` from another module
+  would carry it into the program as `within`, beside or in place of a `within` of the program's own
+  ([#2995](https://github.com/nanyx-lang/nanyx/issues/2995)). The standard library's definitions keep the one name
+  every module shares.
 - How values are laid out and freed is in [Memory management](./memory-management), and how context members are
   passed in [Context calls](./context-calls).
 
