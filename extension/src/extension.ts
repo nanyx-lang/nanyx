@@ -54,7 +54,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const values = new DbgView(() => client);
   dbgView = values;
   const explorer = new TestExplorer(() => compiler, log, values);
-  const live = new LiveMode(context.workspaceState, () => compiler, () => client, values);
+  const live = new LiveMode(context.workspaceState, () => compiler, () => client, values, explorer);
   liveMode = live;
   testExplorer = explorer;
 
