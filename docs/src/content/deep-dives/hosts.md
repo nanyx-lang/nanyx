@@ -218,7 +218,7 @@ in progress.
   crash, which `NYX0312` keeps any test from reaching. For a `#io` test, it calls `nanyx.wasi`'s
   `preview1.system.provide`, which loads the console host's real `Console`, `Env` and `FileSystem`. Its prelude
   re-exports `Console`, with `print`, `println`, `eprint` and `eprintln`, `Random` and `Async`. The contexts it provides
-  are `Hosts.testContexts`, and `Hosts.ioTestContexts` for a `#io` test, which the compiler checks a test against
+  are `Hosts.testContexts`, `Async`, `Console` and `Random`, and `Hosts.ioTestContexts` for a `#io` test, which the compiler checks a test against
   (`NYX0312`).
 - **The playground host's runner.** `packages/nanyx.playground.host/runner` is the JavaScript that runs a module compiled for
   the playground host; it isn't a source of the package (its `sources` are `src/**/*.nyx`), and the compiler built for

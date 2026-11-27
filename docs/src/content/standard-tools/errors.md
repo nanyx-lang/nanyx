@@ -2989,7 +2989,7 @@ To fix it, move what the test and the other code share into a def that isn't mar
 # NYX0312: Context the test host doesn't provide
 
 A test requires a context that the test host doesn't provide it. A test runs under the test host, which provides
-`Console` and `Random` only, so any other context a test requires it must provide itself, even one its program's own
+`Async`, `Console` and `Random` only, so any other context a test requires it must provide itself, even one its program's own
 host provides.
 
 ```nanyx
@@ -3001,7 +3001,7 @@ def readsArguments = {  -- error NYX0312: The test 'readsArguments' requires the
 
 To fix it, load an instance of the context in the test with `use`, such as a fake that records what the code does
 with it, and assert on what it recorded. A test that is meant to read the package's files or the environment can be
-marked `@test(#io)` instead, which runs it with the console host's real `Console`, `Env` and `FileSystem`, and `Async`:
+marked `@test(#io)` instead, which runs it with the console host's real `Console`, `Env` and `FileSystem`:
 where every context a test lacks is one of those, the message says so, and an editor offers to mark it.
 
 # NYX0301: Not supported by the WebAssembly backend

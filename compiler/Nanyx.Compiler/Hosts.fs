@@ -101,12 +101,12 @@ module Hosts =
     let testPackage = "nanyx.test.host"
 
     /// The contexts the test host provides a test, by name: what its `run` passes a test build's entry point. A test
-    /// may require only these (see `TestChecks`).
-    let testContexts = [ "Console"; "Random" ]
+    /// may require only these (see `TestChecks`). `Async` is the host's own, so a test waits as a program does, and can
+    /// call code that reads files through a `FileSystem` it loads itself.
+    let testContexts = [ "Async"; "Console"; "Random" ]
 
     /// The contexts the test host provides a test marked `@test(#io)`: the console host's real `Console`, `Env` and
-    /// `FileSystem`, `Async`, which `FileSystem`'s members require, and the seeded `Random` (see
-    /// `Attributes.ioTestArgument`).
+    /// `FileSystem`, with `Async` and the seeded `Random`, as every test has them (see `Attributes.ioTestArgument`).
     let ioTestContexts = [ "Async"; "Console"; "Env"; "FileSystem"; "Random" ]
 
     /// The module of the foreign functions a component's core module defines itself for its host's component root,
