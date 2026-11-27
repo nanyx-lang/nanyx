@@ -296,6 +296,22 @@ def next = { x ->
 }
 ```
 
+# Comments at the end of a def's line
+
+A comment at the end of a def written on one line stays on the def's first line when the formatter puts its body on lines of its own: after the `{` or `->` that ends that line, not after the `}`. A comment written there, after a lambda's `{` or `->`, stays there too.
+
+```nanyx unformatted
+context Tx = (commit: () -> ())
+
+-- before
+def viaTx: [Tx] () -> () = { commit() } -- a Tx serves
+
+-- after
+def viaTx: [Tx] () -> () = { -- a Tx serves
+  commit()
+}
+```
+
 # Typical workflow
 
 Format files before committing changes, and enable format-on-save in your editor where possible.
