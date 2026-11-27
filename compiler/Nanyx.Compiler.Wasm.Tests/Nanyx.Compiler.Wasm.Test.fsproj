@@ -71,6 +71,7 @@
     <Compile Include="Features\Contexts\RunExpectedFunctionContextTests.fs" />
     <Compile Include="Features\Contexts\RunContextGenericTypeTests.fs" />
     <Compile Include="Features\Contexts\RunContextNameTests.fs" />
+    <Compile Include="Features\Contexts\RunMemberlessContextTests.fs" />
     <Compile Include="Features\Contexts\RunExpectedTypeInstanceTests.fs" />
     <Compile Include="Features\Contexts\RunLocalInstanceContextTests.fs" />
     <Compile Include="Features\Contexts\RunLocalContextCallerTests.fs" />
