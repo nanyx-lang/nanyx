@@ -49,12 +49,12 @@ println("Hello!")
 
 | Directive | What it does | In a manifest |
 | --- | --- | --- |
-| `::host nanyx.cli.host` | Runs the script under a host the compiler ships; without `::host`, a script runs under `nanyx.cli.host` | `host = (package = "nanyx.cli.host", version = "0.49.0")` |
+| `::host nanyx.cli.host` | Runs the script under a host the compiler ships; without `::host`, a script runs under `nanyx.cli.host` | `host = (package = "nanyx.cli.host", version = "0.49.1")` |
 | `::host acme.server ../server` | Runs the script under the host package in a directory, relative to the script | `host = (package = "acme.server", path = "../server")` |
 | `::install acme.json ../json` | Depends on the package in a directory, so the script can import its public modules, `import acme.json/parse` | `dependencies = [(package = "acme.json", path = "../json")]` |
 | `::install acme.json 1.2.0` | Depends on a package from the [package index](../tour/packages#package-dependencies), at exactly that version | `dependencies = [(package = "acme.json", version = "1.2.0")]`, locked in `nanyx.lock` |
-| `::install nanyx.cli` | Depends on a package the compiler ships | `dependencies = [(package = "nanyx.cli", version = "0.49.0")]` |
-| `::linter nanyx.lint` | Turns the official linter on, with every rule at its default severity | `linters = [(package = "nanyx.lint", version = "0.49.0")]` |
+| `::install nanyx.cli` | Depends on a package the compiler ships | `dependencies = [(package = "nanyx.cli", version = "0.49.1")]` |
+| `::linter nanyx.lint` | Turns the official linter on, with every rule at its default severity | `linters = [(package = "nanyx.lint", version = "0.49.1")]` |
 | `::lint unusedBindings #error` | Sets a rule's severity (`#error`, `#warning`, `#info`, `#hint` or `#off`) for the linter of the nearest `::linter` above it | `settings = (rules = (unusedBindings = #error))` in that linter's entry |
 | `::format lineWidth 80` | Sets one of the formatter's settings, `lineWidth` or `indentSize` | `formatter = (lineWidth = 80)` |
 
@@ -104,8 +104,8 @@ A package is described by a `.nyxp` file at the package root: one Nanyx record, 
 ```nanyx fragment
 (
   package = (name = "word_counter", version = "0.1.0", sources = ["src/**/*.nyx"])
-  linters = [(package = "nanyx.lint", version = "0.49.0")]
-  host = (package = "nanyx.cli.host", version = "0.49.0")
+  linters = [(package = "nanyx.lint", version = "0.49.1")]
+  host = (package = "nanyx.cli.host", version = "0.49.1")
 )
 ```
 

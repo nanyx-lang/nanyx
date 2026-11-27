@@ -2,5 +2,5 @@
 -- `nanyx build` writes it as a component of wasi:http/service, which `wasmtime serve` serves.
 (
   package = (name = "hello.server", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.http.host", version = "0.49.0")
+  host = (package = "nanyx.http.host", version = "0.49.1")
 )
