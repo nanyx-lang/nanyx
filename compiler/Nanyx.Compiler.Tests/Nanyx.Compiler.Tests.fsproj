@@ -187,6 +187,7 @@
     <Compile Include="Features\Linters\UselessExpressionsTests.fs" />
     <Compile Include="Features\Linters\ShadowedPreludeNamesTests.fs" />
     <Compile Include="Features\Linters\SemicolonsTests.fs" />
+    <Compile Include="Features\Linters\RedundantTypeNameTests.fs" />
     <Compile Include="Features\Linters\UnconstructibleTypeTests.fs" />
     <Compile Include="Features\Linters\AllowTests.fs" />
     <Compile Include="Features\Loops\ForLoopTests.fs" />

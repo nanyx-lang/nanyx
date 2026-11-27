@@ -63,7 +63,7 @@ let ``Names the compiler makes up are not reported`` () =
         normalized """def half: int -> #some(int) | #odd = { n -> #some(n // 2) }
 def f = { pair ->
   def (a, b) = pair
-  def doubled = [a, b] \ list.map({ * 2 })
+  def doubled = [a, b] \ map({ * 2 })
   for doubled
     | n -> ignore(n)
 }

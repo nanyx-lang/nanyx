@@ -332,6 +332,10 @@ type InferState =
             /// The attached definition each pipe calls, by the pipe's node, where that is not the name written:
             /// `x \trim` on a string calls `string.trim`.
             PipeTargets: Map<NodeId, Identifier>;
+            /// The pipes whose target is written with the name of a type, `xs \list.map`, where the name without it
+            /// calls the same definition, and no plain definition of that name is in scope to confuse a reader: what
+            /// the official linter's `redundantTypeName` draws faint (#3159).
+            RedundantTypeNames: Set<NodeId>;
             /// The standard-library modules that export each value, type and context, as their import paths
             /// (`nanyx/text`), by the name they export it under: where the error for a name that is not in scope, or
             /// for a pipe that could not reach a definition, says to find it.
@@ -573,6 +577,7 @@ let emptyState =
             ImportReferences = Map.empty;
             AmbiguousImports = Map.empty;
             PipeTargets = Map.empty;
+            RedundantTypeNames = Set.empty;
             StandardLibraryExports = lazy Map.empty;
             OperatorCalls = Map.empty;
             OperatorInstances = Map.empty;
