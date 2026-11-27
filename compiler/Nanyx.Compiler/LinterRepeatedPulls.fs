@@ -87,12 +87,13 @@ module RepeatedPulls =
         | None -> None
 
     /// The callee of `expr` if it is a call or a pipe of a function the module knows the type of, with the arguments it
-    /// is given in order: a pipe's value first.
+    /// is given in order, as they are written: a pipe's value first, and `f(a, b)`'s two, not the tuple it passes them
+    /// as (see `SyntaxTree.writtenArguments`).
     let private callOf (model: SemanticModel) (expr: Expression) : (Callee * Expression list) option =
         let arguments =
             match expr.Kind with
-            | FunctionCall(_, _, args) -> Some args
-            | Pipe(value, _, _, args) -> Some (value :: args)
+            | FunctionCall(_, _, args) -> Some (SyntaxTree.writtenArguments args)
+            | Pipe(value, _, _, args) -> Some (value :: SyntaxTree.writtenArguments args)
             | _ -> None
         match arguments, model.References |> Map.tryFind expr.Id with
         | Some args, Some symbol when not args.IsEmpty ->

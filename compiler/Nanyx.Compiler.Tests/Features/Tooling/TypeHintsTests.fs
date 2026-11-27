@@ -288,3 +288,22 @@ def Point.show = { p -> "{p.x}" }
     Assert.Equal<(string * string) list>(
         [ "wrong", "int"; "Point.show", "Point -> string" ],
         TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type))
+
+[<Fact>]
+let ``A def that starts tasks has one entry among the top-level types, under its own name`` () =
+    // The compiler adds a def that a caller's tasks run in for each def that starts tasks; it is not written (#3038).
+    let source =
+        withFinalNewline
+            """def work: () -> int = { () -> 2 }
+
+def starter: [Async] () -> int = { () ->
+  def t = start! work()
+  await(t)
+}
+
+println("{work()}")"""
+    let result = Compiler.compile source
+    Assert.Empty(result.Diagnostics)
+    Assert.Equal<(string * string) list>(
+        [ "work", "() -> int"; "starter", "[Async] () -> int" ],
+        TypeHints.topLevelTypes Ascii "" result |> List.map (fun hint -> hint.Name, hint.Type))

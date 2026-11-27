@@ -148,3 +148,32 @@ def pong: [Async] int, int -> int = { n, acc ->
 export def run: [Async] () -> int = { () -> ping(10, 0) }
 """
     Assert.Empty(reported source)
+
+[<Fact>]
+let ``A private def that starts tasks is reported when nothing calls it, and its fix removes it`` () =
+    // It calls the def the compiler makes to run its body in its caller's scope, which is no use of it (#3035).
+    let starter = "def unusedStarter: [Async] () -> int = { () ->\n  def t = start! work()\n  await(t)\n}\n\n"
+    let source = normalized ("module m\ndef work: () -> int = { () -> 2 }\n\n" + starter + "export def plain = work()\n")
+    Assert.Equal<(string * string) list>([ "It is never used", "unusedStarter" ], reported source)
+    Assert.Equal((source.Replace(starter, "\n"), "Remove `unusedStarter`"), fixed' source)
+
+[<Fact>]
+let ``A private def that starts tasks and is called, or is the entry, is not reported`` () =
+    let source =
+        normalized """module m
+def work: () -> int = { () -> 2 }
+
+def usedStarter: [Async] () -> int = { () ->
+  def t = start! work()
+  await(t)
+}
+
+export def run: [Async] () -> int = { () -> usedStarter() }
+
+@entry
+def main: [Async] () -> () = { () ->
+  def t = start! work()
+  ignore(await(t))
+}
+"""
+    Assert.Empty(reported source)
