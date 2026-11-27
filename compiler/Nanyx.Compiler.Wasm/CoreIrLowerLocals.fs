@@ -143,8 +143,20 @@ let localInstancesAround (tools: LocalTools) (scope: Scope) (name: string) (loca
 /// at each type arguments it uses it at. A use whose type is not known reads the closure lowered at none, with each
 /// of those variables unit.
 let genericLocal (tools: LocalTools) (scope: Scope) (name: string) (rhs: Expression) (target: string) (captured: Expression list) (localTy: Ty) (rest: StatementKind list) (k: Expr -> Expr) : Expr =
-    let instances = localUses tools Map.empty localTy name (Expression.synthetic (Block(rest |> List.map Statement.synthetic)))
-    let instances = if instances.IsEmpty then [ [], Map.empty ] else instances
+    // A use at a variable of another local function generic in variables of its own, as `eq(v, v)` in `def twice = { v
+    // -> eq(v, v) }`, isn't at types known here: that function's closure captures this one at each type arguments it is
+    // lowered at (see `capturedInstances`). Lowered here, at its variables, a context this one requires would have no
+    // members (#2813).
+    // The closure bound here then is at each of its variables unit, whose contexts have members.
+    let atKnownTypes (_, bindings: Map<int, Ty>) = bindings |> Map.forall (fun _ ty -> (freeVars ty).IsEmpty)
+    let used = localUses tools Map.empty localTy name (Expression.synthetic (Block(rest |> List.map Statement.synthetic)))
+    let instances =
+        match used |> List.filter atKnownTypes, used with
+        | [], [] -> [ [], Map.empty ]
+        | [], _ ->
+            let vars = freeVars localTy |> List.distinct |> List.sort
+            [ vars |> List.map (fun _ -> IrUnit), vars |> List.map (fun id -> id, TyPrimitive "unit") |> Map.ofList ]
+        | known, _ -> known
     let make bindings typeArguments = tools.Closure scope rhs target captured bindings typeArguments
     let closures = instances |> List.map (fun (typeArguments, bindings) -> typeArguments, make bindings typeArguments)
     localInstancesAround tools scope name localTy closures (Some make) rest k
