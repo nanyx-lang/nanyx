@@ -5,8 +5,8 @@
   -- The official linter runs only in packages that turn it on. Each rule can be set to #error, #warning, #info,
   -- #hint or #off; leave out its settings to keep every rule at its default.
   linters = [
-    (package = "nanyx.lint", version = "0.50.0", settings = (rules = (unusedBindings = #error)))
+    (package = "nanyx.lint", version = "0.51.0", settings = (rules = (unusedBindings = #error)))
   ]
-  host = (package = "nanyx.cli.host", version = "0.50.0")
+  host = (package = "nanyx.cli.host", version = "0.51.0")
   formatter = (lineWidth = 100)
 )
