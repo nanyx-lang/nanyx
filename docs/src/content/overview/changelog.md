@@ -8,6 +8,70 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.51.0
+
+*27 November 2026*
+
+A type error in a module you import no longer stops the run or your tests, and generic code compares and orders values
+with their own `==` and `compare`, in local functions too. Many errors say more plainly what is wrong, and point at the
+code that is. Two changes may need edits: `unit` is no longer a type name, and `foldWhile`'s step returns `#some(next)`
+to go on.
+
+**Language**
+
+- A type or name error in a module the program imports is deferred, as one in the file being run is: `nanyx run` runs
+  up to the call that reaches it and stops there, naming the file and line in that module, and `nanyx test` fails only
+  the tests that reach it. `nanyx check` and release builds still refuse it, and a syntax error still stops the build
+  ([Deferred errors](../tour/error-handling#deferred-errors)).
+- The type of `()` is written `()`. `unit` and `Unit` are no longer type names: writing one is
+  [NYX0114](../standard-tools/errors#nyx0114), with a fix that writes `()`.
+- An operator on a value of a type variable reads its member only through the prelude's contexts: `+` in a function
+  that requires only a context of your own with a `+` member is missing `Add(a)`, and a module's own `context Add`
+  doesn't take the operator over. Call your own context's member by name
+  ([Operators find their context](../advanced/contexts#operators-find-their-context)).
+- A tuple or a list of a type with its own `compare` is ordered through it, position by position
+  ([Ord(a)](../advanced/contexts#orda)).
+- A module block's pattern that isn't exported is local to the block
+  ([Sharing patterns](../advanced/custom-patterns#sharing-patterns)), and `export def` in a function's block is a
+  syntax error, as `export pattern` there is.
+
+**Standard library**
+
+- Every `foldWhile` takes a step that returns `#some(next)` to go on. Anything else it returns stops the fold and is
+  the result, so a step's own tags, such as `#tooBig(x)`, come straight out ([`list.foldWhile`](../stdlib/prelude-lists#listfoldwhile)).
+
+**Tools**
+
+- A call with the wrong number of arguments is [NYX0304](../standard-tools/errors#nyx0304): "'f' takes 2 arguments,
+  but this call gives 1". Calling a value that isn't a function is [NYX0305](../standard-tools/errors#nyx0305): "'x'
+  is an int, not a function". A lambda whose type gives it one parameter where it takes several says where the
+  parentheses most likely belong.
+- A match arm, `if` branch or list item whose type differs from those before it is reported at itself, and a record
+  field's errors at its name or value.
+- A type mismatch names the made-up type variables `a`, `b` and `r`, and an inferred context variable is `κ`
+  ([Type inference and annotations](../tour/type-inference-and-annotations)). An associated type a type uses is
+  written as a variable bound in its context, as in `[Iter(c, elem = a)] c, a -> a`.
+- An exponent without a fraction, `1e5`, is reported at the literal, with `1.0e5` suggested.
+- Hover, the info view, the outline and completion write a custom pattern as declared, not as its generated def.
+- The info view shows a line's messages in full, with their fixes, and the expression at the cursor or the selection
+  with its type ([VS Code extension](../standard-tools/vs-code-extension#info-view)).
+- When the formatter breaks a one-line def's body onto lines of its own, the def's trailing comment stays on its first
+  line ([Formatter](../standard-tools/formatter)).
+- A script whose pinned packages are all in the cache runs without reading the package index, so it runs offline
+  ([Single-file scripts](../getting-started/files-and-projects#single-file-scripts)).
+
+**Fixes**
+
+- A local function that writes no type and compares or orders values of its own type variable, or a structure of
+  them, uses a type's own `==` or `compare`, as a top-level function does; before, it compared by structure. A function
+  that writes no type and orders a structure of its variables, as `[a] < [b]`, does so too.
+- A local function can call another local function that requires a context, such as `eq: [Eq(a)]`, at a type
+  variable of its own, and so can a lambda inside it; before, these failed with NYX0301
+  ([Context calls](../deep-dives/context-calls)).
+- A function that requires `Eq` of an open union is passed the same `==` the operator uses.
+- `dbg` writes a derived measure with its dimension in brackets, `(Distance / Time)(1.0)`.
+- A failing `assert` shows the right text in a file with CRLF line endings.
+
 # 0.50.0
 
 *27 November 2026*
