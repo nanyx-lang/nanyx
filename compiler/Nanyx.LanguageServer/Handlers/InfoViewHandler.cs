@@ -32,14 +32,14 @@ public sealed record InfoViewResult
 }
 
 /// <summary>
-/// A scope at the position. <see cref="Kind"/> is one of <c>cursor</c> (always first, with the sections
-/// <c>expression</c>, <c>messages</c> and <c>call</c>, even when they are empty), <c>lambda</c> (<c>type</c>,
-/// <c>names</c>, <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>, <c>contexts</c>, <c>flow</c>) and
-/// <c>module</c> (always last, with <c>names</c> and <c>contexts</c>); a lambda or function scope comes once for each
-/// lambda or def around the position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the
-/// scope and <see cref="Location"/> is where it links: a lambda by its parameters and line, a def by its name, the
-/// module by its declared name. <see cref="Documentation"/> is the module's doc comment. <see cref="Collapsed"/> says
-/// whether a client shows it closed at first: the module, and the scopes after the third.
+/// A scope at the position. <see cref="Kind"/> is one of <c>messages</c> (first, only when the position's line has a
+/// diagnostic, with its <see cref="Messages"/> and no sections), <c>lambda</c> (<c>type</c>, <c>names</c>,
+/// <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>, <c>contexts</c>, <c>flow</c>) and <c>module</c>
+/// (always last, with <c>names</c> and <c>contexts</c>); a lambda or function scope comes once for each lambda or def
+/// around the position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the scope and
+/// <see cref="Location"/> is where it links: a lambda by its parameters and line, a def by its name, the module by its
+/// declared name. <see cref="Documentation"/> is the module's doc comment. <see cref="Collapsed"/> says whether a client
+/// shows it closed at first: the module, and the scopes after the third, not counting the messages.
 /// </summary>
 public sealed record InfoViewScope
 {
@@ -49,6 +49,34 @@ public sealed record InfoViewScope
     public string? Documentation { get; init; }
     public bool Collapsed { get; init; }
     public required IReadOnlyList<InfoViewSection> Sections { get; init; }
+    public IReadOnlyList<InfoViewMessage>? Messages { get; init; }
+}
+
+/// <summary>
+/// A diagnostic on the position's line, in full, as <c>nanyx run</c> prints it: its <see cref="Severity"/>
+/// (<c>error</c>, <c>warning</c>, <c>info</c>, <c>hint</c>) and <see cref="Code"/>, which links to
+/// <see cref="Reference"/>, its section of the errors reference, if it has one (a linter's code has none); its
+/// <see cref="Headline"/> (<c>Type mismatch</c>), at <see cref="Location"/>; its <see cref="Notes"/>, the body and then
+/// each suggestion after <c>help:</c> (<c>'float' vs 'int'</c>); the other places that explain it, each linking there;
+/// and its fixes.
+/// </summary>
+public sealed record InfoViewMessage
+{
+    public required string Severity { get; init; }
+    public string? Code { get; init; }
+    public Uri? Reference { get; init; }
+    public required string Headline { get; init; }
+    public required Location Location { get; init; }
+    public IReadOnlyList<string> Notes { get; init; } = [];
+    public IReadOnlyList<InfoViewItem> Related { get; init; } = [];
+    public IReadOnlyList<InfoViewFix> Fixes { get; init; } = [];
+}
+
+/// <summary>A fix of a message: its title, and the edit it makes, the same edit as its quick fix makes.</summary>
+public sealed record InfoViewFix
+{
+    public required string Title { get; init; }
+    public required WorkspaceEdit Edit { get; init; }
 }
 
 /// <summary>
@@ -71,12 +99,12 @@ public sealed record InfoViewSection
 }
 
 /// <summary>
-/// An item of a section: its text (<c>name: type</c>, a context, a message), what kind of thing it is or where it
-/// comes from (<c>parameter</c>, <c>use</c>, <c>error NYX0101</c>), where it is, for a link, and the doc comment of
-/// what it names, as Markdown with its links written out, as hover shows it: for an import, that of the module it
-/// brings in. <see cref="Name"/> is the part of the text that links to <see cref="Location"/>: the name it starts with
-/// (a def's, a local's, a parameter's, a context's, a callee's); an item without one, such as a type or a message, has
-/// no link in its text. <see cref="Links"/> are the other parts of it that link: the names of types, each to its
+/// An item of a section: its text (<c>name: type</c>, a context, or, among a message's other places, what one says),
+/// what kind of thing it is or where it comes from (<c>parameter</c>, <c>use</c>, <c>line 4</c>), where it is, for a
+/// link, and the doc comment of what it names, as Markdown with its links written out, as hover shows it: for an
+/// import, that of the module it brings in. <see cref="Name"/> is the part of the text that links to
+/// <see cref="Location"/>: the name it starts with (a def's, a local's, a parameter's, a context's, a callee's); an
+/// item without one, such as a type, has no link in its text. <see cref="Links"/> are the other parts of it that link: the names of types, each to its
 /// definition (see <see cref="InfoViewTypeLinks"/>). <see cref="Children"/> are the items under it: the calls a provider in the flow serves.
 /// </summary>
 public sealed record InfoViewItem
@@ -100,33 +128,19 @@ public sealed record InfoViewName(int Start, int Length)
             ? new InfoViewName(0, name.Length)
             : null;
 
-    /// <summary>
-    /// The name <paramref name="name"/> in what hover writes on a name, <c>def name: type</c> or <c>name: type</c>,
-    /// if <paramref name="text"/> is that.
-    /// </summary>
-    public static InfoViewName? Declared(string text, string name) =>
-        text.StartsWith($"def {name}:", StringComparison.Ordinal) ? new InfoViewName(4, name.Length)
-        : text.StartsWith($"{name}:", StringComparison.Ordinal) ? new InfoViewName(0, name.Length)
-        : null;
-
     private static bool IsNamePart(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '.';
 }
 
 /// <summary>
 /// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel, by scope, innermost first.
-/// The cursor: on a module's name, as hover finds it, the module and its doc comment (see <see cref="ModuleItem"/>);
-/// otherwise the expression there with its type, as hover shows it, and on a use of a generic def the def's declared
-/// signature and how the use fills in its type variables (see <see cref="ExpressionItems"/>); the diagnostics on the
-/// position's line; and the contexts the innermost call around the position that requires any requires, each with
-/// where it finds it (a def's signature, a <c>use</c>, a def that was inferred to require it, the runtime, or an
-/// instance the compiler builds: from attached definitions, derived from the type's parts, or its own). Then each
+/// First, if the position's line has any, its diagnostics, each in full (see <see cref="InfoViewMessage"/>). Then each
 /// lambda and def around the position (see <see cref="InfoView.Scope"/>): a lambda's type, with the contexts it
 /// carries, a def's signature and doc comment, the parameters, locals and pattern variables each declares, the
 /// contexts each provides, and in the innermost def the flow of contexts through it, each provider with the calls it
-/// serves (see <see cref="NyxCompiler.ContextFlow"/>). Last the module: its doc comment, its top-level defs and imports
-/// in scope, and the runtime's contexts. It also gives the ranges to highlight: a provider at the position and the
-/// calls it serves, or a call and what provides its contexts. Read from the
-/// document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
+/// serves, an instance the compiler builds among them (see <see cref="NyxCompiler.ContextFlow"/>). Last the module: its
+/// doc comment, its top-level defs and imports in scope, and the runtime's contexts. It also gives the ranges to
+/// highlight: a provider at the position and the calls it serves, or a call and what provides its contexts. Read from
+/// the document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
 /// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it. Each
 /// item whose name or context has a doc comment carries it, read as hover reads it (see
 /// <see cref="NyxCompiler.Documentation.Reader"/>): a context's is that of the def a <c>use</c> names, if it has
@@ -178,26 +192,6 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         string Signature(string name, string type) => LaidOut(request.Width, name, type);
         string? DocOf(NyxCompiler.Symbol symbol) => docs?.ForSymbol(symbol)?.Value;
 
-        // What is at the cursor is only shown where the text has not been edited since it was typed.
-        IReadOnlyList<InfoViewItem> cursor = document.ToLastGood(offset) is not { } typed
-            ? []
-            : document.LastGood is { Compiled: { } typedCompile } typedDocument
-              && NyxCompiler.Hover.moduleAt(typedDocument.FileName, typedCompile, typed)?.Value is { } module
-                ? [ModuleItem(module, typedDocument.DocReader(uri, typed, _standardLibrary), Locate)]
-                : info?.Expression?.Value is { } hover
-                    ? ExpressionItems(hover, info.Instantiation?.Value, Locate, info.ExpressionSymbol?.Value, DocOf, request.Width)
-                    : [];
-        var line = request.Position.Line;
-        var messages = document.PublishedDiagnostics(uri)
-            .Where(diagnostic => diagnostic.Range.Start.Line <= line && line <= diagnostic.Range.End.Line)
-            .Select(diagnostic => new InfoViewItem
-            {
-                Text = diagnostic.Message.String ?? "",
-                Detail = $"{Describe(diagnostic.Severity)} {diagnostic.Code?.String}".TrimEnd(),
-                Location = new Location { Uri = uri, Range = diagnostic.Range }
-            })
-            .ToList();
-
         InfoViewItem Name(InfoView.ScopedName name) => new()
         {
             Text = name.Type?.Value is { } type ? Signature(name.Name, type) : name.Name,
@@ -216,30 +210,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
         };
 
-        var call = info?.Call
-            .Select(context => new InfoViewItem
-            {
-                Text = context.Context,
-                Name = InfoViewName.AtStart(context.Context, context.Name),
-                Detail = Describe(context.Source),
-                Location = Locate(context.Span),
-                Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
-            })
-            .ToList() ?? [];
-        var scopes = new List<InfoViewScope>
-        {
-            new()
-            {
-                Kind = "cursor",
-                Heading = "At the cursor",
-                Sections =
-                [
-                    new InfoViewSection { Id = "expression", Title = "Expression", Items = cursor },
-                    new InfoViewSection { Id = "messages", Title = "Messages", Items = messages },
-                    new InfoViewSection { Id = "call", Title = "This call", Items = call }
-                ]
-            }
-        };
+        var scopes = new List<InfoViewScope>();
         // The flow of contexts is through the innermost def around the position.
         var flowShown = false;
         foreach (var scope in info?.Scopes ?? [])
@@ -310,7 +281,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             });
         }
 
-        // Each type's name links to its definition, in every item but a message, which is prose.
+        // Each type's name links to its definition, in every item.
         var types = new Dictionary<string, Location>();
         foreach (var (name, symbol) in info?.TypeNames.Select(entry => (entry.Item1, entry.Item2)) ?? [])
         {
@@ -320,20 +291,25 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             }
         }
 
+        // The line's messages come first, and only when it has any.
+        var messages = Messages(uri, document, request.Position.Line);
+        IEnumerable<InfoViewScope> messagesScope = messages.Count == 0
+            ? []
+            : [new InfoViewScope { Kind = "messages", Heading = "Messages", Sections = [], Messages = messages }];
         return new InfoViewResult
         {
             // The side bar is narrow: past the third scope they start closed, as the module always does.
-            Scopes = scopes
-                .Select((scope, index) => scope with
+            Scopes =
+            [
+                .. messagesScope,
+                .. scopes.Select((scope, index) => scope with
                 {
                     Collapsed = index >= 3 || scope.Kind == "module",
                     Sections = scope.Sections
-                        .Select(section => section.Id == "messages"
-                            ? section
-                            : section with { Items = section.Items.Select(item => InfoViewTypeLinks.WithLinks(item, types)).ToList() })
+                        .Select(section => section with { Items = section.Items.Select(item => InfoViewTypeLinks.WithLinks(item, types)).ToList() })
                         .ToList()
                 })
-                .ToList(),
+            ],
             Highlights = highlights is null
                 ? []
                 :
@@ -345,15 +321,69 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
     }
 
     /// <summary>
+    /// The messages on <paramref name="line"/> of the document, each in full (see <see cref="InfoViewMessage"/>): those
+    /// published on it, from this text's own compile, whose range takes in the line.
+    /// </summary>
+    private static IReadOnlyList<InfoViewMessage> Messages(DocumentUri uri, OpenDocument document, int line)
+    {
+        var converted = document.ConvertedDiagnostics(uri);
+        return converted.Own
+            .Zip(converted.Origins)
+            .Where(pair => pair.First.Range.Start.Line <= line && line <= pair.First.Range.End.Line)
+            .Select(pair => Message(uri, document, pair.First, pair.Second))
+            .ToList();
+    }
+
+    /// <summary>
+    /// <paramref name="published"/> in full: the headline and the body are the published message's first line and the
+    /// rest, and <paramref name="origin"/>, the compiler's diagnostic it was made from, if any, gives the suggestions
+    /// and the fixes. A fix that edits another file is left out, as its quick fix is.
+    /// </summary>
+    private static InfoViewMessage Message(DocumentUri uri, OpenDocument document, Diagnostic published, NyxCompiler.Diagnostic? origin)
+    {
+        var text = (published.Message.String ?? "").ReplaceLineEndings("\n");
+        var lineEnd = text.IndexOf('\n');
+        var headline = lineEnd < 0 ? text : text[..lineEnd];
+        var body = lineEnd < 0 ? "" : text[(lineEnd + 1)..];
+        return new InfoViewMessage
+        {
+            Severity = Describe(published.Severity),
+            Code = published.Code?.String,
+            Reference = published.CodeDescription?.Href,
+            Headline = headline,
+            Location = new Location { Uri = uri, Range = published.Range },
+            Notes =
+            [
+                .. body.Length > 0 ? [body] : Array.Empty<string>(),
+                .. origin?.Suggestions.Select(suggestion => $"help: {suggestion}") ?? []
+            ],
+            Related = published.RelatedInformation?
+                .Select(related => new InfoViewItem { Text = related.Message, Detail = Place(uri, related.Location), Location = related.Location })
+                .ToList() ?? [],
+            Fixes = origin?.Fixes
+                .Select(fix => CodeActionHandler.FixEdit(uri, document, fix) is { } edit ? new InfoViewFix { Title = fix.Title, Edit = edit } : null)
+                .OfType<InfoViewFix>()
+                .ToList() ?? []
+        };
+    }
+
+    /// <summary>Where <paramref name="location"/> is, as a message's other place says: <c>line 4</c>, or <c>other.nyx:4</c> in another file.</summary>
+    private static string Place(DocumentUri uri, Location location) =>
+        location.Uri == uri
+            ? $"line {location.Range.Start.Line + 1}"
+            : $"{Path.GetFileName(location.Uri.Path)}:{location.Range.Start.Line + 1}";
+
+    /// <summary>
     /// The item of a provider in the context flow: its context, its source with how many calls it serves (a
-    /// <c>use</c> that serves none is <c>unused</c>), linking to it, with an item under it for each call it serves.
+    /// <c>use</c> that serves none is <c>unused</c>), linking to it, with an item under it for each call it serves. An
+    /// instance the compiler builds says how: <c>attached Point.show</c>, <c>derived</c>, <c>built in</c>.
     /// </summary>
     private static InfoViewItem FlowItem(NyxCompiler.ContextFlow.FlowEntry entry, Func<Parser.Program.SourceSpan, Location?> locate)
     {
         var source = Describe(entry.Source);
         var serves = entry.Calls.Length switch
         {
-            0 when entry.Source.IsUse => "unused",
+            0 when entry.Source is InfoView.CallSource.Provided { Item.IsUse: true } => "unused",
             0 => "no calls",
             1 => "1 call",
             var count => $"{count} calls"
@@ -380,70 +410,6 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             .Select(locate)
             .Where(location => location is not null && location.Uri == uri)
             .Select(location => new InfoViewHighlight { Range = location!.Range, Kind = kind });
-
-    /// <summary>
-    /// The item of a module's name at the cursor (see <see cref="NyxCompiler.Hover.moduleAt"/>): <c>module name</c>,
-    /// linking to the name, with the module's doc comment, as hover shows it.
-    /// </summary>
-    private static InfoViewItem ModuleItem(
-        NyxCompiler.Hover.ModuleHover module,
-        NyxCompiler.Documentation.Reader docs,
-        Func<Parser.Program.SourceSpan, Location?> locate) =>
-        new()
-        {
-            Text = $"module {module.Name}",
-            Name = new InfoViewName("module ".Length, module.Name.Length),
-            Detail = "module",
-            Location = locate(module.Span),
-            Documentation = docs.ForModule(module.File)?.Value
-        };
-
-    /// <summary>
-    /// The items of the cursor section on an expression: the expression's type, as hover shows it, linking to the expression. On a
-    /// use of a generic def, the def's declared signature (<c>declared</c>) comes first, then the type at this use
-    /// (<c>at this use</c>), then what the use fills each of the signature's type variables with
-    /// (<c>a = string, b = int</c>), each linking to the def. The first carries the doc comment of
-    /// <paramref name="symbol"/>, the name there, read by <paramref name="docOf"/>. Where an item writes the name
-    /// (<c>def name: type</c>, <c>name: type</c>), the name is its link; a bare type has none.
-    /// </summary>
-    private static IReadOnlyList<InfoViewItem> ExpressionItems(
-        NyxCompiler.Hover.HoverInfo hover,
-        NyxCompiler.Hover.Instantiation? instantiation,
-        Func<Parser.Program.SourceSpan, Location?> locate,
-        NyxCompiler.Symbol? symbol,
-        Func<NyxCompiler.Symbol, string?> docOf,
-        int? width)
-    {
-        var documentation = symbol is null ? null : docOf(symbol);
-        InfoViewName? NameIn(string text) => symbol is null ? null : InfoViewName.Declared(text, symbol.Name);
-        // What hover writes on a name, laid out as a signature: the name and its type, after `def` for a def.
-        string Written(string text) =>
-            NameIn(text) is { } name && symbol is not null
-                ? text[..name.Start] + LaidOut(width - name.Start, symbol.Name, text[(name.Start + name.Length + ": ".Length)..])
-                : text;
-        if (instantiation is null)
-        {
-            return [new InfoViewItem { Text = Written(hover.Type), Name = NameIn(hover.Type), Location = locate(hover.Span), Documentation = documentation }];
-        }
-
-        var definition = locate(instantiation.Definition);
-        var items = new List<InfoViewItem>
-        {
-            new() { Text = Written(instantiation.Declared), Name = NameIn(instantiation.Declared), Detail = "declared", Location = definition, Documentation = documentation },
-            new() { Text = Written(hover.Type), Name = NameIn(hover.Type), Detail = "at this use", Location = definition }
-        };
-        if (!instantiation.Bindings.IsEmpty)
-        {
-            items.Add(new InfoViewItem
-            {
-                Text = string.Join(", ", instantiation.Bindings.Select(binding => $"{binding.Item1} = {binding.Item2}")),
-                Detail = "type variables",
-                Location = definition
-            });
-        }
-
-        return items;
-    }
 
     /// <summary>
     /// <c>name: type</c>, laid out to fit <paramref name="width"/> characters as the formatter lays out a def's

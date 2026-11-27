@@ -11,10 +11,13 @@ namespace Nanyx.LanguageServer;
 
 /// <summary>
 /// The LSP diagnostics of a document's compile: those published on the document itself, and those found in files it
-/// imports, by the file they are in.
+/// imports, by the file they are in. <see cref="Origins"/> are the compiler's diagnostics those on the document were
+/// made from, one for each, in the same order: none for the one at an import that sums up the errors it brings in, or
+/// for a compiler that threw.
 /// </summary>
 public sealed record ConvertedDiagnostics(
     IReadOnlyList<Diagnostic> Own,
+    IReadOnlyList<NyxCompiler.Diagnostic?> Origins,
     IReadOnlyDictionary<DocumentUri, IReadOnlyList<Diagnostic>> Imported);
 
 /// <summary>
@@ -152,11 +155,13 @@ public sealed class DiagnosticsPublisher
                         Message = $"Internal compiler error: {document.CompilerFailure?.Message}"
                     }
                 ],
+                [null],
                 new Dictionary<DocumentUri, IReadOnlyList<Diagnostic>>());
         }
 
         var locator = new Locator(uri, document);
         var own = new List<Diagnostic>();
+        var origins = new List<NyxCompiler.Diagnostic?>();
         var imported = new Dictionary<DocumentUri, List<Diagnostic>>();
         // The diagnostics brought in by each import, and where in `own` the one at the import goes.
         var byImport = new Dictionary<(int Start, int End), (int Index, Parser.Program.SourceSpan Import, List<(NyxCompiler.Diagnostic Diagnostic, Location? Location)> Found)>();
@@ -166,6 +171,7 @@ public sealed class DiagnosticsPublisher
             if (span is null || IsDocumentFile(span.File, document))
             {
                 own.Add(ToLsp(diagnostic, locator, span is null ? new Range(0, 0, 0, 0) : document.Positions.ToRange(span.Start, span.End)));
+                origins.Add(diagnostic);
                 continue;
             }
 
@@ -188,6 +194,7 @@ public sealed class DiagnosticsPublisher
                     group = (own.Count, import, []);
                     byImport[(import.Start, import.End)] = group;
                     own.Add(null!);
+                    origins.Add(null);
                 }
 
                 group.Found.Add((diagnostic, location));
@@ -195,6 +202,7 @@ public sealed class DiagnosticsPublisher
             else
             {
                 own.Add(OnlyInDocument(diagnostic, locator, span, location));
+                origins.Add(diagnostic);
             }
         }
 
@@ -203,7 +211,7 @@ public sealed class DiagnosticsPublisher
             own[index] = AtImport(document, import, found);
         }
 
-        return new ConvertedDiagnostics(own, imported.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<Diagnostic>)pair.Value));
+        return new ConvertedDiagnostics(own, origins, imported.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<Diagnostic>)pair.Value));
     }
 
     /// <summary>The diagnostic at an import that brings in files with errors: it names them and links to each error.</summary>
