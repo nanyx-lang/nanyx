@@ -662,6 +662,16 @@ and private inferPipe (env: TypeEnv) (state: InferState) (expr: Expression) (val
         let nextState =
             if resolvedName = name then nextState
             else { nextState with PipeTargets = nextState.PipeTargets |> Map.add expr.Id resolvedName }
+        // `xs \list.map`, where `xs \map` reaches `list.map` by `xs`'s type as it is here, and nothing else named `map`
+        // is in scope: the type's name says nothing (see `RedundantTypeNames`).
+        let nextState =
+            match name.LastIndexOf '.' with
+            | dot when dot > 0 ->
+                let unqualified = name.Substring(dot + 1)
+                if tryResolveAttachedFunction env valueTy unqualified = Some name && (TypeEnv.tryFind unqualified env).IsNone then
+                    { nextState with RedundantTypeNames = nextState.RedundantTypeNames |> Set.add expr.Id }
+                else nextState
+            | _ -> nextState
         let callArgs = pipeCallArguments value args
         let lookup : PipeLookups.Lookup =
             { PipedType = valueTy; AttachedUnder = attachedTypeNames valueTy; Written = name; Called = resolvedName; At = SyntaxTree.nameSpan spanOpt expr }

@@ -911,6 +911,7 @@ module Compiler =
                      Lowered = lowered
                      Subst = subst
                      RawExprTypes = state.ExprTypes
+                     RedundantTypeNames = state.RedundantTypeNames
                      RawCalleeTypes = state.CalleeTypes
                      RawSymbolTypes = state.SymbolTypes
                      // Only declarations the module made itself are in `DeclarationSymbols`.
@@ -1295,7 +1296,7 @@ module Compiler =
                 if not syntaxErrors.IsEmpty then syntaxErrors
                 elif checkedModule.Errors.IsEmpty && imported.IsEmpty then
                     checkedModule.Warnings
-                    @ Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments typed)
+                    @ Linters.run options (SemanticModel.ofTyped (checkedModules.FileName origin) source checkedModule.Syntax checkedModule.Lowered checkedModule.DocComments checkedModule.RedundantTypeNames typed)
                 else
                     // A name another module of the package, or of a package it depends on, exports gets its import too.
                     let packageExports =
