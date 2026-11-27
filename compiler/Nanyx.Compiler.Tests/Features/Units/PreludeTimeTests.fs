@@ -10,7 +10,7 @@ open Nanyx.Compiler.Tests.TestSupport
 let ``Every module sees the prelude's Time and its units`` () =
     Assert.Equal<string list>(
         [ "Time(int)"; "Time(float)"; "int" ],
-        typesOf (withFinalNewline "def a = 1ns + 1us + 1ms + 1s + 1min + 1hr + 1d\ndef b = 0.5s\ndef c = 1d // 1hr") [ "a"; "b"; "c" ])
+        typesOf (withFinalNewline "def a = 1ns + 1us + 1ms + 1s + 1min + 1hr + 1d\ndef b = 0.5ns\ndef c = 1d // 1hr") [ "a"; "b"; "c" ])
 
 [<Fact>]
 let ``A module's own dimension Time and unit s are the ones their names mean there`` () =

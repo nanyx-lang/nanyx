@@ -29,11 +29,11 @@ let ``The dimensions a function is passed written without their storage share on
 
 [<Fact>]
 let ``A call that passes differently stored values to dimensions written without their storage is a mismatch`` () =
-    let source = "def overlap: Time, Time -> bool = { a, b -> true }\ndef both = overlap(1ns, 2.0ns)"
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "2.0ns" ], reportedAt (dimensions + source))
+    let source = "def overlap: Time, Time -> bool = { a, b -> true }\ndef i: Time(int) = 1ns\ndef f: Time(float) = 2ns\ndef both = overlap(i, f)"
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "f" ], reportedAt (dimensions + source))
     let message = (Compiler.compile (withFinalNewline (dimensions + source))).Diagnostics.Head.Message
     Assert.Equal("'float' vs 'int'", message)
-    Assert.Empty(reportedAt (dimensions + "def apart: Time(a), Time(b) -> bool = { a, b -> true }\ndef both = apart(1ns, 2.0ns)"))
+    Assert.Empty(reportedAt (dimensions + "def apart: Time(a), Time(b) -> bool = { a, b -> true }\ndef i: Time(int) = 1ns\ndef f: Time(float) = 2ns\ndef both = apart(i, f)"))
 
 [<Fact>]
 let ``A dimension in a result written without its storage is of the one the body makes it`` () =

@@ -19,7 +19,7 @@ let ``A product or quotient of measured values adds or takes off the exponents``
     Assert.Equal<string list>(
         [ "Length(float) / Time(float)"; "Length(int) * Length(int)"; "Length(float) / (Time(float) * Time(float))"; "Length(float)"; "float" ],
         typesAfter length
-            "def a = 100.0m / 9.58s\ndef b = 2m * 3m\ndef c = 10.0m / 2.0s / 1.0s\ndef d = a * 1.0s\ndef e = 1.0km / 1.0m"
+            "def a = 100.0m / 9.58s\ndef b = 2m * 3m\ndef c = a / 1.0s\ndef d = a * 1.0s\ndef e = 1.0km / 1.0m"
             [ "a"; "b"; "c"; "d"; "e" ])
 
 [<Fact>]

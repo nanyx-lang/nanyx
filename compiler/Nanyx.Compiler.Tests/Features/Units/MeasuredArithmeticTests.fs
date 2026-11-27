@@ -45,7 +45,7 @@ let ``Each row holds at a generic storage`` () =
 let ``A dimension has Add and Sub of its storage, so a function generic in Add sums times`` () =
     Assert.Equal<string list>(
         [ "Time(int)"; "Time(float)"; "Time(int)" ],
-        typesAfter dimensions "def sum: [Add(a)] a, a -> a = { x, y -> x + y }\ndef a = sum(100ms, 200ms)\ndef b = sum(0.5s, 0.25s)\ndef none: [Add(a)] a -> a = { x -> zero }\ndef c = none(5ms)" [ "a"; "b"; "c" ])
+        typesAfter dimensions "def sum: [Add(a)] a, a -> a = { x, y -> x + y }\ndef a = sum(100ms, 200ms)\ndef b = sum(0.5ns, 0.25ns)\ndef none: [Add(a)] a -> a = { x -> zero }\ndef c = none(5ms)" [ "a"; "b"; "c" ])
 
 [<Fact>]
 let ``Measured values compare as their storages do`` () =

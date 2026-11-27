@@ -38,4 +38,4 @@ dbg(50.5KB)
 """
     runSource source
     |> withoutDbgLocations
-    |> assertRan "Time(500000000.0)\nTime(500000000)\nTime(500000000.0)\nTime(500000000)\nTime(-1500000.0)\nLength(5.0)\nBytes(50500)\n"
+    |> assertRan "Time(500000000)\nTime(500000000)\nTime(500000000.0)\nTime(500000000)\nTime(-1500000)\nLength(5.0)\nBytes(50500)\n"

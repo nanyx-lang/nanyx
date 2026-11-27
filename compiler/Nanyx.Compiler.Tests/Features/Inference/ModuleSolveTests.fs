@@ -122,6 +122,6 @@ let ``A call passed a division whose storages don't agree adds no full solve for
         Assert.Equal<string list>([ DiagnosticCodes.TypeMismatch.Code ], result.Diagnostics |> List.map _.Code)
         solves
     let addedBefore count =
-        fullSolves "def first: [Console] () -> () = { () -> println(1.5s / 1ms) }" count
+        fullSolves "def i: Time(int) = 1ms\ndef first: [Console] () -> () = { () -> println(1.5ns / i) }" count
         - fullSolves "def first: int = \"one\"" count
     Assert.Equal(addedBefore 20, addedBefore 80)

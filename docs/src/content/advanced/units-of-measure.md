@@ -22,7 +22,7 @@ println(timeout // 1min)
 # Dimensions and units
 
 A **dimension** is a kind of quantity: `Time`, `Length`, `Bytes`. A dimension is a type, generic in the number that
-stores it, as a `[Num(a)]` function is generic in its number type: `500ms` is a `Time(int)` and `0.5s` a
+stores it, as a `[Num(a)]` function is generic in its number type: `500ms` and `0.5s` are a `Time(int)` and `0.25ns` a
 `Time(float)`.
 
 A **unit** is a named scale within one dimension: `ns`, `ms`, `s`. Units make values, `500ms`, and read them back,
@@ -97,29 +97,32 @@ is the unit's dimension, and the compiler scales it to the default storage unit:
 a space, is the number `100` followed by the name `ms`.
 
 A literal's storage is the one the code around it expects, as a plain number's type is. Where nothing expects one, it
-is the constrained dimension's, or else the one the number is written as: `500ms` is a `Time(int)` and `0.5s` a
-`Time(float)`.
+is the constrained dimension's, or else an `int` when the literal is a whole number of default storage units that fits
+one, and a `float` when it isn't. How the number is written doesn't matter: `0.5s` and `500ms` are both 500_000_000
+nanoseconds, so both are a `Time(int)`, and `0.25ns` is a `Time(float)`. Literals of one storage, as in `2.0 * 1.5s`
+or `[0.5s, 0.25ns]`, are a `float` together if one of them must be. A whole number is stored as a `float` where a
+`float` is expected: `def v: Time(float) = 500ms`.
 
 ```nanyx
 def t = 0.5s
 def u = 500ms
 def v: Time(float) = 500ms
-def w: Time(int) = 0.5s
+def w = 0.25ns
 println(t)
-println(u)
-println(v == t)
+println(u == t)
+println(v)
 println(w)
--- 500.0ms
 -- 500ms
 -- true
--- 500ms
+-- 500.0ms
+-- 0.25ns
 ```
 
 A program doesn't mix two storages by accident, and in an `int` storage a literal must be a whole number of default
 storage units:
 
 ```nanyx
-def t = 0.5s
+def t: Time(float) = 0.5s
 def u = 500ms
 def both = t + u  -- error NYX0201: 'float' vs 'int'
 def x: Time(int) = 1.5ns  -- error NYX0201: '1.5ns' is 3/2 of a 'ns', which is no whole number of 'ns', ...
@@ -140,7 +143,7 @@ def overlap: Time, Time -> bool  -- [Num(a)] Time(a), Time(a) -> bool
 def total: list(Time) -> Time  -- [Num(a)] list(Time(a)) -> Time(a), from its body
 ```
 
-So `overlap(1s, 2.0s)` is an error: `1s` is stored as an `int` and `2.0s` as a `float`. Writing the storages says
+So `overlap(t, u)` is an error for a `t` stored as an `int` and a `u` stored as a `float`. Writing the storages says
 otherwise: `Time(a), Time(b)` takes two, and in `Distance(a), Time` the bare `Time` has a storage of its own, apart from
 `a`. A signature that names a dimension requires `Num` of its storage without writing it. A function with no body to say
 what its result is, as an [`@extern`](../tour/attributes#extern) has, writes a storage its parameters fix, or a number
@@ -229,10 +232,10 @@ def speed: Length(float), Time(float) -> Speed(float) = { d, t ->
 
 def sprint = speed(100.0m, 9.58s)
 println(sprint * 9.58s)
-println(2.0m * 3.0m)
-println(1.0km / 1.0m)
+println(2m * 3m)
+println(1km / 1m)
 -- 100.0m
--- 6.0m*m
+-- 6m*m
 -- 1000.0
 ```
 
@@ -249,10 +252,10 @@ display units, so a unit of one marked `@baseUnit` or `@storageUnit`, or not def
 ([NYX0289](../standard-tools/errors#nyx0289)). A unit can be defined from another of the dimension's units, its own or
 imported: `unit mph: Speed = 1.609344kmh`.
 
-A number with one is a value of the dimension, `90.0kmh`, stored as its number of the parts' default storage units, as
+A number with one is a value of the dimension, `90kmh`, stored as its number of the parts' default storage units, as
 `500ms` is.
-That is seldom a whole number, a kilometre an hour being 1/3_600_000_000 of a metre a nanosecond, so write it with a
-decimal point to store it as a `float`: `90kmh` in an `int` is an error that says so.
+That is seldom a whole number, a kilometre an hour being 1/3_600_000_000 of a metre a nanosecond, so it is a `float`
+unless the code around it expects an `int`, where it is an error that says so.
 
 A value prints in its parts' default display units, joined by `*` and `/` with no spaces, and a divisor of more than
 one part in brackets: `m/s`, `m*m`, `m/(s*s)`. Its own units make values but never print them: the units come from the
@@ -272,9 +275,9 @@ dimension Speed = Length / Time
 
 unit kmh: Speed = 1km / 1hr
 
-def cruise = 90.0kmh
+def cruise = 90kmh
 println(cruise)
-println(36.0km / 0.5hr)
+println(36km / 0.5hr)
 println(1m / 1s)
 println(2000mm * 1000mm)
 println(1500mm * 1mm)
@@ -286,7 +289,7 @@ println(1500mm * 1mm)
 ```
 
 A `float` that arithmetic has left within a millionth of a millionth of a whole number counts as that whole number:
-`90.0kmh + 10.0m / 1.0s` prints `35.0m/s`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an
+`90kmh + 10m / 1s` prints `35.0m/s`. A unit defined as nothing, `0m`, or divided by nothing, `1m / 0s`, is an
 error ([NYX0298](../standard-tools/errors#nyx0298)).
 
 # Printing
@@ -297,13 +300,17 @@ A measured value prints in a unit chosen by its storage:
   storage unit when it is a whole number of no other: `1500ms`, `2min`.
 - **A `float` or `F32`** prints in the largest unit its magnitude is at least 1 of, `1.5s`, `16.5ms`, `-1.5s`, and in
   the smallest unit when it is under 1 of every unit: `0.25ns`. It is written as a `float` is, so a whole number keeps
-  its decimal point, as `println(2.0)` writes `2.0`: `120.0s` prints `2.0min`.
+  its decimal point, as `println(2.0)` writes `2.0`: a `Time(float)` of `120s` prints `2.0min`.
 - **Zero** prints in the default display unit, which is `s` for a `Time`: `0s`, `0.0s`.
 
 ```nanyx
-println("{1500ms} {120s} {1.5s} {16.5ms} {120.0s} {0.25ns} {0s} {0.0s}")
+def asFloat: Time(float) -> Time(float) = { t -> t }
+
+println("{1500ms} {120s} {asFloat(1.5s)} {asFloat(16.5ms)}")
+println("{asFloat(120s)} {0.25ns} {0s} {asFloat(0s)}")
 println([1s, 2min, 3hr])
--- 1500ms 2min 1.5s 16.5ms 2.0min 0.25ns 0s 0.0s
+-- 1500ms 2min 1.5s 16.5ms
+-- 2.0min 0.25ns 0s 0.0s
 -- [1s, 2min, 3hr]
 ```
 

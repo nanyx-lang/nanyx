@@ -1,6 +1,6 @@
 /// Numbers with units (#2798): `500ms` is a measured value of `ms`'s dimension, stored as the number the code around it
-/// expects, or the one its dimension is constrained to, or else the one it is written as, and is its number of base
-/// units there.
+/// expects, or the one its dimension is constrained to, or else an `int` if it is a whole number of base units that fits
+/// one and a `float` if not, and is its number of base units there.
 module Nanyx.Compiler.Tests.Features.UnitLiterals
 
 open Xunit
@@ -14,8 +14,22 @@ let private only (source: string) =
     code, message
 
 [<Fact>]
-let ``A number with a unit is stored as the number it is written as, where nothing expects another`` () =
-    Assert.Equal<string list>([ "Time(float)"; "Time(int)" ], typesAfter dimensions "def t = 0.5s\ndef u = 500ms" [ "t"; "u" ])
+let ``A number with a unit that is a whole number of base units is an int, however it is written`` () =
+    Assert.Equal<string list>(
+        [ "Time(int)"; "Time(int)"; "Time(int)"; "bool" ],
+        typesAfter dimensions "def t = 0.5s\ndef u = 500ms\ndef v = 1.5e3ms\ndef same = 0.5s == 500ms" [ "t"; "u"; "v"; "same" ])
+
+[<Fact>]
+let ``A number with a unit that is a fraction of a base unit, or too many for an int, is a float`` () =
+    Assert.Equal<string list>(
+        [ "Time(float)"; "Time(float)"; "Time(int)" ],
+        typesAfter dimensions "def t = 0.25ns\ndef u = 1.0e300s\ndef v = 9_000_000_000s" [ "t"; "u"; "v" ])
+
+[<Fact>]
+let ``Numbers of one storage are a float together if any of them must be`` () =
+    Assert.Equal<string list>(
+        [ "Time(float)"; "list(Time(float))"; "Time(float)"; "Time(int)" ],
+        typesAfter dimensions "def a = 2.0 * 1.5s\ndef b = [0.5s, 0.25ns]\ndef c = 0.5s + 0.25ns\ndef d = 2 * 1.5s" [ "a"; "b"; "c"; "d" ])
 
 [<Fact>]
 let ``A number with a unit is stored as the number expected`` () =
@@ -33,7 +47,7 @@ let ``A function takes a number with a unit of its parameter's dimension`` () =
 
 [<Fact>]
 let ``Numbers with units of two storages are of two types`` () =
-    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, (reportedAt (dimensions + "def both = [0.5s, 500ms]")).Head |> fst)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, (reportedAt (dimensions + "def t: Time(float) = 1s\ndef u: Time(int) = 1s\ndef both = [t, u]")).Head |> fst)
 
 [<Fact>]
 let ``In integer storage, a number with a unit that is no whole number of default storage units is an error with the fix`` () =
@@ -74,5 +88,5 @@ let ``dimension and unit are names a program can still use`` () =
 [<Fact>]
 let ``A division of two storages that don't agree is the error where it is passed to a call, not the call's context`` () =
     // The `/` was left unsettled, so `println` reportedAt (dimensions + that) `ToString` of it is missing, and not the mismatch (#2852).
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5s / 1ms" ], reportedAt (dimensions + "println(1.5s / 1ms)"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5ns" ], reportedAt (dimensions + "def i: Time(int) = 1ms\nprintln(1.5ns / i)"))
     Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5 / 1" ], reportedAt (dimensions + "println(1.5 / 1)"))
