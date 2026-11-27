@@ -22,7 +22,7 @@ client noticing. `PackageIndex.fs` reads it.
   first and builds every other address from it, so the index can move to another address with a change there and a
   redirect, not a client release. The compiler refuses a format it doesn't read.
 - **One file per package**, `<index><namespace>/<name>.json`, lists every version ever recorded with its `url`,
-  `sha256`, `nanyx` (the compilers it builds with, as its manifest writes them: `0.49`, that one or later, or `=0.49.1`, that one
+  `sha256`, `nanyx` (the compilers it builds with, as its manifest writes them: `0.50`, that one or later, or `=0.50.0`, that one
   only), `dependencies`, `unlisted` and `available`
   (`PackageIndex.versions`). An older file writes `unlisted` as `yanked`, which the compiler reads as the same. A
   package the index doesn't list has no file: a 404, which is read as no versions.
@@ -59,7 +59,7 @@ unlisted and is available, and a version whose number is too small for its API's
 package's first version isn't checked.
 
 A release's tag is `v1.2.0` or `1.2.0`, perhaps after a prefix that ends in `/`. The compiler's releases,
-`compiler/0.49.1`, carry the [packages it ships](./shipped-packages), each registered with `nanyx-lang/nanyx`, so Sync
+`compiler/0.50.0`, carry the [packages it ships](./shipped-packages), each registered with `nanyx-lang/nanyx`, so Sync
 records them as it does any package ([Releases](./releases#the-shipped-packages)). The API check holds them to their
 version too: a compiler release whose shipped package breaks its API in a patch release, or in a minor one from 1.0.0
 up, records nothing for that package, and Sync reports it.

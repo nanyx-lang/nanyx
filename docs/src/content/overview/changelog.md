@@ -8,6 +8,30 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.50.0
+
+*27 November 2026*
+
+A test can now use the file system and the environment, with `@test(#io)`, and a program can define a name its host
+uses inside.
+
+**Language**
+
+- `@test(#io)` runs a test with the console host's real `Console`, `Env` and `FileSystem`, in the package's directory,
+  with the environment's variables. What it prints is still kept ([`@test`](../tour/attributes#test)).
+
+**Tools**
+
+- [NYX0312](../standard-tools/errors#nyx0312) suggests `@test(#io)` when a test lacks only contexts that `#io`
+  provides, and an editor offers to mark the test. `nanyx test` marks a `#io` test with `(io)`.
+
+**Fixes**
+
+- A program may define a def with the same name as one its host, or a library it depends on, selects from one of its
+  own imports, such as `within` or `stateAt`, which the console host selects from `nanyx.wasi`. Each keeps its own
+  definition; before, one took the other's place, or compiling stopped with NYX0301
+  ([Compilation](../deep-dives/compilation)).
+
 # 0.49.1
 
 *27 November 2026*

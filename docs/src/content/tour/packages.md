@@ -67,7 +67,7 @@ The manifest describes the package and the source files and dependencies that ma
 )
 ```
 
-A manifest holds only data: records, lists, tuples, strings, numbers, `true` and `false`, tags such as `#error`, and `--` comments. A name, a call, an operator or any other code in it is an error, so a manifest can always be read without running anything. Its fields are `package`, `dependencies`, `linters`, `host` and `formatter`; any other is an error. `package` must have a `name`, lower case with words separated by dots, and a `version`, a semantic version. A package to publish also gives its `repository`, the GitHub repository whose releases are its versions, as `repository = "acme/web"`, and its `nanyx`, the oldest compiler it builds with, as `nanyx = "0.49"`, which `nanyx new` writes for the compiler that makes the package. The package index records it, so a compiler older than that never chooses the version, and one that is given the package anyway refuses it, at the field (`NYX0052`). A package that builds with one compiler only, as a host does, since it uses the compiler's internals, writes `=` and that compiler's version, `nanyx = "=0.49.1"`, and no other compiler chooses it or builds it. A host declares itself one in its `package`'s `host`, and a package that hosts are written on says `hostLibrary = true` ([Writing a host](../advanced/hosts#writing-a-host), [Host libraries](../advanced/hosts#host-libraries)).
+A manifest holds only data: records, lists, tuples, strings, numbers, `true` and `false`, tags such as `#error`, and `--` comments. A name, a call, an operator or any other code in it is an error, so a manifest can always be read without running anything. Its fields are `package`, `dependencies`, `linters`, `host` and `formatter`; any other is an error. `package` must have a `name`, lower case with words separated by dots, and a `version`, a semantic version. A package to publish also gives its `repository`, the GitHub repository whose releases are its versions, as `repository = "acme/web"`, and its `nanyx`, the oldest compiler it builds with, as `nanyx = "0.50"`, which `nanyx new` writes for the compiler that makes the package. The package index records it, so a compiler older than that never chooses the version, and one that is given the package anyway refuses it, at the field (`NYX0052`). A package that builds with one compiler only, as a host does, since it uses the compiler's internals, writes `=` and that compiler's version, `nanyx = "=0.50.0"`, and no other compiler chooses it or builds it. A host declares itself one in its `package`'s `host`, and a package that hosts are written on says `hostLibrary = true` ([Writing a host](../advanced/hosts#writing-a-host), [Host libraries](../advanced/hosts#host-libraries)).
 
 A manifest written in TOML, starting `[package]` or `name = "..."`, is an error that says so (`NYX0034`). While a package's manifest has errors, checking or running any of its files reports them, at the manifest, rather than checking the file on its own.
 
@@ -116,7 +116,7 @@ Dependencies on other packages are declared in the package manifest's `dependenc
 )
 ```
 
-The directory holds the package's own `.nyxp`, whose `name` must be the one the entry gives. A package the compiler ships, such as `nanyx.cli`, is a package from the index like any other, named at a version: `(package = "nanyx.cli", version = "0.49.1")`. The compiler seeds the version it ships into the package cache, so the compiler's own version needs no download, and a build with no network finds it.
+The directory holds the package's own `.nyxp`, whose `name` must be the one the entry gives. A package the compiler ships, such as `nanyx.cli`, is a package from the index like any other, named at a version: `(package = "nanyx.cli", version = "0.50.0")`. The compiler seeds the version it ships into the package cache, so the compiler's own version needs no download, and a build with no network finds it.
 
 Any other package named by its version, `(package = "acme.web", version = "1.2")`, comes from the [package index](https://packages.nanyx.dev/). `1.2` accepts `1.2.0` and every later `1.x` version; below `1.0.0`, `0.3` accepts only `0.3.x`. The version a build uses is the one `nanyx.lock`, beside the manifest, locks: `nanyx pull` downloads each package the lockfile locks into a cache in your home directory, checking it against the SHA-256 the lockfile records, and a build uses it from there. A locked package that isn't in the cache is an error that says to pull (`NYX0041`). `nanyx pull`, `nanyx install`, `nanyx build` and `nanyx run` choose the versions to lock when the manifest asks for something the lockfile doesn't lock: the newest version that every package's dependencies accept, since a build has one version of each package, keeping each version already locked while it is still accepted. When there is none, the error explains why (`NYX0047`). `nanyx build --locked` refuses to change the lockfile, for CI. Commit `nanyx.lock`, so that every machine builds the same versions. `nanyx pack` packs a package as the `.nyxpkg` a release carries. See [Packages the compiler ships](../advanced/hosts#packages-the-compiler-ships).
 
@@ -217,7 +217,7 @@ The entrypoint runs under the package's host, which loads the contexts it may us
 ```nanyx fragment
 (
   package = (name = "acme.web", version = "1.2.0")
-  host = (package = "nanyx.cli.host", version = "0.49.1")
+  host = (package = "nanyx.cli.host", version = "0.50.0")
 )
 ```
 
@@ -270,7 +270,7 @@ For script mode, Nanyx synthesizes a package description in memory rather than r
 import "./utils" as utils
 ```
 
-Each directive is a name and the words it takes, separated by spaces: `::linter nanyx.lint` and the `::lint unusedBindings #error` under it say what `linters = [(package = "nanyx.lint", version = "0.49.1", settings = (rules = (unusedBindings = #error)))]` says in a manifest. A `::lint` line is for the linter of the nearest `::linter` above it. `::host` and `::install` name the script's host and each package it imports from, as a manifest's `host` and `dependencies` do:
+Each directive is a name and the words it takes, separated by spaces: `::linter nanyx.lint` and the `::lint unusedBindings #error` under it say what `linters = [(package = "nanyx.lint", version = "0.50.0", settings = (rules = (unusedBindings = #error)))]` says in a manifest. A `::lint` line is for the linter of the nearest `::linter` above it. `::host` and `::install` name the script's host and each package it imports from, as a manifest's `host` and `dependencies` do:
 
 ```nanyx fragment
 ::host nanyx.cli.host

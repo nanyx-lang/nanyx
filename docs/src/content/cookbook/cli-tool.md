@@ -19,7 +19,7 @@ The program reads its input with the file system's package, `nanyx.fs`, which th
 manifest's `dependencies`, at the compiler's version:
 
 ```nanyx fragment
-dependencies = [(package = "nanyx.fs", version = "0.49.1")]
+dependencies = [(package = "nanyx.fs", version = "0.50.0")]
 ```
 
 Then `src/main.nyx` reads the file and counts its words:
