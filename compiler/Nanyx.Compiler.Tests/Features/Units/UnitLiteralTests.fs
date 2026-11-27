@@ -12,11 +12,6 @@ let private dimensions =
     + "dimension Length(float)\n@baseUnit unit m: Length\nunit mm: Length = 0.001m\n"
     + "dimension Bytes(int)\n@baseUnit unit B: Bytes\nunit KB: Bytes = 1_000B\n"
 
-/// The code and the text each diagnostic of compiling `source`, after the dimensions, is reported at.
-let private reported (source: string) =
-    let source = withFinalNewline (dimensions + source)
-    (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt source (spanOf diagnostic))
-
 /// The one diagnostic of compiling `source`, after the dimensions: its code and message.
 let private only (source: string) =
     let code, message, _ = onlyDiagnostic (withFinalNewline (dimensions + source))
@@ -44,11 +39,11 @@ let ``A number with a unit of a constrained dimension is stored as its dimension
 
 [<Fact>]
 let ``A function takes a number with a unit of its parameter's dimension`` () =
-    Assert.Empty(reported "def isLong: Time -> bool = { t -> true }\ndef long = isLong(2s)\ndef ints: Time(int) -> bool = { t -> true }\ndef also = ints(0.5s)")
+    Assert.Empty(reportedAt (dimensions + "def isLong: Time -> bool = { t -> true }\ndef long = isLong(2s)\ndef ints: Time(int) -> bool = { t -> true }\ndef also = ints(0.5s)"))
 
 [<Fact>]
 let ``Numbers with units of two storages are of two types`` () =
-    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, (reported "def both = [0.5s, 500ms]").Head |> fst)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, (reportedAt (dimensions + "def both = [0.5s, 500ms]")).Head |> fst)
 
 [<Fact>]
 let ``In integer storage, a number with a unit that is no whole number of default storage units is an error with the fix`` () =
@@ -65,13 +60,13 @@ let ``A number with a unit that doesn't fit its storage is NYX0229`` () =
 [<Fact>]
 let ``A number with no unit is never a measured value`` () =
     // Only the mismatch: the storage of `isLong`'s generic `Time` is the literal's kind where the call looks for `Num`
-    // of it, so the context is found, not reported missing too (#2804).
+    // of it, so the context is found, not reportedAt (dimensions + missing) too (#2804).
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.TypeMismatch.Code, "0" ],
-        reported "def isLong: Time -> bool = { t -> true }\ndef x = isLong(0)")
+        reportedAt (dimensions + "def isLong: Time -> bool = { t -> true }\ndef x = isLong(0)"))
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.TypeMismatch.Code, "0.5" ],
-        reported "def isLong: Time -> bool = { t -> true }\ndef run = { -> isLong(0.5) }")
+        reportedAt (dimensions + "def isLong: Time -> bool = { t -> true }\ndef run = { -> isLong(0.5) }"))
     let _, message, _ =
         (Compiler.compile (withFinalNewline (dimensions + "def x: Time(int) = 0"))).Diagnostics
         |> List.map (fun diagnostic -> diagnostic.Code, diagnostic.Message, ())
@@ -80,7 +75,7 @@ let ``A number with no unit is never a measured value`` () =
 
 [<Fact>]
 let ``A guard compares with a number with a unit`` () =
-    Assert.Empty(reported "def f: Time(int) -> bool = { t ->\n  match t\n    | == 0ms -> true\n    | _ -> false\n}")
+    Assert.Empty(reportedAt (dimensions + "def f: Time(int) -> bool = { t ->\n  match t\n    | == 0ms -> true\n    | _ -> false\n}"))
 
 [<Fact>]
 let ``dimension and unit are names a program can still use`` () =
@@ -88,6 +83,6 @@ let ``dimension and unit are names a program can still use`` () =
 
 [<Fact>]
 let ``A division of two storages that don't agree is the error where it is passed to a call, not the call's context`` () =
-    // The `/` was left unsettled, so `println` reported that `ToString` of it is missing, and not the mismatch (#2852).
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5s / 1ms" ], reported "println(1.5s / 1ms)")
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5 / 1" ], reported "println(1.5 / 1)")
+    // The `/` was left unsettled, so `println` reportedAt (dimensions + that) `ToString` of it is missing, and not the mismatch (#2852).
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5s / 1ms" ], reportedAt (dimensions + "println(1.5s / 1ms)"))
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "1.5 / 1" ], reportedAt (dimensions + "println(1.5 / 1)"))

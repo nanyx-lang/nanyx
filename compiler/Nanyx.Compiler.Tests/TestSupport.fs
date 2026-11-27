@@ -63,6 +63,17 @@ let onlyDiagnosticIn (source: string) (result: CompileResult) =
 /// The one diagnostic compiling `source` gives: its code, its message, and the text it is reported at.
 let onlyDiagnostic (source: string) = onlyDiagnosticIn source (Compiler.compile source)
 
+/// The code and the text each diagnostic of `result`, compiled from `source`, is reported at, in order. Spans are offsets
+/// in the source with its line endings made `\n`.
+let reportedAtIn (source: string) (result: CompileResult) : (string * string) list =
+    let source = normalized source
+    result.Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt source (spanOf diagnostic))
+
+/// The code and the text each diagnostic of compiling `source`, with a final line break, is reported at, in order.
+let reportedAt (source: string) : (string * string) list =
+    let source = withFinalNewline source
+    reportedAtIn source (Compiler.compile source)
+
 /// Compiles `source` with every linter the compiler has turned on, at its defaults, but for `unusedPrivateDefinitions`:
 /// these tests write top-level defs nothing uses, and that rule has tests of its own.
 let compileWithOfficial (source: string) =
