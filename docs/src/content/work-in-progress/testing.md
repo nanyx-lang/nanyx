@@ -133,7 +133,23 @@ The tests run in a core module, as `nanyx run`'s program does, so a test that re
 
 ## Editors
 
-`nanyx test --format json` writes one JSON object per test: its name, file, span, result and captured output. The VS Code extension uses it to fill the editor's test explorer and to put a "Run test" link above each `@test`.
+`nanyx test --format json` is built ([#3079](https://github.com/nanyx-lang/nanyx/issues/3079)): it writes one JSON
+object on each line, each diagnostic, each test as it ends, with its place, outcome, why it failed and what it printed,
+and a summary ([JSON](../standard-tools/command-line#json)). What is left is for the VS Code extension to use it, to fill
+the editor's test explorer and to put a "Run test" link above each `@test`.
+
+## Expecting a crash
+
+A test cannot catch a crash, but the runner sees one, so `@test` takes an argument that passes a test only if it
+crashes ([#3078](https://github.com/nanyx-lang/nanyx/issues/3078)). It is decided, and not built yet:
+
+- `@test(#crashes)` passes if the test crashes, and `@test(#crashes("too big"))` if it crashes with a message that
+  contains the text. With `#io`, the two are a tuple: `@test(#io, #crashes)`.
+- A crash is what `crash`, `orCrash`, `assert` and a match that doesn't handle the case do. A deferred error isn't one,
+  and fails the test as it does any other, and so do a runtime error, such as division by zero, and a timeout. A
+  deferred error's trap says so to the runtime, through `nanyx:crash`, so the runner tells it apart.
+- A test that finishes fails with "It finished, and was expected to crash"; one that crashes with another message fails
+  naming both. A test that passes shows `(crashes)` after its name, as one marked `#io` shows `(io)`.
 
 # Left for later
 
@@ -144,7 +160,6 @@ These fit the design but are not part of the first version:
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Virtual time.** The test host providing `Async` and a `Clock` whose `sleep` advances at once, with tasks run in a
   fixed order, so tests of `sleep`, `race` and timeouts run instantly and the same way every time.
-- **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
 - **A file system in memory.** A ready-made `FileSystem`, which a test loads with `use`, that holds its files in memory, so a test can write files and read them back without faking each member by hand.
 - **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the docs' ([compilation](../deep-dives/compilation#docs-examples)); `nanyx test` could do the same for a package's.
 

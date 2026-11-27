@@ -204,6 +204,28 @@ can't be deferred, such as a syntax error, stops the build, and no test runs.
 | `--timeout <seconds>` | How long a test may run before it is stopped, and fails: 10 seconds by default. |
 | `--release` | Refuses any error, and compiles the tests as a release build does. |
 | `--timings` | As for `run`. |
+| `--format <text \| json>` | How to write the report: `text`, for a person, the default, or `json`, for a tool such as an editor ([JSON](#json)). |
+
+### JSON
+
+With `--format json`, `nanyx test` writes one JSON object on each line of standard output, each with a `type`:
+
+- **`diagnostic`**, first, for each error and warning the build reports: its `code`, `severity` (`error`, `warning`,
+  `info` or `hint`), `headline`, `message`, and, when it has a place, its `file`, from the package's root, `line` and
+  `column`, each from 1; and `deferred`, whether the tests run in spite of it.
+- **`start`**: the package's or script's `name`, how many `tests` run, the `seed`, and how many `deferredErrors` there
+  are.
+- **`test`**, for each test as it ends: its full `name`, as the text report shows it, its `module` and own name
+  (`test`), the `file`, `line` and `column` it is written at, whether it is `io`, its `outcome` (`passed`, `failed` or
+  `timedOut`, with `timeoutSeconds`), what it printed (`output`) and what it wrote to its standard error (`errors`). A
+  test that failed has a `failure`: its `kind` (`crashed`, `trapped`, `arithmetic`, `stackOverflow`, `outOfMemory`,
+  `exited` or `other`), its `message`, the `place` of the program's code a crash was in, and its `stack`, innermost
+  first, each frame's `function` with its `file` and `line`.
+- **`summary`**, last: whether the tests were `built`, how many `passed` and `failed`, and the `seed`. A build that
+  fails writes its diagnostics and a summary with `built` false, and a package with no tests a summary alone.
+
+A package whose manifest can't be read writes its error to standard error, as text, and nothing to standard output.
+The exit code is as with text.
 
 ## Exit codes
 
