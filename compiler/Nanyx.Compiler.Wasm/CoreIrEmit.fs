@@ -1192,8 +1192,21 @@ type private FunctionEmitter(context: EmitContext) =
             | OverRange(first, last) -> [ atomCode first; $"local.set ${localName stream.Element}"; atomCode last; $"local.set ${localName stream.End}" ]
             | OverRangeFrom first -> [ atomCode first; $"local.set ${localName stream.Element}" ]
             | OverList list -> [ atomCode list; $"local.set ${localName stream.Cursor}" ]
+            // The array's length is the count left, and the cursor the address of its first element.
+            | OverArray array ->
+                let cursor = localName stream.Cursor
+                [ atomCode array
+                  $"local.tee ${cursor}"
+                  touching $"i32.load offset={CoreIrLayout.arrayLengthOffset}"
+                  "i64.extend_i32_u"
+                  $"local.set ${localName stream.End}"
+                  $"local.get ${cursor}"
+                  $"i32.const {CoreIrLayout.arrayElementOffset stream.Element.Type 0}"
+                  "i32.add"
+                  $"local.set ${cursor}" ]
             | OverStore(store, walk) -> atomCode store :: CoreIrEmitStoreWalk.start touching stream walk
-        // A range counts in ints; a list's cursor moves to each cell's tail, after its head.
+        // A range counts in ints; a list's cursor moves to each cell's tail, after its head; an array's moves to the next
+        // element, and its count left goes down.
         let next (stream: ForStream) =
             match stream.Source with
             | OverRange _ -> [ $"local.get ${localName stream.Element}"; $"local.get ${localName stream.End}"; "i64.gt_s"; done' ]
@@ -1201,6 +1214,8 @@ type private FunctionEmitter(context: EmitContext) =
             | OverList _ ->
                 let cursor = localName stream.Cursor
                 [ $"local.get ${cursor}"; "i32.eqz"; done'; $"local.get ${cursor}"; load stream.Element.Type 0; $"local.set ${localName stream.Element}" ]
+            | OverArray _ ->
+                [ $"local.get ${localName stream.End}"; "i64.eqz"; done'; $"local.get ${localName stream.Cursor}"; load stream.Element.Type 0; $"local.set ${localName stream.Element}" ]
             | OverStore(_, walk) -> CoreIrEmitStoreWalk.next touching depth done' stream walk
         let advance (stream: ForStream) =
             match stream.Source with
@@ -1211,6 +1226,17 @@ type private FunctionEmitter(context: EmitContext) =
             | OverList _ ->
                 let cursor = localName stream.Cursor
                 [ $"local.get ${cursor}"; touching $"i32.load offset={CoreIrLayout.tailOffset stream.Element.Type}"; $"local.set ${cursor}" ]
+            | OverArray _ ->
+                let cursor = localName stream.Cursor
+                let left = localName stream.End
+                [ $"local.get ${cursor}"
+                  $"i32.const {CoreIrLayout.size stream.Element.Type}"
+                  "i32.add"
+                  $"local.set ${cursor}"
+                  $"local.get ${left}"
+                  "i64.const 1"
+                  "i64.sub"
+                  $"local.set ${left}" ]
             | OverStore(_, walk) -> CoreIrEmitStoreWalk.advance touching stream walk
         let bodyCode = this.Sequence false loop.Body
         let bodyDrop = dropValue loop.Body.Type

@@ -137,7 +137,7 @@ holds when called.
   context's own name for it, `elem`, as `[Iterable(c), ToString(elem)]` writes it. Where nothing can require
   `Iterable`, at the top level or in a sequence's step, which is checked outside the def it is written in, a type
   nothing has settled is still a list, or in a sequence's block the sequence itself (`Loops.readsThroughIterable`).
-  A loop over a list, a sequence, a map or a set whose type is known where the loop is written still walks it directly;
+  A loop over a list, an array, a sequence, a map or a set whose type is known where the loop is written still walks it directly;
   one whose type is settled only after the loop goes through `__toSeq`.
 
 The compiler doesn't insert `toSeq` wherever a `seq(a)` is expected and a `list(a)` is given: unification has no
@@ -161,9 +161,12 @@ A `for` loop walks a `list`, `seq`, `map` or `set` as it is, and reads anything 
 type can be walked by attaching a `toSeq`. A loop rejects a range with no end written in place unless something that
 ends is walked beside it (NYX0217).
 
-The backend walks a list and a range of `int`s written in place with the core IR's `ForEach`, counting with the
-range's bounds rather than making the sequence (`Loops.inferFor` keeps the range as it is written;
-`CoreIrLowerLoops`). A loop over a sequence value is a `while` loop instead (`CoreIrLowerLoops.forEachPulling`): each
+The backend walks a list, an array and a range of `int`s written in place with the core IR's `ForEach`, counting with
+the range's bounds rather than making the sequence (`Loops.inferFor` keeps the range as it is written;
+`CoreIrLowerLoops`). An array is walked by index (`OverArray`): its length is read once, since an `Array` can't change,
+and each element is read where it is, so the loop makes nothing for it, where pulling `array.toSeq` made four blocks for
+each element ([#2207](https://github.com/nanyx-lang/nanyx/issues/2207)). An array walked beside a sequence is walked as
+the list `array_to_list` gives. A loop over a sequence value is a `while` loop instead (`CoreIrLowerLoops.forEachPulling`): each
 time round it pulls the sequence, calling its function with the members of the contexts it carries, binds the element
 and holds the rest for the next time round, so the body runs between pulls. A list or a range walked beside it is
 walked in the same loop, and the loop ends when the first of them does.

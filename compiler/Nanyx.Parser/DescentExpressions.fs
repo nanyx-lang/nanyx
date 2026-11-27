@@ -279,14 +279,17 @@ and private bracketItems (c: Cursor) : Choice<Choice<Expression list, Expression
     let span = c.SpanFrom start
     let entries = items |> List.choose (function Choice1Of2(key, Some value) -> Some(key, value) | _ -> None)
     if entries.IsEmpty then
+        // Each run of elements is built backwards, by consing, and turned round once, so a literal of n elements is
+        // built in time that grows with n (#2220).
         let segments =
             items
             |> List.fold (fun segments item ->
                 match item, segments with
-                | Choice1Of2(element, _), Choice1Of2 elements :: rest -> Choice1Of2(elements @ [ element ]) :: rest
+                | Choice1Of2(element, _), Choice1Of2 elements :: rest -> Choice1Of2(element :: elements) :: rest
                 | Choice1Of2(element, _), _ -> Choice1Of2 [ element ] :: segments
                 | Choice2Of2 spread, _ -> Choice2Of2 spread :: segments) []
             |> List.rev
+            |> List.map (function Choice1Of2 elements -> Choice1Of2(List.rev elements) | spread -> spread)
         Choice1Of2 segments, span
     elif entries.Length = items.Length then
         Choice2Of2(entries |> List.map (fun (key, value) -> Expression.from key (TupleExpr [ key; value ]))), span

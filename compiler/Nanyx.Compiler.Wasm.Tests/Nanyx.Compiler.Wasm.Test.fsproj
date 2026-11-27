@@ -171,6 +171,7 @@
     <Compile Include="Features\Matching\RunIsExpressionTests.fs" />
     <Compile Include="Features\Matching\TagArmTests.fs" />
     <Compile Include="Features\Memory\DropFunctionTests.fs" />
+    <Compile Include="Features\Memory\ArrayLoopTests.fs" />
     <Compile Include="Features\Memory\ReferenceCountingTests.fs" />
     <Compile Include="Features\Memory\ExampleMemoryTests.fs" />
     <Compile Include="Features\Memory\MemoryCheckTests.fs" />
