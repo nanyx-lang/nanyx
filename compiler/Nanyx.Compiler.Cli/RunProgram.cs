@@ -23,8 +23,10 @@ internal static partial class CliCommands
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
         var errors = shell.Error;
-        // A profiled run is of the code without probes, as a release build runs it.
-        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, profile is null, crashToRuntime: true, dbgToEmbedder: false, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait, frameDrops: false);
+        // Without debug probes: nothing listens to them on a run, and they made most of a program's code. The debugger
+        // will compile with them when it attaches. A dbg still gives what it prints to the runtime, which the console
+        // runner leaves to the program and a server writes to its log.
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, false, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait, frameDrops: false);
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;

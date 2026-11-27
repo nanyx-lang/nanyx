@@ -193,9 +193,9 @@ internal static partial class CliCommands
             return 0;
         }
 
-        // As nanyx run compiles a program, with probes for a debug build's stacks; the test build gives its dbgs and
-        // crashes to the runtime itself (see TestBuild.assemble).
-        var options = new CodeGen.WasmOptions(false, true, release, SourceRoot(packageRoot), true, !release, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false);
+        // As nanyx run compiles a program, without debug probes, which nothing listens to; the test build gives its dbgs
+        // and crashes to the runtime itself (see TestBuild.assemble).
+        var options = new CodeGen.WasmOptions(false, true, release, SourceRoot(packageRoot), true, false, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false);
         var wasm = TestBuild.assemble(options, root.Value.Typed.Value);
         var chosenSeed = givenSeed ?? Random.Shared.NextInt64();
         var tests = TestTable.read(wasm);

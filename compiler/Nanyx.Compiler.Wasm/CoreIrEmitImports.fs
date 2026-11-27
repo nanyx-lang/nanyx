@@ -41,5 +41,5 @@ let probingEnabled = "__nanyx_probing_enabled"
 let probing = "__nanyx_probing"
 let probeCall = "__nanyx_probe"
 let probeLocal = "__nanyx_probe_local"
-/// `dbg`, which a debug build the runtime runs imports from `nanyx:debug` (see `EmitContext.DbgToRuntime`).
+/// `dbg`, which a module the runtime runs imports from `nanyx:debug` (see `EmitContext.DbgToRuntime`).
 let dbgImport = "__nanyx_dbg"

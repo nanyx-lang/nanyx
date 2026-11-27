@@ -1,4 +1,5 @@
-/// A `memory` block in a module compiled without debug probes, as `nanyx wasm` and the playground compile one (#2906).
+/// A `memory` block in a module compiled without debug probes, as `nanyx run`, `nanyx wasm` and the playground compile
+/// one (#2906).
 /// Without probes, which read a block's result where it ends, the result is a temporary the block's end reads once:
 /// `region_exit` has to compute it there whatever it holds, and a block whose region is left out
 /// (`CoreIrUnusedRegions`) still has to use it.
