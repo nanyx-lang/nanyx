@@ -48,7 +48,7 @@ let ``A test that fails has why: the crash's message, its place and its stack, a
     Assert.Equal("crashed", text failure "kind")
     Assert.StartsWith("src/geometry.nyx:13:3: assert(double(3) == 5)\n  double(3) = 6\n", text failure "message")
     let place = failure.GetProperty "place"
-    Assert.Equal(("src/geometry.nyx", 13L), (text place "file", number place "line"))
+    Assert.Equal(("src/geometry.nyx", 13L, 3L), (text place "file", number place "line", number place "column"))
     let frame = failure.GetProperty("stack").[0]
     Assert.Equal(("geometry_halves", "src/geometry.nyx", 13L), (text frame "function", text frame "file", number frame "line"))
     Assert.Equal(text failure "message", text halves "errors")

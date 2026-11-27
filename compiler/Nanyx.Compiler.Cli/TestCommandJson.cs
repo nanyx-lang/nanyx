@@ -86,8 +86,8 @@ internal static partial class CliCommands
     /// name, where it is written, whether it is <c>#io</c>, its <c>outcome</c> (<c>passed</c>, <c>failed</c> or
     /// <c>timedOut</c>), what it printed (<c>output</c>) and wrote to its standard error (<c>errors</c>); and for one that
     /// failed, a <c>failure</c>: its <c>kind</c> (<c>crashed</c>, <c>trapped</c>, <c>outOfMemory</c>, <c>stackOverflow</c>,
-    /// <c>arithmetic</c>, <c>exited</c> or <c>other</c>), its message, the place of the program's code it crashed in, and
-    /// its stack, innermost first.
+    /// <c>arithmetic</c>, <c>exited</c> or <c>other</c>), its message, the place of the program's code it crashed in, its
+    /// file, line and column, and its stack, innermost first.
     /// </summary>
     private static void WriteJsonTest(TextWriter writer, TestRun run) =>
         WriteJsonLine(writer, json =>
@@ -133,13 +133,14 @@ internal static partial class CliCommands
                     json.WriteString("message", crashed.message.Value);
                 }
 
-                if (FSharpOption<Tuple<string, int>>.get_IsSome(crashed.place))
+                if (FSharpOption<Tuple<string, int, int>>.get_IsSome(crashed.place))
                 {
-                    var (file, line) = crashed.place.Value;
+                    var (file, line, column) = crashed.place.Value;
                     json.WritePropertyName("place");
                     json.WriteStartObject();
                     json.WriteString("file", file);
                     json.WriteNumber("line", line);
+                    json.WriteNumber("column", column);
                     json.WriteEndObject();
                 }
 

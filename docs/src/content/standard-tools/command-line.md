@@ -219,8 +219,8 @@ With `--format json`, `nanyx test` writes one JSON object on each line of standa
   (`test`), the `file`, `line` and `column` it is written at, whether it is `io`, its `outcome` (`passed`, `failed` or
   `timedOut`, with `timeoutSeconds`), what it printed (`output`) and what it wrote to its standard error (`errors`). A
   test that failed has a `failure`: its `kind` (`crashed`, `trapped`, `arithmetic`, `stackOverflow`, `outOfMemory`,
-  `exited` or `other`), its `message`, the `place` of the program's code a crash was in, and its `stack`, innermost
-  first, each frame's `function` with its `file` and `line`.
+  `exited` or `other`), its `message`, the `place` of the program's code a crash was in, with its `file`, `line` and
+  `column`, and its `stack`, innermost first, each frame's `function` with its `file` and `line`.
 - **`summary`**, last: whether the tests were `built`, how many `passed` and `failed`, and the `seed`. A build that
   fails writes its diagnostics and a summary with `built` false, and a package with no tests a summary alone.
 
