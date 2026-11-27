@@ -589,7 +589,7 @@ module Compiler =
                     // So is a mismatch of a construct's branches, at the one that doesn't fit (see `BranchSpans`).
                     |> List.map (fun (text, span, kind) ->
                         match state.BranchSpans |> Map.tryFind span |> Option.bind _.Value with
-                        | Some (branch, said) -> said, branch, kind
+                        | Some (branch, said) -> Option.defaultValue text said, branch, kind
                         | None -> text, span, kind)
                     |> List.sortBy (fun (_, span, _) -> span.Start)
                     |> List.map (fun (text, span, kind) ->

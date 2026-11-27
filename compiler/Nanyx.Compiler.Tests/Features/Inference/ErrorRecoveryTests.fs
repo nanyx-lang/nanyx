@@ -243,7 +243,8 @@ def head2: list(int) -> int = { xs ->
     Assert.Equal(
         "Tag union mismatch: '#some(int) | #bad(string)' vs '#some(int) | #underflow', where only the first has #bad and only the second has #underflow",
         diagnostic.Message)
-    Assert.Equal(offsetOf source "if x == 1 then applyOp" 0 0, diagnostic.Span.Value.Start)
+    // At the branch that doesn't join the one before it (#2688).
+    Assert.Equal(offsetOf source "else other" 0 0 + "else ".Length, diagnostic.Span.Value.Start)
 
 [<Fact>]
 let ``An error in an earlier def does not change what a later lambda takes`` () =

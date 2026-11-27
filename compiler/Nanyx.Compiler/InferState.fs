@@ -434,9 +434,9 @@ type InferState =
             /// tuple's span: worked out only if one is (see `LambdaArguments.reportedSpan`).
             ArgumentSpans: Map<SourceSpan, Lazy<SourceSpan>>;
             /// Where a mismatch of the branches of a `match`, an `if` or a list literal is reported instead of at the
-            /// whole, by the whole's span, and what it says: at the first branch that doesn't fit with those before it,
-            /// worked out only if one is (see `OddBranches`).
-            BranchSpans: Map<SourceSpan, Lazy<(SourceSpan * MismatchText) option>>;
+            /// whole, by the whole's span, and what it says instead, if anything: at the first branch that doesn't fit
+            /// with those before it, worked out only if one is (see `OddBranches`).
+            BranchSpans: Map<SourceSpan, Lazy<(SourceSpan * MismatchText option) option>>;
             /// The work variables (see `TaskWork`), each with where the def that starts tasks it is of was named.
             TaskWork: Map<int, SourceSpan>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
