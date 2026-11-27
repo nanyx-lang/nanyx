@@ -180,7 +180,11 @@ prelude's `Yield` context declares `yield` as a keyword of kind `#yield`, and an
 `seq` included, is rewritten into the sequence itself (`WorkflowDesugaring`): `yield x` with the rest `k` is
 `seq.cons(x, { k })`, the end of the block `seq.empty()`, and a `for` loop whose body yields
 `seq.append(seq.flatMap(__toSeq(items), body), seq.delay({ k }))`. A `yield` or a loop the sequence ends after makes no
-rest: the last `yield x` is `__seqLast(x)`, the sequence of `x` alone, and the loop is the `seq.flatMap` alone. The loop's items are anything `Iterable`, as a
+rest: the last `yield x` is `__seqLast(x)`, the sequence of `x` alone, and the loop is the `seq.flatMap` alone. A loop
+whose body gives exactly one value each time round, one `yield e`, or an `if` or a `match` each of whose branches is
+one, is `__seqMap(__toSeq(items), { item -> e })` instead, the prelude's `seq.map` under a name `EmitLambdas` reads
+as the `yield` it was, which passes each element on through one sequence rather than through the body's and
+`seq.flatMap`'s ([#2208](https://github.com/nanyx-lang/nanyx/issues/2208)). The loop's items are anything `Iterable`, as a
 plain `for` loop's are: the checker reads `__toSeq(items)` as `__seqItself(items)`, the sequence as it is with whatever
 its steps need, when the items are a sequence or a type nothing has settled (`Loops.walksAsSequence`), and through
 their `Iterable` otherwise, so a list, an array, a set or a map is walked by its `toSeq`. A step is checked outside the
@@ -248,10 +252,12 @@ nothing: the stage's `match` arm takes the `#next` it pulled apart and builds it
 into the same blocks ([Reuse in place](reference-counting#reuse-in-place)). So `seq.range(1, n) \seq.toList` makes five
 blocks per element, the list's cell included, and a `seq.filter` and a `seq.map` folded with `seq.fold` seven.
 
-A `yield` block costs what its calls do. `seq { for 1..n | i -> yield i }` makes ten blocks per element: four for the
-range, two for the step of `seq.flatMap` that gives the element, and four for `__seqLast(i)`, though the `#next` it gives
-is reused by `seq.flatMap`'s. `seq.flatMap` walks each inner sequence itself rather than through `seq.append`, and
-`seq.empty()` is one sequence that every call shares.
+A `yield` block costs what its calls do. `seq { for 1..n | i -> yield i }` is a map, so it makes six blocks per
+element, as `seq.map` over the range does: four for the range and two for the map's step. A loop whose body yields
+more than once goes through `seq.flatMap`: four blocks for the range, two for the step of `seq.flatMap` that gives
+each element, and four for each `__seqLast(x)` or `seq.cons(x, ...)`, though the `#next` it gives is reused by
+`seq.flatMap`'s. `seq.flatMap` walks each inner sequence itself rather than through `seq.append`, and `seq.empty()` is
+one sequence that every call shares.
 
 What isn't reused, and why:
 
