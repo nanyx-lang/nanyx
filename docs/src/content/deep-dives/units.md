@@ -94,11 +94,16 @@ import's unit replaces the prelude's of its name rather than making it ambiguous
 
 # Numbers with units
 
-`Infer` types `500ms` as a measured value of `ms`'s dimension, `TyMeasure([Time, 1], s)`, and `90.0kmh` one of
+`Infer` types `500ms` as a measured value of `ms`'s dimension, `TyMeasure([Time, 1], s)`, and `90kmh` one of
 `[Length, 1; Time, -1]`, whose storage `s` is recorded as
 a number literal's type is (`NumericLiterals.typeOf`), so it is the number the code around it expects, as a plain
-literal's is. A constrained dimension's literal is of the dimension's storage. One nothing settles is of the number it is
-written as: `int` for `500ms`, `float` for `0.5s` (`NumericLiterals.defaultType`).
+literal's is. A constrained dimension's literal is of the dimension's storage. One nothing settles is an `int` when its
+number of default storage units (`NumericLiterals.inStorageUnits`) is whole and fits one, however it is written, so
+`500ms` and `0.5s` both are, and a `float` when it isn't, as `0.25ns` and `90kmh` are (`NumericLiterals.defaultType`).
+Literals with units that are of one storage are a `float` together if one of them is, or a plain `float` literal is of
+it, so that `2.0 * 1.5s` and `[0.5s, 0.25ns]` agree (`NumericLiterals.sharedDefaults`). A literal of one storage whose
+other operand is a derived quotient of literals in the same expression, as in `1m / 1s / 1s`, is defaulted with them,
+before the quotient's `fraction` is known, so it can disagree with it; a def of the quotient avoids that.
 
 Once every type is known, `NumericLiterals.check` works out each one's number of default storage units exactly, the
 written number
@@ -150,9 +155,9 @@ For an `int` storage, or a sized integer that converts to one, the definition ca
 text to write around a number of default storage units: it writes the number in the first unit it is a whole number
 of, `2min` for `120s`, zero in the default display unit, `0s`, and a number no unit fits in the default storage unit. A
 `float` or `F32` storage calls `__measuredFloatToString`, which writes the number in the first unit its magnitude is at
-least 1 of, `1.5s`, `2.0min` for `120.0s`, and in the last, the smallest, when it is under 1 of every unit, `0.25ns`,
+least 1 of, `1.5s`, `2.0min` for `120s`, and in the last, the smallest, when it is under 1 of every unit, `0.25ns`,
 as a float is written, and zero as `0.0s`. A number within a millionth of a millionth of a whole one, relatively,
-counts as that whole one, as float arithmetic rounds: `90.0kmh + 10.0m / 1.0s` is `3.4999999999999996e-8` of a metre a
+counts as that whole one, as float arithmetic rounds: `90kmh + 10m / 1s` is `3.4999999999999996e-8` of a metre a
 nanosecond, and is written `35.0m/s`. Any other storage, a type variable's among them, is written in the default storage unit through its own `ToString`, so the
 definition for a `Time(a)` requires `ToString(a)`. A module that can't write its dimension's default storage unit writes
 a number of default storage units as `dbg` does, `Time(1500000000)`.
@@ -191,8 +196,8 @@ defined, is [`NYX0297`](../standard-tools/errors#nyx0297).
 and multiplying and dividing them as the definition does: `1km / 1hr` is of `Length / Time`, and is 1_000 metres over
 3_600_000_000_000 nanoseconds, so a kilometre an hour is `1/3600000000` of a metre a nanosecond. A definition of
 another dimension than the unit's is [`NYX0289`](../standard-tools/errors#nyx0289). A unit of a derived dimension is
-a literal's unit as another is, so `90.0kmh` is `Length(float) / Time(float)`, stored as its number of the parts'
-default storage units; `90kmh` in an `int` is no whole number of them, an error that names them, `m/ns`.
+a literal's unit as another is, so `90kmh` is `Length(float) / Time(float)`, stored as its number of the parts'
+default storage units, which is no whole number; where an `int` is expected it is an error that names them, `m/ns`.
 
 `MeasuredArithmetic.read` types `*` on two measured values as the storage's `*`, of the product of their dimensions, and
 `/` as the storage's `/`, of their quotient, at the storage's fraction, so `100m / 3s` is not rounded. `//` rounds only
@@ -204,7 +209,7 @@ module sees, and the names of the display units are joined as `Dimension.written
 spaces, and a divisor of more than one part in brackets. Their scale is the product of the parts' display units'
 scales, each raised to its part's power. A `float` is multiplied by how many display units a storage unit is, which
 rounds less than dividing, and written by `__measuredFloatToString` in that one unit: `100.0m / 9.58s` is
-`10.438413361169102m/s`, and `90.0kmh` is `25.0m/s`. An `int` is written by `__measuredRatioToString`, given the scale
+`10.438413361169102m/s`, and `90kmh` is `25.0m/s`. An `int` is written by `__measuredRatioToString`, given the scale
 as a numerator and a denominator: in the display units if it is a whole number of them, `2000mm * 1000mm` is `2m*m`,
 and otherwise in the parts' default storage units, the only ones it is exact in, `1500mm*mm`. A module that can't write
 a part's default display unit writes the value as `dbg` does, `(Length / Time)(1.04e-8)`.

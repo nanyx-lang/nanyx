@@ -255,7 +255,8 @@ def writeFrom: [HostRuntime] I32, I32, I32, I32 -> #ok | FsError = { fd, buffer,
 }
 
 --| Writes `text` to the file at `at`, which it opens with the WASI open flags `openFlags` and
-  descriptor flags `descriptorFlags`.
+  descriptor flags `descriptorFlags`. A directory at `at` is `#isDirectory`, whatever the system
+  says: Windows refuses to open one for writing as `EINVAL`, where Linux says `EISDIR`.
 export def writeWith
   : [HostRuntime] Path, string, I32, I32 -> #ok | FsError
   = { at, text, openFlags, descriptorFlags ->
@@ -265,7 +266,10 @@ export def writeWith
         keepAlive(text)
         ignore(fdClose(fd))
         result
-      | e -> e
+      | e ->
+        match kindAt(at)
+          | #some(kind) -> (if kind == directoryKind then #isDirectory else e)
+          | _ -> e
   }
 
 --| How many bytes a directory listing is read in at a time.

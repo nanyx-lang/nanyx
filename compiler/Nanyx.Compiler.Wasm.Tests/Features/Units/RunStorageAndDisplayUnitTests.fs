@@ -49,11 +49,12 @@ let ``Run - the prelude's Time is stored in nanoseconds and written in seconds w
     let source =
         """@entry
 def main = {
+  def none: Time(float) = 0s
   println(0s)
   println(0ms)
-  println(0.0s)
+  println(none)
   println(1500ms)
   dbg(500ms)
 }
 """
-    runSource (normalized source) |> assertRanWithDbg "0s\n0s\n0.0s\n1500ms\n" "[main.nyx:7] Time(500000000)\n"
+    runSource (normalized source) |> assertRanWithDbg "0s\n0s\n0.0s\n1500ms\n" "[main.nyx:8] Time(500000000)\n"

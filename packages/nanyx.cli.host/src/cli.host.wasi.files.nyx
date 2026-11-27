@@ -348,7 +348,9 @@ def chunkAt: [HostRuntime] Path, int, int -> #some(string) | FsError = { at, off
 }
 
 --| Writes `text` to the file at `at`, which it opens with the `open-flags` `openFlags`, through
-  `output`, the descriptor's `write-via-stream` or `append-via-stream` as `outputOf` gives them.
+  `output`, the descriptor's `write-via-stream` or `append-via-stream` as `outputOf` gives them. A
+  directory at `at` is `#isDirectory`, whatever the system says: Windows refuses to open one for
+  writing as `invalid`, where Linux says `is-directory`.
 def writeWith
   : [HostRuntime] Path, string, I32, ([HostRuntime] I32 -> Output) -> #ok | FsError
   = { at, text, openFlags, outputOf ->
@@ -360,7 +362,10 @@ def writeWith
         def written = resultAt(result)
         free(result)
         written
-      | e -> e
+      | e ->
+        match kindAt(at)
+          | #some(kind) -> (if kind == directoryType then #isDirectory else e)
+          | _ -> e
   }
 
 --| A file's `write-via-stream`, from its start, as an `Output`.

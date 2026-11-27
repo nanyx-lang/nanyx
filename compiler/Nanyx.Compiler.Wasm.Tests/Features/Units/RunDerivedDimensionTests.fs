@@ -20,8 +20,9 @@ def speed: Length(float), Time(float) -> Speed(float) = { d, t -> d / t }
 def v = speed(100.0m, 9.58s)
 println(v)
 println(v * 9.58s)
-println(2.0m * 3.0m)
-println(10.0m / 2.0s / 1.0s)
+println(2m * 3m)
+def perSecond = 10.0m / 2.0s
+println(perSecond / 1.0s)
 def ratio: float = 1.0km / 1.0m
 println(ratio)
 dbg(v)
@@ -33,7 +34,7 @@ dbg(v)
             "\n"
             [ "10.438413361169102m/s"
               "100.0m"
-              "6.0m*m"
+              "6m*m"
               "5.0m/(s*s)"
               "1000.0"
               "(Length / Time)(1.0438413361169103e-8)"
@@ -123,14 +124,15 @@ def main = {
   println(90.0kmh)
   println(1500mm * 1mm)
   println(2000mm * 1000mm)
-  println(1.0m / 1.0s / 1.0s)
+  def perSecond = 1.0m / 1.0s
+  println(perSecond / 1.0s)
   dbg(1m / 1s)
 }
 """
     runSource (normalized source)
     |> assertRanWithDbg
         "1.0m/s\n10.438413361169102m/s\n25.0m/s\n1500mm*mm\n2m*m\n1.0m/(s*s)\n"
-        "[main.nyx:19] (Distance / Time)(0.000001)\n"
+        "[main.nyx:20] (Distance / Time)(0.000001)\n"
 
 [<Fact>]
 let ``Run - dbg writes a derived dimension in brackets around its number, and a single one without`` () =
