@@ -101,7 +101,10 @@ module internal ImportMerging =
         let importedKey = originKey importedOrigin
         let qualifier = ModuleLinking.importQualifier item
         // In a module that isn't the program's own, an import's definitions are inlined under qualified names, but the
-        // standard library's, which every module shares under one name.
+        // standard library's, which every module shares under one name. That is safe only because the standard library
+        // selects nothing but types from its imports (`import nanyx/async as (Async)`), so no program's def can take the
+        // place of one of its functions (#2995). If it ever selects a function by name, that import has to be
+        // qualified like the rest.
         let qualifies =
             merged.QualifiesImports
             && (match importedOrigin with
