@@ -707,8 +707,10 @@ module internal StructuralInstances =
         let abstractedTy, abstracted, abstractedState = abstractParts partInstance ty state
         match functionPart abstractedTy with
         | Some held -> Some (Error (HoldsFunction held))
-        // A union open to the caller's tags has an `==` derived only where it is compared (see `comparison`).
-        | None when (closed rigid ty).IsNone && (closed Set.empty ty |> Option.bind (shapeFor ctxName)).IsSome -> Some (Error OpenToCaller)
+        // A union open to the caller's tags has only an `==` derived, which compares the tags it names part by part and
+        // leaves the others to the compiler's own, as a comparison of it does (see `comparison`), and a call that requires
+        // `Eq` of it is passed that (#2751).
+        | None when (closedFor ctxName rigid ty).IsNone && (closed Set.empty ty |> Option.bind (shapeFor ctxName)).IsSome -> Some (Error OpenToCaller)
         | None ->
             let ty, state = abstractedTy, abstractedState
             let instanceOf = withAbstracted abstracted instanceOf
