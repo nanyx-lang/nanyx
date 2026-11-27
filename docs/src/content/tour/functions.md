@@ -10,7 +10,7 @@ Functions are written with braces, `{ ... }`, and optionally define parameters: 
 
 # Function basics
 
-A function that takes no parameters (or, more specifically, take `unit` as input) is simply `{ ... }`:
+A function that takes no parameters (or, more specifically, take `()` as input) is simply `{ ... }`:
 
 ```nanyx
 def main = {
@@ -289,7 +289,7 @@ The tags are:
 - `#union(u)`: the type is a union of tags. `u` is a `UnionInfo(a)` with the same `name`, `module`, `parameters` and `doc`, and its `cases`.
 - `#nominal(n)`: a nominal type seen from outside its home module, which shows only its `name`, `module`, `parameters` and `doc`, so its own module decides how it is written and read. Where a `Type` value is seen from is where its `type X` is written, so the `typeOf` of a [`Typed`](#type-arguments) instance, which the prelude writes, sees every nominal type of yours as `#nominal`.
 
-Each field of `r.fields` has a type of its own, which the checker never learns: a field `f` has its `name`, its `type`, a `Type` of it, `get`, which takes a value of `a` and gives the field's value, and the [`attributes`](attributes#attributes-on-fields) written before it, each with its `name` and its `arguments` as pairs of text. Since `f.get(value)` and `f.type` are of the same type, the call `describe(f.get(value), f.type)` checks, whatever the field's type is. A case of `u.cases` has its `name`, its payload's `type` (`unit` for a tag without one), and `get`, which gives `#some(payload)` for a value of that case and `#none` otherwise. A value of a field's or an element's type can only be used where it is opened: giving it back from the lambda or the arm is an error (NYX0274), as it could then be given where another field's type is expected.
+Each field of `r.fields` has a type of its own, which the checker never learns: a field `f` has its `name`, its `type`, a `Type` of it, `get`, which takes a value of `a` and gives the field's value, and the [`attributes`](attributes#attributes-on-fields) written before it, each with its `name` and its `arguments` as pairs of text. Since `f.get(value)` and `f.type` are of the same type, the call `describe(f.get(value), f.type)` checks, whatever the field's type is. A case of `u.cases` has its `name`, its payload's `type` (`()` for a tag without one), and `get`, which gives `#some(payload)` for a value of that case and `#none` otherwise. A value of a field's or an element's type can only be used where it is opened: giving it back from the lambda or the arm is an error (NYX0274), as it could then be given where another field's type is expected.
 
 A `match` on a type that leaves out a tag and has no `else` is a non-exhaustive match (NYX0203), and a pattern that isn't a description's tag is NYX0273. A function that calls itself at the type of a part, as `describe` does, must write its type, so that it can be called at other types.
 

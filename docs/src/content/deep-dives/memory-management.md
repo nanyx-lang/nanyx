@@ -211,7 +211,7 @@ interpolation, `if ... is`, record updates, workflows and context calls are lowe
 works from it alone.
 
 **Shape.** The IR is in `compiler/Nanyx.Compiler.Wasm/CoreIr.fs`. A function has typed parameters, a result type and
-a body. Types are concrete (`int`, `bool`, `unit`, `string`, `float`, a union of tags, a record, a list, a function),
+a body. Types are concrete (`int`, `bool`, `()`, `string`, `float`, a union of tags, a record, a list, a function),
 with no type variables. A tuple is a record whose fields are its positions, and a nominal type is the type of its
 shape. A body is an expression with a type on every node:
 
@@ -256,7 +256,7 @@ values boxed (`IrBox`), by a function at the call's own types that converts its 
 boxes (`CoreIrLowerModule.boxedInstead`, `CoreIrLowerLifted.boxedCalling`). A call that is specialised on known context
 members or described types, or on what a context variable stands for, can't go that way, and past the cap is still
 `NYX0301`.
-A type variable that nothing constrains (the element of `[]`) is `unit`: nothing can make or inspect a value of such a
+A type variable that nothing constrains (the element of `[]`) is `()`: nothing can make or inspect a value of such a
 type. The rest of an open union that no use closes adds no tags.
 A definition that reads fields of any record that has them is specialised per record layout, so each specialisation
 reads its fields from where they are stored. A generic definition exists only as its specialisations: it is neither

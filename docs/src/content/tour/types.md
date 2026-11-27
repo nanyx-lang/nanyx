@@ -94,7 +94,6 @@ Each built-in type has a capitalised name, which is the type, and a lowercase al
 |---|---|
 | `string` | `String` |
 | `list` | `List` |
-| `unit` | `Unit` |
 | `seq` | `Sequence` |
 | `map` | `Map` |
 | `set` | `Set` |
@@ -105,6 +104,8 @@ Each built-in type has a capitalised name, which is the type, and a lowercase al
 The two are the same type everywhere, so `List(int)` and `list(int)` are one type, and so are `def String.trim` and `def string.trim` (see [Attached definitions](../advanced/attached-definitions#attaching-to-a-built-in-type)). The compiler prints the alias: an error message or a hover says `list(string)`.
 
 `Int`, `Float`, `Bool` and `Char` are not types at all: writing one is the error `NYX0114`, with a fix that writes `int`, `float`, `bool` or `char`.
+
+The type of `()` is written `()`, as in `() -> int`, and has no other name: `unit` and `Unit` are `NYX0114` too, with a fix that writes `()`.
 
 # Record types
 
@@ -252,7 +253,7 @@ The first letter of a name in a type says what kind of name it is:
 - **A single lowercase letter**, such as `a`, `b` or `c`, is a type variable. The parameters of a type or a [context](../advanced/contexts) are type variables, so each of them is a single lowercase letter too: `type Pair(a, b)`, `context Store(c, i)`. A longer name, `type Box(item)`, is an error where it is written.
 - **Longer lowercase names** are reserved for [associated types](../advanced/contexts#associated-types), so one written in a type that no context in scope has as an associated type is an error too.
 
-The exceptions are the built-in types whose names are lowercase keywords for convenience: `int`, `float`, `string`, `bool`, `unit`, `list`, `seq`, `map`, `set`, `any` and `undefined`. These names are reserved by the language, so none of them can be the name of a type variable, an associated type or a type you define.
+The exceptions are the built-in types whose names are lowercase keywords for convenience: `int`, `float`, `string`, `bool`, `list`, `seq`, `map`, `set`, `any` and `undefined`. These names, and `unit`, are reserved by the language, so none of them can be the name of a type variable, an associated type or a type you define.
 
 # Type aliases
 

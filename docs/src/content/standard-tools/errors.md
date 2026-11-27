@@ -1180,14 +1180,18 @@ To fix it, rename or remove one of the definitions.
 
 # NYX0114: Not a built-in type
 
-A type is written `Int`, `Float`, `Bool` or `Char`. Those are not types: the built-in types are `int`, `float`, `bool`
-and `char`. An editor offers to write the right name.
+A type is written `Int`, `Float`, `Bool` or `Char`, or `unit` or `Unit`. Those are not types: the built-in types are
+`int`, `float`, `bool` and `char`, and the type of `()` is written `()`. An editor offers to write the right name.
 
 ```nanyx
 def count: Int = 3  -- error NYX0114: A built-in type's name is in lower case: write 'int'
 ```
 
-To fix it, write the type in lower case.
+```nanyx
+def nothing: unit -> int = { _ -> 0 }  -- error NYX0114: The type of `()` is written '()', not 'unit'
+```
+
+To fix it, write the type in lower case, or write `()`.
 
 # NYX0115: Initialisation cycle
 
