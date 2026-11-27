@@ -36,14 +36,17 @@ public sealed record InfoViewResult
 /// <summary>
 /// A scope at the position. <see cref="Kind"/> is one of <c>messages</c> (first, only when the position's line has a
 /// diagnostic, with its <see cref="Messages"/> and no sections), <c>expression</c> (next, with the section
-/// <c>type</c>, only when there is an expression there that no scope below shows), <c>lambda</c> (<c>type</c>,
-/// <c>names</c>, <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>, <c>contexts</c>, <c>flow</c>) and
-/// <c>module</c> (always last, with <c>names</c> and <c>contexts</c>); a lambda or function scope comes once for each
-/// lambda or def around the position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the
-/// scope, as code but for the messages', after <see cref="Label"/>, which says what kind of code it is where it
-/// doesn't, and <see cref="Location"/> is where it links (see <c>InfoView.Heading</c>): the expression by its
+/// <c>type</c>, only when there is an expression there that no scope below shows), or in its place <c>type</c> (a
+/// type there: its <c>definition</c>, a selected type's <c>type</c>, or the <c>contexts</c> of a type variable),
+/// <c>lambda</c> (<c>type</c>, <c>names</c>, <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>,
+/// <c>contexts</c>, <c>flow</c>), <c>typeDefinition</c> (<c>definition</c>, <c>parameters</c>, <c>attached</c>) and
+/// <c>module</c> (always last, with <c>names</c> and <c>contexts</c>); a lambda, function or type definition scope comes
+/// once for each lambda, def or <c>type</c>, <c>context</c>, <c>dimension</c> or <c>unit</c> declaration around the
+/// position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the scope, as code but for the
+/// messages', after <see cref="Label"/>, which says what kind of code it is where it doesn't, and
+/// <see cref="Location"/> is where it links (see <c>InfoView.Heading</c>): the expression or selected type by its
 /// text, a lambda by its parameters and line, a <c>for</c> loop's as the loop is written, with its line, a def by its
-/// name, the module by its declared name. <see cref="Documentation"/> is the module's doc comment.
+/// name, a type as declared, the module by its declared name. <see cref="Documentation"/> is the module's doc comment.
 /// <see cref="Collapsed"/> says whether a client shows it closed at first: the module, and the scopes after the third,
 /// not counting the messages and the expression.
 /// </summary>
@@ -142,11 +145,12 @@ public sealed record InfoViewName(int Start, int Length)
 /// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel, by scope, innermost first.
 /// First, if the position's line has any, its diagnostics, each in full (see <see cref="InfoViewMessage"/>). Then the
 /// expression selected, or with no selection the one at the position, with its type, as hover writes it (see
-/// <see cref="InfoView.expressionAt"/>). Then each
+/// <see cref="InfoView.expressionAt"/>), or in its place the type there (see <see cref="InfoView.typeAt"/>). Then each
 /// lambda and def around the position (see <see cref="InfoView.Scope"/>): a lambda's type, with the contexts it
 /// carries, a def's signature and doc comment, the parameters, locals and pattern variables each declares, the
 /// contexts each provides, and in the innermost def the flow of contexts through it, each provider with the calls it
-/// serves, an instance the compiler builds among them (see <see cref="NyxCompiler.ContextFlow"/>). Last the module: its
+/// serves, an instance the compiler builds among them (see <see cref="NyxCompiler.ContextFlow"/>). Then the type
+/// declaration around the position, if any: its definition, its parameters and the definitions attached to it. Last the module: its
 /// doc comment, its top-level defs and imports in scope, and the runtime's contexts. It also gives the ranges to
 /// highlight: a provider at the position and the calls it serves, or a call and what provides its contexts. Read from
 /// the document's last typed compile, as hover is (see <see cref="OpenDocument.LastGood"/>); the diagnostics are this
@@ -185,6 +189,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         var offset = document.Positions.ToOffset(request.Position);
         InfoView.Info? info = null;
         InfoView.Described? expression = null;
+        InfoView.DescribedType? typeAt = null;
         NyxCompiler.ContextFlow.Flow? flow = null;
         NyxCompiler.ContextFlow.Highlights? highlights = null;
         NyxCompiler.Documentation.Reader? docs = null;
@@ -193,9 +198,13 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         {
             fileName = lastGood.FileName;
             info = InfoView.at(_settings.TypeNotation, lastGood.FileName, lastGood.Positions.NormalizedText, compiled, nearest);
+            // A type there is described in place of the expression around it, as a lambda is around its parameter's type.
             if (SelectedInLastGood(request, document, offset) is { } selected)
             {
-                expression = InfoView.expressionAt(_settings.TypeNotation, lastGood.Positions.NormalizedText, compiled, selected)?.Value;
+                typeAt = InfoView.typeAt(_settings.TypeNotation, lastGood.FileName, lastGood.Positions.NormalizedText, compiled, selected)?.Value;
+                expression = typeAt is null
+                    ? InfoView.expressionAt(_settings.TypeNotation, lastGood.Positions.NormalizedText, compiled, selected)?.Value
+                    : null;
             }
 
             var contexts = NyxCompiler.ContextFlow.at(_settings.TypeNotation, compiled, nearest);
@@ -215,9 +224,12 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                 ? item with { Text = pattern, Name = new InfoViewName(0, Parser.Program.PatternSyntax.keyword.Length), Detail = detail }
                 : item;
 
+        // A type's definition writes its name, `type Bag.elem = int`.
         InfoViewItem Name(InfoView.ScopedName name) => AsDeclared(name.Name, name.Type?.Value, new()
         {
-            Text = name.Type?.Value is { } type ? Signature(name.Name, type) : name.Name,
+            Text = name.Type?.Value is not { } type ? name.Name
+                : name.Kind.IsTypeDefinition ? type
+                : Signature(name.Name, type),
             Name = new InfoViewName(0, name.Name.Length),
             Detail = Describe(name.Kind),
             Location = Locate(name.Declaration),
@@ -232,6 +244,18 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             Location = Locate(context.Span),
             Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
         };
+
+        // A type's definition, as hover shows it: what hover says after it, then the type's doc comment.
+        InfoViewItem Definition(string definition, string? note, NyxCompiler.Symbol? symbol, Parser.Program.SourceSpan span)
+        {
+            var notes = new[] { note, symbol is null ? null : DocOf(symbol) }.OfType<string>().ToList();
+            return new InfoViewItem
+            {
+                Text = definition,
+                Location = Locate(symbol?.Declaration ?? span),
+                Documentation = notes.Count == 0 ? null : string.Join("\n\n", notes)
+            };
+        }
 
         var scopes = new List<InfoViewScope>();
         if (expression is not null)
@@ -259,6 +283,39 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                         ]
                     }
                 ]
+            });
+        }
+
+        if (typeAt is not null)
+        {
+            List<InfoViewSection> sections = [];
+            if (typeAt.Definition?.Value is { } definition)
+            {
+                sections.Add(new InfoViewSection
+                {
+                    Id = "definition",
+                    Title = "Definition",
+                    Items = [Definition(definition, typeAt.Note?.Value, typeAt.Symbol?.Value, typeAt.Span)]
+                });
+            }
+
+            if (typeAt.Type?.Value is { } type)
+            {
+                sections.Add(new InfoViewSection { Id = "type", Title = "Type", Items = [new InfoViewItem { Text = type, Location = Locate(typeAt.Span) }] });
+            }
+
+            if (!typeAt.Contexts.IsEmpty)
+            {
+                sections.Add(new InfoViewSection { Id = "contexts", Title = "Contexts", Items = typeAt.Contexts.Select(Context).ToList() });
+            }
+
+            scopes.Add(new InfoViewScope
+            {
+                Kind = "type",
+                Label = typeAt.Heading.Label?.Value,
+                Heading = typeAt.Heading.Code,
+                Location = Locate(typeAt.Span),
+                Sections = sections
             });
         }
 
@@ -313,6 +370,20 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                     Add("flow", "Context flow", flow.Entries.Select(entry => FlowItem(entry, Locate)).ToList());
                 }
             }
+            else if (scope.Kind.IsTypeScope)
+            {
+                kind = "typeDefinition";
+                Add("definition", "Definition", scope.Type?.Value is { } definition
+                    ? [Definition(definition, scope.Note?.Value, scope.Symbol?.Value, scope.Span)]
+                    : []);
+                Add("parameters", "Parameters", scope.Parameters.Select(parameter => new InfoViewItem
+                {
+                    Text = parameter.Bounds.IsEmpty ? parameter.Name : $"[{string.Join(", ", parameter.Bounds)}] {parameter.Name}",
+                    Detail = parameter.IsAssociated ? "associated type" : "parameter"
+                }).ToList());
+                // An attached def is listed among the module's too, but says here that it is attached.
+                Add("attached", "Attached", names.Select(name => name with { Detail = "attached" }).ToList());
+            }
             else
             {
                 kind = "module";
@@ -354,7 +425,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                 ? scope with { Sections = scope.Sections.Select(section => AsType(section, expression.Type)).ToList() }
                 : scope)
             .ToList();
-        var expressionScopes = shown.Count(scope => scope.Kind == "expression");
+        var expressionScopes = shown.Count(scope => scope.Kind is "expression" or "type");
         return new InfoViewResult
         {
             // The side bar is narrow: past the third scope around the position they start closed, as the module always
@@ -601,6 +672,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             SymbolKind.Tags.LocalValue => "local",
             SymbolKind.Tags.PatternVariable => "pattern variable",
             SymbolKind.Tags.ImportedModule => "import",
+            SymbolKind.Tags.TypeDefinition => "type",
             _ => "def"
         };
 

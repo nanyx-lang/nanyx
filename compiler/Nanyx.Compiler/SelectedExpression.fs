@@ -68,15 +68,19 @@ let rec internal findIn (source: string) (selection: SourceSpan) (site: Site) (s
         | Some found -> Some found
         | None -> inChildren ()
 
+/// `selection`, a span of `source`, less the spaces around it: what is selected, for the rule that what is written
+/// exactly there is what the selection picks.
+let internal trimmed (source: string) (selection: SourceSpan) : SourceSpan =
+    let text = SourceSpan.textIn source selection
+    { selection with Start = selection.Start + (text.Length - text.TrimStart().Length); End = selection.End - (text.Length - text.TrimEnd().Length) }
+
 /// The expression of `syntax`, parsed from `source`, written exactly at `selection` less the spaces around it, the
 /// outermost if several are (see `findIn`): in the value of a def or a top-level expression. None for an empty selection,
 /// or one that is not a single expression, such as part of one or two statements.
 let internal at (source: string) (syntax: Module) (selection: SourceSpan) : (Expression * Site * string option) option =
     if selection.End <= selection.Start then None
     else
-        let text = SourceSpan.textIn source selection
-        let selection =
-            { selection with Start = selection.Start + (text.Length - text.TrimStart().Length); End = selection.End - (text.Length - text.TrimEnd().Length) }
+        let selection = trimmed source selection
         syntax
         |> List.tryPick (fun item ->
             match item.Kind with

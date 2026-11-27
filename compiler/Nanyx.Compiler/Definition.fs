@@ -130,6 +130,11 @@ let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (
 let internal typeDefsBesides (info: TypeDefInfo) (typeDefs: Map<string, TypeDefInfo>) =
     typeDefs |> Map.filter (fun _ other -> TypeDefInfo.nominalId other <> TypeDefInfo.nominalId info)
 
+/// The definition of the type `symbol` names, `info`, in the compiled root module, compiled as `file`, as hover writes it
+/// (see `writtenTypeDefinition`), with made-up type variables named by `names`, and the note after it.
+let internal typeDefinitionWritten (names: TypeNotation) (file: string) (typed: TypedModule) (symbol: Symbol) (info: TypeDefInfo) : string * string option =
+    writtenTypeDefinition (Unifier.tyToDisplayStringIn (typeDefsBesides info typed.TypeDefs) names) symbol info (symbol.Declaration.File = file)
+
 /// What hovering a type's name shows: its definition, as `writtenTypeDefinition` writes it, with made-up type
 /// variables named by `names`, over the span of the name. The name can be in an annotation, a type definition (its
 /// own or another's) or a signature's contexts, and the type can be the module's own or an imported one. `None` when
@@ -139,7 +144,7 @@ let typeDefinitionAt (names: TypeNotation) (file: string) (result: CompileResult
     | Some typed, Some (symbol, span) when symbol.Kind = TypeDefinition ->
         typeDefinitionOf typed symbol
         |> Option.map (fun info ->
-            let definition, note = writtenTypeDefinition (Unifier.tyToDisplayStringIn (typeDefsBesides info typed.TypeDefs) names) symbol info (symbol.Declaration.File = file)
+            let definition, note = typeDefinitionWritten names file typed symbol info
             { Type = definition; Span = span; Note = note })
     | _ -> None
 
