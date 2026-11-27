@@ -21,10 +21,12 @@ let ``The console host is shipped beside the compiler, at the compiler's version
     Assert.Equal(Toolchain.version, manifest.Version)
     // `ShippedPackages` reads a shipped package's sources from its `src` directory.
     Assert.Equal<string list>([ "src/**/*.nyx" ], manifest.Sources)
-    Assert.Equal<string list>([ "cli.host"; "cli.host.wasi"; "cli.prelude" ], (ShippedPackages.tryModules Hosts.consolePackage).Value.PublicModules)
+    Assert.Equal<string list>([ "cli.host.memory"; "cli.host"; "cli.host.wasi"; "cli.prelude" ], (ShippedPackages.tryModules Hosts.consolePackage).Value.PublicModules)
     // It declares that it is a host, with its root module and its prelude.
     let host = manifest.Declares.Value
     Assert.Equal(("cli.host", Some "cli.prelude"), (host.Module, host.Prelude))
+    // And the root `nanyx run --files-in-memory` builds a program from (see `Host.InMemory`).
+    Assert.Equal(Some "cli.host.memory", host.FilesInMemory)
     Assert.Equal(host, HostPackages.console.Value)
 
 [<Fact>]

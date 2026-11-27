@@ -232,6 +232,7 @@ internal static partial class CliCommands
     /// <param name="allowDir">A directory the program may read and write besides the current directory, which it always may. A path outside them is #permissionDenied.</param>
     /// <param name="profile">Sample the run with Wasmtime's guest profiler and write the profile to this file, in the Firefox profiler's format, to open at profiler.firefox.com.</param>
     /// <param name="dbgTo">Write each dbg the program reaches to this file, made anew, as a line of JSON (its file, line, column, value and sequence number), and none to stderr: for an editor, to show the values where they are written.</param>
+    /// <param name="filesInMemory">Run the program with its files in memory: it reads the real files until it writes, appends to or deletes them, and nothing it does reaches the disk. The program is built from its host's root for this, which the console host has.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("check-memory")] bool checkMemory = false,
@@ -243,10 +244,11 @@ internal static partial class CliCommands
         [Consolo("allow-dir")] string? allowDir = null,
         [Consolo("profile")] string? profile = null,
         [Consolo("dbg-to")] string? dbgTo = null,
+        [Consolo("files-in-memory")] bool filesInMemory = false,
         params string[] path)
     {
         var memoryCheck = memory ? MemoryCheck.Report : checkMemory ? MemoryCheck.Check : MemoryCheck.Off;
-        return RunIn(Shell.Process, memoryCheck, path, timings, host, !noInline, allowDir is null ? [] : [allowDir], profile, yieldAtEveryWait, dbgTo);
+        return RunIn(Shell.Process, memoryCheck, path, timings, host, !noInline, allowDir is null ? [] : [allowDir], profile, yieldAtEveryWait, dbgTo, filesInMemory);
     }
 
     /// <summary>
@@ -254,7 +256,7 @@ internal static partial class CliCommands
     /// and each of <paramref name="allowedDirectories"/>. With <paramref name="profile"/>, the run is profiled into that
     /// file (see <see cref="RunProgram"/>).
     /// </summary>
-    internal static int RunIn(Shell shell, MemoryCheck memoryCheck, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null)
+    internal static int RunIn(Shell shell, MemoryCheck memoryCheck, string[] path, bool timings = false, string? host = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null, bool filesInMemory = false)
     {
         if (profile is not null && memoryCheck != MemoryCheck.Off)
         {
@@ -276,7 +278,7 @@ internal static partial class CliCommands
         {
             return NoProgramInTestFile(shell, single)
                 ?? NoHostForScript(shell, host)
-                ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls, allowedDirectories: directories, profile: profile, yieldAtEveryWait: yieldAtEveryWait, dbgTo: dbgTo);
+                ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls, allowedDirectories: directories, profile: profile, yieldAtEveryWait: yieldAtEveryWait, dbgTo: dbgTo, filesInMemory: filesInMemory);
         }
 
         if (!TryUpdateLockfile(shell, single, frozen: false, out var failed) || !TryFindPackage(shell, single, host, out var package, out failed))
@@ -287,6 +289,16 @@ internal static partial class CliCommands
         if (NoProgramInTestPackage(shell, package) is { } testPackage)
         {
             return testPackage;
+        }
+
+        if (filesInMemory)
+        {
+            if (PackageModule.inMemory(package) is not { } inMemory)
+            {
+                return NoFilesInMemory(shell, package.Host);
+            }
+
+            package = inMemory.Value;
         }
 
         // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr, in the run's box.
@@ -611,10 +623,13 @@ internal static partial class CliCommands
     /// Compiles a script, as <see cref="Script.compileFile"/> does, with a stopwatch on the shell's stderr while that is
     /// a terminal, and each module's time after it with <paramref name="timings"/> (see <see cref="CompileProgress"/>).
     /// </summary>
-    internal static CompileResult CompileScript(Shell shell, string inputFile, bool timings)
+    internal static CompileResult CompileScript(Shell shell, string inputFile, bool timings, bool filesInMemory = false)
     {
         using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)), shell.DisplayPath, timings);
-        var result = Script.compileFileReportingIn(shell.Packages, progress.Listener, shell.FullPath(inputFile));
+        // With its files in memory, the script is built from its host's root for that (see `Host.InMemory`).
+        var result = filesInMemory
+            ? Script.compileFileRehostedReportingIn(FuncConvert.FromFunc<Host, Host>(host => host.InMemory?.Value ?? host), shell.Packages, progress.Listener, shell.FullPath(inputFile))
+            : Script.compileFileReportingIn(shell.Packages, progress.Listener, shell.FullPath(inputFile));
         progress.Finish();
         return result;
     }
@@ -1100,6 +1115,17 @@ internal static partial class CliCommands
         }
     }
 
+    /// <summary>
+    /// The error for <c>run --files-in-memory</c> with a program whose host, <paramref name="host"/>, has no root that runs
+    /// it with its files in memory (see <c>Host.InMemory</c>).
+    /// </summary>
+    private static int NoFilesInMemory(Shell shell, FSharpOption<Host>? host)
+    {
+        var named = host is null ? "Its host" : $"The host '{host.Value.Package}'";
+        shell.Error.WriteLine($"error: --files-in-memory needs a host that can run a program with its files in memory, and {named.ToLowerInvariant()[0]}{named[1..]} can't: a host declares the root that does it with `filesInMemory` in its manifest.");
+        return UsageError;
+    }
+
     /// <summary>"2 deferred errors": the errors among <paramref name="diagnostics"/>, every one of them deferred.</summary>
     private static string DeferredErrors(FSharpList<Diagnostic> diagnostics)
     {
@@ -1107,7 +1133,7 @@ internal static partial class CliCommands
         return $"{count} deferred error{(count == 1 ? "" : "s")}";
     }
 
-    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null)
+    private static int Execute(Shell shell, string inputFile, Target target, string? outputPath, bool release = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, ProgramFormat format = ProgramFormat.Binary, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null, bool filesInMemory = false)
     {
         if (string.IsNullOrWhiteSpace(inputFile))
         {
@@ -1128,7 +1154,7 @@ internal static partial class CliCommands
 
         if (target == Target.Run)
         {
-            return RunScript(shell, inputFile, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile, yieldAtEveryWait, dbgTo);
+            return RunScript(shell, inputFile, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile, yieldAtEveryWait, dbgTo, filesInMemory);
         }
 
         // Script mode: the file's :: directives say what a package's manifest would.
@@ -1152,7 +1178,7 @@ internal static partial class CliCommands
     /// <paramref name="programArguments"/>, and it may read and write the shell's directory and each of
     /// <paramref name="allowedDirectories"/>, full paths. The Wasm tests call this to run programs in their own process.
     /// </summary>
-    internal static int RunScript(Shell shell, string inputFile, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null)
+    internal static int RunScript(Shell shell, string inputFile, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null, bool filesInMemory = false)
     {
         // `run` is the user-facing command: its stdout belongs to the program, so compiler chatter is kept off it, and
         // on a terminal it goes in the run's box.
@@ -1166,7 +1192,12 @@ internal static partial class CliCommands
             return 1;
         }
 
-        var result = CompileScript(compiling, inputFile, timings);
+        if (filesInMemory && Script.hostOf(compiling.Packages, compiling.FullPath(inputFile)) is { } host && host.Value.InMemory is null)
+        {
+            return NoFilesInMemory(compiling, host);
+        }
+
+        var result = CompileScript(compiling, inputFile, timings, filesInMemory);
         return RunCompiledScript(compiling, inputFile, result, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile, yieldAtEveryWait, dbgTo);
     }
 

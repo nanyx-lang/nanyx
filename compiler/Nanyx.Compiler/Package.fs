@@ -759,6 +759,11 @@ module Package =
             let inOrder (tests: Test list) = counted |> List.collect (fun (name, _) -> tests |> List.filter (fun test -> test.Module = name))
             Some { result with Typed = result.Typed |> Option.map (fun typed -> { typed with Tests = inOrder typed.Tests }) }
 
+    /// `package` as `nanyx run --files-in-memory` builds it, if its host has a root for that: with that root's `run` in
+    /// place of its host's (see `Host.InMemory`).
+    let inMemory (package: Package) : Package option =
+        package.Host |> Option.bind _.InMemory |> Option.map (fun host -> { package with Host = Some host })
+
     /// `package` as a component build builds it, if its host has a component root: with that root's `run` in place of
     /// its host's (see `Host.AsComponent`).
     let asComponent (package: Package) : Package option =

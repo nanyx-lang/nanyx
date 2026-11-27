@@ -479,6 +479,17 @@ module Script =
     let compileFileReportingIn (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
         if File.Exists filePath then compileSourceReportingIn store listener filePath (File.ReadAllText filePath) else Compiler.compileFile filePath
 
+    /// `compileFileReportingIn`, with the host the script runs under made what `rehost` makes of it: as
+    /// `nanyx run --files-in-memory` builds it under its host's `Host.InMemory`.
+    let compileFileRehostedReportingIn (rehost: Host -> Host) (store: PackageStore) (listener: CompileListener) (filePath: string) : CompileResult =
+        if File.Exists filePath then
+            let source = File.ReadAllText filePath
+            let directives = readFrom store filePath source
+            let directives = { directives with Build = directives.Build |> Option.map (fun build -> { build with Host = build.Host |> Option.map rehost }) }
+            compileSourceReading store listener File.ReadAllText directives (directives.Linters |> Option.defaultValue Linters.none) filePath source
+            |> withDirectives directives
+        else Compiler.compileFile filePath
+
     /// `compileFileReportingIn`, telling nobody.
     let compileFileIn (store: PackageStore) (filePath: string) : CompileResult = compileFileReportingIn store CompileListener.none filePath
 

@@ -105,4 +105,17 @@ reads and writes files needs neither `@test(#io)` nor a fake of each member. Eac
 directory besides `.`, so a relative path and an absolute one never name the same file, and nothing
 is out of reach, so there is no `#permissionDenied`.
 
+## `overlay`
+
+```nanyx fragment
+def overlay: [c, FileSystem] ([c, FileSystem] () -> a) -> a
+```
+
+What `body` gives, run with a `FileSystem` that keeps what `body` writes in memory, over the one in
+scope: a read sees the real file until `body` writes, appends to or deletes it, and then what
+`body` left; a directory's listing is the real one's, without what `body` deleted and with what it
+made; and nothing `body` does reaches the disk. `nanyx run --files-in-memory` runs a program so,
+as the editor's live mode does, which re-runs a program on every save. Each member gives the
+`FsError` the one in scope does for the same thing, as a file `body` deleted is `#notFound`.
+
 <!-- End of the generated reference. -->
