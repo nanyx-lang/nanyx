@@ -43,19 +43,79 @@ let private localTypeArguments (tools: LocalTools) (localTy: Ty) (instanceTy: Ty
             Some (typeArguments, bindings)
         with CannotLower _ -> None)
 
-/// The type arguments, and what they bind, of each use in `expr` of `name`, a local function of type `localTy`
-/// generic in variables of its own, where `bindings` binds the variables of the function `expr` is in as it says:
-/// none where a use's type is not known. A use in a lambda that captures it counts (see
-/// `ClosureSyntax.usesThroughClosures`).
-let localUses (tools: LocalTools) (bindings: Map<int, Ty>) (localTy: Ty) (name: string) (expr: Expression) : (IrType list * Map<int, Ty>) list =
-    ClosureSyntax.usesThroughClosures (fun target -> tools.Definitions |> Map.tryFind target) name expr
-    |> List.map (fun reference ->
+/// The local functions generic in variables of their own that `expr` defines, by the lifted lambda each is a closure
+/// over: the local's name and its type.
+let private genericLocalsIn (tools: LocalTools) (bindings: Map<int, Ty>) (expr: Expression) : Map<string, string * Ty> =
+    SyntaxTree.expressionsWithin expr
+    |> List.collect (fun within ->
+        match within.Kind with
+        | Block statements ->
+            statements
+            |> List.choose (fun statement ->
+                match statement.Kind with
+                | DefStatement(_, local, _, (Kind (ClosureSyntax.Closure(target, _)) as value)) ->
+                    tools.Input.ExprTypes
+                    |> Map.tryFind value.Id
+                    |> Option.map (substitute bindings >> tools.Substitute)
+                    |> Option.filter (fun localTy -> not (freeVars localTy).IsEmpty)
+                    |> Option.map (fun localTy -> target, (local, localTy))
+                | _ -> None)
+        | _ -> [])
+    |> Map.ofList
+
+/// Each use in `expr` of the local `name`, with what binds the type variables it is at: `bindings`, and, for a use in a
+/// local function generic in variables of its own that `expr` defines, what those bind at each type that function is
+/// used at in `expr`, so that a use at one of its variables is at the types it is used at (#2813). A use in a lambda that
+/// captures `name` counts, as `ClosureSyntax.usesThroughClosures` counts it. `visited` are the lifted lambdas already
+/// looked in, which a local function that calls itself would look in again.
+let rec private usesWithBindings (tools: LocalTools) (visited: Set<string>) (bindings: Map<int, Ty>) (name: string) (expr: Expression) : (Expression * Map<int, Ty>) list =
+    let found = ClosureSyntax.references expr
+    let closures =
+        found
+        |> List.choose (fun (_, node) ->
+            match node.Kind with
+            | ClosureSyntax.Closure(target, captured) ->
+                let captures = captured |> List.filter (function Kind (IdentifierExpr captured) -> captured = name | _ -> false)
+                if captures.IsEmpty || visited.Contains target then None else Some (target, captures)
+            | _ -> None)
+    let captures = closures |> List.collect snd
+    let direct =
+        found
+        |> List.filter (fun (referenced, node) -> referenced = name && not (captures |> List.exists (fun capture -> obj.ReferenceEquals(capture, node))))
+        |> List.map (fun (_, node) -> node, bindings)
+    let genericLocals = lazy (genericLocalsIn tools bindings expr)
+    let inLambda (target: string) =
+        match tools.Definitions |> Map.tryFind target with
+        | None -> []
+        | Some definition ->
+            let visited = visited.Add target
+            let atBindings =
+                match genericLocals.Force() |> Map.tryFind target with
+                | Some (local, localTy) ->
+                    match localUsesFrom tools visited bindings localTy local expr with
+                    | [] -> [ bindings ]
+                    | used -> used |> List.map (fun (_, own) -> own |> Map.fold (fun acc id ty -> acc |> Map.add id ty) bindings)
+                | None -> [ bindings ]
+            atBindings |> List.collect (fun bindings -> usesWithBindings tools visited bindings name definition)
+    direct @ (closures |> List.map fst |> List.distinct |> List.collect inLambda)
+
+/// `localUses`, not looking again in the lifted lambdas `visited`.
+and private localUsesFrom (tools: LocalTools) (visited: Set<string>) (bindings: Map<int, Ty>) (localTy: Ty) (name: string) (expr: Expression) : (IrType list * Map<int, Ty>) list =
+    usesWithBindings tools visited bindings name expr
+    |> List.map (fun (reference, bindings) ->
         let instanceTy =
             match reference.Kind with
             | IdentifierExpr _ -> tools.Input.ExprTypes |> Map.tryFind reference.Id
             | _ -> tools.Input.CalleeTypes |> Map.tryFind reference.Id
         localTypeArguments tools localTy (instanceTy |> Option.map (substitute bindings)) |> Option.defaultValue ([], Map.empty))
     |> List.distinctBy fst
+
+/// The type arguments, and what they bind, of each use in `expr` of `name`, a local function of type `localTy`
+/// generic in variables of its own, where `bindings` binds the variables of the function `expr` is in as it says:
+/// none where a use's type is not known. A use in a lambda that captures it counts, and one in a local function generic
+/// in variables of its own counts at each type that function is used at (see `usesWithBindings`).
+let localUses (tools: LocalTools) (bindings: Map<int, Ty>) (localTy: Ty) (name: string) (expr: Expression) : (IrType list * Map<int, Ty>) list =
+    localUsesFrom tools Set.empty bindings localTy name expr
 
 /// The closure of `var`, the local function `name` generic in variables of its own, at each type arguments in `used`
 /// (with what they bind): the one bound where it is defined, or else one made here, for a use in a lambda whose

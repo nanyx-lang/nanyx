@@ -43,3 +43,14 @@ let ``An inferred local that calls a local [Eq(a)] function compares with a type
 let ``A lambda in an inferred local calls a top-level [Eq(a)] function at the local's variable`` () =
     runSource "def eq: [Eq(a)] a, a -> bool = { x, y -> x == y }\n\n@entry\ndef main = {\n  def outer = { s -> { t -> eq(s, t) } }\n  println(outer(\"a\")(\"a\"))\n  println(outer(1)(2))\n}\n"
     |> assertRan "true\nfalse\n"
+
+[<Fact>]
+let ``A lambda two locals deep calls a local [Eq(a)] function at the outer local's variable`` () =
+    runs "  def eq: [Eq(a)] a, a -> bool = { x, y -> x == y }\n  def outer = { s ->\n    def inner = { t -> { u -> eq(s, u) and eq(t, u) } }\n    inner(s)\n  }\n  println(outer(\"a\")(\"a\"))\n  println(outer(1)(2))\n"
+    |> assertRan "true\nfalse\n"
+
+[<Fact>]
+let ``A lambda in a local that declares [Eq(c)], in one that declares [Eq(b)], calls a local [Eq(a)] function`` () =
+    // `eq` is used in `inner` at `inner`'s own variable, so `outer` captures it at each type `inner` is used at.
+    runs "  def eq: [Eq(a)] a, a -> bool = { x, y -> x == y }\n  def outer: [Eq(b)] b -> (b -> bool) = { s ->\n    def inner: [Eq(c)] c -> (c -> bool) = { t -> { u -> eq(t, u) } }\n    inner(s)\n  }\n  println(outer(\"a\")(\"a\"))\n  println(outer(1)(2))\n"
+    |> assertRan "true\nfalse\n"
