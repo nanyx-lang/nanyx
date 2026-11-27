@@ -46,6 +46,13 @@ let private reportBadGroups (c: Cursor) (start: int) (text: string) =
 /// Whether `token`, a number, has a unit written straight after it, as `500ms` has.
 let private hasUnit (c: Cursor) (token: Token) = Lexer.numberEnd c.Source token.Start < token.End
 
+/// Whether a number, or a sign written straight before one, is at the cursor, as `intLiteral`, `floatLiteral` and
+/// `unitLiteral` each read first: where neither is, each would fail, noting that a number was expected, and this notes
+/// that (see `Cursor.AttemptIf`).
+let numberNext (c: Cursor) =
+    let signed = (c.Is(Operator, "-") || c.Is(Operator, "+")) && c.IsAt(1, Number) && c.AdjacentAt 1
+    c.Token.IsSome && (signed || c.Expects Number)
+
 /// An integer, with its sign if one is written straight before it.
 let intLiteral (c: Cursor) : Literal * SourceSpan =
     let start = c.Start
@@ -152,13 +159,13 @@ let stringLiteral (c: Cursor) : Literal * SourceSpan =
 
 /// A literal: an integer, a float, a number with a unit, `true` or `false`, or a string with no holes.
 let literal (c: Cursor) : Literal * SourceSpan =
-    match c.Attempt(fun () -> intLiteral c) with
+    match c.AttemptIf(numberNext c, fun () -> intLiteral c) with
     | Some literal -> literal
     | None ->
-    match c.Attempt(fun () -> unitLiteral c) with
+    match c.AttemptIf(numberNext c, fun () -> unitLiteral c) with
     | Some literal -> literal
     | None ->
-        match c.Attempt(fun () -> floatLiteral c) with
+        match c.AttemptIf(numberNext c, fun () -> floatLiteral c) with
         | Some literal -> literal
         | None ->
             if c.Is(Name, "true") || c.Is(Name, "false") then

@@ -62,6 +62,12 @@ let private describeKind (kind: TokenKind) =
     | Hash -> "`#`"
     | other -> $"{other}"
 
+/// What `Expect` notes it expected when the token at the cursor is not `kind` (with `text`).
+let private expectedToken (kind: TokenKind) (text: string option) =
+    match text with
+    | Some text -> $"`{text}`"
+    | None -> describeKind kind
+
 /// A cursor over `laid`, the layout pass's tokens of `source`, the text of the file at `file`.
 type Cursor(file: string, source: string, laid: Laid array) =
     let lines = LineTable source
@@ -86,6 +92,8 @@ type Cursor(file: string, source: string, laid: Laid array) =
     // How many code tokens have been taken, a token read again after a reading that didn't match counted again: the
     // parser's work, which grows with the text when each part of it is read a few times at most.
     let mutable tokensRead = 0
+    /// How many readings `Attempt` tried that didn't match.
+    let mutable noMatches = 0
 
     member _.Source = source
     member _.Index
@@ -164,7 +172,54 @@ type Cursor(file: string, source: string, laid: Laid array) =
     /// Takes the code token at the cursor if it is `kind` (with the text `text`), or fails to match.
     member this.Expect(kind: TokenKind, ?text: string) =
         if this.Is(kind, ?text = text) then this.Take()
-        else this.Fail(match text with Some text -> $"`{text}`" | None -> describeKind kind)
+        else this.Fail(expectedToken kind text)
+
+    /// Whether a reading that starts with `Expect kind` (with `text`) gets past it. When it doesn't, this notes what
+    /// `Expect` would have noted, so that a parser can skip a reading the token at the cursor rules out, with
+    /// `AttemptIf`, rather than run it to fail: a failed reading is an exception, and costs far more (#2219).
+    member this.Expects(kind: TokenKind, ?text: string) =
+        this.Is(kind, ?text = text) || (this.Expecting(expectedToken kind text); false)
+
+    /// `Expects`, for a reading that asks where the code token at the cursor starts (`Start`) first, which fails, noting
+    /// nothing, where there is no code token.
+    member this.StartsWith(kind: TokenKind, ?text: string) = this.Token.IsSome && this.Expects(kind, ?text = text)
+
+    /// Whether the item `offset` from the cursor is a code token of `kind`, with the text `text` if one is given.
+    member this.IsAt(offset: int, kind: TokenKind, ?text: string) =
+        match this.At offset with
+        | Code token -> token.Kind = kind && (text.IsNone || this.Text token = text.Value)
+        | _ -> false
+
+    /// Whether the item `offset` from the cursor is a code token that follows the one before it with nothing between
+    /// them, as `Adjacent` asks at the cursor.
+    member this.AdjacentAt(offset: int) =
+        match this.At offset with
+        | Code token when index + offset > 0 ->
+            match this.At(offset - 1) with
+            | Code previous -> previous.End = token.Start
+            | _ -> false
+        | _ -> false
+
+    /// Notes, for the message, what a reading that took the code tokens before `offset` from the cursor and then
+    /// expected `description` there would have noted, as `Take` and `Expecting` do, without moving: for a parser that
+    /// sees that a reading would fail there before it tries it (see `AttemptIf`). With no `description`, the reading
+    /// fails there noting nothing.
+    member _.NoteAt(offset: int, ?description: string) =
+        let at = index + offset
+        if at > furthest then
+            furthest <- at
+            expected <- Option.toList description
+        else
+            match description with
+            | Some description when at = furthest && not (List.contains description expected) -> expected <- expected @ [ description ]
+            | _ -> ()
+
+    /// Whether `Across fits` would go across to a code token that `fits`, without going.
+    member this.AcrossFits(fits: Cursor -> bool) =
+        let start = index
+        let found = this.Across fits
+        index <- start
+        found
 
     /// Reports the mistake `message` at `offset` (see `Reported`).
     member _.Report (offset: int) (message: string) : 'a =
@@ -243,6 +298,11 @@ type Cursor(file: string, source: string, laid: Laid array) =
         | Some token -> token.Start
         | None -> raise NoMatch
 
+    /// `Attempt read` where `fits`, and else `None` without running it. `fits` says whether `read` can match here, and
+    /// where it says no, `read` would have failed before it took a token, and `fits` has noted what `read` would have
+    /// noted (see `Expects`): skipping it leaves the cursor as trying it would.
+    member this.AttemptIf(fits: bool, read: unit -> 'a) : 'a option = if fits then this.Attempt read else None
+
     /// Runs `read`, and if it doesn't match, puts the cursor back and gives `None`.
     member _.Attempt(read: unit -> 'a) : 'a option =
         let start = index
@@ -251,6 +311,7 @@ type Cursor(file: string, source: string, laid: Laid array) =
         try
             Some(read ())
         with NoMatch ->
+            noMatches <- noMatches + 1
             index <- start
             declared <- declaredBefore
             documentable <- documentableBefore
@@ -298,6 +359,9 @@ type Cursor(file: string, source: string, laid: Laid array) =
 
     /// How many code tokens have been taken (see `ParseState.TokensRead`).
     member _.TokensRead = tokensRead
+
+    /// How many readings `Attempt` tried that didn't match (see `ParseState.NoMatches`).
+    member _.NoMatches = noMatches
 
     /// Notes `name`, written at `span`, as declared by the construct being read (see `Collecting`).
     member _.NoteName (name: Identifier) (span: SourceSpan) = pending <- (name, span) :: pending
@@ -425,6 +489,29 @@ let sepBy1 (cursor: Cursor) (item: unit -> 'a) (separator: unit -> unit) : 'a li
         | Some next -> rest.Add next
         | None -> going <- false
     first :: List.ofSeq rest
+
+/// `sepBy1`, where `separates ()` is asked before each separator whether one may be next, and the list ends where it
+/// says no, as it would where `separator` fails: it says no only where `separator` would fail before it took a token,
+/// and notes what `separator` would have noted then (see `Cursor.AttemptIf`).
+let sepBy1If (cursor: Cursor) (item: unit -> 'a) (separates: unit -> bool) (separator: unit -> unit) : 'a list =
+    let first = item ()
+    let rest = ResizeArray<'a>()
+    let mutable going = true
+    while going do
+        match cursor.AttemptIf(separates (), fun () -> separator (); item ()) with
+        | Some next -> rest.Add next
+        | None -> going <- false
+    first :: List.ofSeq rest
+
+/// `many`, where `starts ()` is asked before each item whether one may be next, as `sepBy1If` asks of a separator.
+let manyIf (cursor: Cursor) (starts: unit -> bool) (item: unit -> 'a) : 'a list =
+    let items = ResizeArray<'a>()
+    let mutable going = true
+    while going do
+        match cursor.AttemptIf(starts (), item) with
+        | Some next -> items.Add next
+        | None -> going <- false
+    List.ofSeq items
 
 /// Takes as many `item`s as there are, going back to before each one that doesn't match.
 let many (cursor: Cursor) (item: unit -> 'a) : 'a list =

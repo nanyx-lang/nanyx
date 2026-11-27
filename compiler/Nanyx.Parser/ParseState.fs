@@ -28,7 +28,9 @@ type ParseState =
       StringTexts: (int * int) list
       /// How many code tokens the parser took, each one read again after a reading that didn't match counted again: its
       /// work, which a test of how the parser scales counts rather than times.
-      TokensRead: int }
+      TokensRead: int
+      /// How many readings the parser tried that didn't match, each of them an exception: work a test counts too (#2219).
+      NoMatches: int }
 
 module ParseState =
     let empty () =
@@ -37,4 +39,5 @@ module ParseState =
           Comments = []
           DocumentableStarts = Map.empty
           StringTexts = []
-          TokensRead = 0 }
+          TokensRead = 0
+          NoMatches = 0 }

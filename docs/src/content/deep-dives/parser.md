@@ -25,7 +25,12 @@ tree is needed ([#2730](https://github.com/nanyx-lang/nanyx/issues/2730)).
   alternative (`NoMatch`, which `Cursor.Attempt` catches), and the side state kept beside the tree (`ParseState`): the
   names nodes declare, where documentable constructs start, `module name =` blocks, comments from the lexer's trivia,
   string texts, and how many tokens it took (`TokensRead`), a token read again after going back counted again, which
-  tests of how the parser scales count rather than time it. The files read, in order: types, with a field's default and a `where` constraint read as
+  tests of how the parser scales count rather than time it. A failed alternative is an exception, which costs far more
+  than a token, so where the token at the cursor rules an alternative out, the parser skips it rather than try it
+  (`Cursor.AttemptIf`, and `sepBy1If` and `manyIf` for a list's separators and items): it asks what the alternative
+  would read first, and where that isn't there notes what the alternative would have noted, so that a syntax error's
+  message is the same as trying it gives (`Cursor.Expects`, `Cursor.NoteAt`). `ParseState.NoMatches` counts the
+  alternatives that were tried and failed, fewer than one a line in the standard library. The files read, in order: types, with a field's default and a `where` constraint read as
   expressions; literals, with a `+` or `-` written straight before a number as its sign and `1.` as a float, though the
   lexer reads both apart, and a number with a unit as a `UnitLit` that keeps the number exactly, as digits and a power
   of ten (`WrittenNumber`), and whether it was written whole or as a decimal; patterns, with a guard's lambda and a custom pattern's arguments read as expressions;
