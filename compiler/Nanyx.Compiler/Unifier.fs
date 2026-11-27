@@ -745,11 +745,14 @@ module Unifier =
         // `origin`, given how trying each one failed, in the order tried. A member is tried against the constraints
         // after it too, so one whose failure is elsewhere fitted here, and what failed is a constraint further on,
         // which may be in another def altogether: that is reported, not this constraint (`solve` would otherwise set
-        // this one aside as wrong too). Only when every member failed here is the last one's failure reported.
-        let unionFailure (origin: SourceSpan) (failures: Mismatch list) =
+        // this one aside as wrong too). When every member failed here, a tag `ty` is reported as the last member's
+        // failure, which says how it differs from the member of its name; any other `ty` is no member of the union at
+        // all, so `whole`, its mismatch with the whole union, is reported (#3105).
+        let unionFailure (origin: SourceSpan) (whole: Mismatch) (ty: Ty) (failures: Mismatch list) =
             failures
             |> List.tryFind (fun (_, span, _) -> span <> origin)
-            |> Option.orElse (List.tryLast failures)
+            |> Option.orElse (if isTagLike ty then List.tryLast failures else None)
+            |> Option.defaultValue whole
         // The pairs of references to recursive aliases being compared by what they stand for (see `unfoldBoth`).
         let assumed = HashSet<Ty * Ty>(HashIdentity.Structural)
         // The name of the alias each type compared was written as, by the type it stands for: `P` for a record of `P`'s
@@ -1020,7 +1023,7 @@ module Unifier =
                                 match lRest, tagNotInUnion l lItems lMap lRest ty with
                                 | Some restVar, _ when isTagLike ty && not (lMap.ContainsKey (tagUnionKey ty)) -> loop subst ((TyVar restVar, ty, Equal, origin) :: rest)
                                 | _, Some message -> Error (message, origin, TypesDiffer)
-                                | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin, TypesDiffer))
+                                | _ -> Error (unionFailure origin (mismatchMessage l r, origin, TypesDiffer) ty failures)
                             | item :: restItems ->
                                 match loop subst ((item, ty, Equal, origin) :: emptyRest lRest @ rest) with
                                 | Ok result -> Ok result
@@ -1037,7 +1040,7 @@ module Unifier =
                                 match rRest, tagNotInUnion r rItems rMap rRest ty with
                                 | Some restVar, _ when isTagLike ty && not (rMap.ContainsKey (tagUnionKey ty)) -> loop subst ((ty, TyVar restVar, Equal, origin) :: rest)
                                 | _, Some message -> Error (message, origin, TypesDiffer)
-                                | _ -> Error (unionFailure origin failures |> Option.defaultValue (mismatchMessage l r, origin, TypesDiffer))
+                                | _ -> Error (unionFailure origin (mismatchMessage l r, origin, TypesDiffer) ty failures)
                             | item :: restItems ->
                                 match loop subst ((ty, item, Equal, origin) :: emptyRest rRest @ rest) with
                                 | Ok result -> Ok result

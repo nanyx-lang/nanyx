@@ -440,3 +440,14 @@ let ``Each rest variable after the first is an error`` () =
     let result = Compiler.compile "def ignore: (#a | r | s | t) -> int = { _ -> 0 }"
     Assert.Equal<string list>([ "s"; "t" ], result.Diagnostics |> List.map (fun diagnostic -> textAt "def ignore: (#a | r | s | t) -> int = { _ -> 0 }" diagnostic.Span.Value))
     Assert.All(result.Diagnostics, fun diagnostic -> Assert.Equal(DiagnosticCodes.UnionWithTwoRests.Code, diagnostic.Code))
+
+[<Fact>]
+let ``A value that isn't a tag, given for a closed union of tags, is a mismatch with the whole union`` () =
+    // It named only the union's last member, as if that were the type expected (#3105).
+    let code, message, at = onlyDiagnostic "def u: #a | #b(int) = 3\n"
+    Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'int' vs '#a | #b(int)'", "3"), (code, message, at))
+
+[<Fact>]
+let ``A tag of the union's with another payload is still a mismatch with that tag`` () =
+    let code, message, _ = onlyDiagnostic "def u: #a | #b(int) = #b(\"x\")\n"
+    Assert.Equal((DiagnosticCodes.TypeMismatch.Code, "'string' vs 'int'"), (code, message))
