@@ -105,6 +105,21 @@ A package can keep [tests](./attributes#test) in files of their own. The `tests`
 
 A test file is part of the package in a test build alone, and every other build leaves it out. Like a source file, it declares a named module, and it can import the package's modules. A file that both `sources` and `tests` select is an error at the manifest (`NYX0023`). With no `tests`, a package has no test files.
 
+## Test packages
+
+The tests of a package can also live in a package of their own, beside it, as a .NET test project sits beside the project it tests. A manifest that gives `tests` and no `sources` is a **test package**'s:
+
+```nanyx fragment
+(
+  package = (name = "cart.tests", version = "0.1.0", tests = ["tests/**/*.nyx"])
+  dependencies = [(package = "cart", path = "../cart")]
+)
+```
+
+A test package has no source files, rather than every file, as a manifest with no `sources` otherwise has; `sources = []` says the same. It needs no host and exports nothing. Its tests run under the test host, and import what the packages it depends on export, as any dependent does: here `import cart/pricing`, for a `cart` whose `pricing.nyx` starts `export module pricing`. So they see only what a package exports, and a private helper is tested beside its code.
+
+It can depend on any package, an application included. In the test build, the application's `@entry` is an ordinary def, as it is in its own test build, and its modules keep its host, whose prelude they see. `nanyx test cart-tests` runs the tests; `nanyx run` and `nanyx build` of a test package are an error that says to use `nanyx test` (`NYX0045`). A `sources` whose patterns match no file is still an error (`NYX0042`).
+
 # Package dependencies
 
 Dependencies on other packages are declared in the package manifest's `dependencies` list. Each entry names a package and the directory it is in, relative to the manifest:
