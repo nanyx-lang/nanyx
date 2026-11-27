@@ -91,3 +91,50 @@ let ``Run - sorting an array of 100,000 elements`` () =
     println(MArray.at(big, 0))
     println(MArray.length(big))"""
     runSource source |> assertRan "true\n#some(0)\n100000\n"
+
+let private sortingN =
+    normalized """import nanyx/marray
+import nanyx/mslice
+
+def made: int -> int = { n ->
+  memory {
+    def xs = MArray.init(n, { i -> i * 7919 % 200003 })
+    someOr(MArray.at(xs, 0), 0)
+  }
+}
+
+def sorted: int -> int = { n ->
+  memory {
+    def xs = MArray.init(n, { i -> i * 7919 % 200003 })
+    MArray.sort(xs)
+    someOr(MArray.at(xs, 0), 0)
+  }
+}
+
+def sortedBy: int -> int = { n ->
+  memory {
+    def xs = MArray.init(n, { i -> i * 7919 % 200003 })
+    MArray.slice(xs, 0, n) \MSlice.sortBy { x -> 0 - x }
+    someOr(MArray.at(xs, 0), 0)
+  }
+}
+"""
+
+[<Fact>]
+let ``Sorting makes the same few blocks, whatever the array's length`` () =
+    // #2212: the sort's scratch array was made from a list of every element, a block for each one. It is made by
+    // filling a new array, so a sort of 100 elements and of 100,000 make the same blocks, the scratch among them.
+    use program = instantiateWasm sortingN []
+    let blocks (name: string) (n: int) =
+        let made, _ = allocationsOf program "made" n
+        let sorted, result = allocationsOf program name n
+        sorted - made, result
+    let small, smallest = blocks "sorted" 100
+    let large, _ = blocks "sorted" 100000
+    Assert.Equal(0, smallest)
+    Assert.Equal(small, large)
+    Assert.InRange(large, 1, 8)
+    let smallBy, _ = blocks "sortedBy" 100
+    let largeBy, _ = blocks "sortedBy" 100000
+    Assert.Equal(smallBy, largeBy)
+    Assert.InRange(largeBy, 1, 8)
