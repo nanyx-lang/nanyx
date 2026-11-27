@@ -35,3 +35,27 @@ let ``A list literal's item of another type is reported at it`` () =
 [<Fact>]
 let ``Arms of different tags are joined, not reported`` () =
     compileClean "def tags = { n: int ->\n  match n\n    | 0 -> #zero\n    | _ -> #many\n}" |> ignore
+
+/// The related locations of the one diagnostic of `source`: the text each is at, and its label.
+let private related (source: string) =
+    let source = withFinalNewline source
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    diagnostic.Related |> List.map (fun (span, label) -> textAt source span, label)
+
+[<Fact>]
+let ``Each arm before the odd one out is a related location, saying what it gives`` () =
+    // The places that explain the error (#2717).
+    let source = "def describe = { n: int ->\n  match n\n    | 0 -> \"zero\"\n    | 1 -> \"one\"\n    | 2 -> 2\n    | _ -> \"many\"\n}"
+    Assert.Equal<(string * string) list>(
+        [ "\"zero\"", "this arm gives 'string'"; "\"one\"", "this arm gives 'string'" ],
+        related source)
+
+[<Fact>]
+let ``An if's then branch is the related location of its else branch, and a list's items before the odd one of it`` () =
+    Assert.Equal<(string * string) list>(
+        [ "\"yes\"", "the `then` branch gives 'string'" ],
+        related "def pick = { b: bool -> if b then \"yes\" else 0 }")
+    Assert.Equal<(string * string) list>(
+        [ "\"a\"", "this item is 'string'"; "\"b\"", "this item is 'string'" ],
+        related "def xs = [\"a\", \"b\", 3, \"d\"]")
