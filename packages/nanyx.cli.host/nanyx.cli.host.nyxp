@@ -1,9 +1,9 @@
 (
   package = (
     name = "nanyx.cli.host"
-    version = "0.51.0"
+    version = "0.52.0"
     repository = "nanyx-lang/nanyx"
-    nanyx = "=0.51.0"
+    nanyx = "=0.52.0"
     sources = ["src/**/*.nyx"]
     host = (
       root = "cli.host"
@@ -16,9 +16,9 @@
     )
   )
   dependencies = [
-    (package = "nanyx.cli", version = "0.51.0")
-    (package = "nanyx.fs", version = "0.51.0")
-    (package = "nanyx.http", version = "0.51.0")
-    (package = "nanyx.wasi", version = "0.51.0")
+    (package = "nanyx.cli", version = "0.52.0")
+    (package = "nanyx.fs", version = "0.52.0")
+    (package = "nanyx.http", version = "0.52.0")
+    (package = "nanyx.wasi", version = "0.52.0")
   ]
 )
