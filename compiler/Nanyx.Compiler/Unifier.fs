@@ -16,6 +16,9 @@ type MismatchKind =
     | ContextsNotAllowed
     /// A value of the shape of the nominal type it is given for: the type, whether it is private, and its shape.
     | NominalShape of NominalId * isPrivate: bool * shape: Ty
+    /// A value of no nominal type given for the nominal type, private when `isPrivate`, whose shape it doesn't have
+    /// either: outside the type's home module, the error says where values of it come from (see `ProtectedShapes`).
+    | NominalExpected of NominalId * isPrivate: bool
     /// Two records that differ in one field each, whose names are close, so one is likely the other misspelled: the
     /// field only the first has and the second record's type, then the field only the second has and the first's.
     /// Each type is named as its alias if it was written as one: `P`.
@@ -1222,13 +1225,15 @@ module Unifier =
                             not (match other with TyNominal _ -> true | _ -> false)
                             && fitsWithoutEffect (fun () -> loop subst [ (other, underlying, Assignable, origin) ]) ->
                             Error (mismatchMessage l r, origin, NominalShape(nominal, isPrivate, underlying))
+                        | other, TyNominal(nominal, _, _, true) when not (match other with TyNominal _ -> true | _ -> false) ->
+                            Error (mismatchMessage l r, origin, NominalExpected(nominal, true))
                         | TyNominal(_, _, _, true), _
                         | _, TyNominal(_, _, _, true) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
                         | RecursiveNominals.Nominal(_, _, underlying, false), other when not (match other with TyNominal _ -> true | _ -> false) ->
                             loop subst ((underlying, other, Equal, origin) :: rest)
-                        | other, TyNominal(_, _, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
-                            Error (mismatchMessage l r, origin, TypesDiffer)
+                        | other, TyNominal(nominal, _, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
+                            Error (mismatchMessage l r, origin, NominalExpected(nominal, false))
                         | TyNominal _, TyNominal _ ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
                         | _ ->
