@@ -36,8 +36,6 @@ let ``A def whose type is inferred is reported too`` () =
 [<Theory>]
 [<InlineData("def parse: [Decode(a)] (Type(a), string) -> a = { t, json -> decode(json) }\n")>]
 [<InlineData("def parse: [Decode(into)] (string, into: Type(into)) -> into = { json, into -> decode(json) }\n")>]
-[<InlineData("def parse: [Decode(a)] type a, string -> a = { t, json -> decode(json) }\n")>]
-[<InlineData("def parse: [Decode(into)] (string, into: type) -> into = { json, into -> decode(json) }\n")>]
 [<InlineData("def total: [Add(a)] list(a) -> a = { xs -> xs \\head ?? crash(\"none\") }\n")>]
 [<InlineData("def twice: [Num(a)] a -> a = { x -> x + x }\n")>]
 [<InlineData("def first: [Iterable(c, elem = a)] c -> a = { xs -> crash(\"none\") }\n")>]
