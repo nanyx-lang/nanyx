@@ -200,7 +200,7 @@ can't be deferred, such as a syntax error, stops the build, and no test runs.
 | Option | What it does |
 |--------|--------------|
 | `--filter <text>` | Runs only the tests whose full name, as `` geometry.`adds points` ``, contains the text. |
-| `--test <name>` | Runs only the test of that full name, exactly, as the report writes it or without its backticks; several, one on each line, as a tool gives them. A name that names no test is an error, which exits with 2. |
+| `--test <name>` | Runs only the test of that full name, exactly, as the report writes it or without its backticks. Several names go one on each line, a form mainly for tools such as an editor: in a shell, ``--test $'geometry.adds\nshapes.squares'``. A name that names no test is an error, which exits with 2. |
 | `--module <name>` | Runs only the tests of that module. A module with no tests is an error, which exits with 2. |
 | `--list` | Lists the tests that would run, each with where it is written, and runs none. |
 | `--seed <number>` | Seeds each test's `Random` with the number. Without it, the seed is chosen at random, and printed when a test fails. |
