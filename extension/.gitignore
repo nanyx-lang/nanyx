@@ -1,3 +1,5 @@
 # Written by the build (see .github/scripts/changelog.sh), never committed.
 CHANGELOG.md
 notes/
+# The unit tests, compiled; npm test compiles them.
+dist/test/

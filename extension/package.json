@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.31",
+  "version": "0.9.32",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -294,7 +294,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "vscode-tmgrammar-test -g syntaxes/nanyx.tmLanguage.json \"tests/syntax/**/*.nyx\"",
+    "test": "vscode-tmgrammar-test -g syntaxes/nanyx.tmLanguage.json \"tests/syntax/**/*.nyx\" && npm run compile && node --test \"dist/test/*.test.js\"",
     "vscode:prepublish": "npm run compile"
   },
   "dependencies": {
