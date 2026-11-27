@@ -45,7 +45,7 @@ as the application's own build does. In any other build, a package the program d
 - a test's type is `()` or `() -> ()`, which a block is (`NYX0310`);
 - code that isn't a test, the module's top-level expressions and its other defs, never refers to one (`NYX0311`): only
   a test build has them;
-- a test requires only the contexts the test host provides, `Hosts.testContexts`: `Console` and `Random` (`NYX0312`).
+- a test requires only the contexts the test host provides, `Hosts.testContexts`: `Async`, `Console` and `Random` (`NYX0312`).
 
 The official linter's unused-definitions rule skips a test, which nothing but a test build calls.
 
@@ -84,8 +84,8 @@ it is imported by, `__test0_perimeter`, and a crash's stack names it as the modu
 (`FunctionNames.source`; [#3081](https://github.com/nanyx-lang/nanyx/issues/3081)).
 
 The root's `Typed.Tests` lists the tests in that order. The test host's `run` asks the runtime's `nanyx:test` which
-index to run, and calls the entry point with it, under a `Console` whose output goes to the runtime and a `Random` seeded
-with the runtime's seed:
+index to run, and calls the entry point with it, under a `Console` whose output goes to the runtime, a `Random` seeded
+with the runtime's seed, and the host's own `Async`:
 
 - `index() -> i32`, the index of the test to run;
 - `seed() -> i64`, the seed of its `Random`, as `random.seeded` takes one;
@@ -103,8 +103,8 @@ stops the build, and no test runs. `nanyx test --release` refuses to run if ther
 
 # `#io` tests
 
-`@test(#io)` marks a test that runs with the console host's real `Console`, `Env` and `FileSystem`, and `Async`
-(`Hosts.ioTestContexts`). `Attributes.applyAttributes` records whether each test is marked so (`MarkedTest.Io`), which
+`@test(#io)` marks a test that runs with the console host's real `Console`, `Env` and `FileSystem`
+(`Hosts.ioTestContexts`, which has the `Async` and `Random` every test has too). `Attributes.applyAttributes` records whether each test is marked so (`MarkedTest.Io`), which
 `TypedModule.Tests` carries (`Test.Io`); any other argument of `@test` is `NYX0013`. `TestChecks` checks a `#io` test
 against those contexts, and any other against `Hosts.testContexts`. When every context a test lacks is one `#io`
 provides, `NYX0312` says so, with a fix that adds `(#io)` after the test's `@test`.

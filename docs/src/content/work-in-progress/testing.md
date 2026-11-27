@@ -28,8 +28,8 @@ Settled with the maintainer on 26 November 2026 ([#2936](https://github.com/nany
   runtime's `nanyx:test`, as the HTTP host's imports `nanyx:serve`, to learn which test to run.
 - **What it needs first is crash reports as data:** a crash's message, place and stack, which today reach the runtime
   only partly, the message as text on stderr.
-- **The test host provides `Console` and `Random` only,** as [Contexts](#contexts) says. `Async` with a virtual-time
-  `Clock` comes later.
+- **The test host provides `Async`, `Console` and `Random` only,** as [Contexts](#contexts) says. Its `Async` waits on a
+  real clock; virtual time, below, would replace it.
 - **`assert` checks in release builds too, and takes no message.**
 
 # Writing a test
@@ -124,7 +124,7 @@ A test stops at the first `assert` that fails. Each test runs on its own (see [R
 
 # Contexts
 
-Built: a test runs under the test host with `Console` and a seeded `Random`, a test that requires another context is
+Built: a test runs under the test host with `Console`, a seeded `Random` and `Async`, a test that requires another context is
 `NYX0312`, and `@test(#io)` runs one with the console host's real `Console`, `Env` and `FileSystem`
 ([`@test`](../tour/attributes#test), [Test builds](../deep-dives/test-builds#io-tests)). What is left:
 
@@ -169,7 +169,7 @@ These fit the design but are not part of the first version:
 - **Parametrised tests.** A loop inside a test covers this for now, and `assert` prints the loop variable when the expression reads it.
 - **Property-based testing.** A library, with a context that generates values, rather than a language feature.
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
-- **Virtual time.** The test host providing `Async` and a `Clock` whose `sleep` advances at once, with tasks run in a
+- **Virtual time.** The test host providing an `Async`, in place of the real one every test has now, and a `Clock` whose `sleep` advances at once, with tasks run in a
   fixed order, so tests of `sleep`, `race` and timeouts run instantly and the same way every time.
 - **A file system in memory.** A ready-made `FileSystem`, which a test loads with `use`, that holds its files in memory, so a test can write files and read them back without faking each member by hand.
 - **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the docs' ([compilation](../deep-dives/compilation#docs-examples)); `nanyx test` could do the same for a package's.

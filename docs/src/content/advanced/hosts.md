@@ -165,10 +165,10 @@ page, and gives `#endOfInput` once the input has ended.
 
 The test host, `nanyx.test.host`, runs one test of a program's: a test build runs under it in place of the program's own
 host, and its entry point runs the test at the index the host gives it ([Test builds](../deep-dives/test-builds)). It
-provides `Console`, whose output it gives the runtime and whose input is empty, and `Random`, seeded with the runtime's
-seed as [`random.seeded`](../stdlib/random) seeds it, and nothing else, so a test that requires any other context loads
-it with `use` (`NYX0312`). A test marked [`@test(#io)`](../tour/attributes#test) has the console host's real `Console`,
-`Env` and `FileSystem` instead, written in the host library `nanyx.wasi`, and `Async`.
+provides `Console`, whose output it gives the runtime and whose input is empty, `Random`, seeded with the runtime's
+seed as [`random.seeded`](../stdlib/random) seeds it, and `Async`, and nothing else, so a test that requires any other
+context loads it with `use` (`NYX0312`). A test marked [`@test(#io)`](../tour/attributes#test) has the console host's
+real `Console`, `Env` and `FileSystem` instead, written in the host library `nanyx.wasi`.
 
 # Where `dbg` prints
 
