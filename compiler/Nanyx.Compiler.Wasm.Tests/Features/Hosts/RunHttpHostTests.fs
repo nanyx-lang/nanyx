@@ -36,7 +36,10 @@ let private writePackage (directory: string) (port: int) (main: string) =
 /// answers, then stops it, and gives what the run printed.
 let private serving (directory: string) (port: int) (requests: HttpClient -> unit) : RunOutcome =
     use stop = new CancellationTokenSource()
-    let run = Task.Run(fun () -> nanyxInUntil stop.Token directory [ "run" ])
+    // On a thread of its own, not the thread pool's, which it would hold for as long as it serves: the pool also
+    // finishes the requests it answers, and the test's own, and on a loaded machine is slow to make up a thread it lacks
+    // (#2367).
+    let run = Task.Factory.StartNew((fun () -> nanyxInUntil stop.Token directory [ "run" ]), TaskCreationOptions.LongRunning)
     use client = new HttpClient(BaseAddress = Uri $"http://localhost:{port}", Timeout = TimeSpan.FromSeconds 30.0)
     let deadline = DateTime.UtcNow.AddSeconds 60.0
     let rec waitForServer () =
@@ -220,8 +223,9 @@ let ``A request is answered while another's handler waits on a request of its ow
     // what the test checks, not how long either took.
     use received = new ManualResetEventSlim()
     use release = new ManualResetEventSlim()
+    // On a thread of its own, as `serving` runs the server, since it holds it until the test releases it.
     let answeringSlowly =
-        Task.Run(fun () ->
+        Task.Factory.StartNew((fun () ->
             try
                 let context = slow.GetContext()
                 received.Set()
@@ -229,7 +233,7 @@ let ``A request is answered while another's handler waits on a request of its ow
                 let bytes = Text.Encoding.UTF8.GetBytes "late"
                 context.Response.OutputStream.Write(bytes, 0, bytes.Length)
                 context.Response.Close()
-            with _ -> ())
+            with _ -> ()), TaskCreationOptions.LongRunning)
     use directory = new TempDirectory()
     let port = freePort ()
     writePackage directory.Path port $"""module main
