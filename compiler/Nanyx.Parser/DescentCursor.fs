@@ -143,7 +143,7 @@ type Cursor(file: string, source: string, laid: Laid array) =
         match this.At offset with
         | Code token when index + offset > 0 ->
             match laid[index + offset - 1] with
-            | Code previous -> not (source.AsSpan(previous.End, token.Start - previous.End).Contains '\n')
+            | Code previous -> source.IndexOf('\n', previous.End, token.Start - previous.End) < 0
             | _ -> false
         | _ -> false
 
