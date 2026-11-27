@@ -30,8 +30,7 @@ sum<T>(items: List<T>) where T : ISummable<T>
 In Nanyx, you model that as a context constraint. The prelude already has one for adding, `Add(a)`:
 
 ```nanyx
-context Add(a) = (zero: a, `+`: (a, a) -> a)
-
+-- The prelude's: context Add(a) = (zero: a, `+`: (a, a) -> a)
 def sum: [Add(a)] list(a) -> a = { items ->
   items \fold(zero) { + }
 }

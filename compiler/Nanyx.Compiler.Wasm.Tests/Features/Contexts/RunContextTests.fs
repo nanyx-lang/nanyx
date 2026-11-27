@@ -341,7 +341,7 @@ def Point.`+`: Point, Point -> Point = { p, q -> Point(x = p.x + q.x, y = p.y + 
 let ``Run - a context member that is a value is passed from a synthesized instance`` () =
     let source =
         sumPrelude +
-        normalized """def sum: [Sum(a)] list(a) -> a = { items -> items \fold(`0`) { + } }
+        normalized """def sum: [Sum(a)] list(a) -> a = { items -> items \fold(`0`) { a, b -> `+`(a, b) } }
 
 @entry
 def main = {
@@ -423,9 +423,8 @@ def main = {
 [<Fact>]
 let ``Run - an operator in a generic function calls the member of the context the function requires`` () =
     let source =
-        normalized """context Add(a) = (`+`: (a, a) -> a)
-
-type Point = (x: int, y: int)
+        normalized """type Point = (x: int, y: int)
+def Point.zero: Point = Point(x = 0, y = 0)
 def Point.`+`: Point, Point -> Point = { p, q -> Point(x = p.x + q.x, y = p.y + q.y) }
 
 def add: [Add(a)] a, a -> a = { x, y -> x + y }
