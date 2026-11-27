@@ -43,7 +43,7 @@ let ``A public module of a package the compiler ships has a page, but a host's m
     Assert.DoesNotContain("console-host", pages.Keys)
 
 /// What `StandardLibraryDocs.update` says of the page `page.md`, whose text is `text`, alone in a directory, with the
-/// tests' package store, which holds nanyx.json 0.1.0, 0.2.0, 0.4.2 and 0.5.0 and no other version.
+/// tests' package store, which holds nanyx.json 0.1.0, 0.2.0, 0.4.2, 0.5.0 and 0.5.1 and no other version.
 let private updateOf (text: string) =
     use directory = new TempDirectory()
     directory.Write "page.md" text
@@ -85,6 +85,6 @@ let ``A page that pins a package that doesn't compile can't be written, and says
 [<Fact>]
 let ``A page of a published package's file has its reference from the version the page pins`` () =
     let page = File.ReadAllText(Path.Combine(docsContentDirectory, "stdlib", "encode.md"))
-    Assert.Equal(Result.Ok(Some("nanyx.json", (SemanticVersion.tryParse "0.5.0").Value)), StandardLibraryDocs.pinOf page)
-    Assert.Contains(StandardLibraryDocs.beginMarkerOf (Some("nanyx.json", (SemanticVersion.tryParse "0.5.0").Value)), page)
+    Assert.Equal(Result.Ok(Some("nanyx.json", (SemanticVersion.tryParse "0.5.1").Value)), StandardLibraryDocs.pinOf page)
+    Assert.Contains(StandardLibraryDocs.beginMarkerOf (Some("nanyx.json", (SemanticVersion.tryParse "0.5.1").Value)), page)
     Assert.Contains("## `string`", page)

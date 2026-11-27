@@ -2,13 +2,13 @@
 title: json
 description: Reading and writing JSON
 order: 15.5
-package: nanyx.json 0.5.0
+package: nanyx.json 0.5.1
 ---
 
 `nanyx.json` isn't part of the standard library: it is a package published to the
 [package index](https://github.com/nanyx-lang/packages) from [nanyx-lang/json](https://github.com/nanyx-lang/json). An
 application lists it in its manifest's `dependencies`, `(package = "nanyx.json", version = "0.5")`, which
-`nanyx install nanyx.json` adds, and a script names the version it uses in a `::install nanyx.json 0.5.0` line. Import
+`nanyx install nanyx.json` adds, and a script names the version it uses in a `::install nanyx.json 0.5.1` line. Import
 `nanyx.json/json` under a name, `as json`, as these examples do: its `print` would otherwise clash with the console's.
 It is pure, so it needs no context.
 
@@ -18,7 +18,7 @@ write or read one another way, build a [decoder](json-typed) or an [encoder](enc
 underneath them, which `json.parse` reads and `json.print` writes:
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -35,7 +35,7 @@ A `Json` value is a tag union, so it is built and taken apart as any other is: a
 its members in the order they are written, and an array a `list(Json)`.
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -54,7 +54,7 @@ When the text isn't JSON, `parse` gives `#invalidJson`, which says where, by byt
 found there. `json.describe` writes it as a message:
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -72,7 +72,7 @@ match json.parse('{"a" 1}')
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.5.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.5.1, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 JSON text, read into a [`Json`](#json) value and written back out.
 

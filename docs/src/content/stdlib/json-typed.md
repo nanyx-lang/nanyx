@@ -2,7 +2,7 @@
 title: json, decoders
 description: Reading JSON into types of your own, and writing them back
 order: 15.6
-package: nanyx.json 0.5.0
+package: nanyx.json 0.5.1
 ---
 
 `json.decode(type T, text)` reads most types with nothing written for them, by walking the type: see
@@ -23,7 +23,7 @@ both. Text that isn't JSON is an `#invalidJson`, as `json.parse` gives. A decode
 of what it reads, and reads a long list in constant stack.
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -53,7 +53,7 @@ A tagged union whose tag is a member of its own is read by the decoder that memb
 decoder, including one picked by what an earlier `try` read.
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -82,7 +82,7 @@ match json.decodeWith('{"kind": "square", "side": 2}', shape)
 
 # Reference
 
-<!-- The reference below is generated from the doc comments of nanyx.json 0.5.0, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
+<!-- The reference below is generated from the doc comments of nanyx.json 0.5.1, which this page pins, by `nanyx stdlib-docs`: edit those, in the package's repository, not this. -->
 
 ## `PathStep`
 

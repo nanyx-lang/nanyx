@@ -21,7 +21,7 @@ nanyx install nanyx.json
 instead, which `nanyx run` downloads:
 
 ```nanyx fragment
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 ```
 
 Import its module under a name, `json`, so that its `print` doesn't clash with the console's.
@@ -33,7 +33,7 @@ list of its members, each a key and a value, in the order they are written, so `
 pattern can take the result apart through as many tags as it needs:
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -91,7 +91,7 @@ a part that can't be written, a function or a nominal type whose structure it ca
 written in the order its type declares them:
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import nanyx.json/json as json
 
@@ -128,7 +128,7 @@ time, each with `try`, `json.decoderFor(type T)` reads a part by walking its typ
 decoder; encoders from `nanyx.json/encode` go the other way, run by `json.encodeWith`:
 
 ```nanyx
-::install nanyx.json 0.5.0
+::install nanyx.json 0.5.1
 
 import (
   nanyx.json/encode as encode
