@@ -45,4 +45,6 @@ module internal TypeHoles =
         match expr.Kind, declared, Unifier.unalias declaredTy with
         | Lambda _, Some (Kind TypeHole), _
         | Lambda _, _, TyFunc _ -> constrainLambda expr.Span declared declaredTy actualTy state
-        | _ -> Visibility.addDeclaredConstraintAt expr.Span actualTy declaredTy state
+        | _ ->
+            Visibility.addDeclaredConstraintAt expr.Span actualTy declaredTy state
+            |> fun state -> match declared with Some written -> noteAnnotation expr.Span written.Span declaredTy state | None -> state

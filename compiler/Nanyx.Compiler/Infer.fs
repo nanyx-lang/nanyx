@@ -797,6 +797,11 @@ and internal inferTypeOfValues (env: TypeEnv) (state: InferState) (typeExpr: Typ
 and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression) (annotation: DefAnnotations.ReadAnnotation) : Result<TypedExpr * InferState, Diagnostic list> =
     match expr.Kind with
     | Lambda(args, body, _) when annotation.ExpectedInput.IsSome || annotation.ExpectedReturn.IsSome ->
+        // The body is checked against the return type where it is written (see `AnnotationSpans`).
+        let state =
+            match annotation.ExpectedReturn, DefAnnotations.writtenReturn annotation with
+            | Some expectedReturn, Some written -> noteAnnotation body.Span written expectedReturn state
+            | _ -> state
         inferLambdaWithExpected env state expr args body annotation.ExpectedInput annotation.ExpectedReturn
     | _ ->
     // A square-bracket literal builds the type the def is declared at, if it is one with a `fromArray`.

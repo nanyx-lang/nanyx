@@ -613,15 +613,18 @@ module Compiler =
                     mismatches
                     // A mismatch of a call's arguments is reported at the one that doesn't fit (see `ArgumentSpans`).
                     |> List.map (fun (text, span, kind) ->
+                        let annotation = InferState.annotationAt span state
                         match state.ArgumentSpans |> Map.tryFind span with
-                        | Some reported -> text, reported.Value, kind
-                        | None -> text, span, kind)
+                        | Some reported -> text, reported.Value, kind, annotation
+                        | None -> text, span, kind, annotation)
                     // So is a mismatch of a construct's branches, at the one that doesn't fit, with the branches before it
                     // as related locations (see `BranchSpans`).
-                    |> List.map (fun (text, span, kind) ->
+                    // A mismatch against a type written for it points back at where it is written (see `AnnotationSpans`).
+                    |> List.map (fun (text, span, kind, annotation) ->
+                        let written = annotation |> Option.map (fun at -> at, (fun _ -> "the type written here") : SourceSpan * MismatchText) |> Option.toList
                         match state.BranchSpans |> Map.tryFind span |> Option.bind _.Value with
-                        | Some (branch, said, related) -> Option.defaultValue text said, branch, kind, related
-                        | None -> text, span, kind, [])
+                        | Some (branch, said, related) -> Option.defaultValue text said, branch, kind, related @ written
+                        | None -> text, span, kind, written)
                     |> List.sortBy (fun (_, span, _, _) -> span.Start)
                     |> List.map (fun (text, span, kind, related) ->
                         let withRelated (diagnostic: Diagnostic) =
