@@ -88,7 +88,6 @@ module internal StructuralInstances =
 
     let private isTuple (fields: Map<string, Ty>) = not fields.IsEmpty && WellKnownContexts.isTuple fields
 
-    let private tupleItems (fields: Map<string, Ty>) = List.init fields.Count (fun index -> fields.[string index])
 
     /// `ty` without the variables that leave its tag unions open to more tags, at any depth: by the time an instance
     /// is derived, such a union holds only the tags it names. One of them in `rigid`, the variables of the function
@@ -157,7 +156,7 @@ module internal StructuralInstances =
         match Unifier.unalias ty with
         | TyTag(name, payload) -> Some (TagShape [ name, payload ])
         | TyUnion items when not items.IsEmpty -> tagsOf items |> Option.map TagShape
-        | TyRecord(fields, _) when isTuple fields -> Some (TupleShape (tupleItems fields))
+        | TyRecord(fields, _) when isTuple fields -> Some (TupleShape (WellKnownContexts.tupleItems fields))
         | TyRecord(fields, _) when not fields.IsEmpty -> Some (RecordShape (Map.toList fields))
         | Lists.ListType element -> Some (ListShape element)
         | _ -> None
@@ -372,7 +371,7 @@ module internal StructuralInstances =
                     | None -> None, text [ StringText $"#{tagName}" ]
                     // A payload written out as a tuple or a record is written field by field, as the tag is made.
                     | Some (TyRecord(fields, _)) when isTuple fields ->
-                        Some (pattern (TuplePattern(positions fields.Count, false))), bracketed $"#{tagName}(" (positional (tupleItems fields))
+                        Some (pattern (TuplePattern(positions fields.Count, false))), bracketed $"#{tagName}(" (positional (WellKnownContexts.tupleItems fields))
                     | Some (TyRecord(fields, _)) when not fields.IsEmpty ->
                         Some whole, bracketed $"#{tagName}(" (named (name (partName 0)) (Map.toList fields))
                     | Some (TyPrimitive "unit") -> Some (pattern UnitPattern), text [ StringText $"#{tagName}()" ]
