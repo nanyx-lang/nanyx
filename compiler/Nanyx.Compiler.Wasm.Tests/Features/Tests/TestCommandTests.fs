@@ -170,6 +170,22 @@ let ``A test build keeps the console host's prelude for the program's modules, s
     Assert.Contains("PASS main.greets", outcome.StandardOutput)
 
 [<Fact>]
+let ``A test build reports no entry point as unused, and still reports a private def nothing uses (#3094)`` () =
+    let main =
+        "module main\n\ndef spare = 1\n\n@entry\ndef main = {\n  println(\"hello\")\n}\n"
+    let checks = "module checks\n\n@test\ndef `adds up` = {\n  assert(1 + 1 == 2)\n}\n"
+    use directory = new TempDirectory()
+    directory.Write
+        "app.nyxp"
+        $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"], tests = ["tests/**/*.nyx"]), {consoleHostEntry}, linters = [(package = "nanyx.lint", version = "{NyxCompiler.Toolchain.version}")])"""
+    directory.Write "src/main.nyx" main
+    directory.Write "tests/checks.nyx" checks
+    let outcome = nanyxIn directory.Path [ "test" ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.DoesNotContain("Unused private definition 'main'", outcome.StandardError)
+    Assert.Contains("Unused private definition 'spare'", outcome.StandardError)
+
+[<Fact>]
 let ``A test build keeps the HTTP host's prelude for the program's modules, so a module that names Request runs its tests`` () =
     let main =
         "module main\n\ndef greeting: Request -> string = { request -> \"hello {Request.path(request)}\" }\n\n@entry\ndef main: Request -> Response = { request -> Response.text(200, greeting(request)) }\n\n@test\ndef `adds up` = {\n  assert(1 + 1 == 2)\n}\n"
