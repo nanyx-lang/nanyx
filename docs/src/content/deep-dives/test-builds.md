@@ -79,6 +79,10 @@ import geometry.tests as __test1
 def run = { index -> if index < 1 then __test0.__tests(index - 0) else if index < 3 then __test1.__tests(index - 1) else () }
 ```
 
+The aliases, `__test0` and so on, are `TestRootSyntax.alias`. The backend names a module's exported def after the alias
+it is imported by, `__test0_perimeter`, and a crash's stack names it as the module does, `perimeter`
+(`FunctionNames.source`; [#3081](https://github.com/nanyx-lang/nanyx/issues/3081)).
+
 The root's `Typed.Tests` lists the tests in that order. The test host's `run` asks the runtime's `nanyx:test` which
 index to run, and calls the entry point with it, under a `Console` whose output goes to the runtime and a `Random` seeded
 with the runtime's seed:

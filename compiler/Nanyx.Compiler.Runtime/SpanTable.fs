@@ -21,23 +21,26 @@ module FunctionNames =
     /// The name a function has in the source, from the name the backend gave it: `count`; `list_fold` for a library
     /// module's `fold`; `go` for a local `rec go` (`__rec_go_16`, see `LambdaLifting`); without the type arguments of a
     /// specialisation (`map__int`) or the suffix of a closure's owning entry (`__owning`, see `CoreIrClosureEntries`).
-    /// None for a lambda (`__lambda_3`), a runtime helper (`__nanyx_alloc`) and the other functions the backend makes,
-    /// whose names all start with `__`.
-    let source (name: string) =
+    /// A def a test build's root imports is named as its module names it (`__test0_perimeter` is `perimeter`, see
+    /// `TestRootSyntax`). None for a lambda (`__lambda_3`), a runtime helper (`__nanyx_alloc`) and the other functions the
+    /// backend makes, whose names all start with `__`.
+    let rec source (name: string) =
         // The name without what follows its first `__`, the type arguments of a specialisation or `__owning`.
         let own (name: string) =
             match name.IndexOf "__" with
             | -1 -> name
             | index -> name.Substring(0, index)
-        if String.IsNullOrEmpty name then None
-        elif name.StartsWith "__rec_" then
+        match name with
+        | _ when String.IsNullOrEmpty name -> None
+        | _ when name.StartsWith "__rec_" ->
             let numbered = own (name.Substring "__rec_".Length)
             match numbered.LastIndexOf '_' with
             | index when index > 0 -> Some(numbered.Substring(0, index))
             | _ -> None
-        elif name.StartsWith "__fn_" then Some(own (name.Substring "__fn_".Length))
-        elif name.StartsWith "__" then None
-        else Some(own name)
+        | _ when name.StartsWith "__fn_" -> Some(own (name.Substring "__fn_".Length))
+        | Parser.Program.TestRootSyntax.Aliased name -> source name
+        | _ when name.StartsWith "__" -> None
+        | _ -> Some(own name)
 
     /// The name a stack shows for the function the backend named `name`: its name in the source (see `source`),
     /// `<lambda>` for a lambda and `<top level>` for a script's top-level code, which the compiler makes a def named
