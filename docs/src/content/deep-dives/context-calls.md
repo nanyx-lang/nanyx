@@ -129,7 +129,11 @@ passes the instance the type checker found for it there, as a call to a top-leve
   its variables, as `a == b` or `a < b`: the operator then calls the member of the instance the function is passed, as
   a top-level def's does (`EqualityOperators.callMembers`), so that a type's own `==` or `compare` is the one used
   ([#2809](https://github.com/nanyx-lang/nanyx/issues/2809)). An operator on a structure of its variables, as
-  `[a] == [b]`, is still the compiler's own at each type the function is specialised at (`InferState.LocalComparisons`). A generic local function used in another one, at that one's own
+  `[a] == [b]`, makes it require the context of each variable it compares, and the def around it derives the
+  structure's instance from those, as it does for its own (`InferState.LocalStructureInstances`,
+  [#3055](https://github.com/nanyx-lang/nanyx/issues/3055)); `<` on a structure of a variable is ordered that way in a
+  top-level def that writes no type too. Only the rest of a union it compares, as `r` in `#none | r`, is compared by the
+  compiler's own at each type the function is specialised at (`InferState.LocalComparisons`). A generic local function used in another one, at that one's own
   variables, as `eq` is in `def twice = { v -> eq(v, v) }`, is used at each type the other is used at: its closure is
   made at those types where it is defined, and the other's closure captures it at them
   (`CoreIrLowerLocals.usesWithBindings`), however deep the local functions are nested. Inlining makes these members

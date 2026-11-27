@@ -1,7 +1,7 @@
 /// A generic local function, or a lambda in one, that calls a local function requiring a parameterised context at one of
 /// its own type variables passes the members it has for that variable, or requires the context itself if it is inferred
 /// (#2813). An inferred local function's own operator on one of its variables, `a == b`, uses the type's own `==` too
-/// (#2809, #2815).
+/// (#2809, #2815), and so does one on a structure of them, `[a] == [b]` (#3055).
 module TranspilerWasmTests.Features.Contexts.LocalContextCallers
 
 open Xunit
@@ -83,3 +83,16 @@ let ``An inferred local's != and < on its own variable use a type's own == and c
     runSource
         "type Rev = protected (n: int)\n\ndef Rev.compare: Rev, Rev -> #less | #equal | #greater = { a, b -> int.compare(b.n, a.n) }\n\ndef Rev.`==`: Rev, Rev -> bool = { a, b -> true }\n\n@entry\ndef main = {\n  def less = { a, b -> a < b }\n  def differ = { a, b -> a != b }\n  println(less(Rev(n = 1), Rev(n = 2)))\n  println(less(1, 2))\n  println(differ(Rev(n = 1), Rev(n = 2)))\n  println(differ(1, 2))\n}\n"
     |> assertRan "false\ntrue\nfalse\ntrue\n"
+
+[<Fact>]
+let ``An inferred local's == on a structure of its own variable compares with a type's own == (#3055)`` () =
+    runSource (
+        email
+        + "def sameListsTop = { a, b -> [a] == [b] }\n\n@entry\ndef main = {\n  def sameListsDeclared: [Eq(t)] t, t -> bool = { a, b -> [a] == [b] }\n  def sameLists = { a, b -> [a] == [b] }\n  def samePairs = { a, b -> (a, 1) == (b, 1) }\n  println(sameListsTop(Email(\"a\"), Email(\"b\")))\n  println(sameListsDeclared(Email(\"a\"), Email(\"b\")))\n  println(sameLists(Email(\"a\"), Email(\"b\")))\n  println(samePairs(Email(\"a\"), Email(\"b\")))\n  println(sameLists(1, 2))\n}\n"
+    )
+    |> assertRan "true\ntrue\ntrue\ntrue\nfalse\n"
+
+[<Fact>]
+let ``An inferred local's == on a list of its own variable at a recursive union uses Obj's own ==`` () =
+    objectsIn "  def sameLists = { a, b -> [a] == [b] }\n  println(sameLists(p, q))\n  println(sameLists(jp, jq))\n"
+    |> assertRan "true\ntrue\n"
