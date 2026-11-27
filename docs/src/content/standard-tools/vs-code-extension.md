@@ -194,14 +194,15 @@ editor, or press Ctrl+1, to carry on typing. You can drag the **Nanyx** tab to t
 and VS Code remembers where you put it. The extension needs VS Code 1.106 or later.
 
 It is organised by scope, innermost first, with a rule between one scope and the next: the cursor line's messages, if
-it has any, the expression you selected or the one at the cursor, each lambda around the cursor, each definition around
-it (a local one as well as a top-level one), and the module. Each scope's heading names it by its code and links to it:
-the expression by its text, `expression x + 1`, on one line and cut with `…` when it is long; a lambda by its
-parameters and line, `lambda { message -> … } (line 4)`, or, for a shorthand lambda, as it is written,
-`lambda { * 2 } (line 4)`; a `for` loop's body as the loop is written, `for words | word -> … (line 4)`; a definition
-by its name, `def greet`; the module by its name.
+it has any, the expression or type you selected or the one at the cursor, each lambda around the cursor, each definition
+around it (a local one as well as a top-level one), the `type`, `context`, `dimension` or `unit` declaration around it,
+and the module. Each scope's heading names it by its code and links to it: the expression by its text,
+`expression x + 1`, on one line and cut with `…` when it is long; a lambda by its parameters and line,
+`lambda { message -> … } (line 4)`, or, for a shorthand lambda, as it is written, `lambda { * 2 } (line 4)`; a `for`
+loop's body as the loop is written, `for words | word -> … (line 4)`; a definition by its name, `def greet`; a type's
+declaration as it is declared, `context Iter(c)`; the module by its name.
 Click the heading's arrow to open or close a scope. The module starts closed, and so does every scope after the third,
-not counting the messages and the expression, since the side bar is narrow. A `memory` block or a `use` is part of the
+not counting the messages and the expression or type, since the side bar is narrow. A `memory` block or a `use` is part of the
 scope it is in.
 
 The view shows nothing twice. An item that repeats one a scope further down shows, the same text naming the same thing
@@ -230,6 +231,14 @@ view, such as a long parameter's, wraps.
   in `def f = { x -> x + 1 }` shows `int`, with the spaces around the selection left out. A selection that is not a
   whole expression, such as `x +`, or that runs across two statements, shows nothing here. With nothing selected it is
   the innermost expression at the cursor, as hover finds it: on `x`, `int`. A name's doc comment shows under it.
+- **The type**, in place of the expression when the cursor is on a type, or a type is selected. On a type's name, in an
+  annotation, a signature or a type's definition, or on the name a declaration declares, the scope is headed as the
+  type is declared, `type Point`, `context Iter` or `dimension Distance`, with its **Definition** as hover writes it,
+  linked to where it is declared, and its doc comment; a built-in type such as `int` shows what hover says of it. A
+  selected type, such as `list(Point)` in an annotation, is headed by its text, `type list(Point)`, with its **Type** as
+  the compiler reads it; the selection is chosen as an expression's is, so `list(` shows nothing. A type variable, such
+  as `a` in `def twice: [Num(a)] a -> a`, is headed `type variable a`, links to its first use, and lists the
+  **Contexts** the signature requires of it, `Num(a)`.
 - **A lambda**: its type, with the contexts it carries, such as `[Log] int -> ()`; its parameters, locals and pattern
   variables, each with its type, nearest first; and each `use` in it, with the context it gives.
 - **A definition**: its signature, with its doc comment; its parameters and locals; its contexts, each with where it comes from (its signature, inference, or a
@@ -237,6 +246,11 @@ view, such as a long parameter's, wraps.
   inferred to need, each `use` in it, and each instance the compiler builds for a call in it, from the definitions
   attached to the type (`attached Point.show`), derived from the type's parts (`derived`), or its own (`built in`), with
   the calls each one serves under it. A `use` that serves no call is marked `unused`.
+- **A type's declaration**, with the cursor anywhere in a `type`, `context`, `dimension` or `unit` declaration: its
+  **Definition** as hover writes it, with its doc comment; its **Parameters**, each with the contexts it is bounded by,
+  and a context's associated types, marked `associated type`; and the definitions **Attached** to it, such as
+  `Point.norm: Point -> int`, each with its type and linked, whether it is declared beside the type or elsewhere in the
+  module.
 - **The module**: its doc comment, the top-level definitions and imports in scope, the file's own first, and the
   contexts the runtime supplies (`Console`, `Env` and `FileSystem`, from the host's prelude).
 
