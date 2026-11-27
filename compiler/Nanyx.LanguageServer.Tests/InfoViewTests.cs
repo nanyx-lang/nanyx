@@ -10,7 +10,7 @@ namespace Nanyx.LanguageServer.Tests;
 public sealed class InfoViewTests : LanguageServerTestBase
 {
     [Fact]
-    public async Task Info_view_shows_the_expression_and_the_names_in_scope_nearest_first()
+    public async Task Info_view_starts_at_the_innermost_scope_and_shows_the_names_in_scope_nearest_first()
     {
         var uri = DocumentUri.Parse("untitled:InfoView-1");
 
@@ -25,9 +25,9 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 2, 3);
 
-        var expression = Assert.Single(Section(view, "cursor", "expression"));
-        Assert.Equal("shout: string", expression.Text);
-        Assert.Equal(new Range(2, 2, 2, 7), expression.Location?.Range);
+        // With no message on the line, the innermost def comes first, and no scope has an Expression or This call.
+        Assert.Equal(["function", "module"], view.Scopes.Select(scope => scope.Kind));
+        Assert.DoesNotContain(view.Scopes.SelectMany(scope => scope.Sections), section => section.Id is "expression" or "call");
         Assert.Equal(
             [("shout: string", "local", new Range(1, 6, 1, 11)), ("name: string", "parameter", new Range(0, 32, 0, 36))],
             Section(view, "function", "names").Select(item => (item.Text, item.Detail, item.Location?.Range)));
@@ -35,7 +35,6 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var topLevel = Section(view, "module", "names");
         Assert.Equal(("greet: string -> string", "def"), (topLevel[0].Text, topLevel[0].Detail));
         Assert.DoesNotContain(topLevel, item => item.Text.StartsWith("__"));
-        Assert.Empty(Section(view, "cursor", "messages"));
     }
 
     [Fact]
@@ -84,7 +83,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
     }
 
     [Fact]
-    public async Task Info_view_shows_the_diagnostics_on_the_line()
+    public async Task Info_view_shows_the_messages_on_the_line_first()
     {
         var uri = DocumentUri.Parse("untitled:InfoView-4");
 
@@ -94,11 +93,71 @@ public sealed class InfoViewTests : LanguageServerTestBase
             """.ReplaceLineEndings("\n"));
         Assert.Single((await NextPublished(uri)).Diagnostics!);
 
-        var message = Assert.Single(Section(await InfoViewAt(uri, 0, 0), "cursor", "messages"));
-        Assert.Equal("error NYX0101", message.Detail);
-        Assert.Contains("missing", message.Text);
-        Assert.Equal(new Range(0, 8, 0, 15), message.Location?.Range);
-        Assert.Empty(Section(await InfoViewAt(uri, 1, 0), "cursor", "messages"));
+        var view = await InfoViewAt(uri, 0, 0);
+        Assert.Equal(("messages", "Messages"), (view.Scopes[0].Kind, view.Scopes[0].Heading));
+        var message = Assert.Single(view.Scopes[0].Messages!);
+        Assert.Equal(("error", "NYX0101"), (message.Severity, message.Code));
+        Assert.Contains("missing", message.Headline + string.Join("\n", message.Notes));
+        Assert.Equal(new Range(0, 8, 0, 15), message.Location.Range);
+        Assert.Equal(["module"], (await InfoViewAt(uri, 1, 0)).Scopes.Select(scope => scope.Kind));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_a_type_mismatch_in_full()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Mismatch");
+
+        Open(uri, """
+            def half: () -> int = {
+              2.5
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Single((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 1, 3);
+
+        Assert.Equal(["messages", "function", "module"], view.Scopes.Select(scope => scope.Kind));
+        var message = Assert.Single(view.Scopes[0].Messages!);
+        Assert.Equal(("error", "NYX0201", "Type mismatch"), (message.Severity, message.Code, message.Headline));
+        Assert.Equal(["'float' vs 'int'"], message.Notes);
+        Assert.Equal(new Uri("https://nanyx.dev/docs/standard-tools/errors#nyx0201"), message.Reference);
+        Assert.Equal(new Range(1, 2, 1, 5), message.Location.Range);
+        // The messages don't push the def's own scopes towards being collapsed.
+        Assert.False(view.Scopes[1].Collapsed);
+    }
+
+    [Fact]
+    public async Task Info_view_offers_a_messages_fixes_with_the_edit_its_quick_fix_makes()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Fix");
+        const string text = "def s = max(1, 2)\n";
+
+        Open(uri, text);
+        Assert.Single((await NextPublished(uri)).Diagnostics!);
+
+        var message = Assert.Single((await InfoViewAt(uri, 0, 10)).Scopes[0].Messages!);
+        var fix = Assert.Single(message.Fixes);
+        Assert.Equal("Add `import nanyx/math`", fix.Title);
+        Assert.Equal("import nanyx/math\n\ndef s = max(1, 2)\n", Applied(text, Assert.Single(fix.Edit.Changes![uri])));
+    }
+
+    [Fact]
+    public async Task Info_view_links_a_messages_other_places()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Related");
+
+        Open(uri, """
+            def twice = 1
+            def twice = 2
+
+            """.ReplaceLineEndings("\n"));
+        var published = Assert.Single((await NextPublished(uri)).Diagnostics!);
+        var related = Assert.Single(published.RelatedInformation!);
+
+        var message = Assert.Single((await InfoViewAt(uri, published.Range.Start.Line, 0)).Scopes[0].Messages!);
+        var place = Assert.Single(message.Related);
+        Assert.Equal((related.Message, related.Location.Range, $"line {related.Location.Range.Start.Line + 1}"), (place.Text, place.Location?.Range, place.Detail));
     }
 
     [Fact]
@@ -113,151 +172,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 0, 32);
 
-        Assert.Equal("n: int", Assert.Single(Section(view, "cursor", "expression")).Text);
         Assert.Equal("n: int", Assert.Single(Section(view, "function", "names")).Text);
-    }
-
-    [Fact]
-    public async Task Info_view_shows_the_signature_of_a_generic_def_beside_its_type_at_the_use()
-    {
-        var uri = DocumentUri.Parse("untitled:InfoView-6");
-
-        Open(uri, """
-            def pair: a, b -> (a, b) = { x, y -> (x, y) }
-            def first = { x, y -> x }
-            def p = pair("a", #some(1))
-            def f = first(1, "b")
-
-            """.ReplaceLineEndings("\n"));
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-        var annotated = Section(await InfoViewAt(uri, 2, 9), "cursor", "expression");
-        Assert.Equal(
-            [
-                ("def pair: a, b -> (a, b)", "declared"),
-                ("def pair: string, #some(int) -> (string, #some(int))", "at this use"),
-                ("a = string, b = #some(int)", "type variables")
-            ],
-            annotated.Select(item => (item.Text, item.Detail)));
-        Assert.All(annotated, item => Assert.Equal(new Range(0, 4, 0, 8), item.Location?.Range));
-
-        var inferred = Section(await InfoViewAt(uri, 3, 9), "cursor", "expression");
-        Assert.Equal(
-            [
-                ("def first: α, β -> α", "declared"),
-                ("def first: int, string -> int", "at this use"),
-                ("α = int, β = string", "type variables")
-            ],
-            inferred.Select(item => (item.Text, item.Detail)));
-    }
-
-    [Fact]
-    public async Task Info_view_shows_a_def_that_is_not_generic_once()
-    {
-        var uri = DocumentUri.Parse("untitled:InfoView-7");
-
-        Open(uri, """
-            def double: int -> int = { n -> n + n }
-            def four = double(2)
-
-            """.ReplaceLineEndings("\n"));
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-        var expression = Assert.Single(Section(await InfoViewAt(uri, 1, 12), "cursor", "expression"));
-        Assert.Equal(("def double: int -> int", null), (expression.Text, expression.Detail));
-        // The def's own name shows its signature once too.
-        Assert.Single(Section(await InfoViewAt(uri, 0, 5), "cursor", "expression"));
-    }
-
-    [Fact]
-    public async Task Info_view_shows_the_signature_of_a_def_with_a_context_variable()
-    {
-        var uri = DocumentUri.Parse("untitled:InfoView-8");
-
-        Open(uri, """
-            def apply: [c] ([c] a -> b), a -> b = { f, x -> f(x) }
-            def n = apply({ x -> x + 1 }, 1)
-            def say = { apply({ x -> println(x) }, "hi") }
-
-            """.ReplaceLineEndings("\n"));
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-        // A context variable that stands for no contexts is not among the bindings.
-        Assert.Equal(
-            [
-                ("def apply: [c] ([c] a -> b), a -> b", "declared"),
-                ("def apply: (int -> int), int -> int", "at this use"),
-                ("a = int, b = int", "type variables")
-            ],
-            Section(await InfoViewAt(uri, 1, 10), "cursor", "expression").Select(item => (item.Text, item.Detail)));
-        Assert.Equal(
-            [
-                ("def apply: [c] ([c] a -> b), a -> b", "declared"),
-                ("def apply: [Console] ([Console] string -> ()), string -> ()", "at this use"),
-                ("c = [Console], a = string, b = ()", "type variables")
-            ],
-            Section(await InfoViewAt(uri, 2, 14), "cursor", "expression").Select(item => (item.Text, item.Detail)));
-    }
-
-    [Fact]
-    public async Task Info_view_shows_the_signature_of_a_def_from_an_imported_module()
-    {
-        var directory = Directory.CreateTempSubdirectory("nanyx-info-view-");
-        try
-        {
-            var modulePath = Path.Combine(directory.FullName, "mod.nyx");
-            File.WriteAllText(modulePath, """
-                module mod
-                export def wrap: a -> #some(a) | #nothing = { x -> #some(x) }
-
-                """.ReplaceLineEndings("\n"));
-            var uri = DocumentUri.FromFileSystemPath(Path.Combine(directory.FullName, "main.nyx"));
-
-            Open(uri, """
-                module main
-                import mod as m
-                def w = m.wrap("hi")
-
-                """.ReplaceLineEndings("\n"));
-            Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-            var items = Section(await InfoViewAt(uri, 2, 11), "cursor", "expression");
-            Assert.Equal(
-                [
-                    ("def wrap: a -> #some(a) | #nothing", "declared"),
-                    ("def wrap: string -> #some(string) | #nothing", "at this use"),
-                    ("a = string", "type variables")
-                ],
-                items.Select(item => (item.Text, item.Detail)));
-            Assert.All(items, item => Assert.Equal(
-                new Location { Uri = DocumentUri.FromFileSystemPath(modulePath), Range = new Range(1, 11, 1, 15) },
-                item.Location));
-        }
-        finally
-        {
-            directory.Delete(recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task Info_view_shows_the_signature_of_a_standard_library_def_with_contexts()
-    {
-        var uri = DocumentUri.Parse("untitled:InfoView-9");
-
-        Open(uri, """
-            import nanyx/math as m
-            def biggest = m.max(1, 2)
-
-            """.ReplaceLineEndings("\n"));
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-        Assert.Equal(
-            [
-                ("def max: [Ord(a)] a, a -> a", "declared"),
-                ("def max: [Ord(int)] int, int -> int", "at this use"),
-                ("a = int", "type variables")
-            ],
-            Section(await InfoViewAt(uri, 1, 17), "cursor", "expression").Select(item => (item.Text, item.Detail)));
     }
 
     [Fact]
@@ -287,7 +202,6 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 13, 7);
 
-        Assert.Equal("The message, shouted.", Assert.Single(Section(view, "cursor", "expression")).Documentation);
         Assert.Equal(
             [("loud: string", "The message, shouted."), ("message: string", null)],
             Section(view, "function", "names").Select(item => (item.Text, item.Documentation)));
@@ -300,77 +214,6 @@ public sealed class InfoViewTests : LanguageServerTestBase
     }
 
     [Fact]
-    public async Task Info_view_shows_the_doc_comment_of_a_def_from_an_imported_module()
-    {
-        var directory = Directory.CreateTempSubdirectory("nanyx-info-view-");
-        try
-        {
-            File.WriteAllText(Path.Combine(directory.FullName, "mod.nyx"), """
-                module mod
-                --| Wraps `x` in a `#some`.
-                export def wrap: a -> #some(a) | #nothing = { x -> #some(x) }
-
-                """.ReplaceLineEndings("\n"));
-            var uri = DocumentUri.FromFileSystemPath(Path.Combine(directory.FullName, "main.nyx"));
-
-            Open(uri, """
-                module main
-                import mod as m
-                def w = m.wrap("hi")
-
-                """.ReplaceLineEndings("\n"));
-            Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-            var items = Section(await InfoViewAt(uri, 2, 11), "cursor", "expression");
-            Assert.Equal(
-                [("declared", "Wraps `x` in a `#some`."), ("at this use", null), ("type variables", null)],
-                items.Select(item => (item.Detail, item.Documentation)));
-        }
-        finally
-        {
-            directory.Delete(recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task Info_view_shows_the_doc_comment_of_a_standard_library_def()
-    {
-        var uri = DocumentUri.Parse("untitled:InfoView-10");
-
-        Open(uri, """
-            import nanyx/math as m
-            def biggest = m.max(1, 2)
-
-            """.ReplaceLineEndings("\n"));
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-        var declared = Section(await InfoViewAt(uri, 1, 17), "cursor", "expression")[0];
-        Assert.Equal("The larger of `a` and `b`.", declared.Documentation);
-    }
-
-    [Fact]
-    public async Task Info_view_shows_a_module_and_its_doc_comment_at_its_name()
-    {
-        var uri = DocumentUri.Parse("untitled:InfoView-13");
-
-        Open(uri, """
-            import nanyx/math as m
-            def biggest = m.max(1, 2)
-
-            """.ReplaceLineEndings("\n"));
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-        foreach (var (line, character, range) in new[] { (0, 10, new Range(0, 7, 0, 22)), (1, 14, new Range(1, 14, 1, 15)) })
-        {
-            var view = await InfoViewAt(uri, line, character);
-            var module = Assert.Single(Section(view, "cursor", "expression"));
-            Assert.Equal(("module math", "module", range), (module.Text, module.Detail, module.Location?.Range));
-            Assert.NotNull(module.Documentation);
-            Assert.Equal("At the cursor", view.Scopes[0].Heading);
-        }
-    }
-
-    [Fact]
     public async Task Info_view_shows_only_the_cursor_and_the_module_at_the_top_level()
     {
         var uri = DocumentUri.Parse("untitled:InfoView-14");
@@ -380,9 +223,9 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 1, 1);
 
-        Assert.Equal([("cursor", "At the cursor"), ("module", "this module")], view.Scopes.Select(scope => (scope.Kind, scope.Heading)));
+        Assert.Equal([("module", "this module")], view.Scopes.Select(scope => (scope.Kind, scope.Heading)));
         // The module's contexts are the ones the runtime supplies, from the host's prelude.
-        Assert.Equal(["names", "contexts"], view.Scopes[1].Sections.Select(section => section.Id));
+        Assert.Equal(["names", "contexts"], view.Scopes[0].Sections.Select(section => section.Id));
     }
 
     [Fact]
@@ -410,22 +253,22 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         Assert.Equal(
             [
-                ("cursor", "At the cursor", false), ("lambda", "{ x -> … } (line 5)", false), ("function", "def report", false),
-                ("function", "def run", true), ("module", "this module", true)
+                ("lambda", "{ x -> … } (line 5)", false), ("function", "def report", false), ("function", "def run", false),
+                ("module", "this module", true)
             ],
             view.Scopes.Select(scope => (scope.Kind, scope.Heading, scope.Collapsed)));
-        var lambda = view.Scopes[1];
+        var lambda = view.Scopes[0];
         Assert.Equal(new Range(4, 10, 7, 5), lambda.Location?.Range);
         Assert.Equal(["type", "names"], lambda.Sections.Select(section => section.Id));
         Assert.Equal("[Log] int -> ()", Assert.Single(lambda.Sections[0].Items).Text);
         Assert.Equal([("line: string", "local"), ("x: int", "parameter")], lambda.Sections[1].Items.Select(item => (item.Text, item.Detail)));
 
-        var report = view.Scopes[2];
+        var report = view.Scopes[1];
         Assert.Equal(new Range(3, 6, 3, 12), report.Location?.Range);
         Assert.Equal(("report: [Log] int -> ()", "inferred"), (report.Sections[0].Items[0].Text, report.Sections[0].Items[0].Detail));
         Assert.Equal(["count: int"], Section(view, "function", "names").Select(item => item.Text));
 
-        var run = view.Scopes[3];
+        var run = view.Scopes[2];
         Assert.Equal(
             [
                 ("signature", ["run: [Log] string -> ()"]),
@@ -465,35 +308,8 @@ public sealed class InfoViewTests : LanguageServerTestBase
         Assert.Equal([("Log", "signature")], Section(inLambda, "function", "contexts").Select(item => (item.Text, item.Detail)));
 
         var inMemory = await InfoViewAt(uri, 9, 5);
-        Assert.Equal(["cursor", "function", "module"], inMemory.Scopes.Select(scope => scope.Kind));
+        Assert.Equal(["function", "module"], inMemory.Scopes.Select(scope => scope.Kind));
         Assert.Equal(["sum: int", "n: int"], Section(inMemory, "function", "names").Select(item => item.Text));
-    }
-
-    [Fact]
-    public async Task Info_view_shows_where_the_call_at_the_position_finds_each_context()
-    {
-        var uri = DocumentUri.Parse("untitled:InfoView-11");
-
-        Open(uri, """
-            context Show(a) = (show: a -> string)
-            context Log = (log: string -> ())
-            type Point = (x: int, y: int)
-            def describe: [Log, Show(a)] a -> string = { x -> show(x) }
-            def main: [Log] () -> string = {
-              use Show(Point)(show = { p -> "p" })
-              describe(Point(x = 1, y = 2))
-            }
-
-            """.ReplaceLineEndings("\n"));
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-        var view = await InfoViewAt(uri, 6, 4);
-
-        Assert.Equal("This call", view.Scopes[0].Sections.Single(section => section.Id == "call").Title);
-        Assert.Equal(
-            [("Log", "signature", new Range(4, 11, 4, 14)), ("Show(Point)", "use", new Range(5, 6, 5, 38))],
-            Section(view, "cursor", "call").Select(item => (item.Text, item.Detail, item.Location?.Range)));
-        Assert.Empty(Section(await InfoViewAt(uri, 4, 5), "cursor", "call"));
     }
 
     [Fact]
@@ -518,7 +334,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var view = await InfoViewAt(uri, 4, 3);
         var flow = Section(view, "function", "flow");
 
-        Assert.Equal("def main", view.Scopes[1].Heading);
+        Assert.Equal("def main", view.Scopes[0].Heading);
         Assert.Equal(
             [("Log", "signature · 1 call", new Range(2, 11, 2, 14)), ("Log", "use · 1 call", new Range(4, 6, 4, 28)), ("Log", "use · unused", new Range(6, 6, 6, 28))],
             flow.Select(item => (item.Text, item.Detail, item.Location?.Range)));
@@ -530,6 +346,26 @@ public sealed class InfoViewTests : LanguageServerTestBase
         Assert.Equal(
             [("provider", new Range(2, 11, 2, 14)), ("call", new Range(3, 2, 3, 6))],
             (await InfoViewAt(uri, 3, 3)).Highlights.Select(highlight => (highlight.Kind, highlight.Range)));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_an_instance_the_compiler_builds_in_the_flow_with_the_calls_it_serves()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Built");
+
+        Open(uri, """
+            context Show(a) = (show: a -> string)
+            type Point = (x: int, y: int)
+            def describe: [Show(a)] a -> string = { x -> show(x) }
+            def Point.show: Point -> string = { p -> "p" }
+            def main = { describe(Point(x = 1, y = 2)) }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var built = Assert.Single(Section(await InfoViewAt(uri, 4, 14), "function", "flow"));
+        Assert.Equal(("Show(Point)", "attached Point.show · 1 call", null), (built.Text, built.Detail, built.Location));
+        Assert.Equal(("describe", new Range(4, 13, 4, 21)), (Assert.Single(built.Children!).Text, built.Children![0].Location?.Range));
     }
 
     [Fact]
@@ -564,9 +400,6 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         // Outside it, by the name an import brings in, without its module.
         var outside = await InfoViewAt(uri, 10, 14);
-        Assert.Equal(
-            "def Points.Point.new: int, int -> #some(Point) | #error(string)",
-            Assert.Single(Section(outside, "cursor", "expression")).Text);
         Assert.Equal("made: #some(Point) | #error(string)", Assert.Single(Section(outside, "function", "signature")).Text);
     }
 
@@ -618,8 +451,6 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var flow = Assert.Single(Section(view, "function", "flow"));
         Assert.Equal(new InfoViewName(0, 3), flow.Name);
         Assert.Equal(("log", new InfoViewName(0, 3)), (Assert.Single(flow.Children!).Text, flow.Children![0].Name));
-        var expression = Assert.Single(Section(view, "cursor", "expression"));
-        Assert.Equal(("message: string", new InfoViewName(0, 7)), (expression.Text, expression.Name));
     }
 
     [Fact]
@@ -644,23 +475,6 @@ public sealed class InfoViewTests : LanguageServerTestBase
     }
 
     [Fact]
-    public async Task Info_view_links_no_name_in_a_bare_type()
-    {
-        var uri = DocumentUri.Parse("untitled:InfoView-16");
-
-        Open(uri, """
-            def total = [1, 2]
-
-            """.ReplaceLineEndings("\n"));
-        Assert.Empty((await NextPublished(uri)).Diagnostics!);
-
-        var expression = Assert.Single(Section(await InfoViewAt(uri, 0, 12), "cursor", "expression"));
-
-        Assert.Equal("list(int)", expression.Text);
-        Assert.Null(expression.Name);
-    }
-
-    [Fact]
     public async Task Info_view_lays_out_a_signature_that_does_not_fit_its_width_as_the_formatter_does()
     {
         var uri = DocumentUri.Parse("untitled:InfoView-17");
@@ -678,8 +492,6 @@ public sealed class InfoViewTests : LanguageServerTestBase
         Assert.Equal("parse\n  : string,\n    int\n    -> | #some(int)\n       | #error(string)", signature.Text);
         Assert.Equal(new InfoViewName(0, 5), signature.Name);
         Assert.Contains("text: string", Section(narrow, "function", "names").Select(item => item.Text));
-        var call = Assert.Single(Section(await InfoViewAt(uri, 2, 14, width: 30), "cursor", "expression"));
-        Assert.Equal(("def parse\n  : string,\n    int\n    -> | #some(int)\n       | #error(string)", new InfoViewName(4, 5)), (call.Text, call.Name));
 
         var wide = await InfoViewAt(uri, 0, 70, width: 80);
         Assert.Equal("parse: string, int -> #some(int) | #error(string)", Assert.Single(Section(wide, "function", "signature")).Text);

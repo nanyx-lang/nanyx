@@ -47,7 +47,8 @@ const DEBOUNCE_MILLISECONDS = 150;
  * The info view: a view in the secondary side bar that shows what the compiler knows at the cursor, as Lean's infoview
  * does. It is the webview view `nanyx.infoView`, in the `nanyx` view container that `package.json` contributes to the
  * secondary side bar. It asks the language server (`nanyx/infoView`) when the selection in a Nanyx editor changes, or
- * the document does, once it has stayed put for a moment, and again when the server has compiled the document. Every item that has a place links to it, and shows the doc
+ * the document does, once it has stayed put for a moment, and again when the server has compiled the document. When the
+ * cursor's line has messages, it shows them first, each in full, with a button for each fix. Every item that has a place links to it, and shows the doc
  * comment of what it names under it, cut to its first paragraph until clicked. Pinning keeps the view on one position
  * while you edit elsewhere, moving it with the edits above it and unpinning it when its text is deleted. While it is visible and not pinned, it highlights in the editor what the server says to: on
  * a `use` or a context of a signature, the calls it serves; on a call, what provides its contexts. The code it shows is
@@ -174,6 +175,17 @@ class InfoView {
         else if (message.type === "openLink" && message.href) {
             void openLink(message.href);
         }
+        else if (message.type === "fix" && message.edit) {
+            void this.applyFix(message.edit);
+        }
+    }
+    /** Makes the edit of a message's fix, as its quick fix would. */
+    async applyFix(edit) {
+        const client = this.client();
+        const converted = client && await client.protocol2CodeConverter.asWorkspaceEdit(edit);
+        if (converted) {
+            await vscode.workspace.applyEdit(converted);
+        }
     }
     /**
      * Moves the pinned position with `event`'s edits to its document, so that it stays on the text it was on, and unpins
@@ -289,8 +301,8 @@ async function withRenderedDocumentation(scopes) {
     })));
 }
 /**
- * The scopes with their code highlighted: each heading but the cursor's, and the text of each item, and of the items
- * under it, but the messages, which are prose.
+ * The scopes with their code highlighted: each heading but the messages', and the text of each item, and of the items
+ * under it. The messages are prose.
  */
 async function withHighlightedCode(highlighter, scopes) {
     const highlighted = async (item) => ({
@@ -300,10 +312,10 @@ async function withHighlightedCode(highlighter, scopes) {
     });
     return Promise.all(scopes.map(async (scope) => ({
         ...scope,
-        headingCode: scope.kind === "cursor" ? undefined : await highlighter.highlight(scope.heading),
+        headingCode: scope.kind === "messages" ? undefined : await highlighter.highlight(scope.heading),
         sections: await Promise.all(scope.sections.map(async (section) => ({
             ...section,
-            items: section.id === "messages" ? section.items : await Promise.all(section.items.map(highlighted))
+            items: await Promise.all(section.items.map(highlighted))
         })))
     })));
 }
@@ -361,9 +373,17 @@ function page(webview) {
   code a.name:hover, summary a:hover { color: var(--vscode-textLink-foreground); }
   code a.name:hover span { color: inherit !important; }
   .detail { color: var(--vscode-descriptionForeground); font-size: 0.9em; white-space: nowrap; }
-  .empty, .message { color: var(--vscode-descriptionForeground); }
+  .message { color: var(--vscode-descriptionForeground); }
   code.ruler { position: absolute; visibility: hidden; white-space: pre; }
-  li.error code { color: var(--vscode-errorForeground); }
+  /* A message, as the terminal prints one: its severity, code and headline, then its notes, places and fixes. */
+  .diagnostic { margin: 6px 0 10px 12px; }
+  .diagnostic .headline { font-weight: 600; }
+  .diagnostic .severity.error { color: var(--vscode-errorForeground); }
+  .diagnostic .severity.warning { color: var(--vscode-editorWarning-foreground); }
+  .diagnostic .severity.info, .diagnostic .severity.hint { color: var(--vscode-editorInfo-foreground); }
+  .diagnostic .note { margin: 2px 0 0 12px; white-space: pre-wrap; font-family: var(--vscode-editor-font-family); }
+  .diagnostic ul { padding-left: 12px; }
+  .diagnostic .fixes { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0 12px; }
 </style>
 </head>
 <body>
@@ -463,35 +483,76 @@ function page(webview) {
   }
 
   // An item: its code, of which the name it starts with, if any, links to where it is, and each type's name to its
-  // definition; and its detail, which is the link of a message. Under it, its doc comment and the items under it.
-  function item(entry, expanded, isMessage) {
-    const li = element("li", entry.detail && entry.detail.startsWith("error") ? "error" : "");
+  // definition; and its detail. Under it, its doc comment and the items under it.
+  function item(entry) {
+    const li = element("li");
     const links = (entry.links || []).map((link) => ({ start: link.start, length: link.length, element: linkTo(link.location, "name") }));
-    if (entry.location && entry.name && !isMessage) {
+    if (entry.location && entry.name) {
       links.push({ start: entry.name.start, length: entry.name.length, element: linkTo(entry.location, "name") });
     }
     li.appendChild(highlightedCode(entry.text, entry.code, links));
-    if (entry.detail) {
-      if (isMessage && entry.location) {
-        const link = linkTo(entry.location, "detail");
-        link.textContent = entry.detail;
-        li.appendChild(link);
-      } else {
-        li.appendChild(element("span", "detail", entry.detail));
-      }
-    }
-    const doc = documentation(entry, expanded);
+    if (entry.detail) li.appendChild(element("span", "detail", entry.detail));
+    const doc = documentation(entry);
     if (doc) li.appendChild(doc);
     if (entry.children && entry.children.length > 0) {
       const children = element("ul", "children");
-      entry.children.forEach((child) => children.appendChild(item(child, expanded, false)));
+      entry.children.forEach((child) => children.appendChild(item(child)));
       li.appendChild(children);
     }
     return li;
   }
 
+  // A message, as the terminal prints it: its severity and code, the code linking to its entry in the errors reference,
+  // and its headline, linking to where it is; then its notes, each after "=", the other places that explain it, each
+  // linking there, and a button for each of its fixes, which makes the fix as its quick fix does.
+  function message(data) {
+    const part = element("div", "diagnostic");
+    const first = element("div");
+    first.appendChild(element("span", "severity " + data.severity, data.severity + " "));
+    if (data.code && data.reference) {
+      const code = element("a", "", data.code);
+      code.title = "Open " + data.reference;
+      code.addEventListener("click", (event) => {
+        event.preventDefault();
+        vscode.postMessage({ type: "openLink", href: data.reference });
+      });
+      first.appendChild(code);
+      first.appendChild(document.createTextNode(": "));
+    } else if (data.code) {
+      first.appendChild(document.createTextNode(data.code + ": "));
+    }
+    const headline = linkTo(data.location, "headline");
+    headline.textContent = data.headline;
+    first.appendChild(headline);
+    part.appendChild(first);
+    data.notes.forEach((note) => part.appendChild(element("div", "note", "= " + note)));
+    if (data.related.length > 0) {
+      const places = element("ul");
+      data.related.forEach((place) => {
+        const li = element("li");
+        const link = linkTo(place.location, "");
+        link.textContent = place.detail;
+        li.appendChild(element("span", "", "note: " + place.text));
+        li.appendChild(link);
+        places.appendChild(li);
+      });
+      part.appendChild(places);
+    }
+    if (data.fixes.length > 0) {
+      const fixes = element("div", "fixes");
+      data.fixes.forEach((fix) => {
+        const button = element("button", "", fix.title);
+        button.title = "Make this fix";
+        button.addEventListener("click", () => vscode.postMessage({ type: "fix", edit: fix.edit }));
+        fixes.appendChild(button);
+      });
+      part.appendChild(fixes);
+    }
+    return part;
+  }
+
   // The doc comment of an item or a scope, if it has one: rendered, or else its Markdown as it is, one paragraph each.
-  function documentation(data, expanded) {
+  function documentation(data) {
     const doc = element("div", "doc");
     if (data.documentationHtml) {
       doc.innerHTML = data.documentationHtml;
@@ -508,12 +569,12 @@ function page(webview) {
     } else {
       return undefined;
     }
-    return collapsible(doc, expanded);
+    return collapsible(doc);
   }
 
   // A doc comment of more than one paragraph (or other block) shows its first until it is clicked, which shows all of
-  // it; a second click cuts it back. An expanded one (that of what is at the cursor) starts showing all of it.
-  function collapsible(doc, expanded) {
+  // it; a second click cuts it back.
+  function collapsible(doc) {
     if (doc.children.length < 2) return doc;
     const more = element("span", "more", " …");
     doc.firstElementChild.appendChild(more);
@@ -522,25 +583,20 @@ function page(webview) {
       more.hidden = !collapsed;
       doc.title = collapsed ? "Show all of the doc comment" : "Show only its first paragraph";
     };
-    show(!expanded);
+    show(true);
     doc.addEventListener("click", () => show(!doc.classList.contains("collapsed")));
     return doc;
   }
 
-  // A section of a scope: its title, with how many items it has, and its items. Only the cursor's sections can be
-  // empty; the server leaves out the others' empty ones.
-  function section(data, expanded) {
+  // A section of a scope: its title, with how many items it has, and its items. The server leaves out empty ones.
+  function section(data) {
     const part = element("section");
     const title = element("h4", "", data.title + " ");
     title.appendChild(element("span", "count", "(" + data.items.length + ")"));
     part.appendChild(title);
-    if (data.items.length === 0) {
-      part.appendChild(element("p", "empty", "Nothing here."));
-    } else {
-      const list = element("ul");
-      data.items.forEach((entry) => list.appendChild(item(entry, expanded && data.id === "expression", data.id === "messages")));
-      part.appendChild(list);
-    }
+    const list = element("ul");
+    data.items.forEach((entry) => list.appendChild(item(entry)));
+    part.appendChild(list);
     return part;
   }
 
@@ -567,9 +623,10 @@ function page(webview) {
       summary.appendChild(data.headingCode ? highlightedCode(data.heading, data.headingCode) : document.createTextNode(data.heading));
     }
     details.appendChild(summary);
-    const doc = documentation(data, false);
+    const doc = documentation(data);
     if (doc) details.appendChild(doc);
-    data.sections.forEach((part) => details.appendChild(section(part, data.kind === "cursor")));
+    data.sections.forEach((part) => details.appendChild(section(part)));
+    (data.messages || []).forEach((entry) => details.appendChild(message(entry)));
     return details;
   }
 

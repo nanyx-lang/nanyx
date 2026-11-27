@@ -256,7 +256,6 @@
     <Compile Include="Features\Tooling\ContextFlowTests.fs" />
     <Compile Include="Features\Tooling\DocumentationTests.fs" />
     <Compile Include="Features\Tooling\HoverTests.fs" />
-    <Compile Include="Features\Tooling\InfoViewCallTests.fs" />
     <Compile Include="Features\Tooling\LibrarySearchTests.fs" />
     <Compile Include="Features\Tooling\OutlineTests.fs" />
     <Compile Include="Features\Tooling\PackageReferencesTests.fs" />

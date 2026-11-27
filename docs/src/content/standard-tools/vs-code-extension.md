@@ -193,12 +193,12 @@ editor) opens the secondary side bar if it is closed, shows the view and moves t
 editor, or press Ctrl+1, to carry on typing. You can drag the **Nanyx** tab to the primary side bar or to the panel,
 and VS Code remembers where you put it. The extension needs VS Code 1.106 or later.
 
-It is organised by scope, innermost first, with a rule between one scope and the next: the cursor, each lambda around
-it, each definition around it (a local one as well as a top-level one), and the module. Each scope's heading names it
-and links to it: a lambda by its parameters and line, `{ message -> … } (line 4)`, a definition by its name,
-`def greet`, the module by its name. Click the heading's arrow to open or close a scope. The module starts closed, and
-so does every scope after the third, since the side bar is narrow. A `memory` block or a `use` is part of the scope it
-is in.
+It is organised by scope, innermost first, with a rule between one scope and the next: the cursor line's messages, if
+it has any, each lambda around the cursor, each definition around it (a local one as well as a top-level one), and the
+module. Each scope's heading names it and links to it: a lambda by its parameters and line, `{ message -> … } (line 4)`,
+a definition by its name, `def greet`, the module by its name. Click the heading's arrow to open or close a scope. The
+module starts closed, and so does every scope after the third, not counting the messages, since the side bar is narrow.
+A `memory` block or a `use` is part of the scope it is in.
 
 Types and contexts are named as the code at the cursor would name them, so a signature reads as you would write it:
 inside `module Points`, which declares `Point`, it is `Point`, not `Points.Point`; elsewhere in the file it is `Point`
@@ -211,25 +211,20 @@ line, its result's union one case per line, and its contexts on a line of their 
 ([Definitions](formatter#definitions)). It is laid out again when you resize the view. A line still too long for the
 view, such as a long parameter's, wraps.
 
-- **At the cursor**:
-  - **Expression**: the type of the expression at the cursor, as hover shows it. On a use of a generic function, it
-    shows the function's declared signature first (its annotation, or the generic type it was inferred to have), then
-    its type at this use, then what this use fills in each type variable with, such as
-    `a = string, b = #some(int) | #nothing`. Each links to the function's definition. A function that is not generic is
-    shown once. On a module's name (in its `module` line, an import, an import's alias, or an alias that qualifies a
-    name), it shows `module name` and the module's doc comment.
-  - **Messages**: the errors and warnings on the cursor's line.
-  - **This call**: on a call that requires contexts, the innermost one around the cursor, each context the call needs
-    and where it finds it: a `use`, a definition's signature, a definition that does not write its type and was
-    inferred to need it, or the runtime, linked, or an instance the compiler builds, from the definitions attached to
-    the type (`attached Point.show`), derived from the type's parts, or its own (`built in`).
+- **Messages**, only when the cursor's line has an error or warning: each one in full, as `nanyx run` prints it in a
+  terminal, with more than the Problems panel shows. First its severity and code, such as `error NYX0201`, the code
+  linking to its entry in the [errors reference](errors), and its headline, `Type mismatch`, linking to where it is
+  reported. Under that, its notes, such as `= 'float' vs 'int'`, and the advice after `help:`; each other place that
+  explains it, such as where a name was first defined, linked; and a button for each of its fixes, which makes the fix
+  as its quick fix does. With no message on the line, the view starts at the innermost scope.
 - **A lambda**: its type, with the contexts it carries, such as `[Log] int -> ()`; its parameters, locals and pattern
   variables, each with its type, nearest first; and each `use` in it, with the context it gives.
 - **A definition**: its signature, marked `declared` if it writes its type and `inferred` if not, with its doc
   comment; its parameters and locals; its contexts, each with where it comes from (its signature, inference, or a
   `use` in it); and, in the innermost definition, its **Context flow**: each context its signature writes or it was
-  inferred to need, and each `use` in it, with the calls each one serves under it. A `use` that serves no call is
-  marked `unused`.
+  inferred to need, each `use` in it, and each instance the compiler builds for a call in it, from the definitions
+  attached to the type (`attached Point.show`), derived from the type's parts (`derived`), or its own (`built in`), with
+  the calls each one serves under it. A `use` that serves no call is marked `unused`.
 - **The module**: its doc comment, the top-level definitions and imports in scope, the file's own first, and the
   contexts the runtime supplies (`Console`, `Env` and `FileSystem`, from the host's prelude).
 
@@ -252,8 +247,7 @@ decorations and CSS, as extensions that draw indent guides do. They do not follo
 
 Under each item that has one comes its [doc comment](../getting-started/basics#doc-comments), as hover shows it: a name's own, an
 import's module's, a context's own, or, for a context a `use` gives, that of the definition the `use` names if it has one. A doc comment of
-more than one paragraph shows its first, except at the cursor, where it shows in full; click it to show the rest, and again
-to cut it back. Its links go where the
+more than one paragraph shows its first; click it to show the rest, and again to cut it back. Its links go where the
 names they name are declared.
 
 The code it shows, in the headings and the items, is highlighted as the editor highlights it: with the extension's
@@ -264,8 +258,7 @@ Only the names in the code are links, and they look like the rest of the code un
 to it: a definition's, local's or parameter's name to where it is declared, a definition's name in its signature to the
 definition, a context's name to the `use` or signature that gives it, a call in the context flow to the call, and the
 name of a type or context with a definition, wherever the code writes it, to that definition (`Point` in
-`#some(Point)`). A type with no name to follow, such as `int -> string`, has no link. Click a message's code, such as
-`error NYX0201`, to go to where it is reported. **Pin**
+`#some(Point)`). A type with no name to follow, such as `int -> string`, has no link. **Pin**
 keeps the view on the cursor's current position while you move around and edit elsewhere; **Unpin** follows the cursor
 again. The pinned position moves with your edits, as the text it is on does: a line added above it, or text typed before
 it on its line, leaves the view on the same expression. Deleting the text it is on unpins the view. After an edit, the view catches up when the compiler has checked the new text, without the cursor moving. While
