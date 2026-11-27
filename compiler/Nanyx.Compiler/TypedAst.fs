@@ -298,6 +298,11 @@ module Dimension =
     /// `dimension` as it is written: `Time`, or a product and quotient of dimensions, `Length / Time`.
     let text (dimension: Dimension) : string = writtenWith _.Name " * " " / " dimension
 
+    /// `dimension` written where it is applied to a number, as a measured value is written by `dbg`: `Time`, or a
+    /// derived dimension in brackets, `(Length / Time)`, so that `(Length / Time)(1.0)` doesn't read as `Length` over
+    /// `Time(1.0)` (#2970).
+    let applied (dimension: Dimension) : string = if isDerived dimension then $"({text dimension})" else text dimension
+
     /// A value of `dimension` stored as `storage`: a measured value, or the plain number a dimension of nothing is, as
     /// `Length / Length` is.
     let measured (dimension: Dimension) (storage: Ty) : Ty =

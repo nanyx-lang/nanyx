@@ -36,7 +36,7 @@ dbg(v)
               "6.0m*m"
               "5.0m/(s*s)"
               "1000.0"
-              "Length / Time(1.0438413361169103e-8)"
+              "(Length / Time)(1.0438413361169103e-8)"
               "" ])
 
 // The result's type is left to inference, and was the def's own fraction at the call, which no instance fixed, so the
@@ -130,4 +130,19 @@ def main = {
     runSource (normalized source)
     |> assertRanWithDbg
         "1.0m/s\n10.438413361169102m/s\n25.0m/s\n1500mm*mm\n2m*m\n1.0m/(s*s)\n"
-        "[main.nyx:19] Distance / Time(0.000001)\n"
+        "[main.nyx:19] (Distance / Time)(0.000001)\n"
+
+[<Fact>]
+let ``Run - dbg writes a derived dimension in brackets around its number, and a single one without`` () =
+    // `Distance / Time(1.0)` would read as `Distance` over `Time(1.0)` (#2970).
+    let source =
+        normalized """dimension Distance
+@baseUnit unit m: Distance
+dimension Time
+@baseUnit unit s: Time
+
+(1m / 1s) \dbg
+(1m * 2m) \dbg
+(1m) \dbg
+"""
+    runSource source |> assertRanWithDbg "" "[main.nyx:6] (Distance / Time)(1.0)\n[main.nyx:7] (Distance * Distance)(2)\n[main.nyx:8] Distance(1)\n"

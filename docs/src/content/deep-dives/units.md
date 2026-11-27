@@ -106,7 +106,9 @@ times its unit's `Scale`, and reads the literal as that plain number from then o
 `500000000` where `500ms` is written and lays the measured value out as its storage. In an integer storage the number
 must be whole, so `1.5ns` is an error that says how to store it as a `float`, and it must fit the storage, as a plain
 literal must. A plain literal where a measured value is expected is an error: a number with no unit is never a measured
-value. `dbg` writes a measured value as its dimension around its number of default storage units, `Time(500000000)`.
+value. `dbg` writes a measured value as its dimension around its number of default storage units, `Time(500000000)`,
+and a derived dimension in brackets, `(Length / Time)(1.0)`, so that it doesn't read as `Length` over `Time(1.0)`
+(`Dimension.applied`).
 
 # Arithmetic
 
@@ -205,7 +207,7 @@ rounds less than dividing, and written by `__measuredFloatToString` in that one 
 `10.438413361169102m/s`, and `90.0kmh` is `25.0m/s`. An `int` is written by `__measuredRatioToString`, given the scale
 as a numerator and a denominator: in the display units if it is a whole number of them, `2000mm * 1000mm` is `2m*m`,
 and otherwise in the parts' default storage units, the only ones it is exact in, `1500mm*mm`. A module that can't write
-a part's default display unit writes the value as `dbg` does, `Length / Time(1.04e-8)`.
+a part's default display unit writes the value as `dbg` does, `(Length / Time)(1.04e-8)`.
 
 # Hover
 
