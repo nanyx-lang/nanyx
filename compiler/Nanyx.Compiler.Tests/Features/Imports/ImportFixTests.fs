@@ -78,7 +78,7 @@ let ``A name several modules export offers one fix for each`` () =
     let source = "import nanyx/host.memory\n\ndef n = frobnicate(1)\n"
     let result = Compiler.compile source
     let exports = Map.ofList [ "frobnicate", [ "nanyx/alpha"; "nanyx/beta" ] ]
-    let diagnostic = ImportFixes.addFrom [] exports source result.Syntax.Value result.Diagnostics |> List.exactlyOne
+    let diagnostic = ImportFixes.addFrom (lazy []) exports source result.Syntax.Value result.Diagnostics |> List.exactlyOne
     Assert.Equal<(string * string) list>(
         [ "Add `import nanyx/alpha`", "import nanyx/host.memory\nimport nanyx/alpha\n\ndef n = frobnicate(1)\n"
           "Add `import nanyx/beta`", "import nanyx/host.memory\nimport nanyx/beta\n\ndef n = frobnicate(1)\n" ],

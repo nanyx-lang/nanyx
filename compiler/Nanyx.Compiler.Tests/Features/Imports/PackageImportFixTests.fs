@@ -115,3 +115,22 @@ let ``An import that would make a name the file uses ambiguous is not offered, a
         fixesIn [ "catalogue.nyx", catalogue; "ledger.nyx", ledger ] "module main\n\nimport catalogue\n\nexport def entry: Entry = (amount = total)\n"
     Assert.Empty fixes
     Assert.EndsWith("'ledger' exports 'Entry', but importing it would make 'total' ambiguous between 'catalogue' and 'ledger'", message)
+
+[<Fact>]
+let ``A compile reads the package's other modules for an unknown name, and not for another error`` () =
+    // A file a compile reads is one its module depends on, which the language server compiles it again for whenever it
+    // changes: any error read them all (#2222).
+    let wrong = normalized "module main\n\nexport def wrong: string = 1\n"
+    let unknown = normalized "module main\n\nexport def fine: Money = (amount = 5)\n"
+    use package = new TempPackage(util @ [ "app/app.nyxp", manifest; "app/main.nyx", wrong; "app/billing.nyx", normalized billing ])
+    let readFor (main: string) =
+        let read = System.Collections.Generic.List<string>()
+        let readFile (path: string) =
+            read.Add(System.IO.Path.GetFileName path)
+            System.IO.File.ReadAllText path
+        let result = Package.compileSourceReading (SeededPackages.user ()) CompileListener.none readFile Linters.none (package.Path "app/main.nyx") main
+        Assert.NotEmpty(result.Diagnostics)
+        // The package's other module and its dependency's public module, of the files read (the host's are read too).
+        read |> Seq.filter (fun file -> file = "billing.nyx" || file = "strings.nyx") |> Seq.distinct |> Seq.sort |> List.ofSeq
+    Assert.Equal<string list>([], readFor wrong)
+    Assert.Equal<string list>([ "billing.nyx"; "strings.nyx" ], readFor unknown)
