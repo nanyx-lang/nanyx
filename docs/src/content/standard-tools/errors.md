@@ -2902,6 +2902,19 @@ def three = add(1)  -- error NYX0304: 'add' takes 2 arguments, but this call giv
 To fix it, give the function as many arguments as it takes. A function of several parameters can also be given a
 tuple of them, as in `add(pair)` where `pair` is `(1, 2)`.
 
+# NYX0305: Call of a value that isn't a function
+
+A value is called, but its type is known and is no function: a number, a string, a `bool`, a record or tuple, a tag,
+or a list. A map and an array can be called, to look up an item.
+
+```nanyx
+def limit = 5
+
+def twice = limit(2)  -- error NYX0305: 'limit' is an int, not a function, so it can't be called
+```
+
+To fix it, call a function, or use the value without calling it.
+
 # NYX0310: Test that isn't a test's type
 
 A def marked `@test` takes arguments or gives back a value. A test is run with nothing and gives back `()`: it is a

@@ -75,9 +75,7 @@ let private slug (text: string) =
 /// What an entry's heading names: a custom pattern by its tags, `#Even | #Odd`, and anything else by its name as
 /// source writes it.
 let private headingName (name: string) =
-    match PatternSyntax.shapeOf name with
-    | Some shape -> shape.Tags |> List.map (fun tag -> $"#{tag}") |> String.concat " | "
-    | None -> writtenName name
+    Signatures.patternName name |> Option.defaultWith (fun () -> writtenName name)
 
 /// The ids of the headings of `exports`, in order: a heading's slug, with `-1`, `-2`, ... after it when an earlier one
 /// has the same, as the site numbers them. A pattern's is its heading's, as `#Even | #Odd` is `even--odd`.
@@ -85,27 +83,24 @@ let private anchors (exports: Entry list) : (Entry * string) list =
     exports
     |> List.mapFold (fun (seen: Map<string, int>) export ->
         let name = export.Name
-        let id = slug (if (PatternSyntax.shapeOf name).IsSome then headingName name else name)
+        let id = slug (Signatures.patternName name |> Option.defaultValue name)
         match seen |> Map.tryFind id with
         | Some count -> (export, $"{id}-{count}"), seen |> Map.add id (count + 1)
         | None -> (export, id), seen |> Map.add id 1) Map.empty
     |> fst
 
 /// A def's signature, as hover writes its declaration: `def name: type`, after the contexts it requires. A custom
-/// pattern's is its declaration's, `pattern string -> #Even | #Odd`, with `_` for no match.
+/// pattern's is its declaration's, `pattern string -> #Even | #Odd`, with `_` for no match (see
+/// `Signatures.patternDeclaration`).
 let private defSignature (typed: TypedModule) (symbol: Symbol) =
-    match Hover.declaredType typed symbol, PatternSyntax.shapeOf symbol.Name with
-    | Some (ty, _), Some shape ->
-        let written = Signatures.typeWithContexts typed.TypeDefs Source ty []
-        // A partial pattern with one tag and no payload is a function that returns a `bool` (see `CustomPatterns`).
-        let results =
-            if shape.ReturnsBool then written.Substring(0, written.Length - "bool".Length) + $"#{shape.Tags.Head} | _"
-            else written.Replace("#" + PatternSyntax.noMatchTag, "_")
-        $"pattern {results}"
-    | Some (ty, contexts), _ ->
-        let contexts = contexts |> FunctionContexts.flatten |> Unifier.writtenContexts
-        $"def {writtenName symbol.Name}: {Signatures.typeWithContexts typed.TypeDefs Source ty contexts}"
-    | None, _ -> $"def {writtenName symbol.Name}"
+    match Hover.declaredType typed symbol with
+    | Some (ty, contexts) ->
+        match Signatures.patternDeclaration symbol.Name (Signatures.typeWithContexts typed.TypeDefs Source ty []) with
+        | Some pattern -> pattern
+        | None ->
+            let contexts = contexts |> FunctionContexts.flatten |> Unifier.writtenContexts
+            $"def {writtenName symbol.Name}: {Signatures.typeWithContexts typed.TypeDefs Source ty contexts}"
+    | None -> $"def {writtenName symbol.Name}"
 
 /// A type's definition, as hover writes it, but for a context's members: one to a line, in the order it declares them.
 let private typeSignature (typed: TypedModule) (symbol: Symbol) (info: TypeDefInfo) (members: Symbol list) =

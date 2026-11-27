@@ -37,6 +37,7 @@
     <Compile Include="Features\Blocks\BlockFreeNamesTests.fs" />
     <Compile Include="Features\Calls\ArgumentCountTests.fs" />
     <Compile Include="Features\Calls\NamedArgumentTests.fs" />
+    <Compile Include="Features\Calls\NotAFunctionTests.fs" />
     <Compile Include="Features\Calls\CallCheckTimeTests.fs" />
     <Compile Include="Features\Calls\FunctionFieldCallTests.fs" />
     <Compile Include="Features\Calls\BuiltInCallTests.fs" />

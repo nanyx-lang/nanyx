@@ -54,6 +54,21 @@ public sealed class DocumentSymbolTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Document_symbols_name_a_custom_pattern_by_its_tags()
+    {
+        var uri = DocumentUri.Parse("untitled:Untitled-Patterns");
+
+        Open(uri, "pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }\ndef parse = { (s: string) ->\n  pattern string -> #Num(float) | _ = { t -> _ }\n  0\n}\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var symbols = await DocumentSymbols(uri);
+        Assert.Equal(
+            [("#Even | #Odd", "pattern", SymbolKind.Function), ("parse", null, SymbolKind.Function)],
+            symbols.Select(symbol => (symbol.Name, symbol.Detail, symbol.Kind)));
+        var local = Assert.Single(symbols[1].Children!);
+        Assert.Equal(("#Num", "pattern", new Range(2, 10, 2, 35)), (local.Name, local.Detail, local.SelectionRange));
+    }
+    [Fact]
     public async Task Document_symbols_of_text_that_does_not_parse_are_the_last_good_ones_not_edited_since()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-7");

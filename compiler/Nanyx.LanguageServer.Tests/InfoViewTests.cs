@@ -629,4 +629,58 @@ public sealed class InfoViewTests : LanguageServerTestBase
             made.Links!.Select(found => made.Text.Substring(found.Start, found.Length)));
         Assert.Equal(made.Text.IndexOf("#some(Point)") + "#some(".Length, made.Links![0].Start);
     }
+
+    [Fact]
+    public async Task Info_view_writes_a_custom_pattern_as_it_was_declared()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Patterns");
+
+        Open(uri, """
+            pattern int -> #Even | _ = { n -> n % 2 == 0 }
+
+            def parse: string -> float = { s ->
+              pattern string -> #Num(float) | _ = { t ->
+                match t \float.fromString
+                  | #some(f) -> #Num(f)
+                  | _ -> _
+              }
+              pattern string -> #Op((float, float) -> float) | _ = { t ->
+                if t == "+" then #Op({ a, b -> a + b }) else _
+              }
+              match s
+                | #Num(f) -> f
+                | _ -> 0.0
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 13, 11);
+
+        // Each local pattern is written as declared, its keyword linking to the declaration, nearest first.
+        Assert.Equal(
+            [
+                ("pattern string -> #Op((float, float) -> float) | _", "pattern", new Range(8, 10, 8, 52)),
+                ("pattern string -> #Num(float) | _", "pattern", new Range(3, 10, 3, 35)),
+                ("s: string", "parameter", new Range(2, 31, 2, 32))
+            ],
+            Section(view, "function", "names").Select(item => (item.Text, item.Detail, item.Location?.Range)));
+        Assert.All(
+            Section(view, "function", "names").Where(item => item.Detail == "pattern"),
+            item => Assert.Equal(new InfoViewName(0, "pattern".Length), item.Name));
+        // A partial pattern of one tag, whose function returns a `bool`, is written with its tag.
+        var topLevel = Section(view, "module", "names");
+        Assert.Contains(("pattern int -> #Even | _", "pattern"), topLevel.Select(item => (item.Text, item.Detail)));
+        Assert.DoesNotContain(view.Scopes.SelectMany(scope => scope.Sections).SelectMany(section => section.Items), item => item.Text.Contains("__"));
+
+        // Inside a pattern's body, its scope is headed by its tags, and its signature is its declaration.
+        var inPattern = await InfoViewAt(uri, 5, 20);
+        var scope = inPattern.Scopes.First(scope => scope.Kind == "function");
+        Assert.Equal("pattern #Num", scope.Heading);
+        var signature = Assert.Single(Section(inPattern, "function", "signature"));
+        Assert.Equal(("pattern string -> #Num(float) | _", "declared"), (signature.Text, signature.Detail));
+
+        // The tag a match arm uses is the pattern, written as declared.
+        Assert.Equal("pattern string -> #Num(float) | _", Assert.Single(Section(await InfoViewAt(uri, 12, 7), "expression", "expression")).Text);
+    }
 }
