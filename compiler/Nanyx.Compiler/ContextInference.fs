@@ -446,7 +446,6 @@ module internal ContextInference =
             |> List.filter (fun p ->
                 not (earlier.Contains (p.Call, p.Index))
                 && not p.ChecksOnly
-                && (WellKnownContexts.tryFind p.Context).IsNone
                 && not (WellKnownContexts.isOperatorPending p)
                 && not (InterpolationHoles.isHole p.Callee))
         if candidates.IsEmpty || scheme.Quantified.IsEmpty then state
