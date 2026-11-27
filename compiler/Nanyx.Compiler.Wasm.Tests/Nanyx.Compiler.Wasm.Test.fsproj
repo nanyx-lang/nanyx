@@ -316,6 +316,7 @@
     <Compile Include="Features\Tests\TestCommandTests.fs" />
     <Compile Include="Features\Tests\ExpectedCrashTests.fs" />
     <Compile Include="Features\Tests\TestJsonFormatTests.fs" />
+    <Compile Include="Features\Tests\TestSelectionTests.fs" />
     <Compile Include="Features\Tests\TestPackageTests.fs" />
     <Compile Include="E2E\E2ETests.fs" />
   </ItemGroup>

@@ -453,7 +453,12 @@ A pipe `x \f(y)` is the call `f(x, y)`, so the same rules apply to it. Nothing e
 
 A [workflow](../advanced/workflows) block is a call to its builder, with the rest of the block passed to each keyword as a closure, and the same rules apply to that code.
 
-A def that starts a task waits for its tasks before it returns ([Async](../advanced/async#each-def-is-a-scope)), so a call last in it is not a tail call, unless what it calls is another def that starts tasks: then that def's tasks join the caller's, and the call stays a tail call. Both defs must be in the same module for that.
+A construct that runs code when its scope ends runs it after the last call in its body, so that call is not a tail call. Nanyx has no `defer`, and these are the constructs that do:
+
+- A `memory { ... }` block frees its memory when its body is done, so a call last in it is not a tail call. Recurse outside the block, passing on what the block works out.
+- A def that starts a task waits for its tasks before it returns ([Async](../advanced/async#each-def-is-a-scope)), so a call last in it is not a tail call, unless what it calls is another def that starts tasks: then that def's tasks join the caller's, and the call stays a tail call. Both defs must be in the same module for that.
+
+`use C(...) in body` runs nothing when it ends, so its body is in tail position, as the list above says.
 
 # Function composition
 
