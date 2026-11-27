@@ -90,6 +90,25 @@ let ``Run - text that isn't ISO 8601 says where it stops being it, and a time no
               "out of range\n" ])
 
 [<Fact>]
+let ``Run - a year or a fraction of a second of too many digits isn't ISO 8601, however many there are (#3113)`` () =
+    // Their digits are counted only so far, and not read, so they overflow no int and use no stack for each.
+    let source =
+        readsBack
+            [ "9223372036854775807-01-01T00:00:00Z"
+              "+92233720368547758070-01-01T00:00:00Z"
+              "2026-11-25T18:20:57.0000000000000000000000000001Z" ]
+        + """println(show(string.repeat("1", 1_000_000) ++ "-01-01T00:00:00Z"))
+"""
+    runSource source
+    |> assertRan (
+        String.concat
+            ""
+            [ "not ISO at 0: a year of four digits\n"
+              "not ISO at 1: a year of four to six digits\n"
+              "not ISO at 20: one to nine digits of a second\n"
+              "not ISO at 0: a year of four digits\n" ])
+
+[<Fact>]
 let ``Run - an instant is moved and measured by times, compared, and written by a hole`` () =
     let source =
         """def at = { text: string ->
