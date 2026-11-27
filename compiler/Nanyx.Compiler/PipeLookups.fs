@@ -93,7 +93,9 @@ let misfit (env: TypeEnv) (state: InferState) (lookup: Lookup) (hasArguments: bo
         let takes =
             match Unifier.unalias (fst (instantiate state scheme)) with
             | TyFunc(TyRecord(parameters, _), _, _) when hasArguments -> parameters |> Map.tryFind "0"
-            | TyFunc(input, _, _) when not hasArguments -> Some input
+            // A function of several parameters, given the value alone, is given too few arguments, which the call
+            // reports (see `ArgumentCount`).
+            | TyFunc(input, _, _) when not hasArguments && (ArgumentCount.parametersOf input |> Option.forall ((=) 1)) -> Some input
             | _ -> None
         takes
         |> Option.filter (fun takes -> Solving.unify [ lookup.PipedType, takes, Assignable, SourceSpan.none ] |> Result.isError)

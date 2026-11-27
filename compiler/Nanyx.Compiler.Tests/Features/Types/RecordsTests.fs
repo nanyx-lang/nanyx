@@ -56,16 +56,14 @@ def result = f(args)"""
     Assert.Equal(TyPrimitive "string", typed.Types.["result"])
 
 [<Fact>]
-let ``Typecheck reports mismatch for missing tuple args`` () =
+let ``Typecheck reports the count for missing tuple args`` () =
     let source =
         normalized """def f = { x, y -> "" }
 def result = f(4)"""
     let result = Compiler.compile source
-    assertReports DiagnosticCodes.TypeMismatch result
+    assertReports DiagnosticCodes.ArgumentCount result
     let message = result.Diagnostics |> List.head |> fun diag -> diag.Message
-    Assert.Contains("' vs '", message)
-    Assert.Contains("(", message)
-    Assert.Contains("'int' vs '(", message)
+    Assert.Equal("'f' takes 2 arguments, but this call gives 1", message)
 
 // A record type is closed: it has exactly the fields it names (#470).
 [<Fact>]

@@ -2889,6 +2889,19 @@ unit ps: Clock = 0.001ns  -- error NYX0300: 'ps' is 1/1000 of 'ns', the default 
 To fix it, define the unit as a whole number of the default storage unit, or, in the dimension's own module, mark a
 smaller unit `@storageUnit`, or none, to have the compiler work it out.
 
+# NYX0304: Call with the wrong number of arguments
+
+A call gives a function more or fewer arguments than it takes. A pipe's value counts as the first of them.
+
+```nanyx
+def add: int, int -> int = { a, b -> a + b }
+
+def three = add(1)  -- error NYX0304: 'add' takes 2 arguments, but this call gives 1
+```
+
+To fix it, give the function as many arguments as it takes. A function of several parameters can also be given a
+tuple of them, as in `add(pair)` where `pair` is `(1, 2)`.
+
 # NYX0310: Test that isn't a test's type
 
 A def marked `@test` takes arguments or gives back a value. A test is run with nothing and gives back `()`: it is a

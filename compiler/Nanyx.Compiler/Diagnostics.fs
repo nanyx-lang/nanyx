@@ -242,6 +242,9 @@ module DiagnosticCodes =
     let NoStorageUnit = code 299 "Dimension with no unit to store it in" Severity.Error
     let UnitNotWholeStorageUnits = code 300 "Unit that is no whole number of the storage unit" Severity.Error
 
+    // Calls.
+    let ArgumentCount = code 304 "Call with the wrong number of arguments" Severity.Error
+
     // Tests.
     let NotATest = code 310 "Test that isn't a test's type" Severity.Error
     let ReferenceToTest = code 311 "Reference to a test" Severity.Error
@@ -280,6 +283,7 @@ module DiagnosticCodes =
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
           UnitsNotFromOne; MisplacedUnitAttribute; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
           NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing; NoStorageUnit; UnitNotWholeStorageUnits
+          ArgumentCount
           NotATest; ReferenceToTest; TestContextNotProvided
           UnsupportedByBackend; BackendInternalError ]
 

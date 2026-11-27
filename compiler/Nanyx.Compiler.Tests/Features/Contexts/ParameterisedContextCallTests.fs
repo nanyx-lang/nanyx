@@ -11,9 +11,9 @@ let private named = """def named = { r, w: int -> "{r}" }
 """
 
 [<Fact>]
-let ``A call with too many arguments to a function that requires ToString(a) is a type mismatch`` () =
+let ``A call with too many arguments to a function that requires ToString(a) is reported as one`` () =
     let code, at = singleError (named + "def t = named(1, 2, 3)\n")
-    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Equal(DiagnosticCodes.ArgumentCount.Code, code)
     Assert.Equal("1, 2, 3", at)
 
 [<Fact>]

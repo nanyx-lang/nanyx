@@ -101,6 +101,7 @@
     <Compile Include="ExpectedLiterals.fs" />
     <Compile Include="CharLiterals.fs" />
     <Compile Include="Unreached.fs" />
+    <Compile Include="ArgumentCount.fs" />
     <Compile Include="PipeLookups.fs" />
     <Compile Include="Contexts.fs" />
     <Compile Include="AttachedContextDefs.fs" />

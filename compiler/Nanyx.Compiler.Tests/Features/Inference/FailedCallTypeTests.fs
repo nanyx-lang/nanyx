@@ -46,7 +46,7 @@ let ``A call given too many arguments gives back its callee's result`` () =
         """def f: int -> string = { n -> "x" }
 def v = f(1, 2)
 """
-    Assert.Equal(([ DiagnosticCodes.TypeMismatch.Code ], "string"), failedCall source "v")
+    Assert.Equal(([ DiagnosticCodes.ArgumentCount.Code ], "string"), failedCall source "v")
 
 [<Fact>]
 let ``A call that passes by position what its callee takes by name gives back its callee's result`` () =
