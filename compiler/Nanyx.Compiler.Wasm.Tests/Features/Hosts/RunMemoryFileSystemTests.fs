@@ -145,7 +145,7 @@ def save: [Async, FileSystem] int -> #ok | FsError = { port ->
   file.write(path.of("app.toml"), "port = {port}")
 }
 
-@test(#io)
+@test
 def `saves the port` = {
   filesystem.inMemory([("app.toml", "port = 8080")], {
     assert(save(9090) == #ok)
