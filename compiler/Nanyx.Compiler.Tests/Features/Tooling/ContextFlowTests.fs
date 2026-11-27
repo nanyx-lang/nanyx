@@ -4,8 +4,8 @@ open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
 
-// The info view's flow view: each provider of contexts in a def, with the calls it serves, and the highlights between
-// a provider and its calls.
+// The info view's flow view: each provider of contexts in a def, an instance the compiler builds among them, with the
+// calls it serves, and the highlights between a provider and its calls.
 
 let private compiled (source: string) =
     let result = Compiler.compile source
@@ -13,7 +13,8 @@ let private compiled (source: string) =
     result
 
 /// The flow of the def around the `occurrence`th appearance of `text` in `source`: the def's name, and each provider as
-/// its context, its source, the text of its span, and the names of the calls it serves.
+/// its context, its source, the text of its span (none for an instance the compiler builds), and the names of the calls
+/// it serves.
 let private flowAt (source: string) (text: string) (occurrence: int) =
     (ContextFlow.at Ascii (compiled source) (offsetOf source text occurrence 0)).Flow
     |> Option.map (fun flow ->
@@ -22,11 +23,15 @@ let private flowAt (source: string) (text: string) (occurrence: int) =
         |> List.map (fun entry ->
             let found =
                 match entry.Source with
-                | InfoView.Signature -> "signature"
-                | InfoView.Use -> "use"
-                | InfoView.Inferred -> "inferred"
-                | InfoView.Runtime -> "runtime"
-            entry.Context, found, textAt source entry.Span, entry.Calls |> List.map _.Callee))
+                | InfoView.Provided InfoView.Signature -> "signature"
+                | InfoView.Provided InfoView.Use -> "use"
+                | InfoView.Provided InfoView.Inferred -> "inferred"
+                | InfoView.Provided InfoView.Runtime -> "runtime"
+                | InfoView.Attached definitions -> $"""attached {String.concat ", " definitions}"""
+                | InfoView.Derived -> "derived"
+                | InfoView.BuiltIn -> "built in"
+            let provider = if entry.Span.Start < 0 then "" else textAt source entry.Span
+            entry.Context, found, provider, entry.Calls |> List.map _.Callee))
 
 /// The texts the editor highlights at the `occurrence`th appearance of `text` in `source`: the providers', then the
 /// calls'.
@@ -71,7 +76,49 @@ let ``The flow view shows what an unannotated def was inferred to require`` () =
   println("a")
   println("b")
 }"""
-    Assert.Equal(Some ("greet", [ "Console", "inferred", "greet", [ "println"; "println" ] ]), flowAt source "println" 0)
+    Assert.Equal(
+        Some (
+            "greet",
+            [ "Console", "inferred", "greet", [ "println"; "println" ]
+              "ToString(string)", "attached string.toString", "", [ "println"; "println" ] ]
+        ),
+        flowAt source "println" 0)
+
+let private showContext =
+    """
+context Show(a) = (show: a -> string)
+
+type Point = (x: int, y: int)
+
+def describe: [Show(a)] a -> string = { x -> show(x) }
+"""
+        .ReplaceLineEndings "\n"
+
+[<Fact>]
+let ``The flow view shows an instance built from attached definitions, naming them, with the calls it serves`` () =
+    let source = showContext + """
+def Point.show: Point -> string = { p -> "p" }
+
+def main = {
+  describe(Point(x = 1, y = 2))
+  describe(Point(x = 3, y = 4))
+}
+"""
+    Assert.Equal(
+        Some ("main", [ "Show(Point)", "attached Point.show", "", [ "describe"; "describe" ] ]),
+        flowAt source "describe(Point" 0)
+
+[<Fact>]
+let ``The flow view shows a context from a use with the use, not as an instance the compiler builds`` () =
+    let source = showContext + """
+def main = {
+  use Show(Point)(show = { p -> "p" })
+  describe(Point(x = 1, y = 2))
+}
+"""
+    Assert.Equal(
+        Some ("main", [ "Show(Point)", "use", """Show(Point)(show = { p -> "p" })""", [ "describe" ] ]),
+        flowAt source "describe(Point" 0)
 
 // The flow wrote a context's associated types by position, `Num(a, fraction)`, where hover writes them by name (#3047).
 [<Fact>]
