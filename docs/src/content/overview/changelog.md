@@ -8,6 +8,23 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.49.1
+
+*27 November 2026*
+
+Fixes for 0.49.0: `nanyx test` runs the tests of an app, not only of a library, and errors name their files as a
+crash's stack does.
+
+**Fixes**
+
+- `nanyx test` compiles a program's modules with their own host's prelude, so a console app that calls `args()` or uses
+  `FileSystem`, or an HTTP-host app that names `Request`, runs its tests. In 0.49.0 such a module didn't compile in the
+  test build, and no test ran ([Test builds](../deep-dives/test-builds)).
+- A failed `assert`, and an error deferred to run time, name their file as a crash's place does: by its name in a
+  script, and from the package's root in a package, not by its full path.
+- A deferred error at a unit literal, as in `def t: Time(int) = 2cm`, stops the program where it's reached, rather than
+  running on with the literal as written.
+
 # 0.49.0
 
 *26 November 2026*
