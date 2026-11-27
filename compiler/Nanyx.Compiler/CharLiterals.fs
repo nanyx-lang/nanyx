@@ -51,9 +51,10 @@ let typeOf (span: SourceSpan) (text: string) : Result<Ty, Diagnostic list> =
 /// The error for a string with holes, at `span`, where a `char` is expected.
 let withHoles (span: SourceSpan) : Result<'a, Diagnostic list> = Error [ notOne span None ]
 
-/// `message`, a type mismatch's, with how to make a literal a `char` when the mismatch is of a `char` and a `string`.
-let withHint (message: string) : string =
-    let char, string = $"'{Chars.name}'", "'string'"
-    if message = $"{char} vs {string}" || message = $"{string} vs {char}" then
+/// `message`, a type mismatch's of the kind `kind`, with how to make a literal a `char` when the mismatch is of a `char`
+/// and a `string`.
+let withHint (kind: MismatchKind) (message: string) : string =
+    match kind with
+    | CharAndString ->
         message + $": a string literal is a char only where a char is expected, so write the type, as in `{{ c: {Chars.name} -> ... }}`"
-    else message
+    | _ -> message

@@ -10,6 +10,9 @@ type Subst = Map<int, Ty>
 /// requires fewer is expected, which may be the same type otherwise.
 type MismatchKind =
     | TypesDiffer
+    /// A `char` and a `string`, which differ as any two types do, but whose error says how to make a string literal a
+    /// `char` (see `CharLiterals.withHint`).
+    | CharAndString
     | ContextsNotAllowed
     /// A value of the shape of the nominal type it is given for: the type, whether it is private, and its shape.
     | NominalShape of NominalId * isPrivate: bool * shape: Ty
@@ -935,6 +938,8 @@ module Unifier =
                                 | Error inner -> tryItems restItems (failures @ [ inner ])
                         tryItems tags []
                     | Error message -> Error ((fun _ -> message), origin, TypesDiffer)
+                | Chars.CharType, TyPrimitive "string"
+                | TyPrimitive "string", Chars.CharType -> Error (mismatchMessage l r, origin, CharAndString)
                 | _ -> Error (mismatchMessage l r, origin, TypesDiffer)
             match remaining with
             | [] -> Ok subst

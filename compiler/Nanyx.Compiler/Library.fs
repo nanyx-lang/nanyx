@@ -588,7 +588,7 @@ module Compiler =
                         | None -> text, span, kind)
                     |> List.sortBy (fun (_, span, _) -> span.Start)
                     |> List.map (fun (text, span, kind) ->
-                        let message = text (Unifier.tyToStringIn state.TypeDefs) |> CharLiterals.withHint
+                        let message = text (Unifier.tyToStringIn state.TypeDefs) |> CharLiterals.withHint kind
                         match entries |> List.tryFind (fun entry -> entry.Argument = span), provided |> List.tryFind (fun export -> export.Argument = span) with
                         // A keyword's call that calls a local in the keyword's def's place says so (see `HiddenKeywords`).
                         | _ when state.HiddenKeywords.ContainsKey span ->
@@ -607,6 +607,7 @@ module Compiler =
                                 MisspelledFields.diagnose state desugared span (onlyLeft, rightRecord, onlyRight, leftRecord)
                                 |> Option.defaultWith (fun () -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
                             | TypesDiffer
+                            | CharAndString
                             | NominalShape _ -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
                     |> List.distinct
                 // What each call requires of the def it calls, by the call's node: `HostRuntime`, which has no members,
