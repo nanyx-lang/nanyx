@@ -226,7 +226,10 @@ match "key:value"
 -- A pair, split by a colon
 ```
 
-Several arguments are a tuple, and an argument may be any expression:
+Several arguments are a tuple. An argument is a literal, a name or a qualified name, or a tuple, list or tag of
+those. Anything else, as a call or arithmetic, is bound with a `def` before the `match` and passed by its name, so that
+a pattern's arguments never read as a payload to take apart, and a value is worked out once, not each time the arm is
+tried (NYX0264):
 
 ```nanyx
 pattern int, int -> int -> #Between | _ = { low, high ->
@@ -234,9 +237,11 @@ pattern int, int -> int -> #Between | _ = { low, high ->
 }
 
 def size = { (n: int), (limit: int) ->
+  def half = limit // 2
+  def bigFrom = half + 1
   match n
-    | #Between(0, limit // 2) -> "small"
-    | #Between(limit // 2 + 1, limit) -> "big"
+    | #Between(0, half) -> "small"
+    | #Between(bigFrom, limit) -> "big"
     | _ -> "out of range"
 }
 

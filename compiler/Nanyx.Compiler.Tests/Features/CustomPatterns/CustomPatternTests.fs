@@ -338,3 +338,42 @@ module shapes =
 """
     let result = Compiler.compile (source.ReplaceLineEndings "\n")
     Assert.Empty(result.Diagnostics |> List.filter Diagnostics.isError)
+
+/// Patterns that take arguments, `#DivisibleBy` with no payload and `#SplitOn` with one, and a def `f` whose match uses
+/// `arm`.
+let private withArguments (arm: string) =
+    normalized (
+        """pattern int -> int -> #DivisibleBy | _ = { divisor -> { n -> n % divisor == 0 } }
+
+pattern string -> string -> #SplitOn(string, string) | _ = { separator -> { s -> #SplitOn(s, s) } }
+
+def comma = { () -> "," }
+
+def f = { (n: int), (s: string) ->
+  match n
+    | ARM -> 1
+    | _ -> 2
+}
+"""
+            .Replace("ARM", arm))
+
+[<Fact>]
+let ``A pattern's argument that is a call is NYX0264 at it, with or without a payload group`` () =
+    // An argument is a literal, a name, or a tuple, list or tag of those, in both forms (#2064).
+    Assert.Equal<(string * string) list>(
+        [ DiagnosticCodes.PatternArguments.Code, "n + 1" ],
+        reportedAt (withArguments "#DivisibleBy(n + 1)"))
+    let source = withArguments "#DivisibleBy(2)"
+    let withPayload = source.Replace("match n\n    | #DivisibleBy(2) -> 1", "match s\n    | #SplitOn(comma())(a, b) -> 1")
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.PatternArguments.Code, "comma()" ], reportedAt withPayload)
+    compileClean (withArguments "#DivisibleBy(-3)") |> ignore
+
+[<Fact>]
+let ``The fix for a pattern's argument that is a call binds it with a def before the match`` () =
+    let source = withArguments "#DivisibleBy(n + 1)"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    let fix = Assert.Single(diagnostic.Fixes)
+    Assert.Equal("Bind it with `def divisibleByArgument`", fix.Title)
+    let fixedSource = applyFix source fix
+    Assert.Contains("  def divisibleByArgument = n + 1\n  match n\n    | #DivisibleBy(divisibleByArgument) -> 1", fixedSource)
+    compileClean fixedSource |> ignore
