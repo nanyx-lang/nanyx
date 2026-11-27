@@ -24,6 +24,20 @@ a module that calls `args()` under the console host, or names `Request` under th
 as it does in any other (#2996). Only the build's root, and the test host's own package, run under the test host
 (`Library.hostOf`). A library has no host, nor a prelude, so its modules run under the test host, and see its prelude.
 
+## Test packages
+
+A manifest that gives `tests` and no `sources` is a test package's (`Manifest.isTestPackage`): `Manifest.check` gives it
+no sources, rather than `**/*.nyx`, so its files are all test files, and `Package.ofManifestIn` gives it no `@entry`
+and no `NYX0033`, since it exports nothing. It is a library, so `withTests` runs it under the test host. `nanyx run` and
+`nanyx build` refuse it with `NYX0045`.
+
+Its tests import the packages it depends on, an application among them. In a test build, a source file of an
+application the program depends on, or of that application's host's package, is the application's
+(`Library.applicationOf`): it runs under the application's host and sees its prelude, as in the application's own test
+build, its imports of the host resolve in that host's package, and its `@entry` is an ordinary def. Its modules are
+checked from their source, not from a checked file in the package cache (`Library.fromCheckedPackage`), which has them
+as the application's own build does. In any other build, a package the program depends on is a library's.
+
 # Checking them
 
 `TestChecks.errors` checks a module's tests when it is compiled, in every build:

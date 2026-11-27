@@ -66,7 +66,8 @@ type Manifest =
       Root: string
       Name: string
       Version: string
-      /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise.
+      /// Globs relative to `Root`: `**/*.nyx` unless the manifest says otherwise, or none for a test package, whose
+      /// manifest gives `tests` and no `sources` (see `Manifest.isTestPackage`).
       Sources: string list
       /// Globs relative to `Root` that select the package's test files, which are part of it only in a test build (see
       /// `Package.testResult`); none unless the manifest says.
@@ -106,6 +107,10 @@ module Manifest =
 
     let private packageFields = [ "name"; "version"; "sources"; "tests"; "repository"; "nanyx"; HostPackages.field; HostLibraries.field ]
 
+    /// Whether `manifest` is a test package's: one that selects test files and no sources, `sources = []` or none at
+    /// all, to hold the tests of the packages it depends on. It has no `@entry` and exports nothing, so only a test
+    /// build builds it.
+    let isTestPackage (manifest: Manifest) = manifest.Sources.IsEmpty && not manifest.Tests.IsEmpty
 
     /// The fields of an entry of `linters`.
     let private entryFields = [ "package"; "version"; "settings" ]
@@ -673,7 +678,8 @@ module Manifest =
                       Root = Path.GetDirectoryName path
                       Name = defaultArg name ""
                       Version = defaultArg version ""
-                      Sources = defaultArg sources [ "**/*.nyx" ]
+                      // A manifest that selects tests and no sources is a test package's, which has no sources.
+                      Sources = defaultArg sources (if tests |> Option.exists (not << List.isEmpty) then [] else [ "**/*.nyx" ])
                       Tests = defaultArg tests []
                       Repository = repository
                       Nanyx = nanyx

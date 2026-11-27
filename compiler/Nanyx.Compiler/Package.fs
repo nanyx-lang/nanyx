@@ -227,7 +227,11 @@ module Package =
             | both ->
                 [ AboutPackage(DiagnosticCodes.InvalidManifestValue, $"""'{manifest.Path}' selects {both |> List.map (display >> sprintf "'%s'") |> Diagnostics.listed} with both `sources` and `tests`, but a test file is part of the package only in a test build: select it with one of them""") ]
         let entry =
-            if files.IsEmpty then
+            // A test package has no sources, and so no `@entry`.
+            if Manifest.isTestPackage manifest then Result.Ok None
+            elif manifest.Sources.IsEmpty then
+                Result.Error [ AboutPackage(DiagnosticCodes.NoSourceFiles, $"'{manifest.Path}' selects no sources and no tests: select its sources with `sources`, or its test files with `tests`") ]
+            elif files.IsEmpty then
                 Result.Error [ AboutPackage(DiagnosticCodes.NoSourceFiles, $"""'{manifest.Path}' selects its sources with {manifest.Sources |> List.map (sprintf "'%s'") |> Diagnostics.listed}, which match no file""") ]
             else
                 match files |> List.filter declaresEntry with

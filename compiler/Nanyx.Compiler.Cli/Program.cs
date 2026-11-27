@@ -268,6 +268,11 @@ internal static partial class CliCommands
             return failed;
         }
 
+        if (NoProgramInTestPackage(shell, package) is { } testPackage)
+        {
+            return testPackage;
+        }
+
         // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr, in the run's box.
         using var box = RunBox.For(shell, $"run {package.Manifest.Name}");
         var compiling = box is null ? shell : shell with { Error = box.Lines };
@@ -331,6 +336,11 @@ internal static partial class CliCommands
         if (!TryUpdateLockfile(shell, single, locked, out var failed) || !TryFindPackage(shell, single, host, out var package, out failed))
         {
             return failed;
+        }
+
+        if (NoProgramInTestPackage(shell, package) is { } testPackage)
+        {
+            return testPackage;
         }
 
         // A host with a component root builds a WASI 0.3 component from it, unless a core module is asked for.
@@ -636,6 +646,22 @@ internal static partial class CliCommands
     /// <summary>Whether a path names a package (its directory or manifest) rather than a file to run as a script.</summary>
     private static bool IsPackagePath(Shell shell, string path) =>
         Directory.Exists(shell.FullPath(path)) || path.EndsWith(ManifestModule.extension, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// An error, reported, when <paramref name="package"/> is a test package, which has no program to run or build: only
+    /// <c>nanyx test</c> builds one. Null for any other package.
+    /// </summary>
+    private static int? NoProgramInTestPackage(Shell shell, Package package)
+    {
+        if (!ManifestModule.isTestPackage(package.Manifest))
+        {
+            return null;
+        }
+
+        var why = "It is a test package, which holds the tests of the packages it depends on and no program: run them with `nanyx test`";
+        PrintDiagnostics(shell, General(DiagnosticCodes.NothingToRun, package.Manifest.Name, why), shell.Error);
+        return 1;
+    }
 
     /// <summary>
     /// A usage error, reported, when <c>--host</c> is given for a script, which names its host with <c>::host</c>; null
