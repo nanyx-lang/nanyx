@@ -66,6 +66,7 @@
     <Compile Include="CoreIrInline.fs" />
     <Compile Include="CoreIrClosureEntries.fs" />
     <Compile Include="CoreIrReuseSites.fs" />
+    <Compile Include="CoreIrReuseFields.fs" />
     <Compile Include="CoreIrCounting.fs" />
     <Compile Include="CoreIrReuse.fs" />
     <Compile Include="CoreIrReach.fs" />
