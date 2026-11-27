@@ -158,3 +158,56 @@ let ``Run - a list of a type with its own compare is ordered through it, element
           "before([v(2, 0)], [v(1, 9)])" ]
     |> runSource
     |> assertRan "T\nF\nT\nF\nT\nF\n"
+
+/// A `Rank` ordered by its attached `compare` the other way from its number, which its structure wouldn't: rank 1
+/// comes after rank 2.
+let private rank =
+    [ "type Rank = protected (n: int)"
+      "def Rank.compare: Rank, Rank -> #less | #equal | #greater = { a, b -> int.compare(b.n, a.n) }"
+      "def r = { n: int -> Rank(n = n) }" ]
+
+[<Fact>]
+let ``Run - a tuple is ordered through the compare of a part that has one, position by position`` () =
+    comparing
+        rank
+        [ "(r(1), 0) < (r(2), 0)"
+          "(r(2), 0) < (r(1), 0)"
+          "(r(1), 1) < (r(1), 2)"
+          "(r(1), \"b\", r(1)) > (r(1), \"b\", r(2))"
+          "[(r(1), 0)] < [(r(2), 0)]" ]
+    |> runSource
+    |> assertRan "F\nT\nT\nT\nF\n"
+
+[<Fact>]
+let ``Run - a list of lists is ordered through the compare of its elements' elements`` () =
+    comparing
+        rank
+        [ "[[r(1)]] < [[r(2)]]"
+          "[[r(2)], [r(1)]] < [[r(2)], [r(2)]]"
+          "[[r(2)]] < [[r(2), r(1)]]" ]
+    |> runSource
+    |> assertRan "F\nF\nT\n"
+
+[<Fact>]
+let ``Run - a list whose element type is settled later in the def is ordered through the element's compare`` () =
+    let source =
+        normalized """type Rank = protected (n: int)
+
+def Rank.compare: Rank, Rank -> #less | #equal | #greater = { a, b -> int.compare(b.n, a.n) }
+
+def r = { n: int -> Rank(n = n) }
+
+def check = {
+  def compareLater = { xs, ys ->
+    def smaller = xs < ys
+    def _ = [r(1)] ++ xs
+    smaller
+  }
+
+  println(compareLater([r(1)], [r(2)]))
+  println(compareLater([r(2)], [r(1)]))
+}
+
+check()
+"""
+    runSource source |> assertRan "false\ntrue\n"

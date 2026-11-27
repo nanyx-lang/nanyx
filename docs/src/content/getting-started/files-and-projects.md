@@ -64,8 +64,10 @@ A script has no lockfile, so a package from the index is named at the exact vers
 it accepts, `1.2`: the directive is the pin. Named with no version it is an error, whose fix writes the newest version
 the index has. `nanyx run` downloads each version a script pins into the package cache, with the packages it depends
 on, the newest each accepts, and checks each download against the SHA-256 the index records, as `nanyx pull script.nyx`
-does; `nanyx check` and the editor read them from the cache. A version that has been unlisted still resolves when a
-script names it, with a warning ([`NYX0051`](../standard-tools/errors#nyx0051)).
+does; `nanyx check` and the editor read them from the cache. Once the cache holds every package the script needs,
+`nanyx run` reads nothing from the index, so a script runs without a network; `nanyx pull script.nyx` reads the index
+whatever the cache holds. A version that has been unlisted still resolves when a script names it, with a warning
+([`NYX0051`](../standard-tools/errors#nyx0051)), which `nanyx run` gives when it downloads it.
 
 As in a manifest, only the linters a script's `::linter` lines name run, so a script without one runs none. A `::lint` with no `::linter` above it is an error, whose fix turns the official linter on above it. A wrong `::host` or `::install` is the error a manifest's entry would be, at the word it is about. A directive the compiler does not understand, one written as a manifest's key and a TOML value (`::linters.default`, which the error's fix rewrites), or one after the first line of code, is an error. A file that belongs to a package cannot have directives: its manifest is the one place a package says these things. When a script grows into a package, `nanyx migrate` writes its manifest from its directives and makes the script the package's `@entry` (see [`nanyx migrate`](../standard-tools/command-line#nanyx-migrate)).
 

@@ -123,3 +123,68 @@ let ``A package from the index named with no version is an error, whose fix writ
     let edit = Assert.Single fix.Edits
     let atEnd = source.IndexOf "acme.core" + "acme.core".Length
     Assert.Equal((atEnd, atEnd, " 1.2.0"), (edit.Span.Start, edit.Span.End, edit.NewText))
+
+[<Fact>]
+let ``Run - a script whose pinned packages are all in the cache runs without the index`` () =
+    use directory = new TempDirectory()
+    let store = storeIn directory
+    publishCore directory store "1.0.0" 5 ""
+    let script = scriptWith directory "::install acme.core 1.0.0"
+    let first = nanyxInStore store (Path.GetDirectoryName script) [ "run"; "script.nyx" ]
+    Assert.Equal("5\n", normalised first.StandardOutput)
+    // An index that can't be read, as one with no network can't (#2221).
+    let offline = { store with Index = Path.Combine(directory.Path, "unreachable") }
+    let again = nanyxInStore offline (Path.GetDirectoryName script) [ "run"; "script.nyx" ]
+    Assert.Equal("", again.StandardError)
+    Assert.Equal("5\n", normalised again.StandardOutput)
+    Assert.Equal(0, again.ExitCode)
+    // A pin the cache doesn't hold still goes to the index, and says it can't be read.
+    let other = scriptWith directory "::install acme.core 1.1.0"
+    let missing = nanyxInStore offline (Path.GetDirectoryName other) [ "run"; "script.nyx" ]
+    Assert.Contains("unreachable", missing.StandardError)
+    Assert.Equal(1, missing.ExitCode)
+
+/// acme.web 0.1.0, which depends on acme.core 1.0, published to the index of `store` beside acme.core 1.0.0.
+let private publishWeb (directory: TempDirectory) (store: PackageStore) =
+    publishCore directory store "1.0.0" 1 ""
+    directory.Write "web/web.nyxp" "(package = (name = \"acme.web\", version = \"0.1.0\"), dependencies = [(package = \"acme.core\", version = \"1.0\")])\n"
+    directory.Write "web/web.nyx" "export module web\n\nimport acme.core/core as core\n\nexport def page = core.answer * 10\n"
+    publishToIndex store (Path.Combine(directory.Path, "web")) [ "acme.core", "1.0" ] "" |> ignore
+
+/// How many times each file of the index of `store` was read, of `reads` (see `PackageIndex.startCounting`).
+let private readsOfIndex (store: PackageStore) (reads: string seq) =
+    reads
+    |> Seq.filter (fun location -> location.StartsWith store.Index)
+    |> Seq.countBy (fun location -> Path.GetRelativePath(store.Index, location).Replace('\\', '/'))
+    |> Seq.sort
+    |> List.ofSeq
+
+[<Fact>]
+let ``Pull - a first pull of a script reads the index's config.json once and each listing once`` () =
+    use directory = new TempDirectory()
+    let store = storeIn directory
+    publishWeb directory store
+    directory.Write "scripts/script.nyx" "::install acme.web 0.1.0\n\nimport acme.web/web as web\n\nprintln(web.page)\n"
+    let reads = PackageIndex.startCounting ()
+    let pulled = nanyxInStore store (Path.Combine(directory.Path, "scripts")) [ "pull"; "script.nyx" ]
+    Assert.Equal(0, pulled.ExitCode)
+    Assert.Equal<(string * int) list>(
+        [ "config.json", 1; "index/acme/acme.core.json", 1; "index/acme/acme.web.json", 1 ],
+        readsOfIndex store reads
+    )
+
+[<Fact>]
+let ``Pull - a first pull of a package reads the index's config.json once and each listing once`` () =
+    use directory = new TempDirectory()
+    let store = storeIn directory
+    publishWeb directory store
+    directory.Write "app/app.nyxp" "(package = (name = \"acme.app\", version = \"0.1.0\"), dependencies = [(package = \"acme.web\", version = \"0.1\")])\n"
+    directory.Write "app/app.nyx" "export module app\n\nimport acme.web/web as web\n\nexport def page = web.page\n"
+    let reads = PackageIndex.startCounting ()
+    let pulled = nanyxInStore store (Path.Combine(directory.Path, "app")) [ "pull" ]
+    Assert.True((pulled.StandardError = ""), pulled.StandardError)
+    Assert.Equal(0, pulled.ExitCode)
+    Assert.Equal<(string * int) list>(
+        [ "config.json", 1; "index/acme/acme.core.json", 1; "index/acme/acme.web.json", 1 ],
+        readsOfIndex store reads
+    )

@@ -67,7 +67,8 @@ export def list.`++`: list(a), list(a) -> list(a) = { xs, ys ->
   first), `string` (by bytes, which is the order of code points), and tuples and lists of them
   (position by position, and a list that is a prefix of another first). Records and tags have no
   order: a nominal type gets one by attaching `compare`, and a private type has no other, and a list of records is sorted by a key
-  with [`list.sortBy`]. A function that orders values of one of its type variables requires it:
+  with [`list.sortBy`]. A tuple or a list that holds a type with a `compare` of its own is ordered
+  through it, position by position. A function that orders values of one of its type variables requires it:
   `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
   should keep them consistent.
 export context Ord(a) = (compare: (a, a) -> #less | #equal | #greater)
@@ -106,6 +107,12 @@ export def __greaterOrEqual: [Ord(a)] a, a -> bool = { x, y ->
   match compare(x, y)
     | #less -> false
     | _ -> true
+}
+
+--| How `x` and `y` are ordered through their `Ord`, whichever that is. The `compare` the compiler
+  derives for a tuple whose parts have a `compare` of their own orders each part with it.
+export def __compareOf: [Ord(a)] a, a -> #less | #equal | #greater = { x, y ->
+  compare(x, y)
 }
 
 --| What `xs < ys` calls on two lists whose elements have an `Ord` other than the compiler's own:
