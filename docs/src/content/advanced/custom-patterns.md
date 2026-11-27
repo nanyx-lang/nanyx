@@ -50,8 +50,9 @@ the same tag are an error, as two imports of the same name are, since a match co
 
 # Patterns are pure
 
-A pattern's type requires no contexts: it can't print, read input or change a cell. A pattern that would is an error
-([`NYX0262`](../standard-tools/errors#nyx0262)).
+A pattern's type requires no contexts: it can't print, read input, or read or change a cell, even one of the `memory`
+block a local pattern is written in. A pattern that would is an error
+([`NYX0262`](../standard-tools/errors#nyx0262)). A cell it makes in a `memory` block of its own is its own.
 
 So it never matters how often a pattern runs, and the compiler is free to share the work. A pattern without arguments
 runs at most once per match, however many arms use it. Arms are tried top to bottom, as in any match.

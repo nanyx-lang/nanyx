@@ -146,6 +146,84 @@ pattern int -> #Loud | #Quiet = { n ->
     Assert.Contains("a pattern is pure", message)
     Assert.Equal("println", text)
     Assert.Empty((single (Compiler.compile source)).Fixes)
+
+/// The code, message and text of the only diagnostic of the local pattern `pattern`, written in a `memory` block with
+/// the lines `before` it.
+let private inMemoryBlock (before: string) (pattern: string) =
+    onlyDiagnostic (
+        $"""
+def count = {{ (n: int) ->
+  memory {{
+{before}
+{pattern}
+    match n
+      | #Big -> 1
+      | _ -> 0
+  }}
+}}
+"""
+            .ReplaceLineEndings "\n"
+    )
+
+[<Fact>]
+let ``A local pattern that changes a cell of the block around it is an error at the assignment (#3112)`` () =
+    let code, message, text =
+        inMemoryBlock "    mut runs = 0" "    pattern int -> #Big | _ = { x ->\n      runs := runs + 1\n      if x > 10 then #Big else _\n    }"
+    Assert.Equal(DiagnosticCodes.PatternRequiresContexts.Code, code)
+    Assert.Equal("Changing the cell 'runs' with `:=` requires the context 'Memory', but a pattern is pure: nothing in its body can require a context", message)
+    Assert.Equal("runs := runs + 1", text)
+
+[<Fact>]
+let ``A local pattern that reads a cell of the block around it is an error at the read (#3112)`` () =
+    let code, message, text =
+        inMemoryBlock "    mut limit = 10" "    pattern int -> #Big | _ = { x -> if x > limit then #Big else _ }"
+    Assert.Equal(DiagnosticCodes.PatternRequiresContexts.Code, code)
+    Assert.Equal("Reading the cell 'limit' requires the context 'Memory', but a pattern is pure: nothing in its body can require a context", message)
+    Assert.Equal("limit", text)
+
+[<Fact>]
+let ``A local pattern that calls an MArray function is the pattern's error, which names no made-up def (#3112)`` () =
+    let code, message, text =
+        onlyDiagnostic (
+            """import nanyx/marray
+
+def count = { (n: int) ->
+  memory {
+    def log = MArray.fromList([0])
+    pattern int -> #Big | _ = { x ->
+      MArray.set(log, 0, x)
+      if x > 10 then #Big else _
+    }
+    match n
+      | #Big -> 1
+      | _ -> 0
+  }
+}
+"""
+                .ReplaceLineEndings "\n"
+        )
+    Assert.Equal(DiagnosticCodes.PatternRequiresContexts.Code, code)
+    Assert.Equal("'MArray.set' requires the context 'Memory', but a pattern is pure: nothing in its body can require a context", message)
+    Assert.Equal("MArray.set", text)
+    Assert.DoesNotContain("__pattern", message)
+
+[<Fact>]
+let ``A pattern may change a cell of a memory block of its own`` () =
+    let result =
+        Compiler.compile (
+            """pattern int -> #Big | _ = { x ->
+  def c = memory {
+    mut t = 0
+    t := x
+    t
+  }
+  if c > 10 then #Big else _
+}
+"""
+                .ReplaceLineEndings "\n"
+        )
+    Assert.Empty(result.Diagnostics |> List.filter Diagnostics.isError)
+
 [<Fact>]
 let ``A match on a partial pattern without a _ arm is not exhaustive, and says so`` () =
     let source =

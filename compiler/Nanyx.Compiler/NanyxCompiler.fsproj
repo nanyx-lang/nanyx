@@ -94,6 +94,7 @@
     <Compile Include="MatchExhaustiveness.fs" />
     <Compile Include="DefinitionOrder.fs" />
     <Compile Include="InitialisationCycles.fs" />
+    <Compile Include="PatternPurity.fs" />
     <Compile Include="MemoryCells.fs" />
     <Compile Include="MisspelledFields.fs" />
     <Compile Include="ScopedCalls.fs" />
