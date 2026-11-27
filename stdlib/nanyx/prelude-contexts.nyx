@@ -269,16 +269,73 @@ export def __toString: a -> string = { value ->
   dimension's default storage units, written in the first of the units `names` that it is a whole
   number of, each as many default storage units as the scale beside it in `scales`, the largest
   first, so `1500ms` is written `1500ms` and `120s` is `2min`. Zero is written in `display`, the
-  dimension's default display unit, `0s`, if it is not empty. A value no unit fits, and zero if
-  `display` is empty, is written as a number of default storage units, between `before` and
-  `after`.
-export def __measuredIntToString: int, list(string), list(int), string, string, string -> string = {
-  | n, [name, ...names], [scale, ...scales], display, before, after ->
-    if n != 0 and n % scale == 0
-      then "{n // scale}{name}"
-      else __measuredIntToString(n, names, scales, display, before, after)
-  | n, _, _, display, before, after ->
-    if n == 0 and display != "" then "0{display}" else "{before}{n}{after}"
+  dimension's default display unit, `0s`, if it is not empty. A value no unit fits is written as
+  an exact decimal of the first of the units `decimalNames` it is one of, each as many default
+  storage units as the scale beside it in `decimalScales`, the smallest first: where the default
+  storage unit is 0.2mm, made up because no unit is one, 13 of it is `2.6mm`. A value that is a
+  decimal of none of them, and zero if `display` is empty, is written as a number of default
+  storage units, between `before` and `after`.
+export def __measuredIntToString
+  : int, list(string), list(int), string, list(string), list(int), string, string -> string
+  = {
+    | n, [name, ...names], [scale, ...scales], display, decimalNames, decimalScales, before, after ->
+      if n != 0 and n % scale == 0
+        then "{n // scale}{name}"
+        else __measuredIntToString(
+          n
+          names
+          scales
+          display
+          decimalNames
+          decimalScales
+          before
+          after
+        )
+    | n, _, _, display, decimalNames, decimalScales, before, after ->
+      if n == 0 and display != ""
+        then "0{display}"
+        else measuredDecimal(n, decimalNames, decimalScales, before, after)
+  }
+
+--| `n` default storage units written as an exact decimal of the first of the units `names` it is
+  one of, each as many default storage units as the scale beside it in `scales`, or as a number of
+  default storage units, between `before` and `after`, if it is a decimal of none of them.
+def measuredDecimal: int, list(string), list(int), string, string -> string = {
+  | n, [name, ...names], [scale, ...scales], before, after ->
+    def common = commonDivisor(n, scale)
+    def denominator = scale // common
+    def places = decimalPlaces(denominator, 0, 1)
+
+    if places < 0
+      then measuredDecimal(n, names, scales, before, after)
+      else "{decimalText(n // common * (tenToThe(places, 1) // denominator), places)}{name}"
+  | n, _, _, before, after -> "{before}{n}{after}"
+}
+
+--| The greatest common divisor of `a` and `b`, never negative.
+def commonDivisor: int, int -> int = { a, b ->
+  if b == 0 then (if a < 0 then -a else a) else commonDivisor(b, a % b)
+}
+
+--| How many decimal places a fraction over `denominator` has, the fewest `places` from which
+  `power`, 10 to the power `places`, is a whole number of it; -1 if it has more than 18, as one
+  over 3 does.
+def decimalPlaces: int, int, int -> int = { denominator, places, power ->
+  if power % denominator == 0
+    then places
+    else if places >= 18 then -1 else decimalPlaces(denominator, places + 1, power * 10)
+}
+
+--| `digits` divided by 10 to the power `places`, written as a decimal: `decimalText(26, 1)` is
+  `2.6`.
+def decimalText: int, int -> string = { digits, places ->
+  def magnitude = if digits < 0 then -digits else digits
+  def sign = if digits < 0 then "-" else ""
+  def scale = tenToThe(places, 1)
+
+  if places == 0
+    then "{digits}"
+    else "{sign}{magnitude // scale}.{zeroPadded(magnitude % scale, places)}"
 }
 
 --| What the derived `toString` of a measured value stored as a `float` calls: `x` of its

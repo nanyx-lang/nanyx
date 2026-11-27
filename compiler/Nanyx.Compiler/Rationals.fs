@@ -59,3 +59,10 @@ module Rational =
                 let sign = if number.Sign < 0 then "-" else ""
                 let written = (BigInteger.Abs number).ToString().PadLeft(places + 1, '0')
                 $"{sign}{written.Substring(0, written.Length - places)}.{written.Substring(written.Length - places)}")
+
+    /// The smallest of `scales` that `r` is an exact decimal of, with that decimal: of `mm` at 5 and `inch` at 127,
+    /// 1 is `0.2` of `mm`. None if it is a decimal of none of them.
+    let smallestDecimalOf (r: Rational) (scales: ('a * Rational) list) : ('a * string) option =
+        scales
+        |> List.sortWith (fun (_, a) (_, b) -> compare (a.Numerator * b.Denominator) (b.Numerator * a.Denominator))
+        |> List.tryPick (fun (unit, scale) -> decimalText (divide r scale) |> Option.map (fun number -> unit, number))
