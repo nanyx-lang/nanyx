@@ -341,8 +341,10 @@ public sealed class DocumentStore
 
         try
         {
-            var store = SeededPackages.user();
-            var directives = Script.readFrom(store, path ?? string.Empty, text);
+            var store = _settings.PackageStore();
+            // The index is left out of a compile, which runs as the text is typed: the fix that writes a package's
+            // newest version is made when it is asked for (see CodeActionHandler).
+            var directives = Script.readFromWithoutIndex(store, path ?? string.Empty, text);
             var linters = _settings.LinterOptionsFor(path, directives);
             var stopwatch = Stopwatch.StartNew();
             var timings = new CompileTimings();

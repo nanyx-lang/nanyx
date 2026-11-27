@@ -95,6 +95,7 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .SelectMany(pair => pair.Origin.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Published, isPreferred: index == 0)))
             .OfType<CodeAction>()
             .ToList();
+        actions.AddRange(NewestVersionActions(uri, document, published.Where(_ => quickFixes).Where(pair => pair.Span.File == document.FileName && Overlaps(pair.Span, start, end))));
         var refactorings = Offers(uri, document, compiled, start, end, only)
             .Select(offer => Offered(uri, document, offer, start, end))
             .ToList();
@@ -121,6 +122,33 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         }
 
         return new CommandOrCodeActionContainer(actions.Concat(formatting).Concat(refactorings).Select(action => new CommandOrCodeAction(action)));
+    }
+
+    /// <summary>
+    /// The fix that writes the newest version the index lists of a package a script's <c>::install</c> names with no
+    /// version, for each of <paramref name="diagnostics"/> that says so. A compile doesn't ask the index (see
+    /// <c>Script.readFromWithoutIndex</c>), so it is looked up here, when the fixes at the diagnostic are asked for, and
+    /// kept for five minutes (#2223).
+    /// </summary>
+    private IEnumerable<CodeAction> NewestVersionActions(
+        DocumentUri uri,
+        OpenDocument document,
+        IEnumerable<(NyxCompiler.Diagnostic Origin, Parser.Program.SourceSpan Span, Diagnostic Published)> diagnostics)
+    {
+        var unversioned = diagnostics
+            .Where(pair => pair.Origin.Code == NyxCompiler.DiagnosticCodes.InvalidDirective.Code && pair.Origin.Fixes.IsEmpty)
+            .ToList();
+        if (unversioned.Count == 0 || document.FileName.Length == 0)
+        {
+            return [];
+        }
+
+        var fixes = NyxCompiler.Script.newestVersionFixes(_settings.PackageStore(), document.FileName, document.Text);
+        return unversioned
+            .SelectMany(pair => fixes
+                .Where(fix => fix.Item1.Start == pair.Span.Start && fix.Item1.End == pair.Span.End)
+                .Select(fix => ToAction(uri, document, fix.Item2, pair.Published, isPreferred: true)))
+            .OfType<CodeAction>();
     }
 
     /// <summary>

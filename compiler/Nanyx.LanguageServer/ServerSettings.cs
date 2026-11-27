@@ -29,6 +29,10 @@ namespace Nanyx.LanguageServer;
 /// tree of the modules each one imported (<c>nanyx lsp --timings</c>; the VS Code extension passes it in development
 /// mode).
 /// </param>
+/// <param name="Packages">
+/// The packages a script's directives are read against: its packages and the index the newest version of one is looked
+/// up in. The user's (<see cref="SeededPackages.user"/>) when <c>null</c>. For tests, which give an index of their own.
+/// </param>
 /// <param name="FormattingHints">
 /// Whether to show where a document differs from its formatted text, as Hint diagnostics with quick fixes (see
 /// <see cref="Nanyx.LanguageServer.FormattingHints"/>).
@@ -44,8 +48,12 @@ public sealed record ServerSettings(
     TimeSpan? CompileDelay = null,
     Action<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri>? CompileStarted = null,
     bool Timings = false,
-    bool FormattingHints = true)
+    bool FormattingHints = true,
+    Func<PackageStore>? Packages = null)
 {
+    /// <summary>The packages a script's directives are read against (see <see cref="Packages"/>).</summary>
+    public PackageStore PackageStore() => Packages?.Invoke() ?? SeededPackages.user();
+
     public static ServerSettings Default { get; } = new(TypeNotation.Unicode);
 
     /// <summary>How long a changed document waits to be compiled, unless <see cref="CompileDelay"/> says otherwise.</summary>

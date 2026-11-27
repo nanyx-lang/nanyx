@@ -118,7 +118,7 @@ and private statementItems (c: Cursor) : Statement list =
     if c.IsKeyword "export" && (match c.At 1 with Code next -> c.Text next = "def" | _ -> false) then
         c.Report start "A def in a function's block is local to it, so it can't be exported: declare it at the top level, or in a module block, to export it"
     if c.IsKeyword "def" then
-        match c.Attempt(fun () -> destructuringDefinition c start) with
+        match c.AttemptIf(not (DescentPatterns.loneNameAt c 1 true [ "`,`" ]), fun () -> destructuringDefinition c start) with
         | Some statements -> statements
         | None -> [ statement c ]
     else [ statement c ]
@@ -136,7 +136,7 @@ and internal destructuringDefinition (c: Cursor) (start: int) : Statement list =
         c.Collecting(fun () ->
             try
                 let patternStart = c.Start
-                match sepBy1 c (fun () -> DescentPatterns.pattern c) (fun () -> c.Expect Comma |> ignore) with
+                match sepBy1If c (fun () -> DescentPatterns.pattern c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore) with
                 | [ single ] -> single
                 | several -> Pattern.at (c.SpanFrom patternStart) (TuplePattern(several, false))
             with
@@ -198,7 +198,7 @@ and internal useValue (c: Cursor) : Expression =
             match c.Attempt named with
             | Some argument -> argument
             | None -> DescentTypes.typeExpr c
-        let arguments = sepBy1 c typeArgument (fun () -> c.Expect Comma |> ignore)
+        let arguments = sepBy1If c typeArgument (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
         c.Expect RightParen |> ignore
         let context = TypeExpr.at (c.SpanFrom start) (TypeApply(contextName, arguments))
         if c.Is Equals then
@@ -274,7 +274,7 @@ and internal armsWith (c: Cursor) (isLast: 'a -> bool) (arm: unit -> 'a list) : 
 and private arm (c: Cursor) : MatchArm list =
     let alternatives, names =
         c.Collecting(fun () ->
-            let alternative () = sepBy1 c (fun () -> DescentPatterns.pattern c) (fun () -> c.Expect Comma |> ignore)
+            let alternative () = sepBy1If c (fun () -> DescentPatterns.pattern c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
             let all = ResizeArray [ alternative () ]
             let mutable going = true
             while going do
@@ -515,7 +515,7 @@ and private parameters (c: Cursor) : Choice<Identifier * TypeExpr option, Patter
             let name, held = parameter c DescentTypes.typeUnion
             Choice1Of2(name, Some(CellPassingSyntax.parameterType held))
         else
-            match c.Attempt(fun () -> bracketedParameter c) with
+            match c.AttemptIf(c.Expects LeftParen, fun () -> bracketedParameter c) with
             | Some named -> Choice1Of2 named
             | None ->
                 // A pattern the parser stops at is no pattern parameter here: the next reading, a name, is tried, as it
@@ -530,14 +530,18 @@ and private parameters (c: Cursor) : Choice<Identifier * TypeExpr option, Patter
                     | IdentifierPattern _
                     | WildcardPattern -> raise NoMatch
                     | _ -> Choice2Of2(pattern, names)
-                match c.Attempt patternParameter with
+                match c.AttemptIf(not (DescentPatterns.loneNameAt c 0 false []), patternParameter) with
                 | Some destructured -> destructured
                 | None -> Choice1Of2(parameter c DescentTypes.typeUnion)
-    if c.Is Arrow then [] else sepBy1 c one (fun () -> c.Expect Comma |> ignore)
+    if c.Is Arrow then [] else sepBy1If c one (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
 
 /// What follows `{` and its spaces, as a function of the lambda's span: the forms of a lambda, in the order they are
 /// tried.
 and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
+    let isShorthandOperator () =
+        match c.Token with
+        | Some token -> token.Kind = Operator && (binaryOperatorNamed (c.Text token)).IsSome
+        | None -> false
     let shorthandOperator () =
         match c.Token with
         | Some token when token.Kind = Operator && (binaryOperatorNamed (c.Text token)).IsSome -> token
@@ -561,7 +565,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
                 false)
     let withArgument () =
         let leftOut =
-            match c.Attempt shorthandOperator with
+            match c.AttemptIf(isShorthandOperator (), shorthandOperator) with
             | Some token -> c.SpanOf token
             | None ->
                 if c.Is Dot && (match c.At 1 with Code next -> (next.Kind = Name || next.Kind = Keyword) && next.Start = c.Start + 1 | _ -> false) then
@@ -588,7 +592,7 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
                         Some(DescentTypes.typeUnion c)
                     else None
                 instance, typeOpt, span
-            let names = sepBy1 c one (fun () -> c.Expect Comma |> ignore; if not (c.IsKeyword "context") then raise NoMatch)
+            let names = sepBy1If c one (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore; if not (c.IsKeyword "context") then raise NoMatch)
             if c.Is Comma then c.Take() |> ignore
             Some names
     let underContextNames (names: (Identifier * TypeExpr option * SourceSpan) list option) (body: Expression) =
@@ -662,13 +666,19 @@ and private lambdaKind (c: Cursor) : SourceSpan -> ExpressionKind =
             let names = [ 1..arity ] |> List.map (fun index -> ($"arg{index}", None))
             Lambda(names, made (Match(names |> List.map (fun (name, _) -> made (IdentifierExpr name)), written)), false)
     if nextCodeIs c Bar then matchArms () else
-    match c.Attempt empty with
+    // Each form is tried only where what it reads first is there: `}` for `empty`, an operator for `binaryAlone`, and an
+    // operator, `.name` or `\` for `withArgument`, none of which notes what it expected.
+    let leftOutNext () =
+        isShorthandOperator ()
+        || (c.Is Dot && (match c.At 1 with Code next -> (next.Kind = Name || next.Kind = Keyword) && next.Start = c.Start + 1 | _ -> false))
+        || c.Is Backslash
+    match c.AttemptIf(nextCodeIs c RightBrace, empty) with
     | Some kind -> kind
     | None ->
-        match c.Attempt binaryAlone with
+        match c.AttemptIf(isShorthandOperator (), binaryAlone) with
         | Some kind -> kind
         | None ->
-            match c.Attempt withArgument with
+            match c.AttemptIf(leftOutNext (), withArgument) with
             | Some kind -> kind
             | None ->
                 match c.Attempt withParameters with

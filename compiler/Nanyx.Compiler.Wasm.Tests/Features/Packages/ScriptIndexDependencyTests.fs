@@ -125,6 +125,38 @@ let ``A package from the index named with no version is an error, whose fix writ
     Assert.Equal((atEnd, atEnd, " 1.2.0"), (edit.Span.Start, edit.Span.End, edit.NewText))
 
 [<Fact>]
+let ``Read as the editor reads it, a package named with no version asks the index nothing`` () =
+    // The editor compiles a script as it is typed, and each new spelling of a package's name waited for two requests to
+    // the index (#2223).
+    let mutable requests = 0
+    use index = new TestServer(fun _ _ _ _ -> (System.Threading.Interlocked.Increment(&requests) |> ignore; 500, [], ""))
+    use directory = new TempDirectory()
+    let store = { storeIn directory with Index = index.Url }
+    let script = scriptWith directory "::install acme.coreless"
+    let diagnostic = Assert.Single (Script.readFromWithoutIndex store script (File.ReadAllText script)).Diagnostics
+    Assert.Equal(DiagnosticCodes.InvalidDirective.Code, diagnostic.Code)
+    Assert.Contains("`::install acme.coreless` needs the version of 'acme.coreless' to use", diagnostic.Message)
+    Assert.DoesNotContain("newest", diagnostic.Message)
+    Assert.Empty diagnostic.Fixes
+    Assert.Equal(0, requests)
+
+[<Fact>]
+let ``The editor's fix for a package named with no version writes the newest the index has, when it is asked for`` () =
+    use directory = new TempDirectory()
+    let store = storeIn directory
+    publishCore directory store "1.0.0" 1 ""
+    publishCore directory store "1.2.0" 2 ""
+    let script = scriptWith directory "::install acme.core"
+    let source = File.ReadAllText script
+    let diagnostic = Assert.Single (Script.readFromWithoutIndex store script source).Diagnostics
+    let span, fix = Assert.Single(Script.newestVersionFixes store script source)
+    Assert.Equal(diagnostic.Span, Some span)
+    Assert.Equal("Use acme.core 1.2.0", fix.Title)
+    let edit = Assert.Single fix.Edits
+    let atEnd = source.IndexOf "acme.core" + "acme.core".Length
+    Assert.Equal((atEnd, atEnd, " 1.2.0"), (edit.Span.Start, edit.Span.End, edit.NewText))
+
+[<Fact>]
 let ``Run - a script whose pinned packages are all in the cache runs without the index`` () =
     use directory = new TempDirectory()
     let store = storeIn directory

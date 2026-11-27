@@ -21,9 +21,38 @@ let private first (c: Cursor) (alternatives: (unit -> 'a) list) : 'a =
     |> List.tryPick (fun read -> c.Attempt read)
     |> Option.defaultWith (fun () -> raise NoMatch)
 
+/// The first of `alternatives` that matches, each a reading and whether the token at the cursor lets it match, asked
+/// just before it would be tried (see `Cursor.AttemptIf`).
+let private firstThat (c: Cursor) (alternatives: ((unit -> bool) * (unit -> 'a)) list) : 'a =
+    alternatives
+    |> List.tryPick (fun (fits, read) -> c.AttemptIf(fits (), read))
+    |> Option.defaultWith (fun () -> raise NoMatch)
+
 /// `items` separated by `,`, as `sepBy1 (ws >>. pattern) (pstring "," .>> ws)` reads them.
 let private commaSeparated (c: Cursor) (item: unit -> 'a) : 'a list =
-    sepBy1 c item (fun () -> c.Expect Comma |> ignore)
+    sepBy1If c item (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
+
+/// The operators a bare guard starts with, `> 5`.
+let private isGuardOperator (text: string) = List.contains text [ ">="; "<="; "=="; "!="; ">"; "<" ]
+
+/// Whether a name is at the cursor, as `identifierWithSpan` reads one: a name or a keyword.
+let private nameNext (c: Cursor) = c.Is Name || c.Is Keyword
+
+/// Whether `recordPatternByPosition` can read past the type's name at the cursor: a name with `(` straight after it.
+/// Where there is a name without one, it would fail having taken the name, and this notes what it would have noted (see
+/// `Cursor.AttemptIf`). A `$` is left to it, which reports one.
+let private nominalNext (c: Cursor) =
+    if c.Is Dollar then true
+    elif not (nameNext c) then false
+    elif not (c.AdjacentAt 1) then
+        c.NoteAt 1
+        false
+    // What is straight after the name is read as a record member pattern, then as patterns by position, each of which
+    // expects `(` first.
+    elif c.IsAt(1, LeftParen) then true
+    else
+        c.NoteAt(1, "`(`")
+        false
 
 /// `else`, a match's last arm.
 let private elsePattern (c: Cursor) =
@@ -65,7 +94,7 @@ let private literalOrRangePattern (c: Cursor) =
 
 /// `, ...` after the elements of a tuple pattern, which leaves the value's other fields out: whether it is there.
 let private rest (c: Cursor) =
-    c.Attempt(fun () -> c.Expect Comma |> ignore; c.Expect Ellipsis |> ignore).IsSome
+    c.AttemptIf(c.Expects Comma, fun () -> c.Expect Comma |> ignore; c.Expect Ellipsis |> ignore).IsSome
 
 /// `(p1, p2)`: a tuple, or one pattern in brackets, which is that pattern. `(p1, ...)` ends in `...` to leave the other
 /// fields out, even after one pattern.
@@ -116,7 +145,7 @@ and private recordMemberPattern (c: Cursor) =
             if name = "_" then raise NoMatch
             name, Pattern.at nameSpan (IdentifierPattern name), false
     let firstMember = memberPattern ()
-    let others = many c (fun () -> c.Expect Comma |> ignore; memberPattern ())
+    let others = manyIf c (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore; memberPattern ())
     let members = firstMember :: others
     if members |> List.forall (fun (_, _, renamed) -> not renamed) then raise NoMatch
     let hasRest = rest c
@@ -133,7 +162,7 @@ and private listPattern (c: Cursor) =
         | Some(name, span) -> Splat(Pattern.at span (IdentifierPattern name))
         | None -> Splat(Pattern.at (c.SpanOf dots) WildcardPattern)
     let element () =
-        match c.Attempt splat with
+        match c.AttemptIf(c.Expects Ellipsis, splat) with
         | Some element -> element
         | None -> RegularPattern(pattern c)
     let elements = if c.Is RightBracket then [] else commaSeparated c element
@@ -154,7 +183,6 @@ and private guardPattern (c: Cursor) =
         let lambda = Forward.lambda.Value c
         Pattern.at lambda.Span (GuardPattern lambda)
     else
-    let isGuardOperator text = List.contains text [ ">="; "<="; "=="; "!="; ">"; "<" ]
     match c.Token with
     | Some token when token.Kind = Operator && isGuardOperator (c.Text token) ->
         c.Take() |> ignore
@@ -203,7 +231,7 @@ and private tagPattern (c: Cursor) =
     let arguments () =
         if not (c.Adjacent && c.Is LeftParen) then raise NoMatch
         let open' = c.Take()
-        let values = sepBy1 c (fun () -> Forward.expression.Value c) (fun () -> c.Expect Comma |> ignore)
+        let values = sepBy1If c (fun () -> Forward.expression.Value c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
         c.Expect RightParen |> ignore
         match values with
         | [ single ] -> single
@@ -222,26 +250,55 @@ and private tagPattern (c: Cursor) =
         else TagPattern(tagName, payload ())
     Pattern.at (c.SpanFrom start) kind
 
+/// Whether the pattern `offset` from the cursor is a name alone, which `pattern` reads as an `IdentifierPattern`. A
+/// reading that wants another pattern there, a destructuring def's or a pattern parameter's, would fail once it had
+/// read it, and is not tried: where the pattern is a name alone, this notes what reading it would have noted, then each
+/// of `after`, what the reading expects after it (see `Cursor.AttemptIf`). With `commaJoins`, a `,` after the name
+/// joins it to more patterns, a tuple. A name that `pattern` reads otherwise, or gives up at, is left to the reading.
+and loneNameAt (c: Cursor) (offset: int) (commaJoins: bool) (after: string list) =
+    let text = match c.At offset with Code token -> c.Text token | _ -> ""
+    let next = offset + 1
+    let mutable across = next
+    while (match c.At across with Newline _ | Indent _ -> true | _ -> false) do
+        across <- across + 1
+    let lone =
+        (c.IsAt(offset, Name) || c.IsAt(offset, Keyword))
+        && not (List.contains text [ "true"; "false"; "_" ] || text.StartsWith "else")
+        && not (c.AdjacentAt next && (c.IsAt(next, LeftParen) || c.IsAt(next, Dot) || c.IsAt(next, DotDot) || c.IsAt(next, Ellipsis)))
+        && not (c.IsAt(across, Ampersand))
+        && not (commaJoins && c.IsAt(next, Comma))
+    if lone then
+        if c.AdjacentAt next then c.NoteAt(next, "`(`") else c.NoteAt next
+        for description in after do
+            c.NoteAt(next, description)
+    lone
+
 /// One pattern, not an and-pattern.
 and singlePattern (c: Cursor) : Pattern =
-    first
+    let guardNext () =
+        c.Is LeftBrace || (match c.Token with Some token -> token.Kind = Operator && isGuardOperator (c.Text token) | None -> false)
+    // A literal is an integer, which `numberNext` asks for, or else one of `literal`'s: a number, `true` or `false`, or
+    // a string, which ends in `Expect StringLiteral`.
+    let literalNext () =
+        c.Token.IsSome && (numberNext c || c.Is(Name, "true") || c.Is(Name, "false") || c.Is StringStart || c.Expects StringLiteral)
+    firstThat
         c
-        [ fun () -> elsePattern c
-          fun () -> tagPattern c
-          fun () -> guardPattern c
-          fun () -> literalOrRangePattern c
-          fun () -> recordPatternByPosition c
-          fun () -> recordMemberPattern c
-          fun () -> listPattern c
-          fun () -> unitPattern c
-          fun () -> tuplePattern c
-          fun () -> wildcardPattern c
-          fun () -> identifierPattern c
-          fun () -> c.Fail "a pattern" ]
+        [ (fun () -> c.Expects(Keyword, "else")), (fun () -> elsePattern c)
+          (fun () -> c.StartsWith Hash), (fun () -> tagPattern c)
+          guardNext, (fun () -> guardPattern c)
+          literalNext, (fun () -> literalOrRangePattern c)
+          (fun () -> nominalNext c), (fun () -> recordPatternByPosition c)
+          (fun () -> c.StartsWith LeftParen), (fun () -> recordMemberPattern c)
+          (fun () -> c.StartsWith LeftBracket), (fun () -> listPattern c)
+          (fun () -> c.StartsWith LeftParen), (fun () -> unitPattern c)
+          (fun () -> c.StartsWith LeftParen), (fun () -> tuplePattern c)
+          (fun () -> c.Expects(Name, "_")), (fun () -> wildcardPattern c)
+          (fun () -> true), (fun () -> identifierPattern c)
+          (fun () -> true), (fun () -> c.Fail "a pattern") ]
 
 /// A pattern: single patterns joined by `&`, an and-pattern.
 and pattern (c: Cursor) : Pattern =
     let ampersand () = if c.Across(fun c -> c.Is Ampersand) then c.Take() |> ignore else raise NoMatch
-    match sepBy1 c (fun () -> singlePattern c) ampersand with
+    match sepBy1If c (fun () -> singlePattern c) (fun () -> c.AcrossFits(fun c -> c.Is Ampersand)) ampersand with
     | [ single ] -> single
     | parts -> Pattern.at (SourceSpan.between (List.head parts).Span (List.last parts).Span) (AndPattern parts)

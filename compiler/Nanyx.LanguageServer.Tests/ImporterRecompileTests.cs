@@ -155,4 +155,44 @@ public sealed class ImporterRecompileTests : LanguageServerTestBase
             Assert.Equal([_main, other, _main], compiled);
         }
     }
+
+    [Fact]
+    public async Task A_file_of_a_package_with_a_type_error_is_not_compiled_again_for_a_change_to_a_file_it_does_not_import()
+    {
+        // A compile read the package's other files, to offer imports for unknown names, whatever its errors were, and so
+        // became an importer of each of them (#2222).
+        var compiled = new List<DocumentUri>();
+        await RestartWithAsync(TestSettings with
+        {
+            CompileStarted = uri =>
+            {
+                lock (compiled)
+                {
+                    compiled.Add(uri);
+                }
+            }
+        });
+        File.WriteAllText(TempPath("app.nyxp"), """
+            (package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]))
+            """.ReplaceLineEndings("\n"));
+        var firstPath = TempPath("src", "first.nyx");
+        File.WriteAllText(firstPath, "module first\nexport def one = 1\n");
+        File.WriteAllText(TempPath("src", "second.nyx"), "module second\nexport def wrong: string = 1\n");
+        var first = DocumentUri.FromFileSystemPath(firstPath);
+        var second = DocumentUri.FromFileSystemPath(TempPath("src", "second.nyx"));
+        Open(first, "module first\nexport def one = 1\n");
+        Assert.Empty((await NextPublished(first)).Diagnostics!);
+        Open(second, "module second\nexport def wrong: string = 1\n");
+        Assert.Equal("NYX0201", Assert.Single((await NextPublished(second)).Diagnostics!).Code?.String);
+
+        Change(first, version: 2, "module first\nexport def one = 2\n");
+        Assert.Empty((await NextPublished(first)).Diagnostics!);
+
+        // Had the second document been scheduled with the first, it would have been compiled by now.
+        await Task.Delay(500);
+        lock (compiled)
+        {
+            Assert.Equal([first, second, first], compiled);
+        }
+    }
 }

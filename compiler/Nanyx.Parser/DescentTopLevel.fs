@@ -116,7 +116,7 @@ let private typeParameter (c: Cursor) : Identifier * TypeExpr option =
 let private typeParameters (c: Cursor) : (Identifier * TypeExpr option) list =
     if c.Is LeftParen && c.OnSameLine then
         c.Take() |> ignore
-        let parameters = sepBy1 c (fun () -> typeParameter c) (fun () -> c.Expect Comma |> ignore)
+        let parameters = sepBy1If c (fun () -> typeParameter c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
         c.Expect RightParen |> ignore
         parameters
     else []
@@ -202,7 +202,7 @@ let typeDefinition (c: Cursor) : Definition =
         let scope =
             let inScope () =
                 c.Expect LeftBracket |> ignore
-                let contexts = sepBy1 c (fun () -> identifierWithSpan c) (fun () -> c.Expect Comma |> ignore)
+                let contexts = sepBy1If c (fun () -> identifierWithSpan c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
                 c.Expect RightBracket |> ignore
                 if not (c.IsKeyword "protected" || c.IsKeyword "private") then raise NoMatch
                 InScopeOf contexts
@@ -362,7 +362,11 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
     let isDef = c.IsKeyword "def" || (c.IsKeyword "export" && nextText = "def")
     // A destructuring def is tried before any other item: `export def (a, b)` is no
     // re-export of a module called `def`.
-    let destructured = if isDef then c.Attempt(fun () -> destructuringDefinition c start) else None
+    let destructured =
+        if isDef then
+            let patternAt = if c.IsKeyword "export" then 2 else 1
+            c.AttemptIf(not (DescentPatterns.loneNameAt c patternAt true [ "`,`" ]), fun () -> destructuringDefinition c start)
+        else None
     match destructured with
     | Some statements ->
         statements
@@ -371,7 +375,28 @@ and private definitionOrExpression (c: Cursor) (start: int) (inBlock: bool) : To
             | DefStatement(isExport, name, typeOpt, value) -> TopLevelItem.at statement.Span (Def(ValueDef(isExport, name, typeOpt, value)))
             | _ -> c.GiveUp "a destructuring def's statement that isn't a def")
     | None ->
-    match c.Attempt(fun () -> if c.IsKeyword "export" then reExport () else raise NoMatch) with
+    // A re-export takes `export`, a module's path on its line, and then expects `(` or the end of the line: `export def
+    // name` is none, and fails at the name, noting nothing.
+    let reExportNext () =
+        if not (c.IsKeyword "export") then false
+        elif not (c.OnSameLineAt 1) then
+            c.NoteAt 1
+            false
+        elif c.IsAt(1, StringLiteral) then true
+        elif not (c.IsAt(1, Name) || c.IsAt(1, Keyword)) then
+            c.NoteAt 1
+            false
+        else
+            // The offset after the path, whose parts `modulePath` takes when each is straight after the one before.
+            let mutable after = 2
+            while c.AdjacentAt after && (c.IsAt(after, Dot) || c.IsAt(after, Operator, "/")) && c.AdjacentAt(after + 1)
+                  && (c.IsAt(after + 1, Name) || c.IsAt(after + 1, Keyword)) do
+                after <- after + 2
+            if (c.IsAt(after, LeftParen) && c.OnSameLineAt after) || c.IsAt(after, EndOfFile) || not (c.OnSameLineAt after) then true
+            else
+                c.NoteAt after
+                false
+    match c.AttemptIf(reExportNext (), fun () -> if c.IsKeyword "export" then reExport () else raise NoMatch) with
     | Some kind -> single kind
     | None ->
     if unitDeclarationAhead c then unitDeclaration c start else
@@ -465,6 +490,7 @@ let tryReadModuleWithState (file: string) (source: string) : Result<TopLevelItem
                 DocumentableStarts = c.DocumentableStarts
                 StringTexts = c.StringTexts
                 TokensRead = c.TokensRead
+                NoMatches = c.NoMatches
                 Comments = c.Comments
                 ModuleBlocks = c.ModuleBlocks }
         Ok(List.ofSeq all, state)
@@ -539,6 +565,7 @@ let readModuleRecovering (file: string) (source: string) : TopLevelItem list * P
             DocumentableStarts = c.DocumentableStarts
             StringTexts = c.StringTexts
             TokensRead = c.TokensRead
+            NoMatches = c.NoMatches
             Comments = c.Comments
             ModuleBlocks = c.ModuleBlocks }
     List.ofSeq all, state, errors |> Seq.sortBy _.Span.Start |> List.ofSeq
