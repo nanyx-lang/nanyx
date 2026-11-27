@@ -447,6 +447,10 @@ type InferState =
             /// with those before it, worked out only if one is, with the related locations that say what the branches
             /// before it give (see `OddBranches`).
             BranchSpans: Map<SourceSpan, Lazy<(SourceSpan * MismatchText option * (SourceSpan * MismatchText) list) option>>;
+            /// The type written for what a constraint's origin is checked against, by that origin: where the type is
+            /// written, and the type, for a def's value checked against its annotation and a def's lambda's body against
+            /// the return type its annotation gives (see `noteAnnotation`). A mismatch there points back at it (#2717).
+            AnnotationSpans: Map<SourceSpan, SourceSpan * Ty>;
             /// The work variables (see `TaskWork`), each with where the def that starts tasks it is of was named.
             TaskWork: Map<int, SourceSpan>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
@@ -593,6 +597,7 @@ let emptyState =
             Cells = Map.empty;
             ArgumentSpans = Map.empty;
             BranchSpans = Map.empty;
+            AnnotationSpans = Map.empty;
             TaskWork = Map.empty;
             SupplyingCalls = Map.empty;
             EscapedContexts = Set.empty;
@@ -844,6 +849,24 @@ let internal addConstraint left right (state: InferState) =
 
 let internal addAssignableConstraint left right (state: InferState) =
     { state with Constraints = (left, right, Assignable, state.Origin) :: state.Constraints }
+
+/// `state` noting that what is at `origin` is checked against `declared`, the type written at `written`, as a def's value
+/// is against its annotation (see `AnnotationSpans`). A made-up span is left out.
+let internal noteAnnotation (origin: SourceSpan) (written: SourceSpan) (declared: Ty) (state: InferState) =
+    if SourceSpan.isNone origin || SourceSpan.isNone written then state
+    else { state with AnnotationSpans = state.AnnotationSpans |> Map.add origin (written, declared) }
+
+/// Where the type a mismatch at `origin` was checked against is written, if it is the annotation's constraint that
+/// fails there: without it, the other constraints from `origin` agree with those from everywhere else. Another reported
+/// at the same place, such as an operator's in a lambda's body, fails without it too, and points at nothing.
+let internal annotationAt (origin: SourceSpan) (state: InferState) : SourceSpan option =
+    match state.AnnotationSpans |> Map.tryFind origin with
+    | Some (written, declared) ->
+        let fromThere, elsewhere = state.Constraints |> List.partition (fun (_, _, _, span) -> span = origin)
+        let others = fromThere |> List.filter (fun (_, right, _, _) -> right <> declared)
+        if others.Length < fromThere.Length && Solving.unify (others @ Solving.agreeing elsewhere) |> Result.isOk then Some written
+        else None
+    | None -> None
 
 /// `addConstraint`, reported at `span` rather than at the expression being inferred.
 let internal addConstraintAt (span: SourceSpan) left right (state: InferState) =
