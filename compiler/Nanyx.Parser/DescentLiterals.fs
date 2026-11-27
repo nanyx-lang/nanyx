@@ -74,6 +74,13 @@ let intLiteral (c: Cursor) : Literal * SourceSpan =
             Numerics.BigInteger.Parse(signText + text.Replace("_", ""), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture)
     IntLit value, c.SpanFrom start
 
+/// Reports `token`, a number written with an exponent and no fraction, `1e5` or `1e3ms`: as in a float, an exponent
+/// comes after a fraction.
+let private exponentWithoutFraction (c: Cursor) (token: Token) : 'a =
+    let written = c.Text token
+    let fixedText = written.Insert(written.IndexOfAny [| 'e'; 'E' |], ".0")
+    c.ReportBetween token.Start token.End $"An exponent comes after a fraction: write '{fixedText}', not '{written}'"
+
 /// A float: digits with a fraction or an exponent, or digits and a `.` alone, `1.`.
 let private floatLiteral (c: Cursor) : Literal * SourceSpan =
     let start = c.Start
@@ -95,7 +102,7 @@ let private floatLiteral (c: Cursor) : Literal * SourceSpan =
             | _ -> ()
             if c.Adjacent then c.GiveUp "a `.` after a number with a name or number straight after it"
             text + "."
-        elif not (text.Contains '.') then c.GiveUp "a number with an exponent and no fraction"
+        elif not (text.Contains '.') then exponentWithoutFraction c token
         else text
     let parts = written.Split([| '.'; 'e'; 'E'; '+'; '-' |])
     if parts |> Array.exists (fun part -> part <> "" && not (wellGrouped part)) then reportBadGroups c token.Start text
@@ -112,7 +119,7 @@ let private unitLiteral (c: Cursor) : Literal * SourceSpan =
     let text = c.Source.Substring(token.Start, numberEnd - token.Start)
     reportBadGroups c token.Start text
     // As in a float, an exponent comes after a fraction: `1.5e3ms`, not `1e3ms`.
-    if text.IndexOfAny [| 'e'; 'E' |] >= 0 && not (text.Contains '.') then c.GiveUp "a number with an exponent and no fraction"
+    if text.IndexOfAny [| 'e'; 'E' |] >= 0 && not (text.Contains '.') then exponentWithoutFraction c token
     let plain = text.Replace("_", "")
     let mantissa, exponent =
         match plain.IndexOfAny [| 'e'; 'E' |] with
