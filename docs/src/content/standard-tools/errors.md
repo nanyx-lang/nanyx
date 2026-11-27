@@ -24,6 +24,26 @@ error NYX0201: Type mismatch
 
 On a terminal, the headline and the underline are coloured, unless the `NO_COLOR` environment variable is set.
 
+Some errors are explained by a second place in the code, a related location: the first definition of a name defined
+twice, or the declaration of a name that is private. The command line shows each one after the body, under a note
+that says what it is, with its own line of source underlined:
+
+```text
+error NYX0113: Duplicate definition 'total'
+   --> main.nyx:10:5
+    |
+ 10 | def total = 2
+    |     ^^^^^
+    = The name 'total' is already defined in this module
+    = note: 'total' is first defined here
+   --> main.nyx:1:5
+    |
+  1 | def total = 1
+    |     ^^^^^
+```
+
+An editor links to it from the error, as related information.
+
 Where the compiler can tell what was meant, the body says so. An unknown name is followed by the names in scope closest
 to it (`'totl' is not in scope: did you mean 'total'?`), and a character that only looks like one Nanyx reads, such as
 U+2212 for `-`, is named. In an editor, these and other errors come with a fix that makes the edit for you: writing the
@@ -807,11 +827,13 @@ dependencies accept.
 # NYX0045: Package with nothing to run
 
 `nanyx run` is given a package with no `@entry`, so there is nothing to run: a library, whose manifest names no host,
-or an application whose files declare no `@entry`. No example can show it, since it is reported by `nanyx run`, not by
-checking the package.
+or an application whose files declare no `@entry`. `nanyx run` and `nanyx build` report it for a
+[test package](../tour/packages#test-packages) too, and `nanyx run` for a test file, one the manifest's `tests` selects,
+which only a test build has. No example can show it, since it is reported by `nanyx run`, not by checking the package.
 
 To fix it, run an application, or add an `@entry` to one of its files and name the host it runs under in its manifest,
-as `host = (package = "nanyx.cli.host", version = "...")`.
+as `host = (package = "nanyx.cli.host", version = "...")`. Run a test package's tests, or a test file's, with
+`nanyx test`.
 
 # NYX0046: Keyword member whose type doesn't fit its kind
 
@@ -1297,6 +1319,18 @@ annotation on a definition in between shows which of them is wrong.
 Where the type expected is a protected or private [nominal type](../advanced/nominal-and-protected-types) of another
 module, a second line says that only that module makes values of it, and names the definitions attached to the type that
 make one, up to three, or says that none does. A value of the type's shape is the error NYX0260 instead.
+
+Where a `match`'s arms, an `if`'s branches or a list's items give different types, the error is at the first one that
+differs from those before it, and says what it gives and what they give. Each one before it is a related location,
+saying what it gives, which an editor links to and the command line shows under the error:
+
+```nanyx
+def describe = { n: int ->
+  match n
+    | 0 -> "zero"
+    | _ -> 2  -- error NYX0201: This arm gives 'int', but the arms before it give 'string'
+}
+```
 
 An `if` with no `else` gives `()` when its condition is false, so one whose `then` branch gives something else is
 reported at the `if`, saying that it has no `else`:

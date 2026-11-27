@@ -78,3 +78,23 @@ let ``Check - a span over several lines is underlined to the end of its first`` 
     let lines = (diagnosticLines source).Split '\n'
     Assert.Equal(" 1 | def count: string = (", lines[3])
     Assert.Equal("   |                     ^", lines[4])
+
+[<Fact>]
+let ``Check - a related location is shown under its note with its own excerpt`` () =
+    // The place that explains the error, the first definition of a name defined twice, is shown as the error's own is
+    // (#2717), and every excerpt's bars line up, whatever its line number.
+    let source = "def total = 1\n" + String.replicate 8 "\n" + "def total = 2\n"
+    Assert.Equal(
+        """error NYX0113: Duplicate definition 'total'
+   --> main.nyx:10:5
+    |
+ 10 | def total = 2
+    |     ^^^^^
+    = The name 'total' is already defined in this module
+    = note: 'total' is first defined here
+   --> main.nyx:1:5
+    |
+  1 | def total = 1
+    |     ^^^^^
+""".ReplaceLineEndings "\n",
+        diagnosticLines source)

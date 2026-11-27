@@ -82,6 +82,7 @@
     <Compile Include="UseDischarge.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
+    <Compile Include="LambdaCaptures.fs" />
     <Compile Include="DimensionSignatures.fs" />
     <Compile Include="EmitLambdas.fs" />
     <Compile Include="ProtectedShapes.fs" />
@@ -188,6 +189,7 @@
     <Compile Include="BuiltInTypeHover.fs" />
     <Compile Include="DimensionHover.fs" />
     <Compile Include="Hover.fs" />
+    <Compile Include="LambdaCaptureHover.fs" />
     <Compile Include="Definition.fs" />
     <Compile Include="NominalNames.fs" />
     <Compile Include="SemanticTokens.fs" />

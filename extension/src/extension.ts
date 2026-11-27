@@ -15,6 +15,7 @@ import { copyBuild, removeOldCopies, watchBuild } from "./developmentMode";
 import { InfoView } from "./infoView";
 import { LibraryView } from "./library";
 import { runFile } from "./run";
+import { TestExplorer } from "./testController";
 
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
@@ -35,6 +36,7 @@ let buildWatcher: vscode.Disposable | undefined;
 let outputChannel: vscode.OutputChannel;
 let infoView: InfoView | undefined;
 let libraryView: LibraryView | undefined;
+let testExplorer: TestExplorer | undefined;
 let declinedDownload = false;
 let declinedUpdate = false;
 
@@ -45,10 +47,13 @@ export async function activate(context: vscode.ExtensionContext) {
   infoView = view;
   const library = new LibraryView(() => client);
   libraryView = library;
+  const explorer = new TestExplorer(() => compiler, log);
+  testExplorer = explorer;
 
   context.subscriptions.push(
     view,
     library,
+    explorer,
     vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()),
     vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
       declinedDownload = false;
@@ -282,6 +287,8 @@ async function download(context: vscode.ExtensionContext, settings: CompilerSett
 async function restartClient(context: vscode.ExtensionContext, executable: string): Promise<void> {
   await stopClient();
   compiler = executable;
+  // The tests are listed by the compiler, so a new one lists them again.
+  void testExplorer?.refresh();
 
   // Each switch is passed only when it is on, so the defaults still work with compilers that predate it.
   const config = vscode.workspace.getConfiguration("nanyx");

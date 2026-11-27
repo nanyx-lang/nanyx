@@ -113,6 +113,19 @@ internal static partial class CliCommands
             return failed;
         }
 
+        // A test package has only test files, so it is checked as its test build compiles them.
+        if (ManifestModule.isTestPackage(package.Manifest))
+        {
+            var withTests = PackageModule.withTests(shell.Packages, package);
+            if (withTests.IsError)
+            {
+                shell.Error.WriteLine($"error: the test host can't be read: {withTests.ErrorValue}");
+                return 1;
+            }
+
+            package = withTests.ResultValue;
+        }
+
         var build = BuildPackage(shell, package, timings);
         PrintDiagnostics(shell, build.Diagnostics, shell.Out);
         shell.Out.WriteLine($"{Checked(package)}.");
@@ -259,7 +272,8 @@ internal static partial class CliCommands
 
         if (single is not null && !IsPackagePath(shell, single))
         {
-            return NoHostForScript(shell, host)
+            return NoProgramInTestFile(shell, single)
+                ?? NoHostForScript(shell, host)
                 ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls, allowedDirectories: directories, profile: profile, yieldAtEveryWait: yieldAtEveryWait);
         }
 
@@ -660,6 +674,22 @@ internal static partial class CliCommands
 
         var why = "It is a test package, which holds the tests of the packages it depends on and no program: run them with `nanyx test`";
         PrintDiagnostics(shell, General(DiagnosticCodes.NothingToRun, package.Manifest.Name, why), shell.Error);
+        return 1;
+    }
+
+    /// <summary>
+    /// An error, reported, when the file <paramref name="path"/> is a test file of a package, which only its test build
+    /// has: it is no script, and has no program to run. Null for any other file.
+    /// </summary>
+    private static int? NoProgramInTestFile(Shell shell, string path)
+    {
+        if (PackageModule.testFileOf(shell.FullPath(path)) is not { } tested)
+        {
+            return null;
+        }
+
+        var why = $"It is a test file of {tested.Value.Name}, which its manifest's `tests` selects, and has no program: run its tests with `nanyx test {path}`";
+        PrintDiagnostics(shell, General(DiagnosticCodes.NothingToRun, shell.DisplayPath(shell.FullPath(path)), why), shell.Error);
         return 1;
     }
 
@@ -1211,6 +1241,14 @@ internal static partial class CliCommands
         //        |   ^^^^^^^
         //        = 'println' requires the context 'Console', which 'wrapped' does not declare: ...
         //
+        // A related location, a place that explains the error, is shown the same way under a note with its label:
+        //
+        //        = note: 'x' is first defined here
+        //       --> main.nyx:1:5
+        //        |
+        //      1 | def x = 1
+        //        |     ^
+        //
         // On a terminal, the severity, headline and underline are in its colour. In the run's box, only the gutter is
         // dimmed, so diagnostics keep their colours.
         var box = (writer as RunBox.Writer)?.Box;
@@ -1233,36 +1271,44 @@ internal static partial class CliCommands
             string Coloured(string text) => escape is null ? text : $"\u001b[{escape}m{text}\u001b[0m";
             writer.WriteLine($"{Coloured($"{severity} {diagnostic.Code}: {Diagnostics.headline(diagnostic)}")}");
 
-            var excerpt = new List<string>();
-            var gutter = string.Empty;
+            // The gutter is as wide as the widest line number shown, so that every excerpt's bars line up.
+            var gutter = new string(' ', new[] { diagnostic.Span?.Value }
+                .Concat(diagnostic.Related.Select(related => (Parser.Program.SourceSpan?)related.Item1))
+                .Where(span => span is not null)
+                .Select(span => (span!.StartLine + 1).ToString().Length)
+                .DefaultIfEmpty(0)
+                .Max());
             if (diagnostic.Span is not null)
             {
-                var span = diagnostic.Span.Value;
+                WritePlace(diagnostic.Span.Value);
+            }
+
+            writer.WriteLine($" {gutter} = {diagnostic.Message}");
+            foreach (var related in diagnostic.Related)
+            {
+                writer.WriteLine($" {gutter} = note: {related.Item2}");
+                WritePlace(related.Item1);
+            }
+
+            foreach (var suggestion in diagnostic.Suggestions)
+            {
+                writer.WriteLine($" {gutter} = help: {suggestion}");
+            }
+
+            // Where `span` is, then its line with the span underlined, if its file can be read.
+            void WritePlace(Parser.Program.SourceSpan span)
+            {
                 if (!sources.TryGetValue(span.File, out var source))
                 {
                     source = SourceExcerpt.SourceOf(span.File);
                     sources[span.File] = source;
                 }
 
-                excerpt.AddRange(source is null ? [] : SourceExcerpt.Lines(span, source, Coloured));
-                gutter = new string(' ', (span.StartLine + 1).ToString().Length);
                 writer.WriteLine($" {gutter}--> {FormatLocation(shell, span)}");
-            }
-
-            foreach (var line in excerpt)
-            {
-                writer.WriteLine($" {line}");
-            }
-
-            writer.WriteLine($" {gutter} = {diagnostic.Message}");
-            foreach (var related in diagnostic.Related)
-            {
-                writer.WriteLine($" {gutter} = note: {FormatLocation(shell, related.Item1)}: {related.Item2}");
-            }
-
-            foreach (var suggestion in diagnostic.Suggestions)
-            {
-                writer.WriteLine($" {gutter} = help: {suggestion}");
+                foreach (var line in source is null ? [] : SourceExcerpt.Lines(span, source, Coloured, gutter.Length))
+                {
+                    writer.WriteLine($" {line}");
+                }
             }
         }
     }

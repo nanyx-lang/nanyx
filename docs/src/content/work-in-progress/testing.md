@@ -82,10 +82,8 @@ holds only the tests of the packages it depends on, in a sibling folder, as a .N
 ([Test packages](../tour/packages#test-packages)). It has no source files, needs no host and exports nothing; only
 `nanyx test` builds it. It can depend on an application, whose `@entry` is an ordinary def in the test build and whose
 modules keep its host ([Test builds](../deep-dives/test-builds#test-packages)). Its tests import what the package exports,
-so a private helper is still tested beside its code.
-
-An editor checks a file under the manifest's `sources` as one of its package's; a file that only `tests` selects, as all
-of a test package's are, is still checked on its own, as a script ([#3098](https://github.com/nanyx-lang/nanyx/issues/3098)).
+so a private helper is still tested beside its code. The editor and `nanyx check` check a test file as the test build
+compiles it ([#3098](https://github.com/nanyx-lang/nanyx/issues/3098)).
 
 ## Scripts
 
@@ -146,12 +144,12 @@ The tests run in a core module, as `nanyx run`'s program does, so a test that re
 
 ## Editors
 
-`nanyx test --format json` is built ([#3079](https://github.com/nanyx-lang/nanyx/issues/3079)): it writes one JSON
-object on each line, each diagnostic, each test as it ends, with its place, outcome, why it failed and what it printed,
-and a summary ([JSON](../standard-tools/command-line#json)). `--list` lists the tests without running them, and `--test`
-and `--module` run exactly the tests they name ([#3099](https://github.com/nanyx-lang/nanyx/issues/3099)). What is left
-is for the VS Code extension to use them, to fill the editor's test explorer and to put a "Run test" link above each
-`@test` ([#3100](https://github.com/nanyx-lang/nanyx/issues/3100)).
+`nanyx test --format json` writes one JSON object on each line ([#3079](https://github.com/nanyx-lang/nanyx/issues/3079),
+[JSON](../standard-tools/command-line#json)), and `--list`, `--test` and `--module` list the tests and run exactly the
+ones named ([#3099](https://github.com/nanyx-lang/nanyx/issues/3099)). Built on them
+([#3100](https://github.com/nanyx-lang/nanyx/issues/3100)): the VS Code extension fills the editor's test explorer from
+`nanyx test --list --format json`, runs a test, a module or a package, shows each result at the place it failed, and
+puts a **Run test** link above each `@test` ([VS Code extension](../standard-tools/vs-code-extension#testing)).
 
 ## Expecting a crash
 

@@ -16,7 +16,7 @@ internal static partial class CliCommands
     /// <summary>
     /// Run the tests of a package, the defs marked @test, beside its code and in the files its manifest's tests field selects, or of a script, whose top-level statements are not run.
     /// </summary>
-    /// <param name="path">A .nyx script, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
+    /// <param name="path">A .nyx script, a test file its package's tests field selects, whose tests alone run, or a package's directory or .nyxp manifest; none means the package the current directory is in.</param>
     /// <param name="filter">Run only the tests whose full name, as geometry.`adds points`, contains this text.</param>
     /// <param name="seed">The seed of each test's Random, as random.seeded takes one. Without it, a seed is chosen at random, and printed when a test fails, so that a run can be repeated.</param>
     /// <param name="timeout">How many seconds a test may run before it is stopped, and fails; 10 by default.</param>
@@ -86,6 +86,14 @@ internal static partial class CliCommands
         FSharpList<Diagnostic> diagnostics;
         bool deferred;
         FSharpOption<CompileResult> root;
+        // A test file of a package is no script: its tests run as part of its package's test build, and only they run.
+        string? onlyFile = null;
+        if (single is not null && !IsPackagePath(shell, single) && PackageModule.testFileOf(shell.FullPath(single)) is { } tested)
+        {
+            onlyFile = Path.GetRelativePath(tested.Value.Root, shell.FullPath(single)).Replace('\\', '/');
+            single = tested.Value.Path;
+        }
+
         if (single is not null && !IsPackagePath(shell, single))
         {
             if (!File.Exists(shell.FullPath(single)))
@@ -208,6 +216,7 @@ internal static partial class CliCommands
         }
 
         var selected = tests
+            .Where(listed => onlyFile is null || listed.File == onlyFile)
             .Where(listed => (named.Count == 0 && module is null) || IsNamed(listed) || listed.Module == module)
             .Where(listed => filter is null || Shown(listed).Contains(filter, StringComparison.Ordinal))
             .ToList();
