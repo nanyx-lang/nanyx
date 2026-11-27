@@ -193,10 +193,19 @@ def isoDigits: string, int, int, int -> #some(int) | #notIso(NotIso) = { text, a
       else #notIso(NotIso(at = at, expected = "a digit"))
 }
 
---| How many digits `text` has from `at` on.
+--| How many digits `text` has from `at` on, up to ten: more than any part of ISO 8601 has, so that
+  a longer run is too long, whatever its length.
 def isoDigitCount: string, int -> int = { text, at ->
+  isoDigitRun(text, at, 0)
+}
+
+--| `counted`, and how many digits `text` has from `at` on, up to ten in all.
+def isoDigitRun: string, int, int -> int = { text, at, counted ->
   def byte = isoByte(text, at)
-  if byte >= 48 and byte <= 57 then 1 + isoDigitCount(text, at + 1) else 0
+
+  if counted < 10 and byte >= 48 and byte <= 57
+    then isoDigitRun(text, at + 1, counted + 1)
+    else counted
 }
 
 --| `#some()` if the byte of `text` at `at` is `byte`, which ISO 8601 writes as `written`.
@@ -220,14 +229,12 @@ def isoYearAt: string -> #some(year: int, next: int) | #notIso(NotIso) = { text 
   def count = isoDigitCount(text, start)
   def wanted = if signed then count >= 4 and count <= 6 else count == 4
 
-  match (wanted, isoDigits(text, start, count, 0))
-    | (true, #some(year)) -> #some(
-      year = (if first == 45 then 0 - year else year)
-      next = start + count
-    )
-    | _ ->
-      def expected = if signed then "a year of four to six digits" else "a year of four digits"
-      #notIso(NotIso(at = start, expected = expected))
+  def expected = if signed then "a year of four to six digits" else "a year of four digits"
+
+  if not wanted then #notIso(NotIso(at = start, expected = expected)) else
+    match isoDigits(text, start, count, 0)
+      | #some(year) -> #some(year = (if first == 45 then 0 - year else year), next = start + count)
+      | _ -> #notIso(NotIso(at = start, expected = expected))
 }
 
 --| The fraction of a second written at `at`, in nanoseconds, after a point, and where it ends.
