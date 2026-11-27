@@ -426,7 +426,7 @@ The operators read through contexts of the prelude in the same way: `x + y` on v
 
 ## Operators find their context
 
-An operator reads the context member of its name (prefix `-` reads `negate`), and its context is the prelude's context with the fewest members that has that member. `Add` and `Num` both have a `` `+` ``, and `Add` is the smaller, so `+` is read through `Add`; in the same way `-` and prefix `-` are read through `Sub`, and only `Num` has a `` `*` ``. Only the prelude's contexts are looked at: a context of your own with a `` `+` `` member is required by name.
+An operator reads the context member of its name (prefix `-` reads `negate`), and its context is the prelude's context with the fewest members that has that member. `Add` and `Num` both have a `` `+` ``, and `Add` is the smaller, so `+` is read through `Add`; in the same way `-` and prefix `-` are read through `Sub`, and only `Num` has a `` `*` ``. Only the prelude's contexts are looked at: a context of your own with a `` `+` `` member is required by name, and its member is called by name, as `` `+`(x, y) ``, since `x + y` in a function that requires only it is missing `Add`. A module's own context named `Add` doesn't take the operator over either.
 
 So every member of the prelude's contexts has exactly one smallest context. A context that repeats a member of another is larger or smaller than it, never the same size, and a smaller one takes the operator over in every function whose type is inferred. The compiler checks this when it checks the prelude, and reports a tie as `NYX0006`.
 
