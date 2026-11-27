@@ -23,7 +23,8 @@ dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). What is 
 - **Dimension variables.** `def square: d -> d^2` (spelling open) needs unification that solves equations such as
   `d * d = Length^2`. This is the largest piece of the work; Kennedy's "Types for Units-of-Measure" gives an algorithm
   that fits a Hindley–Milner checker. `Time(a)` already means a `Time` stored as `a`, so a dimension variable needs a
-  spelling of its own.
+  spelling of its own ([#2817](https://github.com/nanyx-lang/nanyx/issues/2817),
+  [#2627](https://github.com/nanyx-lang/nanyx/issues/2627)).
 - **Affine quantities.** `Instant` and `Time` are a point and a distance, and a library type of its own answers it, with
   the operators it attaches: `i - j` is a `Time(int)` and `i + t` an `Instant` (see
   [Instant](../advanced/units-of-measure#instant)). Temperature has the same shape (a temperature and a temperature
