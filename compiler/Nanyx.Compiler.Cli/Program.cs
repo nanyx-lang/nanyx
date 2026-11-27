@@ -1211,6 +1211,14 @@ internal static partial class CliCommands
         //        |   ^^^^^^^
         //        = 'println' requires the context 'Console', which 'wrapped' does not declare: ...
         //
+        // A related location, a place that explains the error, is shown the same way under a note with its label:
+        //
+        //        = note: 'x' is first defined here
+        //       --> main.nyx:1:5
+        //        |
+        //      1 | def x = 1
+        //        |     ^
+        //
         // On a terminal, the severity, headline and underline are in its colour. In the run's box, only the gutter is
         // dimmed, so diagnostics keep their colours.
         var box = (writer as RunBox.Writer)?.Box;
@@ -1233,36 +1241,44 @@ internal static partial class CliCommands
             string Coloured(string text) => escape is null ? text : $"\u001b[{escape}m{text}\u001b[0m";
             writer.WriteLine($"{Coloured($"{severity} {diagnostic.Code}: {Diagnostics.headline(diagnostic)}")}");
 
-            var excerpt = new List<string>();
-            var gutter = string.Empty;
+            // The gutter is as wide as the widest line number shown, so that every excerpt's bars line up.
+            var gutter = new string(' ', new[] { diagnostic.Span?.Value }
+                .Concat(diagnostic.Related.Select(related => (Parser.Program.SourceSpan?)related.Item1))
+                .Where(span => span is not null)
+                .Select(span => (span!.StartLine + 1).ToString().Length)
+                .DefaultIfEmpty(0)
+                .Max());
             if (diagnostic.Span is not null)
             {
-                var span = diagnostic.Span.Value;
+                WritePlace(diagnostic.Span.Value);
+            }
+
+            writer.WriteLine($" {gutter} = {diagnostic.Message}");
+            foreach (var related in diagnostic.Related)
+            {
+                writer.WriteLine($" {gutter} = note: {related.Item2}");
+                WritePlace(related.Item1);
+            }
+
+            foreach (var suggestion in diagnostic.Suggestions)
+            {
+                writer.WriteLine($" {gutter} = help: {suggestion}");
+            }
+
+            // Where `span` is, then its line with the span underlined, if its file can be read.
+            void WritePlace(Parser.Program.SourceSpan span)
+            {
                 if (!sources.TryGetValue(span.File, out var source))
                 {
                     source = SourceExcerpt.SourceOf(span.File);
                     sources[span.File] = source;
                 }
 
-                excerpt.AddRange(source is null ? [] : SourceExcerpt.Lines(span, source, Coloured));
-                gutter = new string(' ', (span.StartLine + 1).ToString().Length);
                 writer.WriteLine($" {gutter}--> {FormatLocation(shell, span)}");
-            }
-
-            foreach (var line in excerpt)
-            {
-                writer.WriteLine($" {line}");
-            }
-
-            writer.WriteLine($" {gutter} = {diagnostic.Message}");
-            foreach (var related in diagnostic.Related)
-            {
-                writer.WriteLine($" {gutter} = note: {FormatLocation(shell, related.Item1)}: {related.Item2}");
-            }
-
-            foreach (var suggestion in diagnostic.Suggestions)
-            {
-                writer.WriteLine($" {gutter} = help: {suggestion}");
+                foreach (var line in source is null ? [] : SourceExcerpt.Lines(span, source, Coloured, gutter.Length))
+                {
+                    writer.WriteLine($" {line}");
+                }
             }
         }
     }
