@@ -357,15 +357,17 @@ A run started from the editor shows what each [`dbg`](../stdlib/console#dbg) gav
 faint text, rather than in the terminal, which keeps only what the program prints: `▸ 84`, or, for a `dbg` reached
 several times, how many times and the last value, `▸ ×3, last #shipped`. A value longer than a line is cut short there.
 Hovering the `dbg` shows the value whole, or each value in the order they came, numbered, the first 200 of them, and
-**Nanyx: Show dbg values**, on the `dbg`'s line, lists every one, to copy one. The values come as the program runs: the
-run is given [`nanyx run --dbg-to`](./command-line#nanyx-run) a file of its own, which the extension reads as it grows
-and deletes once the run ends.
+**Nanyx: Show dbg values**, on the `dbg`'s line, lists every one, to copy one. A place keeps its latest 1000 values,
+and counts them all, so a `dbg` in a loop reached a million times says `▸ ×1000000` and lists the last 1000. The
+values come as the program runs: the run is given [`nanyx run --dbg-to`](./command-line#nanyx-run) a file of its own,
+which the extension reads as it grows and deletes once the run ends.
 
 The values of a file stay until the next run that reaches one of its `dbg`s, which replaces them, or until the file is
 closed. Once the file is edited they fade, and each stays on its `dbg`'s line as lines above it are added or taken
 away: the language server matches each `dbg` of the file as it was when the run gave its values with the one it is
-now, by the definition it is in and its text, so a `dbg` that is deleted loses its value. While the file doesn't parse,
-the values stay where they were.
+now, by the definition it is in and its text, so a `dbg` that is deleted loses its value. A value a live run showed
+that no `dbg` gave (see [Live mode](#live-mode)) moves to the nearest line with the text its line had, and is lost when
+there is none. While the file doesn't parse, the values stay where they were.
 
 A test run from the [Testing](#testing) view shows its tests' `dbg` values the same way, from `nanyx test`'s `dbg`
 lists, and what the tests printed, `dbg`s too, is still in **Test Results**. A `nanyx run` in a terminal of your own
@@ -387,10 +389,19 @@ terminal; its files are still in memory.
 
 The **Live mode** view in the Nanyx sidebar, beside the Info view and the Library, shows the active file's script or
 package: whether live mode is on, the contexts its entry point needs, that its files are in memory and its input
-empty, and what holds it back, or runs for real once it is on. Its switch, beside the first line or at the top of the
+empty, what it shows, and what holds it back, or runs for real once it is on. Its switch, beside the first line or at the top of the
 view, turns live mode on or off for that script or package, and so does **Nanyx: Toggle live mode**; the extension
 remembers the choice for the workspace. A file of a package that isn't its `@entry` file shows the package once its
 `@entry` file has been opened.
+
+A live run shows what each `dbg` writes, or, once switched, every value the program's own code binds or gives: each
+`def` that isn't a function, at the `def`, and each statement whose value isn't `()`, a block's last among them, as
+`= 84` at the end of its line, or `= ×3, last 84`, beside its `dbg`s' `▸` values. The view's **Shows** line, and
+**Nanyx: Toggle showing every value**, switch it, which sets `nanyx.live.show`, and run the program again. A value of
+a type no `dbg` could write is shown by its type, `<value of MArray(int)>`, and a sequence always is,
+`<sequence of int>`, so that showing it never runs it. It is
+[`nanyx run --show-values`](./command-line#nanyx-run), and shows only the values of the script or the package's own
+files, not of the library's.
 
 A save while a run is still going stops it and starts another, and a run that takes longer than `nanyx.live.timeLimit`
 seconds is stopped, so a program that never ends doesn't keep a process busy.
@@ -408,6 +419,7 @@ stops the run and starts another, and the same time limit stops a run of them th
 | Setting | Default | What it does |
 |---------|---------|--------------|
 | `nanyx.live.timeLimit` | 10 | How many seconds a live run may take before it is stopped. |
+| `nanyx.live.show` | `dbg` | What a live run shows in the editor: `dbg`, what each `dbg` writes, or `every`, every value its code binds or gives as well. |
 
 # Testing
 
@@ -430,8 +442,9 @@ test the run would have run is marked errored, with the build's errors. Stopping
 | Command | What it does |
 |---------|--------------|
 | **Nanyx: Run the current file** | Saves the file and runs it in a terminal. See [Running a file](#running-a-file). |
-| **Nanyx: Show dbg values** | Lists every value the `dbg` on the cursor's line gave in the last run, in order, and copies the one you choose. See [dbg values](#dbg-values). |
+| **Nanyx: Show dbg values** | Lists every value the `dbg` on the cursor's line gave in the last run, in order, or else the value shown there, and copies the one you choose. See [dbg values](#dbg-values). |
 | **Nanyx: Toggle live mode** | Turns live mode on or off for the active file's script or package. See [Live mode](#live-mode). |
+| **Nanyx: Toggle showing every value** | Switches a live run between showing its `dbg`s' values and every value, `nanyx.live.show`. See [Live mode](#live-mode). |
 | **Nanyx: Show info view** | Shows and focuses the view that shows what the compiler knows at the cursor. See [Info view](#info-view). |
 | **Nanyx: Search library by type** | Searches the standard library by name or type, and inserts the match you choose with its import. See [Searching the library](#searching-the-library). |
 | **Nanyx: Download the compiler** | Looks for the newest compiler release straight away and downloads it. |

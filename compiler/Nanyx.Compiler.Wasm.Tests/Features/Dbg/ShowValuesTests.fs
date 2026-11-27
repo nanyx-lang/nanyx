@@ -86,3 +86,13 @@ let ``--show-values without --dbg-to is a usage error, and the program doesn't r
     Assert.Equal(2, outcome.ExitCode)
     Assert.Equal("error: --show-values writes the values to the file --dbg-to names: give it --dbg-to too.\n", outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal("", outcome.StandardOutput)
+
+[<Fact>]
+let ``A statement that is a dbg, called or piped, is written once, as the dbg`` () =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" "def f = { n: int ->\n  def m = n + 1\n  m \\dbg\n}\nprintln(f(2))\n"
+    let outcome = nanyxIn directory.Path [ "run"; "--show-values"; "--dbg-to"; "hits.jsonl"; "main.nyx" ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal<(string * int * string) list>(
+        [ "value", 2, "3"; "dbg", 3, "3" ],
+        shownIn directory.Path |> List.map (fun (_, shown) -> shown.Kind, shown.Line, shown.Value))

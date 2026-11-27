@@ -29,6 +29,7 @@ let private leftAlone (expr: Expression) : bool =
     SourceSpan.isNone expr.Span
     || (match expr.Kind with
         | FunctionCall(name, _, _) -> name = DbgSyntax.builtIn || madeUp name
+        | Pipe(_, name, _, _) -> name = DbgSyntax.builtIn
         | IdentifierExpr name -> madeUp name
         | WorkflowBindExpr _
         | WorkflowReturnExpr _ -> true

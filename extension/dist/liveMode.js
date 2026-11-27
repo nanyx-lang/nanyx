@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LiveMode = exports.COMMAND_TOGGLE_LIVE = void 0;
+exports.LiveMode = exports.COMMAND_TOGGLE_SHOW = exports.COMMAND_TOGGLE_LIVE = void 0;
 const child_process_1 = require("child_process");
 const crypto_1 = require("crypto");
 const fs = __importStar(require("fs"));
@@ -44,6 +44,8 @@ const dbgValues_1 = require("./dbgValues");
 const live_1 = require("./live");
 /** The command that turns live mode on or off for the active file's script or package. */
 exports.COMMAND_TOGGLE_LIVE = "nanyx.toggleLiveMode";
+/** The command that switches a live run between showing its `dbg`s' values and every value (`nanyx.live.show`). */
+exports.COMMAND_TOGGLE_SHOW = "nanyx.toggleShowValues";
 /** Where the user's choices are kept, by target, in the workspace's state. */
 const settingsKey = "nanyx.liveMode";
 /** How often a live run's `dbg` file is read for what it has written since. */
@@ -53,7 +55,9 @@ const readEvery = 200;
  * input, and its `dbg`s shown in the editor, and writes what it printed to the "Nanyx Live" output channel. It is on
  * on its own where the entry point requires none but `Console`, `Async` and `FileSystem`, and elsewhere only once the
  * user turns it on, from the Live mode view in the Nanyx sidebar or **Nanyx: Toggle live mode**. A save while a run is
- * still going stops it and starts another, and a run past `nanyx.live.timeLimit` seconds is stopped.
+ * still going stops it and starts another, and a run past `nanyx.live.timeLimit` seconds is stopped. With
+ * `nanyx.live.show` set to `every`, which the view's row and **Nanyx: Toggle showing every value** switch, a run shows
+ * every value its code binds or gives.
  */
 class LiveMode {
     constructor(state, compiler, client, dbg, tests) {
@@ -72,7 +76,7 @@ class LiveMode {
         this.lastTests = new Map();
         this.disposables = [];
         this.view = vscode.window.createTreeView("nanyx.live", { treeDataProvider: this });
-        this.disposables.push(this.output, this.changed, this.view, vscode.commands.registerCommand(exports.COMMAND_TOGGLE_LIVE, () => this.toggle()), vscode.window.onDidChangeActiveTextEditor(() => void this.refresh()), vscode.workspace.onDidSaveTextDocument((document) => void this.saved(document)));
+        this.disposables.push(this.output, this.changed, this.view, vscode.commands.registerCommand(exports.COMMAND_TOGGLE_LIVE, () => this.toggle()), vscode.commands.registerCommand(exports.COMMAND_TOGGLE_SHOW, () => this.toggleShow()), vscode.workspace.onDidChangeConfiguration((event) => event.affectsConfiguration("nanyx.live.show") && this.changed.fire()), vscode.window.onDidChangeActiveTextEditor(() => void this.refresh()), vscode.workspace.onDidSaveTextDocument((document) => void this.saved(document)));
         void this.refresh();
     }
     dispose() {
@@ -123,6 +127,10 @@ class LiveMode {
             item.contextValue = "liveSwitch";
             item.iconPath = new vscode.ThemeIcon(row.label.endsWith("on") ? "pass-filled" : "circle-large-outline");
         }
+        else if (row.label.startsWith("Shows ")) {
+            item.contextValue = "showSwitch";
+            item.iconPath = new vscode.ThemeIcon(row.label === "Shows every value" ? "eye" : "debug-console");
+        }
         return item;
     }
     getChildren(row) {
@@ -136,7 +144,25 @@ class LiveMode {
         const info = this.infos.get(active.target.key);
         const setting = this.setting(active.target);
         const tests = this.testsOf(active.document.fileName);
-        return (0, live_1.rowsOf)(active.target, info, (0, live_1.isOn)(info, setting), tests, (0, live_1.testsOn)(tests, setting));
+        return (0, live_1.rowsOf)(active.target, info, (0, live_1.isOn)(info, setting), tests, (0, live_1.testsOn)(tests, setting), this.show());
+    }
+    /** What a live run shows (`nanyx.live.show`). */
+    show() {
+        return vscode.workspace.getConfiguration("nanyx").get("live.show", "dbg") === "every" ? "every" : "dbg";
+    }
+    /**
+     * Switches what a live run shows, where the setting is set (the workspace's, or else the user's), and runs the active
+     * file's script or package again, if live mode is on for it, to show it.
+     */
+    async toggleShow() {
+        const configuration = vscode.workspace.getConfiguration("nanyx");
+        const inWorkspace = configuration.inspect("live.show")?.workspaceValue !== undefined;
+        await configuration.update("live.show", this.show() === "every" ? "dbg" : "every", inWorkspace ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global);
+        this.changed.fire();
+        const active = this.activeTarget();
+        if (active && (0, live_1.isOn)(this.infos.get(active.target.key), this.setting(active.target))) {
+            void this.run(active.target);
+        }
     }
     /** Turns live mode on or off for the active file's script or package, and runs it once when it is turned on. */
     async toggle() {
@@ -239,7 +265,7 @@ class LiveMode {
         this.output.clear();
         this.output.appendLine(`▶ ${target.name}, live: files in memory, no input`);
         // No input: what the program reads sees the end of it.
-        const process = (0, child_process_1.spawn)(executable, (0, live_1.liveArguments)(target.target, channel), { cwd: target.directory, stdio: ["ignore", "pipe", "pipe"] });
+        const process = (0, child_process_1.spawn)(executable, (0, live_1.liveArguments)(target.target, channel, this.show()), { cwd: target.directory, stdio: ["ignore", "pipe", "pipe"] });
         const dbgRun = this.dbg.beginRun();
         const reader = new dbgValues_1.HitReader(channel);
         const read = () => {

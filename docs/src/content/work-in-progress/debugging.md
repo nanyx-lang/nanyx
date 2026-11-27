@@ -34,10 +34,6 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
   A program that needs more is re-run on save only once the user turns it on for its script or package, from the Live
   mode view in the Nanyx sidebar, and then with those contexts for real; its files are still in memory. A save stops a
   run still going, and runs have a time limit.
-- **Live mode can show every value, not only `dbg`'s.** A toggle switches it between `dbg` values only, the default,
-  and the value of each `def` and expression statement at the end of its line. Showing every value needs a live run
-  built with probes, or a cheaper write of its own at each binding
-  ([#3198](https://github.com/nanyx-lang/nanyx/issues/3198)).
 - **The console host first.** Debugging a request in the HTTP host, and a single test from the editor, come next; the
   browser host later.
 
@@ -83,6 +79,6 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 | `dbg` output kept with each test by the test runner (Planning) | [#2103](https://github.com/nanyx-lang/nanyx/issues/2103) | `nanyx test` |
 | `dbg` values inline in the editor: built ([dbg values](../standard-tools/vs-code-extension#dbg-values)) | [#2054](https://github.com/nanyx-lang/nanyx/issues/2054) | |
 | Live mode: re-run on save when the entry needs only `Console`, `Async` and `FileSystem`: built ([Live mode](../standard-tools/vs-code-extension#live-mode)) | [#2055](https://github.com/nanyx-lang/nanyx/issues/2055) | #2054 |
-| Live mode: a toggle between `dbg` values only and every line's value | [#3198](https://github.com/nanyx-lang/nanyx/issues/3198) | |
+| Live mode: a switch between `dbg` values only and every value: built ([Live mode](../standard-tools/vs-code-extension#live-mode)) | [#3201](https://github.com/nanyx-lang/nanyx/issues/3201), [#3198](https://github.com/nanyx-lang/nanyx/issues/3198) | #2055 |
 | Traces of a function's calls, shown and replayed in the editor (Planning) | [#3199](https://github.com/nanyx-lang/nanyx/issues/3199) | #2042 |
 | Typed holes (Planning) | [#3200](https://github.com/nanyx-lang/nanyx/issues/3200) | |
