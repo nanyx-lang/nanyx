@@ -40,6 +40,11 @@ export def __seqLast: a -> seq(a) = { x ->
   Sequence(next = { #next(x, seq.empty()) })
 }
 
+--| `f` of each element of `s`: what a `for` loop that yields one value each time round is in a sequence's block.
+export def __seqMap: ([c] seq(a)), ([d] a -> b) -> [c, d] seq(b) = { s, f ->
+  seq.map(s, f)
+}
+
 --| `x`, then the elements of the sequence `rest` gives, which runs only when the sequence is pulled
   past `x`.
 export def seq.cons: a, ([c] () -> [d] seq(a)) -> [c, d] seq(a) = { x, rest ->

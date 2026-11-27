@@ -12,8 +12,9 @@ module internal EmitLambdas =
     /// The prelude's context a builder's function pushes its values through.
     let emitContext = "Emit"
 
-    /// The calls the rewrite makes a `yield` into: `seq.cons(x, { rest })`, or the last one's `__seqLast(x)`.
-    let private yieldCalls = set [ Seqs.consFunction; Seqs.lastFunction ]
+    /// The calls the rewrite makes a `yield` into: `seq.cons(x, { rest })`, the last one's `__seqLast(x)`, or a loop's
+    /// that yields once each time round, `__seqMap(items, { item -> x })`, made at its first `yield`.
+    let private yieldCalls = set [ Seqs.consFunction; Seqs.lastFunction; Seqs.mapFunction ]
 
     /// The calls the rewrite chains a sequence's parts with, whose lambdas are the rest of the same block.
     let private chainCalls = set [ Seqs.consFunction; Seqs.appendFunction; Seqs.flatMapFunction; Seqs.delayFunction ]
