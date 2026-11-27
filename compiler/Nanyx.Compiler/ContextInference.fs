@@ -24,7 +24,9 @@ module internal ContextInference =
             | TyApply(_, args)
             | TyRecursive(_, args)
             | TySelf args
+            | TyMember(_, args)
             | TyUnion args -> args |> List.collect collect
+            | TyGroup _ -> []
             | TyFunc(arg, ret, contexts) ->
                 (Unifier.writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
             | TyContexts contexts -> Unifier.writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect
@@ -127,6 +129,8 @@ module internal ContextInference =
             // Only inside what a recursive alias stands for, which is written by the alias's name.
             | TyRecursive _
             | TySelf _
+            | TyMember _
+            | TyGroup _
             | TyParam _ -> None
             // A scoped context's scope is never written, nor are the contexts a type carries as an argument.
             | TyScope _
@@ -213,7 +217,9 @@ module internal ContextInference =
             | TyAlias(_, args, _)
             | TyApply(_, args)
             | TyRecursive(_, args)
-            | TySelf args -> args |> List.collect collect
+            | TySelf args
+            | TyMember(_, args) -> args |> List.collect collect
+            | TyGroup _ -> []
             | TyUnion items -> items |> List.collect (function TyVar v -> [ v ] | item -> collect item)
             | TyFunc(arg, ret, _) -> collect arg @ collect ret
             | TyRecord(fields, _)
