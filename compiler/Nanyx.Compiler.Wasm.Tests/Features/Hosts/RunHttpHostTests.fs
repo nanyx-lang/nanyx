@@ -117,7 +117,7 @@ def main: Request -> Response = { request ->
 """
     let outcome = serving directory.Path port (fun client -> Assert.Equal((500, "Internal Server Error"), get client "/crash"))
     Assert.Equal(0, outcome.ExitCode)
-    Assert.Contains("it crashed at src/main.nyx:5: no such page", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Contains("it crashed at src/main.nyx:5:45: no such page", outcome.StandardError.ReplaceLineEndings "\n")
 
 [<Fact>]
 let ``What a handler's dbg prints goes to the server's log with its request, not into the response (#2058)`` () =

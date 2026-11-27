@@ -3,10 +3,12 @@ namespace Nanyx.Runtime
 open System
 
 /// A frame of a program's stack where it stopped: the function, by the name its source gives it, and the file and line
-/// of the code it was running, when the module's table of places has them.
+/// of the code it was running, when the module's table of places has them, with the column there (0 for none), which a
+/// crash's report names and a stack doesn't.
 type Frame =
     { Name: string
-      Place: (string * int) option }
+      Place: (string * int) option
+      Column: int }
 
     /// The frame as a line of a stack: `count (main.nyx:3)`, or the name alone without a place.
     override this.ToString() =
@@ -50,8 +52,9 @@ module FunctionNames =
         | _ -> None
 
 /// Where code was made from: for each call it was inlined through, innermost first, the function whose code it is, the
-/// file and the line; the outermost has no function's name, since it is the function the code is in.
-type InlinedFrame = string option * string * int
+/// file, the line and the column (0 for none); the outermost has no function's name, since it is the function the code
+/// is in.
+type InlinedFrame = string option * string * int * int
 
 /// Where a debug build's probe is (see `Transpiler.Wasm.CoreIrProbes`).
 type ProbeKind =
@@ -138,8 +141,9 @@ module SpanTable =
                     let functionName = number ()
                     let file = number ()
                     let line = number ()
+                    let column = number ()
                     let outer = number ()
-                    let frame = (if functionName = 0 then None else Some strings.[functionName - 1]), strings.[file - 1], line
+                    let frame = (if functionName = 0 then None else Some strings.[functionName - 1]), strings.[file - 1], line, column
                     frames.Add(frame :: (if outer = 0 then [] else frames.[outer - 1]))
                 let mutable offset = 0
                 let entries =
@@ -169,7 +173,7 @@ module SpanTable =
                     for _ in 1 .. number () do
                         let functionName = strings.[number () - 1]
                         match frames.[number () - 1] with
-                        | (_, file, line) :: _ -> definitions.[functionName] <- (file, line)
+                        | (_, file, line, _) :: _ -> definitions.[functionName] <- (file, line)
                         | [] -> ()
                 let library =
                     if at < finish then Set.ofList [ for _ in 1 .. number () -> strings.[number () - 1] ] else Set.empty

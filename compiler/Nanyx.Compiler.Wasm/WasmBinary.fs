@@ -16,7 +16,8 @@ open Transpiler.Wasm.WatSyntax
 
 /// The name of the custom section that holds the table of places. It holds six vectors, written as in the rest of the module.
 /// The names of files and functions, numbered from 1. The frames, numbered from 1, each a function's name (0 for the
-/// function the code is in), a file's name, a line, and the frame of the call it was inlined at (0 for none), which
+/// function the code is in), a file's name, a line, a column (0 for none, as a definition's frame has), and the frame of
+/// the call it was inlined at (0 for none), which
 /// comes before it: a place is its innermost frame, and the frames of the calls it was inlined through follow from it.
 /// For each stretch of code, in order, how far after the last one it starts (the first, from the start of the
 /// module) and its place, the number of its innermost frame. And each debug probe (see `CoreIrProbes`), in order of
@@ -578,8 +579,8 @@ type private CodeWriter
         assembler: Assembler,
         locals: Dictionary<string, int>,
         out: Bytes,
-        places: ResizeArray<int * (string option * string * int) list>,
-        probes: ResizeArray<int * string * string option * (string option * string * int) list>
+        places: ResizeArray<int * (string option * string * int * int) list>,
+        probes: ResizeArray<int * string * string option * (string option * string * int * int) list>
     ) =
     let labels = Stack<string option>()
     // The frames of the last place marker, which a probe's marker after it is at.
@@ -818,9 +819,9 @@ let assemble (wat: string) : byte array =
         let code = Bytes()
         // Each place marker's frames, and where in `code` the code after it starts; and where each body starts, with no
         // frames, so that code before a body's first marker has no place.
-        let places = ResizeArray<int * (string option * string * int) list>()
+        let places = ResizeArray<int * (string option * string * int * int) list>()
         // Each probe's number and kind, and the frames of its place.
-        let probes = ResizeArray<int * string * string option * (string option * string * int) list>()
+        let probes = ResizeArray<int * string * string option * (string option * string * int * int) list>()
         // Each function's name, as the name section gives it, with the file and line of its definition.
         let definitions = ResizeArray<string * string * int>()
         vector code assembler.Functions (fun out func ->
@@ -944,12 +945,12 @@ let assemble (wat: string) : byte array =
                     strings.[text] <- strings.Count + 1
                     strings.Count
             // Each frame once, with the frame of the call it was inlined at, which is numbered first.
-            let frames = Dictionary<int * int * int * int, int>()
-            let rec frameNumber (place: (string option * string * int) list) =
+            let frames = Dictionary<int * int * int * int * int, int>()
+            let rec frameNumber (place: (string option * string * int * int) list) =
                 match place with
                 | [] -> 0
-                | (functionName, file, line) :: outer ->
-                    let key = (functionName |> Option.map stringNumber |> Option.defaultValue 0), stringNumber file, line, frameNumber outer
+                | (functionName, file, line, column) :: outer ->
+                    let key = (functionName |> Option.map stringNumber |> Option.defaultValue 0), stringNumber file, line, column, frameNumber outer
                     match frames.TryGetValue key with
                     | true, number -> number
                     | _ ->
@@ -964,14 +965,14 @@ let assemble (wat: string) : byte array =
                     id, probeKindCode kind, (functionName |> Option.map stringNumber |> Option.defaultValue 0), frameNumber frames)
                 |> List.ofSeq
             // Each function's name and the frame of its definition.
-            let defined = definitions |> Seq.map (fun (functionName, file, line) -> stringNumber functionName, frameNumber [ None, file, line ]) |> List.ofSeq
+            let defined = definitions |> Seq.map (fun (functionName, file, line) -> stringNumber functionName, frameNumber [ None, file, line, 0 ]) |> List.ofSeq
             // The strings and frames are all numbered by now.
             let table = Bytes()
 
             name table spanTableName
             vector table (strings |> Seq.sortBy _.Value |> Seq.map _.Key) name
-            vector table (frames |> Seq.sortBy _.Value |> Seq.map _.Key) (fun out (functionName, file, line, outer) ->
-                for number in [ functionName; file; line; outer ] do
+            vector table (frames |> Seq.sortBy _.Value |> Seq.map _.Key) (fun out (functionName, file, line, column, outer) ->
+                for number in [ functionName; file; line; column; outer ] do
                     unsigned out (uint64 number))
             let mutable last = 0
             vector table stretches (fun out (offset, place) ->

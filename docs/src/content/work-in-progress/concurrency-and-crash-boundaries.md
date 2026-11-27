@@ -50,8 +50,8 @@ untouched. The [HTTP host](../advanced/hosts#the-http-host) runs each request in
 
 **The report is built** ([#2933](https://github.com/nanyx-lang/nanyx/issues/2933)): a crash hands the runtime its
 message, the place in the program's code it crashed at and the stack, as data (`RunError.Crashed`, see
-[Crash stacks](../deep-dives/crash-stacks#the-runtime)). The place is a file and a line; a column waits for the
-caller's location ([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)). What is still open is the hook: a host
+[Crash stacks](../deep-dives/crash-stacks#the-runtime)). The place is a file, a line and a column
+([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)). What is still open is the hook: a host
 deciding what a crash does, rather than the runtime. The design:
 
 ```nanyx fragment

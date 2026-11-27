@@ -92,9 +92,9 @@ let ``A crash reports its message to the runtime as data, and writes it to stder
     match runReporting threeDeep with
     | Error(Nanyx.Runtime.Crashed(message, place, stack)), written ->
         Assert.Equal(Some "too big: 5", message)
-        // Where the program called `crash`, not where `crash` is in the standard library: a source compiled on its own
-        // is in a file with no name.
-        Assert.Equal(Some("", 2), place)
+        // Where the program called `crash`, its column too (#2950), not where `crash` is in the standard library: a
+        // source compiled on its own is in a file with no name.
+        Assert.Equal(Some("", 2, 17), place)
         Assert.Equal("crash: too big: 5\n", written.ReplaceLineEndings "\n")
         Assert.Equal<string list>([ "crash"; "inner"; "middle"; "outer"; "<top level>" ], stack |> List.map _.Name)
     | other -> Assert.Fail $"%A{other}"
@@ -106,7 +106,7 @@ let ``A failed orCrash is placed where the program called it, past the standard 
     match runReporting source with
     | Error(Nanyx.Runtime.Crashed(message, place, _)), _ ->
         Assert.Equal(Some "no 3", message)
-        Assert.Equal(Some("", 3), place)
+        Assert.Equal(Some("", 3, 3), place)
     | other -> Assert.Fail $"%A{other}"
 
 [<Fact>]
@@ -116,7 +116,7 @@ let ``A failed assert reports its message, and is placed at the line of the asse
         Assert.Contains("assert(n < 2)", message)
         Assert.Contains("n = 5", message)
         Assert.Equal(written, message)
-        Assert.Equal(Some("", 2), place)
+        Assert.Equal(Some("", 2, 3), place)
         // The message names the place too, with its column; a source compiled on its own is in no file, so it names none.
         Assert.StartsWith("2:3: ", message)
     | other -> Assert.Fail $"%A{other}"
@@ -125,8 +125,10 @@ let ``A failed assert reports its message, and is placed at the line of the asse
 let ``An error deferred to run time reports its message to the runtime`` () =
     match runReporting "def broken = { n: int ->\n  n + \"x\"\n}\n\nprintln(broken(1))\n" with
     | Error(Nanyx.Runtime.Crashed(Some message, place, _)), written ->
-        Assert.Equal(Some("", 2), place)
+        // The column of the expression the error replaced, as its message says.
+        Assert.Equal(Some("", 2, 3), place)
         Assert.Contains("NYX", message)
+        Assert.StartsWith("2:3: ", message)
         Assert.Equal(written, message)
     | other -> Assert.Fail $"%A{other}"
 

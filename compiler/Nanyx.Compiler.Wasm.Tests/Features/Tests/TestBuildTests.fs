@@ -40,7 +40,7 @@ let ``The test host runs the test at the index it is given: one that holds passe
     Assert.Equal(Passed, runs.["geometry.doubles"].Outcome)
     Assert.Equal(Passed, runs.["geometry.tests.adds up"].Outcome)
     match runs.["geometry.tests.fails"].Outcome with
-    | Failed(Crashed(_, Some(file, line), _)) -> Assert.Equal(("tests/geometry_tests.nyx", 12), (file, line))
+    | Failed(Crashed(_, Some(file, line, column), _)) -> Assert.Equal(("tests/geometry_tests.nyx", 12, 3), (file, line, column))
     | other -> Assert.Fail $"%A{other}"
 
 [<Fact>]

@@ -20,9 +20,9 @@ let ``A test that crashes fails with the crash's message and place, and the test
     let runs, _ =
         runsOf WasmTester.defaultTimeout "@test\ndef `crashes` = {\n  crash(\"boom\")\n}\n\n@test\ndef `passes` = {\n  assert(answer == 42)\n}\n"
     match runs.["crashes"].Outcome with
-    | Failed(Crashed(Some message, Some(file, line), _)) ->
+    | Failed(Crashed(Some message, Some(file, line, column), _)) ->
         Assert.Contains("boom", message)
-        Assert.Equal(("src/checks.nyx", 7), (file, line))
+        Assert.Equal(("src/checks.nyx", 7, 3), (file, line, column))
     | other -> Assert.Fail $"%A{other}"
     Assert.Equal(Passed, runs.["passes"].Outcome)
 
