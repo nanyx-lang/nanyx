@@ -447,7 +447,6 @@ module internal ContextInference =
             |> List.filter (fun p ->
                 not (earlier.Contains (p.Call, p.Index))
                 && not p.ChecksOnly
-                && not (WellKnownContexts.isOperatorPending p)
                 && not (InterpolationHoles.isHole p.Callee))
         if candidates.IsEmpty || scheme.Quantified.IsEmpty then state
         else
@@ -477,6 +476,15 @@ module internal ContextInference =
                             PendingContextInstances = left
                             HoleScopes = state.HoleScopes |> Map.filter (fun call _ -> leftCalls.Contains call || not (takenCalls |> Set.exists (fst >> (=) call))) }
                         symbol name contexts (Some signature)
+                // An operator on the def's own variables, as `a == b` in `def same = { a, b -> a == b }`, calls the
+                // member of the instance the def is now passed, as it does in a top-level def that writes no type, so
+                // that a type's own `==` is the one it calls (#2809).
+                let operators = taken |> List.map fst
+                let inputOf ty = TypeResolution.inputTypeFromArgs [ ty; ty ]
+                let registered =
+                    registered
+                    |> EqualityOperators.callMembers inputOf (operators |> List.filter EqualityOperators.isPending)
+                    |> OrderingOperators.callHelpers inputOf (operators |> List.filter OrderingOperators.isPending)
                 match symbol with
                 | Some symbol ->
                     let contextTys = required |> List.map (fun (ctxName, vars) -> TyApply(ctxName, vars |> List.map TyVar))
