@@ -99,9 +99,13 @@ let ``Each member gives in memory what the console host's gives on disk`` () =
     let inMemory =
         linesOf memory.Path """println(string.join(filesystem.inMemory([("a.txt", "alpha"), ("sub/b.txt", "beta")], operations), "\n"))"""
 
-    Assert.Equal(String.concat "
-" onDisk, String.concat "
-" inMemory)
+    // Every line that differs, so that a failure shows each case the two disagree on, not only the first.
+    let differing =
+        List.zip onDisk inMemory
+        |> List.filter (fun (disk, memory) -> disk <> memory)
+        |> List.map (fun (disk, memory) -> $"on disk: {disk} / in memory: {memory}")
+    Assert.Equal(onDisk.Length, inMemory.Length)
+    Assert.Equal<string list>([], differing)
 
 [<Fact>]
 let ``Files in memory are read back as they were written, and an error is the one the member gives`` () =
