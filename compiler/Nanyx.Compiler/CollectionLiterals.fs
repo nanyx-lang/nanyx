@@ -42,7 +42,7 @@ let inferSpread (infer: Infer) (env: TypeEnv) (state: InferState) (expr: Express
         | Some callee -> inferAsCall (infer env) state expr callee [ operand ]
         | None ->
             Error [ Diagnostics.at DiagnosticCodes.InvalidCollectionSpread operand.Span
-                        $"A spread in a square-bracket literal takes something that can be iterated, such as a list, an array, a set or a sequence, not a '{Unifier.tyToStringIn state.TypeDefs ty}'" ]
+                        $"A spread in a square-bracket literal takes something that can be iterated, such as a list, an array, a set or a sequence, not a '{Unifier.typeText state.TypeDefs ty}'" ]
 
 /// `literal`, a list literal with a spread in it, `[a, ...xs]`, which the parser writes `[a] ++ xs`, when one of its
 /// spreads is not a list: inferred as the list of its items with each spread read as `inferSpread` reads it, which is
@@ -88,5 +88,5 @@ let targeted (infer: Infer) (env: TypeEnv) (state: InferState) (literal: Express
                 let array = Expression.from literal (FunctionCall(CollectionSyntax.arrayOf, None, [ CollectionSyntax.listOf literal.Span segments ]))
                 Some (inferAsCall (infer env) state literal fromArray [ array ])
             | None ->
-                let typeName = attachedTypeNames ty |> List.tryHead |> Option.defaultValue (Unifier.tyToString ty)
+                let typeName = attachedTypeNames ty |> List.tryHead |> Option.defaultValue (Unifier.typeText state.TypeDefs ty)
                 Some (Error [ noFromArray literal.Span typeName ])

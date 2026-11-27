@@ -460,7 +460,7 @@ let private settleInstanceInScope (env: TypeEnv) (state: InferState) (ctxName: I
 /// it in scope is `other`, for another type.
 let private unsettledBesideOther (name: Identifier) (ctxName: Identifier) (other: Ty) (span: SourceSpan) : Diagnostic =
     Diagnostics.at DiagnosticCodes.MissingContextMembers span
-        $"'{name}' requires the context '{ctxName}' at a type nothing here settles, and the instance in scope is a '{Unifier.tyToString other}': write the type the call gives, or load an instance of '{ctxName}' for it with `use`"
+        $"'{name}' requires the context '{ctxName}' at a type nothing here settles, and the instance in scope is a '{Unifier.typeText Map.empty other}': write the type the call gives, or load an instance of '{ctxName}' for it with `use`"
     |> Diagnostics.about ctxName
 
 /// `state` with what each associated type of the context `ctxName`, which the callee of `call` requires written with
@@ -505,7 +505,7 @@ let private unfixedError (state: InferState) (inUse: bool) (ctxName: Identifier)
     let types = if names.Length = 1 then "type" else "types"
     let fix =
         if inUse then
-            let positional = argTys |> List.truncate (argTys.Length - (WrittenContexts.associatedArguments state ctxName argTys).Length) |> List.map (resolveSoFar state >> Unifier.tyToString)
+            let positional = argTys |> List.truncate (argTys.Length - (WrittenContexts.associatedArguments state ctxName argTys).Length) |> List.map (resolveSoFar state >> Unifier.typeText state.TypeDefs)
             $"""fix it by name, as in `use {ctxName}({String.concat ", " (positional @ [ $"{names.Head} = ..." ])})(...)`"""
         else $"declare it, as in `type {forType}.{names.Head} = ...`"
     Diagnostics.at DiagnosticCodes.UnfixedAssociatedType span
@@ -556,7 +556,7 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
     match argTys, contextMemberTypes state ctxName argTys with
     | forType :: _, Some members ->
         // The name a definition for the type is attached under: `Point`, `Money`, `int`.
-        let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.tyToStringIn state.TypeDefs forType)
+        let attachTo = attachedTypeNames forType |> List.tryHead |> Option.defaultValue (Unifier.typeText state.TypeDefs forType)
         let definitionOf memberName =
             match NoneDefault.tryDefinitions ctxName argTys with
             | Some definitions -> definitions |> List.tryFind (fst >> (=) memberName) |> Option.map snd |> Option.filter (fun name -> (TypeEnv.tryFind name env).IsSome)
@@ -579,9 +579,11 @@ let rec private synthesizeInstance (env: TypeEnv) (state: InferState) (calleeNam
                         match fixedTwoWays next ctxName argTys opened memberName definitionTy span with
                         | Some (name, earlier, own) ->
                             Error [ Diagnostics.at DiagnosticCodes.AssociatedTypeFixedTwice span
-                                        $"The instance '{WrittenContexts.instanceText state ctxName argTys}' fixes its associated type '{name}' two ways: '{definition}' makes it '{Unifier.tyToStringIn state.TypeDefs own}', where it is already '{Unifier.tyToStringIn state.TypeDefs earlier}'" ]
+                                        (Unifier.messageText state.TypeDefs (fun write ->
+                                            $"The instance '{WrittenContexts.instanceText state ctxName argTys}' fixes its associated type '{name}' two ways: '{definition}' makes it '{write own}', where it is already '{write earlier}'")) ]
                         | None ->
-                            fail $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{Unifier.tyToStringIn state.TypeDefs (resolveSoFar next definitionTy)}', where '{memberName}' must be '{Unifier.tyToStringIn state.TypeDefs (resolveSoFar next memberTy)}'"))
+                            fail (Unifier.messageText state.TypeDefs (fun write ->
+                                $"{requirer} requires the context '{ctxText}', but '{definition}' has the type '{write (resolveSoFar next definitionTy)}', where '{memberName}' must be '{write (resolveSoFar next memberTy)}'"))))
                 (Ok ([], withAttachedAssociated state attachTo ctxName argTys span))
             |> Result.bind (fun (bound, next) ->
                 match unfixedAssociated env next false ctxName argTys |> List.filter opened.Contains with

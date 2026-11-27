@@ -182,7 +182,7 @@ module internal OperatorCalls =
             | IdentifierExpr name when op = addInPlaceOperator && isCell name ->
                 $"`+=` doesn't change a cell, and means only what a type attaches to it, as `MList` does to add to the list: write `{name} := {name} + ...`"
             | _ ->
-                $"`{op}` has no built-in meaning, and '{Unifier.tyToString leftTy}' has no `{op}` attached: attach one to the type, as in ``def Money.`{op}` = ...``"
+                $"`{op}` has no built-in meaning, and '{Unifier.typeText Map.empty leftTy}' has no `{op}` attached: attach one to the type, as in ``def Money.`{op}` = ...``"
         Diagnostics.at DiagnosticCodes.UnknownFunction span message |> Diagnostics.about op
 
     /// `expr`, `-x` on an operand of the type `operandTy`: a call to the `negate` of that type or of the function's

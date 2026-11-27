@@ -49,7 +49,7 @@ module internal UnknownTagArms =
             match suggestions with
             | [] -> ""
             | _ -> $""": did you mean {String.concat " or " suggestions}?"""
-        let message = $"This arm can never match: the value is a '{TypePrinting.tyToString ty}', {listed}, so it has no #{tagName}{question}"
+        let message = $"This arm can never match: the value is a '{Unifier.typeText Map.empty ty}', {listed}, so it has no #{tagName}{question}"
         { Diagnostics.at DiagnosticCodes.TypeMismatch span message with
             Fixes =
                 suggestions

@@ -52,7 +52,7 @@ let private checkAnnotationIsRigid (state: InferState) (name: Identifier) (span:
                         |> Option.map (fun (otherName, _) -> $"'{varName}' would have to be '{otherName}'")
                     // What failed to check was reported where it failed: it is not another error here.
                     | concrete when Unifier.holdsError concrete -> None
-                    | concrete -> Some $"'{varName}' would have to be '{Unifier.tyToStringIn state.TypeDefs (Unifier.apply displayNames concrete)}'")
+                    | concrete -> Some $"'{varName}' would have to be '{Unifier.typeText state.TypeDefs (Unifier.apply displayNames concrete)}'")
                 |> List.choose id
             if problems.IsEmpty then
                 Ok ()
