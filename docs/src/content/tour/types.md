@@ -137,8 +137,8 @@ only call itself, or something else that never returns:
 
 ```nanyx
 def loop = { x -> loop(x) } -- a -> undefined
-def first = { xs: list(int) -> list.head(xs) } -- list(int) -> #some(int) | #emptyList
-def empty = { -> [] } -- () -> list(a)
+def first = { (xs: list(int)) -> list.head(xs) } -- list(int) -> #some(int) | #emptyList
+def empty = { [] } -- () -> list(a)
 ```
 
 `first`'s result comes from its input, and `empty`'s variable is inside a `list`, so both stay as they are. A type that
