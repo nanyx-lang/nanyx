@@ -81,3 +81,28 @@ let ``nanyx test shows a failed assert's place as its stack does, from the packa
     let outcome = testing [] [ "src/geometry.nyx", geometry ]
     let output = outcome.StandardOutput.ReplaceLineEndings "\n"
     Assert.Contains("\n  src/geometry.nyx:13:3: assert(double(3) == 5)\n    double(3) = 6\n    geometry_halves (src/geometry.nyx:13)\n", output)
+
+/// What `nanyx test` printed for the application `app` under the host `hostEntry` names, whose files, in `src`, are
+/// `files`.
+let private testingApplication (hostEntry: string) (files: (string * string) list) =
+    use directory = new TempDirectory()
+    directory.Write "app.nyxp" $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), {hostEntry})"""
+    for path, text in files do
+        directory.Write ("src/" + path) text
+    nanyxIn directory.Path [ "test" ]
+
+[<Fact>]
+let ``A test build keeps the console host's prelude for the program's modules, so a module that reads its arguments and files runs its tests`` () =
+    let main =
+        "module main\n\ndef greeting: string -> string = { name -> \"hello {name}\" }\n\ndef exists: [Async, FileSystem] Path -> bool = { at -> pathExists(at) }\n\n@entry\ndef main = {\n  println(greeting(\"{args()}\"))\n}\n\n@test\ndef `greets` = {\n  assert(greeting(\"x\") == \"hello x\")\n}\n"
+    let outcome = testingApplication consoleHostEntry [ "main.nyx", main ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Contains("PASS main.greets", outcome.StandardOutput)
+
+[<Fact>]
+let ``A test build keeps the HTTP host's prelude for the program's modules, so a module that names Request runs its tests`` () =
+    let main =
+        "module main\n\ndef greeting: Request -> string = { request -> \"hello {Request.path(request)}\" }\n\n@entry\ndef main: Request -> Response = { request -> Response.text(200, greeting(request)) }\n\n@test\ndef `adds up` = {\n  assert(1 + 1 == 2)\n}\n"
+    let outcome = testingApplication $"host = (package = \"nanyx.http.host\", version = \"{NyxCompiler.Toolchain.version}\")" [ "main.nyx", main ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Contains("PASS main.`adds up`", outcome.StandardOutput)

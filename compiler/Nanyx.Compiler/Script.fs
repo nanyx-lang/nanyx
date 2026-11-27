@@ -449,21 +449,23 @@ module Script =
     let compileFileIn (store: PackageStore) (filePath: string) : CompileResult = compileFileReportingIn store CompileListener.none filePath
 
     /// The test build of the script at `filePath`, whose text is `source`, with the packages its directives name found
-    /// in `store` and each module's check reported to `listener`: the compile of the script, under the test host in
-    /// place of its own, and, if it has tests, of a root beside it that imports it by its path (see
+    /// in `store` and each module's check reported to `listener`: the compile of the script, under its own host, and, if
+    /// it has tests, of a root beside it that imports it by its path (see
     /// `Package.testRootSource`), whose `Typed.Tests` are the script's own and whose diagnostics are the script's too. Or
     /// why the test host can't be read.
     let testBuild (store: PackageStore) (listener: CompileListener) (filePath: string) (source: string) : Result<CompileResult * CompileResult option, Diagnostic list> =
         let filePath = Path.GetFullPath filePath
         let directives = readFrom store filePath source
-        Package.scriptModules Hosts.testPackage store Lockfile.empty filePath SourceSpan.none None [] []
-        |> Result.map (fun testHost ->
+        let own = match directives.Build with Some build -> Result.Ok build | None -> Package.scriptModules Hosts.consolePackage store Lockfile.empty filePath SourceSpan.none None [] []
+        own
+        |> Result.bind (fun own -> Package.scriptModules Hosts.testPackage store Lockfile.empty filePath SourceSpan.none None [] [] |> Result.map (fun testHost -> own, testHost))
+        |> Result.map (fun (own, testHost) ->
             let root = Path.Combine(Path.GetDirectoryName filePath, Package.testRootFile)
+            // The script keeps its own host, whose prelude it sees; only the root runs under the test host.
             let build =
-                { (directives.Build |> Option.defaultValue testHost) with
-                    Host = testHost.Host
-                    HostPackage = testHost.HostPackage
-                    TestRoot = Some root }
+                { own with
+                    TestRoot = Some root
+                    TestHost = Option.map2 (fun host hostPackage -> host, hostPackage) testHost.Host testHost.HostPackage }
             let options = directives.Linters |> Option.defaultValue Linters.none
             let script = Compiler.compileSourceInReporting listener File.ReadAllText build options filePath source |> withDirectives directives
             let own (tests: Test list) = tests |> List.filter (fun test -> PackageModules.samePath test.Span.File filePath)

@@ -5,7 +5,7 @@ order: 23
 ---
 
 A test is a def marked `@test` ([Attributes](../tour/attributes#test)). Only a test build has tests: it compiles a
-package's sources and its test files under the test host, `nanyx.test.host`, to a core module whose entry point runs the
+package's sources and its test files to a core module whose entry point, under the test host, `nanyx.test.host`, runs the
 test at the index the host gives it. The design of the runner, `nanyx test`, is on
 [Testing](../work-in-progress/testing).
 
@@ -18,8 +18,11 @@ of its def in the merged module, and its span. Each import carries the imported 
 the root of a build has every test of the modules it reaches.
 
 A manifest's `tests` selects a package's test files (`Package.testFiles`). `Package.withTests` adds them to its
-sources and marks the package a test build, and `Package.testBuild` checks every file under the test host, in place of
-the package's own (`Package.withHost`).
+sources and gives the package the test host, found as `--host` finds one (`Package.withHost`), as its `TestHost`, and
+`Package.testBuild` checks every file. The program's modules keep the package's own host, whose prelude they see, so
+a module that calls `args()` under the console host, or names `Request` under the HTTP host, compiles in a test build
+as it does in any other (#2996). Only the build's root, and the test host's own package, run under the test host
+(`Library.hostOf`). A library has no host, nor a prelude, so its modules run under the test host, and see its prelude.
 
 # Checking them
 
@@ -39,13 +42,16 @@ A test beside its code is private to its module, so no other module can name it.
 `Attributes.testDispatcher`:
 
 ```nanyx fragment
-export def __tests: [Console, Random] int -> () = { index ->
+export def __tests = { index ->
   if index == 0 then `adds points`() else if index == 1 then `scales points`() else ()
 }
 ```
 
-It is written with the test host's contexts, which a test may require, rather than inferred. A program file's `@entry`
-is an ordinary def in a test build: the build runs the tests, not the program.
+Its type, and the contexts it requires, which are its tests', are inferred, as a def's written without a type are. Its
+name and its parameter are declared, as the parser declares a written def's (`Attributes.withDispatcherDeclared`):
+inference finds a def's symbol, and an unannotated one's contexts, by where it is declared, and a def that isn't
+declared loses the contexts it requires. A program file's `@entry` is an ordinary def in a test build: the build runs
+the tests, not the program.
 
 `Package.testResult` compiles the build's root, `__tests.nyx` in the package's directory, which is none of its files
 (`Package.testRootIn`). It imports each module with tests, and its `@entry` takes an index and counts through each
