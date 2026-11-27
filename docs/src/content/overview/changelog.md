@@ -26,7 +26,9 @@ are simple values, and a number with a unit that is a whole number of storage un
   ([Custom patterns](../advanced/custom-patterns#patterns-with-arguments)).
 - A number with a unit that nothing settles is an `int` when it is a whole number of its dimension's storage units, so
   `0.5s == 500ms` checks, and a `float` when it isn't
-  ([Numbers with units](../advanced/units-of-measure#numbers-with-units)).
+  ([Numbers with units](../advanced/units-of-measure#numbers-with-units)). A dimension that no declared unit can store
+  gets a storage unit made up for it, where it was NYX0299
+  ([Dimensions and units](../advanced/units-of-measure#dimensions-and-units)).
 - An open record can be spread to update the fields it is known to have, `(...p, x = 2)`
   ([Closed and open records](../tour/records#closed-and-open-records)).
 - `context x` can name any context a lambda is given, a parameterised one's instance or one with no members
