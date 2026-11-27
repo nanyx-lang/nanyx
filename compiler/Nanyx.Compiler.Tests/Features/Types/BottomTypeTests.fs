@@ -101,3 +101,26 @@ let ``The other branch is still checked against what is expected`` () =
     match (Compiler.compile source).Diagnostics with
     | [ diagnostic ] -> Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     | other -> Assert.Fail($"Expected one diagnostic, got %A{other}")
+
+[<Fact>]
+let ``A function whose result is a variable found nowhere else in its type gives back undefined`` () =
+    // No value of the variable can be made, so the function never returns (#1864).
+    let typed =
+        compileClean (
+            "def loop = { x -> loop(x) }\ndef curried = { a -> { b -> loop(b) } }\ndef first = { xs: list(int) -> list.head(xs) }\n"
+            + "def empty = { -> [] }\ndef id = { x -> x }\n")
+    Assert.Equal("a -> undefined", asciiTypeIn typed "loop")
+    Assert.Equal("a -> b -> undefined", asciiTypeIn typed "curried")
+    // A result that is in the input's type, or inside another type, is as generic as before.
+    Assert.Equal("list(int) -> #some(int) | #emptyList", asciiTypeIn typed "first")
+    Assert.Equal("() -> list(a)", asciiTypeIn typed "empty")
+    Assert.Equal("a -> a", asciiTypeIn typed "id")
+
+[<Fact>]
+let ``A result variable an annotation names stays generic`` () =
+    let typed = compileClean "def loop: a -> b = { x -> loop(x) }\n"
+    Assert.Equal("a -> b", asciiTypeIn typed "loop")
+
+[<Fact>]
+let ``A call to a function that never returns fits wherever a value is expected`` () =
+    compileClean "def loop = { x -> loop(x) }\ndef pick = { n: int -> if n > 0 then loop(n) else \"none\" }\ndef s: string = pick(1)\n" |> ignore

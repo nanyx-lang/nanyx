@@ -64,6 +64,11 @@ let private fieldTySoFar (state: InferState) (ty: Ty) (fieldName: string) : (Ty 
 /// rather than it, each of inference's own variables solved to a type with it is constrained to that type without it.
 /// So is every context variable no caller can choose (see `Unifier.outputOnlyContextVars`) solved to no contexts.
 /// A variable in a box the value holds is never generalised (see `Boxes.heldVariables`).
+///
+/// So is a function's result that is a type variable found nowhere else in its type, which no annotation named: no
+/// value of it can be made, so a call never gives one back, and the function never returns (#1864). `{ x -> loop(x) }`
+/// is an `a -> undefined`, while `{ xs -> xs.head }`, whose result is in its input's type, and `{ -> [] }`, whose result
+/// is a `list(a)`, are as generic as before.
 let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeScheme * InferState =
     // A conflict among the constraints, in this def or an earlier one, is set aside, so a def after an error is
     // generalised as it would be without it (#1441).
@@ -72,7 +77,7 @@ let internal generalizeDef (env: TypeEnv) (state: InferState) (ty: Ty) : TypeSch
     let envVars = envVarsUnder subst env
     envVars.UnionWith(LambdaContexts.usedVars (Unifier.apply subst) state)
     let closed =
-        Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved
+        Unifier.outputOnlyRestVars resolved @ Unifier.outputOnlyContextVars resolved @ Unifier.neverReturnedVars resolved
         |> List.filter (fun v -> v.Name.IsNone && not (envVars.Contains v.Id))
     let bottom = TyUnion []
     let closing = closed |> List.map (fun v -> v.Id, bottom) |> Map.ofList

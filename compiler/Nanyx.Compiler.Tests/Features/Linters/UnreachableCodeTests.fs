@@ -141,3 +141,14 @@ let ``A return in a branch does not make what follows the branch unreachable`` (
         + "  }\n"
         + "}\n"
     Assert.Empty(reported source)
+
+[<Fact>]
+let ``The statements after a call to a function inferred never to return are reported`` () =
+    // An unannotated function whose result is a variable nothing else has is inferred to give back undefined (#1864).
+    let source =
+        "def loop = { x -> loop(x) }\n"
+        + "def f: int -> int = { x ->\n"
+        + "  loop(x)\n"
+        + "  x + 1\n"
+        + "}\n"
+    Assert.Equal<string list>([ "x + 1" ], diagnostics source |> List.map snd)

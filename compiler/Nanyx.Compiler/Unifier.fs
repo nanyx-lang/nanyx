@@ -684,6 +684,23 @@ module Unifier =
         |> List.choose (fun (v, isContext, _) -> if isContext && not (inInput.Contains v.Id) then Some v else None)
         |> List.distinctBy (fun v -> v.Id)
 
+    /// The variable a function type `ty` gives back, after all its inputs, where it is found nowhere else in `ty`: not in
+    /// an input, a function's contexts or another type. No value of it can be made, so a function of that type never
+    /// returns: `a -> b` has `b`, `a -> list(b)` and `b -> b` have none (#1864).
+    let neverReturnedVars (ty: Ty) : TyVar list =
+        let rec result ty =
+            match ty with
+            | TyFunc(_, ret, _) -> result ret
+            | other -> other
+        let rec varIds ty =
+            match ty with
+            | TyVar v -> [ v.Id ]
+            | TyFunc(arg, ret, contexts) -> varIds arg @ varIds ret @ List.collect varIds contexts
+            | _ -> Ty.children ty |> List.collect varIds
+        match ty, result ty with
+        | TyFunc _, TyVar v when varIds ty |> List.filter ((=) v.Id) |> List.length = 1 -> [ v ]
+        | _ -> []
+
     let rec occurs (varId: int) (ty: Ty) : bool =
         match ty with
         | TyVar v -> v.Id = varId
