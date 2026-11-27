@@ -120,6 +120,12 @@ def main = {
         Some ("main", [ "Show(Point)", "use", """Show(Point)(show = { p -> "p" })""", [ "describe" ] ]),
         flowAt source "describe(Point" 0)
 
+// The flow wrote a context's associated types by position, `Num(a, fraction)`, where hover writes them by name (#3047).
+[<Fact>]
+let ``The flow view writes a context's associated type as hover does, bound by name`` () =
+    let source = withFinalNewline "def ratio: [Num(a)] a, a -> fraction = { x, y -> x / y }"
+    Assert.Equal(Some ("ratio", [ "Num(a, fraction = b)", "signature", "Num(a)", [] ]), flowAt source "x / y" 0)
+
 [<Fact>]
 let ``There is no flow outside a def`` () =
     Assert.Equal(None, flowAt "println(\"top\")\n" "println" 0)

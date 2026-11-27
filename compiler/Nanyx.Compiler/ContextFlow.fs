@@ -129,13 +129,17 @@ let private entriesAt (typed: TypedModule) (syntax: Module) (offset: int) =
             |> List.collect (fun (call, _, built) -> built |> List.map (fun instance -> instance, call))
             |> List.groupBy fst
             |> List.map (fun ((context, source), served) -> (context, source, SourceSpan.none), SourceSpan.none, served |> List.map snd |> List.distinctBy _.Id)
-        name, provided @ built, calls |> List.map (fun (call, providers, _) -> call, providers))
+        symbol, name, provided @ built, calls |> List.map (fun (call, providers, _) -> call, providers))
 
 
-/// The flow of contexts through the def `entriesAt` found, with made-up type variables named by `names`, and the
-/// contexts named by `rename` (see `Signatures.relativeAt`).
-let private flowOf (names: TypeNotation) (rename: Ty -> Ty) (name: string, entries, _) : Flow =
-    let written = Unifier.tysToDisplayStrings names (entries |> List.map (fun ((context, _, _), _, _) -> rename context))
+/// The flow of contexts through the def `entriesAt` found, `symbol`, with made-up type variables named by `names`, and
+/// the contexts named by `rename` (see `Signatures.relativeAt`). The contexts are written as hover writes them in the
+/// def's type, named together with it, so an associated type the def's type uses is bound by name: `Num(a, fraction = b)`.
+let private flowOf (typed: TypedModule) (names: TypeNotation) (rename: Ty -> Ty) (symbol: Symbol, name: string, entries, _) : Flow =
+    let defType = typed.SymbolTypes |> Map.tryFind symbol.Id |> Option.map rename |> Option.toList
+    let written =
+        Unifier.tysToDisplayStringsIn typed.TypeDefs names (defType @ (entries |> List.map (fun ((context, _, _), _, _) -> rename context)))
+        |> List.skip defType.Length
     { Def = name
       Entries =
         List.map2
@@ -151,7 +155,7 @@ let private flowOf (names: TypeNotation) (rename: Ty -> Ty) (name: string, entri
 /// What the editor highlights at `offset` in the def `entriesAt` found there: on a `use` or a context of the def's
 /// signature, that provider and the calls it serves; else, on the innermost call around it that one of the def's
 /// providers serves, the call and those providers. Empty elsewhere.
-let private highlightsOf (syntax: Module) (offset: int) (_, entries, calls) : Highlights =
+let private highlightsOf (syntax: Module) (offset: int) (_, _, entries, calls) : Highlights =
     match entries |> List.tryFind (fun (_, trigger, _) -> Hover.contains offset trigger) with
     | Some ((_, _, span), _, served') -> { Providers = [ span ]; Calls = served' |> List.map (fun call -> (served call).Span) }
     | None ->
@@ -175,6 +179,6 @@ let at (names: TypeNotation) (result: CompileResult) (offset: int) : View =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
         match entriesAt typed syntax offset with
-        | Some found -> { Flow = Some (flowOf names (Signatures.relativeAt typed.TypeDefs syntax offset) found); Highlights = highlightsOf syntax offset found }
+        | Some found -> { Flow = Some (flowOf typed names (Signatures.relativeAt typed.TypeDefs syntax offset) found); Highlights = highlightsOf syntax offset found }
         | None -> none
     | _ -> none

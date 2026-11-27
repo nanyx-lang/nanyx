@@ -321,8 +321,16 @@ let ``A Type value of an associated type names a context the signature requires`
     Assert.Equal(DiagnosticCodes.UnknownAssociatedType.Code, code)
     Assert.Equal("Iter(d).elem", text)
 
+/// What hover shows, in `notation`, on the def `name` of `source`, which must compile cleanly.
+let private hoverOn (notation: TypeNotation) (source: string) (name: string) =
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    Hover.typeAt notation result (offsetOf source $"def {name}" 0 4) |> Option.map _.Type
+
+// A signature's variable named after an associated type was written bare, `[Iter(c)] c, elem -> elem`, which reads as a
+// type's name. It is a variable bound in its context, with the next free Latin letter, whatever the notation (#3047).
 [<Fact>]
-let ``Hover leaves out an associated type that is the signature's own variable of its name`` () =
+let ``Hover binds a signature's associated type the type uses to a variable in its context`` () =
     let source =
         withIter
             """
@@ -332,9 +340,66 @@ def headOr: [Iter(c)] c, elem -> elem = { items, fallback ->
     | #done -> fallback
 }
 """
-    let result = Compiler.compile source
-    let hover = Hover.typeAt Ascii result (offsetOf source "headOr:" 0 1)
-    Assert.Equal(Some "def headOr: [Iter(c)] c, elem -> elem", hover |> Option.map _.Type)
+    Assert.Equal(Some "def headOr: [Iter(c, elem = a)] c, a -> a", hoverOn Ascii source "headOr")
+    Assert.Equal(Some "def headOr: [Iter(c, elem = a)] c, a -> a", hoverOn Unicode source "headOr")
+
+[<Fact>]
+let ``A message binds a signature's associated type as hover does`` () =
+    let source =
+        withIter
+            """
+def runPure: (Bag -> int) -> int = { g -> 1 }
+
+def pass: ([Iter(c)] c -> elem) -> int = { f -> runPure(f) }
+"""
+    let code, message, _ = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.ContextsNotAllowed.Code, code)
+    Assert.StartsWith("'[Iter(c, elem = a)] c -> a' is given where 'Bag -> int' is expected", message)
+
+[<Fact>]
+let ``Hover leaves out an associated type the type doesn't use`` () =
+    let source =
+        withIter
+            """
+def countAll: [Iter(c)] c -> int = { items ->
+  match next(items)
+    | #some(_, rest) -> 1 + countAll(rest)
+    | #done -> 0
+}
+"""
+    Assert.Equal(Some "def countAll: [Iter(c)] c -> int", hoverOn Unicode source "countAll")
+
+[<Fact>]
+let ``Hover binds Num's fraction by name, declared with Latin letters and inferred with Greek`` () =
+    let source =
+        withFinalNewline
+            """dimension Distance
+@baseUnit unit m: Distance
+
+def speed: Distance(a), Time(a) -> Distance(Num(a).fraction) / Time(Num(a).fraction) = { d, t -> d / t }
+
+def ratio: [Num(a)] a, a -> fraction = { x, y -> x / y }
+
+def divide = { x, y -> x / y }"""
+    Assert.Equal(Some "def speed: [Num(a, fraction = b)] Distance(a), Time(a) -> Distance(b) / Time(b)", hoverOn Unicode source "speed")
+    Assert.Equal(Some "def ratio: [Num(a, fraction = b)] a, a -> b", hoverOn Unicode source "ratio")
+    Assert.Equal(Some "def divide: [Num(α, fraction = β)] α, α -> β", hoverOn Unicode source "divide")
+    Assert.Equal(Some "def divide: [Num(a, fraction = b)] a, a -> b", hoverOn Ascii source "divide")
+
+[<Fact>]
+let ``Two contexts' associated types of one name are two variables`` () =
+    let source =
+        withIter
+            """
+def headOr: [Iter(c)] c, elem -> elem = { items, fallback ->
+  match next(items)
+    | #some(value, _) -> value
+    | #done -> fallback
+}
+
+def both = { xs, ys, x, y -> (headOr(xs, x), headOr(ys, y)) }
+"""
+    Assert.Equal(Some "def both: [Iter(α, elem = γ), Iter(β, elem = δ)] α, β, γ, δ -> (γ, δ)", hoverOn Unicode source "both")
 
 [<Fact>]
 let ``A signature writes an associated type a constraint fixes, or inference leaves open, by name`` () =
