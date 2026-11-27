@@ -146,10 +146,12 @@ The tests run in a core module, as `nanyx run`'s program does, so a test that re
 
 ## Editors
 
-Built ([#3100](https://github.com/nanyx-lang/nanyx/issues/3100)): the VS Code extension fills the editor's test
-explorer from `nanyx test --list --format json`, runs a test, a module or a package with `--test` or `--module`, shows
-each result at the place it failed, and puts a **Run test** link above each `@test`
-([VS Code extension](../standard-tools/vs-code-extension#testing)).
+`nanyx test --format json` writes one JSON object on each line ([#3079](https://github.com/nanyx-lang/nanyx/issues/3079),
+[JSON](../standard-tools/command-line#json)), and `--list`, `--test` and `--module` list the tests and run exactly the
+ones named ([#3099](https://github.com/nanyx-lang/nanyx/issues/3099)). Built on them
+([#3100](https://github.com/nanyx-lang/nanyx/issues/3100)): the VS Code extension fills the editor's test explorer from
+`nanyx test --list --format json`, runs a test, a module or a package, shows each result at the place it failed, and
+puts a **Run test** link above each `@test` ([VS Code extension](../standard-tools/vs-code-extension#testing)).
 
 ## Expecting a crash
 
