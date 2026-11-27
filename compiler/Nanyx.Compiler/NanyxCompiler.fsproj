@@ -121,6 +121,7 @@
     <Compile Include="InferMatch.fs" />
     <Compile Include="InferCalls.fs" />
     <Compile Include="Infer.fs" />
+    <Compile Include="NeverReturns.fs" />
     <Compile Include="InferModule.fs" />
     <Compile Include="RequiredContexts.fs" />
     <Compile Include="Builtins.fs" />

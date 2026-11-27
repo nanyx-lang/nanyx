@@ -200,7 +200,7 @@ the compiler ships. Measures print in units a reader expects, a custom pattern c
   ([Keywords in loops](../advanced/workflows#keywords-in-loops)).
 - **Changed:** a dimension's values are stored in its default storage unit, the largest declared unit every unit of the
   dimension is a whole number of, and `@baseUnit` now marks only the unit its values are written in. `@storageUnit`
-  sets the storage unit by hand. A dimension with no such unit is [NYX0299](../standard-tools/errors#nyx0299), and a
+  sets the storage unit by hand. A dimension with no such unit is `NYX0299`, and a
   unit that is no whole number of it [NYX0300](../standard-tools/errors#nyx0300)
   ([Units of measure](../advanced/units-of-measure#dimensions-and-units)).
 - **Changed:** a measure prints as a reader expects ([Printing](../advanced/units-of-measure#printing)):

@@ -239,7 +239,6 @@ module DiagnosticCodes =
     let NotADimension = code 296 "Part of a derived dimension that is no dimension" Severity.Error
     let UnitOfDerivedDimension = code 297 "Unit of a derived dimension that its parts' units don't define" Severity.Error
     let UnitWorthNothing = code 298 "Unit worth nothing" Severity.Error
-    let NoStorageUnit = code 299 "Dimension with no unit to store it in" Severity.Error
     let UnitNotWholeStorageUnits = code 300 "Unit that is no whole number of the storage unit" Severity.Error
 
     // Calls.
@@ -283,7 +282,7 @@ module DiagnosticCodes =
           ComponentRootContextsDiffer; ReservedExternModule; ComponentBoundaryType; ComponentImportOutsideComponent; TaskHoldsMemory
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
           UnitsNotFromOne; MisplacedUnitAttribute; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
-          NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing; NoStorageUnit; UnitNotWholeStorageUnits
+          NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing; UnitNotWholeStorageUnits
           ArgumentCount; NotAFunction
           NotATest; ReferenceToTest; TestContextNotProvided
           UnsupportedByBackend; BackendInternalError ]

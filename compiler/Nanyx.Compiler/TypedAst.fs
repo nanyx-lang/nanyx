@@ -435,7 +435,7 @@ type UnitInfo =
       /// The attributes written before it, `@storageUnit` and `@baseUnit`.
       Marks: UnitMark list
       /// Whether it is its dimension's default display unit: the one `@baseUnit` marks, or, if none is marked, its
-      /// default storage unit.
+      /// default storage unit, or the smallest unit that one is a decimal of where the compiler made it up.
       IsDisplay: bool
       /// The symbol of its name, which a number written with it refers to (see `UnitOfMeasure`).
       Symbol: SymbolId option }
@@ -443,6 +443,16 @@ type UnitInfo =
 module UnitInfo =
     /// Whether `info` is its dimension's default storage unit, the one its values are stored as a number of.
     let isStorage (info: UnitInfo) = info.Scale = Rational.one
+
+    /// The default storage unit of a dimension whose units are `units`, as a number of a unit writes it: the unit's
+    /// name, `ns`, or, where no declared unit is one and the compiler made one up, the exact decimal of the smallest unit
+    /// it is a decimal of, `0.2mm`. None if `units` has neither.
+    let storageText (units: UnitInfo list) : string option =
+        match units |> List.tryFind isStorage with
+        | Some storage -> Some storage.Name
+        | None ->
+            Rational.smallestDecimalOf Rational.one (units |> List.map (fun info -> info, info.Scale))
+            |> Option.map (fun (info, number) -> number + info.Name)
 
 /// A definition marked `@component`, which a component built from the program exports, in the WIT interface its module
 /// names (see `ComponentInterface`).

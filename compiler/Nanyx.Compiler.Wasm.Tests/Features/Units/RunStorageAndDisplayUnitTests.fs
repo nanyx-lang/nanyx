@@ -45,6 +45,40 @@ def main = {
     runSource (normalized source) |> assertRan "0items\n2dozen\n25items\n"
 
 [<Fact>]
+let ``Run - a made-up storage unit's value that fits no unit is written as a decimal of the smallest it is one of`` () =
+    let source =
+        """dimension Distance
+
+@baseUnit unit m: Distance = 1_000mm
+unit inch: Distance = 25.4mm
+unit mm: Distance
+
+@entry
+def main = {
+  def float: Distance(float) -> Distance(float) = { d -> d }
+  dbg(1inch)
+  println("{1inch} {1mm} {2.6mm} {1inch + 1mm} {-2.6mm} {2m} {0mm}")
+  println("{float(1.5m)} {float(1inch)} {float(0mm)}")
+}
+"""
+    runSource (normalized source) |> assertRanWithDbg "1inch 1mm 2.6mm 26.4mm -2.6mm 2m 0m\n1.5m 1.0inch 0.0m\n" "[main.nyx:10] Distance(127)\n"
+
+[<Fact>]
+let ``Run - a made-up storage unit with no @baseUnit is displayed in the smallest unit it is a decimal of`` () =
+    let source =
+        """dimension Distance
+
+unit mm: Distance
+unit inch: Distance = 25.4mm
+
+@entry
+def main = {
+  println("{0mm} {0.4mm} {2inch}")
+}
+"""
+    runSource (normalized source) |> assertRan "0mm 0.4mm 2inch\n"
+
+[<Fact>]
 let ``Run - the prelude's Time is stored in nanoseconds and written in seconds when it is zero`` () =
     let source =
         """@entry

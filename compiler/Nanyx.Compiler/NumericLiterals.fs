@@ -341,7 +341,7 @@ module internal NumericLiterals =
         // A derived dimension has no default storage unit of its own: it is stored in its parts', multiplied and
         // divided, `m/ns`.
         let baseOf (dimension: Dimension) =
-            state.Units |> Map.tryFindKey (fun _ other -> other.Dimension = dimension && UnitInfo.isStorage other)
+            state.Units |> Map.values |> Seq.filter (fun other -> other.Dimension = dimension) |> List.ofSeq |> UnitInfo.storageText
         let partBase (id: NominalId) = baseOf (Dimension.ofBase id)
         let baseUnit =
             state.Units
