@@ -19,7 +19,8 @@ namespace Nanyx.LanguageServer;
 /// <c>nanyx/infoView</c>, a request of its own for the extension's info view (see <see cref="InfoViewHandler"/>), and
 /// <c>nanyx/libraryModules</c> and <c>nanyx/libraryModule</c>, which list the standard library's modules and what each
 /// exports (see <see cref="LibraryModulesHandler"/>), <c>nanyx/librarySearch</c>, which searches it by name and type,
-/// and <c>nanyx/addImport</c>, which imports one. Each editor
+/// <c>nanyx/addImport</c>, which imports one, and <c>nanyx/dbgSites</c>, which says where the <c>dbg</c>s a run reached are
+/// now (see <see cref="DbgSitesHandler"/>). Each editor
 /// feature is one handler class in <c>Handlers/</c>, registered in <see cref="Configure"/>, reading the document's
 /// last compile from <see cref="DocumentStore"/>. To add a feature, add a handler that derives from the matching
 /// OmniSharp base class and register it, as <see cref="RenameHandler"/> derives from <c>RenameHandlerBase</c>.
@@ -89,5 +90,6 @@ public static class NanyxLanguageServer
             .WithHandler<LibraryModulesHandler>()
             .WithHandler<LibraryModuleHandler>()
             .WithHandler<LibrarySearchHandler>()
-            .WithHandler<AddImportHandler>();
+            .WithHandler<AddImportHandler>()
+            .WithHandler<DbgSitesHandler>();
 }
