@@ -26,6 +26,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files and package m
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
 - a [library browser](#library), which lists what the standard library exports, and a [search](#searching-the-library) of it by name and by type
 - a run button, which runs the file as `nanyx run` does; a manifest has none
+- the package's [tests](#testing) in VS Code's **Testing** view, with a **Run test** link above each one
 - in a `.nyxp` manifest, the problems with it as you type, each at the field it is about, and formatting
 
 All of the settings below are under **Nanyx** in VS Code's settings, or can be written in `settings.json`. Changing any of them restarts the language server.
@@ -347,6 +348,22 @@ The run button at the top right of a `.nyx` editor, or **Nanyx: Run the current 
 The program's working directory is the workspace folder the file is in, or the file's own folder when it is in none. The file runs as a script, even when it is part of a package. In [development mode](#working-on-the-compiler), it runs with `--timings`, so the terminal also shows how long each module took to check.
 
 The command has no keyboard shortcut. To give it one, look for it in **Keyboard Shortcuts**.
+
+# Testing
+
+The **Testing** view lists the [tests](../tour/attributes#test) of each package in the workspace, and of each `.nyx`
+file open outside one, as [`nanyx test --list`](./command-line#nanyx-test) lists them: the package, or the file, then
+its modules, then each module's tests in the order they are written. The list is made again when a `.nyx` or `.nyxp`
+file is saved, made or deleted, and when the compiler changes. A test marked `@test(#io)` has the tag `io`, and one
+marked `@test(#crashes)` the tag `crashes`, so `@io` or `@crashes` in the view's filter shows only those.
+
+A test, a module or a package runs from its play button in the view, and a test from the **Run test** link above it
+in the editor. Each runs `nanyx test --format json`, with `--test` or `--module` for less than a package, and shows
+each test's result as it finishes. A test that fails is marked where it failed, at the `assert` or the `crash` and the
+column it is at, with the message, and the stack in the failure's **Call Stack**; one that ran too long, finished when
+it was meant to crash, or crashed with another message says that. What a test printed is in the **Test Results**
+panel, under the test, and the run's seed is at the top, for `nanyx test --seed`. When the tests can't be built, every
+test the run would have run is marked errored, with the build's errors. Stopping the run stops `nanyx test`.
 
 # Commands
 
