@@ -426,8 +426,17 @@ module UnusedPrivateDefinitions =
         let spans =
             (expressions |> List.map (fun expr -> expr.Id, expr.Span)) @ (types |> List.map (fun typeExpr -> typeExpr.Id, typeExpr.Span))
             |> Map.ofList
+        // A def that starts tasks calls, from a node desugaring made, the def the compiler made to run its body in its
+        // caller's scope, which is written as itself (see `WrittenReferences`): that call is no use of it (#3035).
+        let callsOwnScopeDef (node: NodeId) =
+            not (spans.ContainsKey node)
+            && model.CalledReferences
+               |> Map.tryFind node
+               |> Option.bind model.Symbols.TryFind
+               |> Option.exists (fun called -> match Names.ownPart called.Name with TaskScopeSyntax.InCallersScope _ -> true | _ -> false)
         let usesBySymbol =
             model.References
+            |> Map.filter (fun node _ -> not (callsOwnScopeDef node))
             |> Map.toList
             |> List.groupBy snd
             |> List.map (fun (symbol, references) -> symbol, references |> List.map (fun (node, _) -> spans |> Map.tryFind node))
