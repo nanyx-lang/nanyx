@@ -42,7 +42,7 @@ def Playlist.toSeq: Playlist -> seq(string) = { p ->
 for Playlist(songs = ["Intro", "Outro"]) | song -> println(song)
 ```
 
-A function that loops over whatever it's given requires `Iterable` of it, and fixes the element type where it needs to:
+A function that loops over whatever it's given requires `Iterable` of it, and one that writes no type is inferred to: `def walk = { xs -> for xs | x -> println("{x}") }` takes any collection whose elements can be printed. A signature fixes the element type where it needs to:
 
 ```nanyx
 def shout: [Console, Iterable(c, elem = string)] c -> () = { words ->

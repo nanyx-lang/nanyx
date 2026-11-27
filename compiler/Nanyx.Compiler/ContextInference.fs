@@ -137,6 +137,37 @@ module internal ContextInference =
     let typeExprOf (names: Map<int, string>) (ty: Ty) : TypeExpr option =
         typeExprWith (fun nominal -> nominal.Name) id names ty
 
+    /// The name `annotationWith` writes each variable of `defTy` and `contexts` by, by its id: those of `defTy` in order,
+    /// then those only `contexts` have, each by the name `preferred` gives it where no other variable has that name.
+    let private annotationNames (preferred: Map<int, string>) (defTy: Ty) (contexts: (Identifier * Ty list) list) : Map<int, string> =
+        let inType = namedInOrder (varsWithNominalArgs defTy)
+        contexts
+        |> List.collect (snd >> List.collect varsInOrder)
+        |> List.distinctBy _.Id
+        |> List.filter (fun v -> not (inType.ContainsKey v.Id))
+        |> List.fold (fun (names: Map<int, string>) v ->
+            let index = names.Count
+            let letter = string "abcdefghijklmnopqrstuvwxyz".[index % 26]
+            let taken = names |> Map.values |> Set.ofSeq
+            match preferred |> Map.tryFind v.Id with
+            | Some name when not (taken.Contains name) -> names |> Map.add v.Id name
+            | _ -> names |> Map.add v.Id (if index < 26 then letter else $"{letter}{index / 26}")) inType
+
+    /// `annotation`, with each variable that only `contexts` have named as `preferred` names it, where it can be.
+    let private annotationWith (preferred: Map<int, string>) (defTy: Ty) (contexts: (Identifier * Ty list) list) : (TypeExpr list * TypeExpr) option =
+        let names = annotationNames preferred defTy contexts
+        let written =
+            contexts
+            |> List.map (fun (ctxName, args) ->
+                args
+                |> List.map (typeExprOf names)
+                |> fun args ->
+                    if args |> List.forall Option.isSome then Some (TypeExpr.synthetic (TypeApply(ctxName, args |> List.map Option.get)))
+                    else None)
+        match typeExprOf names defTy with
+        | Some signature when written |> List.forall Option.isSome -> Some (written |> List.map Option.get, signature)
+        | _ -> None
+
     /// The annotation an unannotated def of the type `defTy` would write to require `contexts`, each a context's name
     /// with the variables of `defTy` it is required at: the contexts, each applied to its variables, and the type
     /// without them. `None` when the type is one an annotation cannot write. A context's associated type is an argument
@@ -144,27 +175,7 @@ module internal ContextInference =
     /// A nominal type's arguments are written, `[Eq(a)] Box(a) -> bool`, so a call reads them as the def's variables,
     /// not as the type's own parameters.
     let annotation (defTy: Ty) (contexts: (Identifier * TyVar list) list) : (TypeExpr list * TypeExpr) option =
-        let inType = namedInOrder (varsWithNominalArgs defTy)
-        let names =
-            contexts
-            |> List.collect snd
-            |> List.distinctBy _.Id
-            |> List.filter (fun v -> not (inType.ContainsKey v.Id))
-            |> List.fold (fun (names: Map<int, string>) v ->
-                let index = names.Count
-                let letter = string "abcdefghijklmnopqrstuvwxyz".[index % 26]
-                names |> Map.add v.Id (if index < 26 then letter else $"{letter}{index / 26}")) inType
-        let written =
-            contexts
-            |> List.map (fun (ctxName, vars) ->
-                vars
-                |> List.map (fun v -> names |> Map.tryFind v.Id |> Option.map (TypeVar >> TypeExpr.synthetic))
-                |> fun args ->
-                    if args |> List.forall Option.isSome then Some (TypeExpr.synthetic (TypeApply(ctxName, args |> List.map Option.get)))
-                    else None)
-        match typeExprOf names defTy with
-        | Some signature when written |> List.forall Option.isSome -> Some (written |> List.map Option.get, signature)
-        | _ -> None
+        annotationWith Map.empty defTy (contexts |> List.map (fun (ctxName, vars) -> ctxName, vars |> List.map TyVar))
 
     /// The type of a def generalised as `scheme` that writes the contexts it requires but not its type, as it would
     /// have written it: `a, a -> a` for `` def add: [Add(a)] = { + } ``. A variable of the type that one written in
@@ -324,34 +335,50 @@ module internal ContextInference =
             TypeResolution.tryFindTypeDef ctxName state
             |> Option.map (fun info -> info.Parameters.Length - info.AssociatedTypes.Length)
             |> Option.defaultValue System.Int32.MaxValue
-        let key (ctxName: Identifier, vars: TyVar list) = ctxName, vars |> List.truncate (writtenOf ctxName) |> List.map _.Id
-        // The variables of the def's own type that a call's arguments are, if they all are, and the variables its
-        // context's associated types are at, which the instance fixes, and so need not be the def's own.
-        let ownVars (ctxName: Identifier) (argTys: Ty list) =
+        let key (ctxName: Identifier, args: Ty list) =
+            ctxName, args |> List.truncate (writtenOf ctxName) |> List.map (function TyVar v -> v.Id | _ -> -1)
+        // A call's arguments, if those its context is chosen by are each a variable of the def's own type, with the types
+        // its context's associated types are at, which the instance fixes, and so need not be the def's own.
+        let ownVarsOf (quantified: Set<int>) (ctxName: Identifier) (argTys: Ty list) =
             let written = writtenOf ctxName
-            let vars =
+            let own =
                 argTys
-                |> List.mapi (fun index ty ->
+                |> List.indexed
+                |> List.forall (fun (index, ty) ->
                     match ty with
-                    | TyVar v when index >= written || scheme.Quantified.Contains v.Id -> Some v
-                    | _ -> None)
-            if vars |> List.forall Option.isSome then Some (vars |> List.map Option.get) else None
+                    | _ when index >= written -> true
+                    | TyVar v -> quantified.Contains v.Id
+                    | _ -> false)
+            if own then Some argTys else None
+        let associatedOf (ctxName: Identifier) (args: Ty list) = List.skip (min (writtenOf ctxName) args.Length) args
         // Two calls that require one context of the same variables require it at the same associated types.
         let state =
             pending
-            |> List.choose (fun p -> ownVars p.Context (p.ArgTys |> List.map (resolveSoFar state)) |> Option.map (fun vars -> key (p.Context, vars), p.ArgTys))
+            |> List.choose (fun p -> ownVarsOf scheme.Quantified p.Context (p.ArgTys |> List.map (resolveSoFar state)) |> Option.map (fun vars -> key (p.Context, vars), p.ArgTys))
             |> List.groupBy fst
             |> List.fold (fun current ((ctxName, _), calls) ->
-                let associated (argTys: Ty list) = List.skip (min (writtenOf ctxName) argTys.Length) argTys
-                match calls |> List.map (snd >> associated) with
+                match calls |> List.map (snd >> associatedOf ctxName) with
                 | first :: others when others |> List.forall (fun other -> other.Length = first.Length) ->
                     others |> List.fold (fun next other -> List.fold2 (fun next a b -> addConstraint a b next) next first other) current
                 | _ -> current) state
         let resolved = pending |> List.rev |> List.map (fun p -> p, p.ArgTys |> List.map (resolveSoFar state))
+        // The def's own variables, and the associated types of the contexts it requires of them: `elem` in
+        // `{ items -> for items | item -> println("{item}") }`, which its type doesn't name, is the def's too, so the
+        // def requires `ToString` of it.
+        let quantified =
+            resolved
+            |> List.collect (fun (p, argTys) ->
+                match ownVarsOf scheme.Quantified p.Context argTys with
+                | Some args -> associatedOf p.Context args |> List.collect varsInOrder |> List.map _.Id
+                | None -> [])
+            |> Set.ofList
+            |> Set.union scheme.Quantified
+        let ownVars = ownVarsOf quantified
         // The rests of the unions in the def's own type, which an operator or a call that only checks its context is
         // not passed one for: a call to the def checks it instead (see `checkRestsAtCalls`).
         let rests = unionRests scheme.Type |> List.map _.Id |> Set.ofList
-        let ofRests (p: PendingContextInstance) (vars: TyVar list) = checksRests p && vars |> List.forall (fun v -> rests.Contains v.Id)
+        let ofRests (p: PendingContextInstance) (args: Ty list) =
+            checksRests p && args |> List.forall (function TyVar v -> rests.Contains v.Id | _ -> false)
         // A well-known context of a type with more to it than a variable is that context of each of the def's
         // variables it compares values of: `Eq(list(a))` is `Eq(a)`.
         let reduced (p: PendingContextInstance) (argTys: Ty list) =
@@ -359,8 +386,8 @@ module internal ContextInference =
                 if (WellKnownContexts.tryFind p.Context).IsSome then argTys |> List.collect WellKnownContexts.comparedVars
                 else derivedVars p argTys
             vars
-            |> List.filter (fun v -> scheme.Quantified.Contains v.Id && not (ofRests p [ v ]))
-            |> List.map (fun v -> p.Context, [ v ])
+            |> List.filter (fun v -> quantified.Contains v.Id && not (ofRests p [ TyVar v ]))
+            |> List.map (fun v -> p.Context, [ TyVar v ])
         let required =
             resolved
             |> List.collect (fun (p, argTys) ->
@@ -369,7 +396,19 @@ module internal ContextInference =
                 | Some vars -> [ p.Context, vars ]
                 | None -> reduced p argTys)
             |> List.distinctBy key
-        let written = if required.IsEmpty then None else annotation scheme.Type required
+        // An associated type the def's type doesn't name is written by the context's name for it, as a signature
+        // writes it: `[Iterable(a), ToString(elem)] a -> ()`.
+        let associatedNames =
+            let own = Set.difference quantified scheme.Quantified
+            required
+            |> List.collect (fun (ctxName, args) ->
+                let associated = TypeResolution.tryFindTypeDef ctxName state |> Option.map _.AssociatedTypes |> Option.defaultValue []
+                associatedOf ctxName args
+                |> List.mapi (fun index arg -> arg, List.tryItem index associated)
+                |> List.choose (function TyVar v, Some associatedName when own.Contains v.Id -> Some (v.Id, associatedName) | _ -> None))
+            |> List.distinctBy fst
+            |> Map.ofList
+        let written = if required.IsEmpty then None else annotationWith associatedNames scheme.Type required
         let ownInstance (ctxName: Identifier) (var: TyVar) =
             match written, required |> List.tryFindIndex (fun required -> key required = (ctxName, [ var.Id ])) with
             | Some (contexts, _), Some index -> Some contexts.[index]
@@ -398,7 +437,20 @@ module internal ContextInference =
         |> Result.map (fun current ->
             match written with
             | Some (contexts, signature) ->
-                let contextTys = required |> List.map (fun (ctxName, vars) -> TyApply(ctxName, vars |> List.map TyVar))
+                let contextTys = required |> List.map TyApply
+                // An associated type the def's type doesn't name is a variable of its body alone, which the backend
+                // finds by the name the annotation gives it, as it does a written signature's (see
+                // `TypedModule.AssociatedArguments`): it is named so.
+                let names = annotationNames associatedNames scheme.Type required
+                let current =
+                    Set.difference quantified scheme.Quantified
+                    |> Seq.choose (fun id -> names |> Map.tryFind id |> Option.map (fun varName -> id, varName))
+                    |> Seq.fold (fun (next: InferState) (id, varName) ->
+                        let namedVar = TyVar.ordinary next.NextId (Some varName)
+                        let var = required |> List.collect (snd >> List.collect varsInOrder) |> List.find (fun v -> v.Id = id)
+                        { next with
+                            NextId = next.NextId + 1
+                            Constraints = (TyVar var, TyVar namedVar, Equal, SourceSpan.none) :: next.Constraints }) current
                 let registered = registerContextRequirement current name contexts (Some signature)
                 Some (TypeExpr.synthetic (TypeWithContext(contexts, signature))),
                 match symbol with
