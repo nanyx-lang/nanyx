@@ -197,3 +197,25 @@ let ``Identifier can contain digits`` () =
             name |> should equal "value123"
         | _ -> failwith "Expected Def"
     | Result.Error err -> failwith $"Parse should succeed, got: {err}"
+
+/// What a def written `export` in a function's block reports, where only a module exports (#2960).
+let private localExportMessage =
+    "A def in a function's block is local to it, so it can't be exported: declare it at the top level, or in a module block, to export it"
+
+[<Fact>]
+let ``a def in a function's block can't be exported`` () =
+    let reported, at = parseErrorOf "def f = { x ->\n  export def y = x\n  y\n}\n"
+    Assert.Equal(localExportMessage, reported)
+    Assert.Equal("export def y = x", at)
+
+[<Fact>]
+let ``a destructuring def in a function's block can't be exported`` () =
+    let reported, at = parseErrorOf "def f = { pair ->\n  export def (a, b) = pair\n  a\n}\n"
+    Assert.Equal(localExportMessage, reported)
+    Assert.Equal("export def (a, b) = pair", at)
+
+[<Fact>]
+let ``a def in a module block is exported`` () =
+    match parseModuleFileWithNames "t.nyx" "module shapes =\n  export def (a, b) = (1, 2)\n  export def c = 3\n" with
+    | Result.Ok _ -> ()
+    | Result.Error error -> failwith $"Parse should succeed, got: {error.Message}"

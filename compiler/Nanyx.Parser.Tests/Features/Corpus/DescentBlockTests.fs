@@ -39,7 +39,7 @@ let ``A lambda on one line is read`` (value: string) =
 
 [<Fact>]
 let ``A lambda's statements on the lines after it are read, at any column until its brace`` () =
-    allSame "def main = {\n  def a = 1\n  rec go = { n -> go(n) }\n  mut total = 0\n  total := total + a\n    \\f\n  export def b: int = 2\n  println(a); println(b)\n}\n"
+    allSame "def main = {\n  def a = 1\n  rec go = { n -> go(n) }\n  mut total = 0\n  total := total + a\n    \\f\n  def b: int = 2\n  println(a); println(b)\n}\n"
 
 [<Fact>]
 let ``A def's value may be an indented block`` () =
@@ -64,7 +64,7 @@ let ``A lambda that names its context's instance or writes its result type is re
 
 [<Fact>]
 let ``A destructuring def is read as the defs it desugars into`` () =
-    allSame "def f = { p ->\n  def (a, b) = p\n  def x, y = p\n  def Money(pence) = m\n  export def [first, ...rest] = xs\n  a\n}\n"
+    allSame "def f = { p ->\n  def (a, b) = p\n  def x, y = p\n  def Money(pence) = m\n  def [first, ...rest] = xs\n  a\n}\n"
 
 [<Fact>]
 let ``An attribute statement is read before the def it applies to`` () =
