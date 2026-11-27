@@ -554,7 +554,7 @@ def contains: [Eq(a)] list(a), a -> bool = { xs, target ->
 
 A function that does not write its type has the requirement inferred: `def same = { x, y -> x == y }` is `[Eq(a)] a, a -> bool`. Comparing a type built from a variable requires `Eq` of the variable, so `==` on two `list(a)` needs `Eq(a)`.
 
-Comparing with a tag doesn't make the other operand that tag: `def isNone = { o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))` is `false`, as a `match` would join the two. A function whose type has an open union, as `isNone`'s does, needs no `Eq` written for its rest: each call checks that the tags it passes can be compared. The official linter [warns](../standard-tools/official-linter#comparison-that-is-always-false) when two closed types have no tag in common, as in `#red == #some(1)`, which is always false.
+Comparing with a tag doesn't make the other operand that tag: `def isNone = { o -> o == #none }` is `#none | r -> bool`, so `isNone(#some(3))` is `false`, as a `match` would join the two. A function whose type has an open union, as `isNone`'s does, needs no `Eq` written for its rest: each call checks that the tags it passes can be compared. A payload of a tag the union names is compared with its own `==`, both by `==` and when the union is passed to a function that requires `Eq` of it; the tags of the rest are compared by the compiler's own. The official linter [warns](../standard-tools/official-linter#comparison-that-is-always-false) when two closed types have no tag in common, as in `#red == #some(1)`, which is always false.
 
 Floats follow IEEE 754: `0.0 == -0.0` is `true`, and `NaN == NaN` is `false`.
 

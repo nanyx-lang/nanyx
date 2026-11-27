@@ -215,6 +215,24 @@ let ``Run - comparing an open union with a tag compares its payload with the == 
     |> assertRan "T\nF\nF\nT\nT\nF\nT\nT\nF\n"
 
 [<Fact>]
+let ``Run - a call that requires Eq of an open union is passed the == derived through the tags it names`` () =
+    // As `v == w` compares the payloads with Email's `==`, so does a function the union is passed to (#2751).
+    comparing
+        [ "type Email = protected string"
+          "def Email.`==`: Email, Email -> bool = { a, b -> string.lowercase(a) == string.lowercase(b) }"
+          "def Email.hash: Email -> int = { e -> string.hash(string.lowercase(e)) }"
+          "def same: [Eq(a)] a, a -> bool = { x, y -> x == y }"
+          "def called: (#x(Email) | r), (#x(Email) | r) -> bool = { v, w -> same(v, w) }"
+          "def compared: (#x(Email) | r), (#x(Email) | r) -> bool = { v, w -> v == w }" ]
+        [ """called(#x(Email("A@b")), #x(Email("a@B")))"""
+          """compared(#x(Email("A@b")), #x(Email("a@B")))"""
+          """called(#x(Email("a@b")), #x(Email("c@d")))"""
+          """called(#x(Email("a@b")), #y)"""
+          "called(#y, #y)" ]
+    |> runSource
+    |> assertRan "T\nT\nF\nF\nT\n"
+
+[<Fact>]
 let ``Run - a function that passes a union on to one that compares it with a tag compares at each type`` () =
     comparing
         [ "def isNone = { o -> o == #none }"
