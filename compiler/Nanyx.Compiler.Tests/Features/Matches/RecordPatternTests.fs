@@ -60,7 +60,7 @@ let ``A record pattern that ends in ... and names a field the record lacks says 
     let diagnostic = Assert.Single result.Diagnostics
     Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
     Assert.Equal(
-        "Record field mismatch: '(height: float, width: float)' vs '(foo: float, ...t1)', where only the first has 'height', 'width' and only the second has 'foo'",
+        "Record field mismatch: '(height: float, width: float)' vs '(foo: float, ...r)', where only the first has 'height', 'width' and only the second has 'foo'",
         diagnostic.Message)
 
 [<Fact>]
