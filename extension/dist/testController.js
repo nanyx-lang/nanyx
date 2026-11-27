@@ -37,6 +37,7 @@ exports.TestExplorer = exports.COMMAND_RUN_TEST = void 0;
 const child_process_1 = require("child_process");
 const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
+const dbgValues_1 = require("./dbgValues");
 const tests_1 = require("./tests");
 /** The command a "Run test" link runs, with the test item's ID. */
 exports.COMMAND_RUN_TEST = "nanyx.runTest";
@@ -47,9 +48,10 @@ exports.COMMAND_RUN_TEST = "nanyx.runTest";
  * each test (see `tests.ts` for the model, which is tested apart from VS Code).
  */
 class TestExplorer {
-    constructor(compiler, log) {
+    constructor(compiler, log, dbg) {
         this.compiler = compiler;
         this.log = log;
+        this.dbg = dbg;
         this.controller = vscode.tests.createTestController("nanyx", "Nanyx");
         this.roots = new Map();
         this.ioTag = new vscode.TestTag("io");
@@ -200,6 +202,8 @@ class TestExplorer {
             .filter((test) => selection.kind === "all" || (selection.kind === "module" ? test.module === selection.module : selection.names.includes(test.name)));
         const items = new Map(tests.map((test) => [test.name, this.itemOf(root, test.name)]));
         items.forEach((item) => item && run.enqueued(item));
+        // The values of the tests' dbgs replace those of the run before, in each file they reach.
+        const dbgRun = this.dbg.beginRun();
         const process = (0, child_process_1.spawn)(executable, (0, tests_1.runArguments)(root.target, selection), { cwd: root.directory });
         const cancelled = token.onCancellationRequested(() => process.kill());
         const diagnostics = [];
@@ -218,6 +222,9 @@ class TestExplorer {
                 case "test":
                     ended.add(event.name);
                     this.show(run, root, items.get(event.name), event);
+                    if (event.dbg && event.dbg.length > 0) {
+                        this.dbg.add(dbgRun, (0, dbgValues_1.testHits)(root.directory, event.dbg));
+                    }
                     break;
                 case "summary":
                     if (!event.built) {

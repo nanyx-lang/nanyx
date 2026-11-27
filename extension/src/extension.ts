@@ -14,7 +14,8 @@ import {
 import { copyBuild, removeOldCopies, watchBuild } from "./developmentMode";
 import { InfoView } from "./infoView";
 import { LibraryView } from "./library";
-import { runFile } from "./run";
+import { DbgView } from "./dbgView";
+import { deleteDbgChannels, runFile } from "./run";
 import { TestExplorer } from "./testController";
 
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
@@ -37,6 +38,7 @@ let outputChannel: vscode.OutputChannel;
 let infoView: InfoView | undefined;
 let libraryView: LibraryView | undefined;
 let testExplorer: TestExplorer | undefined;
+let dbgView: DbgView | undefined;
 let declinedDownload = false;
 let declinedUpdate = false;
 
@@ -47,12 +49,15 @@ export async function activate(context: vscode.ExtensionContext) {
   infoView = view;
   const library = new LibraryView(() => client);
   libraryView = library;
-  const explorer = new TestExplorer(() => compiler, log);
+  const values = new DbgView(() => client);
+  dbgView = values;
+  const explorer = new TestExplorer(() => compiler, log, values);
   testExplorer = explorer;
 
   context.subscriptions.push(
     view,
     library,
+    values,
     explorer,
     vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()),
     vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
@@ -91,6 +96,7 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export async function deactivate() {
+  deleteDbgChannels();
   buildWatcher?.dispose();
   await stopClient();
 }
@@ -162,7 +168,7 @@ async function runCurrentFile(context: vscode.ExtensionContext, uri?: vscode.Uri
     }
   }
 
-  await runFile(compiler, document.uri);
+  await runFile(compiler, document.uri, dbgView!);
 }
 
 /**

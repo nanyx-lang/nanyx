@@ -8,7 +8,7 @@ order: 0
 and is the language server for editors. `nanyx --help` lists its commands, and `nanyx <command> --help` describes one.
 
 ```text
-nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [<file.nyx | package>] [--] [<arguments>]
+nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [--dbg-to <file>] [<file.nyx | package>] [--] [<arguments>]
 nanyx check [--timings] [--host <host>] [<file.nyx | package>]
 nanyx build [--out <path>] [--release] [--core] [--wat] [--locked] [--timings] [--host <host>] [<package>]
 nanyx wasm <file.nyx> [--out <path>] [--release] [--wat]
@@ -88,6 +88,7 @@ program is answered with a 500, and the reason is written to standard error. See
 | `--check-memory` | Checks the program's memory as it runs: it stops with exit code 70 at a block freed twice or an object used after it was freed, and fails with exit code 1 if the program finishes with memory it never freed. |
 | `--memory` | Checks the program's memory as `--check-memory` does, and once the program stops, however it stops, writes a report to standard error (see below). |
 | `--profile <file>` | Samples the run with Wasmtime's guest profiler, every 10 ms, and writes the profile to `<file>` in the Firefox profiler's format, to open at [profiler.firefox.com](https://profiler.firefox.com). Its functions have the names the program gives them, and the file and line each is defined on. The run is of the code `run` always runs, which has no [debug probes](../deep-dives/debug-probes). It can't be given with `--check-memory` or `--memory`, nor for a program that is served. |
+| `--dbg-to <file>` | Writes each [`dbg`](../stdlib/console#dbg) the program reaches to `<file>`, made anew, and none to standard error: one JSON object a line, written as it is reached, with its `file`, a full path, its `line` and `column`, from 1, its `value` as `dbg` writes it, and its `seq`, counted from 0. It is for an editor, which reads the file as it grows and shows each value where its `dbg` is written, as the [VS Code extension](./vs-code-extension#dbg-values) does. A served program writes its `dbg`s to its log, with the request, whether or not it is given. |
 | `--timings` | Writes how long each module took to check (see [Timings](#timings)). |
 
 The report of `--memory` says how many blocks of memory the program allocated and freed, how many were still in use
@@ -229,8 +230,9 @@ With `--format json`, `nanyx test` writes one JSON object on each line of standa
 - **`test`**, for each test as it ends: its full `name`, as the text report shows it, its `module` and own name
   (`test`), the `file`, `line` and `column` it is written at, whether it is `io`, the crash it expects (`crashes`:
   `null`, `{}` for `@test(#crashes)`, or `{"text": ...}`), its `outcome` (`passed`, `failed`, `timedOut` with
-  `timeoutSeconds`, `didNotCrash`, or `crashedOtherwise` with the text it `expected`), what it printed (`output`) and
-  what it wrote to its standard error (`errors`). A test that failed or crashed otherwise has a `failure`: its `kind` (`crashed`, `trapped`, `arithmetic`, `stackOverflow`, `outOfMemory`,
+  `timeoutSeconds`, `didNotCrash`, or `crashedOtherwise` with the text it `expected`), what it printed (`output`),
+  what it wrote to its standard error (`errors`), and each [`dbg`](../stdlib/console#dbg) it reached, in order (`dbg`),
+  with its `file`, `line`, `column` and `value`, which `output` has too. A test that failed or crashed otherwise has a `failure`: its `kind` (`crashed`, `trapped`, `arithmetic`, `stackOverflow`, `outOfMemory`,
   `exited` or `other`), its `message`, the `place` of the program's code a crash was in, with its `file`, `line` and
   `column`, and its `stack`, innermost first, each frame's `function` with its `file` and `line`.
 - **`summary`**, last: whether the tests were `built`, how many `passed` and `failed`, and the `seed`. A build that

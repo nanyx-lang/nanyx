@@ -109,3 +109,15 @@ let ``A test that expects a crash says so, and is passed, didNotCrash or crashed
     Assert.Equal("boom", text (otherwise.GetProperty "failure") "message")
     Assert.Equal("didNotCrash", text (test "finishes") "outcome")
     Assert.Equal(JsonValueKind.Null, (test "plain").GetProperty("crashes").ValueKind)
+
+[<Fact>]
+let ``A test lists each dbg it reached, in order, with its place, and its output keeps them too (#2054)`` () =
+    let source = "export module counting\n\n@test\ndef `counts` = {\n  for [1, 2] | n -> dbg(n * 10)\n  assert(true)\n}\n"
+    let _, objects = jsonOf [] [ "src/counting.nyx", source ]
+    let counts = objects |> List.find (fun element -> text element "type" = "test")
+    let hits =
+        counts.GetProperty("dbg").EnumerateArray()
+        |> Seq.map (fun hit -> text hit "file", number hit "line", number hit "column", text hit "value")
+        |> List.ofSeq
+    Assert.Equal<(string * int64 * int64 * string) list>([ "src/counting.nyx", 5L, 21L, "10"; "src/counting.nyx", 5L, 21L, "20" ], hits)
+    Assert.Equal("[src/counting.nyx:5] 10\n[src/counting.nyx:5] 20\n", text counts "output")

@@ -152,6 +152,7 @@
     <Compile Include="RenamedPackages.fs" />
     <Compile Include="FileImports.fs" />
     <Compile Include="PackageModules.fs" />
+    <Compile Include="DbgSites.fs" />
     <Compile Include="PackageExports.fs" />
     <Compile Include="ShippedPackages.fs" />
     <Compile Include="HostPackages.fs" />
