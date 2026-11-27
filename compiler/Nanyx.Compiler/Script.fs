@@ -510,7 +510,8 @@ module Script =
                 script,
                 Some
                     { result with
-                        Diagnostics = script.Diagnostics @ result.Diagnostics |> List.distinct
+                        // The root imports the script, so it reports the script's errors again, through that import.
+                        Diagnostics = script.Diagnostics @ result.Diagnostics |> List.map Diagnostics.inItsModule |> List.distinct
                         ErrorsDeferred = script.ErrorsDeferred && result.ErrorsDeferred
                         Typed = result.Typed |> Option.map (fun typed -> { typed with Tests = own typed.Tests }) }
             | _ -> script, None)
