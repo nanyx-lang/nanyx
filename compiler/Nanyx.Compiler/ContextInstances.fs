@@ -285,9 +285,24 @@ let internal hasInstance (env: TypeEnv) (state: InferState) (ctxName: Identifier
         | Some members -> members |> List.forall (fun (memberName, _) -> (tryResolveAttachedFunction env ty memberName).IsSome)
         | None -> false)
 
-/// Whether comparing, or hashing, values of the structure `ty` reads a part with a `memberName` (`==` or `hash`) of
-/// its own (see `StructuralInstances.comparesParts`): one attached to the part's type, if not a built-in one, an instance of it in scope that
-/// `partInstance` finds, or the instance of a type variable that `hasInstance` says is in scope.
+/// Whether `part` has a `memberName` (`==`, `hash` or `compare`) of its own: one attached to its type, if not a built-in
+/// one, an instance of it in scope that `partInstance` finds, or, for a type variable, the instance `hasInstance` says
+/// is in scope.
+let private hasOwnMember
+    (env: TypeEnv)
+    (memberName: Identifier)
+    (partInstance: Ty -> (TypeExpr * ContextProvider) option)
+    (hasInstance: TyVar -> bool)
+    (part: Ty)
+    : bool =
+    match part with
+    | TyVar var -> hasInstance var
+    // A built-in type's attached `hash` is the compiler's own (see `WellKnownContexts.isBuiltIn`).
+    | _ when WellKnownContexts.isBuiltIn part -> (partInstance part).IsSome
+    | _ -> (tryResolveAttachedFunction env part memberName).IsSome || (partInstance part).IsSome
+
+/// Whether comparing, hashing or ordering values of the structure `ty` reads a part with a `memberName` of its own
+/// (see `hasOwnMember` and `StructuralInstances.comparesParts`).
 let internal comparesOwnParts
     (env: TypeEnv)
     (rigid: Set<int>)
@@ -296,13 +311,7 @@ let internal comparesOwnParts
     (hasInstance: TyVar -> bool)
     (ty: Ty)
     : bool =
-    ty
-    |> StructuralInstances.comparesParts rigid (fun part ->
-        match part with
-        | TyVar var -> hasInstance var
-        // A built-in type's attached `hash` is the compiler's own (see `WellKnownContexts.isBuiltIn`).
-        | _ when WellKnownContexts.isBuiltIn part -> (partInstance part).IsSome
-        | _ -> (tryResolveAttachedFunction env part memberName).IsSome || (partInstance part).IsSome)
+    ty |> StructuralInstances.comparesParts rigid (hasOwnMember env memberName partInstance hasInstance)
 
 /// `state` with the comparison `call`, at `span`, of two values of the type `ty` calling the `==` the type has of its
 /// own, if it has one: the `==` attached to it, or, for a structure that compares a part with an `==` of its own,
@@ -330,9 +339,10 @@ let internal derivedComparison (env: TypeEnv) (rigid: Set<int>) (instanceOf: TyV
         StructuralInstances.comparison rigid partInstance instanceOf call span ty state |> Option.map calling
     | None, _ -> None
 
-/// The instance of `Eq` or `Hash` (`wellKnown`, found as `instance`) the call `call` to `calleeName`, at `span` in
-/// `env`, finds for the structure `ty` in place of the compiler's own, when `ty` compares or hashes a part with an `==`
-/// or `hash` of its own, or, for `Eq`, holds an array: the derived definition, as the context's member. A
+/// The instance of `Eq`, `Hash` or `Ord` (`wellKnown`, found as `instance`) the call `call` to `calleeName`, at `span`
+/// in `env`, finds for the structure `ty` in place of the compiler's own, when `ty` compares, hashes or orders a part with
+/// an `==`, `hash` or `compare` of its own, or, for `Eq`, holds an array: the derived definition, as the context's
+/// member. An order is derived only for a tuple or a list whose every part has one (#2748). A
 /// variable of `ty` is read with the instance `instanceOf` finds for it, and `rigid` holds the variables of the
 /// function around the call (see `StructuralInstances.instance`). A type with variables in it that holds an array
 /// and has no derived `==` is an error, since the compiler's own cannot compare it, and so is one whose parts' own
@@ -351,9 +361,14 @@ let private derivedEquality
     : Result<ContextInstance * InferState, Diagnostic list> option =
     let partInstance = partInstanceIn env state wellKnown.Context
     let isHash = wellKnown.Context = WellKnownContexts.hashing.Context
-    if (wellKnown.Context <> EqualityOperators.context && not isHash) || instance <> WellKnownContexts.BuiltIn then None
+    let isOrd = wellKnown.Context = WellKnownContexts.ordering.Context
+    if (wellKnown.Context <> EqualityOperators.context && not isHash && not isOrd) || instance <> WellKnownContexts.BuiltIn then None
     else
-        let readsParts = comparesOwnParts env rigid wellKnown.Member partInstance (instanceOf >> Option.isSome) ty
+        let hasOwn = hasOwnMember env wellKnown.Member partInstance (instanceOf >> Option.isSome)
+        // An order is derived only for a tuple or a list whose every part has one, its own or the compiler's.
+        let readsParts =
+            comparesOwnParts env rigid wellKnown.Member partInstance (instanceOf >> Option.isSome) ty
+            && (not isOrd || (wellKnown.Lacks hasOwn ty).IsNone)
         let derived =
             if readsParts then
                 StructuralInstances.instance rigid partInstance instanceOf false call span wellKnown.Context ty state
@@ -363,6 +378,7 @@ let private derivedEquality
         | Some derived -> Some (Ok derived)
         | None when isHash && readsParts ->
             Some (Error (WellKnownContexts.error wellKnown.Context ty span (WellKnownContexts.noInstanceAtCall wellKnown calleeName ty "its parts' own hash cannot be read where the caller chooses more of its tags")))
+        | None when isOrd -> None
         | None when not (TypeEnv.freeTyVars ty).IsEmpty && StructuralInstances.holdsCollection ty ->
             Some (Error (WellKnownContexts.error wellKnown.Context ty span (EqualityOperators.collectionAtGenericCall calleeName ty)))
         | None -> None
@@ -867,8 +883,17 @@ let internal wellKnownInstance (wellKnown: WellKnownContexts.WellKnownContext) (
         |> Result.map (fun (instance, next) -> Some instance, next)
     | None -> Ok (None, state)
 
-/// The instance of `Ord` the ordering operator `op` at `span` reads (see `wellKnownInstance`).
-let internal orderingInstance (op: string) (span: SourceSpan) = wellKnownInstance WellKnownContexts.ordering op span
+/// The instance of `Ord` the ordering operator `op` at `span` reads (see `wellKnownInstance`): for a tuple or a list
+/// with no variables left in it, a part of which has a `compare` of its own, the one derived from its parts (see
+/// `derivedEquality`), so that `<` on a `(Version, int)` orders by `Version.compare` (#2748).
+let internal orderingInstance (op: string) (span: SourceSpan) : WellKnownContexts.InstanceOf = fun env state ty ->
+    match wellKnownInstance WellKnownContexts.ordering op span env state ty with
+    | Ok (None, _) when (TypeEnv.freeTyVars ty).IsEmpty ->
+        match derivedEquality env state Set.empty (fun _ -> None) WellKnownContexts.ordering WellKnownContexts.BuiltIn op (NodeId.next ()) span ty with
+        | Some (Ok (instance, next)) -> Ok (Some instance, next)
+        | Some (Error errors) -> Error errors
+        | None -> Ok (None, state)
+    | found -> found
 
 /// `state` without the calls left to find their instances later (see `PendingContextInstance`) that were left between
 /// `before` and `firstPass`, when an expression inferred again since has left the same ones again: a pipe's value, which

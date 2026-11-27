@@ -143,8 +143,8 @@ module internal WellKnownContexts =
           Member = "compare"
           Operators = [ "<"; "<="; ">"; ">=" ]
           BuiltInFunction = "__compare"
-          // No order is derived from a structure's parts, so a part's own `compare` does not give one.
-          Lacks = fun _ ->
+          // A tuple or a list is ordered through a part's own `compare` (see `StructuralInstances`).
+          Lacks =
             lacking "order" (function
                 | TyFunc _ -> Some ("a function", "functions")
                 | Maps.MapType _ -> Some ("a map", "maps")
@@ -156,7 +156,7 @@ module internal WellKnownContexts =
                 | TyOpenRecord _ -> Some ("a record", "records")
                 | TyTag _
                 | TyUnion _ -> Some ("a tag", "tags")
-                | ty -> privateType "compare" ty) (fun _ -> false)
+                | ty -> privateType "compare" ty)
           ListHelpers =
             Map.ofList [ "<", "__listLess"; "<=", "__listLessOrEqual"; ">", "__listGreater"; ">=", "__listGreaterOrEqual" ]
           AgreesWith = None

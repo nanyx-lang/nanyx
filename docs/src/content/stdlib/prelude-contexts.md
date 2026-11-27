@@ -129,7 +129,8 @@ through it, so the four cannot disagree. The compiler has its own for numbers, `
 first), `string` (by bytes, which is the order of code points), and tuples and lists of them
 (position by position, and a list that is a prefix of another first). Records and tags have no
 order: a nominal type gets one by attaching `compare`, and a private type has no other, and a list of records is sorted by a key
-with [`list.sortBy`](prelude-lists#listsortby). A function that orders values of one of its type variables requires it:
+with [`list.sortBy`](prelude-lists#listsortby). A tuple or a list that holds a type with a `compare` of its own is ordered
+through it, position by position. A function that orders values of one of its type variables requires it:
 `def largest: [Ord(a)] list(a) -> ...`. `Ord` does not require `Eq`; a type that attaches both
 should keep them consistent.
 
