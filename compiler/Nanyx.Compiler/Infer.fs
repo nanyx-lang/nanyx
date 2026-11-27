@@ -391,7 +391,18 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             let positionalExprs, namedExprs = List.splitAt positional.Length typedFields
             let positionalFieldsMap = positionalExprs |> List.mapi (fun index typedExpr -> tupleFieldName index, typedExpr.Type)
             let namedFieldsMap = List.zip (List.map fst named) (namedExprs |> List.map _.Type)
-            mkTypedExpr expr (TyRecord(Map.ofList (positionalFieldsMap @ namedFieldsMap), FieldOrder.ofList named)) None None None, current)
+            let recordTy = TyRecord(Map.ofList (positionalFieldsMap @ namedFieldsMap), FieldOrder.ofList named)
+            // A mismatch of the record with the one expected of it is reported at the first field value that doesn't
+            // fit, as a call's arguments are (see `ArgumentSpans`).
+            let current =
+                match ExpectedLiterals.expectedRecord state expr with
+                | Some (expectedTy, expectedFields) ->
+                    let names = (positionalExprs |> List.mapi (fun index _ -> tupleFieldName index)) @ List.map fst named
+                    let items = List.zip names typedFields |> List.choose (fun (name, typed) -> expectedFields |> Map.tryFind name |> Option.map (fun ty -> typed, ty))
+                    let reported = lazy (LambdaArguments.reportedSpan current expr.Span (List.map fst items) (List.map snd items) recordTy expectedTy)
+                    { current with ArgumentSpans = current.ArgumentSpans |> Map.add expr.Span reported }
+                | None -> current
+            mkTypedExpr expr recordTy None None None, current)
     | ListExpr items ->
         // Checked against a `list(a)`, the items are checked against `a`, and the list is one (see `ExpectedLiterals`).
         let expectedElement = ExpectedLiterals.elementOf state expr

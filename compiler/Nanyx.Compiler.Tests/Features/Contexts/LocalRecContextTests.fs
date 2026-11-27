@@ -50,7 +50,7 @@ def requiredArgument = { args, name ->
 [<Fact>]
 let ``A local rec def that calls a function it is given keeps that function's context variable`` () =
     Assert.Equal<(string * string) list>(
-        [ "each", "[c] ([c] α -> β), list(α) -> ()"; "loop", "[c] list(α) -> ()" ],
+        [ "each", "[κ] ([κ] α -> β), list(α) -> ()"; "loop", "[κ] list(α) -> ()" ],
         hints
             """
 def each = { f, xs ->

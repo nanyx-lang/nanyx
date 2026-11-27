@@ -200,6 +200,8 @@ module TypePrinting =
         // A type variable is written bare, as in an annotation: `(t, a) -> t`.
         | TyVar v ->
             match v.Name with
+            // A context variable the compiler inferred has a name no one can write (see `TyVar.inferredContextName`).
+            | Some name when TyVar.isInferredContextName name -> TyVar.inferredContextFallback name
             | Some name -> name
             | None -> $"t{v.Id}"
         // A type in a scoped context's scope is written without the scope, as `mut T` is: `Cursor`, `MRef(int)`.

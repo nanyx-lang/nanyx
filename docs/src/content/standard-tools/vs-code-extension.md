@@ -56,7 +56,7 @@ def name = { p -> p.name } -- (name: α, …) -> α
 def keep = { p -> (p.name, p) } -- (name: α, …ω) -> (α, (name: α, …ω))
 ```
 
-The other fields get a name, as `…ω` does in `keep`, only where the type uses them more than once: here, to say that `keep` gives back a record with the same fields it was given. The other tags of a union are named from the end of the alphabet in the same way, as in `#some(α) | ω, (α -> β) -> #some(β) | ω`. A type variable you wrote in an annotation keeps the name you gave it, and a type alias is shown by its name.
+The other fields get a name, as `…ω` does in `keep`, only where the type uses them more than once: here, to say that `keep` gives back a record with the same fields it was given. The other tags of a union are named from the end of the alphabet in the same way, as in `#some(α) | ω, (α -> β) -> #some(β) | ω`. A context variable the compiler made up is named from `κ` on, as in `def apply = { f, x -> f(x) }`, shown as `[κ] ([κ] α -> β), α -> β`; with `nanyx.asciiTypes` on, it is named from `c` on, `[c] ([c] a -> b), a -> b`. A type variable you wrote in an annotation keeps the name you gave it, and a type alias is shown by its name.
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
@@ -195,8 +195,11 @@ and VS Code remembers where you put it. The extension needs VS Code 1.106 or lat
 
 It is organised by scope, innermost first, with a rule between one scope and the next: the cursor line's messages, if
 it has any, the expression you selected or the one at the cursor, each lambda around the cursor, each definition around
-it (a local one as well as a top-level one), and the module. Each scope's heading names it and links to it: a lambda by
-its parameters and line, `{ message -> … } (line 4)`, a definition by its name, `def greet`, the module by its name.
+it (a local one as well as a top-level one), and the module. Each scope's heading names it by its code and links to it:
+the expression by its text, `expression x + 1`, on one line and cut with `…` when it is long; a lambda by its
+parameters and line, `lambda { message -> … } (line 4)`, or, for a shorthand lambda, as it is written,
+`lambda { * 2 } (line 4)`; a `for` loop's body as the loop is written, `for words | word -> … (line 4)`; a definition
+by its name, `def greet`; the module by its name.
 Click the heading's arrow to open or close a scope. The module starts closed, and so does every scope after the third,
 not counting the messages and the expression, since the side bar is narrow. A `memory` block or a `use` is part of the
 scope it is in.
@@ -222,7 +225,7 @@ view, such as a long parameter's, wraps.
   reported. Under that, its notes, such as `= 'float' vs 'int'`, and the advice after `help:`; each other place that
   explains it, such as where a name was first defined, linked; and a button for each of its fixes, which makes the fix
   as its quick fix does. With no message on the line, the view starts at the expression, or the innermost scope.
-- **Selection**, or **At the cursor** with nothing selected: the type of what you selected or clicked on, as hover
+- **The expression**, headed by its text, `expression x + 1`: the type of what you selected or clicked on, as hover
   writes it. Select an expression to read its type: selecting `x + 1` in `def f = { x -> x + 1 }` shows
   `x + 1: int`, with the spaces around the selection left out. A selection that is not a whole expression, such as
   `x +`, or that runs across two statements, shows nothing here. With nothing selected it is the innermost expression at

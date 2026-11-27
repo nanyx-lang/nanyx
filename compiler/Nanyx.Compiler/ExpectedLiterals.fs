@@ -65,6 +65,12 @@ let intoMapEntries (state: InferState) (expr: Expression) : InferState =
     | MapSyntax.Call entries, Some (Maps.MapType(_, value)) -> entries |> List.map snd |> List.fold (expect value) state
     | _ -> state
 
+/// The record type expected of the record or tuple literal `expr`, if one is, with its fields.
+let expectedRecord (state: InferState) (expr: Expression) : (Ty * Map<string, Ty>) option =
+    match expectedOf state expr with
+    | Some (TyRecord(fields, _) as ty) -> Some (ty, fields)
+    | _ -> None
+
 /// `state` with the value of each field of the record or tuple literal `expr`, `fields`, checked against the type of the field of
 /// that name in the record expected of it, if one is: a lambda given for a field of type `[C] a -> b` can call `C`'s
 /// members, as one given for a parameter of that type can (see `Contexts.extendEnvForLambdaArgument`).
