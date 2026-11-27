@@ -129,6 +129,20 @@ def double = { n -> if n > 0 then n * 2 else stop(n) } -- int -> int
 
 The items of a list literal are joined the same way, so `[1, crash("no")]` is a `list(int)`, and `[crash("no")]` is one where a `list(int)` is expected. It only works one way: nothing but an expression that never gives a value can be given where an `undefined` is expected.
 
+`undefined` is joined the same way inside a type, where a value of the type gives it out: a list's or a sequence's
+elements, a tag's payload, a record's field, a function's result. So a `list(undefined)`, a list that can hold nothing,
+joined with a `list(int)`, by `++` or as another branch, is a `list(int)`:
+
+```nanyx
+def none: list(undefined) = []
+def numbers = [1, 2] ++ none -- list(int)
+def picked = if numbers == [] then none else [3] -- list(int)
+```
+
+A type that takes values in is not joined so. A function that takes an `undefined` is not given where one that takes an
+`int` is expected, and a nominal type's arguments, such as an `MArray`'s, are its own, so an `MArray(undefined)` is not
+an `MArray(int)`: values of any type could be written into it.
+
 Using a value of type `undefined`, as in `crash("no").name`, or `x + 1` after `def x = crash("no")`, is not an error either: the value is worked out first and stops the program, so what uses it is never reached. `???`, the placeholder for [code not written yet](../getting-started/basics#unimplemented-code), has this type too.
 
 A top-level function that doesn't write its type and never returns is inferred to give back `undefined` too, where its
