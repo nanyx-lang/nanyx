@@ -118,6 +118,10 @@ module Helpers =
     /// name, which the runtime knows, so that it reports the stack under what was written rather than the trap. It is
     /// given the message, which a module the runtime runs reports to it first (see `WasmOptions.CrashToRuntime`).
     let crashed = NyxCompiler.Intrinsics.crashed
+    /// Says that the crash about to happen is an error the compiler found and deferred to run time, not a crash the
+    /// program makes: a module the runtime runs tells it, through `nanyx:crash`'s `deferred`, so that a test that expects
+    /// a crash doesn't pass by reaching one (see `CodeGen.CrashReport`, #3078); in any other it does nothing.
+    let deferredCrash = "__nanyx_deferred"
     let stringLength = NyxCompiler.Intrinsics.stringLength
     let stringByteAt = NyxCompiler.Intrinsics.stringByteAt
     let stringSlice = NyxCompiler.Intrinsics.stringSlice
@@ -1000,6 +1004,7 @@ let private helpersWith (checks: bool) (heapBase: int) : Map<string, string> =
           [ $"(func ${Helpers.crashed} (param $message i32)"
             "  unreachable"
             ")" ]
+      Helpers.deferredCrash, lines [ $"(func ${Helpers.deferredCrash})" ]
       // An int as a float: `f64.convert_i64_s` rounds to the nearest float, and is exact up to 2^53.
       Helpers.intToFloat,
       lines
@@ -1298,6 +1303,7 @@ let helperDependencies =
       Helpers.writeStderr, [ Helpers.stringLength ]
       Helpers.exit, [ Helpers.procExit ]
       Helpers.crashed, []
+      Helpers.deferredCrash, []
       yield! storingDependencies Helpers.listCons (fun _ -> [ Helpers.newCell ])
       yield! storingDependencies Helpers.recordSet (fun _ -> [])
       Helpers.recordCopy, [ Helpers.newObject; Helpers.copyBytes ]
@@ -1351,6 +1357,7 @@ let private helpersWithoutMemory =
           yield Helpers.stringConcat
           yield Helpers.exit
           yield Helpers.crashed
+          yield Helpers.deferredCrash
           yield FloatText.bigMulPow10
           yield Helpers.floatSqrt
           yield Helpers.floatFloor

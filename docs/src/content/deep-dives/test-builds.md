@@ -91,11 +91,29 @@ stops the build, and no test runs. `nanyx test --release` refuses to run if ther
 against those contexts, and any other against `Hosts.testContexts`. When every context a test lacks is one `#io`
 provides, `NYX0312` says so, with a fix that adds `(#io)` after the test's `@test`.
 
-The `nanyx.tests` table gives each test a byte, 1 for a `#io` test, and `nanyx:test`'s `io()` gives it for the test the
+The `nanyx.tests` table gives each test flags, 1 for a `#io` test, and `nanyx:test`'s `io()` gives that for the test the
 instance runs. The test host loads the real contexts for it (see [Hosts](./hosts)), and the runner runs it in the
 package's directory, or the script's, which it may read and write, with the environment variables of the command's
 shell; any other test reaches no directory and sees no variables. What a `#io` test's real `Console` writes to standard
 output is kept with what it printed (`TestRun.Output`).
+
+# Tests that expect a crash
+
+`@test(#crashes)` and `@test(#crashes("text"))` mark a test that passes only if it crashes ([#3078](https://github.com/nanyx-lang/nanyx/issues/3078)).
+`Attributes.applyAttributes` reads the argument, alone or in a tuple with `#io`, into `MarkedTest.Crashes`, an
+`ExpectedCrash` (`AnyCrash`, or `CrashContaining` the text), which `Test.Crashes` carries; any other is `NYX0013`. The
+`nanyx.tests` table gives the test flag 2, and 4 with the text after the flags when it names one, and `TestTable.read`
+gives the runtime's `ListedTest.Crashes`.
+
+What counts is a crash the program makes, a trap in `__nanyx_crashed`: `crash`, `orCrash` and a failed `assert`. An error
+the compiler deferred to run time traps there too, so the core IR's `Crash` says whether it is one, and one that is calls
+`__nanyx_deferred` first, which in a build that reports crashes to the runtime calls `nanyx:crash`'s `deferred` (see
+[Crash stacks](./crash-stacks#the-crash-report)); `CrashImport` notes it. The runner then gives the test's outcome
+(`WasmTester`'s `expected`): `Passed` for a crash that isn't deferred, whose message contains the text if there is
+one, the message as the crash reported it to the runtime; `CrashedOtherwise`, with the crash, for one whose message
+doesn't; `DidNotCrash` for a test that finished; and for anything else, a deferred error, a runtime error such as an
+overflow, or a timeout, what it would be for any test. A match that doesn't handle every case is a deferred error, and
+so not a crash a test can expect.
 
 # The module
 

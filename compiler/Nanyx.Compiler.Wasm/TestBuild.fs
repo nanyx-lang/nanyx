@@ -23,4 +23,5 @@ let assemble (options: WasmOptions) (typed: TypedModule) : byte array =
               File = shown test.Span.File
               Line = test.Span.StartLine + 1
               Column = test.Span.StartColumn + 1
-              Io = test.Io }))
+              Io = test.Io
+              Crashes = test.Crashes }))

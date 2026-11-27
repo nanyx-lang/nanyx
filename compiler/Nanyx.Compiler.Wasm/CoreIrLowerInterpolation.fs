@@ -78,7 +78,7 @@ let lowerInterpolation (tools: InterpolationTools) (scope: Scope) (expr: Express
         let holes = parts |> List.choose (function StringExpr hole -> Some hole | StringText _ -> None)
         let before = holes |> List.takeWhile (fun hole -> tools.TypeOf hole <> IrError)
         let unknown = holes |> List.find (fun hole -> tools.TypeOf hole = IrError)
-        let stop = Expr.make (Crash [ Interpolation.unknownHoleMessage (DbgBuild.sourceRoot tools.Input.Dbg) unknown.Span ]) IrString
+        let stop = Expr.make (Crash([ Interpolation.unknownHoleMessage (DbgBuild.sourceRoot tools.Input.Dbg) unknown.Span ], true)) IrString
         (before @ [ unknown ])
         |> List.rev
         |> List.fold (fun (rest: Expr) hole -> tools.Complex insideHole hole (fun value -> Expr.make (Do(value, rest)) rest.Type)) stop

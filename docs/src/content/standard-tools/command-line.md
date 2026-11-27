@@ -190,7 +190,10 @@ its time limit. A failure shows why, with the stack, and what the test printed, 
 A test's `Random` is seeded, so a test that draws random numbers draws the same ones when it is run with the same seed.
 A test may require only `Console` and `Random`, which the test host provides (`NYX0312`), but one marked
 [`@test(#io)`](../tour/attributes#test), which runs with the console host's real `Console`, `Env` and `FileSystem`,
-in the package's directory or the script's, with the environment's variables; the report marks it `(io)`.
+in the package's directory or the script's, with the environment's variables; the report marks it `(io)`. One marked
+[`@test(#crashes)`](../tour/attributes#test) passes only if it crashes, and the report marks it `(crashes)`; if it
+finishes, it fails with `It finished, and was expected to crash`, and if it crashes with a message that doesn't contain
+the text `#crashes("text")` gives, it fails saying so, with the crash.
 
 `nanyx test` exits with 0 when every test passes, and 1 when one fails or the tests can't be built. It is a debug build,
 as `run` is: a type or name error in any module is reported, and fails only the tests that reach it, with its message,

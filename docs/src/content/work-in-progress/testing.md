@@ -136,6 +136,14 @@ The tests run in a core module, as `nanyx run`'s program does, so a test that re
 
 `nanyx test --format json` writes one JSON object per test: its name, file, span, result and captured output. The VS Code extension uses it to fill the editor's test explorer and to put a "Run test" link above each `@test`.
 
+## Expecting a crash
+
+Built ([#3078](https://github.com/nanyx-lang/nanyx/issues/3078)): `@test(#crashes)` passes a test only if it crashes,
+and `@test(#crashes("text"))` only if the crash's message contains the text; with `#io`, `@test(#io, #crashes)` (see
+[`@test`](../tour/attributes#test)). A crash is what `crash`, `orCrash` and a failed `assert` do. A deferred error,
+a match that doesn't handle every case among them, a runtime error and a timeout fail the test as they fail any
+([Test builds](../deep-dives/test-builds#tests-that-expect-a-crash)).
+
 # Left for later
 
 These fit the design but are not part of the first version:
@@ -145,7 +153,6 @@ These fit the design but are not part of the first version:
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Virtual time.** The test host providing `Async` and a `Clock` whose `sleep` advances at once, with tasks run in a
   fixed order, so tests of `sleep`, `race` and timeouts run instantly and the same way every time.
-- **Expecting a crash.** A test cannot catch a crash, but the runner sees one, so an attribute such as `@test(#crashes)` could pass a test only if it crashes.
 - **A file system in memory.** A ready-made `FileSystem`, which a test loads with `use`, that holds its files in memory, so a test can write files and read them back without faking each member by hand.
 - **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the docs' ([compilation](../deep-dives/compilation#docs-examples)); `nanyx test` could do the same for a package's.
 

@@ -225,8 +225,10 @@ and ExprKind =
     /// A float constant: an `f64`, or an `f32` where the expression is an `F32`.
     | FloatConstant of float
     /// An error deferred to run time, or a crash: writes these messages to stderr and ends the program, with a trap in
-    /// `Helpers.crashed`, from which the runtime reports the stack.
-    | Crash of string list
+    /// `Helpers.crashed`, from which the runtime reports the stack. One that is deferred, an error the compiler found,
+    /// says so to the runtime first (see `Helpers.deferredCrash`), so that a test that expects a crash doesn't pass by
+    /// reaching it (#3078).
+    | Crash of messages: string list * deferred: bool
     /// A crash whose message is made as the program runs, an `assert`'s that shows its values (see `AssertSyntax`):
     /// writes the string to stderr and ends the program, as `Crash` does.
     | CrashWith of Atom
@@ -918,7 +920,7 @@ module Print =
             |> sprintf "\"%s\""
         | Dbg(site, text) -> $"dbg({site.Prefix.Trim()}, {atom text})"
         | FloatConstant value -> string value
-        | Crash messages -> $"""crash({messages |> String.concat ""})"""
+        | Crash(messages, _) -> $"""crash({messages |> String.concat ""})"""
         | CrashWith message -> $"crash({atom message})"
         | Probe(kind, locals) -> $"""probe {kind}({locals |> List.map _.Var.Name |> String.concat ", "})"""
         | ForEach loop ->

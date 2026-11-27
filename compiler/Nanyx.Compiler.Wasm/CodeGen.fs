@@ -126,10 +126,18 @@ type WasmOptions =
           FrameDrops = false }
 
 /// What a module the runtime runs reports a crash through (see `WasmOptions.CrashToRuntime`): the runtime's `nanyx:crash`
-/// `report`, given the address and the length of the message's bytes, which `Helpers.crashed` calls before it traps.
+/// `report`, given the address and the length of the message's bytes, which `Helpers.crashed` calls before it traps; and
+/// `deferred`, which `Helpers.deferredCrash` calls before an error deferred to run time crashes, to say it is one.
 module CrashReport =
     let report: Extern =
         { Module = "nanyx:crash"; Name = "report"; Parameters = [ ExternValue.I32; ExternValue.I32 ]; Result = None }
+
+    let deferred: Extern =
+        { Module = "nanyx:crash"; Name = "deferred"; Parameters = []; Result = None }
+
+    /// `Helpers.deferredCrash`, telling the runtime.
+    let deferredCrash =
+        [ $"  (func ${Helpers.deferredCrash}"; $"    call ${CoreIrEmitImports.importName deferred}"; "  )" ] |> String.concat "\n"
 
     /// `Helpers.crashed`, reporting the message.
     let crashed =
@@ -1185,7 +1193,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let runtimeImports =
         [ if moduleUsesIoHelpers then CoreIrEmitImports.wasiFdWrite
           if usedHelperSet.Contains Helpers.procExit || options.Component.IsSome then CoreIrEmitImports.wasiProcExit
-          if reportsCrashes then CrashReport.report ]
+          if reportsCrashes then CrashReport.report
+          if reportsCrashes && usedHelperSet.Contains Helpers.deferredCrash then CrashReport.deferred ]
     // The foreign functions a component's core module defines itself (see `ComponentAbi.externs`).
     let definedExterns = options.Component |> Option.map ComponentAbi.externs |> Option.defaultValue []
     let isComponentImport (declared: Extern) = componentImports |> List.exists (fst >> (=) declared)
@@ -1210,7 +1219,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
     let moduleUsesHeap = usedHelperSet.Contains Helpers.alloc || usedHelperSet.Contains Helpers.free
     let renderedHelpers =
         let helpers = if options.CheckMemory then checkedRuntimeHelpers heapBase else runtimeHelpers heapBase
-        let helpers = if reportsCrashes then helpers |> Map.add Helpers.crashed CrashReport.crashed else helpers
+        let helpers = if reportsCrashes then helpers |> Map.add Helpers.crashed CrashReport.crashed |> Map.add Helpers.deferredCrash CrashReport.deferredCrash else helpers
         [ yield!
               helperDependencies
               |> List.map fst

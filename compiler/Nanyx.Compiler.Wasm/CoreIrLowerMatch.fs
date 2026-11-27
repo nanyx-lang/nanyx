@@ -136,7 +136,7 @@ let lowerMatch (tools: MatchTools) (scope: Scope) (expr: Expression) (values: Ex
         // A value of no known type cannot be matched. The values are evaluated in order up to it, for what they do
         // (it most likely stops the program itself, through the deferred error that left its type unknown), and
         // if the program is still running then, it stops there.
-        let stop = Expr.make (Crash [ Interpolation.unknownScrutineeMessage tools.SourceRoot values.[unknown].Span ]) ty
+        let stop = Expr.make (Crash([ Interpolation.unknownScrutineeMessage tools.SourceRoot values.[unknown].Span ], true)) ty
         values
         |> List.take (unknown + 1)
         |> List.rev

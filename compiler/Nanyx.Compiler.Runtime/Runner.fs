@@ -265,7 +265,7 @@ module WasmRunner =
             Probing.define linker (spanTable program) listener
             Probing.defineDbg linker (fun _ -> false)
             let reported = ref None
-            CrashImport.define linker reported
+            CrashImport.define linker reported (ref false)
             configure store
             let mutable instantiated = None
             let outcome =

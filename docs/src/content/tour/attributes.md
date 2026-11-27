@@ -155,6 +155,21 @@ def `reads the sample config` = {
 Where a test lacks only contexts `#io` provides, `NYX0312` says so, and an editor offers to mark the test
 `@test(#io)`.
 
+A test can't catch a crash, so `@test(#crashes)` marks one that passes only if it crashes, as `crash`, `orCrash` and a
+failed `assert` do, and fails if it finishes. `@test(#crashes("text"))` passes only if the crash's message contains the
+text. With `#io`, the two are written together, `@test(#io, #crashes)`:
+
+```nanyx fragment
+@test(#crashes("no first element"))
+def `first of an empty list crashes` = {
+  println(first([]))
+}
+```
+
+An error the compiler found and deferred, such as a type error or a `match` that doesn't handle every case, isn't a
+crash a test can expect, and fails it as it fails any test, and so do a runtime error, such as an integer overflow, and
+running past the time a test has.
+
 ## `@allow(...)`
 
 Lets a definition break [linter](../standard-tools/official-linter) rules: before a def, a local one too, or a top-level type, it suppresses the diagnostics of the rules it names inside that definition. Each rule is written as its linter and its name, with no spaces around the `/`, and several are separated by commas. It is the only attribute a block can hold.
