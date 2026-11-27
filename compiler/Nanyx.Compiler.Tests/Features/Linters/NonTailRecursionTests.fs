@@ -87,3 +87,25 @@ def twice: int -> int = { n -> inc(inc(n)) }
 def again: list(int) -> list(int) = { xs -> xs \ list.map({ x -> list.length(again([x])) }) }
 """
     Assert.Empty(nonTailIn source)
+
+[<Fact>]
+let ``A call last in a memory block is reported, as the block frees its memory after it`` () =
+    // The block runs in the function, not as a lambda of its own, and runs code when it ends (#2725).
+    let source =
+        normalized """def count: (int, int) -> int = { n, acc ->
+  if n == 0 then acc else memory { count(n - 1, acc + 1) }
+}
+"""
+    Assert.Equal<(string * string) list>(
+        [ nonTailMessage "count" "the `memory` block frees its memory after it", "count(n - 1, acc + 1)" ],
+        nonTailIn source)
+
+[<Fact>]
+let ``A call last in the body of use ... in is in tail position, and not reported`` () =
+    let source =
+        normalized """context Tag = (name: string)
+def count: [Tag] (int, int) -> int = { n, acc ->
+  if n == 0 then acc else use Tag(name = "x") in count(n - 1, acc + 1)
+}
+"""
+    Assert.Empty(nonTailIn source)

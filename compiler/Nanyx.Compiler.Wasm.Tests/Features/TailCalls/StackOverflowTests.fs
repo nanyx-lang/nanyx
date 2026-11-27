@@ -63,3 +63,39 @@ println("{deep(100000)}")
     let outcome = Nanyx.LargeStack.runWithStack (1024 * 1024) (fun () -> runSource source)
     Assert.Equal(message "deep", outcome.StandardError.ReplaceLineEndings "\n")
     Assert.Equal(1, outcome.ExitCode)
+
+[<Fact>]
+let ``A call last in a memory block is no tail call, as the block frees its memory after it`` () =
+    // A construct that runs code when its scope ends takes a call last in its body out of tail position (#2725).
+    let source =
+        normalized """def count: int, int -> int = { n, acc ->
+  if n == 0 then acc else memory { count(n - 1, acc + 1) }
+}
+
+println(count(1000000, 0))
+"""
+    let outcome = runSource source
+    Assert.Equal(message "count", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(1, outcome.ExitCode)
+
+[<Fact>]
+let ``A call last in a def that starts tasks, of a def that starts none, is no tail call, as the def waits for its tasks`` () =
+    let source =
+        normalized """def work: () -> int = { () -> 1 }
+
+def a: [Async] int -> int = { n ->
+  if n == 0 then 0
+  else
+    def t = start! work()
+    def one = await(t)
+    b(n - one)
+}
+
+def b: [Async] int -> int = { n -> a(n) }
+
+@entry
+def main: [Async, Console] () -> () = { () -> println("{a(200000)}") }
+"""
+    let outcome = runSource source
+    Assert.Equal(message "a", outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal(1, outcome.ExitCode)
