@@ -154,6 +154,31 @@ module TyVar =
     /// The variable `id`, named `name` if it is written in a type, that stands for any type.
     let ordinary (id: int) (name: string option) : TyVar = { Id = id; Name = name; Kind = Ordinary }
 
+    /// The name of the `n`th context variable the compiler infers for an unannotated def, from 1: `'1`, `'2`, ... A
+    /// call and an import find a def's context variables by name, so an inferred one needs a name while checking, but
+    /// this one is not an identifier, so no annotation can write it. It is never shown: a reader sees `κ`, `λ`, ... (or
+    /// `c`, `d`, ... in ASCII), given when the type is printed (see `Unifier.displayRenaming`).
+    let inferredContextName (n: int) : string = $"'{n}"
+
+    /// Whether `name` is one `inferredContextName` gives.
+    let isInferredContextName (name: string) : bool =
+        name.Length > 1 && name[0] = '\'' && name |> Seq.skip 1 |> Seq.forall System.Char.IsDigit
+
+    /// The letters a context variable the compiler inferred is written with where Latin letters are, in order: c, d,
+    /// ..., , as an annotation would name it.
+    let inferredContextLetters = "cdefghijklmnopqrstuvwxyzab"
+
+    /// The name a type that is printed on its own, with no other variables to keep clear of, gives the context variable
+    /// named `name` (see `inferredContextName`): `c` for `'1`, `d` for `'2`, ..., then `c1`, ...
+    let inferredContextFallback (name: string) : string =
+        let letters = inferredContextLetters
+        let index = int (name.Substring 1) - 1
+        let round = index / letters.Length
+        if round = 0 then string letters[index] else $"{letters[index % letters.Length]}{round}"
+
+    /// Whether `v` is a context variable the compiler inferred (see `inferredContextName`).
+    let isInferredContext (v: TyVar) : bool = v.Name |> Option.exists isInferredContextName
+
 type Ty =
     | TyVar of TyVar
     | TyPrimitive of string

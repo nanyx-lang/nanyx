@@ -86,6 +86,7 @@
     <Compile Include="Features\Contexts\ContextVariableCallTimeTests.fs" />
     <Compile Include="Features\Contexts\PointFreeContextTests.fs" />
     <Compile Include="Features\Contexts\LambdaContextTests.fs" />
+    <Compile Include="Features\Contexts\InferredContextVariableNameTests.fs" />
     <Compile Include="Features\Contexts\LambdaSuppliedContextTests.fs" />
     <Compile Include="Features\Contexts\ExpectedFunctionContextTests.fs" />
     <Compile Include="Features\Contexts\LocalRecContextTests.fs" />

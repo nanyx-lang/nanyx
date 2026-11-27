@@ -259,9 +259,10 @@ module internal ContextInference =
         |> Map.fold (fun all ctxName used -> all |> Map.add ctxName (Set.union used (all |> Map.tryFind ctxName |> Option.defaultValue Set.empty))) checkedRests
 
     /// The context variables the unannotated top-level def `defName`, of type `defTy`, was found to use (see
-    /// `ContextVariables.require`) that nothing bound, each given a name as an annotation would have written it, and
-    /// `state` with the names given. `def apply = { f, x -> f(x) }` is `[c] ([c] a -> b), a -> b`. Each name is a letter
-    /// from `c` on that the def's type does not use already.
+    /// `ContextVariables.require`) that nothing bound, each given a name, and `state` with the names given. A call and
+    /// an import find the variables by these names. Each is one no annotation can write, `'1`, `'2`, ... (see
+    /// `TyVar.inferredContextName`), that the def's type does not use already; a reader sees a letter in its place:
+    /// `def apply = { f, x -> f(x) }` is `[κ] ([κ] α -> β), α -> β` (see `Unifier.displayRenaming`).
     let nameContextVariables (defName: Identifier) (defTy: Ty) (state: InferState) : Identifier list * InferState =
         match state.InferredContextVars |> Map.tryFind defName with
         | None -> [], state
@@ -276,21 +277,21 @@ module internal ContextInference =
                 |> List.choose (function TyVar v -> Some v | _ -> None)
                 |> List.distinctBy _.Id
             let taken = (varsInOrder (Unifier.apply subst defTy) |> List.choose _.Name) @ (state.TypeVars.Keys |> Seq.choose (function WrittenVar name -> Some name | ScopeOf _ -> None) |> List.ofSeq) |> Set.ofList
-            let letters = [ for letter in "cdefghijklmnopqrstuvwxyzab" do if not (taken.Contains (string letter)) then string letter ]
+            let free = Seq.initInfinite ((+) 1 >> TyVar.inferredContextName) |> Seq.filter (taken.Contains >> not) |> Seq.truncate unbound.Length |> List.ofSeq
             let names, _, named =
                 unbound
-                |> List.fold (fun (names, letters, current: InferState) var ->
-                    match var.Name, letters with
-                    | Some name, _ -> names @ [ name ], letters, current
-                    | None, letter :: rest ->
-                        let namedVar = TyVar.ordinary current.NextId (Some letter)
+                |> List.fold (fun (names, free, current: InferState) var ->
+                    match var.Name, free with
+                    | Some name, _ -> names @ [ name ], free, current
+                    | None, name :: rest ->
+                        let namedVar = TyVar.ordinary current.NextId (Some name)
                         let next =
                             { current with
                                 NextId = current.NextId + 1
-                                TypeVars = current.TypeVars |> Map.add (WrittenVar letter) namedVar
+                                TypeVars = current.TypeVars |> Map.add (WrittenVar name) namedVar
                                 Constraints = (TyVar var, TyVar namedVar, Equal, SourceSpan.none) :: current.Constraints }
-                        names @ [ letter ], rest, next
-                    | None, [] -> names, [], current) ([], letters, state)
+                        names @ [ name ], rest, next
+                    | None, [] -> names, [], current) ([], free, state)
             names, named
 
     /// `instances` with the call `pending` names finding its context as `instance`.
