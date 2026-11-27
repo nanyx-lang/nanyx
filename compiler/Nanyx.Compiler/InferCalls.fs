@@ -189,6 +189,21 @@ let rec internal inferCall
     | CollectionSyntax.Construct(typeName, _, _) when (TypeEnv.tryFind name env).IsNone ->
         Error [ CollectionLiterals.noFromArray calleeSpan typeName ]
     | _ ->
+    // A call that gives its callee another number of arguments than it takes says so, and is checked no further: what
+    // else it reports, such as a context the callee requires, would only be about the wrong call (see `ArgumentCount`).
+    // One argument given for several is inferred to see whether it is a tuple of them, and what inferring it found is
+    // dropped.
+    let typeOfArgument arg = inferExpr env state arg |> Result.toOption |> Option.map (fun (typed, _) -> typed.Type)
+    let argumentCount =
+        TypeEnv.tryFind name env
+        |> Option.bind (fun scheme -> ArgumentCount.check state expr name scheme.Type calleeSpan args typeOfArgument |> Option.map (fun error -> scheme, error))
+    match argumentCount with
+    | Some (scheme, error) ->
+        let funcTy, next = instantiate (recordReference expr scheme state) scheme
+        match Unifier.unalias funcTy with
+        | TyFunc(input, output, _) -> Ok (FailedCalls.result expr input output [ error ] next)
+        | _ -> Error [ error ]
+    | None ->
     let contextCheck =
         match contextRequirementsOf env state name with
         // A parameterised context is found by its type once the arguments are typed (see `resolveCallInstances`).
