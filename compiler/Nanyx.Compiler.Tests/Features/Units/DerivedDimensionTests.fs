@@ -5,14 +5,9 @@ module Nanyx.Compiler.Tests.Features.DerivedDimension
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
+open Nanyx.Compiler.Tests.Features.UnitsFixture
 
 let private length = "dimension Length\n@baseUnit unit m: Length\nunit km: Length = 1_000m\n"
-
-/// The type of each def `source` declares after the dimensions, by name, which compiles with no diagnostic.
-let private typesIn (source: string) (names: string list) =
-    let result = Compiler.compile (withFinalNewline (length + source))
-    Assert.Empty(result.Diagnostics)
-    names |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name])
 
 /// The code and message of the one diagnostic compiling `source` after the dimensions gives.
 let private only (source: string) =
@@ -23,19 +18,19 @@ let private only (source: string) =
 let ``A product or quotient of measured values adds or takes off the exponents`` () =
     Assert.Equal<string list>(
         [ "Length(float) / Time(float)"; "Length(int) * Length(int)"; "Length(float) / (Time(float) * Time(float))"; "Length(float)"; "float" ],
-        typesIn
+        typesAfter length
             "def a = 100.0m / 9.58s\ndef b = 2m * 3m\ndef c = 10.0m / 2.0s / 1.0s\ndef d = a * 1.0s\ndef e = 1.0km / 1.0m"
             [ "a"; "b"; "c"; "d"; "e" ])
 
 [<Fact>]
 let ``A quotient is of the storage's fraction, so dividing ints is not rounded`` () =
-    Assert.Equal<string list>([ "Length(float) / Time(float)"; "1 / Time(float)" ], typesIn "def a = 100m / 3s\ndef b = 1.0 / 2.0s" [ "a"; "b" ])
+    Assert.Equal<string list>([ "Length(float) / Time(float)"; "1 / Time(float)" ], typesAfter length "def a = 100m / 3s\ndef b = 1.0 / 2.0s" [ "a"; "b" ])
 
 [<Fact>]
 let ``Derived dimensions are written in annotations with * and /, the storage on each part`` () =
     Assert.Equal<string list>(
         [ "Length(float), Time(float) -> Length(float) / Time(float)"; "Time(a) * Time(a) -> Time(a) * Time(a)" ],
-        typesIn
+        typesAfter length
             "def speed: Length(float), Time(float) -> Length(float) / Time(float) = { d, t -> d / t }\ndef square: Time(a) * Time(a) -> Time(a) * Time(a) = { t -> t }"
             [ "speed"; "square" ])
 
@@ -43,14 +38,14 @@ let ``Derived dimensions are written in annotations with * and /, the storage on
 let ``A bare derived dimension in a signature is of one storage, shared by its parts`` () =
     Assert.Equal<string list>(
         [ "Length(a) / Time(a) -> Length(a) / Time(a)" ],
-        typesIn "def same: Length / Time -> int = { v -> 1 }\ndef sameAgain: Length(a) / Time -> Length(a) / Time(a) = { v -> v }" [ "sameAgain" ])
-    Assert.Equal<string list>([ "Length(a) / Time(a) -> int" ], typesIn "def same: Length / Time -> int = { v -> 1 }" [ "same" ])
+        typesAfter length "def same: Length / Time -> int = { v -> 1 }\ndef sameAgain: Length(a) / Time -> Length(a) / Time(a) = { v -> v }" [ "sameAgain" ])
+    Assert.Equal<string list>([ "Length(a) / Time(a) -> int" ], typesAfter length "def same: Length / Time -> int = { v -> 1 }" [ "same" ])
 
 [<Fact>]
 let ``A dimension that names a derived dimension is the same dimension wherever it is written`` () =
     Assert.Equal<string list>(
         [ "Length(float), Time(float) -> Length(float) / Time(float)"; "Length(float) / Time(float)"; "Length(float)" ],
-        typesIn
+        typesAfter length
             "dimension Speed = Length / Time\ndef speed: Length(float), Time(float) -> Speed(float) = { d, t -> d / t }\ndef v: Length(float) / Time(float) = speed(100.0m, 9.58s)\ndef back: Length(float) * Time(float) / Time(float) = 2.0m"
             [ "speed"; "v"; "back" ])
 
@@ -68,7 +63,7 @@ let ``Two parts of a derived dimension stored differently are NYX0295`` () =
 let ``Parts stored as an associated type share it, and NYX0295 writes one as it is written`` () =
     Assert.Equal<string list>(
         [ "Length(a), Time(a) -> Length(fraction) / Time(fraction)" ],
-        typesIn "def speed: Length(a), Time(a) -> Length(Num(a).fraction) / Time(Num(a).fraction) = { d, t -> d / t }" [ "speed" ])
+        typesAfter length "def speed: Length(a), Time(a) -> Length(Num(a).fraction) / Time(Num(a).fraction) = { d, t -> d / t }" [ "speed" ])
     Assert.Equal(
         (DiagnosticCodes.DerivedDimensionStorages.Code,
          "The parts of 'Length / Time' are stored as 'a' and as 'Num(a).fraction', and a derived dimension's parts share one storage: write it on every part, or on none"),

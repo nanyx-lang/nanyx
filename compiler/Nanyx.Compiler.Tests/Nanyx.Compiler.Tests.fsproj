@@ -40,6 +40,7 @@
     <Compile Include="Features\Calls\FunctionFieldCallTests.fs" />
     <Compile Include="Features\Calls\BuiltInCallTests.fs" />
     <Compile Include="Features\Chars\CharLiteralTests.fs" />
+    <Compile Include="Features\Units\UnitsFixture.fs" />
     <Compile Include="Features\Units\UnitLiteralTests.fs" />
     <Compile Include="Features\Units\UnitDeclarationTests.fs" />
     <Compile Include="Features\Units\StorageAndDisplayUnitTests.fs" />

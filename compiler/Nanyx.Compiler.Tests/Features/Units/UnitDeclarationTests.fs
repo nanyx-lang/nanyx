@@ -6,9 +6,7 @@ module Nanyx.Compiler.Tests.Features.UnitDeclarations
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
-
-let private time =
-    "dimension Time\n@baseUnit unit ns: Time\nunit us: Time = 1_000ns\nunit ms: Time = 1_000us\nunit s: Time = 1_000ms\n"
+open Nanyx.Compiler.Tests.Features.UnitsFixture
 
 /// The scale of each unit compiling `source` declares, to its dimension's default storage unit, as text.
 let private scales (source: string) =

@@ -6,36 +6,26 @@ module Nanyx.Compiler.Tests.Features.UnitLiterals
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
-
-let private dimensions =
-    "dimension Time\n@baseUnit unit ns: Time\nunit us: Time = 1_000ns\nunit ms: Time = 1_000us\nunit s: Time = 1_000ms\n"
-    + "dimension Length(float)\n@baseUnit unit m: Length\nunit mm: Length = 0.001m\n"
-    + "dimension Bytes(int)\n@baseUnit unit B: Bytes\nunit KB: Bytes = 1_000B\n"
+open Nanyx.Compiler.Tests.Features.UnitsFixture
 
 /// The one diagnostic of compiling `source`, after the dimensions: its code and message.
 let private only (source: string) =
     let code, message, _ = onlyDiagnostic (withFinalNewline (dimensions + source))
     code, message
 
-/// The types of `names`, as compiling `source` after the dimensions infers them, which reports nothing.
-let private typesIn (source: string) (names: string list) =
-    let result = Compiler.compile (withFinalNewline (dimensions + source))
-    Assert.Empty(result.Diagnostics)
-    names |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name])
-
 [<Fact>]
 let ``A number with a unit is stored as the number it is written as, where nothing expects another`` () =
-    Assert.Equal<string list>([ "Time(float)"; "Time(int)" ], typesIn "def t = 0.5s\ndef u = 500ms" [ "t"; "u" ])
+    Assert.Equal<string list>([ "Time(float)"; "Time(int)" ], typesAfter dimensions "def t = 0.5s\ndef u = 500ms" [ "t"; "u" ])
 
 [<Fact>]
 let ``A number with a unit is stored as the number expected`` () =
     Assert.Equal<string list>(
         [ "Time(float)"; "Time(int)"; "Time(I32)" ],
-        typesIn "def v: Time(float) = 500ms\ndef w: Time(int) = 0.5s\ndef x: Time(I32) = 1s" [ "v"; "w"; "x" ])
+        typesAfter dimensions "def v: Time(float) = 500ms\ndef w: Time(int) = 0.5s\ndef x: Time(I32) = 1s" [ "v"; "w"; "x" ])
 
 [<Fact>]
 let ``A number with a unit of a constrained dimension is stored as its dimension's storage`` () =
-    Assert.Equal<string list>([ "Length(float)"; "Bytes(int)" ], typesIn "def y = 5mm\ndef z = 50.5KB" [ "y"; "z" ])
+    Assert.Equal<string list>([ "Length(float)"; "Bytes(int)" ], typesAfter dimensions "def y = 5mm\ndef z = 50.5KB" [ "y"; "z" ])
 
 [<Fact>]
 let ``A function takes a number with a unit of its parameter's dimension`` () =

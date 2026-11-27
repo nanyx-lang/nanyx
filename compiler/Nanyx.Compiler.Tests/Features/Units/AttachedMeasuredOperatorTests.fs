@@ -5,6 +5,7 @@ module Nanyx.Compiler.Tests.Features.AttachedMeasuredOperators
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
+open Nanyx.Compiler.Tests.Features.UnitsFixture
 
 /// `Stamp`, a private type, with a `+` that moves it by a time and a `-` that gives the time between two.
 let private stamp =
@@ -13,15 +14,9 @@ let private stamp =
     + "def Stamp.`-`: Stamp, Stamp -> Time(int) = { Stamp(a), Stamp(b) -> (a - b) * 1ns }\n"
     + "def s = Stamp(5)\n"
 
-/// The type of each def `source` declares after `stamp`, by name, which compiles with no diagnostic.
-let private typesIn (source: string) (names: string list) =
-    let result = Compiler.compile (withFinalNewline (stamp + source))
-    Assert.Empty(result.Diagnostics)
-    names |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name])
-
 [<Fact>]
 let ``An operator a type attaches that takes a measured value is the one called`` () =
-    Assert.Equal<string list>([ "Stamp"; "Time(int)" ], typesIn "def later = s + 3s\ndef between = later - s" [ "later"; "between" ])
+    Assert.Equal<string list>([ "Stamp"; "Time(int)" ], typesAfter stamp "def later = s + 3s\ndef between = later - s" [ "later"; "between" ])
 
 [<Fact>]
 let ``An operator a type attaches that takes and gives a measured value is the one called`` () =
@@ -32,7 +27,7 @@ let ``An operator a type attaches that takes and gives a measured value is the o
 
 [<Fact>]
 let ``A number beside a measured value is still read by the units rule, though its type attaches the operator`` () =
-    Assert.Equal<string list>([ "Time(int)"; "Time(int)" ], typesIn "def twice = 2 * 3s\ndef sum = 3s + 2s" [ "twice"; "sum" ])
+    Assert.Equal<string list>([ "Time(int)"; "Time(int)" ], typesAfter stamp "def twice = 2 * 3s\ndef sum = 3s + 2s" [ "twice"; "sum" ])
 
 [<Fact>]
 let ``Beside a measured value, an attached operator's parameters are checked as a call's are`` () =
