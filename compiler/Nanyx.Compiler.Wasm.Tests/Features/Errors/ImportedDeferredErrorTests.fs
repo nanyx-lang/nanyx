@@ -52,7 +52,7 @@ let ``nanyx check and a release build of an entry that imports a module with a t
     let main = "module main\n\nimport shapes as (area)\n\n@entry\ndef main = { println(area(3)) }\n"
     let checkedOutcome, _ = nanyxOnPackage [ "shapes.nyx", shapes; "main.nyx", main ] [ "check"; "{package}" ]
     Assert.Equal(1, checkedOutcome.ExitCode)
-    Assert.Contains("NYX0201", checkedOutcome.StandardError)
+    Assert.Contains("NYX0201", checkedOutcome.StandardOutput)
     let released, wrote = nanyxOnPackage [ "shapes.nyx", shapes; "main.nyx", main ] [ "build"; "--release"; "{package}" ]
     Assert.Equal(1, released.ExitCode)
     Assert.False(wrote)
