@@ -82,6 +82,7 @@
     <Compile Include="UseDischarge.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />
+    <Compile Include="LambdaCaptures.fs" />
     <Compile Include="DimensionSignatures.fs" />
     <Compile Include="EmitLambdas.fs" />
     <Compile Include="ProtectedShapes.fs" />

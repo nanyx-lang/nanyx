@@ -25,6 +25,9 @@ dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). What is 
   that fits a Hindley–Milner checker. `Time(a)` already means a `Time` stored as `a`, so a dimension variable needs a
   spelling of its own ([#2817](https://github.com/nanyx-lang/nanyx/issues/2817),
   [#2627](https://github.com/nanyx-lang/nanyx/issues/2627)).
+- **Dimensionless dimensions.** A percentage is a plain number in meaning but should not be passed as one, and scaling
+  a measured value by it leaves the value's dimension as it was. [Dimensionless units](./dimensionless-units) proposes
+  a prelude `Ratio` with `pc`, `bp` and `ppm`.
 - **Affine quantities.** `Instant` and `Time` are a point and a distance, and a library type of its own answers it, with
   the operators it attaches: `i - j` is a `Time(int)` and `i + t` an `Instant` (see
   [Instant](../advanced/units-of-measure#instant)). Temperature has the same shape (a temperature and a temperature

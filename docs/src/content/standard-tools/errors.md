@@ -24,6 +24,26 @@ error NYX0201: Type mismatch
 
 On a terminal, the headline and the underline are coloured, unless the `NO_COLOR` environment variable is set.
 
+Some errors are explained by a second place in the code, a related location: the first definition of a name defined
+twice, or the declaration of a name that is private. The command line shows each one after the body, under a note
+that says what it is, with its own line of source underlined:
+
+```text
+error NYX0113: Duplicate definition 'total'
+   --> main.nyx:10:5
+    |
+ 10 | def total = 2
+    |     ^^^^^
+    = The name 'total' is already defined in this module
+    = note: 'total' is first defined here
+   --> main.nyx:1:5
+    |
+  1 | def total = 1
+    |     ^^^^^
+```
+
+An editor links to it from the error, as related information.
+
 Where the compiler can tell what was meant, the body says so. An unknown name is followed by the names in scope closest
 to it (`'totl' is not in scope: did you mean 'total'?`), and a character that only looks like one Nanyx reads, such as
 U+2212 for `-`, is named. In an editor, these and other errors come with a fix that makes the edit for you: writing the
