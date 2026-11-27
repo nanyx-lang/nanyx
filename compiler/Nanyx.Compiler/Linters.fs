@@ -83,7 +83,9 @@ module UnusedBindings =
 /// The official linter's `nonTailRecursion` rule: a function that calls itself other than in tail position, where
 /// each call keeps a stack frame until it returns. A tail call uses no stack (`TailPosition`), so a function that
 /// only calls itself in tail position can recurse to any depth. Calls within a lambda written in the function (a
-/// workflow block, a `for` loop's body) are left alone: they are calls from that lambda, not the function.
+/// workflow block, a `for` loop's body) are left alone: they are calls from that lambda, not the function. A `memory`
+/// block's are not: the block runs in the function, and frees its memory after its body, so no call in it is in tail
+/// position (#2725).
 module NonTailRecursion =
     let rule =
         { Id = "nonTailRecursion"
@@ -148,6 +150,8 @@ module NonTailRecursion =
         let ofChildren =
             match expr.Kind with
             | Lambda _ -> []
+            | FunctionCall(name, _, [ Kind (Lambda(_, body, _)) ]) when name = MemoryCells.memoryFunction ->
+                callsWithin (why |> Option.orElse (Some "the `memory` block frees its memory after it")) body
             | _ -> children |> List.collect ofChild
         let ofStatements =
             statements
