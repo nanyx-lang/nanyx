@@ -59,7 +59,7 @@ let canHoldMutable (ty: IrType) =
         | IrFunction _
         | IrBox -> true
         // The type itself again, which holds what its body holds.
-        | IrRecursive body -> holds body
+        | IrRecursive(_, bodies) -> bodies |> List.exists holds
         | IrSelf _
         | IrInt
         | IrSized _
