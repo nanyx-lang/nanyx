@@ -465,14 +465,17 @@ let private unsettledBesideOther (name: Identifier) (ctxName: Identifier) (other
 
 /// `state` with what each associated type of the context `ctxName`, which the callee of `call` requires written with
 /// `args`, is at the call, `argTys`, by the name the callee's signature gives it (see `TypedModule.AssociatedArguments`).
-/// One the signature fixes, `[Iterable(c, elem = int)]`, is recorded by the context's name for it, which the types of
-/// the context's members name it by.
+/// Each is also recorded by the context's name for it, which the types of the context's members name it by: one the
+/// signature fixes, `[Iterable(c, elem = int)]`, or names another way, `[Iterable(c, elem = a)]`.
 let private recordAssociatedArguments (state: InferState) (call: NodeId) (ctxName: Identifier) (args: TypeExpr list) (argTys: Ty list) =
     match tryFindTypeDef ctxName state with
     | Some info when not info.AssociatedTypes.IsEmpty && args.Length = argTys.Length ->
         let named =
             List.zip3 (List.skip (args.Length - info.AssociatedTypes.Length) args) info.AssociatedTypes (List.skip (args.Length - info.AssociatedTypes.Length) argTys)
-            |> List.map (fun (arg, associated, ty) -> match arg.Kind with TypeVar name -> name, ty | _ -> associated, ty)
+            |> List.collect (fun (arg, associated, ty) ->
+                match arg.Kind with
+                | TypeVar name when name <> associated -> [ associated, ty; name, ty ]
+                | _ -> [ associated, ty ])
         let recorded = state.AssociatedArguments |> Map.tryFind call |> Option.defaultValue Map.empty
         { state with AssociatedArguments = state.AssociatedArguments |> Map.add call (named |> List.fold (fun acc (name, ty) -> acc |> Map.add name ty) recorded) }
     | _ -> state

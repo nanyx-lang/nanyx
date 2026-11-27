@@ -83,12 +83,32 @@ type Scope =
 /// `Signatures.typeNamesAt`).
 type Info = { Scopes: Scope list; TypeNames: (string * Symbol) list }
 
+/// A context the def a use calls requires, at the types of the use, written as hover writes it, with `Name` its name as
+/// `Context` starts with it. `Source` is where the call finds it, and `Span` what provides it there, as the context flow
+/// says (see `callContextsOf`); a use that is not a call finds none. `Documented` are the symbols whose doc comment
+/// describes it, as a `ScopedContext`'s.
+type CalledContext = { Context: string; Name: string; Source: CallSource option; Span: SourceSpan; Documented: Symbol list }
+
+/// The def the expression the info view describes refers to or calls, as it is declared, shown below the expression. It
+/// is headed as the def's own scope is (`def mapOption`), linking to `Span`, its declaration, which may be in another
+/// file. `Signature` is its generic type with its contexts, as the def's scope writes it, and `Symbol` the def's, whose
+/// doc comment the info view shows. `Filled` is what this use fills in each type variable of the signature, by the
+/// signature's name for it: `a`, `int`. `Contexts` are the contexts it requires, at the types of this use.
+type Called =
+    { Heading: Heading
+      Span: SourceSpan
+      Signature: string option
+      Symbol: Symbol
+      Filled: (string * string) list
+      Contexts: CalledContext list }
+
 /// The expression the info view describes at the top, as hover writes it: `Name` is the name it is, if it is one, as
 /// hover writes it before the type, and else its text; `Type` is its type there, after the contexts a def requires,
 /// named as the code there can name them. `Heading` heads its scope with its text, `expression x + 1`, cut as a
 /// heading's code is (see `headingCode`). `Span` is where it is written, and what the heading links to, and `Symbol`
-/// what a name refers to or declares, whose doc comment the info view shows.
-type Described = { Name: string; Type: string; Heading: Heading; Span: SourceSpan; Symbol: Symbol option }
+/// what a name refers to or declares, whose doc comment the info view shows. `Called` is the def it refers to or
+/// calls, as declared (see `calledAt`).
+type Described = { Name: string; Type: string; Heading: Heading; Span: SourceSpan; Symbol: Symbol option; Called: Called option }
 
 /// The type the info view describes at the top, in place of an expression (see `TypeScopes.typeAt`), headed by its
 /// code and linking to `Span`, where it is written. A type's name, `type Point`, has its `Definition` as hover writes
@@ -386,6 +406,14 @@ let private attachedType (names: TypeNotation) (rename: Ty -> Ty) (file: string)
     | TypeDefinition -> Definition.typeDefinitionOf typed symbol |> Option.map (Definition.typeDefinitionWritten names file typed symbol >> fst)
     | _ -> topLevelType names rename typed symbol
 
+/// The heading of the def named `name`: `def greet`, or a custom pattern's by its tags, `pattern #Even | #Odd`.
+let private defHeading (name: Identifier) : Heading =
+    { Label = None
+      Code =
+        match Signatures.patternName name with
+        | Some tags -> $"{PatternSyntax.keyword} {tags}"
+        | None -> $"def {name}" }
+
 /// The module's scope, with no names or contexts yet: headed by the name its `module` declaration gives it, if any.
 let private moduleScope (syntax: Module) : Scope =
     let declared = syntax |> List.tryPick (fun item -> match item.Kind with ModuleDecl(_, name) -> Some (name, item.Span) | _ -> None)
@@ -473,12 +501,7 @@ let at (names: TypeNotation) (file: string) (source: string) (result: CompileRes
             @ (defs
                |> List.map (fun (symbol, (name, _, _, value)) ->
                    { Kind = FunctionScope
-                     Heading =
-                       { Label = None
-                         Code =
-                           match Signatures.patternName name with
-                           | Some tags -> $"{PatternSyntax.keyword} {tags}"
-                           | None -> $"def {name}" }
+                     Heading = defHeading name
                      Span = symbol.Declaration
                      Type = topLevelType names rename typed symbol
                      Note = None
@@ -519,11 +542,93 @@ let at (names: TypeNotation) (file: string) (source: string) (result: CompileRes
           TypeNames = Signatures.typeNamesAt typed.TypeDefs typed.Symbols syntax offset }
     | _ -> { Scopes = []; TypeNames = [] }
 
+/// The def the expression written at `span` refers to or calls, with its type at this use and the call, if it is one:
+/// a name that refers to a def, a call or pipe whose function is one, or that function's name. Only a def that is a
+/// function counts: a value's declared type is the type the expression shows. A parameter, a pattern variable or what
+/// syntax is desugared to has no definition to show, nor has a def around `span`, whose own scope shows it, as at a
+/// recursive call.
+let private calledAt (syntax: Module) (typed: TypedModule) (span: SourceSpan) : (Symbol * Ty * Expression option) option =
+    let isAt (other: SourceSpan) = other.File = span.File && other.Start = span.Start && other.End = span.End
+    let around = defsAround syntax span.Start |> List.choose (defSymbol typed) |> List.map _.Id |> Set.ofList
+    let isFunction (symbol: Symbol) =
+        match Hover.declaredType typed symbol |> Option.map (fst >> Unifier.unalias) with
+        | Some (TyFunc _) -> true
+        | _ -> false
+    let def (expr: Expression) =
+        referenced typed expr
+        |> Option.filter (fun symbol ->
+            (symbol.Kind = TopLevelValue || symbol.Kind = LocalValue)
+            && isFunction symbol
+            && not (ReservedNames.isHidden symbol)
+            && not (around.Contains symbol.Id))
+    Hover.expressionsAt span.Start syntax
+    |> List.tryPick (fun expr ->
+        match expr.Kind with
+        | IdentifierExpr _ when isAt expr.Span ->
+            def expr |> Option.bind (fun symbol -> typed.ExprTypes |> Map.tryFind expr.Id |> Option.map (fun ty -> symbol, ty, None))
+        | FunctionCall(_, nameSpan, _)
+        | Pipe(_, _, nameSpan, _) when isAt expr.Span || nameSpan |> Option.exists isAt ->
+            def expr
+            |> Option.bind (fun symbol ->
+                typed.CalleeTypes
+                |> Map.tryFind expr.Id
+                |> Option.map (fun ty -> symbol, WrittenReferences.calleeType typed expr.Id ty, Some expr))
+        | _ -> None)
+
+/// `symbol`, a def a use calls or refers to at the type `atUse`, as declared (see `Called`), with made-up type variables
+/// named by `names` and the types and contexts it names named by `rename`. What it fills in and the contexts at the use
+/// are written together, so a variable this use leaves open has one name in both. Where `call` is a call, each context
+/// says where the call finds it. None if `symbol` has no declared type.
+let private calledOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (syntax: Module) (symbol: Symbol, atUse: Ty, call: Expression option) : Called option =
+    Hover.declaredType typed symbol
+    |> Option.map (fun (general, contexts) ->
+        let declared = general :: Unifier.writtenContexts contexts |> List.map rename
+        let subst = match Solving.unify [ general, atUse, Equal, SourceSpan.none ] with Ok subst -> Some subst | Error _ -> None
+        let vars, filled, required =
+            match subst with
+            | Some subst ->
+                let vars = Unifier.displayedVars names declared |> List.filter (fun (var, _) -> not (TyVar.isInferredContext var))
+                vars |> List.map snd,
+                vars |> List.map (fun (var, _) -> Unifier.apply subst (TyVar var) |> rename),
+                contexts |> List.map (Unifier.apply subst) |> FunctionContexts.flatten |> Unifier.writtenContexts
+            | None -> [], [], []
+        let found =
+            match call with
+            | Some call -> callContextsOf typed syntax (expressionById syntax) call
+            | None -> []
+        let sourced =
+            required
+            |> List.map (fun context ->
+                let name = FunctionContexts.contextName context
+                match found |> List.tryFind (fun (other, _, _, _) -> name.IsSome && FunctionContexts.contextName other = name) with
+                | Some (_, source, span, instance) -> context, Some source, span, instance
+                | None -> context, None, SourceSpan.none, None)
+        let written =
+            Unifier.tysToDisplayStringsIn typed.TypeDefs names (declared @ filled @ (sourced |> List.map (fun (context, _, _, _) -> rename context)))
+            |> List.skip declared.Length
+        let filledWritten, contextsWritten = List.splitAt filled.Length written
+        { Heading = defHeading symbol.Name
+          Span = symbol.Declaration
+          Signature = topLevelType names rename typed symbol
+          Symbol = symbol
+          Filled = List.zip vars filledWritten
+          Contexts =
+            List.map2
+                (fun (context, source, span, instance) written ->
+                    { Context = written
+                      Name = FunctionContexts.contextName (rename context) |> Option.defaultValue ""
+                      Source = source
+                      Span = span
+                      Documented = Option.toList instance @ Option.toList (contextSymbol typed context) })
+                sourced
+                contextsWritten })
+
 /// The expression the info view describes at `selection` in the compiled root module, parsed from `source`, with
 /// made-up type variables named by `names`. For a selection, the expression written exactly at it, less the spaces
 /// around it, the outermost if several are (see `SelectedExpression.at`); for an empty one, what hover describes where
 /// it is (see `Hover.typeAt`): the innermost expression there, or the name a declaration declares. None where the
-/// selection is not a single expression, nothing typed is there, or the module did not type-check.
+/// selection is not a single expression, nothing typed is there, or the module did not type-check. With it, the def it
+/// refers to or calls, if any, as declared (see `calledAt`).
 let expressionAt (names: TypeNotation) (source: string) (result: CompileResult) (selection: SourceSpan) : Described option =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
@@ -541,7 +646,8 @@ let expressionAt (names: TypeNotation) (source: string) (result: CompileResult) 
               Type = Hover.typeWrittenAt names rename typed symbol ty
               Heading = { Label = Some "expression"; Code = headingCode false (SourceSpan.textIn source span) }
               Span = span
-              Symbol = symbol })
+              Symbol = symbol
+              Called = calledAt syntax typed span |> Option.bind (calledOf names rename typed syntax) })
     | _ -> None
 
 /// The type the info view describes at `selection` in the compiled root module, compiled as `file` from `source`, with

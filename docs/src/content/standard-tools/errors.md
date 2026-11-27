@@ -1294,6 +1294,10 @@ def count: int = "three"  -- error NYX0201: 'string' vs 'int'
 To fix it, change the value, or the annotation, so that the two types agree. Where the types come from far apart, an
 annotation on a definition in between shows which of them is wrong.
 
+Where the type expected is a protected or private [nominal type](../advanced/nominal-and-protected-types) of another
+module, a second line says that only that module makes values of it, and names the definitions attached to the type that
+make one, up to three, or says that none does. A value of the type's shape is the error NYX0260 instead.
+
 An `if` with no `else` gives `()` when its condition is false, so one whose `then` branch gives something else is
 reported at the `if`, saying that it has no `else`:
 
@@ -2234,7 +2238,7 @@ def p: Point = (x = 3, y = 4)  -- error NYX0260: 'Point' is protected, so only t
 
 To fix it, make the value with one of the definitions the message names. When there is one, it takes the fields in
 order, and it returns the type itself, an editor offers to rewrite the record as a call to it: `Point.at(3, 4)`. A value
-of another shape is an ordinary type mismatch (NYX0201).
+of another shape is a type mismatch (NYX0201), whose second line says the same of who makes values of the type.
 
 # NYX0261: Custom pattern inside another pattern
 
@@ -2580,11 +2584,10 @@ holding: `def count = memory { mut n = 0 ... n }`.
 
 # NYX0282: Type parameter written the old way
 
-A warning, not an error: the program compiles. A function's parameter that takes a
-[type argument](../tour/functions#type-arguments) is written the old way, `type a` for a positional one or `into: type`
-for a named one. A parameter that takes a type is now written with its type, `Type(a)`, as any other parameter is, so
-`name: type` only ever declares a context's [associated type](../advanced/contexts#associated-types). The old forms
-will be errors in a later release.
+A function's parameter that takes a [type argument](../tour/functions#type-arguments) is written the old way, `type a`
+for a positional one or `into: type` for a named one, which earlier releases took with a warning. A parameter that takes a
+type is written with its type, `Type(a)`, as any other parameter is, so `name: type` only ever declares a context's
+[associated type](../advanced/contexts#associated-types).
 
 ```nanyx
 context Decode(a) = (decode: string -> a)
@@ -2595,7 +2598,7 @@ def int.decode: string -> int = { text ->
 
 def deserialise: [Decode(a)] type a, string -> a = { t, text ->
   decode(text)
-} -- warning NYX0282: A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`. `type a` will be an error in a later release
+} -- error NYX0282: A parameter that takes a type is written with its type, `Type(a)`: write `Type(a)`, not `type a`
 
 println(deserialise(type int, "abc"))
 ```

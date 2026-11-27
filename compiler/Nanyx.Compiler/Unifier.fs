@@ -16,6 +16,9 @@ type MismatchKind =
     | ContextsNotAllowed
     /// A value of the shape of the nominal type it is given for: the type, whether it is private, and its shape.
     | NominalShape of NominalId * isPrivate: bool * shape: Ty
+    /// A value of no nominal type given for the nominal type, private when `isPrivate`, whose shape it doesn't have
+    /// either: outside the type's home module, the error says where values of it come from (see `ProtectedShapes`).
+    | NominalExpected of NominalId * isPrivate: bool
     /// Two records that differ in one field each, whose names are close, so one is likely the other misspelled: the
     /// field only the first has and the second record's type, then the field only the second has and the first's.
     /// Each type is named as its alias if it was written as one: `P`.
@@ -510,6 +513,22 @@ module Unifier =
             | other -> v.Id, other)
         |> Map.ofList
 
+    /// `associatedRenaming` for a reader, in `notation`: in a type whose other variables are all made up, as an inferred
+    /// def's are, a variable named after an associated type that the type uses elsewhere too is made up as well, so it
+    /// is named from the same alphabet: `[Iterable(α, elem = β), ToString(β)] α -> ()`.
+    let private associatedRenamingIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (ty: Ty) : Subst =
+        let renaming = associatedRenaming typeDefs ty
+        let othersNamed =
+            varOccurrences ty
+            |> List.exists (fun v -> v.Name.IsSome && not (TyVar.isInferredContext v) && not (renaming.ContainsKey v.Id))
+        if notation = Source || othersNamed then renaming
+        else
+            renaming
+            |> Map.map (fun _ renamed ->
+                match renamed with
+                | TyVar v -> TyVar { v with Name = None }
+                | other -> other)
+
     /// `ty` as `tyToString` writes it, with a union that holds all the tags of a union alias of `typeDefs` written with
     /// its name (see `TypePrinting.withUnionAliases`), and a context's associated types written by name, as a signature
     /// writes them, `Iter(c, elem = string)`, a signature's variable named after one given a name of its own (see
@@ -531,7 +550,7 @@ module Unifier =
     /// type uses it: `[Iter(c, elem = b)] c, b -> b` (see `associatedRenaming`), `Iter(c, elem = int)`, and the tags of
     /// a union alias of `typeDefs` by its name: `#some(string) | FsError`.
     let tyToDisplayStringIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (ty: Ty) : string =
-        let ty = apply (associatedRenaming typeDefs ty) ty
+        let ty = apply (associatedRenamingIn typeDefs notation ty) ty
         let ty = apply (associatedNaming typeDefs ty) ty
         printIn typeDefs notation (apply (displayRenaming notation (loneRests notation ty) ty) ty)
 
@@ -589,7 +608,7 @@ module Unifier =
     /// name from an annotation that it would have been given. A rest is a bare spread only where it is lone in
     /// every one of `tys` it appears in, so it is not named in one and not in another.
     let tysToDisplayStringsIn (typeDefs: Map<string, TypeDefInfo>) (notation: TypeNotation) (tys: Ty list) : string list =
-        let associated = associatedRenaming typeDefs (TyApply("", tys))
+        let associated = associatedRenamingIn typeDefs notation (TyApply("", tys))
         let tys = tys |> List.map (apply associated)
         let named = associatedNaming typeDefs (TyApply("", tys))
         let tys = tys |> List.map (apply named)
@@ -1222,13 +1241,15 @@ module Unifier =
                             not (match other with TyNominal _ -> true | _ -> false)
                             && fitsWithoutEffect (fun () -> loop subst [ (other, underlying, Assignable, origin) ]) ->
                             Error (mismatchMessage l r, origin, NominalShape(nominal, isPrivate, underlying))
+                        | other, TyNominal(nominal, _, _, true) when not (match other with TyNominal _ -> true | _ -> false) ->
+                            Error (mismatchMessage l r, origin, NominalExpected(nominal, true))
                         | TyNominal(_, _, _, true), _
                         | _, TyNominal(_, _, _, true) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
                         | RecursiveNominals.Nominal(_, _, underlying, false), other when not (match other with TyNominal _ -> true | _ -> false) ->
                             loop subst ((underlying, other, Equal, origin) :: rest)
-                        | other, TyNominal(_, _, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
-                            Error (mismatchMessage l r, origin, TypesDiffer)
+                        | other, TyNominal(nominal, _, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
+                            Error (mismatchMessage l r, origin, NominalExpected(nominal, false))
                         | TyNominal _, TyNominal _ ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
                         | _ ->

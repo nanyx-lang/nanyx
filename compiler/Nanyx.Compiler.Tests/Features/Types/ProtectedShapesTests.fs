@@ -104,3 +104,34 @@ let ``Constructing the type outside its module names the ways to make one`` () =
          "The protected type 'Point' can only be constructed in the module that defines it: make one with 'Point.new'",
          "Point"),
         onlyDiagnostic source)
+
+/// The one diagnostic of `source`, which must be a type mismatch: its message and its one suggestion, the note.
+let private mismatchWithNote (source: string) =
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    diagnostic.Message, Assert.Single(diagnostic.Suggestions)
+
+[<Fact>]
+let ``A value of another type given for a private type outside its module is a mismatch that says who makes values of it`` () =
+    // Not only a value of its shape: one of another type could never be one here either (#1804).
+    let source = points "private" checkedNew "def p: Point = \"\""
+    Assert.Equal(
+        ("'string' vs 'Points.Point'", "'Point' is private, so only the module 'Points' makes values of it: make one with 'Point.new'"),
+        mismatchWithNote source)
+
+[<Fact>]
+let ``A value of another type given for a protected type with no maker says no code outside its module can make one`` () =
+    let source = points "protected" "" "def p: Point = 3"
+    Assert.Equal(
+        ("'int' vs 'Points.Point'",
+         "'Point' is protected, so only the module 'Points' makes values of it, and it exports nothing that makes one: no code outside 'Points' can make a 'Point'"),
+        mismatchWithNote source)
+
+[<Fact>]
+let ``A value of a nominal type's shape is still NYX0260, and in its own module a mismatch has no note`` () =
+    let source = points "private" checkedNew "def p: Point = (x = 3, y = 4)"
+    Assert.Equal(DiagnosticCodes.ProtectedShape.Code, (Assert.Single((Compiler.compile source).Diagnostics)).Code)
+    let home = normalized "type Point = private (x: int, y: int)\ndef p: Point = \"\"\n"
+    let diagnostic = Assert.Single((Compiler.compile home).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.Empty(diagnostic.Suggestions)

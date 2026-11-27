@@ -194,7 +194,7 @@ editor, or press Ctrl+1, to carry on typing. You can drag the **Nanyx** tab to t
 and VS Code remembers where you put it. The extension needs VS Code 1.106 or later.
 
 It is organised by scope, innermost first, with a rule between one scope and the next: the cursor line's messages, if
-it has any, the expression or type you selected or the one at the cursor, each lambda around the cursor, each definition
+it has any, the expression or type you selected or the one at the cursor, the definition the expression calls, each lambda around the cursor, each definition
 around it (a local one as well as a top-level one), the `type`, `context`, `dimension` or `unit` declaration around it,
 and the module. Each scope's heading names it by its code and links to it: the expression by its text,
 `expression x + 1`, on one line and cut with `…` when it is long; a lambda by its parameters and line,
@@ -202,12 +202,13 @@ and the module. Each scope's heading names it by its code and links to it: the e
 loop's body as the loop is written, `for words | word -> … (line 4)`; a definition by its name, `def greet`; a type's
 declaration as it is declared, `context Iter(c)`; the module by its name.
 Click the heading's arrow to open or close a scope. The module starts closed, and so does every scope after the third,
-not counting the messages and the expression or type, since the side bar is narrow. A `memory` block or a `use` is part of the
+not counting the messages, the expression or type, and the definition it calls, since the side bar is narrow. A `memory` block or a `use` is part of the
 scope it is in.
 
 The view shows nothing twice. An item that repeats one a scope further down shows, the same text naming the same thing
 at the same place, is left out, and the one further down is kept, where it has its context. With the cursor on a
-definition's name, its signature shows once, in the definition's own scope, with its doc comment.
+definition's name, its signature shows once, in the definition's own scope, with its doc comment. The called
+definition's scope is always shown whole, since it says what this call finds.
 
 Types and contexts are named as the code at the cursor would name them, so a signature reads as you would write it:
 inside `module Points`, which declares `Point`, it is `Point`, not `Points.Point`; elsewhere in the file it is `Point`
@@ -231,6 +232,15 @@ view, such as a long parameter's, wraps.
   in `def f = { x -> x + 1 }` shows `int`, with the spaces around the selection left out. A selection that is not a
   whole expression, such as `x +`, or that runs across two statements, shows nothing here. With nothing selected it is
   the innermost expression at the cursor, as hover finds it: on `x`, `int`. A name's doc comment shows under it.
+- **The called definition**, below the expression when it is a function's name, or a call or pipe of one, from this
+  file, another or the standard library. The expression's type has this call's types filled in; this scope shows the
+  definition as declared. It is headed as the definition's own scope is, `def apply`, and links to its declaration.
+  Its **Signature** is the generic one, `apply: a, (a -> b) -> b`, with its doc comment. **At this call** says what the
+  call fills in each of its type variables, by the signature's names, `a = int` and `b = string`; a definition that
+  isn't generic leaves it out. Its **Contexts** are those it requires, at the call's types, `Eq(int)`, each with where
+  the call finds it, as the context flow says: a `use`, a signature, `attached`, `derived` or `built in`. A parameter
+  or a pattern variable has no definition to show, and inside a definition, as at a recursive call, its own scope
+  shows it.
 - **The type**, in place of the expression when the cursor is on a type, or a type is selected. On a type's name, in an
   annotation, a signature or a type's definition, or on the name a declaration declares, the scope is headed as the
   type is declared, `type Point`, `context Iter` or `dimension Distance`, with its **Definition** as hover writes it,

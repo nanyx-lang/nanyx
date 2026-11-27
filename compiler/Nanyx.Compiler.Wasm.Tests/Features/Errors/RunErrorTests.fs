@@ -247,7 +247,7 @@ def main = {
 [<Fact>]
 let ``Run - an unknown name given where an annotation's variable is expected stops the program there`` () =
     let source =
-        normalized """def f: (string, a: type) -> a = { s, a ->
+        normalized """def f: (string, a: Type(a)) -> a = { s, a ->
   def x: a = arts
   x
 }

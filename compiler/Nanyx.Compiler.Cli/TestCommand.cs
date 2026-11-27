@@ -22,6 +22,7 @@ internal static partial class CliCommands
     /// <param name="timeout">How many seconds a test may run before it is stopped, and fails; 10 by default.</param>
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred, as nanyx run defers them.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported. On a terminal, the tree is shown live while the compile runs.</param>
+    /// <param name="format">How to write the report: text, for a person to read, as without it, or json, one JSON object on each line, for a tool such as an editor to read.</param>
     [Consolo("test")]
     public static int Test(
         [Consolo("filter")] string? filter = null,
@@ -29,16 +30,25 @@ internal static partial class CliCommands
         [Consolo("timeout")] string? timeout = null,
         [Consolo("release")] bool release = false,
         [Consolo("timings")] bool timings = false,
+        [Consolo("format")] string? format = null,
         params string[] path) =>
-        TestIn(Shell.Process, path, filter, seed, timeout, release, timings);
+        TestIn(Shell.Process, path, filter, seed, timeout, release, timings, format);
 
     /// <summary>What <c>nanyx test</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int TestIn(Shell shell, string[] path, string? filter = null, string? seed = null, string? timeout = null, bool release = false, bool timings = false)
+    internal static int TestIn(Shell shell, string[] path, string? filter = null, string? seed = null, string? timeout = null, bool release = false, bool timings = false, string? format = null)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
             return UsageError;
         }
+
+        if (format is not null && format != TextFormat && format != JsonFormat)
+        {
+            shell.Error.WriteLine($"error: --format is {TextFormat} or {JsonFormat}, not '{format}'");
+            return UsageError;
+        }
+
+        var json = format == JsonFormat;
 
         long? givenSeed = null;
         if (seed is not null)
@@ -91,7 +101,16 @@ internal static partial class CliCommands
             progress.Finish();
             if (built.IsError)
             {
-                PrintDiagnostics(shell, built.ErrorValue, shell.Error);
+                if (json)
+                {
+                    WriteJsonDiagnostics(shell.Out, built.ErrorValue, false, null);
+                    WriteJsonSummary(shell.Out, false, 0, 0, null);
+                }
+                else
+                {
+                    PrintDiagnostics(shell, built.ErrorValue, shell.Error);
+                }
+
                 return 1;
             }
 
@@ -126,15 +145,37 @@ internal static partial class CliCommands
             deferred = ErrorsDeferred(build);
         }
 
-        PrintDiagnostics(shell, WorthStoppingFor(diagnostics), shell.Error);
-        if (HasErrors(diagnostics) && (release || !deferred || root is { Value.Typed: null }))
+        var stops = HasErrors(diagnostics) && (release || !deferred || root is { Value.Typed: null });
+        if (json)
         {
+            WriteJsonDiagnostics(shell.Out, WorthStoppingFor(diagnostics), !stops, packageRoot);
+        }
+        else
+        {
+            PrintDiagnostics(shell, WorthStoppingFor(diagnostics), shell.Error);
+        }
+
+        if (stops)
+        {
+            if (json)
+            {
+                WriteJsonSummary(shell.Out, false, 0, 0, null);
+            }
+
             return 1;
         }
 
         if (root is null)
         {
-            shell.Out.WriteLine($"{name} has no tests: mark a def @test to make it one");
+            if (json)
+            {
+                WriteJsonSummary(shell.Out, true, 0, 0, null);
+            }
+            else
+            {
+                shell.Out.WriteLine($"{name} has no tests: mark a def @test to make it one");
+            }
+
             return 0;
         }
 
@@ -145,8 +186,16 @@ internal static partial class CliCommands
         var chosenSeed = givenSeed ?? Random.Shared.NextInt64();
         var tests = TestTable.read(wasm);
         var selected = tests.Where(test => filter is null || Shown(test).Contains(filter, StringComparison.Ordinal)).ToList();
-        shell.Out.WriteLine($"Running {Count(selected.Count, "test")} in {name}{WithDeferred(HasErrors(diagnostics), diagnostics)}");
-        shell.Out.WriteLine();
+        if (json)
+        {
+            WriteJsonStart(shell.Out, name, selected.Count, chosenSeed, HasErrors(diagnostics) ? diagnostics.Count(diagnostic => diagnostic.Severity.IsError) : 0);
+        }
+        else
+        {
+            shell.Out.WriteLine($"Running {Count(selected.Count, "test")} in {name}{WithDeferred(HasErrors(diagnostics), diagnostics)}");
+            shell.Out.WriteLine();
+        }
+
         var passed = 0;
         var runs = WasmTester.run(
             wasm,
@@ -162,7 +211,14 @@ internal static partial class CliCommands
                     passed++;
                 }
 
-                Report(shell.Out, run);
+                if (json)
+                {
+                    WriteJsonTest(shell.Out, run);
+                }
+                else
+                {
+                    Report(shell.Out, run);
+                }
             }));
         if (runs.IsError)
         {
@@ -170,6 +226,12 @@ internal static partial class CliCommands
         }
 
         var failedCount = selected.Count - passed;
+        if (json)
+        {
+            WriteJsonSummary(shell.Out, true, passed, failedCount, chosenSeed);
+            return failedCount == 0 ? 0 : 1;
+        }
+
         shell.Out.WriteLine();
         shell.Out.WriteLine(failedCount == 0 ? $"{passed} passed" : $"{passed} passed, {failedCount} failed");
         if (failedCount > 0)

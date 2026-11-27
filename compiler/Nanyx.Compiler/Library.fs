@@ -613,6 +613,11 @@ module Compiler =
                             | NominalShape(nominal, isPrivate, shape) when not (Visibility.inNominalHome state nominal span) ->
                                 let names = (Map.toList env.Names) @ (types |> Map.toList |> List.map (fun (name, ty) -> name, TypeEnv.mono (Unifier.apply subst ty)))
                                 ProtectedShapes.shapeError state names (normalizeSource source) desugared nominal isPrivate shape span
+                            // So does a value of another type, which no value written here could be, in a second line.
+                            | NominalExpected(nominal, isPrivate) when not (Visibility.inNominalHome state nominal span) ->
+                                let names = (Map.toList env.Names) @ (types |> Map.toList |> List.map (fun (name, ty) -> name, TypeEnv.mono (Unifier.apply subst ty)))
+                                { Diagnostics.at (MemoryCells.mismatchCode state span) span message with
+                                    Suggestions = [ ProtectedShapes.homeNote state names nominal isPrivate ] }
                             | ContextsNotAllowed -> Diagnostics.at DiagnosticCodes.ContextsNotAllowed span message
                             | MisspelledField(onlyLeft, rightRecord, onlyRight, leftRecord) ->
                                 MisspelledFields.diagnose state desugared span (onlyLeft, rightRecord, onlyRight, leftRecord)
@@ -620,6 +625,7 @@ module Compiler =
                             | FieldsDiffer(onlyLeft, onlyRight) ->
                                 Diagnostics.at (MemoryCells.mismatchCode state span) (MisspelledFields.writtenField state desugared span (onlyLeft, onlyRight)) message
                             | TypesDiffer
+                            | NominalExpected _
                             | CharAndString
                             | NominalShape _ -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
                     |> List.distinct
