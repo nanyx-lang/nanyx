@@ -321,6 +321,9 @@ and ForStream =
 
 and ForSource =
     | OverList of Atom
+    /// An array's elements, by index: the stream's `Cursor` is the address of the next element, and its `End` how many
+    /// are left, read from the array's length once, since an `Array` can't change (#2207).
+    | OverArray of Atom
     /// The ints from the first to the second, both included.
     | OverRange of Atom * Atom
     /// The ints from the atom on, without end: only walked in step with a source that ends.
@@ -632,6 +635,7 @@ module ForLoop =
         loop.Streams |> List.collect (fun stream ->
             match stream.Source with
             | OverList list -> [ list ]
+            | OverArray array -> [ array ]
             | OverRange(first, last) -> [ first; last ]
             | OverRangeFrom first -> [ first ]
             | OverStore(store, _) -> [ store ])
@@ -928,6 +932,7 @@ module Print =
             let source (stream: ForStream) =
                 match stream.Source with
                 | OverList list -> atom list
+                | OverArray array -> atom array
                 | OverRange(first, last) -> $"{atom first}..{atom last}"
                 | OverRangeFrom first -> $"{atom first}.."
                 | OverStore(store, _) -> atom store

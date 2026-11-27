@@ -101,6 +101,7 @@ let rec mapVarsAndPlaces (var: Var -> Var) (depth: int -> int) (place: Place opt
     let source (s: ForSource) =
         match s with
         | OverList list -> OverList(atom list)
+        | OverArray array -> OverArray(atom array)
         | OverRange(first, last) -> OverRange(atom first, atom last)
         | OverRangeFrom first -> OverRangeFrom(atom first)
         | OverStore(store, walk) -> OverStore(atom store, StoreWalk.mapVars var walk)
