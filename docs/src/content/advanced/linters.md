@@ -87,7 +87,7 @@ Because severity is configured per project, a team that wants strictness can pro
 
 Writing your own linter is not possible yet. Today the default linter is the only one, and it is built into the compiler.
 
-Linters written in Nanyx are planned. Such a linter is a package, added to a project's `linters` list like the default one. It asks the compiler about your code (the type of an expression, what a name refers to, where a definition is used) and returns diagnostics. Its contract is still being designed: see [Linters: the public contract](../work-in-progress/linters#the-public-contract).
+Linters written in Nanyx are planned. Such a linter is a package, added to a project's `linters` list like the default one. It asks the compiler about your code (the type of an expression, what a name refers to, where a definition is used) and returns diagnostics. Its contract is still being designed: see [Linters: the contract](../work-in-progress/linters#the-contract).
 
 # Why separate linters from the compiler?
 
