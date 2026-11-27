@@ -8,6 +8,65 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.53.0
+
+*27 November 2026*
+
+The editor runs your code as you write it: `dbg` values show at the end of their lines, and live mode re-runs a program
+on every save, with its files kept in memory. Parsing is several times faster, types can name each other, and errors
+name type variables as hover does. Nothing needs edits, but an error message that showed a type variable as `a` now
+shows it as `α`.
+
+**Language**
+
+- Type definitions can name each other, as a syntax tree's node types do: aliases and nominal types whose every cycle
+  passes through a tag's payload or a nominal type ([Recursive types](../tour/types#recursive-types)).
+
+**Standard library**
+
+- `filesystem.overlay(body)` runs a block with a `FileSystem` that reads the real files but keeps what the block writes,
+  appends and deletes in memory, so nothing reaches the disk ([`filesystem`](../stdlib/filesystem#overlay)).
+
+**Tools**
+
+- A program run from VS Code shows each `dbg`'s value at the end of its line instead of in the terminal: the last value,
+  or how many times it was reached and the last, with every value in its hover. The values fade when the file is edited
+  and stay on their `dbg`s as lines change, and tests run from the Testing view show theirs too
+  ([dbg values](../standard-tools/vs-code-extension#dbg-values)).
+- Live mode in VS Code re-runs a program each time you save it, with its output in a **Nanyx Live** channel and its
+  `dbg` values inline. Its files are kept in memory and it gets no input. It is on by itself for a program that needs
+  only `Console`, `Async` and `FileSystem`, and anything else is turned on from the **Live mode** view in the Nanyx
+  sidebar ([Live mode](../standard-tools/vs-code-extension#live-mode)).
+- `nanyx run --dbg-to <file>` writes each `dbg` to a file as a line of JSON, and `nanyx test --format json` lists each
+  test's `dbg`s. `nanyx run --files-in-memory` runs a program over the real files with its writes kept in memory, from
+  a root its host declares with `filesInMemory` ([`nanyx run`](../standard-tools/command-line#nanyx-run),
+  [Writing a host](../advanced/hosts#writing-a-host)).
+- The official linter's new `redundantTypeName` rule draws the type's name in a pipe such as `people \list.map` faint
+  where the piped value's type already finds it, with a fix that removes it
+  ([Redundant type name in a pipe](../standard-tools/official-linter#redundant-type-name-in-a-pipe)).
+- Errors write the type variables the compiler made up as hover does, `α` and `β`, never as `t1000000001`.
+- The editor no longer asks the package index while you type an `::install`; the fix that names the newest version
+  asks when it is offered. A package file with an error other than an unknown name no longer reads the package's other
+  files, so it isn't checked again each time one of them changes.
+
+**Performance**
+
+- The parser decides from the next token which alternatives can match, instead of trying each one: the standard
+  library's files parse about four times faster.
+- `nanyx run` and `nanyx test` compile without the debugger's probes, so a program's WebAssembly is about a third of the
+  size, and compiling it allocates 40% less.
+- A record built from the fields of one that dies there reuses its memory, so a loop that steps a record allocates
+  nothing per step ([Memory management](../deep-dives/memory-management#inserting-counts)).
+
+**Fixes**
+
+- `nanyx test` prints and counts a script's errors once, and no longer reports an application's `@entry` as unused.
+- A custom pattern that reads or changes a cell of the `memory` block around it is
+  [NYX0262](../standard-tools/errors#nyx0262), and a `mut` outside a `memory` block reports only its own error.
+- `Instant.fromIsoString` gives `#notIso` for a year or fraction of too many digits, where it crashed.
+- `nanyx check`, hover and the editor's hints no longer overflow the stack writing a deeply nested type on Windows.
+- Building a value from a type description of a recursive record alias works, where it was an internal error.
+
 # 0.52.1
 
 *27 November 2026*

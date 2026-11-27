@@ -1,15 +1,15 @@
 (
   package = (
     name = "nanyx.test.host"
-    version = "0.52.1"
+    version = "0.53.0"
     repository = "nanyx-lang/nanyx"
-    nanyx = "=0.52.1"
+    nanyx = "=0.53.0"
     sources = ["src/**/*.nyx"]
     host = (root = "test.host", prelude = "test.prelude")
   )
   dependencies = [
-    (package = "nanyx.cli", version = "0.52.1")
-    (package = "nanyx.fs", version = "0.52.1")
-    (package = "nanyx.wasi", version = "0.52.1")
+    (package = "nanyx.cli", version = "0.53.0")
+    (package = "nanyx.fs", version = "0.53.0")
+    (package = "nanyx.wasi", version = "0.53.0")
   ]
 )
