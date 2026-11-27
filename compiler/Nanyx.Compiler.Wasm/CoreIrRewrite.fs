@@ -103,21 +103,7 @@ let rec mapVarsAndPlaces (var: Var -> Var) (depth: int -> int) (place: Place opt
         | OverList list -> OverList(atom list)
         | OverRange(first, last) -> OverRange(atom first, atom last)
         | OverRangeFrom first -> OverRangeFrom(atom first)
-        | OverStore(store, walk) ->
-            OverStore(
-                atom store,
-                { walk with
-                    Root = var walk.Root
-                    Pending = var walk.Pending
-                    Node = var walk.Node
-                    LeafBits = var walk.LeafBits
-                    Leaves = var walk.Leaves
-                    Remaining = var walk.Remaining
-                    LeafIndex = var walk.LeafIndex
-                    LeafEnd = var walk.LeafEnd
-                    Depth = var walk.Depth
-                    Path = var walk.Path }
-            )
+        | OverStore(store, walk) -> OverStore(atom store, StoreWalk.mapVars var walk)
     let kind =
         match e.Kind with
         | Atom a -> Atom(atom a)
