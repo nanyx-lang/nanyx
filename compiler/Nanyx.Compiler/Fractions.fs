@@ -58,6 +58,25 @@ module internal Fractions =
                 | first :: others -> others |> List.fold (fun next other -> addConstraintAt other.At other.ResultTy first.ResultTy next) current
                 | [] -> current) settled
 
+    /// `NumericLiterals.settle`, but for a literal of the type a pending `/` gives, which is settled after the others and
+    /// the fractions they make: the `1s` of `10m / 2s / 1s` is of the quotient's `fraction`, a `float` once `10m` and `2s`
+    /// are `int`, and defaulted with them it would be an `int` (#3134).
+    let settleLiterals (isOwn: Ty -> bool) (state: InferState) : InferState =
+        let results =
+            state.PendingFractions
+            |> List.choose (fun pending -> match resolveSoFar state pending.ResultTy with TyVar v -> Some v.Id | _ -> None)
+            |> Set.ofList
+        // Resolving every literal costs as much as there are, so a def with no `/` pending looks at none of them.
+        let ofResult, others =
+            if results.IsEmpty then [], state.UnsettledLiterals
+            else
+                state.UnsettledLiterals
+                |> List.partition (fun literal -> match resolveSoFar state literal.Type with TyVar v -> results.Contains v.Id | _ -> false)
+        if ofResult.IsEmpty then NumericLiterals.settle isOwn state
+        else
+            let settled = NumericLiterals.settle isOwn { state with UnsettledLiterals = others } |> settle
+            NumericLiterals.settle isOwn { settled with UnsettledLiterals = ofResult @ settled.UnsettledLiterals }
+
     /// `state` with each number literal in `tys` of its default type (see `NumericLiterals.settleIn`), and so with each
     /// literal of the operands of a pending `/` that gives a variable in `tys`, which is then settled as far as that
     /// lets it (see `settle`): `println(1s / 1ms)` finds `ToString` of the `float` the literals' `int` divides to.
