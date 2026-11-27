@@ -586,6 +586,11 @@ module Compiler =
                         match state.ArgumentSpans |> Map.tryFind span with
                         | Some reported -> text, reported.Value, kind
                         | None -> text, span, kind)
+                    // So is a mismatch of a construct's branches, at the one that doesn't fit (see `BranchSpans`).
+                    |> List.map (fun (text, span, kind) ->
+                        match state.BranchSpans |> Map.tryFind span |> Option.bind _.Value with
+                        | Some (branch, said) -> said, branch, kind
+                        | None -> text, span, kind)
                     |> List.sortBy (fun (_, span, _) -> span.Start)
                     |> List.map (fun (text, span, kind) ->
                         let message = Unifier.messageText state.TypeDefs text |> CharLiterals.withHint kind

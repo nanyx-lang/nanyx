@@ -433,6 +433,10 @@ type InferState =
             /// Where a mismatch of a call's arguments, written as one tuple, is reported instead of at the tuple, by the
             /// tuple's span: worked out only if one is (see `LambdaArguments.reportedSpan`).
             ArgumentSpans: Map<SourceSpan, Lazy<SourceSpan>>;
+            /// Where a mismatch of the branches of a `match`, an `if` or a list literal is reported instead of at the
+            /// whole, by the whole's span, and what it says: at the first branch that doesn't fit with those before it,
+            /// worked out only if one is (see `OddBranches`).
+            BranchSpans: Map<SourceSpan, Lazy<(SourceSpan * MismatchText) option>>;
             /// The work variables (see `TaskWork`), each with where the def that starts tasks it is of was named.
             TaskWork: Map<int, SourceSpan>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
@@ -578,6 +582,7 @@ let emptyState =
             DerivedCalls = Map.empty;
             Cells = Map.empty;
             ArgumentSpans = Map.empty;
+            BranchSpans = Map.empty;
             TaskWork = Map.empty;
             SupplyingCalls = Map.empty;
             EscapedContexts = Set.empty;

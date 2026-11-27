@@ -76,6 +76,7 @@
     <Compile Include="NamedArguments.fs" />
     <Compile Include="FailedCalls.fs" />
     <Compile Include="LambdaArguments.fs" />
+    <Compile Include="OddBranches.fs" />
     <Compile Include="LambdaParameterFields.fs" />
     <Compile Include="LambdaArity.fs" />
     <Compile Include="UseDischarge.fs" />

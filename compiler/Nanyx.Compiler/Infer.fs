@@ -420,6 +420,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                 typedItems |> List.fold (fun constrained item -> addAssignableConstraintAt item.Expr.Span item.Type element constrained) current
             | typedItems ->
                 // The elements are joined as an `if`'s branches are, so `[#red, #green]` is a `list(#red | #green)`.
+                let current = OddBranches.note Set.empty OddBranches.Items typedItems current
                 let elementTy, constrained = joinBranchTypes Set.empty current (typedItems |> List.map _.Type)
                 match expectedElement with
                 | Some element -> mkTypedExpr expr (listType element) None None None, addConstraint elementTy element constrained
@@ -460,6 +461,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
                         // It fails to check, as the `if` it would be with an `else`, so nothing is reported again.
                         Ok (mkTypedExpr expr thenExprTyped.Type None (Some children) None, { finalState with FailedExprs = (expr.Id, [ error ]) :: finalState.FailedExprs })
                     | None ->
+                        let finalState = OddBranches.note Set.empty OddBranches.IfBranches [ thenExprTyped; elseExprTyped ] finalState
                         let resultTy, constrained = joinBranchTypes Set.empty finalState [ thenExprTyped.Type; elseExprTyped.Type ]
                         Ok (mkTypedExpr expr resultTy None (Some children) None, constrained)
     // Desugaring has made each `except` a `match`; one checked before then is checked as that match.

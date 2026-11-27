@@ -158,6 +158,7 @@
     <Compile Include="Features\Inference\BranchJoinTests.fs" />
     <Compile Include="Features\Inference\IfWithoutElseTests.fs" />
     <Compile Include="Features\Inference\CallArgumentMismatchTests.fs" />
+    <Compile Include="Features\Inference\OddBranchTests.fs" />
     <Compile Include="Features\Lambdas\ArmsAfterParametersTests.fs" />
     <Compile Include="Features\Lambdas\IgnoredParameterTests.fs" />
     <Compile Include="Features\Lambdas\LambdaArityTests.fs" />
