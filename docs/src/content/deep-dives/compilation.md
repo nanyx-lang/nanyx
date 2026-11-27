@@ -117,7 +117,16 @@ pass is `DeferredErrors.deferErrors`, and the backend lowers what it leaves to a
   (`Solving.solveLeavingUnknown`). The expressions where a conflict was found are otherwise typed by their other
   constraints, and the deferral pass replaces the outermost expression at the conflict's span.
 
-What is still open is in issues: whether to defer errors in type definitions, imports and syntax
+- **An imported module's errors.** Every module is compiled with its errors deferred, and a module whose errors were
+  all placed (`CheckedModule.Undeferred` is empty) is imported as a clean one is: its definitions, traps included, are
+  inlined into its importer ([#2967](https://github.com/nanyx-lang/nanyx/issues/2967)). Its errors come with it
+  (`CheckedModule.ImportedErrors`), through the import that brings them in, each once however many modules import it,
+  and the compiled module reports them at that import, as before, but deferred: it isn't type-checked, so `nanyx check`
+  and a release build fail, while a debug build runs. A module with an error that can't be placed fails each of its
+  importers, as it always did (`Library.checkImportItem`). The editor shows an imported module's errors at the import,
+  as it did when the importer failed with them.
+
+What is still open is in issues: whether to defer errors in type definitions, imports that can't be found, and syntax
 ([#2766](https://github.com/nanyx-lang/nanyx/issues/2766)), whether blame should follow annotations
 ([#2768](https://github.com/nanyx-lang/nanyx/issues/2768)), and tests of a generic def with a deferred error used at
 several types ([#2771](https://github.com/nanyx-lang/nanyx/issues/2771)).

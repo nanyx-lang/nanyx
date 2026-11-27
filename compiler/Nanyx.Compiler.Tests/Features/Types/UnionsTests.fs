@@ -315,7 +315,7 @@ let ``Typecheck still rejects branches of different non-tag types`` () =
     let source = """def f = { c -> if c then 1 else "one" }"""
     let result = Compiler.compile source
     assertReports DiagnosticCodes.TypeMismatch result
-    Assert.Contains("' vs '", (List.head result.Diagnostics).Message)
+    Assert.Equal("The `else` branch gives 'string', but the `then` branch gives 'int'", (List.head result.Diagnostics).Message)
 
 [<Fact>]
 let ``Typecheck leaves the scrutinee union open when a match has a catch-all arm`` () =

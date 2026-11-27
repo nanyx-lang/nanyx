@@ -57,8 +57,7 @@ type Heading = { Label: string option; Code: string }
 /// loop is written (`for xs | x -> …`); a def by its name (`def greet`), a custom pattern by its tags
 /// (`pattern #Even | #Odd`), the module by its declared name (`module library.lending`). `Span` is what the heading
 /// links to: the lambda, the `for` loop, the def's name, or the module's declaration (none if it has none). `Type` is a lambda's type, with the
-/// contexts it carries, or a def's signature, as hover writes them, and `Declared` says whether the def writes its type;
-/// `Symbol` is the def's, whose doc comment the info view shows. `Names` are the parameters, locals and pattern variables it declares, nearest the position first, and for
+/// contexts it carries, or a def's signature, as hover writes them; `Symbol` is the def's, whose doc comment the info view shows. `Names` are the parameters, locals and pattern variables it declares, nearest the position first, and for
 /// the module its top-level defs and imports, its own first, then by name, less intrinsics. `Contexts` are those it
 /// provides: a `use` in it, a def's signature or what a def was inferred to require, or the module's runtime.
 type Scope =
@@ -66,7 +65,6 @@ type Scope =
       Heading: Heading
       Span: SourceSpan
       Type: string option
-      Declared: bool
       Symbol: Symbol option
       Names: ScopedName list
       Contexts: ScopedContext list }
@@ -366,7 +364,6 @@ let private moduleScope (syntax: Module) : Scope =
       Heading = { Label = None; Code = match declared with Some (name, _) -> $"module {name}" | None -> "this module" }
       Span = declared |> Option.map snd |> Option.defaultValue SourceSpan.none
       Type = None
-      Declared = false
       Symbol = None
       Names = []
       Contexts = [] }
@@ -433,7 +430,6 @@ let at (names: TypeNotation) (file: string) (source: string) (result: CompileRes
                       Heading = heading
                       Span = headed
                       Type = List.tryHead typeWritten
-                      Declared = false
                       Symbol = None
                       Names = []
                       Contexts = [] },
@@ -441,7 +437,7 @@ let at (names: TypeNotation) (file: string) (source: string) (result: CompileRes
                 lambdas
                 lambdasWritten)
             @ (defs
-               |> List.map (fun (symbol, (name, annotation, _, value)) ->
+               |> List.map (fun (symbol, (name, _, _, value)) ->
                    { Kind = FunctionScope
                      Heading =
                        { Label = None
@@ -451,7 +447,6 @@ let at (names: TypeNotation) (file: string) (source: string) (result: CompileRes
                            | None -> $"def {name}" }
                      Span = symbol.Declaration
                      Type = topLevelType names rename typed symbol
-                     Declared = annotation.IsSome
                      Symbol = Some symbol
                      Names = []
                      Contexts = [] },

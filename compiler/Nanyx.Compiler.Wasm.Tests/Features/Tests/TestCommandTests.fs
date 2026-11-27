@@ -48,12 +48,29 @@ let ``nanyx test stops a test that runs past --timeout`` () =
     Assert.Contains("It ran for longer than 0.2 seconds, and was stopped: give it longer with --timeout", outcome.StandardOutput)
 
 [<Fact>]
-let ``nanyx test reports a build error and runs nothing`` () =
-    let broken = "export module broken\n\n@test\ndef `adds` = {\n  assert(1 + \"1\" == 2)\n}\n"
+let ``nanyx test reports an error that can't be deferred and runs nothing`` () =
+    let broken = "export module broken\n\n@test\ndef `adds` = {\n  assert(1 + == 2)\n}\n"
     let outcome = testing [] [ "src/broken.nyx", broken; "src/geometry.nyx", geometry ]
     Assert.Equal(1, outcome.ExitCode)
-    Assert.Contains("NYX0201", outcome.StandardError)
+    Assert.Contains("error NYX", outcome.StandardError)
     Assert.DoesNotContain("Running", outcome.StandardOutput)
+
+[<Fact>]
+let ``A type error in one module fails only the tests that reach it, and the others run (#2967)`` () =
+    let broken =
+        "export module broken\n\nexport def perimeter: int -> int = { n -> n * \"4\" }\n\nexport def area: int -> int = { n -> n * n }\n\n@test\ndef `areas` = {\n  assert(area(3) == 9)\n}\n\n@test\ndef `perimeters` = {\n  assert(perimeter(3) == 12)\n}\n"
+    let doubles = "export module doubles\n\nexport def double: int -> int = { n -> n * 2 }\n\n@test\ndef `doubles a number` = {\n  assert(double(2) == 4)\n}\n"
+    let outcome = testing [ "--seed"; "7" ] [ "src/broken.nyx", broken; "src/doubles.nyx", doubles ]
+    Assert.Equal(1, outcome.ExitCode)
+    let output = outcome.StandardOutput.ReplaceLineEndings "\n"
+    let lines = output.Split('\n') |> List.ofArray
+    Assert.Contains("Running 3 tests in tested with 1 deferred error", lines)
+    Assert.Contains("PASS broken.areas", lines)
+    Assert.Contains("FAIL broken.perimeters  src/broken.nyx:13:1", lines)
+    Assert.Contains("PASS doubles.`doubles a number`", lines)
+    Assert.Contains("  src/broken.nyx:3:43: error NYX0201: Type mismatch: 'string' is not a number, so it cannot be used with * (deferred from compile time)\n", output)
+    Assert.Contains("2 passed, 1 failed", lines)
+    Assert.Contains("NYX0201", outcome.StandardError)
 
 [<Fact>]
 let ``nanyx test says so when a package has no tests`` () =

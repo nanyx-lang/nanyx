@@ -76,6 +76,13 @@ with the runtime's seed:
 The program runs in the module's start function, so each test runs in an instance of its own, and a test that crashes
 ends only that instance.
 
+A test build is a debug build, as `nanyx run`'s is, so a type or name error in any module, the root's imports
+included, is deferred (see [Deferred errors](./compilation#deferred-errors)): `nanyx test` reports each once, says
+`Running 3 tests in tested with 1 deferred error`, and runs every test. A test that reaches the error fails with its
+message and stack, as with any crash, and the others pass or fail on their own
+([#2967](https://github.com/nanyx-lang/nanyx/issues/2967)). An error that can't be deferred, such as a syntax error,
+stops the build, and no test runs. `nanyx test --release` refuses to run if there is any error.
+
 # `#io` tests
 
 `@test(#io)` marks a test that runs with the console host's real `Console`, `Env` and `FileSystem`, and `Async`

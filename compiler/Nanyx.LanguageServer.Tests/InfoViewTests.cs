@@ -27,7 +27,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         // With no message on the line, the expression at the cursor comes first, then the innermost def.
         Assert.Equal(["expression", "function", "module"], view.Scopes.Select(scope => scope.Kind));
-        Assert.Equal("shout: string", Assert.Single(Section(view, "expression", "expression")).Text);
+        Assert.Equal(("Type", "string"), Assert.Single(view.Scopes[0].Sections) is var type ? (type.Title, Assert.Single(type.Items).Text) : default);
         Assert.DoesNotContain(view.Scopes.SelectMany(scope => scope.Sections), section => section.Id is "call");
         Assert.Equal(
             [("shout: string", "local", new Range(1, 6, 1, 11)), ("name: string", "parameter", new Range(0, 32, 0, 36))],
@@ -225,11 +225,11 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var view = await InfoViewAt(uri, 0, 20, selection: new Range(0, 15, 0, 20));
 
         Assert.Equal(("expression", "expression", "x + 1", new Range(0, 15, 0, 20)), (view.Scopes[0].Kind, view.Scopes[0].Label, view.Scopes[0].Heading, view.Scopes[0].Location?.Range));
-        var selected = Assert.Single(Section(view, "expression", "expression"));
-        Assert.Equal(("x + 1: int", new Range(0, 15, 0, 20)), (selected.Text, selected.Location?.Range));
+        var selected = Assert.Single(Section(view, "expression", "type"));
+        Assert.Equal(("int", new Range(0, 15, 0, 20)), (selected.Text, selected.Location?.Range));
         // The spaces around a selection are left out.
         var spaced = await InfoViewAt(uri, 0, 21, selection: new Range(0, 14, 0, 21));
-        Assert.Equal("x + 1: int", Assert.Single(Section(spaced, "expression", "expression")).Text);
+        Assert.Equal(("x + 1", "int"), (spaced.Scopes[0].Heading, Assert.Single(Section(spaced, "expression", "type")).Text));
     }
 
     [Fact]
@@ -256,8 +256,8 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var view = await InfoViewAt(uri, 0, 15, selection: new Range(0, 15, 0, 15));
 
         Assert.Equal(("expression", "expression", "x"), (view.Scopes[0].Kind, view.Scopes[0].Label, view.Scopes[0].Heading));
-        var atCursor = Assert.Single(Section(view, "expression", "expression"));
-        Assert.Equal(("x: int", new Range(0, 15, 0, 16)), (atCursor.Text, atCursor.Location?.Range));
+        var atCursor = Assert.Single(Section(view, "expression", "type"));
+        Assert.Equal(("int", new Range(0, 15, 0, 16)), (atCursor.Text, atCursor.Location?.Range));
         // The parameter it names is still shown where it is declared.
         Assert.Contains(Section(view, "function", "names"), item => item.Text == "x: int");
     }
@@ -274,7 +274,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
             """.ReplaceLineEndings("\n"));
         Assert.Empty((await NextPublished(uri)).Diagnostics!);
 
-        foreach (var (line, character, signature, detail) in new[] { (0, 5, "twice: int -> int", "declared"), (1, 4, "f: int -> int", "inferred") })
+        foreach (var (line, character, signature) in new[] { (0, 5, "twice: int -> int"), (1, 4, "f: int -> int") })
         {
             var view = await InfoViewAt(uri, line, character);
 
@@ -285,7 +285,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
                 .SelectMany(scope => scope.Sections)
                 .SelectMany(section => section.Items)
                 .Where(item => item.Text == signature);
-            Assert.Equal(detail, Assert.Single(shown).Detail);
+            Assert.Null(Assert.Single(shown).Detail);
         }
     }
 
@@ -300,7 +300,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var view = await InfoViewAt(uri, 1, 1);
 
         Assert.Equal([("expression", "one"), ("module", "this module")], view.Scopes.Select(scope => (scope.Kind, scope.Heading)));
-        Assert.Equal("one: int", Assert.Single(Section(view, "expression", "expression")).Text);
+        Assert.Equal("int", Assert.Single(Section(view, "expression", "type")).Text);
         // The module's contexts are the ones the runtime supplies, from the host's prelude.
         Assert.Equal(["names", "contexts"], view.Scopes[1].Sections.Select(section => section.Id));
     }
@@ -343,7 +343,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var report = view.Scopes[2];
         Assert.Equal(new Range(3, 6, 3, 12), report.Location?.Range);
-        Assert.Equal(("report: [Log] int -> ()", "inferred"), (report.Sections[0].Items[0].Text, report.Sections[0].Items[0].Detail));
+        Assert.Equal(("report: [Log] int -> ()", null), (report.Sections[0].Items[0].Text, report.Sections[0].Items[0].Detail));
         Assert.Equal(["count: int"], Section(view, "function", "names").Select(item => item.Text));
 
         var run = view.Scopes[3];
@@ -354,7 +354,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
                 ("contexts", ["Log"])
             ],
             run.Sections.Where(section => section.Id != "flow").Select(section => (section.Id, section.Items.Select(item => item.Text).ToArray())));
-        Assert.Equal("declared", run.Sections[0].Items[0].Detail);
+        Assert.Null(run.Sections[0].Items[0].Detail);
         Assert.Contains(view.Scopes[^1].Sections[0].Items, item => item.Text.StartsWith("apply:"));
     }
 
@@ -753,9 +753,9 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var scope = inPattern.Scopes.First(scope => scope.Kind == "function");
         Assert.Equal("pattern #Num", scope.Heading);
         var signature = Assert.Single(Section(inPattern, "function", "signature"));
-        Assert.Equal(("pattern string -> #Num(float) | _", "declared"), (signature.Text, signature.Detail));
+        Assert.Equal(("pattern string -> #Num(float) | _", null), (signature.Text, signature.Detail));
 
         // The tag a match arm uses is the pattern, written as declared.
-        Assert.Equal("pattern string -> #Num(float) | _", Assert.Single(Section(await InfoViewAt(uri, 12, 7), "expression", "expression")).Text);
+        Assert.Equal("pattern string -> #Num(float) | _", Assert.Single(Section(await InfoViewAt(uri, 12, 7), "expression", "type")).Text);
     }
 }

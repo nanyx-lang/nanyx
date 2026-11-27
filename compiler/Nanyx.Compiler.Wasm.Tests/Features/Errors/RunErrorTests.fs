@@ -346,9 +346,10 @@ let ``Run - each kind of deferred error traps where it was found`` () =
     let run body = runSource ("" + body + (withFinalNewline """
 println("start")
 println(f(1))"""))
-    // A type mismatch, an unknown name inside a def, and a def whose annotation names an unknown type.
+    // A type mismatch, an unknown name inside a def, and a def whose annotation names an unknown type. The mismatch is
+    // at the `else` branch, which doesn't fit the `then` branch (#2688), so `f(1)` traps there.
     for body, expected in
-        [ """def f = { x -> if x == 1 then "one" else 2 }""", "Type mismatch"
+        [ """def f = { x -> if x == 2 then "one" else 2 }""", "Type mismatch"
           "def f = { x ->\n  def y = nope\n  \"{y}\"\n}", "Unknown identifier 'nope'"
           """def f: Missing -> string = { x -> "one" }""", "Unknown type 'Missing'" ] do
         let outcome = run body
