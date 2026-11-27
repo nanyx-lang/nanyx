@@ -11,6 +11,7 @@ open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
+open Transpiler.Wasm.WatText
 
 /// The name of the hash function of `ty`.
 let hashName (ty: IrType) = "__nanyx_hash_" + sanitizeIdentifier (IrType.mangle ty)
@@ -35,7 +36,6 @@ let private fold (part: string list) = [ "local.get $h"; "i32.const 31"; "i32.mu
 /// The code that hashes the value `load` leaves on the stack, as a value of type `ty`.
 let private hashOf (ty: IrType) (load: string list) = load @ [ $"call ${hashName ty}" ]
 
-let private indent (lines: string list) = lines |> List.map (fun line -> "  " + line)
 
 /// The locals the hash function of `ty` needs, and its body, which leaves the hash of `$a`. `tagId` gives the number of
 /// each tag the module numbers.

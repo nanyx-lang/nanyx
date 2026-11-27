@@ -10,6 +10,7 @@ open Transpiler.Wasm.WasmAllocator
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
+open Transpiler.Wasm.WatText
 
 /// The name of the function that makes an array of `element`s from a list of them.
 let ofListName (element: IrType) = Intrinsics.arrayOfList + "_" + sanitizeIdentifier (IrType.mangle element)

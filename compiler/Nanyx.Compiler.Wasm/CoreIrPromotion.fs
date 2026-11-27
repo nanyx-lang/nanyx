@@ -12,6 +12,7 @@ module internal Transpiler.Wasm.CoreIrPromotion
 open System.Collections.Generic
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.Wat
+open Transpiler.Wasm.WatText
 
 /// The runtime helpers a store, and the result of a block, are lowered to (see `promoting`).
 let private storing (name: string) =
@@ -142,7 +143,6 @@ let private promoteBody (tagId: string -> int option) (ty: IrType) : string list
     | IrBox -> [ "local.get $t"; $"call ${WasmRegions.Names.regionMerge}" ]
     | other -> internalError $"a promote function for '{IrType.show other}', which holds no mutable object"
 
-let private lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
 
 /// The promote function of each of `types`, as WebAssembly text. `tagId` gives the number of each tag the module numbers;
 /// a tag it does not is never made.

@@ -10,6 +10,7 @@ open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
+open Transpiler.Wasm.WatText
 
 /// The name of the equality function of `ty`.
 let equalsName (ty: IrType) = "__nanyx_equals_" + sanitizeIdentifier (IrType.mangle ty)
@@ -101,7 +102,6 @@ let private compare (ty: IrType) (loadA: string list) (loadB: string list) : str
 /// Returns 0 from the function unless the code before it left 1.
 let private orReturnFalse = [ "i32.eqz"; "if"; "  i32.const 0"; "  return"; "end" ]
 
-let private indent (lines: string list) = lines |> List.map (fun line -> "  " + line)
 
 /// The body of the equality function of `ty`, which compares `$a` and `$b` and leaves 1 when they are equal.
 let private equalsBody (tagId: string -> int option) (ty: IrType) : string list =

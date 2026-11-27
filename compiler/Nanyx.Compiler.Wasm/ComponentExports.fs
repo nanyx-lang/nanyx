@@ -10,6 +10,7 @@ open NyxCompiler
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.ComponentValues
 open Transpiler.Wasm.WasmRuntime
+open Transpiler.Wasm.WatText
 
 /// The most core values an export's parameters are passed as before the canonical ABI passes them in memory instead.
 let private maxFlatParameters = 16
@@ -31,7 +32,6 @@ type ExportContext =
       RecordLayout: string list -> int
       UseHelper: string -> unit }
 
-let private indented (lines: string list) = lines |> List.map (fun line -> "  " + line)
 
 /// The functions that export `func` under `name`, calling `target`, numbered `index` among the module's exports.
 ///
@@ -119,14 +119,14 @@ let private exportFunctions (context: ExportContext) (index: int) (name: string)
             let free = freeing.Call Helpers.free
             let declarations = freeing.Declarations |> String.concat " "
             [ $"(func {wrapper}_post (export \"cabi_post_{name}\") (param $area i32) {declarations}"
-              yield! indented frees
+              yield! indent frees
               "  local.get $area"
               $"  {free}"
               ")" ]
         | _ -> []
     let declarations = generator.Declarations |> String.concat " "
     [ $"(func {wrapper} (export \"{name}\") {parameters} {resultType} {declarations}"
-      yield! indented body
+      yield! indent body
       ")"
       yield! post ]
     |> String.concat "\n"

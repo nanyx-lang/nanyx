@@ -27,6 +27,7 @@
 module internal Transpiler.Wasm.ComponentCallback
 
 open Transpiler.Wasm.WasmAllocator
+open Transpiler.Wasm.WatText
 
 /// The names of the functions and globals.
 module Names =
@@ -73,7 +74,6 @@ type Entry =
 let private wait = 2
 let private taskCancelled = 6
 
-let private indented (code: string list) = code |> List.map (fun line -> "  " + line)
 
 /// The functions of each entry of `entries`, and, when one can stop, the scheduler they run. A host's wait is a function
 /// value of the indirect type `waiterType`.
@@ -88,13 +88,13 @@ let functions (entries: Entry list) (waiterType: string) =
         [ yield! entry.Globals
           // Finishes the entry, with its function's value, and lowers backpressure.
           $"(func {finishName index} (param $value {entry.ValueType}) {finishLocals}"
-          yield! indented entry.Finish
+          yield! indent entry.Finish
           $"  call {ComponentAbi.backpressureDec}"
           ")"
           $"{entry.Header} (local $value {entry.ValueType}) {locals}"
           $"  call {ComponentAbi.backpressureInc}"
-          yield! indented entry.Before
-          yield! indented entry.Call
+          yield! indent entry.Before
+          yield! indent entry.Call
           "  local.set $value"
           if entry.CanStop then
               $"  global.get {scheduler TaskLowering.Names.suspending}"
