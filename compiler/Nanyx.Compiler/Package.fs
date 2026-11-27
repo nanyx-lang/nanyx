@@ -55,12 +55,22 @@ module Package =
             matcher.AddIncludePatterns manifest.Tests
             matcher.GetResultsInFullPath manifest.Root |> Seq.map Path.GetFullPath |> Seq.sort |> List.ofSeq
 
-    /// Whether the manifest's `sources` select the file at the full path `filePath`, which need not exist yet.
-    let private selects (manifest: Manifest) (filePath: string) =
+    /// Whether `patterns`, a manifest's `sources` or `tests`, select the file at the full path `filePath`, which need not
+    /// exist yet.
+    let private matches (manifest: Manifest) (patterns: string list) (filePath: string) =
         let relative = Path.GetRelativePath(manifest.Root, filePath)
         let matcher = Matcher(StringComparison.OrdinalIgnoreCase)
-        matcher.AddIncludePatterns manifest.Sources
-        not (Path.IsPathRooted relative || relative.StartsWith "..") && matcher.Match(relative).HasMatches
+        matcher.AddIncludePatterns patterns
+        not (patterns.IsEmpty || Path.IsPathRooted relative || relative.StartsWith "..") && matcher.Match(relative).HasMatches
+
+    /// Whether the file at the full path `filePath`, which need not exist yet, is a test file of the manifest's package:
+    /// one its `tests` select and its `sources` don't.
+    let private isTestFile (manifest: Manifest) (filePath: string) =
+        matches manifest manifest.Tests filePath && not (matches manifest manifest.Sources filePath)
+
+    /// Whether the manifest's `sources` or `tests` select the file at the full path `filePath`, which need not exist yet.
+    let private selects (manifest: Manifest) (filePath: string) =
+        matches manifest manifest.Sources filePath || matches manifest manifest.Tests filePath
 
     /// Whether the module at `path` declares an `@entry`. A file that does not parse does not; building it reports why.
     let private declaresEntry (path: string) =
@@ -472,21 +482,50 @@ module Package =
             TestHost = package.TestHost |> Option.map (fun (host, hostPackage) -> host, modules hostPackage) }
         |> PackageModules.withReferenced package.ReferencedFiles
 
-    /// The name of the package the file at `filePath` is a source file of, if it is in one whose manifest reads.
-    let nameFor (filePath: string) : string option =
+    /// `package` as a test build has it, with the test host found in `store`, or why the test host can't be read: its
+    /// test files among its sources, so that they are compiled, and that its modules and theirs can import each other,
+    /// each of the program's modules giving the build's root a way to run its tests (see `PackageModules.TestRoot`).
+    /// The program's modules keep its own host, whose prelude they see, and only the root runs under the test host, but
+    /// for a library's, which has none.
+    let withTests (store: PackageStore) (package: Package) : Result<Package, string> =
+        withHost store package.Manifest.Root Hosts.testPackage package
+        |> Result.map (fun underTest ->
+            { package with
+                Sources = package.Sources @ package.TestFiles
+                // A library has no host, nor a prelude of its own, so its modules run under the test host, and see its.
+                Host = package.Host |> Option.orElse underTest.Host
+                HostPackage = package.HostPackage |> Option.orElse underTest.HostPackage
+                TestHost = Option.map2 (fun host hostPackage -> host, hostPackage) underTest.Host underTest.HostPackage })
+
+    /// The manifest of the package the file at `filePath` is in, if it is under one that reads, with the file's full path.
+    let private manifestOver (filePath: string) : (Manifest * string) option =
         let filePath = Path.GetFullPath filePath
         let directory = Path.GetDirectoryName filePath
         match if Directory.Exists directory then Manifest.tryFind directory else Result.Ok None with
-        | Result.Ok(Some manifestPath) ->
-            match Manifest.read manifestPath with
-            | Result.Ok manifest when selects manifest filePath -> Some manifest.Name
-            | _ -> None
+        | Result.Ok(Some manifestPath) -> Manifest.read manifestPath |> Result.toOption |> Option.map (fun manifest -> manifest, filePath)
         | _ -> None
 
-    /// The modules of the package the file at `filePath` is a source file of, if it is one, with those of the packages
-    /// it depends on, found in `store`, if they read; none for a file in no package. A file the manifest selects that is not on disk yet
-    /// (an editor's new buffer) is one of them. The manifest's problems are the error if it does not read: which files
-    /// it selects can't be known, and the file can't be checked as a script without blaming its package imports.
+    /// The name of the package the file at `filePath` is a source file or a test file of, if it is in one whose manifest
+    /// reads.
+    let nameFor (filePath: string) : string option =
+        match manifestOver filePath with
+        | Some (manifest, filePath) when selects manifest filePath -> Some manifest.Name
+        | _ -> None
+
+    /// The manifest of the package the file at `filePath` is a test file of, if it is one: its `tests` select the file,
+    /// and its `sources` don't. Only a test build has such a file, so `nanyx test` runs its tests as part of the package.
+    let testFileOf (filePath: string) : Manifest option =
+        match manifestOver filePath with
+        | Some (manifest, filePath) when isTestFile manifest filePath -> Some manifest
+        | _ -> None
+
+    /// The modules of the package the file at `filePath` is a source file or a test file of, if it is one, with those of
+    /// the packages it depends on, found in `store`, if they read; none for a file in no package. A test file's are a test
+    /// build's (see `withTests`), so it imports the package's modules, and an application the package depends on keeps
+    /// its host and its `@entry` is an ordinary def; a source file's include the test files, so that an editor finds a
+    /// name's uses in them too. A file the manifest selects that is not on disk yet (an editor's new buffer) is one of
+    /// them. The manifest's problems are the error if it does not read: which files it selects can't be known, and the
+    /// file can't be checked as a script without blaming its package imports.
     let modulesFor (store: PackageStore) (filePath: string) : Result<PackageModules option, Diagnostic list> =
         let filePath = Path.GetFullPath filePath
         let directory = Path.GetDirectoryName filePath
@@ -502,22 +541,29 @@ module Package =
                     | Result.Ok dependencies -> dependencies
                     | Result.Error _ -> []
                 let host = match hostIn lookup reached manifest.Host with Result.Ok host -> host | Result.Error _ -> None
-                // An editor compiles a test file as a test build does: as one of the package's files.
-                let files = sources manifest @ testFiles manifest
-                let modules =
-                    modules
-                        { Manifest = manifest
-                          Sources = files
-                          TestFiles = []
-                          Entry = None
-                          Dependencies = dependencies
-                          ReferencedFiles =
-                            referencedFiles store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None files).Modules manifest.Files
-                            |> Result.defaultValue []
-                          Host = host |> Option.map fst
-                          HostPackage = host |> Option.map snd
-                          CheckedFile = None
-                          TestHost = None }
+                let sources = sources manifest
+                let tests = testFiles manifest
+                let package =
+                    { Manifest = manifest
+                      Sources = sources
+                      TestFiles = tests
+                      Entry = None
+                      Dependencies = dependencies
+                      ReferencedFiles =
+                        referencedFiles store.GitHub (PackageModules.ofFiles manifest.Name manifest.Root None (sources @ tests)).Modules manifest.Files
+                        |> Result.defaultValue []
+                      Host = host |> Option.map fst
+                      HostPackage = host |> Option.map snd
+                      CheckedFile = None
+                      TestHost = None }
+                // An editor compiles a test file as a test build does, and a source file with the test files among the
+                // package's, but as its other builds do.
+                let package =
+                    if isTestFile manifest filePath then withTests store package |> Result.defaultValue { package with Sources = sources @ tests }
+                    else { package with Sources = sources @ tests }
+                // There is no root, so the file gets no `Attributes.testDispatcher`: a def the editor would show, declared
+                // where the file's first test is.
+                let modules = { modules package with TestRoot = None }
                 Result.Ok(Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] }))
             | Result.Ok _ -> Result.Ok None
         | _ -> Result.Ok None
@@ -664,21 +710,6 @@ module Package =
 
     /// `buildReporting`, telling nobody.
     let build (package: Package) : PackageBuild = buildReporting CompileListener.none package
-
-    /// `package` as a test build has it, with the test host found in `store`, or why the test host can't be read: its
-    /// test files among its sources, so that they are compiled, and that its modules and theirs can import each other,
-    /// each of the program's modules giving the build's root a way to run its tests (see `PackageModules.TestRoot`).
-    /// The program's modules keep its own host, whose prelude they see, and only the root runs under the test host, but
-    /// for a library's, which has none.
-    let withTests (store: PackageStore) (package: Package) : Result<Package, string> =
-        withHost store package.Manifest.Root Hosts.testPackage package
-        |> Result.map (fun underTest ->
-            { package with
-                Sources = package.Sources @ package.TestFiles
-                // A library has no host, nor a prelude of its own, so its modules run under the test host, and see its.
-                Host = package.Host |> Option.orElse underTest.Host
-                HostPackage = package.HostPackage |> Option.orElse underTest.HostPackage
-                TestHost = Option.map2 (fun host hostPackage -> host, hostPackage) underTest.Host underTest.HostPackage })
 
     /// Checks every source file and every test file of `package` (see `withTests`), as `build` checks its sources; or
     /// why the test host, found in `store`, can't be read.

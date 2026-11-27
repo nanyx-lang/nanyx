@@ -78,6 +78,32 @@ let ``nanyx test says so when a package has no tests`` () =
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("tested has no tests: mark a def @test to make it one\n", outcome.StandardOutput.ReplaceLineEndings "\n")
 
+let private geometryTests =
+    """module geometry.tests
+
+import geometry as (double)
+
+@test
+def `doubles zero` = {
+  assert(double(0) == 0)
+}
+"""
+
+[<Fact>]
+let ``nanyx test of a test file runs its tests, and only its, as part of its package`` () =
+    use directory = testedPackage "tests/**/*.nyx" [ "src/geometry.nyx", geometry; "tests/geometry_tests.nyx", geometryTests ]
+    let outcome = nanyxIn directory.Path [ "test"; "tests/geometry_tests.nyx" ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal("Running 1 test in tested\n\nPASS geometry.tests.`doubles zero`\n\n1 passed\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``nanyx run of a test file says it is one, and to use nanyx test`` () =
+    use directory = testedPackage "tests/**/*.nyx" [ "src/geometry.nyx", geometry; "tests/geometry_tests.nyx", geometryTests ]
+    let outcome = nanyxIn directory.Path [ "run"; "tests/geometry_tests.nyx" ]
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Contains("error NYX0045", outcome.StandardError)
+    Assert.Contains("It is a test file of tested, which its manifest's `tests` selects, and has no program: run its tests with `nanyx test tests/geometry_tests.nyx`", outcome.StandardError)
+
 [<Fact>]
 let ``nanyx test refuses a seed that isn't a whole number`` () =
     let outcome = testing [ "--seed"; "seven" ] [ "src/geometry.nyx", geometry ]

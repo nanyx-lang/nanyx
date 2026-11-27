@@ -73,6 +73,16 @@ let ``A build that isn't a test build leaves test files out`` () =
     | Error problems -> failwith $"%A{problems}"
 
 [<Fact>]
+let ``The editor checks a test file as a test build does, importing the package's modules, with no def it didn't write`` () =
+    use directory = testedPackage "tests/**/*.nyx" [ "src/geometry.nyx", geometry; "tests/geometry_tests.nyx", geometryTests ]
+    let file = Path.Combine(directory.Path, "tests", "geometry_tests.nyx")
+    Assert.Equal(Some "tested", Package.nameFor file)
+    let result = Package.compileSourceWith (testStore ()) Linters.none file geometryTests
+    Assert.Empty(result.Diagnostics)
+    let names = TypeHints.topLevelTypes TypeNotation.Ascii file result |> List.map _.Name
+    Assert.Equal<string list>([ "adds up"; "fails" ], names)
+
+[<Fact>]
 let ``A file both sources and tests select is an error in the manifest`` () =
     use directory = testedPackage "src/**/*.nyx" [ "src/geometry.nyx", geometry ]
     match Package.ofManifestFrom (testStore ()) (Path.Combine(directory.Path, "tested.nyxp")) with
