@@ -221,6 +221,7 @@ internal static partial class CliCommands
 
         writer.WriteLine($"FAIL {Shown(run.Test)}{Io(run.Test)}  {run.Test.File}:{run.Test.Line}:{run.Test.Column}");
         var why = new StringWriter();
+        why.Write(CrashPlace(run));
         why.Write(run.Errors);
         switch (run.Outcome)
         {
@@ -238,6 +239,23 @@ internal static partial class CliCommands
             writer.WriteLine("  Output:");
             WriteIndented(writer, run.Output, "    ");
         }
+    }
+
+    /// <summary>
+    /// Where the program's code that <paramref name="run"/> crashed in is, <c>src/geometry.nyx:14:5: </c>, to start what
+    /// it wrote with, as a crash's report gives it (#2950); nothing for a run that didn't crash with a place, or one whose
+    /// message starts with its place already, as an <c>assert</c>'s and a deferred error's do.
+    /// </summary>
+    private static string CrashPlace(TestRun run)
+    {
+        if (run.Outcome is TestOutcome.Failed { Item: RunError.Crashed { place: { } place } } && FSharpOption<Tuple<string, int, int>>.get_IsSome(place))
+        {
+            var (file, line, column) = place.Value;
+            var at = column > 0 ? $"{file}:{line}:{column}: " : $"{file}:{line}: ";
+            return run.Errors.StartsWith(at, StringComparison.Ordinal) ? "" : at;
+        }
+
+        return "";
     }
 
     /// <summary>Writes each line of <paramref name="text"/> to <paramref name="writer"/>, after <paramref name="indent"/>.</summary>

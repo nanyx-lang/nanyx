@@ -133,3 +133,15 @@ let ``A test build keeps the HTTP host's prelude for the program's modules, so a
     let outcome = testingApplication $"host = (package = \"nanyx.http.host\", version = \"{NyxCompiler.Toolchain.version}\")" [ "main.nyx", main ]
     Assert.Equal(0, outcome.ExitCode)
     Assert.Contains("PASS main.`adds up`", outcome.StandardOutput)
+
+[<Fact>]
+let ``A test that crashes is reported with the file, line and column of the crash, once`` () =
+    // `crash` writes only its message, so the report puts the crash's place in front of it (#2950); an `assert`'s
+    // message starts with its place already, so it isn't written twice.
+    let checks =
+        "export module checks\n\n@test\ndef `crashes` = {\n  def n = 2\n  if n > 1 then crash(\"boom\") else ()\n}\n\n@test\ndef `asserts` = {\n  assert(1 + 1 == 3)\n}\n"
+    let outcome = testing [ "--seed"; "1" ] [ "src/checks.nyx", checks ]
+    Assert.Equal(1, outcome.ExitCode)
+    let output = outcome.StandardOutput.ReplaceLineEndings "\n"
+    Assert.Contains("FAIL checks.crashes  src/checks.nyx:4:1\n  src/checks.nyx:6:17: crash: boom\n", output)
+    Assert.Contains("FAIL checks.asserts  src/checks.nyx:10:1\n  src/checks.nyx:11:3: assert(1 + 1 == 3)\n", output)

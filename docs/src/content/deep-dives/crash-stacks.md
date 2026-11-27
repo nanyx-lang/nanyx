@@ -25,7 +25,7 @@ needs, so a release build's crash prints the same stack. Planned next: the debug
 
 # Places in the core IR
 
-Every core IR expression has a `Place`, the file and line of the source it was lowered from (`CoreIr.fs`). The lowering
+Every core IR expression has a `Place`, the file, line and column of the source it was lowered from (`CoreIr.fs`). The lowering
 sets `Places.Current` as it lowers each source expression, in `FunctionLowering.Complex`, and restores it afterwards, so
 `Expr.make` gives what is made from an expression its place without each call naming it. What the passes after the
 lowering make, such as reference counts, has none. A place is not part of what an expression is: every place equals
@@ -42,21 +42,25 @@ With `WasmOptions.Places`, which the command line turns on for every program it 
 marker before the code of each expression that calls or can trap, a line comment that WebAssembly ignores:
 
 ```text
-;;@ prelude.nyx:18 | crash | main.nyx:2 | inner | main.nyx:6
+;;@ prelude.nyx:18:3 | crash | main.nyx:2:17 | inner | main.nyx:6:3
 ```
 
-That is the expression's file and line, then for each call it was inlined through, the inlined function's name and the
-call's file and line. After the code of an operand computed in place, with markers of its own, the marker of the
+That is the expression's file, line and column, then for each call it was inlined through, the inlined function's name
+and the call's file, line and column. After the code of an operand computed in place, with markers of its own, the marker of the
 expression it is an operand of is written again, so the instruction that follows is not taken for the operand's. A
 marker that repeats the one before it is left out.
 
 `WasmBinary`, the compiler's own assembler, reads each marker (`WatSyntax.Placed`) and notes where in the module the
 code after it starts. It writes them into a custom section, `nanyx.spans` (`WasmBinary.spanTableName` says how it is
-laid out): the names of files and functions, the frames, each with the frame of the call it was inlined at so that
-inlined code shares its outer frames, each stretch of code by how far after the last it starts, a debug build's probes
-(see [Debug probes](./debug-probes)), and each function's definition, by its name: the frame of the marker `;;@def
-main.nyx:3` that starts its body, which a profile gives the function (see [Profiling](./command-line#profiling)). The
-function names the frames fall back on are in the name section. Across the examples, the table adds 16% to a release build's module.
+laid out): the names of files and functions, the frames, each a function's name, a file, a line, a column (0 for none)
+and the frame of the call it was inlined at, so that inlined code shares its outer frames, each stretch of code by how
+far after the last it starts, a debug build's probes (see [Debug probes](./debug-probes)), and each function's
+definition, by its name: the frame of the marker `;;@def main.nyx:3` that starts its body, which has no column and a
+profile gives the function (see [Profiling](./command-line#profiling)). The function names the frames fall back on are
+in the name section. A frame is kept once for each place, so two places on one line at different columns are two frames:
+the columns made the table about 38% larger across the examples, and their modules about 7% larger
+([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)). A stack prints each frame's file and line; a crash's report
+names the column too.
 
 # The runtime
 
@@ -81,12 +85,15 @@ the program to act on without reading it back out of stderr: the message, the pl
   `nanyx run`, and a served program's instances (`RunProgram`). A module `nanyx build` or `nanyx wasm` writes, a
   component, and the playground's have no such import, and the report's message is then none. Every module still
   writes the message to stderr itself, so what a crash prints is the same with the option or without.
-- **The place** is the file and line of the program's own code it crashed in: the innermost frame of the stack outside
+- **The place** is the file, line and column of the program's own code it crashed in: the innermost frame of the stack outside
   the standard library. So a `crash` or an `orCrash` is placed at the line that called it, not in the prelude. The
   table knows which files are the library's: the code generator writes a `;;@lib prelude.nyx` marker among the
   module's fields for each library file a marker names (`CoreIrEmit.libraryMarker`, for a place whose file is a
   library module's, `nanyx/prelude.nyx`), and `WasmBinary` writes their names' numbers as the table's last vector. A
-  place has no column yet ([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)).
+  place's column is the frame's: for a `crash` or an `orCrash`, where the program called it, for an `assert`, where it
+  is written, and for a deferred error, where the expression it replaced starts, as its message says
+  ([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)). `nanyx test` writes the place first in a crashed test's
+  report, before what it printed, unless that starts with the place already, as an `assert`'s message does.
 
-A served program's 500 is logged with the place and the message: `it crashed at src/main.nyx:5: no such page`, then the
+A served program's 500 is logged with the place and the message: `it crashed at src/main.nyx:5:45: no such page`, then the
 stack.
