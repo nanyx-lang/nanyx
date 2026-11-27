@@ -91,7 +91,8 @@ let rec differInContexts (given: IrType) (wanted: IrType) : bool =
             match payload, wantedTags |> List.tryFind (fst >> (=) name) |> Option.bind snd with
             | Some givenPayload, Some wantedPayload -> differInContexts givenPayload wantedPayload
             | _ -> false)
-    | IrRecursive givenBody, IrRecursive wantedBody -> differInContexts givenBody wantedBody
+    | IrRecursive(_, givenBodies), IrRecursive(_, wantedBodies) ->
+        givenBodies.Length = wantedBodies.Length && List.exists2 differInContexts givenBodies wantedBodies
     | _ -> false
 
 /// `atom` as a value of type `expected`. A function value where it requires other contexts' members where it is

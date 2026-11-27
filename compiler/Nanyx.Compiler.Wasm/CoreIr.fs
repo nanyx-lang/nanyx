@@ -44,13 +44,15 @@ type IrType =
     /// dropped the same way whatever the value is (see `CoreIrLowerBoxes`).
     | IrBox
     /// A type that holds itself, as a type alias that names itself in the payload of one of its tags does
-    /// (`type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))`): the type is its body, with each `IrSelf` in it the whole
-    /// type again. Code that reads what the type is made of reads `IrType.unfold` of it.
-    | IrRecursive of IrType
-    /// In the body of an `IrRecursive`, an `IrRecursive` around it: `IrSelf 0` the innermost, `IrSelf 1` the one around
-    /// that, and so on, as a type that holds a map of itself, `type Json = ... | #object(map(string, Json))`, holds
-    /// `Json` inside the map's store, itself recursive (see `Maps.storeOf`).
-    | IrSelf of int
+    /// (`type Tree(a) = #leaf | #node(Tree(a), a, Tree(a))`), or one of a group of types that hold each other: the
+    /// bodies of the group's types, with each `IrSelf` in them one of the group's types again, and which of them this
+    /// type is. A type that holds only itself is a group of one. Code that reads what the type is made of reads
+    /// `IrType.unfold` of it.
+    | IrRecursive of selected: int * bodies: IrType list
+    /// In a body of an `IrRecursive`, one of the types of an `IrRecursive` around it: `depth` 0 the innermost, 1 the
+    /// one around that, and so on, as a type that holds a map of itself, `type Json = ... | #object(map(string, Json))`,
+    /// holds `Json` inside the map's store, itself recursive (see `Maps.storeOf`); and `groupMember` which of its types.
+    | IrSelf of depth: int * groupMember: int
     /// A 32-bit word that is no value of the program's: a function's slot in the table, which a closure block holds
     /// first, a cursor along a list's cells, or the block a reuse token holds.
     | IrWord
@@ -417,15 +419,17 @@ exception InternalError of string
 let internalError message : 'a = raise (InternalError message)
 
 module IrType =
-    /// What a recursive type is made of: its body, with each `IrSelf` that stands for it the type itself, so that what
-    /// is inside a recursive type in it refers to the type by itself and not by an `IrSelf`. Any other type as it is.
+    /// What a recursive type is made of: its body, with each `IrSelf` that stands for a type of its group that type
+    /// itself, so that what is inside a recursive type in it refers to the type by itself and not by an `IrSelf`. Any
+    /// other type as it is.
     let unfold (ty: IrType) : IrType =
+        let bodies = match ty with IrRecursive(_, bodies) -> bodies | _ -> []
         let rec replaceAt (depth: int) inner =
             let replace = replaceAt depth
             match inner with
-            | IrSelf index when index = depth -> ty
+            | IrSelf(index, groupMember) when index = depth -> IrRecursive(groupMember, bodies)
             | IrSelf _ -> inner
-            | IrRecursive body -> IrRecursive(replaceAt (depth + 1) body)
+            | IrRecursive(selected, inners) -> IrRecursive(selected, inners |> List.map (replaceAt (depth + 1)))
             | IrTags tags -> IrTags(tags |> List.map (fun (name, payload) -> name, Option.map replace payload))
             | IrRecord fields -> IrRecord(fields |> List.map (fun (name, fieldTy) -> name, replace fieldTy))
             | IrList element -> IrList(replace element)
@@ -443,7 +447,7 @@ module IrType =
             | IrBox
             | IrWord -> inner
         match ty with
-        | IrRecursive body -> replaceAt 0 body
+        | IrRecursive(selected, _) -> replaceAt 0 bodies.[selected]
         | _ -> ty
 
     /// Whether a value of `ty` is a floating-point number: a float or an `F32`.
@@ -552,9 +556,11 @@ module IrType =
         | IrFunction(input, output, members, waits) ->
             let keys = (if waits then [ "Async" ] else []) @ (members |> List.map (fst >> ContextMemberKey.text)) |> String.concat ", "
             $"([{keys}] {show input} -> {show output})"
-        | IrRecursive body -> $"rec self. {show body}"
-        | IrSelf 0 -> "self"
-        | IrSelf index -> $"self{index}"
+        | IrRecursive(_, [ body ]) -> $"rec self. {show body}"
+        | IrRecursive(selected, bodies) -> $"""rec self.{selected} [{bodies |> List.map show |> String.concat "; "}]"""
+        | IrSelf(0, 0) -> "self"
+        | IrSelf(index, 0) -> $"self{index}"
+        | IrSelf(index, groupMember) -> $"self{index}.{groupMember}"
 
     /// The type as part of a WebAssembly name, such as `list_string` in `id__list_string`.
     let rec mangle (ty: IrType) =
@@ -579,7 +585,13 @@ module IrType =
             let contexts = if members.IsEmpty then "" else $"_ctx_{keys}"
             let waiting = if waits then "_waits" else ""
             $"fn_{mangle input}_to_{mangle output}{contexts}{waiting}"
-        | IrRecursive body -> $"mu_{mangle body}"
+        | IrRecursive(_, [ body ]) -> $"mu_{mangle body}"
+        // A group's bodies would make the name of each of its types as long as all of them: it is named by a hash of
+        // them, and which of them it is.
+        | IrRecursive(selected, bodies) ->
+            let text = bodies |> List.map mangle |> String.concat "__"
+            let hash = text |> Seq.fold (fun (hash: uint64) c -> (hash ^^^ uint64 c) * 1099511628211UL) 14695981039346656037UL
+            $"mu{selected}_{hash:x16}"
         | _ -> show ty
 
 /// The bits an integer constant is held in: its low 64, so that a `U64` past the largest `int` is negative.

@@ -65,7 +65,7 @@ type Tree = #leaf | #node(Tree, string, Tree)
 
 def build: int -> Tree = { n -> if n == 0 then #leaf else #node(build(n - 1), "node {n}", build(n // 2)) }
 """
-    let ty = IrRecursive(IrTags [ "leaf", None; "node", Some(IrRecord [ "0", IrSelf 0; "1", IrString; "2", IrSelf 0 ]) ])
+    let ty = IrRecursive(0, [ IrTags [ "leaf", None; "node", Some(IrRecord [ "0", IrSelf(0, 0); "1", IrString; "2", IrSelf(0, 0) ]) ] ])
     use program = instantiateWasm (source.ReplaceLineEndings "\n") [ ty ]
     assertDropFreesEverything program "build" ty
 
@@ -78,7 +78,7 @@ def grow: int, Chain -> Chain = { n, chain -> if n == 0 then chain else grow(n -
 
 def build: int -> Chain = { n -> grow(n, #end) }
 """
-    let ty = IrRecursive(IrTags [ "end", None; "link", Some(IrRecord [ "0", IrString; "1", IrSelf 0 ]) ])
+    let ty = IrRecursive(0, [ IrTags [ "end", None; "link", Some(IrRecord [ "0", IrString; "1", IrSelf(0, 0) ]) ] ])
     use program = instantiateWasm (source.ReplaceLineEndings "\n") [ ty ]
     let live = program.LiveBlocks
     program.Drop(ty, program.Call("build", 100000))
