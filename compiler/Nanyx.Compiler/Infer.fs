@@ -824,10 +824,14 @@ and inferLambdaWithExpected (env: TypeEnv) (state: InferState) (lambda: Expressi
             |> List.fold (fun result typeExpr -> result |> Result.bind (fun current -> inferTypeOfValues env current typeExpr)) (Ok state)
     // A parameter that takes no field of a named record it is given is an error at the parameter (see
     // `LambdaParameterFields`).
+    // So is a lambda of several parameters given one that is no record (see `LambdaArity`).
     let fields =
         match expectedInputOpt |> Option.map (LambdaParameterFields.check state lambda args) with
         | Some (_ :: _ as errors) -> Error errors
-        | _ -> Ok ()
+        | _ ->
+            match expectedInputOpt |> Option.map (fun input -> LambdaArity.check state lambda args input expectedReturnOpt) with
+            | Some (_ :: _ as errors) -> Error errors
+            | _ -> Ok ()
     annotated
     |> Result.bind (fun state -> fields |> Result.map (fun () -> state))
     |> Result.bind (fun state -> inferLambdaAfterTypeOfs env state lambda args body expectedInputOpt expectedReturnOpt)

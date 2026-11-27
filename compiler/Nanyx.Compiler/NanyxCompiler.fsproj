@@ -77,6 +77,7 @@
     <Compile Include="FailedCalls.fs" />
     <Compile Include="LambdaArguments.fs" />
     <Compile Include="LambdaParameterFields.fs" />
+    <Compile Include="LambdaArity.fs" />
     <Compile Include="UseDischarge.fs" />
     <Compile Include="DuplicateDefinitions.fs" />
     <Compile Include="SyntaxTree.fs" />

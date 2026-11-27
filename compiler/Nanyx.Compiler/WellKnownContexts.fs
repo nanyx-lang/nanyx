@@ -93,6 +93,9 @@ module internal WellKnownContexts =
     let isTuple (fields: Map<string, Ty>) =
         Set.ofSeq fields.Keys = Set.ofList (List.init fields.Count string)
 
+    /// The items of a tuple whose fields are `fields` (see `isTuple`), in order.
+    let tupleItems (fields: Map<string, Ty>) = List.init fields.Count (fun index -> fields.[string index])
+
     /// Whether `ty` is a built-in type, whose instances of the well-known contexts are always the compiler's own,
     /// never ones built from definitions attached to it.
     let isBuiltIn (ty: Ty) =

@@ -119,15 +119,16 @@ def n = P(x = 3) \apply { p -> p.x }"""
 let ``Typecheck rejects a lambda of several parameters whose signature's input is not a record`` () =
     let messages source = (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Message)
     Assert.Equal<string list>(
-        [ "'#some(x: string, y: string)' vs '(t0, t1)'" ],
+        [ "This lambda takes 2 parameters, but its type gives it one, of type '#some(x: string, y: string)'" ],
         messages (withFinalNewline """def g: #some(x: string, y: string) -> string = { x, y -> "{x}{y}" }"""))
     Assert.Equal<string list>(
-        [ "'#some(x: string, y: string)' vs '(t1, t2)'" ],
+        [ "This lambda takes 2 parameters, but its type gives it one, of type '#some(x: string, y: string)'" ],
         messages (
             withFinalNewline """def a: #some(x: string, y: string) = #some(x = "", y = "")
 def g: typeof a -> string = { x, y -> "{x}{y}" }"""))
     Assert.Equal<string list>(
-        [ "'string' vs '(string, t1)'" ], messages "def g: string -> string = { x, y -> x }\n")
+        [ "This lambda takes 2 parameters, but its type gives it one, of type 'string'" ],
+        messages "def g: string -> string = { x, y -> x }\n")
 
 [<Fact>]
 let ``Typecheck gives a lambda argument's parameter a type solved from the arguments before it`` () =
