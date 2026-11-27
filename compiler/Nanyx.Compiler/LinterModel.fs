@@ -42,6 +42,10 @@ type SemanticModel =
       /// The symbol each identifier, call, pipe target and qualified name resolved to, by its node, as the source
       /// writes it (see `WrittenReferences`).
       References: Map<NodeId, SymbolId>
+      /// The symbol each identifier, call and pipe target calls, by its node: as `References`, but for a call of a def
+      /// the compiler made in place of the one written, as a def that starts tasks calls the def that runs its body in
+      /// its caller's scope (see `TaskScopes`), which is to that made def.
+      CalledReferences: Map<NodeId, SymbolId>
       /// The import each name brought in by an import came through, by the node that names it.
       ImportReferences: Map<NodeId, SymbolId>
       /// Where each call to a function that requires a parameterised context finds each instance, by the call's node
@@ -71,6 +75,7 @@ module SemanticModel =
           Symbols = typed.Symbols
           TypeDefs = typed.TypeDefs
           References = WrittenReferences.ofModule typed
+          CalledReferences = typed.References
           ImportReferences = typed.ImportReferences
           ContextInstances = typed.ContextInstances
           ContextProviders = typed.ContextProviders

@@ -34,13 +34,6 @@ module internal ArgumentCount =
 
     let private arguments (count: int) = if count = 1 then "1 argument" else $"{count} arguments"
 
-    /// The arguments `args` of a call as it was written: `f(a, b)` passes its arguments as one tuple, which starts
-    /// where its first item does, but `f((a, b))` passes a tuple, whose span takes in its brackets.
-    let private written (args: Expression list) =
-        match args with
-        | [ Kind (TupleExpr (first :: _ as items)) as tuple ] when first.Span.Start = tuple.Span.Start -> items
-        | _ -> args
-
     /// Whether `arg` is written as one value that is no tuple: a literal or a lambda, whose type may not be settled yet.
     let private writtenAsOneValue (arg: Expression) =
         match arg.Kind with
@@ -54,7 +47,7 @@ module internal ArgumentCount =
     /// of them. A pipe's value is its call's first argument, written before the function's name, and is counted. The
     /// error is at the call's arguments, or at the whole of a pipe.
     let check (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty) (calleeSpan: SourceSpan) (args: Expression list) (typeOf: Expression -> Ty option) : Diagnostic option =
-        let args = written args
+        let args = SyntaxTree.writtenArguments args
         let report (taken: int) =
             let piped = not (SourceSpan.isNone calleeSpan) && (List.head args).Span.Start < calleeSpan.Start
             let span = if piped then call.Span else SourceSpan.between (List.head args).Span (List.last args).Span

@@ -70,12 +70,12 @@ type EmitContext =
       BorrowedIn: Function -> Set<int> }
 
 /// The marker that says the code after it, up to the next one, was made from source at `place`: a line comment,
-/// `;;@ main.nyx:12`, that `WasmBinary` writes into the module's table of places (see `WatSyntax.Placed`). Code inlined
-/// from a function says which, and where the call was, for each call it was inlined through, innermost first:
-/// `;;@ prelude.nyx:18 | crash | main.nyx:12`.
+/// `;;@ main.nyx:12:5`, its file, line and column, that `WasmBinary` writes into the module's table of places (see
+/// `WatSyntax.Placed`). Code inlined from a function says which, and where the call was, for each call it was inlined
+/// through, innermost first: `;;@ prelude.nyx:18:3 | crash | main.nyx:12:5`.
 let placeMarker (shownFile: string -> string) (place: Place) =
     let rec frames (place: Place) =
-        let here = $"{shownFile place.File}:{place.Line}"
+        let here = $"{shownFile place.File}:{place.Line}:{place.Column}"
         match place.InlinedAt with
         | Some(name, site) -> $"{here} | {name} | {frames site}"
         | None -> here

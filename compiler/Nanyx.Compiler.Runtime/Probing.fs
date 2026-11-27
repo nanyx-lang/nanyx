@@ -34,15 +34,15 @@ type ShadowStack() =
 
     /// Takes the program on past `probe`.
     member _.Pass(probe: Probe) =
-        let place =
+        let place, column =
             match probe.Place with
-            | (_, file, line) :: _ -> Some(file, line)
-            | [] -> None
+            | (_, file, line, column) :: _ -> Some(file, line), column
+            | [] -> None, 0
         match probe.Kind with
         | Entry functionName ->
             let name = FunctionNames.shown functionName |> Option.defaultValue functionName
-            frames.Add { Name = name; Place = place }
-        | Statement when frames.Count > 0 -> frames.[frames.Count - 1] <- { frames.[frames.Count - 1] with Place = place }
+            frames.Add { Name = name; Place = place; Column = column }
+        | Statement when frames.Count > 0 -> frames.[frames.Count - 1] <- { frames.[frames.Count - 1] with Place = place; Column = column }
         | Statement -> ()
         | Return when frames.Count > 0 -> frames.RemoveAt(frames.Count - 1)
         | Return -> ()

@@ -123,6 +123,13 @@ module SyntaxTree =
             children @ (statements |> List.collect ofStatement))
 
     /// The expressions a top-level item holds, and the items of a module block.
+    /// The arguments `args` of a call as it was written: `f(a, b)` passes its arguments as one tuple, which starts
+    /// where its first item does, but `f((a, b))` passes a tuple, whose span takes in its brackets.
+    let writtenArguments (args: Expression list) =
+        match args with
+        | [ Kind (TupleExpr (first :: _ as items)) as tuple ] when first.Span.Start = tuple.Span.Start -> items
+        | _ -> args
+
     let rec ofItem (item: TopLevelItem) : Expression list =
         match item.Kind with
         | Def (ValueDef(_, _, _, value))

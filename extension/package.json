@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.36",
+  "version": "0.9.37",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -275,6 +275,19 @@
           ],
           "default": "full",
           "markdownDescription": "How the editor shows the flow of contexts that the info view highlights, with the cursor on a `use`, a context in a signature, or a call. The lines are drawn in the `nanyx.contextLine` colour, which `workbench.colorCustomizations` can change."
+        },
+        "nanyx.infoView.openDocsIn": {
+          "type": "string",
+          "enum": [
+            "editor",
+            "browser"
+          ],
+          "enumDescriptions": [
+            "In VS Code's built-in Simple Browser, in a tab beside the editor. If Simple Browser is disabled, in the system browser.",
+            "In the system browser."
+          ],
+          "default": "editor",
+          "markdownDescription": "Where the info view opens a link to the docs site, nanyx.dev, such as a message's error code, which links to its entry in the errors reference. Other links open as VS Code opens links."
         }
       }
     },

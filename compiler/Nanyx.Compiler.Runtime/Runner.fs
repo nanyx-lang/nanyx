@@ -22,10 +22,10 @@ type RunError =
     | Trapped of message: string * stack: Frame list
     /// The program crashed, or reached an error deferred to run time: it wrote why to stderr, and stopped with the stack
     /// given here, innermost first. The message is what it wrote, when it reported it to the runtime too (see
-    /// `CrashImport`), as a module the command line runs does. The place is the file and line of the program's own
-    /// code it crashed in: the innermost frame of the stack outside the standard library, so that a `crash` or an
-    /// `orCrash` is placed where the program called it.
-    | Crashed of message: string option * place: (string * int) option * stack: Frame list
+    /// `CrashImport`), as a module the command line runs does. The place is the file, line and column of the program's
+    /// own code it crashed in: the innermost frame of the stack outside the standard library, so that a `crash` or an
+    /// `orCrash` is placed at the column where the program called it (#2950). The column is 0 where the table has none.
+    | Crashed of message: string option * place: (string * int * int) option * stack: Frame list
     /// The program asked for more memory than there is: its allocator trapped because a new block would end past
     /// 4 GB, or because the host would not grow its memory.
     | OutOfMemory
@@ -164,12 +164,12 @@ module WasmRunner =
             |> Seq.collect (fun frame ->
                 let place = table |> Option.map (fun table -> SpanTable.placeAt table (int frame.ModuleOffset)) |> Option.defaultValue []
                 match place with
-                | [] -> FunctionNames.shown frame.FunctionName |> Option.map (fun name -> { Name = name; Place = None }) |> Option.toList
+                | [] -> FunctionNames.shown frame.FunctionName |> Option.map (fun name -> { Name = name; Place = None; Column = 0 }) |> Option.toList
                 | inlined ->
                     inlined
-                    |> List.choose (fun (functionName, file, line) ->
+                    |> List.choose (fun (functionName, file, line, column) ->
                         FunctionNames.shown (defaultArg functionName frame.FunctionName)
-                        |> Option.map (fun name -> { Name = name; Place = Some(file, line) })))
+                        |> Option.map (fun name -> { Name = name; Place = Some(file, line); Column = column })))
             |> List.ofSeq
 
     /// What the trap `ex` means, with the stack from `table`: out of memory when it is an `unreachable` in the allocator
@@ -185,7 +185,10 @@ module WasmRunner =
         | :? TrapException as trap when trap.Type = TrapCode.Unreachable && List.tryHead (frameNames trap) = Some crashed ->
             let stack = stackOf table trap
             let isLibrary (file: string) = table |> Option.exists (fun table -> SpanTable.isLibrary table file)
-            let place = stack |> List.tryPick (fun frame -> frame.Place |> Option.filter (fst >> isLibrary >> not))
+            let place =
+                stack
+                |> List.tryPick (fun frame ->
+                    frame.Place |> Option.filter (fst >> isLibrary >> not) |> Option.map (fun (file, line) -> file, line, frame.Column))
             Crashed(reported, place, stack)
         | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick FunctionNames.source)
         | :? TrapException as trap ->

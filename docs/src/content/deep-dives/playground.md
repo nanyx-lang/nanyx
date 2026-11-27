@@ -296,7 +296,7 @@ downloads it from the release named by `playgroundRelease` in `docs/site/playgro
 named, and unpacks it into `public/playground/compiler`, so the site serves the compiler at `/playground/compiler/`;
 `compiler.js` fetches its files from beside itself, so it works from there. Moving the playground on to a newer
 release is changing that line, after the release is published: a build that names a release without the asset fails.
-It names the latest release, 0.50.0. A release is due whenever the tour uses something the named release can't compile: the page test's run of every example fails until one is out and named here. When it is `null`, the build unpacks nothing and the page says its
+It names the latest release, 0.51.0. A release is due whenever the tour uses something the named release can't compile: the page test's run of every example fails until one is out and named here. When it is `null`, the build unpacks nothing and the page says its
 compiler isn't on the site. To build the site with a compiler you built
 yourself, set `NANYX_BROWSER_ZIP` to its zip.
 

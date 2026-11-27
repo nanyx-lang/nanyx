@@ -95,7 +95,7 @@ module WasmServer =
                     match WasmRunner.trapped table reported.Value ex with
                     | Trapped(message, stack) -> Error(message + WasmRunner.stackText stack)
                     | Crashed(message, place, stack) ->
-                        let at = place |> Option.map (fun (file, line) -> $" at {file}:{line}") |> Option.defaultValue ""
+                        let at = place |> Option.map (fun (file, line, column) -> $" at {file}:{line}:{column}") |> Option.defaultValue ""
                         let why = message |> Option.map (fun message -> $": {message}") |> Option.defaultValue ""
                         Error($"it crashed{at}{why}" + WasmRunner.stackText stack)
                     | OutOfMemory -> Error "it ran out of memory"

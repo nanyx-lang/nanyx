@@ -35,7 +35,7 @@ let private listen (wanted: Probe -> bool) (source: string) =
             member _.Probe probe =
                 stack.Pass probe
                 match probe.Place with
-                | (_, "main.nyx", line) :: _ ->
+                | (_, "main.nyx", line, _) :: _ ->
                     let kind =
                         match probe.Kind with
                         | Entry name -> $"entry {name}"
@@ -70,7 +70,7 @@ println(sum([1, 2, 3]))
 
 /// The probe of a statement on `line`.
 let private statementAt (line: int) (probe: Probe) =
-    probe.Kind = Statement && (match probe.Place with (_, _, at) :: _ -> at = line | [] -> false)
+    probe.Kind = Statement && (match probe.Place with (_, _, at, _) :: _ -> at = line | [] -> false)
 
 [<Fact>]
 let ``A debug build passes each function's entry, each statement and each return, in order`` () =
