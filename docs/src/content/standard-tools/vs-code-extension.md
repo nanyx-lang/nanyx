@@ -398,12 +398,12 @@ seconds is stopped, so a program that never ends doesn't keep a process busy.
 Live mode re-runs a file's [tests](../tour/attributes#test) on a save too, with the same switch: the tests written in
 the saved file, as the [Testing](#testing) view runs them, so its results update there and each test's `dbg` values
 show in the editor. Only the saved file's own tests re-run, not those of other files that import its module. Tests are
-safe to re-run by themselves, since every test runs with a `Console` whose output is kept and whose input is empty, a seeded `Random` and `Async`,
-and one that needs files can use [`filesystem.inMemory`](../stdlib/filesystem); but a `@test(#io)` test runs with the
-real files and environment, so a file with one re-runs its tests only once live mode is turned on for its script or
-package, and then all of them, `#io` ones too, as `nanyx test` runs them. The view says how many tests the file has, how
-the last live run of them went, and how many `#io` tests hold it back. A save while they are still running stops the run
-and starts another, and the same time limit stops a run of them that takes too long.
+safe to re-run by themselves, so they do unless live mode is turned off for the file's script or package: every test
+runs with a `Console` whose output is kept and whose input is empty, a seeded `Random` and `Async`, and a live run keeps
+a `@test(#io)` test's files in memory over the real ones ([`nanyx test --files-in-memory`](./command-line#nanyx-test)),
+so it reads the real files and writes none, while its `Env` is only read. The view says how many tests the file has,
+how the last live run of them went, and that its `#io` tests' files are in memory. A save while they are still running
+stops the run and starts another, and the same time limit stops a run of them that takes too long.
 
 | Setting | Default | What it does |
 |---------|---------|--------------|

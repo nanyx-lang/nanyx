@@ -67,26 +67,24 @@ test("how a run ended is said in a line", () => {
   assert.equal(endedText(null, "SIGTERM", 10000, true, 10), "Stopped after 10 s: give it longer with nanyx.live.timeLimit.");
 });
 
-test("a file's tests re-run by themselves unless one is #io, and otherwise only once turned on", () => {
+test("a file's tests re-run by themselves, #io ones too, unless turned off", () => {
   assert.equal(testsOn({ count: 2, io: 0 }, undefined), true);
-  assert.equal(testsOn({ count: 2, io: 1 }, undefined), false);
-  assert.equal(testsOn({ count: 2, io: 1 }, true), true);
-  assert.equal(testsOn({ count: 2, io: 0 }, false), false);
+  assert.equal(testsOn({ count: 2, io: 1 }, undefined), true);
+  assert.equal(testsOn({ count: 2, io: 1 }, false), false);
   assert.equal(testsOn({ count: 0, io: 0 }, true), false);
   assert.equal(testsOn(undefined, true), false);
 });
 
-test("the sidebar says how many tests the file has, how their last run went, and what holds #io tests back", () => {
+test("the sidebar says how many tests the file has, how their last run went, and that #io tests' files are in memory", () => {
   const target = targetOf("/work/app/src/geometry.nyx", "/work/app");
-  const rows = rowsOf(target, { entry: null, contexts: [], offered: false }, false, { count: 3, io: 1, last: { passed: 2, failed: 1 } }, false);
+  const rows = rowsOf(target, { entry: null, contexts: [], offered: false }, false, { count: 3, io: 1, last: { passed: 2, failed: 1 } }, true);
   assert.deepEqual(
     rows.map((row) => [row.label, row.description]),
     [
-      ["Live mode is off", "app"],
+      ["Live mode is on", "app"],
       ["Tests", "3 in this file, last run: 2 passed, 1 failed"],
-      ["Held back", "1 #io test"]
+      ["Files are in memory", "for 1 #io test too"]
     ]
   );
-  const on = rowsOf(target, { entry: null, contexts: [], offered: false }, false, { count: 3, io: 2 }, true);
-  assert.deepEqual(on.map((row) => row.label), ["Live mode is on", "Tests", "Runs for real"]);
+  assert.equal(rowsOf(target, { entry: null, contexts: [], offered: false }, false, { count: 3, io: 0 }, false)[0].label, "Live mode is off");
 });

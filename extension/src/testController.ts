@@ -186,7 +186,7 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
    * Runs what `request` chooses, a run of `nanyx test` for each package or script it chooses from, and gives how many
    * of its tests passed and how many didn't.
    */
-  private async run(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<TestCounts> {
+  private async run(request: vscode.TestRunRequest, token: vscode.CancellationToken, filesInMemory = false): Promise<TestCounts> {
     const executable = this.compiler();
     const run = this.controller.createTestRun(request);
     const counts: TestCounts = { passed: 0, failed: 0 };
@@ -201,7 +201,7 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
         }
         const root = this.roots.get(id);
         if (root) {
-          await this.runRoot(executable, run, root, chosen, token, counts);
+          await this.runRoot(executable, run, root, chosen, token, counts, filesInMemory);
         }
       }
     } finally {
@@ -231,7 +231,7 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
 
   /**
    * Runs the tests written in `file`, a full path, as live mode does on a save, as they were last listed: in the Testing
-   * view, their `dbg` values shown in the editor. Gives how many passed and how many didn't, or none when the file has
+   * view, an `#io` test's files in memory, and their `dbg` values shown in the editor. Gives how many passed and how many didn't, or none when the file has
    * no tests.
    */
   async liveRun(file: string, token: vscode.CancellationToken): Promise<TestCounts | undefined> {
@@ -240,7 +240,7 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
       return undefined;
     }
     const items = found.names.map((name) => this.itemOf(found.root, name)).filter((item): item is vscode.TestItem => item !== undefined);
-    return this.run(new vscode.TestRunRequest(items), token);
+    return this.run(new vscode.TestRunRequest(items), token, true);
   }
 
   /** The items `request` chooses, by the root they are in: every root when it chooses none. */
@@ -265,7 +265,8 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
     root: Root,
     chosen: vscode.TestItem[],
     token: vscode.CancellationToken,
-    counts: TestCounts
+    counts: TestCounts,
+    filesInMemory: boolean
   ): Promise<void> {
     const rootChosen = chosen.some((item) => item.id === rootId(root.target));
     const chosenModules = root.modules.filter((module) => chosen.some((item) => item.id === moduleId(root.target, module.module))).map((module) => module.module);
@@ -279,7 +280,7 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
 
     // The values of the tests' dbgs replace those of the run before, in each file they reach.
     const dbgRun = this.dbg.beginRun();
-    const process = spawn(executable, runArguments(root.target, selection), { cwd: root.directory });
+    const process = spawn(executable, runArguments(root.target, selection, filesInMemory), { cwd: root.directory });
     const cancelled = token.onCancellationRequested(() => process.kill());
     const diagnostics: DiagnosticEvent[] = [];
     const splitter = new LineSplitter();

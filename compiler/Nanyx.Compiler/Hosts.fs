@@ -75,6 +75,11 @@ module Hosts =
     /// The function each host exports that takes the entry point and runs it.
     let runFunction = "run"
 
+    /// Why `host` can't run a program, or a test build, with its files in memory: it has no root for it (see
+    /// `Host.InMemory`).
+    let noFilesInMemory (host: Host) =
+        $"the host '{host.Package}' has no root that runs a program with its files in memory, which a host declares with `filesInMemory` in its manifest"
+
     /// The function each host's root may export that calls a function under the contexts it provides, and gives back
     /// what it returns: a component's export that requires contexts is called through it (see `providedExportName`).
     let provideFunction = "provide"

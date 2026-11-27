@@ -255,9 +255,10 @@ let private command (arguments: string list) : Shell -> int =
         let given, rest = valued [ "--filter"; "--seed"; "--timeout"; "--format"; "--test"; "--module" ] Map.empty [] rest
         let value name = given |> Map.tryFind name |> Option.toObj
         let list, rest = takeFlag "--list" rest
+        let filesInMemory, rest = takeFlag "--files-in-memory" rest
         let _, release, timings, _, path = options (null, false, false, null, []) rest
         fun shell ->
-            CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings, value "--format", list, value "--test", value "--module")
+            CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings, value "--format", list, value "--test", value "--module", filesInMemory)
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)
@@ -1171,7 +1172,7 @@ let testBuildOf (directory: TempDirectory) : byte array * Diagnostic list =
     let store = testStore ()
     match Package.ofManifestFrom store (Path.Combine(directory.Path, "tested.nyxp")) with
     | Ok found ->
-        let build = Package.testBuild store found |> Result.defaultWith failwith
+        let build = Package.testBuild store false found |> Result.defaultWith failwith
         let root = (Package.testResult build).Value
         let typed = root.Typed |> Option.defaultWith (fun () -> failwith $"%A{build.Diagnostics @ root.Diagnostics}")
         let options = { WasmOptions.Default with Places = true; SourceRoot = Some directory.Path }
