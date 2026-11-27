@@ -41,11 +41,13 @@ let private isFunction (ty: Ty) =
     | TyFunc _ -> true
     | _ -> false
 
-/// The names of `namesInScope`, with their types.
+/// The names of `namesInScope` that code can write, with their types: a custom pattern's def is used by its tags, not
+/// its name (see `PatternSyntax`), and is left out.
 let typedNamesInScope (names: TypeNotation) (result: CompileResult) (offset: int) : NameInScope list =
     match result.Typed with
     | Some typed ->
         namesInScope result offset
+        |> List.filter (fun symbol -> (PatternSyntax.shapeOf symbol.Name).IsNone)
         |> List.map (fun symbol ->
             let ty = symbolType typed symbol
             { Symbol = symbol
@@ -127,7 +129,8 @@ let membersAt (names: TypeNotation) (result: CompileResult) (offset: int) (path:
             let prefix = String.concat "." path + "."
             typed.ModuleNames
             |> Map.toList
-            |> List.filter (fun (name, _) -> name.StartsWith(prefix, System.StringComparison.Ordinal))
+            // A custom pattern's def is used by its tags, not its name.
+            |> List.filter (fun (name, _) -> name.StartsWith(prefix, System.StringComparison.Ordinal) && (PatternSyntax.shapeOf name).IsNone)
             |> List.map (fun (name, id) ->
                 let after = name.Substring prefix.Length
                 match after.IndexOf '.' with

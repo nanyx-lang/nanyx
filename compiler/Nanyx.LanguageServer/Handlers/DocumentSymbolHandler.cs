@@ -68,7 +68,7 @@ public sealed class DocumentSymbolHandler : DocumentSymbolHandlerBase
         {
             Name = item.Name,
             Kind = KindOf(item.Kind),
-            Detail = item.Kind.IsScopedContextType ? "scoped" : null,
+            Detail = item.Kind.IsScopedContextType ? "scoped" : item.Kind.IsPattern ? "pattern" : null,
             Range = document.Positions.ToRange(span.Start, span.End),
             SelectionRange = document.Positions.ToRange(name.Start, name.End),
             Children = new Container<DocumentSymbol>(item.Children.Select(child => ToSymbol(child, map, document)).OfType<DocumentSymbol>())
@@ -79,7 +79,7 @@ public sealed class DocumentSymbolHandler : DocumentSymbolHandlerBase
     internal static SymbolKind KindOf(Outline.OutlineKind kind) =>
         kind.Tag switch
         {
-            Outline.OutlineKind.Tags.Function => SymbolKind.Function,
+            Outline.OutlineKind.Tags.Function or Outline.OutlineKind.Tags.Pattern => SymbolKind.Function,
             Outline.OutlineKind.Tags.Value => SymbolKind.Variable,
             Outline.OutlineKind.Tags.RecordType => SymbolKind.Struct,
             Outline.OutlineKind.Tags.UnionType => SymbolKind.Enum,

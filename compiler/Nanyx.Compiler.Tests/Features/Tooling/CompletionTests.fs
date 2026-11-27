@@ -274,3 +274,19 @@ let ``After a value of an open record type come the fields its type lists`` () =
     Assert.Equal<(string * Completion.MemberKind * string option) list>(
         [ "name", Completion.Field, Some "string"; "x", Completion.Field, Some "int" ],
         membersIn (Compiler.compile source) source "p.x }" [ "p" ])
+
+[<Fact>]
+let ``A custom pattern's def is not offered, as code uses its tags`` () =
+    let source =
+        normalized """pattern int -> #Even | #Odd = { n -> if n % 2 == 0 then #Even else #Odd }
+def parse = { (s: string) ->
+  pattern string -> #Num(float) | _ = { t -> _ }
+  0
+}
+"""
+    let result = Compiler.compile source
+    Assert.True(result.Diagnostics.IsEmpty, sprintf "%A" result.Diagnostics)
+    let offered = Completion.typedNamesInScope Unicode result (offsetOf source "  0" 0 2) |> List.map _.Symbol.Name
+    Assert.Contains("parse", offered)
+    Assert.Contains("s", offered)
+    Assert.DoesNotContain(offered, fun name -> name.StartsWith "__pattern_")
