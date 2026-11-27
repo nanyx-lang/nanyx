@@ -77,3 +77,41 @@ def main = withLog { context l -> use l in inner() }
 let ``Hovering a context name shows its context`` () =
     let source = (contexts + "def run: [Log] () -> () = { context l -> use l in inner() }\n").ReplaceLineEndings "\n"
     Assert.Equal(Some "l: Log", hoverType source "l in")
+
+[<Fact>]
+let ``A context name names an instance of a parameterised context, by its context or with its types`` () =
+    // Not only a plain context with members (#1870).
+    compileClean (
+        """context Show(a) = (show: a -> string)
+def describe: [Show(int)] int -> string = { n -> Show(int).show(n) }
+def run: [Show(int)] int -> string = { context s, n ->
+  use Show(int)(show = { m -> "shadowed" })
+  use s
+  describe(n)
+}
+def both: [Show(int), Show(string)] int -> string = { context s: Show(int), n ->
+  use s in describe(n)
+}
+"""
+            .ReplaceLineEndings "\n")
+    |> ignore
+    let result =
+        Compiler.compile (
+            "context Show(a) = (show: a -> string)\ndef both: [Show(int), Show(string)] () -> () = { context s: Show -> () }\n"
+                .ReplaceLineEndings "\n")
+    let diagnostic = Assert.Single result.Diagnostics
+    Assert.Equal(DiagnosticCodes.UnknownContextName.Code, diagnostic.Code)
+    Assert.Equal("'s' could name any of the instances of 'Show' this lambda is given: say which, as in `context s: Show(int)`", diagnostic.Message)
+
+[<Fact>]
+let ``A context name names a context with no members, and use loads it`` () =
+    compileClean (
+        """context Tx = protected ()
+def needsTx: [Tx] () -> () = { () }
+def run: [Tx] () -> () = { context t ->
+  use t
+  needsTx()
+}
+"""
+            .ReplaceLineEndings "\n")
+    |> ignore

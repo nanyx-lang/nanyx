@@ -2051,7 +2051,12 @@ context Tick = (tick: () -> ())
 def run: [Log, Tick] () -> () = { context l -> () }  -- error NYX0246: 'l' could name any of 'Log' and 'Tick', which this lambda is given: say which, as in `context l: Log`
 ```
 
-To fix it, say which context the name is for, `context l: Log`, or name one the lambda's type requires.
+To fix it, say which context the name is for, `context l: Log`, or name one the lambda's type requires. Of two
+instances of one parameterised context, say which by its types, `context s: Show(int)`.
+
+A name is for a context the lambda's type, or its def's, writes: one with members, an instance of a parameterised
+context, or one with no members, and a `memory` block's `Memory`. A context variable (`[c]`), another scoped context,
+and what a def that doesn't write its type was inferred to need can't be named, so naming one is this error too.
 
 # NYX0247: Context written as a type
 
