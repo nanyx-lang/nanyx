@@ -495,6 +495,19 @@ def codePointAt: string, int, int -> int = { s, start, stop ->
   continueCodePoint(s, start + 1, stop, leadBits(__nanyx_string_byte_at(s, start), stop - start))
 }
 
+--| The character of `s` that starts at byte `start`, which must start one: what a function that walks
+  a string by position reads, without making a list of its characters, as [`nanyx/trie`]'s
+  `StringTrie` does.
+export def __stringCharAt: string, int -> char = { s, start ->
+  __nanyx_from_int(codePointAt(s, start, nextCharStart(s, start + 1)))
+}
+
+--| The byte at which the character of `s` after the one that starts at byte `start` starts, or the
+  length of `s`: where a walk by position goes next (see [`__stringCharAt`]).
+export def __stringNextChar: string, int -> int = { s, start ->
+  nextCharStart(s, start + 1)
+}
+
 --| The code points of the characters of `s` before byte `stop`, in order, in front of `acc`.
 def codePointsBefore: string, int, list(int) -> list(int) = { s, stop, acc ->
   def start = charStart(s, stop - 1)
