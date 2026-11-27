@@ -1,0 +1,137 @@
+--| The console's system on WASI preview 1, which the console host's core root provides: a
+  `Console` that reads and writes the standard streams, an `Env` that reads what the program was
+  started with, and a `FileSystem` that reads and writes the directories the runtime opened for it.
+  A host that runs programs on WASI preview 1 writes them on these functions, as the console host's
+  `provide` does.
+@partial export module preview1.system
+
+import (
+  nanyx/array
+  nanyx/async as (Async)
+  nanyx/host.async as (cancelled)
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx/text
+  files as (bytesAt, within)
+  nanyx.cli/console as (Console, IoError)
+  nanyx.cli/env as (Env)
+  nanyx.fs/filesystem as (FileSystem, FsError)
+  nanyx.fs/path as (Path)
+  nanyx.fs/path as path
+  stdin as (bufferOffset, bufferSize, readLineAfter, readToEndAfter, stateAt)
+)
+
+@extern("wasi_snapshot_preview1", "fd_write")
+def fdWrite: [HostRuntime] I32, I32, I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "fd_read")
+def fdRead: [HostRuntime] I32, I32, I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "args_sizes_get")
+def argsSizesGet: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "args_get")
+def argsGet: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "environ_sizes_get")
+def environSizesGet: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "environ_get")
+def environGet: [HostRuntime] I32, I32 -> I32
+
+@extern("wasi_snapshot_preview1", "proc_exit")
+def procExit: [HostRuntime] I32 -> ()
+
+-- The host keeps its state in the block the module sets aside for it (see `hostState`): at 4 and 8,
+-- where what is left of the standard input it has read starts and ends in its buffer; at 12, an
+-- iovec, the address and length of the bytes to write or read; at 20, the count of bytes written or
+-- read; and from 64 to the end of the block, the buffer standard input is read into (see `cli.stdin`).
+
+--| Writes `text` to the file descriptor `fd`, as it is.
+export def writeTo: [HostRuntime] I32, string -> () = { fd, text ->
+  writeI32(stateAt(12), addressOf(text))
+  writeI32(stateAt(16), byteLength(text))
+  ignore(fdWrite(fd, stateAt(12), 1, stateAt(20)))
+  keepAlive(text)
+}
+
+--| How many bytes of standard input are left in the buffer, read into it when none are; 0 when the
+  input has ended, or cannot be read.
+export def fill: [HostRuntime] () -> I32 = { _ ->
+  def start = readI32(stateAt(4))
+  def end = readI32(stateAt(8))
+
+  if start < end then end - start else
+    writeI32(stateAt(12), stateAt(bufferOffset))
+    writeI32(stateAt(16), bufferSize)
+    def read = if fdRead(0, stateAt(12), 1, stateAt(20)) == 0 then readI32(stateAt(20)) else 0
+    writeI32(stateAt(4), 0)
+    writeI32(stateAt(8), read)
+    read
+}
+
+--| How many bytes the string ending in a zero byte at `address` has before it, after `count`.
+def lengthFrom: [HostRuntime] I32, I32 -> I32 = { address, count ->
+  if readByte(address + count) == 0 then count else lengthFrom(address, count + 1)
+}
+
+--| The first `count` of the strings ending in a zero byte that `pointers` holds the addresses of, in
+  front of `acc`.
+def entriesBefore: [HostRuntime] I32, I32, list(string) -> list(string) = { pointers, count, acc ->
+  if count == 0 then acc else
+    def address = readI32(pointers + (count - 1) * 4)
+    entriesBefore(pointers, count - 1, [stringAt(address, lengthFrom(address, 0)), ...acc])
+}
+
+--| The program's arguments, its own name first, or its environment variables, each `NAME=value`:
+  the list that `sizesGet` writes the count and byte length of at its two addresses, and `get` writes,
+  each entry ended by a zero byte, in its second address, with their addresses at its first. The
+  WASI functions are passed in rather than chosen by a tag, so a program that reads only one list
+  imports only that list's functions.
+def entriesOf
+  : [HostRuntime] ([HostRuntime] I32, I32 -> I32), ([HostRuntime] I32, I32 -> I32) -> list(string)
+  = { sizesGet, get ->
+    def sizes = allocate(8)
+    ignore(sizesGet(sizes, sizes + 4))
+    def count = readI32(sizes)
+    def pointers = allocate(count * 4 + 4)
+    def buffer = allocate(readI32(sizes + 4) + 1)
+    free(sizes)
+    ignore(get(pointers, buffer))
+    def entries = entriesBefore(pointers, count, [])
+    free(pointers)
+    free(buffer)
+    entries
+  }
+
+--| The value in `entries`, each written `NAME=value`, of the variable whose entries start `prefix`.
+def variableIn: list(string), string -> #some(string) | #notSet = {
+  | [], _ -> #notSet
+  | [entry, ...rest], prefix ->
+    if string.startsWith(entry, prefix)
+      then #some(string.skip(entry, string.length(prefix)))
+      else variableIn(rest, prefix)
+}
+
+--| The program's command-line arguments, after its name.
+export def arguments: [HostRuntime] () -> list(string) = { _ ->
+  match entriesOf(argsSizesGet, argsGet)
+    | [] -> []
+    | [_, ...rest] -> rest
+}
+
+--| The value of the environment variable `name`, or `#notSet` when it has none.
+export def environmentVariable: [HostRuntime] string -> #some(string) | #notSet = { name ->
+  variableIn(entriesOf(environSizesGet, environGet), name ++ "=")
+}
+
+--| Ends the program with the exit code `code`, or 1 for a code that doesn't fit an `I32`. WASI's
+  `proc_exit` never returns: the call after it only gives the function its type.
+export def exitProcess: [HostRuntime] int -> undefined = { code ->
+  def exitCode = match int.toI32(code)
+    | #some(fits) -> fits
+    | #outOfRange -> 1
+
+  procExit(exitCode)
+  exitProcess(code)
+}

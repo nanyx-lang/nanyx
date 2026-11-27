@@ -169,17 +169,6 @@ type Places private () =
         with get () = Places.current
         and set (place: Place option) = Places.current <- place
 
-/// The name a program shows for the source file at `file`, a path as a span names it: its path from `root`, the root of
-/// its package, with `/` between its parts; its name alone without a root (a script) or when it is outside the root.
-let shownFile (root: string option) (file: string) =
-    match root with
-    | _ when file = "" -> ""
-    | Some root ->
-        let relative = System.IO.Path.GetRelativePath(root, file)
-        if relative.StartsWith ".." || System.IO.Path.IsPathRooted relative then System.IO.Path.GetFileName file
-        else relative.Replace('\\', '/')
-    | None -> System.IO.Path.GetFileName file
-
 type Expr =
     { Kind: ExprKind
       Type: IrType
@@ -272,7 +261,7 @@ and ExprKind =
     | FreeToken of token: Var * Expr
 
 /// Where a probe is (see `Probe`).
-/// Where a `dbg` is written: the file, as the program names it (see `shownFile`), and the line and column, counted from 1.
+/// Where a `dbg` is written: the file, as the program names it (see `PackageModules.shownFile`), and the line and column, counted from 1.
 and DbgSite =
     { File: string
       Line: int

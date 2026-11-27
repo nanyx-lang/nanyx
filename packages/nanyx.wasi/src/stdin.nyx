@@ -4,7 +4,7 @@
   Each root reads a buffer with its own `fill`, on WASI preview 1 or on `wasi:cli/stdin`, and the
   rest is the same: at 4 and 8 in the host's block (see `hostState`), where what is left of the
   input it has read starts and ends in its buffer, and from 64 to the end of the block, the buffer.
-module cli.stdin
+export module stdin
 
 import (
   nanyx/host.memory

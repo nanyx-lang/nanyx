@@ -103,12 +103,15 @@ What each command does is in [The nanyx command](https://nanyx.dev/docs/standard
 
 The `Compiler` workflow (`.github/workflows/compiler.yml`) builds and tests the solution on
 Linux and Windows for every push to `main` that touches `compiler/` or `stdlib/`, and
-publishes a self-contained `nanyx` executable for each supported platform as a workflow artifact.
+publishes a self-contained `nanyx` executable for each supported platform as a workflow artifact. A run of a
+branch publishes them only when the branch's version has no `compiler/<version>` tag yet, as a release PR's has not.
 On a pull request it does only the work the change can affect: everything when the pull request
 touches the compiler, the standard library, the examples or any other `.nyx` file; the tests
 without the Wasm tests when it touches only the docs' content (a formatter test reads the docs'
-code blocks); and nothing otherwise. Each job caches the NuGet packages it restores, keyed on the OS and the
-projects' files, so a run restores from scratch only after a package reference changes.
+code blocks); and nothing otherwise. The Wasm tests run in 3 shards per platform, which
+`.github/scripts/wasm-shards.py` lists by the test project's areas. A test in no shard, or in two, fails each shard's job:
+a new directory under `Features/` goes into one of the shards there. Each job caches the NuGet packages it restores,
+keyed on the OS and the projects' files, so a run restores from scratch only after a package reference changes.
 
 To cut a release, bump `<Version>` in `Directory.Build.props` and merge. The packages the compiler ships
 are named at that version, and a manifest names them at it exactly, so update the `version` of the
