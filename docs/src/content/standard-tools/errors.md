@@ -2287,8 +2287,8 @@ To fix it, write the value meant, such as `()` for the unit value or `#none` for
 # NYX0264: Custom pattern given arguments wrongly
 
 A [custom pattern](../advanced/custom-patterns#patterns-with-arguments)'s tag is used with arguments the pattern
-doesn't take, without the arguments it does take, or with a pattern, such as `_`, where an argument goes. The message
-says which.
+doesn't take, without the arguments it does take, with a pattern, such as `_`, where an argument goes, or with an
+argument that is no literal, name, or tuple, list or tag of those, such as a call. The message says which.
 
 ```nanyx
 pattern int -> int -> #DivisibleBy | _ = { divisor -> { n -> n % divisor == 0 } }
@@ -2302,7 +2302,8 @@ def isFizz = { (n: int) ->
 
 To fix it, write the arguments in the first brackets after the tag, `#DivisibleBy(3)`, and the payload to take apart,
 if the pattern returns one, in a second pair: `#SplitOn(",")(first, second)`. A pattern that takes no arguments has
-only the payload's brackets.
+only the payload's brackets. Bind any other value with a `def` before the `match` and pass its name, as an editor's
+quick fix does.
 
 # NYX0265: Associated type declared wrongly
 
