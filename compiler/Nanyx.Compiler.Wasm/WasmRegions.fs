@@ -12,6 +12,7 @@
 module internal Transpiler.Wasm.WasmRegions
 
 open Transpiler.Wasm.WasmAllocator
+open Transpiler.Wasm.WatText
 
 /// The names of the helpers. The two the standard library calls are its intrinsics.
 module Names =

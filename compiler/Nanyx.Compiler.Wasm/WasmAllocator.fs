@@ -2,6 +2,8 @@
 /// the reference counts' `retain` and `release`, and what a module compiled with memory checks adds to them.
 module internal Transpiler.Wasm.WasmAllocator
 
+open Transpiler.Wasm.WatText
+
 /// The names of the allocator's functions, and of what its memory checks call (`WasmRuntime.Helpers` names them for
 /// the rest of the backend).
 module Names =
@@ -81,7 +83,6 @@ module MemoryChecks =
     /// of one. It is `SizeWordBits.freeLarge`, which a module without memory checks sets on free large blocks only.
     let freedMark = SizeWordBits.freeLarge
 
-let lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
 
 // Leaves on the stack the address of the head of the free list for a block of `$size` bytes, in the table at
 // `heapBase`.

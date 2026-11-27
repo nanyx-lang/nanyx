@@ -18,6 +18,7 @@ open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
+open Transpiler.Wasm.WatText
 
 /// The name of the ordering function of `ty`.
 let compareName (ty: IrType) = "__nanyx_compare_" + sanitizeIdentifier (IrType.mangle ty)
@@ -47,7 +48,6 @@ let private sign (greater: string list) (less: string list) = greater @ less @ [
 /// Returns from the function the order the code before it left, in `$order`, unless it is 0.
 let private orReturnOrder = [ "local.tee $order"; "if"; "  local.get $order"; "  return"; "end" ]
 
-let private indent (lines: string list) = lines |> List.map (fun line -> "  " + line)
 
 /// The locals the ordering function of `ty` needs, and its body, which orders `$a` and `$b`. `tagId` gives the number
 /// of each tag the module numbers.

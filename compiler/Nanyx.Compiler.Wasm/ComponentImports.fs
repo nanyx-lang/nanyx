@@ -10,6 +10,7 @@ open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.ComponentValues
 open Transpiler.Wasm.ComponentExports
 open Transpiler.Wasm.WasmRuntime
+open Transpiler.Wasm.WatText
 
 /// The most core values a call passes as arguments before the canonical ABI passes them in memory instead.
 let private maxFlatParameters = 16
@@ -33,7 +34,6 @@ let private declaration (index: int) (func: ComponentFunction) =
 let declarations (imports: (NyxCompiler.Extern * ComponentFunction) list) =
     imports |> List.mapi (fun index (_, func) -> declaration index func) |> String.concat "\n"
 
-let private indented (lines: string list) = lines |> List.map (fun line -> "  " + line)
 
 /// The function a call of the import `declared`, of `func`, numbered `index`, calls, taking and giving Nanyx values of
 /// the types its WIT types are held as (`irTypeOf`). Its arguments, which it borrows, are written to a new block, their strings and lists to new blocks of their
@@ -94,7 +94,7 @@ let private wrapper (context: ExportContext) (index: int) (declared: NyxCompiler
     let result = if declared.Result.IsSome then $"(result {CoreIrLayout.valueType resultIr})" else ""
     let declarations = generator.Declarations |> String.concat " "
     [ $"(func ${CoreIrEmitImports.importName declared} {parameters} {result} {declarations}"
-      yield! indented body
+      yield! indent body
       ")" ]
     |> String.concat "\n"
 

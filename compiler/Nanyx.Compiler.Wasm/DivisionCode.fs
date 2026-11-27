@@ -6,6 +6,8 @@
 /// float's (see `CoreIrLower`).
 module internal Transpiler.Wasm.DivisionCode
 
+open Transpiler.Wasm.WatText
+
 /// `//` on ints.
 let intFloorDiv = "__nanyx_int_floor_div"
 
@@ -18,8 +20,6 @@ let floatFloorDiv = "__nanyx_float_floor_div"
 /// `%` on floats, and on `F32`s widened to floats.
 let floatMod = "__nanyx_float_mod"
 
-/// The lines of a helper, indented as the module's other functions are.
-let private lines (code: string list) = code |> List.map (fun line -> "  " + line) |> String.concat "\n"
 
 /// The code that leaves 1 when the values of the locals `left` and `right`, of the integer type `held`, have different
 /// signs, and `remainder` is not zero.
@@ -51,7 +51,7 @@ let signedFloorDiv (name: string) (held: string) =
           yield $"  {held}.rem_s"
           yield "  local.set $r"
           yield "  local.get $q"
-          yield! adjusts held "$r" "$a" "$b" |> List.map (fun line -> "  " + line)
+          yield! adjusts held "$r" "$a" "$b" |> indent
           if held = "i64" then yield "  i64.extend_i32_u"
           yield $"  {held}.sub"
           yield ")" ]
@@ -117,7 +117,6 @@ let private signsDiffer =
       "i32.ne"
       "i32.and" ]
 
-let private indent (code: string list) = code |> List.map (fun line -> "  " + line)
 
 /// `%` on floats, as Python's: the truncated remainder, plus `b` when the two have different signs, and a zero has the
 /// sign of `b`.

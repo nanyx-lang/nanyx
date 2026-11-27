@@ -470,7 +470,6 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
 
     member _.Changed = changed
 
-    /// A chain, with what each of its bindings tells known in what follows it.
     /// When `link` and the links after it in `remaining` bind temporaries one after another that are, in that order,
     /// the temporaries a record bound next to a variable is made of, and the record is only read a field at a time:
     /// how many of `remaining` that takes, and the links again, from `link` to the record's, with the temporaries made
@@ -505,6 +504,7 @@ type private Simplifier(functions: Dictionary<string, Function>, f: Function) =
             Some(temps.Length, relinked @ [ recordLink ])
         | None -> None
 
+    /// A chain, with what each of its bindings tells known in what follows it.
     member this.Sequence (facts: Map<int, Fact>) (e: Expr) : Expr =
         let links, chainEnd = Chain.split e
         let rebuilt = ResizeArray<Expr -> Expr>()

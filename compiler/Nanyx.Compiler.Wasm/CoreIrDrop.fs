@@ -9,6 +9,7 @@ open Transpiler.Wasm.Identifiers
 open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.Wat
 open Transpiler.Wasm.CoreIr
+open Transpiler.Wasm.WatText
 
 /// Whether a value of this type can be a pointer to an object on the heap. A union of tags is one when some tag has a
 /// payload, though a value of it is a pointer only when it is not a code.
@@ -400,7 +401,6 @@ let private dupBody (ty: IrType) : string list =
       "end"
       "local.get $p" ]
 
-let private lines (items: string list) = items |> List.map (fun line -> "  " + line) |> String.concat "\n"
 
 /// The functions of `drops`, as WebAssembly text: the drop and dup functions of each type, the function that drops
 /// each closure environment, and the `++` of each list. The function that drops a closure's captures is called through

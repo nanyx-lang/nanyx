@@ -11,6 +11,7 @@ module internal Transpiler.Wasm.ComponentAbi
 open NyxCompiler
 open Transpiler.Wasm.WasmAllocator
 open Transpiler.Wasm.WasmRuntime
+open Transpiler.Wasm.WatText
 
 /// The version of WASI 0.3 the module imports and exports, which every 0.3 host accepts.
 let wasiVersion = "0.3.0"

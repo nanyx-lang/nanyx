@@ -3,6 +3,7 @@
 module internal Transpiler.Wasm.WasmRuntime
 
 open Transpiler.Wasm.WasmAllocator
+open Transpiler.Wasm.WatText
 
 /// How a value of the program's is written in memory: the WebAssembly value type it is held in, and how many bytes of
 /// it are written (see `CoreIrLayout.storage`).
