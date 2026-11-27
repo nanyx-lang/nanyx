@@ -75,6 +75,18 @@ A package can also keep tests in files of their own. The `tests` field of the ma
 
 Each test file declares a named module, as every file in a package does. It is part of the package in a test build and is left out of every other build. It can import the package's modules and use what they export, but not their private definitions. If `tests` is left out, a package has no test files, and its tests are the ones beside its code.
 
+## Test packages
+
+Built ([#3095](https://github.com/nanyx-lang/nanyx/issues/3095)): a package whose manifest gives `tests` and no `sources`
+holds only the tests of the packages it depends on, in a sibling folder, as a .NET test project does
+([Test packages](../tour/packages#test-packages)). It has no source files, needs no host and exports nothing; only
+`nanyx test` builds it. It can depend on an application, whose `@entry` is an ordinary def in the test build and whose
+modules keep its host ([Test builds](../deep-dives/test-builds#test-packages)). Its tests import what the package exports,
+so a private helper is still tested beside its code.
+
+An editor checks a file under the manifest's `sources` as one of its package's; a file that only `tests` selects, as all
+of a test package's are, is still checked on its own, as a script ([#3098](https://github.com/nanyx-lang/nanyx/issues/3098)).
+
 ## Scripts
 
 `nanyx test file.nyx` runs the tests in a script. The script's top-level statements are its entry, so they are not run, as a package's `@entry` is not.
