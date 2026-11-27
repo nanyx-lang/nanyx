@@ -87,6 +87,7 @@
     <Compile Include="ComponentExports.fs" />
     <Compile Include="ComponentImports.fs" />
     <Compile Include="CodeGenContexts.fs" />
+    <Compile Include="ShownValues.fs" />
     <Compile Include="CodeGen.fs" />
     <Compile Include="WatSyntax.fs" />
     <Compile Include="WasmBinary.fs" />

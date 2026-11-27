@@ -93,6 +93,7 @@
     <Compile Include="Features\Async\FrameDropTests.fs" />
     <Compile Include="Features\Dbg\RunDbgTests.fs" />
     <Compile Include="Features\Dbg\RunDbgChannelTests.fs" />
+    <Compile Include="Features\Dbg\ShowValuesTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />
     <Compile Include="Features\Components\ComponentBuildTests.fs" />

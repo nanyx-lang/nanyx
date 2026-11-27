@@ -270,7 +270,10 @@ and ExprKind =
 and DbgSite =
     { File: string
       Line: int
-      Column: int }
+      Column: int
+      /// Whether it is a value `--show-values` shows, which goes to the runtime's `value`, not a `dbg` the program
+      /// writes (see `ShownValues`).
+      Shown: bool }
 
     /// What the program writes before the value: `[main.nyx:12] `, or `[12] ` for a file with no name.
     member this.Prefix = if this.File = "" then $"[{this.Line}] " else $"[{this.File}:{this.Line}] "

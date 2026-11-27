@@ -11,7 +11,8 @@ internal static partial class CliCommands
 {
     /// <summary>
     /// The file at <paramref name="path"/>, made anew, that <see cref="Write"/> writes each <c>dbg</c> hit to as a line:
-    /// <c>{"file", "line", "column", "value", "seq"}</c>, its file a full path where the program's name for it is the name
+    /// <c>{"kind", "file", "line", "column", "value", "seq"}</c>, its kind <c>dbg</c> for a <c>dbg</c> the program writes and
+    /// <c>value</c> for a value <c>--show-values</c> shows, its file a full path where the program's name for it is the name
     /// of one of the files <paramref name="compiled"/> read (see <c>PackageModules.shownFile</c>), and its sequence number
     /// counted from 0. Another process may read the file while it is written.
     /// </summary>
@@ -62,6 +63,7 @@ internal static partial class CliCommands
         {
             WriteJsonLine(writer, json =>
             {
+                json.WriteString("kind", hit.Shown ? "value" : "dbg");
                 json.WriteString("file", fullPaths.TryGetValue(hit.File, out var full) ? full : hit.File);
                 json.WriteNumber("line", hit.Line);
                 json.WriteNumber("column", hit.Column);

@@ -761,6 +761,11 @@ module NegateSyntax =
 module DbgSyntax =
     let builtIn = "dbg"
 
+    /// What `nanyx run --show-values` makes of each value the program binds or gives: a call of this, which no code can
+    /// write, around it, lowered as `dbg` is but reported as a shown value, not a written `dbg` (see the backend's
+    /// `ShownValues`).
+    let shown = "__show"
+
 /// `assert(condition)`: built in, as `dbg` is, and called by that name where nothing else is named `assert`. Once the
 /// condition is typed, the compiler writes each call as a call to `rewritten`, which carries what its message needs:
 /// where it is and its source text, then, for each value the message shows, its label and the expression, which is the

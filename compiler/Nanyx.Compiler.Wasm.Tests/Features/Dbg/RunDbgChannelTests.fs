@@ -8,8 +8,8 @@ open Xunit
 open NyxCompiler
 open TranspilerWasmTestHelpers
 
-/// A hit as the channel writes it: its file, line, column, value and sequence number.
-type private Hit = { File: string; Line: int; Column: int; Value: string; Seq: int }
+/// A hit as the channel writes it: its kind, file, line, column, value and sequence number.
+type private Hit = { Kind: string; File: string; Line: int; Column: int; Value: string; Seq: int }
 
 /// The hits written to the file at `path`, a line each, in order.
 let private hitsIn (path: string) =
@@ -17,7 +17,8 @@ let private hitsIn (path: string) =
     |> Array.filter (fun line -> line <> "")
     |> Array.map (fun line ->
         let json = JsonDocument.Parse(line).RootElement
-        { File = json.GetProperty("file").GetString()
+        { Kind = json.GetProperty("kind").GetString()
+          File = json.GetProperty("file").GetString()
           Line = json.GetProperty("line").GetInt32()
           Column = json.GetProperty("column").GetInt32()
           Value = json.GetProperty("value").GetString()
@@ -34,9 +35,9 @@ let ``--dbg-to writes each hit as a JSON line, in order, with its full path and 
     Assert.Equal(0, outcome.ExitCode)
     let main = Path.GetFullPath(Path.Combine(directory.Path, "main.nyx"))
     Assert.Equal<Hit list>(
-        [ { File = main; Line = 2; Column = 1; Value = "12"; Seq = 0 }
-          { File = main; Line = 4; Column = 19; Value = "2"; Seq = 1 }
-          { File = main; Line = 4; Column = 19; Value = "4"; Seq = 2 } ],
+        [ { Kind = "dbg"; File = main; Line = 2; Column = 1; Value = "12"; Seq = 0 }
+          { Kind = "dbg"; File = main; Line = 4; Column = 19; Value = "2"; Seq = 1 }
+          { Kind = "dbg"; File = main; Line = 4; Column = 19; Value = "4"; Seq = 2 } ],
         hitsIn (Path.Combine(directory.Path, "hits.jsonl")))
 
 [<Fact>]
