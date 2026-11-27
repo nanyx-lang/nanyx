@@ -115,6 +115,9 @@ module internal StructuralInstances =
         | TyScope scope -> all [ scope ] |> Option.map (List.exactlyOne >> TyScope)
         | TyMeasure(dimension, storage) -> closed rigid storage |> Option.map (fun storage -> TyMeasure(dimension, storage))
         | TySelf args -> all args |> Option.map TySelf
+        | TyMember(index, args) -> all args |> Option.map (fun args -> TyMember(index, args))
+        // Closed: a group's definitions have no variables.
+        | TyGroup _ -> Some ty
         | TyRecursive(body, args) ->
             match all (body :: args) with
             | Some (body :: args) -> Some (TyRecursive(body, args))

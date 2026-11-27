@@ -63,6 +63,8 @@ let private renamed (written: (TypeDefInfo -> bool) -> string -> string) (ty: Ty
         | TyUnion items -> TyUnion(List.map rename items)
         | TyRecursive(body, args) -> TyRecursive(body, List.map rename args)
         | TySelf args -> TySelf(List.map rename args)
+        | TyMember(index, args) -> TyMember(index, List.map rename args)
+        | TyGroup _ -> ty
         | TyScope scope -> TyScope(rename scope)
         | TyContexts contexts -> TyContexts(List.map rename contexts)
         | TyMeasure(dimension, storage) ->

@@ -330,6 +330,8 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | TyContexts _ -> cannot "the contexts a type carries, as a value"
     | TyRecursive _
     | TySelf _
+    | TyMember _
+    | TyGroup _
     | TyParam _ -> cannot "a recursive alias's definition outside the alias"
 
 /// The members of the contexts among `contexts`, each with its key and IR type, in the order a function value that

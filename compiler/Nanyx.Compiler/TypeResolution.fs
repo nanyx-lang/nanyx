@@ -824,8 +824,23 @@ let private fieldAttributesOf (body: TypeExpr) : Map<string, FieldAttribute list
         |> Map.ofList
     | _ -> Map.empty
 
-let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
-    let originalTypeVars = state.TypeVars
+/// A type definition as `registerTypeDef` reads it before its body: the variables of its parameters, of the scope of
+/// the scoped context it belongs to and of its contexts, the state with them in scope, and the type as its own
+/// definition names it.
+type private TypeDefSetup =
+    { Name: Identifier
+      Modifiers: TypeDefModifier list
+      Body: TypeExpr
+      ParamVars: TyVar list
+      ScopedBy: string option
+      Scope: TyVar option
+      ContextVariable: TyVar option
+      StateWithParams: InferState
+      IsNominal: bool
+      IsPrivate: bool
+      Self: TypeDefInfo }
+
+let private setUpTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) : TypeDefSetup =
     let mutable current = state
     let paramEntries =
         parameters
@@ -878,8 +893,24 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
           Doc = ""
           FieldAttributes = Map.empty
           IsDimension = false }
-    let underlyingTy, next = readTypeDefBody stateWithParams name modifiers paramVars self body
-    let selfReferences = if canReferToItself stateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
+    { Name = name
+      Modifiers = modifiers
+      Body = body
+      ParamVars = paramVars
+      ScopedBy = scopedBy
+      Scope = scope
+      ContextVariable = contextVariable
+      StateWithParams = stateWithParams
+      IsNominal = isNominal
+      IsPrivate = isPrivate
+      Self = self }
+
+/// Registers the type definition `setup`, made from `underlyingTy`, in `next`, the state its body was read in, with
+/// `originalTypeVars` in scope again: its symbol, its members if it is a context, and each of `selfReferences`, the
+/// places its definition names it, as a reference to it.
+let private finishTypeDef (originalTypeVars: Map<TypeVarKey, TyVar>) (setup: TypeDefSetup) (underlyingTy: Ty) (next: InferState) (selfReferences: TypeExpr list) =
+    let { Name = name; Modifiers = modifiers; Body = body; ParamVars = paramVars; IsNominal = isNominal; IsPrivate = isPrivate } = setup
+    let { ScopedBy = scopedBy; Scope = scope; ContextVariable = contextVariable } = setup
     let nextNominals =
         if isNominal then next.LocalNominals |> Set.add name else next.LocalNominals
     let nextPrivate =
@@ -934,12 +965,101 @@ let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: 
         LocalNominals = nextNominals
         LocalPrivateNominals = nextPrivate }
 
-/// The type definitions `items` declares, ordered so that each comes after the types it names that are declared
-/// among them, and otherwise in the order they are written. Each is registered with `registerTypeDef` in this order,
-/// so a type's body reads the types it names as declared, wherever they are written: a type written above an alias it
-/// names, or in a fragment of a partial module whose file sorts first, sees the alias's union and not an unknown name.
-/// Types that name each other keep the order they are written in, as do two definitions of one name.
-let internal inDependencyOrder (items: TopLevelItem list) =
+let internal registerTypeDef (state: InferState) (name: Identifier) (modifiers: TypeDefModifier list) (parameters: (Identifier * TypeExpr option) list) (body: TypeExpr) =
+    let setup = setUpTypeDef state name modifiers parameters body
+    let underlyingTy, next = readTypeDefBody setup.StateWithParams name modifiers setup.ParamVars setup.Self body
+    let selfReferences = if canReferToItself setup.StateWithParams name modifiers then RecursiveAliases.namesOfItself name body |> List.map fst else []
+    finishTypeDef state.TypeVars setup underlyingTy next selfReferences
+
+/// A type definition as a module writes it: its name, modifiers, parameters and body.
+type internal WrittenTypeDef = Identifier * TypeDefModifier list * (Identifier * TypeExpr option) list * TypeExpr
+
+/// Whether the definitions `group`, which name each other, can be closed together as a group (see `TyGroup`): each is
+/// an alias or a nominal type, not a context, with a name no other definition of the group or type in scope has, and
+/// the aliases among them name each other through the payload of a tag (see `RecursiveAliases.unguardedCycles`).
+let private isClosableGroup (state: InferState) (group: WrittenTypeDef list) =
+    let names = group |> List.map (fun (name, _, _, _) -> name)
+    group.Length > 1
+    && List.distinct names = names
+    && group |> List.forall (fun (name, modifiers, _, _) -> canReferToItself state name modifiers)
+    && (let aliases =
+            group
+            |> List.filter (fun (_, modifiers, _, _) -> not (TypeDefModifier.isNominal modifiers))
+            |> List.map (fun (name, _, _, body) -> name, body)
+        aliases |> List.forall (fun (name, body) -> RecursiveAliases.namesOfItself name body |> List.forall snd)
+        && List.isEmpty (RecursiveAliases.unguardedCycles aliases))
+
+/// Registers the definitions `group`, which name each other, closed together (see `TyGroup`): each body is read with
+/// every member a marker (`RecursiveAliases.memberMarker`), then each member is made from its group, closed over.
+let private registerTypeGroup (state: InferState) (group: WrittenTypeDef list) =
+    let originalTypeVars = state.TypeVars
+    let setups, state =
+        group
+        |> List.mapFold (fun state (name, modifiers, parameters, body) ->
+            let setup = setUpTypeDef state name modifiers parameters body
+            setup, { setup.StateWithParams with TypeVars = originalTypeVars }) state
+    let markers =
+        setups
+        |> List.mapi (fun index setup ->
+            let marker = if setup.IsNominal then RecursiveAliases.memberMarker index [] else RecursiveAliases.memberMarker index setup.ParamVars
+            setup.Name, { setup.Self with Underlying = marker })
+    let bodies, state =
+        setups
+        |> List.mapFold (fun state setup ->
+            let reading = { state with TypeVars = setup.StateWithParams.TypeVars; TypeDefs = markers |> List.fold (fun defs (name, info) -> defs |> Map.add name info) state.TypeDefs }
+            typeExprToTy reading setup.Body) state
+    let state = { state with TypeVars = originalTypeVars; TypeDefs = markers |> List.fold (fun defs (name, _) -> defs |> Map.remove name) state.TypeDefs }
+    let variablesOf (setup: TypeDefSetup) =
+        if setup.IsNominal then setup.ParamVars @ Option.toList setup.Scope @ Option.toList setup.ContextVariable else setup.ParamVars
+    let members =
+        List.map2
+            (fun setup body ->
+                { Name = setup.Name
+                  Nominal = if setup.IsNominal then Some (TypeDefInfo.nominalId setup.Self, setup.IsPrivate) else None
+                  Body = RecursiveAliases.closeMember (variablesOf setup) body })
+            setups bodies
+    let state =
+        setups
+        |> List.indexed
+        |> List.fold (fun state (index, setup) ->
+            finishTypeDef originalTypeVars setup (TyRecursive(TyGroup(index, members), variablesOf setup |> List.map TyVar)) state []) state
+    // A name of a member in the group's definitions refers to it, as any other does.
+    let names = setups |> List.map _.Name |> Set.ofList
+    setups
+    |> List.collect (fun setup -> RecursiveAliases.namesOf names setup.Body)
+    |> List.fold (fun state (name, typeExpr, _) -> recordTypeReference typeExpr state.TypeDefs.[name] state) state
+
+/// Registers `groups`, as `inDependencyGroups` gives them, in order: a definition on its own, a group that can be
+/// closed together (see `isClosableGroup`) as one, and the definitions of any other group one at a time.
+let internal registerTypeDefs (state: InferState) (groups: WrittenTypeDef list list) =
+    groups
+    |> List.fold (fun state group ->
+        if isClosableGroup state group then
+            registerTypeGroup state group
+        else
+            group |> List.fold (fun state (name, modifiers, parameters, body) -> registerTypeDef state name modifiers parameters body) state) state
+
+/// The errors for the places the aliases of `groups` name each other with no tag in between (see
+/// `RecursiveAliases.unguardedCycleErrors`), by the name of the alias each is written in.
+let internal unguardedGroupReferences (groups: WrittenTypeDef list list) : Map<Identifier, Diagnostic list> =
+    groups
+    |> List.collect (fun group ->
+        group
+        |> List.filter (fun (_, modifiers, _, _) -> not (TypeDefModifier.isNominal modifiers || isContextDef modifiers))
+        |> List.map (fun (name, _, _, body) -> name, body)
+        |> List.sortBy (fun (_, body) -> body.Span.Start)
+        |> RecursiveAliases.unguardedCycleErrors)
+    |> List.groupBy fst
+    |> List.map (fun (name, errors) -> name, List.map snd errors)
+    |> Map.ofList
+
+/// The type definitions `items` declares, in groups that name each other, ordered so that each group comes after the
+/// types it names that are declared among them, and otherwise in the order they are written. Each group is registered
+/// in this order (see `registerTypeDefs`), so a type's body reads the types it names as declared, wherever they are
+/// written: a type written above an alias it names, or in a fragment of a partial module whose file sorts first, sees
+/// the alias's union and not an unknown name. A group's definitions are in the order a walk of the types each names
+/// finishes them, which is the order one at a time reads them in, as do two definitions of one name.
+let internal inDependencyGroups (items: TopLevelItem list) : WrittenTypeDef list list =
     let typeDefs =
         items
         |> List.choose (function
@@ -950,13 +1070,40 @@ let internal inDependencyOrder (items: TopLevelItem list) =
         typeDefs |> Array.indexed |> Array.groupBy (fun (_, (name, _, _, _)) -> name) |> Array.map (fun (name, defs) -> name, Array.map fst defs) |> Map.ofArray
     let named (_, _, parameters: (Identifier * TypeExpr option) list, body) =
         body :: (parameters |> List.choose snd) |> List.collect typeNamesIn |> List.map fst |> List.distinct
-    let visited = Array.create typeDefs.Length false
-    let mutable ordered = []
+    let next index = named typeDefs.[index] |> List.collect (fun name -> indicesByName |> Map.tryFind name |> Option.map List.ofArray |> Option.defaultValue [])
+    // Tarjan's strongly connected components, which come out each after those it names. A definition's place in the
+    // walk's finishing order orders the definitions of a component.
+    let order = Array.create typeDefs.Length -1
+    let lowest = Array.create typeDefs.Length 0
+    let onStack = Array.create typeDefs.Length false
+    let finished = Array.create typeDefs.Length 0
+    let mutable visits = 0
+    let mutable finishes = 0
+    let mutable stack = []
+    let mutable groups = []
     let rec visit index =
-        if not visited.[index] then
-            visited.[index] <- true
-            named typeDefs.[index] |> List.iter (fun name -> indicesByName |> Map.tryFind name |> Option.iter (Array.iter visit))
-            ordered <- typeDefs.[index] :: ordered
+        order.[index] <- visits
+        lowest.[index] <- visits
+        visits <- visits + 1
+        stack <- index :: stack
+        onStack.[index] <- true
+        for target in next index do
+            if order.[target] < 0 then
+                visit target
+                lowest.[index] <- min lowest.[index] lowest.[target]
+            elif onStack.[target] then
+                lowest.[index] <- min lowest.[index] order.[target]
+        finished.[index] <- finishes
+        finishes <- finishes + 1
+        if lowest.[index] = order.[index] then
+            let rec pop members =
+                match stack with
+                | top :: rest ->
+                    stack <- rest
+                    onStack.[top] <- false
+                    if top = index then top :: members else pop (top :: members)
+                | [] -> members
+            groups <- (pop [] |> List.sortBy (fun member' -> finished.[member'])) :: groups
     for index in 0 .. typeDefs.Length - 1 do
-        visit index
-    List.rev ordered
+        if order.[index] < 0 then visit index
+    groups |> List.rev |> List.map (List.map (fun index -> typeDefs.[index]))

@@ -59,8 +59,10 @@ module TypePrinting =
         | TyAlias(_, args, _)
         | TyApply(_, args)
         | TyUnion args
-        | TySelf args -> all args
+        | TySelf args
+        | TyMember(_, args) -> all args
         | TyRecursive(body, _) -> scopedContextsInPrintOrder body
+        | TyGroup(selected, members) -> scopedContextsInPrintOrder members.[selected].Body
         | _ -> []
 
     /// A union alias in scope, by the name it is known by there, and the tags it stands for: a union that holds all of
@@ -156,6 +158,7 @@ module TypePrinting =
         | FunctionContexts.CarryingNominal(_, _, contexts) -> not (writtenContexts contexts).IsEmpty
         | TyContexts _ -> true
         | TyRecursive(body, _) -> writtenWithContexts body
+        | TyGroup(selected, members) -> writtenWithContexts members.[selected].Body
         | _ -> false
 
     /// `ty` with the fewest brackets the grammar allows. `,` binds tighter than `->`, which groups to the right,
@@ -331,6 +334,9 @@ module TypePrinting =
         | TyRecursive(body, _) -> printTy p signature body
         | TySelf [] -> "self"
         | TySelf args -> $"self({items args})"
+        | TyGroup(selected, members) -> printTy p signature members.[selected].Body
+        | TyMember(index, []) -> $"member{index}"
+        | TyMember(index, args) -> $"member{index}({items args})"
         | TyParam index -> $"${index}"
         // Only where a scoped context's scope is printed on its own, which a reader never sees.
         | TyScope scope -> $"scope({soleArgument scope})"
@@ -358,7 +364,9 @@ module TypePrinting =
             | TyNominal(_, args, _, _)
             | TyAlias(_, args, _)
             | TyRecursive(_, args)
-            | TySelf args -> args |> List.collect collect
+            | TySelf args
+            | TyMember(_, args) -> args |> List.collect collect
+            | TyGroup _ -> []
             | TyFunc(arg, ret, contexts) ->
                 (writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect) @ collect arg @ collect ret
             | TyContexts contexts -> writtenContexts contexts |> List.map FunctionContexts.withoutScope |> List.collect collect

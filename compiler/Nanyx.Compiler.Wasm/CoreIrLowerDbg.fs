@@ -117,6 +117,8 @@ let rec private mangle (ty: Ty) : string =
     | TyOpenRecord _ -> "unit"
     | TyRecursive _
     | TySelf _
+    | TyMember _
+    | TyGroup _
     | TyParam _ -> internalError "a recursive alias's definition outside the alias"
 
 /// The name a printer is asked for by, and its function's name.

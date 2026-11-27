@@ -129,7 +129,8 @@ let makingFunction (tools: TypeMatchTools) (functionName: string) (recordType: T
         match remaining with
         | [] ->
             let byName = Map.ofList acc
-            let slots = match recordTy with IrRecord slots -> slots | other -> internalError $"a record made of '{IrType.show other}'"
+            // A recursive alias of a record, which names itself in a field, is made of the record its body is.
+            let slots = match IrType.unfold recordTy with IrRecord slots -> slots | other -> internalError $"a record made of '{IrType.show other}'"
             bindLocal tools "__record" (Expr.make (MakeRecord(slots |> List.map (fun (name, _) -> name, byName.[name]))) recordTy) (fun record ->
                 bindLocal tools "__box" (Expr.make (MakeClosure(tools.Reader recordTy, 1, [ AVar record ])) IrBox) (fun box -> Expr.make (Atom(AVar box)) IrBox))
         | ((name, fieldType), box) :: rest -> decanonical tools fieldType box (fun value -> unboxAll rest ((name, value) :: acc))
