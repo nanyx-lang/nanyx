@@ -36,7 +36,10 @@ public sealed record InfoViewResult
 /// <summary>
 /// A scope at the position. <see cref="Kind"/> is one of <c>messages</c> (first, only when the position's line has a
 /// diagnostic, with its <see cref="Messages"/> and no sections), <c>expression</c> (next, with the section
-/// <c>type</c>, only when there is an expression there that no scope below shows), or in its place <c>type</c> (a
+/// <c>type</c>, only when there is an expression there that no scope below shows), then <c>definition</c> (only when
+/// the expression refers to or calls a def outside the def around the position: its <c>signature</c>, as declared, what
+/// this use fills in each of its type variables, <c>filled</c>, and the <c>contexts</c> it requires, each with where the
+/// call finds it; see <c>InfoView.Called</c>), or in place of the expression <c>type</c> (a
 /// type there: its <c>definition</c>, a selected type's <c>type</c>, or the <c>contexts</c> of a type variable),
 /// <c>lambda</c> (<c>type</c>, <c>names</c>, <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>,
 /// <c>contexts</c>, <c>flow</c>), <c>typeDefinition</c> (<c>definition</c>, <c>parameters</c>, <c>attached</c>) and
@@ -48,7 +51,7 @@ public sealed record InfoViewResult
 /// text, a lambda by its parameters and line, a <c>for</c> loop's as the loop is written, with its line, a def by its
 /// name, a type as declared, the module by its declared name. <see cref="Documentation"/> is the module's doc comment.
 /// <see cref="Collapsed"/> says whether a client shows it closed at first: the module, and the scopes after the third,
-/// not counting the messages and the expression.
+/// not counting the messages, the expression and the def it calls.
 /// </summary>
 public sealed record InfoViewScope
 {
@@ -145,7 +148,8 @@ public sealed record InfoViewName(int Start, int Length)
 /// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel, by scope, innermost first.
 /// First, if the position's line has any, its diagnostics, each in full (see <see cref="InfoViewMessage"/>). Then the
 /// expression selected, or with no selection the one at the position, with its type, as hover writes it (see
-/// <see cref="InfoView.expressionAt"/>), or in its place the type there (see <see cref="InfoView.typeAt"/>). Then each
+/// <see cref="InfoView.expressionAt"/>), and below it the def it refers to or calls, as declared, or in its place the
+/// type there (see <see cref="InfoView.typeAt"/>). Then each
 /// lambda and def around the position (see <see cref="InfoView.Scope"/>): a lambda's type, with the contexts it
 /// carries, a def's signature and doc comment, the parameters, locals and pattern variables each declares, the
 /// contexts each provides, and in the innermost def the flow of contexts through it, each provider with the calls it
@@ -257,6 +261,67 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             };
         }
 
+        // The def the expression refers to or calls, as declared: its generic signature, what this use fills in each of
+        // its type variables, and where the call finds each context it requires.
+        InfoViewScope DefinitionScope(InfoView.Called called)
+        {
+            var sections = new List<InfoViewSection>();
+            if (called.Signature?.Value is { } type)
+            {
+                sections.Add(new InfoViewSection
+                {
+                    Id = "signature",
+                    Title = "Signature",
+                    Items =
+                    [
+                        AsDeclared(called.Symbol.Name, type, new InfoViewItem
+                        {
+                            Text = Signature(called.Symbol.Name, type),
+                            Name = new InfoViewName(0, called.Symbol.Name.Length),
+                            Location = Locate(called.Span),
+                            Documentation = DocOf(called.Symbol)
+                        }, null)
+                    ]
+                });
+            }
+
+            if (!called.Filled.IsEmpty)
+            {
+                sections.Add(new InfoViewSection
+                {
+                    Id = "filled",
+                    Title = "At this call",
+                    Items = called.Filled.Select(filled => new InfoViewItem { Text = $"{filled.Item1} = {filled.Item2}" }).ToList()
+                });
+            }
+
+            if (!called.Contexts.IsEmpty)
+            {
+                sections.Add(new InfoViewSection
+                {
+                    Id = "contexts",
+                    Title = "Contexts",
+                    Items = called.Contexts.Select(context => new InfoViewItem
+                    {
+                        Text = context.Context,
+                        Name = InfoViewName.AtStart(context.Context, context.Name),
+                        Detail = context.Source?.Value is { } source ? Describe(source) : null,
+                        Location = Locate(context.Span),
+                        Documentation = context.Documented.Select(DocOf).FirstOrDefault(doc => doc is not null)
+                    }).ToList()
+                });
+            }
+
+            return new InfoViewScope
+            {
+                Kind = "definition",
+                Label = called.Heading.Label?.Value,
+                Heading = called.Heading.Code,
+                Location = Locate(called.Span),
+                Sections = sections
+            };
+        }
+
         var scopes = new List<InfoViewScope>();
         if (expression is not null)
         {
@@ -284,6 +349,11 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                     }
                 ]
             });
+        }
+
+        if (expression?.Called?.Value is { } called)
+        {
+            scopes.Add(DefinitionScope(called));
         }
 
         if (typeAt is not null)
@@ -425,7 +495,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                 ? scope with { Sections = scope.Sections.Select(section => AsType(section, expression.Type)).ToList() }
                 : scope)
             .ToList();
-        var expressionScopes = shown.Count(scope => scope.Kind is "expression" or "type");
+        var expressionScopes = shown.Count(scope => scope.Kind is "expression" or "definition" or "type");
         return new InfoViewResult
         {
             // The side bar is narrow: past the third scope around the position they start closed, as the module always
@@ -496,8 +566,8 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
     /// item's detail says what it is, a local or a parameter, so two that say different things are both kept, but one
     /// that says nothing, as the expression at the top, repeats any. A def's signature is never left out, though the
     /// module's names list the def too: it is what the def's scope is about. So the cursor on a def's name shows its
-    /// signature only in the def's scope, with its doc comment. A section left with no items is left out, and so is a
-    /// scope left with no sections.
+    /// signature only in the def's scope, with its doc comment. The scope of a def the expression calls is kept whole. A
+    /// section left with no items is left out, and so is a scope left with no sections.
     /// </summary>
     internal static IReadOnlyList<InfoViewScope> WithoutRepeats(IReadOnlyList<InfoViewScope> scopes)
     {
@@ -511,9 +581,10 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         var kept = new List<InfoViewScope>();
         foreach (var scope in scopes.Reverse())
         {
-            // A def's signature is what its scope is about, so it is kept though the module's names list the def too.
+            // A def's signature is what its scope is about, so it is kept though the module's names list the def too. A
+            // called def's scope says what this use finds, so it is kept whole.
             var sections = scope.Sections
-                .Select(section => section.Id == "signature" ? section : section with { Items = section.Items.Where(item => !Repeats(item)).ToList() })
+                .Select(section => section.Id == "signature" || scope.Kind == "definition" ? section : section with { Items = section.Items.Where(item => !Repeats(item)).ToList() })
                 .Where(section => section.Items.Count > 0)
                 .ToList();
             foreach (var item in scope.Sections.SelectMany(section => section.Items))

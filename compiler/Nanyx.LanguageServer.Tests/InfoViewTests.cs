@@ -868,4 +868,86 @@ public sealed class InfoViewTests : LanguageServerTestBase
             [("c", "parameter"), ("elem", "associated type")],
             Section(inIter, "typeDefinition", "parameters").Select(item => (item.Text, item.Detail)));
     }
+
+    [Fact]
+    public async Task Info_view_shows_the_called_def_as_declared_below_the_call()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("info-view-called.nyx"));
+
+        Open(uri, """
+            context Log = (log: string -> ())
+            --| Says hello.
+            def foo: [Log] () -> () = { log("hello") }
+            def main: [Log] () -> () = {
+              foo()
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 4, 3);
+
+        Assert.Equal(["expression", "definition", "function", "module"], view.Scopes.Select(scope => scope.Kind));
+        var definition = view.Scopes[1];
+        Assert.Equal(("def foo", new Range(2, 4, 2, 7)), (definition.Heading, definition.Location?.Range));
+        var signature = Assert.Single(Section(view, "definition", "signature"));
+        Assert.Equal(("foo: [Log] () -> ()", "Says hello."), (signature.Text, signature.Documentation));
+        // Not generic, so nothing is filled in.
+        Assert.DoesNotContain(definition.Sections, section => section.Id == "filled");
+        // The call finds `Log` in `main`'s signature.
+        var context = Assert.Single(Section(view, "definition", "contexts"));
+        Assert.Equal(("Log", "signature"), (context.Text, context.Detail));
+        Assert.Equal(3, context.Location?.Range.Start.Line);
+    }
+
+    [Fact]
+    public async Task Info_view_shows_what_a_call_fills_in_the_called_defs_type_variables()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Filled");
+
+        Open(uri, """
+            def apply: a, (a -> b) -> b = { x, f -> f(x) }
+            def main = { 3 \apply { n -> "{n}" } }
+            def same: [Eq(a)] a, a -> bool = { x, y -> x == y }
+            def check = { same(1, 2) }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 1, 17);
+
+        // The expression has the types at this use; the def keeps its own.
+        Assert.Equal(["expression", "definition"], view.Scopes.Select(scope => scope.Kind).Take(2));
+        Assert.Equal("int, (int -> string) -> string", Assert.Single(Section(view, "expression", "type")).Text);
+        Assert.Equal("apply: a, (a -> b) -> b", Assert.Single(Section(view, "definition", "signature")).Text);
+        Assert.Equal(["a = int", "b = string"], Section(view, "definition", "filled").Select(item => item.Text));
+        Assert.Equal("At this call", view.Scopes[1].Sections.Single(section => section.Id == "filled").Title);
+
+        // A context is at the types of the call, with where the call finds it.
+        var check = await InfoViewAt(uri, 3, 15);
+        Assert.Equal("same: [Eq(a)] a, a -> bool", Assert.Single(Section(check, "definition", "signature")).Text);
+        Assert.Equal(["a = int"], Section(check, "definition", "filled").Select(item => item.Text));
+        Assert.Equal([("Eq(int)", "built in")], Section(check, "definition", "contexts").Select(item => (item.Text, item.Detail)));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_no_called_def_for_a_parameter_or_a_recursive_call()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-NoCalled");
+
+        Open(uri, """
+            def count: int -> int = { n -> if n <= 0 then 0 else count(n - 1) }
+            def run: (int -> int) -> int = { f -> f(1) }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // Inside `count`, its own scope shows it, once.
+        var recursive = await InfoViewAt(uri, 0, 55);
+        Assert.Equal(["expression", "function", "module"], recursive.Scopes.Select(scope => scope.Kind));
+        Assert.Single(recursive.Scopes.Where(scope => scope.Heading == "def count"));
+        // A parameter has no definition of its own.
+        var parameter = await InfoViewAt(uri, 1, 38);
+        Assert.DoesNotContain(parameter.Scopes, scope => scope.Kind == "definition");
+    }
 }
