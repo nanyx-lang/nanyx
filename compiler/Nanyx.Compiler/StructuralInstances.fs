@@ -275,7 +275,9 @@ module internal StructuralInstances =
     /// The text a derived `toString` writes for `value`, a measured value of `dimension` stored as `storage`, by a
     /// prelude function, where the storage is an `int` or a `float`, or a type that converts to one: its number of
     /// default storage units, in the largest of `units` it is a whole number of for an integer, and in the largest its
-    /// magnitude is at least 1 of for a float. Zero is written in the dimension's default display unit, `0s`. An
+    /// magnitude is at least 1 of for a float. Zero is written in the dimension's default display unit, `0s`. Where
+    /// the default storage unit is made up, as no declared unit is one, an integer no unit fits is written as an exact
+    /// decimal of the smallest unit it is one of, `2.6mm`. An
     /// integer no unit fits and a value of any other storage, one of a type variable's, are written in the default
     /// storage unit, through the storage's own `ToString`, or as `dbg` writes them, `Time(500)`, if the module sees no
     /// default storage unit. A value of a derived dimension is written in its parts' default display units, multiplied
@@ -336,7 +338,19 @@ module internal StructuralInstances =
             match asInt, asFloat with
             | Some number, _ ->
                 let whole = units |> List.filter (fun info -> Rational.isWhole info.Scale)
-                inUnits InterpolationHoles.measuredIntFunction number (whole |> List.map _.Name) (whole |> List.map (fun info -> integer info.Scale.Numerator)) display
+                // Where the default storage unit is made up, a value no unit fits is written as a decimal of one.
+                let decimals =
+                    if units |> List.exists UnitInfo.isStorage then []
+                    else whole |> List.sortBy (fun info -> info.Scale.Numerator)
+                call InterpolationHoles.measuredIntFunction [
+                    number
+                    expr (ListExpr (whole |> List.map (_.Name >> text)))
+                    expr (ListExpr (whole |> List.map (fun info -> integer info.Scale.Numerator)))
+                    text display
+                    expr (ListExpr (decimals |> List.map (_.Name >> text)))
+                    expr (ListExpr (decimals |> List.map (fun info -> integer info.Scale.Numerator)))
+                    text before
+                    text after ]
             | _, Some number ->
                 let scales = units |> List.map (fun info -> expr (LiteralExpr (FloatLit (Rational.toFloat info.Scale))))
                 inUnits InterpolationHoles.measuredFloatFunction number (units |> List.map _.Name) scales display

@@ -1807,6 +1807,17 @@ def f = { r -> (...r, a = 1) }  -- error NYX0231: A spread (`...`) needs a recor
 
 To fix it, annotate the value's type, so that its fields are known.
 
+A spread of an open record, one whose type ends with `...`, can set the fields it is known to have, `(...p, x = 2)`,
+and makes a record of its own type. It can't add another field, or be joined with another record, since the fields it
+may have besides aren't known:
+
+```nanyx
+def f: (x: int, ...r) -> int = { p ->
+  def q = (...p, z = 1)  -- error NYX0231: A spread of a record that may have more fields can only set the fields it is known to have, and 'z' isn't one of them: write the record's type with all its fields, closed, as in `(x: int, y: int)`, to make a record of other fields
+  q.x
+}
+```
+
 # NYX0232: Scoped context is neither protected nor private
 
 A `scoped context` is declared neither `protected` nor `private`. A scoped context must be one or the other, so that
@@ -2903,23 +2914,6 @@ unit instant: Speed = 1m / 0s  -- error NYX0298: `0s` is nothing, so 'instant' w
 ```
 
 To fix it, define it from a number of units that isn't zero.
-
-# NYX0299: Dimension with no unit to store it in
-
-A dimension's values are stored as a number of its default storage unit: the largest unit that every unit declared
-with the dimension is a whole number of. No declared unit is one, so there is none to store its values in
-([Units of measure](../advanced/units-of-measure#dimensions-and-units)). An inch is 25.4 millimetres, so neither is a
-whole number of the other.
-
-```nanyx
-dimension Distance  -- error NYX0299: No unit of 'Distance' is one that every other is a whole number of, ...
-
-unit mm: Distance
-unit inch: Distance = 25.4mm
-```
-
-To fix it, declare the unit the message names, which every unit of the dimension is a whole number of:
-`unit tenthMm: Distance = 0.2mm`.
 
 # NYX0300: Unit that is no whole number of the storage unit
 

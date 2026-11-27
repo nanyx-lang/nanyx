@@ -40,13 +40,22 @@ let ``The default storage unit need not be the unit the others are defined from`
     Assert.Equal("1000", Rational.text units["s"].Scale)
 
 [<Fact>]
-let ``A dimension no unit of which every unit is a whole number of is NYX0299, naming the unit it needs`` () =
-    let code, message, at = onlyDiagnostic (withFinalNewline "dimension Distance\nunit mm: Distance\nunit inch: Distance = 25.4mm")
-    Assert.Equal(DiagnosticCodes.NoStorageUnit.Code, code)
-    Assert.Equal(
-        "No unit of 'Distance' is one that every other is a whole number of, so there is none to store its values in: add a unit of 0.2mm, which every unit of 'Distance' is a whole number of",
-        message)
-    Assert.Equal("dimension Distance", at)
+let ``A dimension no unit of which every unit is a whole number of is stored in a unit made up for it`` () =
+    let units =
+        unitsOf "dimension Distance\n@baseUnit unit m: Distance = 1_000mm\nunit inch: Distance = 25.4mm\nunit mm: Distance\n"
+    Assert.Equal<string list * string list>(([], [ "m" ]), storageAndDisplay "Distance" units)
+    Assert.Equal("5", Rational.text units["mm"].Scale)
+    Assert.Equal("127", Rational.text units["inch"].Scale)
+    Assert.Equal("5000", Rational.text units["m"].Scale)
+    let unmarked = unitsOf "dimension Distance\nunit mm: Distance\nunit inch: Distance = 25.4mm\n"
+    Assert.Equal<string list * string list>(([], [ "mm" ]), storageAndDisplay "Distance" unmarked)
+
+[<Fact>]
+let ``A number of a made-up storage unit that isn't whole is named by the decimal the unit is`` () =
+    let code, message, _ =
+        onlyDiagnostic (withFinalNewline "dimension Distance\nunit mm: Distance\nunit inch: Distance = 25.4mm\ndef x: Distance(int) = 0.1mm")
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, code)
+    Assert.Contains("'0.1mm' is 1/2 of a '0.2mm'", message)
 
 [<Fact>]
 let ``@storageUnit sets the default storage unit, and a unit that is no whole number of it is NYX0300`` () =
@@ -83,3 +92,14 @@ let ``A unit declared outside its dimension's module is a whole number of its de
         "'ps' is 1/1000 of 'ns', the default storage unit of 'Time', which is declared in another module: a unit of it declared here is a whole number of its default storage unit, so that it doesn't change what a 'Time' holds",
         message)
     Assert.Equal("unit ps: Time = 0.001ns", at)
+
+[<Fact>]
+let ``A unit declared outside its dimension's module that is no whole number of a made-up storage unit names it as a decimal`` () =
+    let distanceModule = "module mod\nexport dimension Distance\nexport unit mm: Distance\nexport unit inch: Distance = 25.4mm\n"
+    let fraction = "import mod\nunit thou: Distance = 0.001inch\n"
+    let code, message, at = onlyDiagnosticIn fraction (compileImporting distanceModule fraction)
+    Assert.Equal(DiagnosticCodes.UnitNotWholeStorageUnits.Code, code)
+    Assert.Equal(
+        "'thou' is 127/1000 of 0.2mm, the default storage unit of 'Distance', which is declared in another module: a unit of it declared here is a whole number of its default storage unit, so that it doesn't change what a 'Distance' holds",
+        message)
+    Assert.Equal("unit thou: Distance = 0.001inch", at)

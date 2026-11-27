@@ -125,6 +125,10 @@ def moved = moveRight(x = 1, y = 2, label = "a")
 println("{moved.label} is at {moved.x}") -- a is at 2
 ```
 
+A spread does the same: `(...p, x = p.x + 1)` is `p` with its `x` set, of `p`'s own type. It can set only the fields the
+type says `p` has, since whatever else `p` has may already be any of the others: a spread of an open record can't add a
+field (NYX0231).
+
 `...` only covers named fields. A record's positional fields are always exactly the ones its type lists, so a function of two positional parameters can't be called with three.
 
 You rarely need to write `...` yourself. When the compiler infers a function's type from the fields it reads, the type it infers is already open:

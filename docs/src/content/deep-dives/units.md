@@ -55,12 +55,17 @@ scale of the unit it is a multiple of: a unit of one of the module's own dimensi
 multiple, and any other to its dimension's default storage unit, as an imported unit is. Then `Units.storageUnits` picks
 each own dimension's **default storage unit**: the unit `@storageUnit` marks, or else the largest unit that every unit
 declared with the dimension is a whole number of, the greatest common divisor of their scales
-(`Rational.greatestCommonDivisor`), which must be one of them. Every scale is divided by it (`Units.inStorageUnits`), a
-derived dimension's by each part's raised to the part's power, so the default storage unit's scale is one
-(`UnitInfo.isStorage`). Only the units declared with a dimension count: a unit another module declares of it,
+(`Rational.greatestCommonDivisor`). If no declared unit is that one, it is made up: it has no name and no `UnitInfo`, and
+messages write it as an exact decimal of the smallest unit it is one of, `0.2mm` for `mm` and `inch = 25.4mm`
+(`Rational.smallestDecimalOf`, `UnitInfo.storageText`). There always is one, as every scale is a written decimal times
+another unit's, so a decimal multiple of the unit the others are defined from, and so is their greatest common divisor.
+Every scale is divided by it (`Units.inStorageUnits`), a
+derived dimension's by each part's raised to the part's power, so a declared default storage unit's scale is one
+(`UnitInfo.isStorage`), and where it is made up no unit's is. Only the units declared with a dimension count: a unit another module declares of it,
 `unit tick: Time = 10ns`, is checked against the dimension's default storage unit and never changes it, as adding a
 unit in one module must not change what every `Time(int)` holds, an `Instant`'s nanoseconds among them. The **default
-display unit** is the unit `@baseUnit` marks, or else the default storage unit. `Units.declare` reports:
+display unit** is the unit `@baseUnit` marks, or else the default storage unit, or, where that is made up, the smallest
+unit it is a decimal of. `Units.declare` reports:
 
 - a dimension of the module's with no units, a second unit of one that is no multiple of another, and a unit of a
   dimension another module declares that is no multiple ([`NYX0286`](../standard-tools/errors#nyx0286));
@@ -74,9 +79,6 @@ display unit** is the unit `@baseUnit` marks, or else the default storage unit. 
 - a unit of a derived dimension with no definition, or marked `@baseUnit` or `@storageUnit`
   ([`NYX0297`](../standard-tools/errors#nyx0297));
 - a unit defined as nothing, `0ms`, or divided by nothing ([`NYX0298`](../standard-tools/errors#nyx0298));
-- a dimension no unit of which every unit declared with it is a whole number of, naming the unit it needs as a decimal
-  of the smallest unit it can be written in, `0.2mm` for `mm` and `inch = 25.4mm`
-  ([`NYX0299`](../standard-tools/errors#nyx0299));
 - a unit that is no whole number of the unit `@storageUnit` marks, and a unit declared outside its dimension's module
   that is no whole number of the dimension's default storage unit ([`NYX0300`](../standard-tools/errors#nyx0300));
 - a unit of a name that is no dimension (`NYX0109`), and a unit declared twice (`NYX0113`).
@@ -151,9 +153,11 @@ storage, since no scheme can name every dimension, and which the backend compile
 is its storage.
 
 For an `int` storage, or a sized integer that converts to one, the definition calls the prelude's
-`__measuredIntToString` with the number, the units' names and their scales, the default display unit's name, and the
-text to write around a number of default storage units: it writes the number in the first unit it is a whole number
-of, `2min` for `120s`, zero in the default display unit, `0s`, and a number no unit fits in the default storage unit. A
+`__measuredIntToString` with the number, the units' names and their scales, the default display unit's name, the units
+again from the smallest where the default storage unit is made up, and the text to write around a number of default
+storage units: it writes the number in the first unit it is a whole number of, `2min` for `120s`, zero in the default
+display unit, `0s`, and a number no unit fits in the default storage unit. Where that is made up, a number no unit fits
+is written as an exact decimal of the smallest unit it is one of instead: 13 of 0.2mm is `2.6mm`. A
 `float` or `F32` storage calls `__measuredFloatToString`, which writes the number in the first unit its magnitude is at
 least 1 of, `1.5s`, `2.0min` for `120s`, and in the last, the smallest, when it is under 1 of every unit, `0.25ns`,
 as a float is written, and zero as `0.0s`. A number within a millionth of a millionth of a whole one, relatively,

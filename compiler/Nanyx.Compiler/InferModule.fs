@@ -473,6 +473,12 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                                 match contextVariables with
                                 | [] -> resolvedState
                                 | names -> { resolvedState with ContextRequirements = resolvedState.ContextRequirements |> Map.add name (written @ (names |> List.map (TypeVar >> TypeExpr.synthetic))) }
+                            let scheme =
+                                if expectedDeclaredOpt.IsSome then scheme
+                                else
+                                    let scheme, closed = NeverReturns.close state name expr.Span scheme
+                                    state <- closed
+                                    scheme
                             env <- declareTopLevel name symbol scheme env
                             types <- types |> Map.add name declaredTy
                             state <- { state with AssociatedVariables = state.AssociatedVariables @ associatedVariables state contextOpt }

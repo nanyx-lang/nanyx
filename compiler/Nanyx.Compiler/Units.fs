@@ -369,10 +369,12 @@ module internal Units =
             scaleOf [] name |> ignore
         found, List.ofSeq errors
 
-    /// The default storage unit of each of the module's own dimensions, by the dimension's identity, as its name and
-    /// its scale in `found`, with the errors in them. It is the unit `@storageUnit` marks, or else the largest unit
-    /// that every unit declared with the dimension is a whole number of, which must be one of them. A dimension with a
-    /// unit whose scale isn't found has none, as the unit's definition is reported.
+    /// The default storage unit of each of the module's own dimensions, by the dimension's identity, as the name of the
+    /// unit its values are displayed in if `@baseUnit` marks none and its scale in `found`, with the errors in them. It
+    /// is the unit `@storageUnit` marks, or else the largest unit that every unit declared with the dimension is a whole
+    /// number of. If no declared unit is that one it is made up, and its values are displayed in the smallest unit it is
+    /// an exact decimal of: with `mm` and `inch = 25.4mm`, it is 0.2mm, displayed in `mm`. A dimension with a unit whose
+    /// scale isn't found has none, as the unit's definition is reported.
     let private storageUnits (state: InferState) (items: TopLevelItem list) (declared: (Declared * Dimension) list) (found: Map<string, Rational>) =
         let chosen =
             ownDimensions state items
@@ -391,24 +393,21 @@ module internal Units =
                                 Diagnostics.at DiagnosticCodes.UnitNotWholeStorageUnits unit.Item.Span
                                     $"'{unit.Name}' is {Rational.text (Rational.divide scale storageScale)} of '{storage.Name}', the default storage unit of '{name}' that `@{UnitSyntax.storageUnitAttribute}` marks, but every unit of '{name}' declared with it is a whole number of its default storage unit: mark a unit that '{unit.Name}' is a whole number of `@{UnitSyntax.storageUnitAttribute}`, or mark none to have one worked out"
                                 |> Diagnostics.about unit.Name)
-                        Some (dimensionId, Ok (storage.Name, storageScale), errors)
+                        Some (dimensionId, (storage.Name, storageScale), errors)
                     | None ->
                         let divisor = scales |> List.map snd |> List.reduce Rational.greatestCommonDivisor
                         match scales |> List.tryFind (fun (_, scale) -> scale = divisor) with
-                        | Some (storage, _) -> Some (dimensionId, Ok (storage.Name, divisor), [])
+                        | Some (storage, _) -> Some (dimensionId, (storage.Name, divisor), [])
                         | None ->
-                            // The unit it would need, as a decimal of the smallest unit it is one of.
-                            let needed =
-                                scales
-                                |> List.sortWith (fun (_, a) (_, b) -> compare (a.Numerator * b.Denominator) (b.Numerator * a.Denominator))
-                                |> List.tryPick (fun (unit, scale) -> Rational.decimalText (Rational.divide divisor scale) |> Option.map (fun number -> number + unit.Name))
-                                |> Option.defaultWith (fun () -> $"{Rational.text divisor} of a {(fst scales.Head).Name}")
-                            let error =
-                                Diagnostics.at DiagnosticCodes.NoStorageUnit item.Span
-                                    $"No unit of '{name}' is one that every other is a whole number of, so there is none to store its values in: add a unit of {needed}, which every unit of '{name}' is a whole number of"
-                                |> Diagnostics.about name
-                            Some (dimensionId, Error (), [ error ]))
-        let storage = chosen |> List.choose (fun (id, storage, _) -> storage |> Result.toOption |> Option.map (fun storage -> id, storage)) |> Map.ofList
+                            // No unit is one, so the storage unit is made up, with no name. Each unit's scale is a
+                            // decimal times another's, so it is a decimal of one of them, and its values are displayed
+                            // in the smallest of those.
+                            let display =
+                                Rational.smallestDecimalOf divisor scales
+                                |> Option.map fst
+                                |> Option.defaultValue (fst scales.Head)
+                            Some (dimensionId, (display.Name, divisor), []))
+        let storage = chosen |> List.map (fun (id, storage, _) -> id, storage) |> Map.ofList
         storage, chosen |> List.collect (fun (_, _, errors) -> errors)
 
     /// The errors in the units `declared` of dimensions declared in other modules, scaled to their default storage
@@ -419,12 +418,15 @@ module internal Units =
         |> List.choose (fun (unit, dimension) ->
             match dimension, found |> Map.tryFind unit.Name with
             | [ id, 1 ], Some scale when id.Home <> state.Home && not (Rational.isWhole scale) ->
+                // A declared unit is named in quotes, and one made up is written as the decimal it is, 0.2mm.
+                let units = state.Units |> Map.values |> Seq.filter (fun info -> info.Dimension = dimension) |> List.ofSeq
                 let storage =
-                    state.Units
-                    |> Map.tryPick (fun name info -> if info.Dimension = dimension && UnitInfo.isStorage info then Some name else None)
+                    match units |> List.tryFind UnitInfo.isStorage with
+                    | Some storage -> Some $"'{storage.Name}'"
+                    | None -> UnitInfo.storageText units
                 let what =
                     match storage with
-                    | Some storage -> $"'{unit.Name}' is {Rational.text scale} of '{storage}', the default storage unit of '{unit.DimensionName}'"
+                    | Some storage -> $"'{unit.Name}' is {Rational.text scale} of {storage}, the default storage unit of '{unit.DimensionName}'"
                     | None -> $"'{unit.Name}' is no whole number of the default storage unit of '{unit.DimensionName}'"
                 Some (
                     Diagnostics.at DiagnosticCodes.UnitNotWholeStorageUnits unit.Item.Span
