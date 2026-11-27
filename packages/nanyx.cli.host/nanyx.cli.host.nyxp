@@ -8,6 +8,7 @@
     host = (
       root = "cli.host"
       prelude = "cli.prelude"
+      filesInMemory = "cli.host.memory"
       component = (
         root = "cli.host.wasi"
         world = "nanyx:console/command"

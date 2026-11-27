@@ -1,0 +1,28 @@
+--| The console host's root for a run with its files in memory: `nanyx run --files-in-memory`, as
+  the editor's live mode runs a program, builds the program from it in place of `cli.host`. Its
+  [`run`] runs the entry point in the contexts `cli.host`'s `provide` provides, but for a
+  `FileSystem` that keeps what the program writes, appends, makes and deletes in memory, over the
+  real files (see `nanyx.fs`'s `filesystem.overlay`), so nothing the program does reaches the disk.
+  A program built without the flag is built from `cli.host`, and has none of this.
+export module cli.host.memory
+
+import (
+  nanyx/async as (Async)
+  nanyx/clock as (Clock)
+  nanyx/host.runtime
+  nanyx/random as (Random)
+  nanyx.cli/console as (Console)
+  nanyx.cli/env as (Env)
+  nanyx.cli.host/cli.host as host
+  nanyx.fs/filesystem as (FileSystem)
+  nanyx.fs/filesystem as filesystem
+  nanyx.http/client as (Http)
+)
+
+--| Runs `entry`, the program's entry point, in the contexts `cli.host`'s `provide` provides, with its
+  `FileSystem` in memory over the real one. What `entry` returns is ignored.
+export def run
+  : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> ()
+  = { entry ->
+    ignore(host.provide({ -> filesystem.overlay(entry) }))
+  }

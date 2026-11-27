@@ -231,7 +231,7 @@ internal static partial class CliCommands
     /// <param name="yieldAtEveryWait">Make every call that can wait stop once and be resumed: for working on the compiler, to run each way a function that waits has of stopping and carrying on.</param>
     /// <param name="allowDir">A directory the program may read and write besides the current directory, which it always may. A path outside them is #permissionDenied.</param>
     /// <param name="profile">Sample the run with Wasmtime's guest profiler and write the profile to this file, in the Firefox profiler's format, to open at profiler.firefox.com.</param>
-    /// <param name="filesInMemory">Run the program with its files in memory: it reads the real files until it writes, appends to or deletes them, and nothing it does reaches the disk. The console host does this when the environment variable NANYX_FILES_IN_MEMORY is 1, which this sets for the program.</param>
+    /// <param name="filesInMemory">Run the program with its files in memory: it reads the real files until it writes, appends to or deletes them, and nothing it does reaches the disk. The program is built from its host's root for this, which the console host has.</param>
     [Consolo("run")]
     public static int Run(
         [Consolo("check-memory")] bool checkMemory = false,
@@ -289,6 +289,16 @@ internal static partial class CliCommands
             return testPackage;
         }
 
+        if (filesInMemory)
+        {
+            if (PackageModule.inMemory(package) is not { } inMemory)
+            {
+                return NoFilesInMemory(shell, package.Host);
+            }
+
+            package = inMemory.Value;
+        }
+
         // As for a script, stdout belongs to the program, so the build's diagnostics go to stderr, in the run's box.
         using var box = RunBox.For(shell, $"run {package.Manifest.Name}");
         var compiling = box is null ? shell : shell with { Error = box.Lines };
@@ -311,7 +321,7 @@ internal static partial class CliCommands
         }
 
         ReportDeferredRun(compiling, deferred, build.Diagnostics);
-        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls, directories, HostSettings.port(package.Host, package.Manifest.Host), package.Manifest.Root, profile, yieldAtEveryWait, filesInMemory);
+        return RunProgram(compiling, entry.Value, deferred, memoryCheck, timings, [package.Manifest.Name, .. programArguments], inlineCalls, directories, HostSettings.port(package.Host, package.Manifest.Host), package.Manifest.Root, profile, yieldAtEveryWait);
     }
 
     /// <summary>
@@ -611,10 +621,13 @@ internal static partial class CliCommands
     /// Compiles a script, as <see cref="Script.compileFile"/> does, with a stopwatch on the shell's stderr while that is
     /// a terminal, and each module's time after it with <paramref name="timings"/> (see <see cref="CompileProgress"/>).
     /// </summary>
-    internal static CompileResult CompileScript(Shell shell, string inputFile, bool timings)
+    internal static CompileResult CompileScript(Shell shell, string inputFile, bool timings, bool filesInMemory = false)
     {
         using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)), shell.DisplayPath, timings);
-        var result = Script.compileFileReportingIn(shell.Packages, progress.Listener, shell.FullPath(inputFile));
+        // With its files in memory, the script is built from its host's root for that (see `Host.InMemory`).
+        var result = filesInMemory
+            ? Script.compileFileRehostedReportingIn(FuncConvert.FromFunc<Host, Host>(host => host.InMemory?.Value ?? host), shell.Packages, progress.Listener, shell.FullPath(inputFile))
+            : Script.compileFileReportingIn(shell.Packages, progress.Listener, shell.FullPath(inputFile));
         progress.Finish();
         return result;
     }
@@ -1100,6 +1113,17 @@ internal static partial class CliCommands
         }
     }
 
+    /// <summary>
+    /// The error for <c>run --files-in-memory</c> with a program whose host, <paramref name="host"/>, has no root that runs
+    /// it with its files in memory (see <c>Host.InMemory</c>).
+    /// </summary>
+    private static int NoFilesInMemory(Shell shell, FSharpOption<Host>? host)
+    {
+        var named = host is null ? "Its host" : $"The host '{host.Value.Package}'";
+        shell.Error.WriteLine($"error: --files-in-memory needs a host that can run a program with its files in memory, and {named.ToLowerInvariant()[0]}{named[1..]} can't: a host declares the root that does it with `filesInMemory` in its manifest.");
+        return UsageError;
+    }
+
     /// <summary>"2 deferred errors": the errors among <paramref name="diagnostics"/>, every one of them deferred.</summary>
     private static string DeferredErrors(FSharpList<Diagnostic> diagnostics)
     {
@@ -1166,21 +1190,26 @@ internal static partial class CliCommands
             return 1;
         }
 
-        var result = CompileScript(compiling, inputFile, timings);
-        return RunCompiledScript(compiling, inputFile, result, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile, yieldAtEveryWait, filesInMemory);
+        if (filesInMemory && Script.hostOf(compiling.Packages, compiling.FullPath(inputFile)) is { } host && host.Value.InMemory is null)
+        {
+            return NoFilesInMemory(compiling, host);
+        }
+
+        var result = CompileScript(compiling, inputFile, timings, filesInMemory);
+        return RunCompiledScript(compiling, inputFile, result, memoryCheck, timings, programArguments, inlineCalls, allowedDirectories, profile, yieldAtEveryWait);
     }
 
     /// <summary>Runs the script <paramref name="inputFile"/>, compiled to <paramref name="result"/>, as <c>run</c> does
     /// once it has compiled it: so a caller can compile a script once and run it more than one way, as the tests of the
     /// docs' examples run each with and without inlining.</summary>
-    internal static int RunCompiledScript(Shell shell, string inputFile, CompileResult result, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false, bool filesInMemory = false)
+    internal static int RunCompiledScript(Shell shell, string inputFile, CompileResult result, MemoryCheck memoryCheck, bool timings = false, string[]? programArguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, string? profile = null, bool yieldAtEveryWait = false)
     {
         PrintDiagnostics(shell, WorthStoppingFor(result.Diagnostics), shell.Error);
         // A debug run: type and name errors the compiler deferred do not stop it. Each is reported again if the
         // program reaches it.
         var deferred = ErrorsDeferred(result);
         ReportDeferredRun(shell, deferred, result.Diagnostics);
-        return RunProgram(shell, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.Packages, shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait, filesInMemory);
+        return RunProgram(shell, result, deferred, memoryCheck, timings, [inputFile, .. programArguments ?? []], inlineCalls, allowedDirectories, HostSettings.port(Script.hostOf(shell.Packages, shell.FullPath(inputFile)), FSharpOption<HostEntry>.None), null, profile, yieldAtEveryWait);
     }
 
     /// <summary>

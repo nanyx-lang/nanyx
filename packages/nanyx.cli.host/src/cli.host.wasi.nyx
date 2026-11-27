@@ -27,7 +27,6 @@ import (
   nanyx.cli/console as (Console, IoError)
   nanyx.cli/env as (Env)
   nanyx.fs/filesystem as (FileSystem, FsError)
-  nanyx.fs/filesystem as filesystem
   nanyx.fs/path as (Path)
   nanyx.http/client as (Http, HttpError)
   nanyx.http/request as (Method, Request)
@@ -180,19 +179,9 @@ export def provide
   }
 
 --| Runs `entry`, the program's entry point, in the contexts [`provide`] provides. What `entry`
-  returns is ignored. When the environment variable `NANYX_FILES_IN_MEMORY` is `1`, its
-  `FileSystem` keeps what it writes in memory, over the real files, as the preview 1 root's does
-  (see `cli.host`'s `run`).
+  returns is ignored.
 export def run
   : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> ()
   = { entry ->
-    ignore(
-      provide(
-        {
-          if variable("NANYX_FILES_IN_MEMORY") == #some("1")
-            then filesystem.overlay(entry)
-            else entry()
-        }
-      )
-    )
+    ignore(provide(entry))
   }

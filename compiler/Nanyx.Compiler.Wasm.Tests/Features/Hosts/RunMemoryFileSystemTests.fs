@@ -260,30 +260,13 @@ let ``Without --files-in-memory, what the program writes reaches the disk`` () =
     Assert.Equal("changed", File.ReadAllText(Path.Combine(directory.Path, "a.txt")))
     Assert.Equal("made", File.ReadAllText(Path.Combine(directory.Path, "made.txt")))
 
-/// What the program `nanyx wasm` built from `writing` does when another embedder runs it in `directory`, with the
-/// environment variables `variables`: what it printed.
-let private runBuilt (directory: TempDirectory) (variables: (string * string) list) =
-    let program = Path.Combine(directory.Path, "main.wasm")
-    let built = nanyxIn directory.Path [ "wasm"; "main.nyx"; "-o"; program ]
-    Assert.Equal(0, built.ExitCode)
-    let input = Path.Combine(directory.Path, "input.txt")
-    File.WriteAllText(input, "")
-    use output = new MemoryStream()
-    use error = new MemoryStream()
-    let io = Nanyx.Runtime.Redirected(input, output, error, variables)
-    match Nanyx.Runtime.WasmRunner.runBinary io [ "main" ] [ directory.Path ] (File.ReadAllBytes program) with
-    | Ok () -> System.Text.Encoding.UTF8.GetString(output.ToArray()).ReplaceLineEndings "\n"
-    | Error error -> failwith $"%A{error}"
-
 [<Fact>]
-let ``A built program writes to the disk as before, and keeps its files in memory only when given the variable`` () =
+let ``--files-in-memory under a host with no root for it is a usage error, and the program doesn't run`` () =
     use directory = new TempDirectory()
-    directory.Write "a.txt" "alpha"
-    directory.Write "main.nyx" writing
-    Assert.Equal("#some(alpha)\n#ok\n#ok\n#some(changed)\n#some(made)\n", runBuilt directory [ "NANYX_FILES_IN_MEMORY", "1" ])
-    Assert.Equal("alpha", File.ReadAllText(Path.Combine(directory.Path, "a.txt")))
-    Assert.False(File.Exists(Path.Combine(directory.Path, "made.txt")))
-
-    Assert.Equal("#some(alpha)\n#ok\n#ok\n#some(changed)\n#some(made)\n", runBuilt directory [])
-    Assert.Equal("changed", File.ReadAllText(Path.Combine(directory.Path, "a.txt")))
-    Assert.Equal("made", File.ReadAllText(Path.Combine(directory.Path, "made.txt")))
+    directory.Write "main.nyx" "::host nanyx.playground.host\n\nprintln(\"ran\")\n"
+    let outcome = nanyxIn directory.Path [ "run"; "--files-in-memory"; "main.nyx" ]
+    Assert.Equal(2, outcome.ExitCode)
+    Assert.Equal(
+        "error: --files-in-memory needs a host that can run a program with its files in memory, and the host 'nanyx.playground.host' can't: a host declares the root that does it with `filesInMemory` in its manifest.\n",
+        outcome.StandardError.ReplaceLineEndings "\n")
+    Assert.Equal("", outcome.StandardOutput)
