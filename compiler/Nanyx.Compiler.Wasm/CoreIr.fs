@@ -602,6 +602,25 @@ let closureOver (name: string) (arity: int) (captured: Atom list) (ty: IrType) :
     | [] -> { Kind = Atom(AStaticClosure(name, arity, ty)); Type = ty; Place = Places.Current }
     | _ -> { Kind = MakeClosure(name, arity, captured); Type = ty; Place = Places.Current }
 
+module StoreWalk =
+    /// The locals `walk` walks its store in, in the order the loop declares them.
+    let vars (walk: StoreWalk) : Var list =
+        [ walk.Root; walk.Pending; walk.Node; walk.LeafBits; walk.Leaves; walk.Remaining; walk.LeafIndex; walk.LeafEnd; walk.Depth; walk.Path ]
+
+    /// `walk` with each of its locals made what `f` makes it.
+    let mapVars (f: Var -> Var) (walk: StoreWalk) : StoreWalk =
+        { walk with
+            Root = f walk.Root
+            Pending = f walk.Pending
+            Node = f walk.Node
+            LeafBits = f walk.LeafBits
+            Leaves = f walk.Leaves
+            Remaining = f walk.Remaining
+            LeafIndex = f walk.LeafIndex
+            LeafEnd = f walk.LeafEnd
+            Depth = f walk.Depth
+            Path = f walk.Path }
+
 module ForLoop =
     /// The atoms a loop's streams start from, in the order its code reads them.
     let sourceAtoms (loop: ForLoop) =
@@ -617,7 +636,7 @@ module ForLoop =
         loop.Streams |> List.collect (fun stream ->
             [ stream.Cursor; stream.End; stream.Element ]
             @ (match stream.Source with
-               | OverStore(_, walk) -> [ walk.Root; walk.Pending; walk.Node; walk.LeafBits; walk.Leaves; walk.Remaining; walk.LeafIndex; walk.LeafEnd; walk.Depth; walk.Path ]
+               | OverStore(_, walk) -> StoreWalk.vars walk
                | _ -> []))
 
 module Pattern =

@@ -233,8 +233,7 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
         let value = tools.NewVar "__dbg_value" Param (tools.ToIrType ty)
         // The entries or elements of `value`, a map or a set, in a local, as the list the prelude's `toList` gives.
         let listed (collection: Ty) (elementTy: Ty) (k: Var -> Expr) =
-            let listTy = Lists.ofType elementTy
-            let toList = callee (match collection with Sets.SetType _ -> Sets.toList | _ -> Maps.toList) (TyFunc(collection, listTy, []))
+            let toList, listTy = storeListCall callee collection elementTy
             let elements = local "__dbg_elements" (tools.ToIrType listTy)
             Expr.letIn elements (Expr.make (Call(toList, [ AVar value ])) elements.Type) (k elements)
         let body =
@@ -280,7 +279,7 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
             // A map and a set are written as the list their `toList` gives, of their entries or elements, after their
             // type's name.
             | Maps.MapType(keyTy, valueTy) ->
-                let entryTy = TyRecord(Map.ofList [ "0", keyTy; "1", valueTy ], FieldOrder.none)
+                let entryTy = Maps.entryType keyTy valueTy
                 listed ty entryTy (fun entries ->
                     listText entries entryTy "Map" (fun entry k -> entryText entry keyTy valueTy k) (ShowingRest(entryTy, true)))
             | Sets.SetType elementTy ->
