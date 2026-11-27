@@ -74,7 +74,7 @@ def twice = { n -> apply({ m -> m * 2 }, n) }
 """
     let result = compileImporting (normalized library) main
     Assert.Empty(result.Diagnostics)
-    let info = InfoView.at Unicode "" result (main.IndexOf "apply")
+    let info = InfoView.at Unicode "" main result (main.IndexOf "apply")
     let apply = info.Scopes |> List.last |> _.Names |> List.find (fun name -> name.Name = "apply")
     Assert.Equal(Some "[κ] ([κ] α -> β), α -> β", apply.Type)
 
@@ -100,7 +100,7 @@ def run = { n -> apply({ m -> m + 1 }, n) }
         match Hover.typeAt Unicode result offset with
         | Some hover -> Assert.DoesNotContain("'", hover.Type)
         | None -> ()
-        for scope in (InfoView.at Unicode "" result offset).Scopes do
+        for scope in (InfoView.at Unicode "" source result offset).Scopes do
             for name in scope.Names do
                 Assert.DoesNotContain("'", name.Type |> Option.defaultValue "")
     for hint in TypeHints.inlayHintsWithTopLevel Unicode "" result do
