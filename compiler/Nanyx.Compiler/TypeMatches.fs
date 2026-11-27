@@ -112,8 +112,7 @@ let infer
         | TyVar _
         | TypeDescriptions.Skolem _ as target -> Some target
         | _ -> None
-    let expected =
-        state.ExpectedTypes |> Map.tryFind expr.Id |> Option.orElse (state.ExpectedBlockResults |> Map.tryFind expr.Id)
+    let expected = ExpectedLiterals.expectedOrBlockResultOf state expr
     let resultTy, state =
         match expected with
         | Some expected -> expected, state
