@@ -21,7 +21,7 @@ let private readsThroughIterable (env: TypeEnv) (current: InferState) (var: TyVa
     inScope || (match current.ContextScope with DefScope(_, true) -> true | _ -> false)
 
 /// `for xs, ys | arms`, at `expr`: the parser passes the iterables and a lambda of one element of each. Each iterable
-/// is anything `Iterable`, and the loop is unit. A `list(a)`, a `seq(a)`, a `map(k, v)` and a `set(a)` are walked as
+/// is anything `Iterable`, and the loop is unit. A `list(a)`, an `Array(a)`, a `seq(a)`, a `map(k, v)` and a `set(a)` are walked as
 /// they are; anything else is read as the prelude's `__toSeq(xs)`, its sequence. So is a type nothing has settled where
 /// something can require `Iterable` of it (see `readsThroughIterable`): an unannotated def that loops over its
 /// parameter, `{ xs -> for xs | x -> ... }`, requires `Iterable` of it. Anywhere else such a type is a list. The loop
@@ -42,6 +42,8 @@ let inferFor
                 | _ -> afterIterable
             match Unifier.unalias (resolveSoFar afterIterable typedIterable.Type) with
             | Lists.ListType elementTy -> Ok ((elementTy, false), afterIterable)
+            // An array is walked by index, as a list by its cells (#2207).
+            | Arrays.ArrayType elementTy -> Ok ((elementTy, false), afterIterable)
             | Seqs.SeqType elementTy -> Ok ((elementTy, (match iterable.Kind with RangeSyntax.Call(_, None) -> true | _ -> false)), afterIterable)
             // A map's elements are its entries, each a key and its value, and a set's its elements: the backend walks
             // the store (see `StoreWalk`).

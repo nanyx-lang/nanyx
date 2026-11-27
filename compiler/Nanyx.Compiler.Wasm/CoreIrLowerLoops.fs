@@ -32,7 +32,8 @@ let storeAsList
         fun (store: Atom) -> Expr.make (Call(name, [ store ])) (toIrType listTy))
 
 /// `for xs, ys | arms`: the body runs for each step, with each iterable's element in a local the body names by its
-/// parameter. A range counts from its start (to its end, if it has one); a list walks its cells; a map's or a set's
+/// parameter. A range counts from its start (to its end, if it has one); a list walks its cells; an array its elements,
+/// by index; a map's or a set's
 /// store walks its trie (see `StoreWalk`), which `walksStore` says an iterable is, and whether a set's. `depth` is how many
 /// loops enclose this one, which names its locals; `atoms` lowers the iterables' operands, and `lowerBody` the body,
 /// given `vars` with each parameter bound to its element's local.
@@ -81,6 +82,7 @@ let forEach
             match tyOf iterable, walksStore iterable with
             | storeTy, Some keys -> [ iterable ], fun atoms -> OverStore(atoms.Head, storeWalk storeTy keys), storeElement storeTy keys
             | IrList elementTy, None -> [ iterable ], fun atoms -> OverList atoms.Head, elementTy
+            | IrArray elementTy, None -> [ iterable ], fun atoms -> OverArray atoms.Head, elementTy
             | other, None -> cannot $"a `for` loop over a value of type '{IrType.show other}'"
     let walkers =
         iterables |> List.mapi (fun index _ ->
@@ -160,8 +162,14 @@ let forEachPulling
                         Expr.letIn past (Expr.make (Prim(Binary ">", [ AVar counter; AVar finish ])) IrBool) (Expr.make (If(AVar past, stop, body)) IrUnit)
                 walking, step
         | _ ->
-            // A map or a set walked in step with a sequence is walked as the list its `toList` gives.
-            let asList = storeAsList iterable
+            // A map or a set walked in step with a sequence is walked as the list its `toList` gives, and so is an
+            // array, whose index would need locals of its own here.
+            let asList =
+                storeAsList iterable
+                |> Option.orElse (
+                    match tyOf iterable with
+                    | IrArray elementTy -> Some (fun (array: Atom) -> Expr.make (CallRuntime(Intrinsics.arrayToList, [ array ], true)) (IrList elementTy))
+                    | _ -> None)
             let ty = match asList with Some toList -> (toList AUnit).Type | None -> tyOf iterable
             [ iterable ], fun atoms ->
                 let rest = local "__for_rest" ty
