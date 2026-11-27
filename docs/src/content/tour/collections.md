@@ -143,7 +143,7 @@ def m: map(string, int) = [] -- an empty map
 println(set.length(s))
 ```
 
-Writing the type's name before the brackets is like writing a record's type before its fields, `Point(x = 1, y = 2)`. The expected type can be a def's written type or the type a function takes: `total([1, 2])` passes an array to `total: Array(int) -> int`. With neither, plain items make a `list(a)` and `key => value` entries a `map(k, v)`; `[]` is the empty list.
+Writing the type's name before the brackets is like writing a record's type before its fields, `Point(x = 1, y = 2)`. The expected type can be a def's written type, the type a function takes, the result a lambda's type gives it, or a record field's type: `total([1, 2])` passes an array to `total: Array(int) -> int`, and `{ -> [1, 2] }` checked against `() -> Array(int)` gives back an array. With neither, plain items make a `list(a)` and `key => value` entries a `map(k, v)`; `[]` is the empty list.
 
 A type has literals when it has an attached `fromArray`. The compiler collects the items into an `Array`, which knows its length, and passes it in; a map-like type is given an `Array` of `(key, value)` tuples:
 

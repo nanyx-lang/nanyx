@@ -138,3 +138,32 @@ import nanyx/mstack
 def outside = MStack[1, 2]
 """
     Assert.Equal<string list>([ DiagnosticCodes.MissingContextMembers.Code ], codes source)
+
+[<Fact>]
+let ``A literal builds the type a lambda's result, a record field and a spread's def expect`` () =
+    // Not only a def's written type and a call's parameter (#1868).
+    let source =
+        """
+type Box = (xs: Array(int))
+def mk: () -> Array(int) = { -> [1, 2] }
+def mkBlock: int -> Array(int) = { n ->
+  def m = n
+  [m, 2]
+}
+def apply: (int -> Array(int)) -> Array(int) = { f -> f(1) }
+def applied = apply({ n -> [n] })
+def box: Box = (xs = [1, 2])
+def ys = [1, 2]
+def spread: Array(int) = [...ys]
+"""
+    let typeOf = asciiTypeIn (compileClean (normalized source))
+    Assert.Equal("() -> array(int)", typeOf "mk")
+    Assert.Equal("int -> array(int)", typeOf "mkBlock")
+    Assert.Equal("array(int)", typeOf "applied")
+    Assert.Equal("Box", typeOf "box")
+    Assert.Equal("array(int)", typeOf "spread")
+
+[<Fact>]
+let ``A literal ending a lambda whose result is a type variable stays a list`` () =
+    let typeOf = asciiTypeIn (compileClean "def mk = { -> [1, 2] }\n")
+    Assert.Equal("() -> list(int)", typeOf "mk")
