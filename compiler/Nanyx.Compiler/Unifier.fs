@@ -20,6 +20,9 @@ type MismatchKind =
     /// field only the first has and the second record's type, then the field only the second has and the first's.
     /// Each type is named as its alias if it was written as one: `P`.
     | MisspelledField of onlyLeft: string * rightRecord: string * onlyRight: string * leftRecord: string
+    /// Two records whose fields differ otherwise: the fields only the first has, and those only the second has. A
+    /// field written with one of those names is where the mismatch is reported (see `MisspelledFields.writtenField`).
+    | FieldsDiffer of onlyLeft: string list * onlyRight: string list
 
 /// What a mismatch says, with the types it names written by the function it is given: `Unifier.tyToString`, or one
 /// that writes them with the names a module knows them by (see `Unifier.tyToDisplayStringIn`).
@@ -760,7 +763,7 @@ module Unifier =
                         | [ onlyLeft ], [ onlyRight ] when NameSuggestions.closest [ onlyRight ] onlyLeft = [ onlyRight ] ->
                             let named ty = match aliasNames.TryGetValue ty with | true, name -> name | _ -> $"'{tyToString ty}'"
                             MisspelledField(onlyLeft, named right, onlyRight, named left)
-                        | _ -> TypesDiffer
+                        | onlyLeft, onlyRight -> FieldsDiffer(onlyLeft, onlyRight)
                     Error (recordKeyMessage lKeys rKeys left right, origin, kind)
             // Two references to recursive aliases are compared by what they stand for, taking them to agree while that
             // is checked: unfolded, they may hold the same two references again, which agree if nothing else differs.
@@ -887,7 +890,7 @@ module Unifier =
                             match l with
                             | TyOpenRecord _ -> openKeys, keySet fields
                             | _ -> keySet fields, openKeys
-                        Error (recordKeyMessage lKeys rKeys l r, origin, TypesDiffer)
+                        Error (recordKeyMessage lKeys rKeys l r, origin, FieldsDiffer(Set.toList (lKeys - rKeys), Set.toList (rKeys - lKeys)))
                 // Two open records: each row is the other's extra fields and a row they share, as with two open unions.
                 | TyOpenRecord(lFields, lRow), TyOpenRecord(rFields, rRow) ->
                     let lKeys = keySet lFields
@@ -898,7 +901,7 @@ module Unifier =
                         |> Seq.toList
                     if lRow.Id = rRow.Id then
                         if lKeys = rKeys then loop subst (pairs @ rest)
-                        else Error (recordKeyMessage lKeys rKeys l r, origin, TypesDiffer)
+                        else Error (recordKeyMessage lKeys rKeys l r, origin, FieldsDiffer(Set.toList (lKeys - rKeys), Set.toList (rKeys - lKeys)))
                     else
                         let shared = match freshRest () with TyVar v -> v | _ -> failwith "unreachable"
                         let rowOf (extras: Map<string, Ty>) =

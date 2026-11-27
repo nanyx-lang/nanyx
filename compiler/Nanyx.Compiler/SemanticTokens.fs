@@ -74,19 +74,10 @@ let private spanFrom (source: string) (like: SourceSpan) (start: int) (end': int
     let column = if lineBreaks = 0 then like.StartColumn + start - like.Start else start - (source.LastIndexOf('\n', start - 1) + 1)
     { like with Start = start; End = end'; StartLine = like.StartLine + lineBreaks; StartColumn = column }
 
-/// The span of `name`, written in `source` before `separator` and the value that starts at `valueStart`, with only
-/// spaces between them: the field's name in `x = 1` or `x: int`, which the syntax tree keeps no span for.
-let private nameBefore (source: string) (like: SourceSpan) (name: string) (separator: char) (valueStart: int) =
-    let mutable index = valueStart - 1
-    while index >= 0 && System.Char.IsWhiteSpace source.[index] do index <- index - 1
-    if index < 0 || source.[index] <> separator then None
-    else
-        index <- index - 1
-        while index >= 0 && System.Char.IsWhiteSpace source.[index] do index <- index - 1
-        let start = index + 1 - name.Length
-        if start >= 0 && System.String.CompareOrdinal(source, start, name, 0, name.Length) = 0 then
-            Some (spanFrom source like start (index + 1))
-        else None
+/// The span of the field's name `name`, written with the value or type of the node `node`, as the parser saw it written
+/// (see `NamedFieldValue`): `x` in `x = 1`, `x: int` and the pattern `(x = a)`.
+let private fieldNameSpan (typed: TypedModule) (node: NodeId) (name: string) =
+    typed.Declared |> Map.tryFind (node, NamedFieldValue) |> Option.bind (List.tryFind (fst >> (=) name)) |> Option.map snd
 
 /// The codes of the diagnostics that report a name as naming nothing in scope.
 let private unknownNameCodes =
@@ -238,7 +229,7 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
                     | RecordExpr fields ->
                         fields
                         |> List.choose (function
-                            | NamedField(name, value) -> nameBefore source expr.Span name '=' value.Span.Start
+                            | NamedField(name, value) -> fieldNameSpan typed value.Id name
                             | PositionalField _ -> None)
                         |> List.map (fun span -> { Span = span; Type = TokenType.Property; Modifiers = [] })
                     | TagExpr(name, _) -> [ { Span = firstChars (name.Length + 1) expr.Span; Type = TokenType.EnumMember; Modifiers = [] } ]
@@ -258,7 +249,7 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
                 | TypeOpenRecord(fields, _) ->
                     fields
                     |> List.choose (function
-                        | TypeField(name, _, Some fieldType, _) -> nameBefore source typeExpr.Span name ':' fieldType.Span.Start
+                        | TypeField(name, _, Some fieldType, _) -> fieldNameSpan typed fieldType.Id name
                         | _ -> None)
                     |> List.map (fun span -> { Span = span; Type = TokenType.Property; Modifiers = [ TokenModifier.Declaration ] })
                 | _ ->
@@ -277,7 +268,7 @@ let inModule (file: string) (source: string) (result: CompileResult) : Token lis
                 | TagPattern(name, _) -> [ { Span = firstChars (name.Length + 1) pattern.Span; Type = TokenType.EnumMember; Modifiers = [] } ]
                 | RecordMemberPattern(members, _) ->
                     members
-                    |> List.choose (fun (name, inner) -> nameBefore source pattern.Span name '=' inner.Span.Start)
+                    |> List.choose (fun (name, inner) -> fieldNameSpan typed inner.Id name)
                     |> List.map (fun span -> { Span = span; Type = TokenType.Property; Modifiers = [] })
                 | RecordPattern(typeName, _) ->
                     let span = firstChars (Names.written typeName).Length pattern.Span

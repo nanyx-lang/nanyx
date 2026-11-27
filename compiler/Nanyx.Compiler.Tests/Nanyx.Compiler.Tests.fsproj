@@ -276,6 +276,7 @@
     <Compile Include="Features\Types\ProtectedShapesTests.fs" />
     <Compile Include="Features\Types\OpenRecordsTests.fs" />
     <Compile Include="Features\Types\RecordsTests.fs" />
+    <Compile Include="Features\Types\FieldNameErrorTests.fs" />
     <Compile Include="Features\Types\FieldSuggestionTests.fs" />
     <Compile Include="Features\Types\TagNotInUnionTests.fs" />
     <Compile Include="Features\Types\RecordFieldOrderTests.fs" />

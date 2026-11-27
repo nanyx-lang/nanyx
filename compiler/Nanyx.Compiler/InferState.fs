@@ -424,7 +424,8 @@ type InferState =
             /// `MemoryCells`).
             Cells: Map<SymbolId, Ty>;
             /// Where a mismatch of a call's arguments, written as one tuple, is reported instead of at the tuple, by the
-            /// tuple's span: worked out only if one is (see `LambdaArguments.reportedSpan`).
+            /// tuple's span: worked out only if one is (see `LambdaArguments.reportedSpan`). A record literal that a
+            /// record type is expected of is one too, its fields' values the arguments.
             ArgumentSpans: Map<SourceSpan, Lazy<SourceSpan>>;
             /// The work variables (see `TaskWork`), each with where the def that starts tasks it is of was named.
             TaskWork: Map<int, SourceSpan>;
