@@ -28,9 +28,12 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 - **`dbg` values show in the editor, not the terminal,** for runs the editor starts: the runtime writes each `dbg` hit
   to a channel (`nanyx run --dbg-to`), and the extension shows the value at the end of its line, with a count and a
   list of every hit for one hit several times. A `nanyx run` in a terminal prints to stderr.
-- **Live mode is gated on the entry's contexts.** The editor re-runs on save, notebook-style, only when the entry needs
-  nothing beyond `Console`: Nanyx knows from the type that re-running can't write files or send requests. A program
-  that needs more is re-run on save only if the user turns it on for that file.
+- **Live mode is gated on the entry's contexts.** The editor re-runs on save, notebook-style, on its own when the entry
+  needs nothing beyond `Console`, `Async` and `FileSystem`, whose files a live run keeps in memory over the real ones
+  (`nanyx run --files-in-memory`), with no input: Nanyx knows from the type that re-running can't reach past the editor.
+  A program that needs more is re-run on save only once the user turns it on for its script or package, from the Live
+  mode view in the Nanyx sidebar, and then with those contexts for real; its files are still in memory. A save stops a
+  run still going, and runs have a time limit.
 - **The console host first.** Debugging a request in the HTTP host, and a single test from the editor, come next; the
   browser host later.
 
@@ -62,4 +65,4 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 | Stepping backwards (Planning) | [#2043](https://github.com/nanyx-lang/nanyx/issues/2043) | #2041, #2042 |
 | `dbg` output kept with each test by the test runner (Planning) | [#2103](https://github.com/nanyx-lang/nanyx/issues/2103) | `nanyx test` |
 | `dbg` values inline in the editor: built ([dbg values](../standard-tools/vs-code-extension#dbg-values)) | [#2054](https://github.com/nanyx-lang/nanyx/issues/2054) | |
-| Live mode: re-run on save when the entry needs only `Console` | [#2055](https://github.com/nanyx-lang/nanyx/issues/2055) | #2054 |
+| Live mode: re-run on save when the entry needs only `Console`, `Async` and `FileSystem`: built ([Live mode](../standard-tools/vs-code-extension#live-mode)) | [#2055](https://github.com/nanyx-lang/nanyx/issues/2055) | #2054 |

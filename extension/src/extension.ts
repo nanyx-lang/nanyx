@@ -15,6 +15,7 @@ import { copyBuild, removeOldCopies, watchBuild } from "./developmentMode";
 import { InfoView } from "./infoView";
 import { LibraryView } from "./library";
 import { DbgView } from "./dbgView";
+import { LiveMode } from "./liveMode";
 import { deleteDbgChannels, runFile } from "./run";
 import { TestExplorer } from "./testController";
 
@@ -39,6 +40,7 @@ let infoView: InfoView | undefined;
 let libraryView: LibraryView | undefined;
 let testExplorer: TestExplorer | undefined;
 let dbgView: DbgView | undefined;
+let liveMode: LiveMode | undefined;
 let declinedDownload = false;
 let declinedUpdate = false;
 
@@ -52,6 +54,8 @@ export async function activate(context: vscode.ExtensionContext) {
   const values = new DbgView(() => client);
   dbgView = values;
   const explorer = new TestExplorer(() => compiler, log, values);
+  const live = new LiveMode(context.workspaceState, () => compiler, () => client, values);
+  liveMode = live;
   testExplorer = explorer;
 
   context.subscriptions.push(
@@ -59,6 +63,7 @@ export async function activate(context: vscode.ExtensionContext) {
     library,
     values,
     explorer,
+    live,
     vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()),
     vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
       declinedDownload = false;
@@ -344,6 +349,7 @@ async function restartClient(context: vscode.ExtensionContext, executable: strin
     await client.start();
     infoView?.refresh();
     libraryView?.refresh();
+    void liveMode?.refresh();
   } catch (error) {
     void vscode.window.showErrorMessage(`Nanyx: the language server failed to start (${messageOf(error)}). See the Nanyx output channel.`);
     client = undefined;
