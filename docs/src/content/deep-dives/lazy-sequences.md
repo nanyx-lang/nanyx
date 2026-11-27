@@ -7,8 +7,8 @@ order: 19
 What sequences do is described in [Sequences and queries](../advanced/sequences-and-queries),
 [Ranges](../tour/ranges), [Workflows](../advanced/workflows#yield-and-sequences) and
 [prelude: sequences](../stdlib/prelude-sequences). This page gives the design behind them and says how the compiler
-builds them. What is still open is in issues: inferring `Iterable` for a def that writes no type
-([#2003](https://github.com/nanyx-lang/nanyx/issues/2003)), a shorter way to write such a parameter
+builds them. What is still open is in issues: inferring `Iterable` for a def that loops over its parameter in a
+sequence's block ([#3093](https://github.com/nanyx-lang/nanyx/issues/3093)), a shorter way to write such a parameter
 ([#2775](https://github.com/nanyx-lang/nanyx/issues/2775)), `seq.cache`
 ([#2705](https://github.com/nanyx-lang/nanyx/issues/2705)), a range of chars
 ([#2731](https://github.com/nanyx-lang/nanyx/issues/2731)), a `for` over only unbounded ranges
@@ -126,6 +126,19 @@ holds when called.
 - **What takes `Iterable`** is a `for` loop, a spread in a collection literal, and any function written to:
   `[Iterable(c)] c -> ...` reads its argument's elements with `toSeq(xs)`. Another of a function's contexts can name
   `elem`, so `[Iterable(c), ToString(elem)] c -> ()` prints each element.
+- **A def that writes no type is inferred to require it.** In such a def's body, a `for` loop over a type nothing has
+  settled reads it through `Iterable`, as `__toSeq(xs)` (`Loops.inferFor`), so
+  `def walk = { items -> for items | item -> println("{item}") }` is
+  `[Iterable(α, elem = β), ToString(β), Console] α -> ()`. Its type doesn't name `elem`, so generalising it quantifies
+  the associated types of the contexts it is found to require along with its own variables, and requires `ToString` of
+  `elem` too (`ContextInference.resolvePending`). An associated type the body fixes is written in the context:
+  `{ xs -> for xs | x -> x + 1 }` requires `Iterable(c, elem = int)`. The backend finds an associated type in a def's
+  body by the name its signature gives it (`TypedModule.AssociatedArguments`), so an inferred one is named after the
+  context's own name for it, `elem`, as `[Iterable(c), ToString(elem)]` writes it. Where nothing can require
+  `Iterable`, at the top level or in a sequence's step, which is checked outside the def it is written in, a type
+  nothing has settled is still a list, or in a sequence's block the sequence itself (`Loops.readsThroughIterable`).
+  A loop over a list, a sequence, a map or a set whose type is known where the loop is written still walks it directly;
+  one whose type is settled only after the loop goes through `__toSeq`.
 
 The compiler doesn't insert `toSeq` wherever a `seq(a)` is expected and a `list(a)` is given: unification has no
 direction, so whether a conversion was inserted would depend on the order types become known; it would turn an eager
@@ -167,7 +180,10 @@ prelude's `Yield` context declares `yield` as a keyword of kind `#yield`, and an
 rest: the last `yield x` is `__seqLast(x)`, the sequence of `x` alone, and the loop is the `seq.flatMap` alone. The loop's items are anything `Iterable`, as a
 plain `for` loop's are: the checker reads `__toSeq(items)` as `__seqItself(items)`, the sequence as it is with whatever
 its steps need, when the items are a sequence or a type nothing has settled (`Loops.walksAsSequence`), and through
-their `Iterable` otherwise, so a list, an array, a set or a map is walked by its `toSeq`. `seq` is an ordinary prelude
+their `Iterable` otherwise, so a list, an array, a set or a map is walked by its `toSeq`. A step is checked outside the
+def it is written in, so it can't add `Iterable` to what an unannotated def requires: a def that loops over its
+parameter in a sequence's block takes a sequence, unless its signature requires `Iterable` of it
+([#3093](https://github.com/nanyx-lang/nanyx/issues/3093)). `seq` is an ordinary prelude
 function, `seq.delay` by another name. Where the branches of an `if` join, a pure `seq.empty()` joins a branch whose sequence prints: the whole
 carries what any branch's sequence does. There is no `yield` in a `while` loop: a `while` needs a cell, and a sequence
 that reads one can't leave its `memory` block anyway.

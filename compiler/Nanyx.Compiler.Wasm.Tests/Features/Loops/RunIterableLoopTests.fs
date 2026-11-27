@@ -55,6 +55,58 @@ each(Array["x"])
     runSource source |> assertRan "a!\nb!\nc!\neach 1\neach 2\neach x\n"
 
 [<Fact>]
+let ``Run - a function whose signature names elem walks what it is called with`` () =
+    let source =
+        normalized """def each: [Iterable(c, elem = a), k] c, ([k] a -> b) -> () = { xs, f -> for xs | x -> f(x) }
+
+def shown: [Iterable(c, elem = a), ToString(a), Console] c -> () = { xs -> for xs | x -> println("shown {x}") }
+
+each([1, 2], { x -> println("each {x}") })
+each(set.fromList([3]), { x -> println("each {x}") })
+shown(["a"])
+"""
+    runSource source |> assertRan "each 1\neach 2\neach 3\nshown a\n"
+
+[<Fact>]
+let ``Run - an unannotated def that loops over its parameter walks a list, a seq, a map, a set and a user's type`` () =
+    let source =
+        normalized """type Bag(a) = protected (items: list(a))
+
+def Bag.toSeq: Bag(a) -> seq(a) = { b -> list.toSeq(b.items) }
+
+def walk = { items -> for items | item -> println("{item}") }
+
+def iter = { xs, f -> for xs | x -> f(x) }
+
+walk([1, 2])
+walk(seq.fromList([3]))
+walk(["k" => 4])
+walk(set.fromList([5]))
+walk(Bag(items = ["bag"]))
+iter([6], { x -> println("iter {x}") })
+iter(Bag(items = [7]), { x -> println("iter {x + 1}") })
+"""
+    runSource source |> assertRan "1\n2\n3\n(k, 4)\n5\nbag\niter 6\niter 8\n"
+
+[<Fact>]
+let ``A loop over a list walks the list, and one over a type nothing settles reads it through Iterable`` () =
+    let direct =
+        normalized """def show: [Console] list(int) -> () = { xs -> for xs | x -> println(x) }
+
+def showAll = { xs: list(int) -> for xs | x -> println(x) }
+
+show([1])
+showAll([2])
+"""
+    Assert.DoesNotContain("__toSeq", transpileWatNotInlined direct)
+    let throughIterable =
+        normalized """def walk = { xs -> for xs | x -> println(x) }
+
+walk([1])
+"""
+    Assert.Contains("__toSeq", transpileWatNotInlined throughIterable)
+
+[<Fact>]
 let ``Run - a function over Iterable runs at a generic type whose toSeq fixes elem`` () =
     let source =
         normalized """type Bag(a) = protected (items: list(a))
