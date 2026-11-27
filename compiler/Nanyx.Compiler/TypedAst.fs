@@ -554,6 +554,9 @@ type ImportedFile = { File: string; Name: string option }
 /// inlined from the modules the module imports (see `Module`): each resolved as the module it came from resolved it, so
 /// that the backend can compile an imported generic definition from its types as it does one of the module's own.
 /// Filled in for the root module only, and kept apart from its own types so that what reads those sees only them.
+/// `InlinedTypeDefs` holds, the same way, the contexts the imported modules declare that the module's own `TypeDefs`
+/// lacks, by name: a context a module keeps private is carried in by no import, but a definition inlined from that
+/// module may require it, and the backend types the members it is passed from the context's definition.
 ///
 /// `ContextInstances` says, by the node of each call (or pipe) to a function that requires a parameterised context,
 /// where the call finds each context the callee's type declares, in the order it declares them: `None` for one that is
@@ -634,6 +637,7 @@ type TypedModule =
       ImportedFiles: Map<SymbolId, ImportedFile>
       InlinedExprTypes: Map<NodeId, Ty>
       InlinedCalleeTypes: Map<NodeId, Ty>
+      InlinedTypeDefs: Map<string, TypeDefInfo>
       /// A script's values that need a context, which run in its entry point (see `InferState.ScriptEntryValues`).
       ScriptEntryValues: Set<Identifier>
       /// The units of measure the module can write, by name: its own and those its imports bring in (see `Units`).
