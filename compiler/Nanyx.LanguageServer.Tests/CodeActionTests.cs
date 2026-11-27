@@ -73,9 +73,19 @@ public sealed class CodeActionTests : LanguageServerTestBase
               { "version": "1.2.0", "url": "b.nyxpkg", "sha256": "0", "dependencies": {} } ] }
             """);
         var user = NyxCompiler.SeededPackages.user();
-        await RestartWithAsync(TestSettings with { Packages = () => new NyxCompiler.PackageStore(user.Cache, index, user.GitHub, user.Seed) });
-        var uri = DocumentUri.FromFileSystemPath(TempPath("script.nyx"));
+        var store = new NyxCompiler.PackageStore(user.Cache, index, user.GitHub, user.Seed);
+        await RestartWithAsync(TestSettings with { Packages = () => store });
+        var path = TempPath("script.nyx");
+        var uri = DocumentUri.FromFileSystemPath(path);
         const string text = "::install acme.core\n\nprintln(1)\n";
+
+        // A script with a directive is built against its packages, which seeds the compiler's own into a new cache
+        // first: seconds, and on a loaded CI runner more than the timeout. It is done here first, and the server is
+        // given a minute at least, or three times what it took here.
+        AllowFor(TimeSpan.FromSeconds(60));
+        var reading = System.Diagnostics.Stopwatch.StartNew();
+        NyxCompiler.Script.readFromWithoutIndex(store, path, text);
+        AllowFor(TimeSpan.FromTicks(Math.Max(TimeSpan.FromSeconds(60).Ticks, (3 * reading.Elapsed).Ticks)));
 
         Open(uri, text);
         var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!, d => d.Code?.String == NyxCompiler.DiagnosticCodes.InvalidDirective.Code);
