@@ -238,9 +238,10 @@ module internal ExpressionRewrites =
 
     /// `module'` with the names lambdas give their contexts written as the backend reads them (see `ContextNames`): a
     /// lambda's body under `context l` starts by keeping each member of `l`'s context in a local, and `use l` loads
-    /// those locals as a `use` of a record written out does, `use (log = <the local>)`. A `use` of a name for a context
-    /// without members, a `memory` block's `Memory`, loads nothing, so it goes: the type checker has settled whose
-    /// cells a `mut` after it makes.
+    /// those locals as a `use` of a record written out does, `use (log = <the local>)`, or, for an instance of a
+    /// parameterised context, as `use Show(show = <the local>)` does. A `use` of a name for a context without members,
+    /// such as a `memory` block's `Memory`, loads nothing, so it goes: the type checker has settled whose cells a `mut`
+    /// after it makes.
     let writeContextNames (state: InferState.InferState) (module': Module) : Module =
         if state.ContextNames.IsEmpty then
             module'
@@ -259,9 +260,13 @@ module internal ExpressionRewrites =
                         match instance.Members with
                         | [] -> None
                         | members ->
-                            // Nodes of their own: the name's node has the name's type.
                             let fields = members |> List.map (fun (memberName, _) -> NamedField(memberName, Expression.synthetic (IdentifierExpr (local index memberName))))
-                            Some (Expression.synthetic (RecordExpr fields)))
+                            match instance.Instance with
+                            // A parameterised context's instance is loaded as `use Show(show = ...)` is, on the name's
+                            // node, which the instance is recorded by (see `ContextNames.recordLoad`).
+                            | Some _ -> Some { value with Kind = FunctionCall(instance.Context, None, [ Expression.synthetic (RecordExpr fields) ]) }
+                            // Nodes of their own: the name's node has the name's type.
+                            | None -> Some (Expression.synthetic (RecordExpr fields)))
                 | _ -> None
             let rewrite =
                 mapExpressionKinds (fun current kind ->

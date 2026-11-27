@@ -41,8 +41,18 @@ let private isMemberless (info: TypeDefInfo) =
 
 /// `env` where an instance of `info` is supplied, if it is a context with no members (#1479) or a scoped one, which
 /// a `use` of its instance supplies, as `memory` does `Memory` (#2101): `TypeEnv.Supplied` holds it.
-let private withSupplied (info: TypeDefInfo) (env: TypeEnv) : TypeEnv =
-    if isMemberless info || (info.IsContext && info.IsScoped) then { env with Supplied = env.Supplied.Add(TypeDefInfo.nominalId info) } else env
+let private withSupplied (provider: ContextProvider) (info: TypeDefInfo) (env: TypeEnv) : TypeEnv =
+    if isMemberless info || (info.IsContext && info.IsScoped) then { env with Supplied = env.Supplied.Add(TypeDefInfo.nominalId info, provider) } else env
+
+/// The contexts with no members (see `isMemberless`) a signature supplies in `env`, as a lambda is given them (see
+/// `ContextNames`).
+let internal memberlessFromSignature (env: TypeEnv) (state: InferState) : TypeDefInfo list =
+    env.Supplied
+    |> Map.toList
+    |> List.choose (fun (id, provider) ->
+        match provider with
+        | FromSignature _ -> tryFindNominalDef id state |> Option.filter isMemberless
+        | _ -> None)
 
 /// Whether the context `ctxName` is one with no members (see `isMemberless`) that the host provides, as `Async`: an
 /// ambient context, as one whose members the host's prelude stands in for is, but known by its name alone.
@@ -61,7 +71,7 @@ let internal ambientContexts (state: InferState) : Set<Identifier> =
 /// Whether something nearer than the host supplies the context `ctxName`, one with no members or a scoped one, in
 /// `env`: a def that declares it, or a `use` (see `withSupplied`).
 let private isSupplied (env: TypeEnv) (state: InferState) (ctxName: Identifier) =
-    tryFindTypeDef ctxName state |> Option.exists (fun info -> env.Supplied.Contains(TypeDefInfo.nominalId info))
+    tryFindTypeDef ctxName state |> Option.exists (fun info -> env.Supplied.ContainsKey(TypeDefInfo.nominalId info))
 
 /// `env` with the members of the instance a `use` of a value of type `ty` loads, each bound by its name. When the
 /// type names a plain context, as `Foo(bar = ...)`'s does, each member has the symbol the context's definition
@@ -77,7 +87,7 @@ let internal extendEnvWithRecordFields (provider: ContextProvider) (state: Infer
         | TyAlias(name, [], _)
         | TyApply(name, []) -> state.TypeDefs |> Map.tryFind name |> Option.filter plain
         | _ -> None
-    let env = context |> Option.fold (fun acc info -> withSupplied info acc) env
+    let env = context |> Option.fold (fun acc info -> withSupplied provider info acc) env
     let addFields fields =
         fields
         |> Map.fold (fun acc name fieldTy ->
@@ -243,7 +253,7 @@ let private extendEnvWithContextsFrom (provider: TypeExpr -> ContextProvider) (e
             | _ -> None
         let supplied =
             match ctx.Kind with
-            | TypeName name -> tryFindTypeDef name current |> Option.fold (fun acc info -> withSupplied info acc) env'
+            | TypeName name -> tryFindTypeDef name current |> Option.fold (fun acc info -> withSupplied (provider ctx) info acc) env'
             | _ -> env'
         env' <-
             members
@@ -843,7 +853,7 @@ let internal ensureContextAvailable (call: NodeId option) (reportMissing: bool) 
                 match ctx.Kind with
                 | TypeName ctxName ->
                     tryFindTypeDef ctxName state
-                    |> Option.exists (fun info -> isMemberless info && not (env.Supplied.Contains(TypeDefInfo.nominalId info)))
+                    |> Option.exists (fun info -> isMemberless info && not (env.Supplied.ContainsKey(TypeDefInfo.nominalId info)))
                 | _ -> false
             let others = ambientOfAnother ctx
             match members |> List.filter (fun memberName -> TypeEnv.tryFind memberName env |> Option.isNone || List.contains memberName others) with
