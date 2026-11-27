@@ -24,17 +24,6 @@ let ``The corpus has the files, the docs' code blocks and the tests' sources`` (
     Assert.Contains(Corpus.files.Value, fun piece -> piece.Name.Replace('\\', '/') = "stdlib/nanyx/prelude.nyx")
 
 [<Fact>]
-let ``Every file of the standard library and the packages parses`` () =
-    let failures =
-        parses.Value
-        |> List.filter (fun (piece, _) -> piece.Origin = SourceFile && (piece.Name.StartsWith "stdlib" || piece.Name.StartsWith "packages"))
-        |> List.choose (fun (piece, parse) ->
-            match parse with
-            | Result.Error error -> Some $"{piece.Name}: {error.Message}"
-            | Result.Ok _ -> None)
-    Assert.Equal<string list>([], failures)
-
-[<Fact>]
 let ``A tree is written out with its spans and without its node ids`` () =
     let dump source = SyntaxDump.ofParse (parseModuleWithTrivia "t.nyx" source)
     Assert.Equal(dump "def x = 1", dump "def x = 1")
@@ -68,41 +57,6 @@ let private lexedComments (source: string) (lexed: Lexer.Lexed) =
     |> Seq.map (fun trivia -> source.Substring(trivia.Start, trivia.End - trivia.Start).TrimEnd())
     |> List.ofSeq
 
-[<Fact>]
-let ``The lexer reads every piece that parses without an error, and finds the comments the parser does`` () =
-    let parsed =
-        parses.Value
-        |> List.choose (fun (piece, parse) ->
-            match parse with
-            | Result.Ok parsed -> Some(piece.Name, parsed)
-            | Result.Error _ -> None)
-    let failures =
-        parsed
-        |> List.choose (fun (name, parsed) ->
-            let lexed = Lexer.lex name parsed.Source
-            let comments =
-                parsed.Trivia
-                |> List.choose (function
-                    | LineComment(text, _, _)
-                    | DocLineComment(text, _) -> Some(text.TrimEnd())
-                    | BlankLines _ -> None)
-            if not lexed.Errors.IsEmpty then Some $"{name}: %A{lexed.Errors |> List.map _.Message}"
-            elif lexedComments parsed.Source lexed <> comments then Some $"{name}: comments %A{lexedComments parsed.Source lexed}, not %A{comments}"
-            else None)
-    Assert.True(parsed.Length > 3500, $"Only {parsed.Length} pieces parse")
-    Assert.Equal<string list>([], failures)
-
-[<Fact>]
-let ``The parser reads the whole corpus the same way every time`` () =
-    let pieces = Corpus.all.Value
-    // The first reading of each piece is the one the other tests share, so the corpus is parsed once more here, not twice.
-    let first = System.Collections.Generic.Dictionary<string * string, Result<SourceModule, ParseError>>()
-    for piece, parse in parses.Value do
-        first.TryAdd((piece.Name, piece.Source), parse) |> ignore
-    let firstReading: Differential.ModuleParser = fun name source -> first[(name, source)]
-    let found = Differential.differences firstReading parseModuleWithTrivia pieces
-    Assert.True(found.IsEmpty, Differential.report 10 pieces.Length found)
-
 /// The pieces whose block structure the layout pass reads differently from the tree on purpose, each named by its file
 /// and its first line, with why. None is a program.
 let private layoutDifferences =
@@ -120,22 +74,77 @@ let private knownLayoutDifference (piece: Piece) =
     let firstLine = (piece.Source.TrimStart().Split('\n')[0]).TrimEnd()
     layoutDifferences |> List.tryFind (fun (name, first, _) -> name = file && first = firstLine)
 
-[<Fact>]
-let ``The layout pass gives every piece that parses the block structure the parser does`` () =
-    let compared =
-        parses.Value
-        |> Array.ofList
-        |> Array.Parallel.choose (fun (piece, parse) ->
-            match parse with
-            | Result.Error _ -> None
-            | Result.Ok parsed ->
-                let expected = BlockStructure.describe parsed.Source (BlockStructure.ofTree parsed)
-                let actual = BlockStructure.describe parsed.Source (BlockStructure.ofLayout parsed.Source)
-                Some(piece, (expected = actual), $"{piece.Name}:\n--- parser\n{expected}\n--- layout\n{actual}"))
-    let differing = compared |> Array.filter (fun (piece, same, _) -> not same && (knownLayoutDifference piece).IsNone)
-    let shown = differing |> Array.truncate 10 |> Array.map (fun (_, _, text) -> text) |> String.concat "\n\n"
-    Assert.True(differing.Length = 0, $"{differing.Length} pieces differ:\n\n{shown}")
-    // Each known difference is still one, so that the list is no longer than it needs to be.
-    let stillDiffering =
-        compared |> Array.choose (fun (piece, same, _) -> if same then None else knownLayoutDifference piece) |> Set.ofArray
-    Assert.Equal<string list>([], layoutDifferences |> List.filter (stillDiffering.Contains >> not) |> List.map (fun (file, first, _) -> $"{file}: {first}"))
+/// The corpus parsed once, in parallel, before any test that reads it starts: no test's time is the parse, which the
+/// first to read it paid when it was parsed on demand (#2224).
+type ParsedCorpus() =
+    do parses.Force() |> ignore
+
+/// The tests that read each piece of the corpus with its parse.
+type CorpusParseTests(corpus: ParsedCorpus) =
+    interface IClassFixture<ParsedCorpus>
+
+    [<Fact>]
+    member _.``Every file of the standard library and the packages parses`` () =
+        let failures =
+            parses.Value
+            |> List.filter (fun (piece, _) -> piece.Origin = SourceFile && (piece.Name.StartsWith "stdlib" || piece.Name.StartsWith "packages"))
+            |> List.choose (fun (piece, parse) ->
+                match parse with
+                | Result.Error error -> Some $"{piece.Name}: {error.Message}"
+                | Result.Ok _ -> None)
+        Assert.Equal<string list>([], failures)
+
+    [<Fact>]
+    member _.``The lexer reads every piece that parses without an error, and finds the comments the parser does`` () =
+        let parsed =
+            parses.Value
+            |> List.choose (fun (piece, parse) ->
+                match parse with
+                | Result.Ok parsed -> Some(piece.Name, parsed)
+                | Result.Error _ -> None)
+        let failures =
+            parsed
+            |> List.choose (fun (name, parsed) ->
+                let lexed = Lexer.lex name parsed.Source
+                let comments =
+                    parsed.Trivia
+                    |> List.choose (function
+                        | LineComment(text, _, _)
+                        | DocLineComment(text, _) -> Some(text.TrimEnd())
+                        | BlankLines _ -> None)
+                if not lexed.Errors.IsEmpty then Some $"{name}: %A{lexed.Errors |> List.map _.Message}"
+                elif lexedComments parsed.Source lexed <> comments then Some $"{name}: comments %A{lexedComments parsed.Source lexed}, not %A{comments}"
+                else None)
+        Assert.True(parsed.Length > 3500, $"Only {parsed.Length} pieces parse")
+        Assert.Equal<string list>([], failures)
+
+    [<Fact>]
+    member _.``The parser reads the whole corpus the same way every time`` () =
+        let pieces = Corpus.all.Value
+        // The first reading of each piece is the one the other tests share, so the corpus is parsed once more here, not twice.
+        let first = System.Collections.Generic.Dictionary<string * string, Result<SourceModule, ParseError>>()
+        for piece, parse in parses.Value do
+            first.TryAdd((piece.Name, piece.Source), parse) |> ignore
+        let firstReading: Differential.ModuleParser = fun name source -> first[(name, source)]
+        let found = Differential.differences firstReading parseModuleWithTrivia pieces
+        Assert.True(found.IsEmpty, Differential.report 10 pieces.Length found)
+
+    [<Fact>]
+    member _.``The layout pass gives every piece that parses the block structure the parser does`` () =
+        let compared =
+            parses.Value
+            |> Array.ofList
+            |> Array.Parallel.choose (fun (piece, parse) ->
+                match parse with
+                | Result.Error _ -> None
+                | Result.Ok parsed ->
+                    let expected = BlockStructure.describe parsed.Source (BlockStructure.ofTree parsed)
+                    let actual = BlockStructure.describe parsed.Source (BlockStructure.ofLayout parsed.Source)
+                    Some(piece, (expected = actual), $"{piece.Name}:\n--- parser\n{expected}\n--- layout\n{actual}"))
+        let differing = compared |> Array.filter (fun (piece, same, _) -> not same && (knownLayoutDifference piece).IsNone)
+        let shown = differing |> Array.truncate 10 |> Array.map (fun (_, _, text) -> text) |> String.concat "\n\n"
+        Assert.True(differing.Length = 0, $"{differing.Length} pieces differ:\n\n{shown}")
+        // Each known difference is still one, so that the list is no longer than it needs to be.
+        let stillDiffering =
+            compared |> Array.choose (fun (piece, same, _) -> if same then None else knownLayoutDifference piece) |> Set.ofArray
+        Assert.Equal<string list>([], layoutDifferences |> List.filter (stillDiffering.Contains >> not) |> List.map (fun (file, first, _) -> $"{file}: {first}"))
