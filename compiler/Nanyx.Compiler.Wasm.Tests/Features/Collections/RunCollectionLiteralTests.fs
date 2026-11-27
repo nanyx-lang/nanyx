@@ -110,3 +110,23 @@ def top = memory {
 println(top)
 """
     |> assertRan "3\n1\n#some(1)\n"
+
+[<Fact>]
+let ``Run - a literal builds the type a lambda's result, a record field and a spread's def expect`` () =
+    // The expected type comes from a lambda's result, a function argument's result and a record field's type too (#1868).
+    runSource
+        """
+type Box = (xs: Array(int))
+
+def mk: () -> Array(int) = { -> [1, 2] }
+def twice: (int -> Array(int)) -> Array(int) = { f -> f(2) }
+def box: Box = (xs = [3, 4, 5])
+def ys = [6]
+def a: Array(int) = [...ys]
+
+println(Array.length(mk()))
+println(Array.length(twice({ n -> [n, n] })))
+println(Array.length(box.xs))
+println(Array.length(a))
+"""
+    |> assertRan "2\n2\n3\n1\n"

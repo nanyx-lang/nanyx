@@ -308,6 +308,11 @@ let rec internal inferCall
                     | Some yieldsInstead -> Error [ yieldsInstead ]
                     | None ->
                     let lambdaEnv, state = extendEnvForLambdaArgument env state lambda (Some paramTy)
+                    // A square-bracket literal that ends the lambda builds the result its parameter's type gives it.
+                    let state =
+                        match Unifier.unalias (resolveSoFar state paramTy) with
+                        | TyFunc(_, result, _) -> ExpectedLiterals.expectLiteralResult lambdaBody result state
+                        | _ -> state
                     let instances = instancesSuppliedToLambda state lambda (Some paramTy)
                     let ownContexts =
                         match contextRequirementsOf env state name |> Option.map ContextVariables.names with
