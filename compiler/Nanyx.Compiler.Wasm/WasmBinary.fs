@@ -996,19 +996,20 @@ let assemble (wat: string) : byte array =
 let testTableName = "nanyx.tests"
 
 /// A test as a test build's module lists it (see `withTests`): its module, its name, the file, line and column it is
-/// written at, each from 1, and whether it is marked `@test(#io)`.
+/// written at, each from 1, whether it is marked `@test(#io)`, and the crash it expects, if it is `@test(#crashes)`.
 type ListedTest =
     { Module: string
       Name: string
       File: string
       Line: int
       Column: int
-      Io: bool }
+      Io: bool
+      Crashes: NyxCompiler.ExpectedCrash option }
 
 /// `wasm`, a test build's module, with the custom section `testTableName` after its others, listing `tests` at the
 /// indexes its entry point runs them at (see `NyxCompiler.Package.testRootSource`): a vector of each test's module,
-/// name, file, line, column and whether it is `#io` (1) or not (0), the strings as names are written and the numbers as
-/// unsigned LEB128s. The runtime reads it to find a test by its index or its name, to say where it is, and to know
+/// name, file, line, column, and flags, 1 if it is `#io`, 2 if it expects a crash and 4 if that crash's message must
+/// contain a text, which follows them; the strings as names are written and the numbers as unsigned LEB128s. The runtime reads it to find a test by its index or its name, to say where it is, and to know
 /// which contexts it runs with (see `Nanyx.Runtime.TestTable`).
 let withTests (tests: ListedTest list) (wasm: byte array) : byte array =
     let out = Bytes(wasm)
@@ -1020,6 +1021,15 @@ let withTests (tests: ListedTest list) (wasm: byte array) : byte array =
         name out test.File
         unsigned out (uint64 test.Line)
         unsigned out (uint64 test.Column)
-        unsigned out (if test.Io then 1UL else 0UL))
+        let flags =
+            (if test.Io then 1UL else 0UL)
+            ||| (match test.Crashes with
+                 | None -> 0UL
+                 | Some NyxCompiler.AnyCrash -> 2UL
+                 | Some(NyxCompiler.CrashContaining _) -> 6UL)
+        unsigned out flags
+        match test.Crashes with
+        | Some(NyxCompiler.CrashContaining text) -> name out text
+        | _ -> ())
     section out 0uy table
     out.ToArray()

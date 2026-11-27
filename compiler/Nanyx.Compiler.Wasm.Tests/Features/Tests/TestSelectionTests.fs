@@ -77,3 +77,12 @@ let ``nanyx test --list of a build that fails lists nothing, and says so`` () =
     Assert.Equal(1, outcome.ExitCode)
     Assert.DoesNotContain("\"type\":\"test\"", outcome.StandardOutput)
     Assert.Contains("\"type\":\"summary\",\"built\":false", outcome.StandardOutput)
+
+[<Fact>]
+let ``A listed test says which crash it expects`` () =
+    use directory = testedPackage "" [ "src/checks.nyx", "export module checks\n\n@test(#crashes(\"boom\"))\ndef `crashes` = {\n  crash(\"boom\")\n}\n" ]
+    let text = nanyxIn directory.Path [ "test"; "--list" ]
+    Assert.Equal("checks.crashes (crashes)  src/checks.nyx:4:1\n", text.StandardOutput.ReplaceLineEndings "\n")
+    let json = nanyxIn directory.Path [ "test"; "--list"; "--format"; "json" ]
+    let test = JsonDocument.Parse(json.StandardOutput.ReplaceLineEndings("\n").Split('\n').[0]).RootElement
+    Assert.Equal("boom", test.GetProperty("crashes").GetProperty("text").GetString())

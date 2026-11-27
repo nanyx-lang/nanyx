@@ -190,7 +190,10 @@ its time limit. A failure shows why, with the stack, and what the test printed, 
 A test's `Random` is seeded, so a test that draws random numbers draws the same ones when it is run with the same seed.
 A test may require only `Console` and `Random`, which the test host provides (`NYX0312`), but one marked
 [`@test(#io)`](../tour/attributes#test), which runs with the console host's real `Console`, `Env` and `FileSystem`,
-in the package's directory or the script's, with the environment's variables; the report marks it `(io)`.
+in the package's directory or the script's, with the environment's variables; the report marks it `(io)`. One marked
+[`@test(#crashes)`](../tour/attributes#test) passes only if it crashes, and the report marks it `(crashes)`; if it
+finishes, it fails with `It finished, and was expected to crash`, and if it crashes with a message that doesn't contain
+the text `#crashes("text")` gives, it fails saying so, with the crash.
 
 `nanyx test` exits with 0 when every test passes, and 1 when one fails or the tests can't be built. It is a debug build,
 as `run` is: a type or name error in any module is reported, and fails only the tests that reach it, with its message,
@@ -219,9 +222,10 @@ With `--format json`, `nanyx test` writes one JSON object on each line of standa
 - **`start`**: the package's or script's `name`, how many `tests` run, the `seed`, and how many `deferredErrors` there
   are.
 - **`test`**, for each test as it ends: its full `name`, as the text report shows it, its `module` and own name
-  (`test`), the `file`, `line` and `column` it is written at, whether it is `io`, its `outcome` (`passed`, `failed` or
-  `timedOut`, with `timeoutSeconds`), what it printed (`output`) and what it wrote to its standard error (`errors`). A
-  test that failed has a `failure`: its `kind` (`crashed`, `trapped`, `arithmetic`, `stackOverflow`, `outOfMemory`,
+  (`test`), the `file`, `line` and `column` it is written at, whether it is `io`, the crash it expects (`crashes`:
+  `null`, `{}` for `@test(#crashes)`, or `{"text": ...}`), its `outcome` (`passed`, `failed`, `timedOut` with
+  `timeoutSeconds`, `didNotCrash`, or `crashedOtherwise` with the text it `expected`), what it printed (`output`) and
+  what it wrote to its standard error (`errors`). A test that failed or crashed otherwise has a `failure`: its `kind` (`crashed`, `trapped`, `arithmetic`, `stackOverflow`, `outOfMemory`,
   `exited` or `other`), its `message`, the `place` of the program's code a crash was in, with its `file`, `line` and
   `column`, and its `stack`, innermost first, each frame's `function` with its `file` and `line`.
 - **`summary`**, last: whether the tests were `built`, how many `passed` and `failed`, and the `seed`. A build that

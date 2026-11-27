@@ -270,16 +270,19 @@ not two halves
 """
 
 [<Fact>]
-let ``Run - a pattern's arguments may be any expressions, several of them a tuple`` () =
+let ``Run - a pattern's arguments are literals and names, several of them a tuple`` () =
+    // Anything else is bound with a `def` before the match first (#2064).
     """
 pattern (int, int) -> int -> #Between | _ = { low, high ->
   { n -> n >= low and n <= high }
 }
 
 def size = { n: int, limit: int ->
+  def half = limit // 2
+  def bigFrom = half + 1
   match n
-    | #Between(0, limit // 2) -> "small"
-    | #Between(limit // 2 + 1, limit) -> "big"
+    | #Between(0, half) -> "small"
+    | #Between(bigFrom, limit) -> "big"
     | _ -> "out of range"
 }
 
@@ -478,4 +481,26 @@ println(
 zero
 negative
 +
+"""
+
+[<Fact>]
+let ``Run - a pattern given a value a call made, bound first, runs`` () =
+    """
+pattern list(int) -> int -> #OneOf | _ = { choices -> { n -> choices \list.contains(n) } }
+
+def evens = { (limit: int) -> [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] \list.filter { n -> n <= limit and n % 2 == 0 } }
+
+def describe = { (n: int) ->
+  def small = evens(10)
+  match n
+    | #OneOf(small) -> "a small even number"
+    | _ -> "something else"
+}
+
+println(describe(4))
+println(describe(5))
+"""
+    |> printsAs """
+a small even number
+something else
 """

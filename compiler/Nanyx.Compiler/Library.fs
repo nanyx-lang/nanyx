@@ -554,7 +554,7 @@ module Compiler =
                     | provided, _ -> desugared, provided, []
                 // A capitalised tag is a custom pattern's, and a match on one runs the pattern (see `CustomPatterns`).
                 let patternScope = CustomPatterns.scopeOf env ambiguousImports state.ModuleBlocks desugared
-                let desugared, rewriteErrors = CustomPatterns.rewrite patternScope desugared
+                let desugared, rewriteErrors = CustomPatterns.rewrite (normalizeSource source) patternScope desugared
                 let patternErrors = CustomPatterns.check patternScope desugared @ rewriteErrors
                 // A parameter that takes a type is written as one of type `Type(a)` (see `TypeArguments`), and a
                 // context's associated types as its last parameters (see `AssociatedTypes`).
@@ -880,7 +880,7 @@ module Compiler =
                                            |> Option.exists ComponentInterface.requiresAsync })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           Tests =
-                            let own = components.Tests |> List.map (fun test -> { Module = moduleName; Name = test.Name; Definition = test.Name; Span = test.Span; Io = test.Io })
+                            let own = components.Tests |> List.map (fun test -> { Module = moduleName; Name = test.Name; Definition = test.Name; Span = test.Span; Io = test.Io; Crashes = test.Crashes })
                             own @ merged.Tests |> List.distinctBy (fun test -> test.Module, test.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.

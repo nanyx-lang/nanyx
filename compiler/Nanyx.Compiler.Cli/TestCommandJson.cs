@@ -84,9 +84,10 @@ internal static partial class CliCommands
 
     /// <summary>
     /// The <c>test</c> object for <paramref name="run"/>: its full name as the text report shows it, its module and own
-    /// name, where it is written, whether it is <c>#io</c>, its <c>outcome</c> (<c>passed</c>, <c>failed</c> or
-    /// <c>timedOut</c>), what it printed (<c>output</c>) and wrote to its standard error (<c>errors</c>); and for one that
-    /// failed, a <c>failure</c>: its <c>kind</c> (<c>crashed</c>, <c>trapped</c>, <c>outOfMemory</c>, <c>stackOverflow</c>,
+    /// name, where it is written, whether it is <c>#io</c>, the crash it expects (<c>crashes</c>), its <c>outcome</c>
+    /// (<c>passed</c>, <c>failed</c>, <c>timedOut</c>, <c>didNotCrash</c>, or <c>crashedOtherwise</c> with the text it
+    /// <c>expected</c>), what it printed (<c>output</c>) and wrote to its standard error (<c>errors</c>); and for one that
+    /// failed or crashed otherwise, a <c>failure</c>: its <c>kind</c> (<c>crashed</c>, <c>trapped</c>, <c>outOfMemory</c>, <c>stackOverflow</c>,
     /// <c>arithmetic</c>, <c>exited</c> or <c>other</c>), its message, the place of the program's code it crashed in, its
     /// file, line and column, and its stack, innermost first.
     /// </summary>
@@ -108,6 +109,15 @@ internal static partial class CliCommands
                     json.WritePropertyName("failure");
                     WriteJsonFailure(json, failed.Item);
                     break;
+                case var outcome when outcome.IsDidNotCrash:
+                    json.WriteString("outcome", "didNotCrash");
+                    break;
+                case TestOutcome.CrashedOtherwise otherwise:
+                    json.WriteString("outcome", "crashedOtherwise");
+                    json.WriteString("expected", otherwise.expected);
+                    json.WritePropertyName("failure");
+                    WriteJsonFailure(json, otherwise.error);
+                    break;
             }
 
             json.WriteString("output", run.Output);
@@ -116,7 +126,7 @@ internal static partial class CliCommands
 
     /// <summary>
     /// The fields a <c>test</c> object starts with, which say which test it is, as a run and a listing both write them:
-    /// its full name, its module and own name, where it is written and whether it is <c>#io</c>.
+    /// its full name, its module and own name, where it is written, whether it is <c>#io</c>, and the crash it expects.
     /// </summary>
     private static void WriteJsonTestFields(Utf8JsonWriter json, ListedTest test)
     {
@@ -128,11 +138,34 @@ internal static partial class CliCommands
         json.WriteNumber("line", test.Line);
         json.WriteNumber("column", test.Column);
         json.WriteBoolean("io", test.Io);
+        WriteJsonCrashes(json, test.Crashes);
     }
 
     /// <summary>The <c>test</c> object for <paramref name="test"/> in a listing, <c>--list</c>: which test it is, with no outcome.</summary>
     private static void WriteJsonListedTest(TextWriter writer, ListedTest test) =>
         WriteJsonLine(writer, json => WriteJsonTestFields(json, test));
+
+    /// <summary>
+    /// Writes <c>crashes</c>, the crash the test is marked to expect: <c>null</c> for none, <c>{}</c> for any,
+    /// <c>@test(#crashes)</c>, and <c>{"text": ...}</c> for one whose message contains the text (#3078).
+    /// </summary>
+    private static void WriteJsonCrashes(Utf8JsonWriter json, FSharpOption<Nanyx.Runtime.ExpectedCrash> crashes)
+    {
+        json.WritePropertyName("crashes");
+        if (FSharpOption<Nanyx.Runtime.ExpectedCrash>.get_IsNone(crashes))
+        {
+            json.WriteNullValue();
+            return;
+        }
+
+        json.WriteStartObject();
+        if (crashes.Value is Nanyx.Runtime.ExpectedCrash.CrashContaining containing)
+        {
+            json.WriteString("text", containing.text);
+        }
+
+        json.WriteEndObject();
+    }
 
     /// <summary>Writes why a test failed, <paramref name="error"/>, as an object (see <see cref="WriteJsonTest"/>).</summary>
     private static void WriteJsonFailure(Utf8JsonWriter json, RunError error)
