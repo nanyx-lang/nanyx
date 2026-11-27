@@ -200,6 +200,9 @@ can't be deferred, such as a syntax error, stops the build, and no test runs.
 | Option | What it does |
 |--------|--------------|
 | `--filter <text>` | Runs only the tests whose full name, as `` geometry.`adds points` ``, contains the text. |
+| `--test <name>` | Runs only the test of that full name, exactly, as the report writes it or without its backticks; several, one on each line, as a tool gives them. A name that names no test is an error, which exits with 2. |
+| `--module <name>` | Runs only the tests of that module. A module with no tests is an error, which exits with 2. |
+| `--list` | Lists the tests that would run, each with where it is written, and runs none. |
 | `--seed <number>` | Seeds each test's `Random` with the number. Without it, the seed is chosen at random, and printed when a test fails. |
 | `--timeout <seconds>` | How long a test may run before it is stopped, and fails: 10 seconds by default. |
 | `--release` | Refuses any error, and compiles the tests as a release build does. |
@@ -223,6 +226,9 @@ With `--format json`, `nanyx test` writes one JSON object on each line of standa
   `column`, and its `stack`, innermost first, each frame's `function` with its `file` and `line`.
 - **`summary`**, last: whether the tests were `built`, how many `passed` and `failed`, and the `seed`. A build that
   fails writes its diagnostics and a summary with `built` false, and a package with no tests a summary alone.
+
+With `--list`, it writes the diagnostics, then a `test` object for each test that would run, with the fields that say
+which test it is and no outcome, and a `summary`.
 
 A package whose manifest can't be read writes its error to standard error, as text, and nothing to standard output.
 The exit code is as with text.

@@ -11,7 +11,8 @@ using Transpiler.Wasm;
 /// <c>nanyx test --format json</c>: what the test run reports, as one JSON object on each line of standard output, for a
 /// tool such as an editor to read rather than the text a person reads. Each object has a <c>type</c>: a
 /// <c>diagnostic</c> for each error or warning the build reports, then <c>start</c>, a <c>test</c> for each test as it
-/// ends, and a <c>summary</c> last, which a build that fails or a package with no tests writes too.
+/// ends, and a <c>summary</c> last, which a build that fails or a package with no tests writes too. With <c>--list</c>,
+/// a <c>test</c> for each test the run would run, with no outcome, and a <c>summary</c>.
 /// </summary>
 internal static partial class CliCommands
 {
@@ -92,14 +93,7 @@ internal static partial class CliCommands
     private static void WriteJsonTest(TextWriter writer, TestRun run) =>
         WriteJsonLine(writer, json =>
         {
-            json.WriteString("type", "test");
-            json.WriteString("name", Shown(run.Test));
-            json.WriteString("module", run.Test.Module);
-            json.WriteString("test", run.Test.Name);
-            json.WriteString("file", run.Test.File);
-            json.WriteNumber("line", run.Test.Line);
-            json.WriteNumber("column", run.Test.Column);
-            json.WriteBoolean("io", run.Test.Io);
+            WriteJsonTestFields(json, run.Test);
             switch (run.Outcome)
             {
                 case var outcome when outcome.IsPassed:
@@ -119,6 +113,26 @@ internal static partial class CliCommands
             json.WriteString("output", run.Output);
             json.WriteString("errors", run.Errors);
         });
+
+    /// <summary>
+    /// The fields a <c>test</c> object starts with, which say which test it is, as a run and a listing both write them:
+    /// its full name, its module and own name, where it is written and whether it is <c>#io</c>.
+    /// </summary>
+    private static void WriteJsonTestFields(Utf8JsonWriter json, ListedTest test)
+    {
+        json.WriteString("type", "test");
+        json.WriteString("name", Shown(test));
+        json.WriteString("module", test.Module);
+        json.WriteString("test", test.Name);
+        json.WriteString("file", test.File);
+        json.WriteNumber("line", test.Line);
+        json.WriteNumber("column", test.Column);
+        json.WriteBoolean("io", test.Io);
+    }
+
+    /// <summary>The <c>test</c> object for <paramref name="test"/> in a listing, <c>--list</c>: which test it is, with no outcome.</summary>
+    private static void WriteJsonListedTest(TextWriter writer, ListedTest test) =>
+        WriteJsonLine(writer, json => WriteJsonTestFields(json, test));
 
     /// <summary>Writes why a test failed, <paramref name="error"/>, as an object (see <see cref="WriteJsonTest"/>).</summary>
     private static void WriteJsonFailure(Utf8JsonWriter json, RunError error)

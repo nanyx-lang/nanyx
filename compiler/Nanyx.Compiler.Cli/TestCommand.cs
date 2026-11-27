@@ -23,6 +23,9 @@ internal static partial class CliCommands
     /// <param name="release">Refuse any error. Without it, type and name errors are deferred, as nanyx run defers them.</param>
     /// <param name="timings">Write how long each module took to check to stderr, as a tree of the modules each one imported. On a terminal, the tree is shown live while the compile runs.</param>
     /// <param name="format">How to write the report: text, for a person to read, as without it, or json, one JSON object on each line, for a tool such as an editor to read.</param>
+    /// <param name="list">List the tests that would run, each with where it is written, and run none.</param>
+    /// <param name="test">Run only the test of this full name, as the report writes it, geometry.`adds points`; several, one on each line. A name that names no test is an error.</param>
+    /// <param name="module">Run only the tests of the module of this name. A name that names no module with tests is an error.</param>
     [Consolo("test")]
     public static int Test(
         [Consolo("filter")] string? filter = null,
@@ -31,11 +34,14 @@ internal static partial class CliCommands
         [Consolo("release")] bool release = false,
         [Consolo("timings")] bool timings = false,
         [Consolo("format")] string? format = null,
+        [Consolo("list")] bool list = false,
+        [Consolo("test")] string? test = null,
+        [Consolo("module")] string? module = null,
         params string[] path) =>
-        TestIn(Shell.Process, path, filter, seed, timeout, release, timings, format);
+        TestIn(Shell.Process, path, filter, seed, timeout, release, timings, format, list, test, module);
 
     /// <summary>What <c>nanyx test</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int TestIn(Shell shell, string[] path, string? filter = null, string? seed = null, string? timeout = null, bool release = false, bool timings = false, string? format = null)
+    internal static int TestIn(Shell shell, string[] path, string? filter = null, string? seed = null, string? timeout = null, bool release = false, bool timings = false, string? format = null, bool list = false, string? test = null, string? module = null)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -185,7 +191,48 @@ internal static partial class CliCommands
         var wasm = TestBuild.assemble(options, root.Value.Typed.Value);
         var chosenSeed = givenSeed ?? Random.Shared.NextInt64();
         var tests = TestTable.read(wasm);
-        var selected = tests.Where(test => filter is null || Shown(test).Contains(filter, StringComparison.Ordinal)).ToList();
+        // The tests --test names, exactly, by the name the report writes or the name without backticks, and those of the
+        // module --module names: each must be one, so that a list of tests that has gone stale doesn't run nothing.
+        var named = test?.Split('\n').Select(written => written.TrimEnd('\r')).Where(written => written.Length > 0).ToList() ?? [];
+        bool IsNamed(ListedTest listed) => named.Contains(Shown(listed)) || named.Contains(listed.FullName);
+        if (named.FirstOrDefault(written => !tests.Any(listed => Shown(listed) == written || listed.FullName == written)) is { } unknown)
+        {
+            shell.Error.WriteLine($"error: --test names {unknown}, which is no test of {name}: nanyx test --list lists them");
+            return UsageError;
+        }
+
+        if (module is not null && !tests.Any(listed => listed.Module == module))
+        {
+            shell.Error.WriteLine($"error: --module names {module}, which is no module of {name} with tests: nanyx test --list lists them");
+            return UsageError;
+        }
+
+        var selected = tests
+            .Where(listed => (named.Count == 0 && module is null) || IsNamed(listed) || listed.Module == module)
+            .Where(listed => filter is null || Shown(listed).Contains(filter, StringComparison.Ordinal))
+            .ToList();
+        if (list)
+        {
+            foreach (var listed in selected)
+            {
+                if (json)
+                {
+                    WriteJsonListedTest(shell.Out, listed);
+                }
+                else
+                {
+                    shell.Out.WriteLine($"{Shown(listed)}{Io(listed)}  {listed.File}:{listed.Line}:{listed.Column}");
+                }
+            }
+
+            if (json)
+            {
+                WriteJsonSummary(shell.Out, true, 0, 0, null);
+            }
+
+            return 0;
+        }
+
         if (json)
         {
             WriteJsonStart(shell.Out, name, selected.Count, chosenSeed, HasErrors(diagnostics) ? diagnostics.Count(diagnostic => diagnostic.Severity.IsError) : 0);
