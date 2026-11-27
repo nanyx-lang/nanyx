@@ -318,4 +318,40 @@ public sealed class HoverTests : LanguageServerTestBase
         var userId = await HoverAt(uri, 4, 8);
         Assert.Equal("```nanyx\ntype UserId\n```\n\nA private type, declared in 'ids.nyx'.", userId?.Contents.MarkupContent?.Value);
     }
+
+    [Fact]
+    public async Task Hover_shows_a_custom_pattern_as_it_was_declared()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("patterns.nyx"));
+        Open(uri, """
+            pattern int -> #Zero | _ = { n -> n == 0 }
+            def parse = { (s: string) ->
+              pattern string -> #Num(float) | _ = { t ->
+                match t \float.fromString
+                  | #some(f) -> #Num(f)
+                  | _ -> _
+              }
+              match s
+                | #Num(f) -> f
+                | _ -> 0.0
+            }
+            def zero = { (n: int) ->
+              match n
+                | #Zero -> true
+                | _ -> false
+            }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // On the declaration.
+        Assert.Equal("```nanyx\npattern string -> #Num(float) | _\n```", (await HoverAt(uri, 2, 22))?.Contents.MarkupContent?.Value);
+        // On the tag a match arm uses: the tag's name, not its payload, which is a pattern variable.
+        var used = await HoverAt(uri, 8, 7);
+        Assert.Equal("```nanyx\npattern string -> #Num(float) | _\n```", used?.Contents.MarkupContent?.Value);
+        Assert.Equal(new Range(8, 6, 8, 10), used?.Range);
+        Assert.Equal("```nanyx\nf: float\n```", (await HoverAt(uri, 8, 11))?.Contents.MarkupContent?.Value);
+        // A partial pattern of one tag returns a `bool`, but is written with its tag.
+        Assert.Equal("```nanyx\npattern int -> #Zero | _\n```", (await HoverAt(uri, 13, 8))?.Contents.MarkupContent?.Value);
+    }
 }

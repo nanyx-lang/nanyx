@@ -11,6 +11,8 @@ type OutlineKind =
     | Function
     /// Any other def.
     | Value
+    /// A custom pattern, named by its tags: `#Even | #Odd`.
+    | Pattern
     | RecordType
     | UnionType
     /// A type that stands for another, neither a record nor a union: `type Count = int`.
@@ -100,14 +102,16 @@ let rec private localItems (declared: DeclaredNames) (value: Expression) : Outli
     // An or-pattern's arms share their body, which is walked once for each.
     within value |> List.distinctBy (fun item -> item.NameSpan.Start, item.Name) |> List.sortBy (fun item -> item.Span.Start)
 
-/// The def whose value is `value`. A def the compiler made up declares no name, and is left out.
+/// The def whose value is `value`. A def the compiler made up declares no name, and is left out. A custom pattern's
+/// def is named by the pattern's tags (see `Signatures.patternName`).
 and private defItem (declared: DeclaredNames) (span: SourceSpan) (value: Expression) =
     declaredName declared value.Id DefValue
     |> Option.map (fun (name, nameSpan) ->
-        let kind =
-            match value.Kind with
-            | Lambda _ -> OutlineKind.Function
-            | _ -> OutlineKind.Value
+        let name, kind =
+            match Signatures.patternName name, value.Kind with
+            | Some tags, _ -> tags, OutlineKind.Pattern
+            | None, Lambda _ -> name, OutlineKind.Function
+            | None, _ -> name, OutlineKind.Value
         { Name = name; Kind = kind; Span = span; NameSpan = nameSpan; Children = localItems declared value })
 
 /// The span of `text`, written at `offset` in `source`.

@@ -205,14 +205,21 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         string Signature(string name, string type) => LaidOut(request.Width, name, type);
         string? DocOf(NyxCompiler.Symbol symbol) => docs?.ForSymbol(symbol)?.Value;
 
-        InfoViewItem Name(InfoView.ScopedName name) => new()
+        // A custom pattern's def is written as the pattern was declared, whose keyword links to the declaration (see
+        // `Signatures.patternDeclaration`).
+        InfoViewItem AsDeclared(string name, string? type, InfoViewItem item, string? detail) =>
+            type is not null && NyxCompiler.Signatures.patternDeclaration(name, type)?.Value is { } pattern
+                ? item with { Text = pattern, Name = new InfoViewName(0, Parser.Program.PatternSyntax.keyword.Length), Detail = detail }
+                : item;
+
+        InfoViewItem Name(InfoView.ScopedName name) => AsDeclared(name.Name, name.Type?.Value, new()
         {
             Text = name.Type?.Value is { } type ? Signature(name.Name, type) : name.Name,
             Name = new InfoViewName(0, name.Name.Length),
             Detail = Describe(name.Kind),
             Location = Locate(name.Declaration),
             Documentation = DocOf(name.Symbol)
-        };
+        }, "pattern");
 
         InfoViewItem Context(InfoView.ScopedContext context) => new()
         {
@@ -238,12 +245,12 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                         Title = "Expression",
                         Items =
                         [
-                            new InfoViewItem
+                            AsDeclared(expression.Name, expression.Type, new InfoViewItem
                             {
                                 Text = Signature(expression.Name, expression.Type),
                                 Location = Locate(expression.Span),
                                 Documentation = expression.Symbol?.Value is { } symbol ? DocOf(symbol) : null
-                            }
+                            }, null) with { Name = null }
                         ]
                     }
                 ]
@@ -283,15 +290,16 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             else if (scope.Kind.IsFunctionScope)
             {
                 kind = "function";
+                var detail = scope.Declared ? "declared" : "inferred";
                 var signature = scope.Type?.Value is { } type
-                    ? new InfoViewItem
+                    ? AsDeclared(scope.Symbol?.Value.Name ?? "", type, new InfoViewItem
                     {
                         Text = Signature(scope.Symbol?.Value.Name ?? "", type),
                         Name = scope.Symbol?.Value is { } named ? new InfoViewName(0, named.Name.Length) : null,
-                        Detail = scope.Declared ? "declared" : "inferred",
+                        Detail = detail,
                         Location = Locate(scope.Span),
                         Documentation = scope.Symbol?.Value is { } def ? DocOf(def) : null
-                    }
+                    }, detail)
                     : null;
                 Add("signature", "Signature", signature is null ? [] : [signature]);
                 Add("names", "Parameters and locals", names);

@@ -49,7 +49,7 @@ type ScopeKind =
     | ModuleScope
 
 /// A scope around the position. `Heading` names it: a lambda by its parameters (`{ message -> … }`), a def by its name
-/// (`def greet`), the module by its declared name (`module library.lending`). `Span` is what the heading links to: the
+/// (`def greet`), a custom pattern by its tags (`pattern #Even | #Odd`), the module by its declared name (`module library.lending`). `Span` is what the heading links to: the
 /// lambda, the def's name, or the module's declaration (none if it has none). `Type` is a lambda's type, with the
 /// contexts it carries, or a def's signature, as hover writes them, and `Declared` says whether the def writes its type;
 /// `Symbol` is the def's, whose doc comment the info view shows. `Names` are the parameters, locals and pattern variables it declares, nearest the position first, and for
@@ -393,7 +393,10 @@ let at (names: TypeNotation) (file: string) (result: CompileResult) (offset: int
             @ (defs
                |> List.map (fun (symbol, (name, annotation, _, value)) ->
                    { Kind = FunctionScope
-                     Heading = $"def {name}"
+                     Heading =
+                       match Signatures.patternName name with
+                       | Some tags -> $"{PatternSyntax.keyword} {tags}"
+                       | None -> $"def {name}"
                      Span = symbol.Declaration
                      Type = topLevelType names rename typed symbol
                      Declared = annotation.IsSome
