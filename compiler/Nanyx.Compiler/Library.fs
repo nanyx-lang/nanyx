@@ -276,8 +276,8 @@ module Compiler =
 
     /// In a test build, the application the program depends on, directly or through others, that the file at `path` is
     /// a source file of, or a file of whose host's package: a test package's tests import an application's modules, which
-    /// keep its host and see its prelude, as they do in its own test build. None in any other build, where a package
-    /// the program depends on is a library.
+    /// keep its host and see its prelude, as they do in its own test build, and so in an editor's check of a test file
+    /// (see `Package.modulesFor`). None in any other build, where a package the program depends on is a library.
     let private applicationOf (checkedModules: CheckedModules) (path: string) : PackageModules option =
         let rec applications (modules: PackageModules) =
             modules.Dependencies |> List.collect (fun dependency -> (if dependency.Host.IsSome then [ dependency ] else []) @ applications dependency)
@@ -285,7 +285,7 @@ module Compiler =
             PackageModules.contains application path
             || application.HostPackage |> Option.exists (fun hostModules -> (PackageModules.ownerOf hostModules path).IsSome)
         match checkedModules.Package with
-        | Some ({ TestRoot = Some _ } as package) when not (PackageModules.isProgramFile package path) -> applications package |> List.tryFind owns
+        | Some ({ TestHost = Some _ } as package) when not (PackageModules.isProgramFile package path) -> applications package |> List.tryFind owns
         | _ -> None
 
     /// The host of the module from `origin`, with its package's modules: the build's (see `buildHostOf`), but in a test
@@ -404,9 +404,9 @@ module Compiler =
                     // them, and have no entry point; nor has an application's the program depends on.
                     let testBuild =
                         match origin, checkedModules.Package with
-                        | SourceFile path, Some ({ TestRoot = Some root } as package) ->
-                            (PackageModules.isProgramFile package path && not (PackageModules.samePath path root))
-                            || application |> Option.exists (fun application -> PackageModules.contains application path)
+                        | SourceFile path, Some ({ TestRoot = Some root } as package) when PackageModules.isProgramFile package path ->
+                            not (PackageModules.samePath path root)
+                        | SourceFile path, _ -> application |> Option.exists (fun application -> PackageModules.contains application path)
                         | _ -> false
                     Attributes.applyAttributes host testBuild desugaredAst
                     |> Result.map (fun (desugared, entries, components) ->
