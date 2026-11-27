@@ -118,6 +118,31 @@ let ``nanyx test runs a script's tests, not its statements`` () =
     Assert.Equal(0, outcome.ExitCode)
     Assert.Equal("Running 1 test in maths.nyx\n\nPASS maths.doubles\n\n1 passed\n", outcome.StandardOutput.ReplaceLineEndings "\n")
 
+/// How many times `text` appears in `output`.
+let private timesIn (output: string) (text: string) = (output.Split text).Length - 1
+
+[<Fact>]
+let ``nanyx test of a script reports each of its errors once, and counts it once (#3118)`` () =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" "def x: int = \"no\"\n\n@test\ndef `adds` = {\n  assert(1 + 1 == 2)\n}\n"
+    let outcome = nanyxIn directory.Path [ "test"; "main.nyx" ]
+    Assert.Equal(1, timesIn outcome.StandardError "error NYX0201")
+    Assert.Contains("Running 1 test in main.nyx with 1 deferred error\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+
+[<Fact>]
+let ``nanyx test of a script reports a test that needs a context the test host lacks once (#3118)`` () =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" "@test\ndef `reads env directly` = {\n  println(variable(\"PATH\"))\n}\n"
+    let outcome = nanyxIn directory.Path [ "test"; "main.nyx" ]
+    Assert.Equal(1, timesIn outcome.StandardError "error NYX0312")
+
+[<Fact>]
+let ``nanyx test of a package reports each error of a module with tests once (#3118)`` () =
+    let broken = "export module broken\n\ndef x: int = \"no\"\n\n@test\ndef `adds` = {\n  assert(1 + 1 == 2)\n}\n"
+    let outcome = testing [] [ "src/broken.nyx", broken ]
+    Assert.Equal(1, timesIn outcome.StandardError "error NYX0201")
+    Assert.Contains("Running 1 test in tested with 1 deferred error\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+
 [<Fact>]
 let ``nanyx test shows a failed assert's place as its stack does, from the package's root`` () =
     // Not by the file's full path, which would show the machine's directories (#2969).
