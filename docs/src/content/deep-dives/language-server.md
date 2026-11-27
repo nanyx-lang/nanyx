@@ -23,7 +23,10 @@ The info view (`NyxCompiler.InfoView`, `NyxCompiler.ContextFlow`, the server's `
 diagnostics published on the document, each beside the compiler's diagnostic it was made from
 (`ConvertedDiagnostics.Origins`), which gives the suggestions and the fixes. The expression at the top is found by
 `InfoView.expressionAt`: for a selection, by `SelectedExpression.at`, the finder Introduce local uses too; for none, by
-hover's own search. `InfoViewHandler.WithoutRepeats` is the one place that drops an item a scope further out repeats.
+hover's own search. Every scope's heading, the expression's included, comes from `InfoView` as an `InfoView.Heading`:
+its code, and a label where the code doesn't say what it is (`expression`, `lambda`), so neither the handler nor the
+extension writes one; a `for` loop's lambda is found through `ForSyntax` and headed as the loop is written.
+`InfoViewHandler.WithoutRepeats` is the one place that drops an item a scope further out repeats.
 The library browser and search
 by type (`NyxCompiler.LibraryCatalog`, `NyxCompiler.LibrarySearch`, and the `nanyx/libraryModules`,
 `nanyx/libraryModule`, `nanyx/librarySearch` and `nanyx/addImport` requests) read the exports of the checked standard

@@ -72,14 +72,17 @@ interface InfoViewMessage {
  */
 interface InfoViewScope {
   kind: "messages" | "expression" | "lambda" | "function" | "module";
+  /** What kind of code the heading is, where it doesn't say: `expression`, `lambda`. */
+  label?: string;
+  /** The scope's code (`x + 1`, `{ message -> … } (line 30)`, `for xs | x -> … (line 4)`, `def greet`), or the messages' title. */
   heading: string;
-  /** Where the heading links: the lambda, the def's name, the module's declaration. */
+  /** Where the heading links: the expression, the lambda, the `for` loop, the def's name, the module's declaration. */
   location?: LspLocation;
   /** The module's doc comment, as Markdown. */
   documentation?: string;
   /** `documentation` rendered to HTML by VS Code's Markdown renderer, filled in by the extension. */
   documentationHtml?: string;
-  /** `heading` highlighted as code, filled in by the extension for a lambda, def or module. */
+  /** `heading` highlighted as code, filled in by the extension for every scope but the messages. */
   headingCode?: HighlightedCode;
   collapsed?: boolean;
   sections: InfoViewSection[];
@@ -403,8 +406,8 @@ async function withRenderedDocumentation(scopes: InfoViewScope[]): Promise<InfoV
 }
 
 /**
- * The scopes with their code highlighted: each heading but the messages' and the expression's, and the text of each
- * item, and of the items under it. Those headings, and the messages, are prose.
+ * The scopes with their code highlighted: each heading but the messages', and the text of each item, and of the items
+ * under it. The messages' heading, and the messages, are prose.
  */
 async function withHighlightedCode(highlighter: Highlighter, scopes: InfoViewScope[]): Promise<InfoViewScope[]> {
   const highlighted = async (item: InfoViewItem): Promise<InfoViewItem> => ({
@@ -414,7 +417,7 @@ async function withHighlightedCode(highlighter: Highlighter, scopes: InfoViewSco
   });
   return Promise.all(scopes.map(async (scope) => ({
     ...scope,
-    headingCode: scope.kind === "messages" || scope.kind === "expression" ? undefined : await highlighter.highlight(scope.heading),
+    headingCode: scope.kind === "messages" ? undefined : await highlighter.highlight(scope.heading),
     sections: await Promise.all(scope.sections.map(async (section) => ({
       ...section,
       items: await Promise.all(section.items.map(highlighted))
@@ -711,8 +714,8 @@ function page(webview: vscode.Webview): string {
     details.open = open[key] ?? !data.collapsed;
     details.addEventListener("toggle", () => { open[key] = details.open; });
     const summary = element("summary");
-    // A def's and the module's headings say what they are; a lambda's is only its parameters.
-    if (data.kind === "lambda") summary.appendChild(element("span", "kind", "lambda"));
+    // A def's, a loop's and the module's headings say what they are; the server labels the others.
+    if (data.label) summary.appendChild(element("span", "kind", data.label));
     if (data.location) {
       const link = element("a");
       link.appendChild(data.headingCode ? highlightedCode(data.heading, data.headingCode) : document.createTextNode(data.heading));
