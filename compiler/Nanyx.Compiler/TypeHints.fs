@@ -238,14 +238,17 @@ let inlayHintsWithTopLevel (names: TypeNotation) (file: string) (result: Compile
     let lenses, others = hints names file result
     lenses @ others |> List.sortBy (fun hint -> hint.Span.Start)
 
-/// The type of each top-level def in the compiled root module, whether it writes its type or not, in source order,
+/// The type of each top-level def the compiled root module writes, whether it writes its type or not, in source order,
 /// after the contexts it requires, as a hover on its name shows it, with made-up type variables named by `names`, as
 /// `nanyx check` prints them. `file` is as for `typeLenses`. Empty when the module did not type-check.
 let topLevelTypes (names: TypeNotation) (file: string) (result: CompileResult) : TypeHint list =
     match result.Typed with
     | Some typed ->
         ownSymbols file typed
-        |> List.filter (fun symbol -> symbol.Kind = TopLevelValue)
+        // The def the compiler makes for each def that starts tasks, which its callers' tasks run in, is not written in
+        // the file (see `TaskScopeSyntax`).
+        |> List.filter (fun symbol ->
+            symbol.Kind = TopLevelValue && (match symbol.Name with TaskScopeSyntax.InCallersScope _ -> false | _ -> true))
         |> List.choose (fun symbol ->
             typed.SymbolTypes
             |> Map.tryFind symbol.Id
