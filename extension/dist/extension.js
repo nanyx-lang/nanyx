@@ -42,6 +42,7 @@ const developmentMode_1 = require("./developmentMode");
 const infoView_1 = require("./infoView");
 const library_1 = require("./library");
 const run_1 = require("./run");
+const testController_1 = require("./testController");
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
 const COMMAND_RUN = "nanyx.runFile";
@@ -59,6 +60,7 @@ let buildWatcher;
 let outputChannel;
 let infoView;
 let libraryView;
+let testExplorer;
 let declinedDownload = false;
 let declinedUpdate = false;
 async function activate(context) {
@@ -68,7 +70,9 @@ async function activate(context) {
     infoView = view;
     const library = new library_1.LibraryView(() => client);
     libraryView = library;
-    context.subscriptions.push(view, library, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
+    const explorer = new testController_1.TestExplorer(() => compiler, log);
+    testExplorer = explorer;
+    context.subscriptions.push(view, library, explorer, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
         declinedDownload = false;
         const settings = (0, compiler_1.readSettings)();
         const version = await (0, compiler_1.versionToDownload)(context, settings, log);
@@ -251,6 +255,8 @@ async function download(context, settings, version) {
 async function restartClient(context, executable) {
     await stopClient();
     compiler = executable;
+    // The tests are listed by the compiler, so a new one lists them again.
+    void testExplorer?.refresh();
     // Each switch is passed only when it is on, so the defaults still work with compilers that predate it.
     const config = vscode.workspace.getConfiguration("nanyx");
     const args = ["lsp"];

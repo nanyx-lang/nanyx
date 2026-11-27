@@ -81,14 +81,18 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
         var start = document.Positions.ToOffset(request.Range.Start);
         var end = document.Positions.ToOffset(request.Range.End);
 
-        // Published diagnostics are the compiler's, one for one and in the same order.
-        var published = document.PublishedDiagnostics(uri);
-        var actions = compiled.Diagnostics
-            .Zip(published)
+        // Each published diagnostic with the compiler's it was made from: the one at an import that sums up the errors
+        // the import brings in was made from none, and has no fixes of its own (#3048).
+        var converted = document.ConvertedDiagnostics(uri);
+        var published = converted.Own
+            .Zip(converted.Origins)
+            .Where(pair => pair.Second is { } origin && FSharpOption<Parser.Program.SourceSpan>.get_IsSome(origin.Span))
+            .Select(pair => (Origin: pair.Second!, Span: pair.Second!.Span.Value, Published: pair.First))
+            .ToList();
+        var actions = published
             .Where(_ => quickFixes)
-            .Where(pair => FSharpOption<Parser.Program.SourceSpan>.get_IsSome(pair.First.Span))
-            .Where(pair => pair.First.Span.Value.File == document.FileName && Overlaps(pair.First.Span.Value, start, end))
-            .SelectMany(pair => pair.First.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Second, isPreferred: index == 0)))
+            .Where(pair => pair.Span.File == document.FileName && Overlaps(pair.Span, start, end))
+            .SelectMany(pair => pair.Origin.Fixes.Select((fix, index) => ToAction(uri, document, fix, pair.Published, isPreferred: index == 0)))
             .OfType<CodeAction>()
             .ToList();
         var refactorings = Offers(uri, document, compiled, start, end, only)
@@ -96,10 +100,9 @@ public sealed class CodeActionHandler : CodeActionHandlerBase
             .ToList();
 
         // Organising imports is a fix for an unused import, too.
-        var unusedImports = compiled.Diagnostics
-            .Zip(published)
-            .Where(pair => FSharpOption<Parser.Program.SourceSpan>.get_IsSome(pair.First.Span) && Overlaps(pair.First.Span.Value, start, end))
-            .Select(pair => pair.Second)
+        var unusedImports = published
+            .Where(pair => Overlaps(pair.Span, start, end))
+            .Select(pair => pair.Published)
             .Where(diagnostic => diagnostic.Code?.String?.EndsWith("/" + NyxCompiler.UnusedImports.rule.Id) == true)
             .ToList();
         if (unusedImports.Count > 0 && quickFixes && document.Typed)
