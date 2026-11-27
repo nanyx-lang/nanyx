@@ -356,11 +356,17 @@ let rec internal inferCall
                                 match paramTy, tupleItems with
                                 | Some paramTy, Some (typedItems, itemTys) ->
                                     let reported = lazy (LambdaArguments.reportedSpan next arg.Span typedItems itemTys ty.Type paramTy)
+                                    let items = match arg.Kind with TupleExpr items -> items | _ -> []
                                     { next with ArgumentSpans = next.ArgumentSpans |> Map.add arg.Span reported }
+                                    |> ParameterTypes.noteItems scheme.Symbol name items
                                 | _ -> next
                             current <-
                                 match paramTy with
-                                | Some paramTy -> addAssignableConstraintAt arg.Span ty.Type paramTy next
+                                | Some paramTy ->
+                                    // An argument of the wrong type points back at the type the callee writes for the
+                                    // parameter, and a lambda's at the types it writes for its own (#3109).
+                                    addAssignableConstraintAt arg.Span ty.Type paramTy next
+                                    |> ParameterTypes.noteArgument scheme.Symbol name index args.Length arg paramTy
                                 | None -> next
                             Ok (ty, arg.Span)
                         | Error err -> Error err)
