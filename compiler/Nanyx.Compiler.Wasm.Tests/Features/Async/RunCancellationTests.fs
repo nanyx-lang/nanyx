@@ -48,7 +48,8 @@ println(ticks() - started < 30s)"""
 /// cancelled, and its answer to `/started` until a request to `/slow` has come, one for each, so a contestant that asks
 /// for `/started` before it sleeps finishes only once the request it races against is under way. That makes the race
 /// a matter of order, not of how long a request takes to start on a loaded machine (#2878). It answers anything else at
-/// once.
+/// once. The programs give both requests a timeout no loaded machine reaches, and `dbg` anything else they get back, so
+/// a request that fails shows on stderr rather than as the race's result.
 let private withSlowServer (test: string -> unit) =
     use release = new ManualResetEventSlim()
     use slowCame = new SemaphoreSlim(0)
@@ -70,19 +71,34 @@ let ``A request in a task race cancels gives #cancelled, so a timeout is a race 
             "the request was cancelled\n#timedOut\n"
             $"""::install nanyx.http
 
-import nanyx.http/http as http
+import (
+  nanyx.http/http as http
+  nanyx.http/request as (Request)
+)
+
+def get = {{ url: string -> http.send(Request.of(#get, url) with timeout = 10min) }}
 
 def fetch: [Async, Console, Http] string -> #some(string) | #cancelled | #failed = {{ url ->
-  match http.get(url)
+  match get(url)
     | #some(response) -> #some(response.body)
     | #cancelled ->
       println("the request was cancelled")
       #cancelled
-    | _ -> #failed
+    | failed ->
+      dbg(failed)
+      #failed
+}}
+
+def started = {{ url: string ->
+  match get(url)
+    | #some(_) -> ()
+    | failed ->
+      dbg(failed)
+      ()
 }}
 
 def limited: [Async, Clock, Console, Http] () -> #some(string) | #cancelled | #failed | #timedOut = {{ _ ->
-  race([{{ fetch("{url}/slow") }}, {{ http.get("{url}/started"); sleep(50ms); #timedOut }}])
+  race([{{ fetch("{url}/slow") }}, {{ started("{url}/started"); sleep(50ms); #timedOut }}])
 }}
 
 println(limited())""")
@@ -94,14 +110,29 @@ let ``Cancelling a task cancels every task it started`` () =
             "the child's request was cancelled\nquick\n"
             $"""::install nanyx.http
 
-import nanyx.http/http as http
+import (
+  nanyx.http/http as http
+  nanyx.http/request as (Request)
+)
+
+def get = {{ url: string -> http.send(Request.of(#get, url) with timeout = 10min) }}
 
 def child: [Async, Console, Http] string -> string = {{ url ->
-  match http.get(url)
+  match get(url)
     | #cancelled ->
       println("the child's request was cancelled")
       "cancelled"
-    | _ -> "answered"
+    | answered ->
+      dbg(answered)
+      "answered"
+}}
+
+def started = {{ url: string ->
+  match get(url)
+    | #some(_) -> ()
+    | failed ->
+      dbg(failed)
+      ()
 }}
 
 def parent = {{ url: string ->
@@ -110,7 +141,7 @@ def parent = {{ url: string ->
 }}
 
 def raced = {{ _ ->
-  race([{{ parent("{url}/slow") }}, {{ http.get("{url}/started"); sleep(50ms); "quick" }}])
+  race([{{ parent("{url}/slow") }}, {{ started("{url}/started"); sleep(50ms); "quick" }}])
 }}
 
 println(raced())""")

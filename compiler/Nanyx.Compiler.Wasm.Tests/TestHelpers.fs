@@ -787,27 +787,30 @@ type TestServer(answer: string -> string -> (string * string) list -> string -> 
     do
         listener.Prefixes.Add($"http://localhost:{port}/")
         listener.Start()
+    /// Answers the request `context` holds, and closes it.
+    let respond (context: Net.HttpListenerContext) =
+        try
+            let request = context.Request
+            let headers = [ for name in request.Headers.AllKeys -> name.ToLowerInvariant(), request.Headers.[name] ]
+            let body = (new StreamReader(request.InputStream)).ReadToEnd()
+            let status, answerHeaders, text = answer request.HttpMethod request.Url.AbsolutePath headers body
+            context.Response.StatusCode <- status
+            for name, value in answerHeaders do
+                context.Response.Headers.Add(name, value)
+            let bytes = Text.Encoding.UTF8.GetBytes(text: string)
+            context.Response.OutputStream.Write(bytes, 0, bytes.Length)
+            context.Response.Close()
+        with _ -> ()
     let serving =
         Threading.Thread(
             (fun () ->
                 try
                     while listener.IsListening do
                         let context = listener.GetContext()
-                        // Each request is answered on a thread of its own, so that several can be in flight at once.
-                        Threading.ThreadPool.QueueUserWorkItem(fun _ ->
-                            try
-                                let request = context.Request
-                                let headers = [ for name in request.Headers.AllKeys -> name.ToLowerInvariant(), request.Headers.[name] ]
-                                let body = (new StreamReader(request.InputStream)).ReadToEnd()
-                                let status, answerHeaders, text = answer request.HttpMethod request.Url.AbsolutePath headers body
-                                context.Response.StatusCode <- status
-                                for name, value in answerHeaders do
-                                    context.Response.Headers.Add(name, value)
-                                let bytes = Text.Encoding.UTF8.GetBytes(text: string)
-                                context.Response.OutputStream.Write(bytes, 0, bytes.Length)
-                                context.Response.Close()
-                            with _ -> ())
-                        |> ignore
+                        // Each request is answered on a thread of its own, so that several can be in flight at once,
+                        // and not on the thread pool: an answer a test holds back, as a slow server's is, keeps its
+                        // thread, and on a loaded machine the pool can be slow to give another request one (#2878).
+                        Threading.Thread((fun () -> respond context), IsBackground = true).Start()
                 with _ -> ()),
             IsBackground = true)
     do serving.Start()
