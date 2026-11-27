@@ -168,25 +168,23 @@ let private hoveredAt (syntax: Module) (typed: TypedModule) (offset: int) : (Ty 
         Some (ty, symbol, span)
 
 /// `ty`, the type `symbol` has where it is hovered, as hover writes it: after the contexts it requires there (see
-/// `withContextsAt`) and the name (see `declared`), and with each of `others` written with it, its variables named as
-/// they are there. The types and contexts they name are named by `rename` (see `Signatures.relativeAt`).
-let private writtenAt (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (symbol: Symbol option) (ty: Ty) (others: Ty list) =
+/// `withContextsAt`) and the name (see `declared`).
+let private writtenAt (names: TypeNotation) (typed: TypedModule) (symbol: Symbol option) (ty: Ty) =
     let ty, contexts =
         match symbol with
         | Some symbol -> withContextsAt typed symbol ty
         | None -> ty, []
-    let typeWritten, othersWritten =
-        Signatures.typesWithContexts typed.TypeDefs names (rename ty) (List.map rename contexts) (List.map rename others)
-    (symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten), othersWritten
+    let typeWritten = Signatures.typeWithContexts typed.TypeDefs names ty contexts
+    symbol |> Option.map (fun symbol -> declared symbol typeWritten) |> Option.defaultValue typeWritten
 
 /// The hover for what `hoveredAt` found (see `typeAt`). A measured value's says what units make values of its
 /// dimension (see `DimensionHover`).
-let private hoverOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (ty: Ty, symbol: Symbol option, span: SourceSpan) : HoverInfo =
+let private hoverOf (names: TypeNotation) (typed: TypedModule) (ty: Ty, symbol: Symbol option, span: SourceSpan) : HoverInfo =
     let note =
         match Unifier.unalias ty with
         | TyMeasure(dimension, _) -> DimensionHover.unitsNote typed dimension
         | _ -> None
-    { Type = fst (writtenAt names rename typed symbol ty []); Span = span; Note = note }
+    { Type = writtenAt names typed symbol ty; Span = span; Note = note }
 
 /// The hover for the expression at `offset` in the compiled root module: the type of the narrowest expression
 /// there that has one, or of the function itself on a call's function name or an operator, where it is
@@ -201,7 +199,7 @@ let private hoverOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule
 /// outermost wins, for the same reason: the parameters a shorthand match lambda makes up span the whole lambda.
 let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option =
     match result.Syntax, result.Typed with
-    | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.map (hoverOf names id typed)
+    | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.map (hoverOf names typed)
     | _ -> None
 
 /// The hover on a unit or a dimension at `offset` in the compiled root module (see `DimensionHover`): the unit of a number
@@ -315,57 +313,3 @@ let moduleAt (file: string) (result: CompileResult) (offset: int) : ModuleHover 
                     else None))
         ownModule () |> Option.orElseWith import |> Option.orElseWith qualifier
     | _ -> None
-
-/// A def's own signature, beside the type a name that refers to it has where it is used. `Declared` is the signature
-/// as hover writes the def's declaration: its annotation, or else the generic type it was inferred to have. `Bindings`
-/// are the type variables of the signature that are something else at the use, in the order the signature writes
-/// them, each with what it is there, named as the type at the use names its variables: `a`, `string`.
-type Instantiation = { Declared: string; Bindings: (string * string) list; Definition: SourceSpan }
-
-/// The `Instantiation` of what `hoveredAt` found (see `typeAndInstantiationAt`).
-let private instantiationOf (names: TypeNotation) (rename: Ty -> Ty) (typed: TypedModule) (hovered: Ty * Symbol option * SourceSpan) : Instantiation option =
-    match hovered with
-    | ty, Some symbol, _ when symbol.Kind = TopLevelValue || symbol.Kind = LocalValue ->
-        declaredType typed symbol
-        |> Option.bind (fun (general, contexts) ->
-            let contexts = contexts |> FunctionContexts.flatten |> Unifier.writtenContexts
-            let declaredWritten = declared symbol (Signatures.typeWithContexts typed.TypeDefs names (rename general) (List.map rename contexts))
-            let contextVariables = FunctionContexts.variablesIn general
-            // Each variable with what it is here: a type, or the contexts a context variable stands for, if any.
-            let bound =
-                match Solving.unify [ general, ty, Equal, SourceSpan.none ] with
-                | Ok subst ->
-                    Unifier.displayedVars names (general :: contexts)
-                    |> List.choose (fun (var, name) ->
-                        match Unifier.apply subst (TyVar var) with
-                        | TyVar same when same.Id = var.Id -> None
-                        | boundTo when contextVariables.ContainsKey var.Id ->
-                            match FunctionContexts.flatten [ boundTo ] |> Unifier.writtenContexts with
-                            | [] -> None
-                            | boundContexts -> Some (name, true, boundContexts)
-                        | boundTo -> Some (name, false, [ boundTo ]))
-                | Error _ -> []
-            let typeWritten, boundWritten = writtenAt names rename typed (Some symbol) ty (bound |> List.collect (fun (_, _, tys) -> tys))
-            // A context variable stands for a list of contexts, written as a def's type writes one: `c = [Console, Log]`.
-            let bindings =
-                bound
-                |> List.mapFold (fun written (name, isContextVariable, tys) ->
-                    let here, rest = List.splitAt tys.Length written
-                    (name, (if isContextVariable then $"""[{String.concat ", " here}]""" else List.exactlyOne here)), rest) boundWritten
-                |> fst
-            if typeWritten = declaredWritten then None
-            else Some { Declared = declaredWritten; Bindings = bindings; Definition = symbol.Declaration })
-    | _ -> None
-
-/// What `typeAt` shows at `offset`, and the signature of the def that the name there refers to, or declares, when it is
-/// not that, as an `Instantiation`: on a use of a generic def, where its type variables are filled in. The def is a
-/// top-level or local one, the module's own or one an import brings in; there is no `Instantiation` when no such name
-/// is at `offset`, or its type there is its signature: a def that is not generic, or the def's own name. Both come from
-/// one search for what is there, with the types and contexts they name named by `rename` (see `Signatures.relativeAt`).
-let typeAndInstantiationAt (names: TypeNotation) (rename: Ty -> Ty) (result: CompileResult) (offset: int) : HoverInfo option * Instantiation option =
-    match result.Syntax, result.Typed with
-    | Some syntax, Some typed ->
-        match hoveredAt syntax typed offset with
-        | Some hovered -> Some (hoverOf names rename typed hovered), instantiationOf names rename typed hovered
-        | None -> None, None
-    | _ -> None, None

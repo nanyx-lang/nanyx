@@ -14,7 +14,7 @@ let withContexts (written: string list) (typeWritten: string) =
 /// `ty` written for a reader after the contexts `contexts` it requires, as `withContexts` writes them, and each of
 /// `others` written for a reader, the type variables of them all named together and by `names`, so that a variable of
 /// `ty` has the same name in `others`: a parameter's `α` is the `α` of its def's signature. A context of `typeDefs`
-/// that has associated types is written with them by name, as a signature writes it: `[Iter(c)] c -> elem`.
+/// that has associated types is written with them by name, as a signature writes it: `[Iter(c, elem = a)] c -> a`.
 let typesWithContexts (typeDefs: Map<string, TypeDefInfo>) (names: TypeNotation) (ty: Ty) (contexts: Ty list) (others: Ty list) : string * string list =
     match contexts, others with
     | [], [] -> Unifier.tyToDisplayStringIn typeDefs names ty, []

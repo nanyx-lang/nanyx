@@ -349,8 +349,8 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
             })
             .Returning<InfoViewResult?>(_cancellation.Token);
         Assert.NotNull(result);
-        Assert.Equal("cursor", result.Scopes[0].Kind);
-        Assert.Equal(["expression", "messages", "call"], result.Scopes[0].Sections.Select(section => section.Id));
+        // The line's messages, if it has any, come first, and nowhere else.
+        Assert.DoesNotContain(result.Scopes.Skip(1), scope => scope.Kind == "messages");
         Assert.Equal("module", result.Scopes[^1].Kind);
         return result;
     }
