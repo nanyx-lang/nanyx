@@ -113,6 +113,19 @@ internal static partial class CliCommands
             return failed;
         }
 
+        // A test package has only test files, so it is checked as its test build compiles them.
+        if (ManifestModule.isTestPackage(package.Manifest))
+        {
+            var withTests = PackageModule.withTests(shell.Packages, package);
+            if (withTests.IsError)
+            {
+                shell.Error.WriteLine($"error: the test host can't be read: {withTests.ErrorValue}");
+                return 1;
+            }
+
+            package = withTests.ResultValue;
+        }
+
         var build = BuildPackage(shell, package, timings);
         PrintDiagnostics(shell, build.Diagnostics, shell.Out);
         shell.Out.WriteLine($"{Checked(package)}.");
@@ -259,7 +272,8 @@ internal static partial class CliCommands
 
         if (single is not null && !IsPackagePath(shell, single))
         {
-            return NoHostForScript(shell, host)
+            return NoProgramInTestFile(shell, single)
+                ?? NoHostForScript(shell, host)
                 ?? Execute(shell, single, Target.Run, outputPath: null, memoryCheck: memoryCheck, timings: timings, programArguments: programArguments, inlineCalls: inlineCalls, allowedDirectories: directories, profile: profile, yieldAtEveryWait: yieldAtEveryWait);
         }
 
@@ -660,6 +674,22 @@ internal static partial class CliCommands
 
         var why = "It is a test package, which holds the tests of the packages it depends on and no program: run them with `nanyx test`";
         PrintDiagnostics(shell, General(DiagnosticCodes.NothingToRun, package.Manifest.Name, why), shell.Error);
+        return 1;
+    }
+
+    /// <summary>
+    /// An error, reported, when the file <paramref name="path"/> is a test file of a package, which only its test build
+    /// has: it is no script, and has no program to run. Null for any other file.
+    /// </summary>
+    private static int? NoProgramInTestFile(Shell shell, string path)
+    {
+        if (PackageModule.testFileOf(shell.FullPath(path)) is not { } tested)
+        {
+            return null;
+        }
+
+        var why = $"It is a test file of {tested.Value.Name}, which its manifest's `tests` selects, and has no program: run its tests with `nanyx test {path}`";
+        PrintDiagnostics(shell, General(DiagnosticCodes.NothingToRun, shell.DisplayPath(shell.FullPath(path)), why), shell.Error);
         return 1;
     }
 

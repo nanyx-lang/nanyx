@@ -463,6 +463,31 @@ def main = { println(describe(Point(x = 1, y = 2))) }
     File.WriteAllText(mainPath, main)
     runFile mainPath |> assertRan "(1, 2)\n"
 
+// A context an imported module keeps private is carried in by no import, but a private def of that module requiring it
+// is compiled with the module's exported one that calls it, and its members are typed from the context's definition.
+[<Fact>]
+let ``Run - an imported module's private def requiring a context the module keeps private`` () =
+    let lib = """export module lib
+
+context Log = (log: string -> string, other: string -> string)
+
+def hello: [Log] string -> string = { name -> log("hello, {name}") }
+
+export def greet: string -> string = { name ->
+  use Log(log = { line -> line ++ "!" }, other = { line -> line })
+  hello(name)
+}
+"""
+    let main = """import lib as (greet)
+
+println(greet("lib"))
+"""
+    use directory = new TempDirectory()
+    File.WriteAllText(Path.Combine(directory.Path, "lib.nyx"), lib)
+    let mainPath = Path.Combine(directory.Path, "main.nyx")
+    File.WriteAllText(mainPath, main)
+    runFile mainPath |> assertRan "hello, lib!\n"
+
 [<Fact>]
 let ``Run - a lambda that uses a context runs inside the def that supplies it (#774)`` () =
     let source =
