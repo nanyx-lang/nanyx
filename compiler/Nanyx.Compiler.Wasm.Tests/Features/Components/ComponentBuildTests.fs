@@ -159,3 +159,12 @@ let ``A package with defs marked @component is built as a component of its own w
     Assert.Contains("  include nanyx:console/command;", wit)
     Assert.True(File.Exists(Path.Combine(app.Path, "out", "wit", "deps", "host", "console.wit")))
     Assert.True(Directory.Exists(Path.Combine(app.Path, "out", "wit", "deps", "cli")))
+
+[<Fact>]
+let ``WebAssembly text the assembler rejects is an internal error, for a component as for a core module`` () =
+    // `nanyx build`, for a core module or a component, and `nanyx run` assemble through it (#2287).
+    use errors = new StringWriter()
+    let assembled, _ = CliCommands.TryAssemble(errors, "(module (func")
+    Assert.False(assembled)
+    Assert.StartsWith("Internal error in the compiler, whose WebAssembly can't be assembled (", errors.ToString())
+    Assert.Contains("report it at https://github.com/nanyx-lang/nanyx/issues", errors.ToString())

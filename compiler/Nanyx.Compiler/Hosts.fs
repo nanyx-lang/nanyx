@@ -127,6 +127,13 @@ module Hosts =
         | SourceFile path -> isHost path
         | InMemory -> false
 
+    /// The names of the contexts `contexts`, as the module names them, with the type variables among them left out.
+    let private contextNames (contexts: Ty list) =
+        contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source
+
+    /// `names`, each in quotes, joined by commas: `'Console', 'Random'`.
+    let private quoted (names: string list) = names |> List.map (fun name -> $"'{name}'") |> String.concat ", "
+
     /// The error for an entry point that does not fit its host's `run`: `found` is the entry point's type, `required`
     /// the contexts it requires, and `expected` the type of `run`'s parameter, where they are known. It names each context
     /// the entry point requires that `run` doesn't provide.
@@ -143,28 +150,20 @@ module Hosts =
         // Shown together, so that the variables are named alike in both.
         let shown = Unifier.tysToDisplayStrings Source [ defaultArg expected unknown; defaultArg withRequired unknown ]
         // The contexts the entry point requires that the host's `run` doesn't provide, by name.
-        let namesOf (contexts: Ty list) =
-            contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source
         let contextsOf (ty: Ty option) =
             match ty |> Option.map Unifier.unalias with
             | Some(TyFunc(_, _, contexts)) -> contexts
             | _ -> []
-        let provided = namesOf (contextsOf expected) |> Set.ofList
-        let missing = namesOf (contextsOf found @ required) |> List.distinct |> List.filter (provided.Contains >> not)
+        let provided = contextNames (contextsOf expected) |> Set.ofList
+        let missing = contextNames (contextsOf found @ required) |> List.distinct |> List.filter (provided.Contains >> not)
         let missingLines =
             if missing.IsEmpty then ""
-            else
-                let names = missing |> List.map (fun name -> $"'{name}'") |> String.concat ", "
-                $"\n  it doesn't provide {names}"
+            else $"\n  it doesn't provide {quoted missing}"
         Diagnostics.at
             DiagnosticCodes.EntryDoesNotFitHost
             entry.Argument
             $"It doesn't fit the host '{entry.Host.Import}'\n  expected: {shown.[0]}\n  found:    {shown.[1]}{missingLines}"
         |> Diagnostics.about entry.Name
-
-    /// The names of the contexts `contexts`, as the module names them, with the type variables among them left out.
-    let private contextNames (contexts: Ty list) =
-        contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source
 
     /// The error for an export marked `@component`, `export`, that requires contexts its host's root doesn't provide:
     /// `required` is the contexts it requires, and `provides` the type of the parameter of the root's `provide`, if it
@@ -175,8 +174,7 @@ module Hosts =
             | Some(TyFunc(_, _, contexts)) -> contextNames contexts |> Set.ofList
             | _ -> Set.empty
         let missing = contextNames required |> List.distinct |> List.filter (provided.Contains >> not)
-        let names = missing |> List.map (fun name -> $"'{name}'") |> String.concat ", "
-        let said = if missing.IsEmpty then "contexts" else names
+        let said = if missing.IsEmpty then "contexts" else quoted missing
         Diagnostics.at
             DiagnosticCodes.EntryDoesNotFitHost
             export.Argument
@@ -200,21 +198,19 @@ module Hosts =
             match Unifier.unalias run with
             | TyFunc(parameter, _, _) ->
                 match Unifier.unalias parameter with
-                | TyFunc(_, _, contexts) ->
-                    contexts |> List.filter (function TyVar _ -> false | _ -> true) |> Unifier.tysToDisplayStrings Source
+                | TyFunc(_, _, contexts) -> contextNames contexts
                 | _ -> []
             | _ -> []
         let core = provided coreRun
         let built = provided componentRun
-        let listed (names: string list) = names |> List.map (fun name -> $"'{name}'") |> String.concat ", "
         let root = host.Component |> Option.map _.CoreRoot |> Option.defaultValue host.Module
         let differences =
             [ match built |> List.filter (fun name -> not (List.contains name core)) with
               | [] -> ()
-              | extra -> $"provides {listed extra}, which the core root '{host.Package}/{root}' doesn't"
+              | extra -> $"provides {quoted extra}, which the core root '{host.Package}/{root}' doesn't"
               match core |> List.filter (fun name -> not (List.contains name built)) with
               | [] -> ()
-              | missing -> $"doesn't provide {listed missing}, which the core root '{host.Package}/{root}' does" ]
+              | missing -> $"doesn't provide {quoted missing}, which the core root '{host.Package}/{root}' does" ]
         match differences with
         | [] -> []
         | _ ->
