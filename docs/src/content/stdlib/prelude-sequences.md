@@ -392,14 +392,14 @@ on, pulling the whole of `s` now. Stack-safe, but an endless sequence never ends
 ## `seq.foldWhile`
 
 ```nanyx fragment
-def seq.foldWhile: [c, d] ([c] seq(a)), b, ([d] (b, a) -> #continue(b) | #stop(b)) -> b
+def seq.foldWhile: [c, d] ([c] seq(a)), b, ([d] (b, a) -> #some(b) | r) -> #some(b) | r
 ```
 
-[`seq.fold`](#sequencefold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next element,
-or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`, or after
-the last element. It pulls no element after a `#stop`, so it ends on an endless sequence that
-stops: `(1..) \seq.foldWhile(0, { total, n -> if total + n > 10 then #stop(total) else
-#continue(total + n) })` is `10`.
+[`seq.fold`](#sequencefold) that can stop part-way: `step` gives `#some(acc)` to go on to the next element, and
+anything else it gives ends the fold there and is its result, as it is. A fold that runs to the end
+gives `#some(acc)`. It pulls no element after it stops, so it ends on an endless sequence that
+stops: `(1..) \seq.foldWhile(0, { total, n -> if total + n > 10 then #full(total) else
+#some(total + n) })` is `#full(10)`.
 
 ## `seq.reduce`
 

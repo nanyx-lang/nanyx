@@ -280,13 +280,14 @@ def list.foldBack: [c] list(a), b, ([c] (b, a) -> b) -> b
 ## `list.foldWhile`
 
 ```nanyx fragment
-def list.foldWhile: [c] list(a), b, ([c] (b, a) -> #continue(b) | #stop(b)) -> b
+def list.foldWhile: [c] list(a), b, ([c] (b, a) -> #some(b) | r) -> #some(b) | r
 ```
 
-[`list.fold`](#listfold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next element,
-or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`, or after
-the last element. `step` isn't called again after a `#stop`: `list.foldWhile([1, 2, 3, 4, 5], 0,
-{ total, x -> if total + x > 6 then #stop(total) else #continue(total + x) })` is `6`.
+[`list.fold`](#listfold) that can stop part-way: `step` gives `#some(acc)` to go on to the next element,
+and anything else it gives ends the fold there and is its result, as it is. A fold that runs to the
+end gives `#some(acc)`. `step` isn't called again after it stops: with `step` being
+`{ total, x -> if x > 10 then #tooBig(x) else #some(total + x) }`, `list.foldWhile([1, 2, 3], 0,
+step)` is `#some(6)` and `list.foldWhile([1, 20, 3], 0, step)` is `#tooBig(20)`.
 
 ## `list.append`
 
