@@ -372,25 +372,35 @@ let ``Hover and the type lens show the parameterised contexts a def was inferred
     let lenses = TypeHints.typeLenses Unicode "" result |> List.map (fun hint -> hint.Name, hint.Type)
     Assert.Equal<(string * string) list>([ "twice", "[Show(α)] α -> string" ], lenses)
 
-/// A context whose member is an operator, and a generic function that requires it.
-let private addContext =
-    "context Add(a) = (`+`: (a, a) -> a)\n"
+[<Fact>]
+let ``An operator in a generic function calls the member of the prelude's context the function requires`` () =
+    compileClean "def add: [Add(a)] a, a -> a = { x, y -> x + y }\n" |> ignore
 
 [<Fact>]
-let ``An operator in a generic function calls the member of that name of the context the function requires`` () =
+let ``An operator in a generic function never calls a member of that name of another context`` () =
+    // `+` reads the prelude's `Add`, so a function that requires only `Sum(a)` is missing `Add(a)` (#2745).
     let source =
-        addContext +
         normalized """context Sum(a) = (zero: () -> a, `+`: (a, a) -> a)
-def add: [Add(a)] a, a -> a = { x, y -> x + y }
 def sum: [Sum(a)] list(a) -> a = { items -> items \fold(zero()) { + } }
 """
-    let result = Compiler.compile source
-    Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
+    Assert.Equal("'sum' adds values of type 'a' with +, so its type must require Add(a): add [Add(a)] to the type of 'sum'", diagnostic.Message)
+    Assert.Equal(
+        normalized """context Sum(a) = (zero: () -> a, `+`: (a, a) -> a)
+def sum: [Sum(a), Add(a)] list(a) -> a = { items -> items \fold(zero()) { + } }
+""",
+        applyFix source (List.exactlyOne diagnostic.Fixes))
+
+[<Fact>]
+let ``A module's own context Add doesn't take the operator over`` () =
+    let source = "context Add(a) = (`+`: (a, a) -> a)\ndef add: [Add(a)] a, a -> a = { x, y -> x + y }\n"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.MissingContextMembers.Code, diagnostic.Code)
 
 [<Fact>]
 let ``An operator on ints is the built-in one in a function that requires a context with that operator`` () =
     let source =
-        addContext +
         "def addCounting: [Add(a)] a, a, int -> (a, int) = { x, y, n -> (x + y, n + 1) }\n"
     let result = Compiler.compile source
     Assert.True(result.Diagnostics.IsEmpty, $"Unexpected diagnostics: %A{result.Diagnostics}")
@@ -398,8 +408,7 @@ let ``An operator on ints is the built-in one in a function that requires a cont
 [<Fact>]
 let ``An operator that calls a context member checks its operands against the member's type`` () =
     let source =
-        addContext +
-        "def addOne: [Add(a)] a -> a = { x -> x + 1 }\n"
+        "def addText: [Add(a)] a -> a = { x -> x + \"s\" }\n"
     let result = Compiler.compile source
     match result.Diagnostics with
     | [ diagnostic ] -> Assert.Equal(DiagnosticCodes.AnnotationTooGeneral.Code, diagnostic.Code)

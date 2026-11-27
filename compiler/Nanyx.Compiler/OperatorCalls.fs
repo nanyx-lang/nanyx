@@ -48,6 +48,13 @@ module internal OperatorCalls =
     /// variable that has it, which `instanceMember` finds, with that instance as written: in a function that requires
     /// `[Add(a), Add(b)]`, `x + y` on two `a`s calls the `` `+` `` of `Add(a)`, though `Add(b)`'s is bound to the
     /// name too.
+    /// The context an instance, as `instanceMember` writes it, is of: `Add` of `Add(a)`.
+    let private instanceContext (instance: TypeExpr) =
+        match instance.Kind with
+        | TypeApply(context, _)
+        | TypeName context -> Some context
+        | _ -> None
+
     let definition
         (instanceMember: Identifier -> Ty -> (TypeExpr * TypeScheme) option)
         (attached: Identifier -> Identifier option)
@@ -66,12 +73,24 @@ module internal OperatorCalls =
             | FunctionCall(name, _, [ _ ]) when name = NegateSyntax.builtIn -> Some ArithmeticOperators.negate
             | _ -> None
         let comparesOperands (operandTy: Ty) (_, scheme, _) = compares state operandTy input scheme
+        // On a type variable, an operator reads its member only through the prelude's contexts: the one with the fewest
+        // members that has it, or a larger one of them that has it too, as `Num` has `Add`'s `+`. Never through another
+        // context's member of that name, a module's own `Add` included (see `OperatorContexts`, #2745).
+        // An operand whose variable no instance is of yet, as a lambda's parameter is before the call it is passed to
+        // settles it, reads the member bound to the operator's name, while one of those contexts is in scope.
+        let readThroughPrelude (name: Identifier) (operandTy: Ty) =
+            let preludeHaving = OperatorContexts.declared state |> List.filter (fun (_, members) -> members.Contains name) |> List.map fst
+            let isPrelude (context: Identifier) = List.contains context preludeHaving
+            match instanceMember name operandTy with
+            | Some (instance, scheme) when instanceContext instance |> Option.exists isPrelude -> Some (name, scheme, Some instance)
+            | Some _ -> None
+            | None when env.Instances |> List.exists (fun binding -> instanceContext binding.Written |> Option.exists isPrelude) -> bound name
+            | None -> None
         let inScope (name: Identifier) (operandTy: Ty) =
             if name = EqualityOperators.equals then bound name |> Option.filter (comparesOperands operandTy) else None
         match name, Unifier.unalias (resolveSoFar state leftTy) with
         | None, _ -> None
-        | Some name, (TyVar _ as operandTy) when (instanceMember name operandTy).IsSome ->
-            instanceMember name operandTy |> Option.map (fun (instance, scheme) -> name, scheme, Some instance)
+        | Some name, (TyVar _ as operandTy) when (OperatorContexts.smallest state name).IsSome -> readThroughPrelude name operandTy
         | Some name, operandTy when (inScope name operandTy).IsSome -> inScope name operandTy
         | Some name, TyPrimitive _ when not (isSpareOperator name) -> None
         | Some name, operandTy when name = AppendOperator.operator && AppendOperator.isBuiltIn operandTy -> None

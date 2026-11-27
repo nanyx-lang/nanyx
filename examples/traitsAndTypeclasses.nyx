@@ -73,15 +73,14 @@ type Point = (x: int, y: int)
 def Point.zero = Point(x = 0, y = 0)
 def Point.`+` = { a, b -> Point(x = a.x + b.x, y = a.y + b.y) }
 
-context Sum(a) = (zero: a, `+`: (a, a) -> a)
-
-def sum: [Sum(a)] list(a) -> a = { items ->
+-- The prelude's Add(a) is (zero: a, `+`: (a, a) -> a).
+def sum: [Add(a)] list(a) -> a = { items ->
   items \fold(zero) { + }
 }
 
 def points = [Point(x = 1, y = 2), Point(x = 3, y = 4), Point(x = 5, y = 6)]
 
--- Sum(Point) is synthesized from Point.zero and Point.`+`
+-- Add(Point) is synthesized from Point.zero and Point.`+`
 def pointTotal = sum(points) -- Point(x = 9, y = 12)
 
 -- A type with no instance of its own is given one with use. Point has its own,
@@ -89,7 +88,7 @@ def pointTotal = sum(points) -- Point(x = 9, y = 12)
 type Size = (w: int)
 
 def widest =
-  use Sum(Size)(zero = Size(w = 0), `+` = { a, b -> if a.w > b.w then a else b }) in sum(
+  use Add(Size)(zero = Size(w = 0), `+` = { a, b -> if a.w > b.w then a else b }) in sum(
     [Size(w = 1), Size(w = 3), Size(w = 2)]
   )
 
