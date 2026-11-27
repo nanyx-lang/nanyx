@@ -37,7 +37,7 @@ let ``A named type parameter is written into: Type(a)`` () =
     | other -> failwith $"Unexpected annotation: %A{other}"
 
 [<Fact>]
-let ``The old positional type parameter type a still parses`` () =
+let ``The old positional type parameter type a parses, for the compiler to report with its fix`` () =
     annotationOf "def f: (type a, string) -> a = f"
     |> should equal (ty (TypeFunc (ty (TypeTuple [ ty (TypeArgument (var "a")); named "string" ]), var "a")))
 
@@ -47,7 +47,7 @@ let ``The old positional type parameter can follow the other positional paramete
     |> should equal (ty (TypeFunc (ty (TypeTuple [ named "string"; ty (TypeArgument (var "a")) ]), var "a")))
 
 [<Fact>]
-let ``The old named type parameter into: type still parses`` () =
+let ``The old named type parameter into: type parses, for the compiler to report with its fix`` () =
     match annotationOf "def f: (string, into: type) -> into = f" with
     | Kind (TypeFunc (Kind (TypeRecord [ TypeField ("0", false, Some text, None); TypeField ("into", false, Some keyword, None) ]), result)) ->
         text |> should equal (named "string")

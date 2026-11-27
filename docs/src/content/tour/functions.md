@@ -231,7 +231,7 @@ A positional and a named type argument differ only in whether the parameter has 
 
 A type argument is not an [associated type](../advanced/contexts#associated-types). An associated type, written `elem: type` in a context, is a member whose value is a type, which an instance fixes and a signature names; a type argument is a value that stands for a type, which a caller passes. The two meet where a generic function passes its associated type on as a value, `type elem`.
 
-Earlier releases wrote a type argument's parameter `type a`, or `into: type` for a named one. Those forms still compile, with a warning whose fix rewrites them (NYX0282), and will be errors in a later release.
+Earlier releases wrote a type argument's parameter `type a`, or `into: type` for a named one. Those forms are errors now (NYX0282), whose fix rewrites them.
 
 `type` is always written at the call, and a type argument is never left out, even where the type the call gives back would say what it is: `def n: int = deserialise("abc")` is an error that says to pass `type int` (NYX0271). A function that takes a type argument is otherwise a function like any other, so it can be piped into, wrapped in a lambda and passed as a value.
 

@@ -6,7 +6,7 @@
 /// time, so it is never chosen with `if` or `match`, nor held in a list with another type's.
 ///
 /// The old forms, `type a` as a positional parameter and `into: type` as a named one, still compile for one release,
-/// each with a warning (NYX0282) whose fix writes it as `Type(a)` or `into: Type(into)`.
+/// each an error (NYX0282) whose fix writes it as `Type(a)` or `into: Type(into)`.
 module internal NyxCompiler.TypeArguments
 
 open Parser.Program
@@ -45,15 +45,15 @@ let private namedParameters (annotation: TypeExpr) : (Identifier * bool * TypeEx
                 | _ -> None)
         | _ -> [])
 
-/// The warning for a type parameter written the old way, `written`, which should be `now`, with the fix that writes
-/// `newText` at `span`.
+/// The error for a type parameter written the old way, `written`, which is `now`, with the fix that writes `newText` at
+/// `span`. The parameter is still read as `now`, so that nothing else is reported for it.
 let private oldForm (span: SourceSpan) (written: string) (now: string) (newText: string) : Diagnostic =
     { (Diagnostics.at DiagnosticCodes.OldFormTypeParameter span
-           $"A parameter that takes a type is written with its type, `Type(a)`: write `{now}`. `{written}` will be an error in a later release"
+           $"A parameter that takes a type is written with its type, `Type(a)`: write `{now}`, not `{written}`"
        |> Diagnostics.about written) with
         Fixes = [ { Title = $"Write `{now}`"; Edits = [ { Span = span; NewText = newText } ] } ] }
 
-/// The warnings for the type parameters written the old way in `module'`: each `type a` as a positional parameter, and
+/// The errors for the type parameters written the old way in `module'`: each `type a` as a positional parameter, and
 /// each `into: type` as a function's named one.
 let private oldForms (module': Module) : Diagnostic list =
     SyntaxTree.writtenTypes module'
@@ -181,7 +181,7 @@ let rec private inValue (names: Set<Identifier>) (errors: ResizeArray<Diagnostic
     | _ -> rewritten
 
 /// `module'` with each named type parameter written as a parameter of type `Type(name)`, and `name` as a type variable
-/// wherever its def writes it, and the diagnostics: a warning for each type parameter written the old way, and the
+/// wherever its def writes it, and the diagnostics: an error for each type parameter written the old way, and the
 /// errors for type parameters declared wrongly and `Type` values chosen at run time.
 let rewrite (module': Module) : Module * Diagnostic list =
     let errors = ResizeArray<Diagnostic>(oldForms module')
