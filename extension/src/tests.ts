@@ -58,6 +58,8 @@ export interface TestRunEvent extends ListedTest {
   failure?: Failure;
   output?: string;
   errors?: string;
+  /** Each `dbg` it reached, in order, its file named as a failure's place names it. */
+  dbg?: { file: string; line: number; column: number; value: string }[];
 }
 
 export interface DiagnosticEvent {

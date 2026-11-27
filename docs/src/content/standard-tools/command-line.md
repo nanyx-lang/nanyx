@@ -8,7 +8,7 @@ order: 0
 and is the language server for editors. `nanyx --help` lists its commands, and `nanyx <command> --help` describes one.
 
 ```text
-nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [--files-in-memory] [<file.nyx | package>] [--] [<arguments>]
+nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [--dbg-to <file>] [--files-in-memory] [<file.nyx | package>] [--] [<arguments>]
 nanyx check [--timings] [--host <host>] [<file.nyx | package>]
 nanyx build [--out <path>] [--release] [--core] [--wat] [--locked] [--timings] [--host <host>] [<package>]
 nanyx wasm <file.nyx> [--out <path>] [--release] [--wat]
@@ -89,6 +89,7 @@ program is answered with a 500, and the reason is written to standard error. See
 | `--memory` | Checks the program's memory as `--check-memory` does, and once the program stops, however it stops, writes a report to standard error (see below). |
 | `--files-in-memory` | Runs the program with its files in memory, over the real ones: it reads a real file until it writes, appends to or deletes it, and then what it left; a directory's listing has what it made and not what it deleted; and nothing it does reaches the disk (see [`filesystem.overlay`](../stdlib/filesystem)). The program is built from its host's root for this, the console host's `cli.host.memory` ([Writing a host](../advanced/hosts#writing-a-host)), and a program built without the flag is unchanged. A host with no such root is an error. The editor's live mode runs a program so. |
 | `--profile <file>` | Samples the run with Wasmtime's guest profiler, every 10 ms, and writes the profile to `<file>` in the Firefox profiler's format, to open at [profiler.firefox.com](https://profiler.firefox.com). Its functions have the names the program gives them, and the file and line each is defined on. The run is of the code `run` always runs, which has no [debug probes](../deep-dives/debug-probes). It can't be given with `--check-memory` or `--memory`, nor for a program that is served. |
+| `--dbg-to <file>` | Writes each [`dbg`](../stdlib/console#dbg) the program reaches to `<file>`, made anew, and none to standard error: one JSON object a line, written as it is reached, with its `file`, a full path, its `line` and `column`, from 1, its `value` as `dbg` writes it, and its `seq`, counted from 0. It is for an editor, which reads the file as it grows and shows each value where its `dbg` is written, as the [VS Code extension](./vs-code-extension#dbg-values) does. A served program writes its `dbg`s to its log, with the request, whether or not it is given. |
 | `--timings` | Writes how long each module took to check (see [Timings](#timings)). |
 
 The report of `--memory` says how many blocks of memory the program allocated and freed, how many were still in use
@@ -230,8 +231,9 @@ With `--format json`, `nanyx test` writes one JSON object on each line of standa
 - **`test`**, for each test as it ends: its full `name`, as the text report shows it, its `module` and own name
   (`test`), the `file`, `line` and `column` it is written at, whether it is `io`, the crash it expects (`crashes`:
   `null`, `{}` for `@test(#crashes)`, or `{"text": ...}`), its `outcome` (`passed`, `failed`, `timedOut` with
-  `timeoutSeconds`, `didNotCrash`, or `crashedOtherwise` with the text it `expected`), what it printed (`output`) and
-  what it wrote to its standard error (`errors`). A test that failed or crashed otherwise has a `failure`: its `kind` (`crashed`, `trapped`, `arithmetic`, `stackOverflow`, `outOfMemory`,
+  `timeoutSeconds`, `didNotCrash`, or `crashedOtherwise` with the text it `expected`), what it printed (`output`),
+  what it wrote to its standard error (`errors`), and each [`dbg`](../stdlib/console#dbg) it reached, in order (`dbg`),
+  with its `file`, `line`, `column` and `value`, which `output` has too. A test that failed or crashed otherwise has a `failure`: its `kind` (`crashed`, `trapped`, `arithmetic`, `stackOverflow`, `outOfMemory`,
   `exited` or `other`), its `message`, the `place` of the program's code a crash was in, with its `file`, `line` and
   `column`, and its `stack`, innermost first, each frame's `function` with its `file` and `line`.
 - **`summary`**, last: whether the tests were `built`, how many `passed` and `failed`, and the `seed`. A build that

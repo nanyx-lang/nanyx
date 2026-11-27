@@ -78,6 +78,10 @@ module Probing =
                     listener.Local(stringAt memory name, stringAt memory text)
                 | None -> ()))
 
+    /// What a runner that leaves each `dbg` to the program gives `defineDbg`: it deals with none, so the program writes
+    /// each to its own stderr.
+    let leftToProgram (_: DbgHit) = false
+
     /// Defines `dbg` in `linker`, which a debug build the runtime runs calls at each `dbg` it reaches, with the address of
     /// the file's name, the line, the column and the address of the value's text. `handle` is given the hit, and says
     /// whether it has dealt with it: when it hasn't, the program writes it to its own stderr, as a module that another

@@ -16,9 +16,10 @@ internal static partial class CliCommands
     /// paths. A program whose host answers HTTP requests is served on <paramref name="port"/> instead (see
     /// <see cref="Serve"/>). A package's program names its files from <paramref name="packageRoot"/> where it says
     /// where it is, as <c>dbg</c> does. With <paramref name="profile"/>, Wasmtime's guest profiler samples the run and the
-    /// profile is written to that file, in the Firefox profiler's format.
+    /// profile is written to that file, in the Firefox profiler's format. With <paramref name="dbgTo"/>, each <c>dbg</c> the
+    /// program reaches is written to that file (see <see cref="DbgChannel"/>), and not to its stderr.
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null, bool yieldAtEveryWait = false)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
@@ -41,6 +42,16 @@ internal static partial class CliCommands
 
         // The program's output follows the run's box, unmarked, and so does what the run reports after it.
         (errors as RunBox.Writer)?.Box.Close("output");
+        // A served program writes each dbg to the server's log, with its request (#2058), so --dbg-to is for one that runs once.
+        using var channel = dbgTo is null || WasmServer.serves(wat) ? null : DbgChannel.Open(shell.FullPath(dbgTo), result, packageRoot, errors);
+        if (dbgTo is not null && channel is null && !WasmServer.serves(wat))
+        {
+            return UsageError;
+        }
+
+        var dbg = channel is null
+            ? FuncConvert.FromFunc<DbgHit, bool>(Probing.leftToProgram)
+            : FuncConvert.FromFunc<DbgHit, bool>(channel.Write);
         if (WasmServer.serves(wat))
         {
             if (profile is not null)
@@ -54,17 +65,17 @@ internal static partial class CliCommands
 
         if (profile is not null)
         {
-            var profiled = WasmRunner.runProfiled(shell.Io, programArguments, directories, wasm, FuncConvert.FromAction<FSharpResult<byte[], string>>(written => WriteProfile(shell, profile, written, errors)));
+            var profiled = WasmRunner.runProfiled(shell.Io, programArguments, directories, wasm, FuncConvert.FromAction<FSharpResult<byte[], string>>(written => WriteProfile(shell, profile, written, errors)), dbg);
             return profiled.IsOk ? 0 : ReportRunError(profiled.ErrorValue, errors);
         }
 
         if (memoryCheck == MemoryCheck.Off)
         {
-            var outcome = WasmRunner.runBinary(shell.Io, programArguments, directories, wasm);
+            var outcome = WasmRunner.runBinaryWithDbg(shell.Io, programArguments, directories, wasm, dbg);
             return outcome.IsOk ? 0 : ReportRunError(outcome.ErrorValue, errors);
         }
 
-        var (counted, counters) = WasmRunner.runCountingBinary(shell.Io, programArguments, directories, CodeGen.CheckedExports.start, MemoryReport.Counters, wasm);
+        var (counted, counters) = WasmRunner.runCountingBinary(shell.Io, programArguments, directories, CodeGen.CheckedExports.start, MemoryReport.Counters, dbg, wasm);
         var exitCode = counted.IsError ? ReportRunError(counted.ErrorValue, errors) : CheckNothingLeft(counted.ResultValue, errors);
         // The report follows what stopped the program, or the leak the check found.
         if (memoryCheck == MemoryCheck.Report && counters is not null)

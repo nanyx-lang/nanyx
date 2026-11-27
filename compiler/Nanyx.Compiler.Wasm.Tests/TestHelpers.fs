@@ -221,8 +221,12 @@ let private command (arguments: string list) : Shell -> int =
             match rest with
             | "--profile" :: file :: rest -> file, rest
             | _ -> null, rest
+        let dbgTo, rest =
+            match rest with
+            | "--dbg-to" :: file :: rest -> file, rest
+            | _ -> null, rest
         let _, _, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile, yieldAtEveryWait, filesInMemory)
+        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile, yieldAtEveryWait, dbgTo, filesInMemory)
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
         let wat, rest = takeFlag "--wat" rest

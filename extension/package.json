@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.39",
+  "version": "0.9.40",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -130,6 +130,10 @@
       {
         "command": "nanyx.showInfoView",
         "title": "Nanyx: Show info view"
+      },
+      {
+        "command": "nanyx.showDbgValues",
+        "title": "Nanyx: Show dbg values"
       },
       {
         "command": "nanyx.library.open",

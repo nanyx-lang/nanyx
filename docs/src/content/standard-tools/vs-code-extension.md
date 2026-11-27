@@ -26,6 +26,7 @@ The Nanyx extension for Visual Studio Code highlights `.nyx` files and package m
 - an [info view](#info-view), a view in the secondary side bar that shows what the compiler knows at the cursor
 - a [library browser](#library), which lists what the standard library exports, and a [search](#searching-the-library) of it by name and by type
 - a run button, which runs the file as `nanyx run` does; a manifest has none
+- the values a run's [`dbg`](../stdlib/console#dbg)s gave, at the end of their lines ([dbg values](#dbg-values))
 - the package's [tests](#testing) in VS Code's **Testing** view, with a **Run test** link above each one
 - in a `.nyxp` manifest, the problems with it as you type, each at the field it is about, and formatting
 
@@ -349,6 +350,26 @@ The program's working directory is the workspace folder the file is in, or the f
 
 The command has no keyboard shortcut. To give it one, look for it in **Keyboard Shortcuts**.
 
+## dbg values
+
+A run started from the editor shows what each [`dbg`](../stdlib/console#dbg) gave at the end of the `dbg`'s line, in
+faint text, rather than in the terminal, which keeps only what the program prints: `▸ 84`, or, for a `dbg` reached
+several times, how many times and the last value, `▸ ×3, last #shipped`. A value longer than a line is cut short there.
+Hovering the `dbg` shows the value whole, or each value in the order they came, numbered, the first 200 of them, and
+**Nanyx: Show dbg values**, on the `dbg`'s line, lists every one, to copy one. The values come as the program runs: the
+run is given [`nanyx run --dbg-to`](./command-line#nanyx-run) a file of its own, which the extension reads as it grows
+and deletes once the run ends.
+
+The values of a file stay until the next run that reaches one of its `dbg`s, which replaces them, or until the file is
+closed. Once the file is edited they fade, and each stays on its `dbg`'s line as lines above it are added or taken
+away: the language server matches each `dbg` of the file as it was when the run gave its values with the one it is
+now, by the definition it is in and its text, so a `dbg` that is deleted loses its value. While the file doesn't parse,
+the values stay where they were.
+
+A test run from the [Testing](#testing) view shows its tests' `dbg` values the same way, from `nanyx test`'s `dbg`
+lists, and what the tests printed, `dbg`s too, is still in **Test Results**. A `nanyx run` in a terminal of your own
+writes each `dbg` to standard error, as always.
+
 # Testing
 
 The **Testing** view lists the [tests](../tour/attributes#test) of each package in the workspace, and of each `.nyx`
@@ -370,6 +391,7 @@ test the run would have run is marked errored, with the build's errors. Stopping
 | Command | What it does |
 |---------|--------------|
 | **Nanyx: Run the current file** | Saves the file and runs it in a terminal. See [Running a file](#running-a-file). |
+| **Nanyx: Show dbg values** | Lists every value the `dbg` on the cursor's line gave in the last run, in order, and copies the one you choose. See [dbg values](#dbg-values). |
 | **Nanyx: Show info view** | Shows and focuses the view that shows what the compiler knows at the cursor. See [Info view](#info-view). |
 | **Nanyx: Search library by type** | Searches the standard library by name or type, and inserts the match you choose with its import. See [Searching the library](#searching-the-library). |
 | **Nanyx: Download the compiler** | Looks for the newest compiler release straight away and downloads it. |

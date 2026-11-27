@@ -202,6 +202,20 @@ module PackageModules =
             else relative.Replace('\\', '/')
         | None -> Path.GetFileName file
 
+    /// The files the code of `module'` is in, by the spans of the expressions of its definitions and top-level code,
+    /// inlined ones among them, each once: the files a program compiled from it names in its places and its `dbg`s (see
+    /// `shownFile`). A script's top-level code is in a definition the compiler makes, whose own span names no file.
+    let rec codeFiles (module': Module) : string list =
+        module'
+        |> List.collect (fun item ->
+            match item.Kind with
+            | Def (ValueDef(_, _, _, value)) -> SyntaxTree.expressionsWithin value |> List.map _.Span.File
+            | Expr expr -> SyntaxTree.expressionsWithin expr |> List.map _.Span.File
+            | ModuleBlock(_, inner) -> codeFiles inner
+            | _ -> [])
+        |> List.filter (fun file -> file <> "")
+        |> List.distinct
+
     /// Where `span` is, as a program that names its files from `root` writes a place in a message: `file:line:column: `,
     /// the file as `shownFile` names it, or the line and column alone for a span with no file.
     let placeOf (root: string option) (span: SourceSpan) =
