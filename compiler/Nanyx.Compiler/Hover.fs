@@ -238,6 +238,8 @@ let private hoverOf (names: TypeNotation) (typed: TypedModule) (ty: Ty, symbol: 
 /// stands for: a `for` loop's element is an identifier spanning all of the loop's arms. Of equal spans the
 /// outermost wins, for the same reason: the parameters a shorthand match lambda makes up span the whole lambda.
 let typeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option =
+    // A type is written a level at a time, and can nest thousands deep, as checking it does (#3119).
+    Nanyx.LargeStack.run <| fun () ->
     match result.Syntax, result.Typed with
     | Some syntax, Some typed -> hoveredAt syntax typed offset |> Option.map (hoverOf names typed)
     | _ -> None
