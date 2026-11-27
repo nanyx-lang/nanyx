@@ -1307,7 +1307,9 @@ To fix it, re-export only the rest of what the module gives: the fix rewrites `e
 # NYX0201: Type mismatch
 
 A value's type is not the type its place needs: an argument is not what the function takes, a definition's value is
-not the type its annotation says, or two branches give back different types. The message names the two types.
+not the type its annotation says, or two branches give back different types. The message names the two types. Where
+one of them is the type a definition's annotation writes for its value, or the return type it writes for its lambda,
+the error points back at where it is written, "the type written here", as a related location.
 
 ```nanyx
 def count: int = "three"  -- error NYX0201: 'string' vs 'int'

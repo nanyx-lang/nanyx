@@ -32,6 +32,14 @@ type internal ReadAnnotation =
       /// declares were bound: what a def that then fails to check carries on from.
       Checked: InferState }
 
+/// Where the return type `annotation` gives a def's lambda is written: the result of the function type it writes, or
+/// the whole type where that is not a function type as written, an alias of one say.
+let internal writtenReturn (annotation: ReadAnnotation) : SourceSpan option =
+    match annotation.DeclaredTypeExpr with
+    | Some { Kind = TypeFunc(_, result) } -> Some result.Span
+    | Some written -> Some written.Span
+    | None -> None
+
 /// Reads and checks `typeOpt`, the type the def `name` writes for its value `expr`, in `env`. The def is attached to a
 /// type of `moduleName`'s, if its name says so. `extraCheck` is checked after the contexts, before the values each
 /// `typeof` names are inferred in `typeOfEnv` by `inferTypeOfValues`. The first check that fails is the error.
