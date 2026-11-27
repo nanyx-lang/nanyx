@@ -15,9 +15,9 @@ internal static class SourceExcerpt
     /// <summary>
     /// The excerpt's lines for <paramref name="span"/>, in <paramref name="source"/>, its file's text: the gutter, the
     /// line and the underline, each without a line break, with the carets given to <paramref name="marked"/> (to colour
-    /// them). None when the span is not in the source.
+    /// them), and the line number padded to <paramref name="width"/>, at least. None when the span is not in the source.
     /// </summary>
-    public static IReadOnlyList<string> Lines(Parser.Program.SourceSpan span, string source, Func<string, string> marked)
+    public static IReadOnlyList<string> Lines(Parser.Program.SourceSpan span, string source, Func<string, string> marked, int width = 0)
     {
         // The compiler's offsets are into the source with its line endings normalised to `\n`.
         source = source.Replace("\r\n", "\n").Replace('\r', '\n');
@@ -34,7 +34,7 @@ internal static class SourceExcerpt
         }
 
         var line = source[lineStart..lineEnd];
-        var number = (span.StartLine + 1).ToString();
+        var number = (span.StartLine + 1).ToString().PadLeft(width);
         var gutter = new string(' ', number.Length);
         // The carets line up under the span whatever the line indents with: each tab before it is kept as a tab.
         var indent = new StringBuilder();
@@ -43,12 +43,12 @@ internal static class SourceExcerpt
             indent.Append(c == '\t' ? '\t' : ' ');
         }
 
-        var width = Math.Max(1, Math.Min(span.End, lineEnd) - span.Start);
+        var underline = Math.Max(1, Math.Min(span.End, lineEnd) - span.Start);
         return
         [
             $"{gutter} |",
             $"{number} | {line}".TrimEnd(),
-            $"{gutter} | {indent}{marked(new string('^', width))}",
+            $"{gutter} | {indent}{marked(new string('^', underline))}",
         ];
     }
 
