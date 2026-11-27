@@ -195,7 +195,7 @@ let rec internal inferCall
     // dropped.
     let typeOfArgument arg = inferExpr env state arg |> Result.toOption |> Option.map (fun (typed, _) -> typed.Type)
     // So is a call of a value that is no function (see `NotAFunction`).
-    match TypeEnv.tryFind name env |> Option.bind (fun scheme -> NotAFunction.check state name scheme.Type calleeSpan args) with
+    match TypeEnv.tryFind name env |> Option.bind (fun scheme -> NotAFunction.check state expr name scheme.Type calleeSpan args) with
     | Some error -> Error [ error ]
     | None ->
     let argumentCount =

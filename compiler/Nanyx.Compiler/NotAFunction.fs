@@ -17,12 +17,14 @@ module internal NotAFunction =
     /// The error for a call of `name`, of the type `calleeTy` and written at `calleeSpan`, with `args`, when the type is
     /// known to be no function: a number, a string, a `bool`, `()`, a measured value, a record or tuple, a tag or union
     /// of tags, or a list. A map and an array are called to look an item up, and a record given only a block, as in
-    /// `proc { ... }`, is a workflow's builder, so neither is one.
-    let check (state: InferState) (name: Identifier) (calleeTy: Ty) (calleeSpan: SourceSpan) (args: Expression list) : Diagnostic option =
+    /// `proc { ... }`, is a workflow's builder, so neither is one. Nor is a value that never comes, as `crash(...)`'s,
+    /// which may be called, or a keyword's call that a local hides (`call` is one of those), which says so itself (see
+    /// `HiddenKeywords`).
+    let check (state: InferState) (call: Expression) (name: Identifier) (calleeTy: Ty) (calleeSpan: SourceSpan) (args: Expression list) : Diagnostic option =
         let ty = Unifier.unalias (resolveSoFar state calleeTy)
         let notCallable =
             match ty, args with
-            | _ when Unifier.isError ty -> false
+            | _ when Unifier.isError ty || Unifier.isBottom ty || state.DelayCalls.ContainsKey call.Span -> false
             | TyRecord _, [ Kind (Lambda([], _, _)) ] -> false
             | TyPrimitive _, _
             | TyMeasure _, _
