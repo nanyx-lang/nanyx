@@ -56,7 +56,7 @@ def name = { p -> p.name } -- (name: α, …) -> α
 def keep = { p -> (p.name, p) } -- (name: α, …ω) -> (α, (name: α, …ω))
 ```
 
-The other fields get a name, as `…ω` does in `keep`, only where the type uses them more than once: here, to say that `keep` gives back a record with the same fields it was given. The other tags of a union are named from the end of the alphabet in the same way, as in `#some(α) | ω, (α -> β) -> #some(β) | ω`. A type variable you wrote in an annotation keeps the name you gave it, and a type alias is shown by its name.
+The other fields get a name, as `…ω` does in `keep`, only where the type uses them more than once: here, to say that `keep` gives back a record with the same fields it was given. The other tags of a union are named from the end of the alphabet in the same way, as in `#some(α) | ω, (α -> β) -> #some(β) | ω`. A context variable the compiler made up is named from `κ` on, as in `def apply = { f, x -> f(x) }`, shown as `[κ] ([κ] α -> β), α -> β`; with `nanyx.asciiTypes` on, it is named from `c` on, `[c] ([c] a -> b), a -> b`. A type variable you wrote in an annotation keeps the name you gave it, and a type alias is shown by its name.
 
 | Setting | Default | What it does |
 |---------|---------|--------------|

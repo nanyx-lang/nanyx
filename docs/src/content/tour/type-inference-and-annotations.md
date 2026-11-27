@@ -47,7 +47,7 @@ def describe: a, int -> string = { x, n ->
 println(describe(1.5, 2))
 ```
 
-A type variable the compiler made up is named with a Greek letter, `α`, `β`, `γ` and so on, so it is easy to tell from one written in an annotation, which keeps its own name. In the source you write type variables in plain letters, as in `def identity: a -> a`. If you would rather see ASCII in the editor too, turn on [`nanyx.asciiTypes`](../standard-tools/vs-code-extension#how-types-are-shown).
+A type variable the compiler made up is named with a Greek letter, `α`, `β`, `γ` and so on, so it is easy to tell from one written in an annotation, which keeps its own name. A [context variable](./lambdas-and-higher-order-functions) it made up is Greek too, from `κ` on: `def apply = { f, x -> f(x) }` is `[κ] ([κ] α -> β), α -> β`. In the source you write type variables in plain letters, as in `def identity: a -> a`. If you would rather see ASCII in the editor too, turn on [`nanyx.asciiTypes`](../standard-tools/vs-code-extension#how-types-are-shown).
 
 ## Inferring tag unions
 

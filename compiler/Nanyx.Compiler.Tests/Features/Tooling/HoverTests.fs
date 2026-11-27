@@ -223,7 +223,7 @@ let ``A union's rest variable is named from the end of the alphabet`` () =
   | other -> other
 }
 """
-    Assert.Equal(Some "#some(α) | ω, ([c] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
+    Assert.Equal(Some "#some(α) | ω, ([κ] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
     Assert.Equal(Some "#some(a) | z, ([c] a -> b) -> #some(b) | z", latinHoverType source (offsetOf source "{" 0 0))
 
 [<Fact>]
@@ -249,7 +249,7 @@ let ``A shorthand match lambda shows its own type, not that of the parameters it
         normalized """def mapSome = { | #some(a), f -> #some(f(a)) | other, _ -> other }
 def g = mapSome
 """
-    Assert.Equal(Some "#some(α) | ω, ([c] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
+    Assert.Equal(Some "#some(α) | ω, ([κ] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
     Assert.Equal(Some "def mapSome: #some(α) | ω, (α -> β) -> #some(β) | ω", hoverType source (offsetOf source "mapSome" 1 0))
 
 [<Fact>]
@@ -286,7 +286,7 @@ def main = {
     Assert.Equal(Some "a: #some(string)", hoverType source (offsetOf source "a\n}" 0 0))
     Assert.Equal(Some "def mapSome: #some(int), (int -> string) -> #some(string)", hoverType source (offsetOf source "mapSome {" 0 0))
     // A rest variable that the input still shares stays: what the function is given more of, it gives back.
-    Assert.Equal(Some "#some(α) | ω, ([c] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
+    Assert.Equal(Some "#some(α) | ω, ([κ] α -> β) -> #some(β) | ω", hoverType source (offsetOf source "{" 0 0))
     // So does one shared with a parameter in scope, which a later use could still give tags to.
     let inLambda =
         normalized """def mapSome = { | #some(a), f -> #some(f(a)) | other, _ -> other }

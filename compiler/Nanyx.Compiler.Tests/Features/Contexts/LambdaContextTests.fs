@@ -171,8 +171,8 @@ def twice = { f, xs -> list.map(xs, f) }
 
 def show: [Console] int -> () = { n -> println(n) }
 """
-    Assert.Equal(Some "def apply: [c] ([c] α -> β), α -> β", hoverType source "apply =")
-    Assert.Equal(Some "def twice: [c] ([c] α -> β), list(α) -> list(β)", hoverType source "twice =")
+    Assert.Equal(Some "def apply: [κ] ([κ] α -> β), α -> β", hoverType source "apply =")
+    Assert.Equal(Some "def twice: [κ] ([κ] α -> β), list(α) -> list(β)", hoverType source "twice =")
 
 [<Fact>]
 let ``Calling an inferred higher-order function with a function that requires Console requires it`` () =
