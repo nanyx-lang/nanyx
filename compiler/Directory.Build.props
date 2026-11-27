@@ -3,7 +3,7 @@
     <!-- The compiler's release version. Every project has it, so the compiler knows the version it ships its
          packages at (see Toolchain.fs). Bumped for each release: when main has a Version with no compiler/<version>
          tag, the compiler workflow releases it (see README.md). -->
-    <Version>0.52.0</Version>
+    <Version>0.52.1</Version>
     <!-- Tiered PGO off, in the runtime config of every program here (the CLI, the checked-library writer, the tests).
          A command lasts about a second: the instrumented code PGO compiles first costs more than the code it
          recompiles from what it counted gains back, and the test processes are faster without it too (#1523). -->

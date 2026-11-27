@@ -2,6 +2,6 @@
 -- Wasmtime, print the same lines in the same order, which they do only if a sleep lets the other tasks run.
 (
   package = (name = "sleepers", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.cli.host", version = "0.52.0")
+  host = (package = "nanyx.cli.host", version = "0.52.1")
   formatter = (lineWidth = 100)
 )

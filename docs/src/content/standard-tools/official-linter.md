@@ -209,7 +209,7 @@ A [tail call](../tour/functions#tail-recursion) uses no stack, but any other cal
 It is `info` by default, since recursion that is not in tail position is often fine: a walk over a tree only recurses as deep as the tree. A project that wants every loop to be stack-safe can raise it:
 
 ```nanyx fragment
-linters = [(package = "nanyx.lint", version = "0.52.0", settings = (rules = (nonTailRecursion = #warning)))]
+linters = [(package = "nanyx.lint", version = "0.52.1", settings = (rules = (nonTailRecursion = #warning)))]
 ```
 
 ## Unused return value
@@ -273,7 +273,7 @@ def total = { n ->
 The rule (`semicolons`) reports every `;` that separates two statements on one line (see [Variables](../tour/variables#several-statements-on-one-line)). One statement per line is the house style, so it is a warning by default. Where the statements are lines of a block, as here, its fix puts the statement after the `;` on a line of its own, at the block's indent. A one-line body, such as a match arm's or a lambda's, `{ x -> log(x); x + 1 }`, has no block lines to split it into, so it gets no fix. Turn the rule off to write short sequences on one line:
 
 ```nanyx fragment
-linters = [(package = "nanyx.lint", version = "0.52.0", settings = (rules = (semicolons = #off)))]
+linters = [(package = "nanyx.lint", version = "0.52.1", settings = (rules = (semicolons = #off)))]
 ```
 
 ## Exported type no one can get
