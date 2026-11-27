@@ -247,24 +247,27 @@ module Script =
             newestFound.[(store.Index, name)] <- (DateTime.UtcNow, newest)
             newest
 
+    /// The fix that writes `version` after `package`, the name a `::install` gives with no version.
+    let private useVersion (package: DirectiveWord) (version: SemanticVersion) : Fix =
+        let length = package.Span.End - package.Span.Start
+        let atEnd = { package.Span with Start = package.Span.End; StartColumn = package.Span.StartColumn + length }
+        { Title = $"Use {package.Text} {version}"; Edits = [ { Span = atEnd; NewText = $" {version}" } ] }
+
     /// What is wrong with the package `package` a `::install` names, found at `place`, as a script names it: a package
     /// from the index needs the exact version the script uses, since a script has no lockfile and the version its
     /// directive writes is its pin. One with no version is the version of it the compiler ships, if it ships one (see
-    /// `PackageStore.seededCopy`); one it doesn't is offered the newest `store` lists.
-    let private unpinned (store: PackageStore) (package: DirectiveWord) (place: DirectivePlace) : Diagnostic list =
+    /// `PackageStore.seededCopy`); one it doesn't is offered the newest version `newest` finds of it.
+    let private unpinned (store: PackageStore) (newest: string -> SemanticVersion option) (package: DirectiveWord) (place: DirectivePlace) : Diagnostic list =
         match place with
         | Shipped when (PackageStore.seededCopy store package.Text).IsNone ->
-            let newest = newestIn store package.Text
+            let newest = newest package.Text
             let example = newest |> Option.map string |> Option.defaultValue "1.2.0"
             let found = match newest with Some version -> $": the newest in the index is {version}" | None -> ""
             let message =
                 $"`::install {package.Text}` needs the version of '{package.Text}' to use, as in `::install {package.Text} {example}`, or the directory it is in, as in `../{package.Text.Substring(package.Text.LastIndexOf '.' + 1)}`. A script has no lockfile, so the version it writes is the one it uses{found}"
             let diagnostic = invalid package.Span message |> Diagnostics.about package.Text
             match newest with
-            | Some version ->
-                let length = package.Span.End - package.Span.Start
-                let atEnd = { package.Span with Start = package.Span.End; StartColumn = package.Span.StartColumn + length }
-                [ { diagnostic with Fixes = [ { Title = $"Use {package.Text} {version}"; Edits = [ { Span = atEnd; NewText = $" {version}" } ] } ] } ]
+            | Some version -> [ { diagnostic with Fixes = [ useVersion package version ] } ]
             | None -> [ diagnostic ]
         // One that isn't a version at all is the manifest's error, as `version = "1.x"` would be.
         | AtVersion version when
@@ -289,7 +292,7 @@ module Script =
     /// the packages they name found in `store`; or what is wrong with them. A script that names no host runs under the
     /// shipped host `defaultHost`; with no directives at all under the console host, it has no build of its own, and
     /// under any other it has one that names `defaultHost`.
-    let private build (defaultHost: string) (store: PackageStore) (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
+    let private build (defaultHost: string) (store: PackageStore) (newest: string -> SemanticVersion option) (filePath: string) (settings: (Directive * DirectiveSetting) list) : Result<PackageModules option, Diagnostic list> =
         let root = if filePath = "" then Directory.GetCurrentDirectory() else Path.GetDirectoryName filePath
         let notShipped (package: DirectiveWord) place =
             match place with
@@ -323,7 +326,7 @@ module Script =
                     renamedErrors
                 else
                     (hosts |> List.truncate 1 |> List.collect (fun (_, package, place) -> notShipped package place))
-                    @ (dependencies |> List.collect (fun (_, package, place) -> unpinned store package place))
+                    @ (dependencies |> List.collect (fun (_, package, place) -> unpinned store newest package place))
             let host, hostErrors =
                 match hosts with
                 | (directive, package, place) :: _ when unshipped.IsEmpty ->
@@ -344,11 +347,8 @@ module Script =
             | [] -> Package.scriptModules defaultHost store locked filePath first.Span host dependencies files |> Result.map Some
             | errors -> Result.Error errors
 
-    /// The directives at the top of `source`, the text of the file at `filePath` (empty for one not on disk), with the
-    /// packages they name found in `store`, for a script that runs under the shipped host `defaultHost` unless it names
-    /// another. In a file of a package each is an error, since the package's manifest says these things, and they give
-    /// no linters.
-    let readFromUnder (defaultHost: string) (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
+    /// `readFromUnder`, with the newest version of a package a `::install` names with no version found by `newest`.
+    let private readWith (newest: string -> SemanticVersion option) (defaultHost: string) (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
         let filePath = if filePath = "" then "" else Path.GetFullPath filePath
         let directives = Directives.read filePath source
         let manifest =
@@ -365,16 +365,41 @@ module Script =
             let read = results |> List.choose (function directive, Result.Ok setting -> Some (directive, setting) | _, Result.Error _ -> None)
             let linters, linterErrors = linters read
             let build, buildErrors =
-                match build defaultHost store filePath read with
+                match build defaultHost store newest filePath read with
                 | Result.Ok build -> build, []
                 | Result.Error errors -> None, errors
             { Linters = linters
               Build = build
               Diagnostics = (results |> List.choose (function _, Result.Error diagnostic -> Some diagnostic | _, Result.Ok _ -> None)) @ linterErrors @ buildErrors }
 
+    /// The directives at the top of `source`, the text of the file at `filePath` (empty for one not on disk), with the
+    /// packages they name found in `store`, for a script that runs under the shipped host `defaultHost` unless it names
+    /// another. In a file of a package each is an error, since the package's manifest says these things, and they give
+    /// no linters. A package a `::install` names with no version, which the compiler doesn't ship, is offered the newest
+    /// version the index of `store` lists.
+    let readFromUnder (defaultHost: string) (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
+        readWith (newestIn store) defaultHost store filePath source
+
     /// `readFromUnder` for a script that runs under the console host unless it names another, as `nanyx run` runs one.
     let readFrom (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
         readFromUnder Hosts.consolePackage store filePath source
+
+    /// `readFrom`, without asking the index anything: a package a `::install` names with no version is told to name one,
+    /// with no newest version and no fix. The editor compiles a script as it is typed, and each new spelling of a
+    /// package's name would wait for the index (#2223): it offers the fix when asked (see `newestVersionFixes`).
+    let readFromWithoutIndex (store: PackageStore) (filePath: string) (source: string) : ScriptDirectives =
+        readWith (fun _ -> None) Hosts.consolePackage store filePath source
+
+    /// The fix that writes the newest version the index of `store` lists of each package a `::install` of `source`, the
+    /// text of the script at `filePath`, names with no version and the compiler doesn't ship, with the span of the
+    /// package's name: what `readFromWithoutIndex` leaves out, for the editor to offer when it is asked for fixes there.
+    let newestVersionFixes (store: PackageStore) (filePath: string) (source: string) : (SourceSpan * Fix) list =
+        let filePath = if filePath = "" then "" else Path.GetFullPath filePath
+        settings (Directives.read filePath source)
+        |> List.choose (function
+            | _, Result.Ok(DependencySetting(package, Shipped)) when (PackageStore.seededCopy store package.Text).IsNone ->
+                newestIn store package.Text |> Option.map (fun version -> package.Span, useVersion package version)
+            | _ -> None)
 
     /// The packages from the index the script at `filePath`, whose text is `source`, pins with its `::host` and
     /// `::install` lines, each at the exact version it names. A directive written wrong is left for the build to report.

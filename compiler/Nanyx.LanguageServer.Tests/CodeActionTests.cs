@@ -59,6 +59,34 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_package_named_with_no_version_offers_its_newest_version_when_its_fixes_are_asked_for()
+    {
+        // An index that lists two versions of acme.core, which the compile doesn't read (#2223).
+        var config = TempPath("index", "config.json");
+        var index = Path.GetDirectoryName(config)!;
+        File.WriteAllText(config, """{ "format": 1, "index": "index/" }""");
+        var listing = Path.Combine(index, "index", "acme", "acme.core.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(listing)!);
+        File.WriteAllText(listing, """
+            { "name": "acme.core", "versions": [
+              { "version": "1.0.0", "url": "a.nyxpkg", "sha256": "0", "dependencies": {} },
+              { "version": "1.2.0", "url": "b.nyxpkg", "sha256": "0", "dependencies": {} } ] }
+            """);
+        var user = NyxCompiler.SeededPackages.user();
+        await RestartWithAsync(TestSettings with { Packages = () => new NyxCompiler.PackageStore(user.Cache, index, user.GitHub, user.Seed) });
+        var uri = DocumentUri.FromFileSystemPath(TempPath("script.nyx"));
+        const string text = "::install acme.core\n\nprintln(1)\n";
+
+        Open(uri, text);
+        var diagnostic = Assert.Single((await NextPublished(uri)).Diagnostics!, d => d.Code?.String == NyxCompiler.DiagnosticCodes.InvalidDirective.Code);
+        Assert.DoesNotContain("newest", diagnostic.Message.String);
+
+        var use = Assert.Single(await CodeActionsIn(uri, diagnostic.Range), action => action.Kind == CodeActionKind.QuickFix);
+        Assert.Equal(("Use acme.core 1.2.0", true), (use.Title, use.IsPreferred));
+        Assert.Equal("::install acme.core 1.2.0\n\nprintln(1)\n", Applied(text, Assert.Single(use.Edit!.Changes![uri])));
+    }
+
+    [Fact]
     public async Task A_fix_after_an_import_whose_file_has_errors_is_its_own_diagnostics()
     {
         // The import's errors are published as one diagnostic at the import, so the published diagnostics are fewer
