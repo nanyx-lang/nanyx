@@ -48,7 +48,10 @@ type PackageModules =
       /// For a test build's modules, the full path of the build's root, which runs one test of the program's: each of
       /// the program's other files gives it a way to run its own (see `Attributes.testDispatcher`), and its `@entry` is
       /// not one. None for any other build.
-      TestRoot: string option }
+      TestRoot: string option
+      /// In a test build, the test host, which the build's root runs under, with its package's modules; the program's
+      /// own modules keep `Host`, whose prelude they see. None for any other build.
+      TestHost: (Host * PackageModules) option }
 
 module PackageModules =
     /// Whether two full paths name the same file: file names differ only in case on Windows and macOS, and an editor
@@ -135,6 +138,7 @@ module PackageModules =
           HostLibrary = false
           DeclaresHost = false
           TestRoot = None
+          TestHost = None
           Modules = Map.empty }
         |> declaring (files |> List.choose (fun file -> declaredModule file |> Option.map (fun moduleName -> moduleName, file)))
 

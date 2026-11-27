@@ -270,6 +270,19 @@ module Compiler =
             CheckedLibrary.knowShippedDeclarations.Force()
             Some HostPackages.console.Value, ShippedPackages.tryModules Hosts.consolePackage
 
+    /// The test host's package's modules, in a test build (see `PackageModules.TestHost`).
+    let private testHostModulesOf (checkedModules: CheckedModules) : PackageModules option =
+        checkedModules.Package |> Option.bind _.TestHost |> Option.map snd
+
+    /// The host of the module from `origin`, with its package's modules: the build's (see `buildHostOf`), but in a test
+    /// build for its root, and for a module of the test host's own package, which run under the test host.
+    let private hostOf (checkedModules: CheckedModules) (origin: ModuleOrigin) : Host option * PackageModules option =
+        match origin, checkedModules.Package with
+        | SourceFile path, Some ({ TestHost = Some(testHost, testModules) } as package)
+            when package.TestRoot |> Option.exists (PackageModules.samePath path) || (PackageModules.ownerOf testModules path).IsSome ->
+            Some testHost, Some testModules
+        | _ -> buildHostOf checkedModules
+
     /// Parses, desugars and type-checks one module, resolving and checking the modules it imports first. An
     /// error says which phase it came from. The check is reported to the listener of `checkedModules` as it starts
     /// and ends, by the module's `originKey`, with the imports' checks inside it.
@@ -284,7 +297,7 @@ module Compiler =
     /// `typecheckModule`, unreported.
     and private checkModule (checkedModules: CheckedModules) (origin: ModuleOrigin) (source: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> =
         let key = originKey origin
-        let buildHost, hostModules = buildHostOf checkedModules
+        let buildHost, hostModules = hostOf checkedModules origin
         // A file of the host's package, or of a package it depends on, such as the interface package it implements.
         let inHostPackage (path: string) = hostModules |> Option.exists (fun modules -> (PackageModules.ownerOf modules path).IsSome)
         // A file that may require `HostRuntime`: one of a host's own package, its roots and the modules they share, or of
@@ -381,6 +394,7 @@ module Compiler =
                                 desugared |> List.filter (function Kind (Expr _) -> false | _ -> true), None
                             | (SourceFile _ | InMemory), _ when host.IsSome -> Scripts.asEntry host.Value (fun span -> (NyxCompiler.InferState.blockAround moduleBlocks span).IsSome) entries desugared
                             | _ -> desugared, None
+                        let declared = Attributes.withDispatcherDeclared declared desugared
                         // Each module-level def that starts a task is a scope for its tasks (see `TaskScopes`).
                         let desugared, declared =
                             match origin with
@@ -986,7 +1000,7 @@ module Compiler =
     /// process checked it itself.
     and private fromCheckedPackage (checkedModules: CheckedModules) (key: string) (path: string) (visited: Set<string>) : Result<CheckedModule, CompilationPhase * Diagnostic list> option =
         let owner =
-            [ checkedModules.Package; snd (buildHostOf checkedModules) ]
+            [ checkedModules.Package; snd (buildHostOf checkedModules); testHostModulesOf checkedModules ]
             |> List.choose id
             |> List.tryPick (fun modules -> PackageModules.ownerOf modules path)
         match owner with
@@ -1049,8 +1063,8 @@ module Compiler =
         let readsTheSame (file: string, text: string) =
             try checkedModules.ReadFile file = text with _ -> false
         let shipped () =
-            match buildHostOf checkedModules with
-            | _, Some hostModules when (PackageModules.ownerOf hostModules path).IsSome ->
+            match [ snd (buildHostOf checkedModules); testHostModulesOf checkedModules ] |> List.choose id with
+            | hostPackages when hostPackages |> List.exists (fun hostModules -> (PackageModules.ownerOf hostModules path).IsSome) ->
                 CheckedLibrary.tryFindShipped key checkedModules.ReadFile
                 |> Option.map (fun shipped ->
                     let kept = { Package = checkedModules.Package; Read = shipped.Read; Module = shipped.Module; Imports = shipped.Imports }

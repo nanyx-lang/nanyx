@@ -26,8 +26,9 @@ type Package =
       HostPackage: Package option
       /// For a package in the package cache, the file its checked modules are kept in (see `CheckedPackages`).
       CheckedFile: string option
-      /// Whether it is built as a test build builds it (see `Package.withTests`).
-      TestBuild: bool }
+      /// In a test build (see `Package.withTests`), the test host its root runs under, with the host's package; none
+      /// otherwise.
+      TestHost: (Host * Package) option }
 
 /// What building a package found: each source file's compile, and every diagnostic once. Each module is checked once
 /// for the whole build, though a file imported by another is compiled as part of both.
@@ -248,7 +249,7 @@ module Package =
                   Host = host |> Option.map fst
                   HostPackage = host |> Option.map snd
                   CheckedFile = None
-                  TestBuild = false }
+                  TestHost = None }
         | entry, dependencies, host ->
             let errorsOf = function Result.Error errors -> errors | Result.Ok _ -> []
             Result.Error(errorsOf entry @ exports @ testsAmongSources @ errorsOf referenced @ errorsOf dependencies @ errorsOf host)
@@ -463,7 +464,8 @@ module Package =
             CheckedFile = package.CheckedFile
             HostLibrary = package.Manifest.HostLibrary
             DeclaresHost = package.Manifest.Declares.IsSome
-            TestRoot = if package.TestBuild then Some (testRootIn package.Manifest) else None }
+            TestRoot = package.TestHost |> Option.map (fun _ -> testRootIn package.Manifest)
+            TestHost = package.TestHost |> Option.map (fun (host, hostPackage) -> host, modules hostPackage) }
         |> PackageModules.withReferenced package.ReferencedFiles
 
     /// The name of the package the file at `filePath` is a source file of, if it is in one whose manifest reads.
@@ -511,7 +513,7 @@ module Package =
                           Host = host |> Option.map fst
                           HostPackage = host |> Option.map snd
                           CheckedFile = None
-                          TestBuild = false }
+                          TestHost = None }
                 Result.Ok(Some (if PackageModules.contains modules filePath then modules else { modules with Files = modules.Files @ [ filePath ] }))
             | Result.Ok _ -> Result.Ok None
         | _ -> Result.Ok None
@@ -659,16 +661,25 @@ module Package =
     /// `buildReporting`, telling nobody.
     let build (package: Package) : PackageBuild = buildReporting CompileListener.none package
 
-    /// `package` as a test build has it: its test files among its sources, so that they are compiled, and that its
-    /// modules and theirs can import each other, each of the program's modules giving the build's root a way to run its
-    /// tests (see `PackageModules.TestRoot`).
-    let withTests (package: Package) : Package =
-        { package with Sources = package.Sources @ package.TestFiles; TestBuild = true }
+    /// `package` as a test build has it, with the test host found in `store`, or why the test host can't be read: its
+    /// test files among its sources, so that they are compiled, and that its modules and theirs can import each other,
+    /// each of the program's modules giving the build's root a way to run its tests (see `PackageModules.TestRoot`).
+    /// The program's modules keep its own host, whose prelude they see, and only the root runs under the test host, but
+    /// for a library's, which has none.
+    let withTests (store: PackageStore) (package: Package) : Result<Package, string> =
+        withHost store package.Manifest.Root Hosts.testPackage package
+        |> Result.map (fun underTest ->
+            { package with
+                Sources = package.Sources @ package.TestFiles
+                // A library has no host, nor a prelude of its own, so its modules run under the test host, and see its.
+                Host = package.Host |> Option.orElse underTest.Host
+                HostPackage = package.HostPackage |> Option.orElse underTest.HostPackage
+                TestHost = Option.map2 (fun host hostPackage -> host, hostPackage) underTest.Host underTest.HostPackage })
 
-    /// Checks every source file and every test file of `package` (see `withTests`), as `build` checks its sources,
-    /// under the test host, found in `store`, in place of its own; or why the test host can't be read.
+    /// Checks every source file and every test file of `package` (see `withTests`), as `build` checks its sources; or
+    /// why the test host, found in `store`, can't be read.
     let testBuild (store: PackageStore) (package: Package) : Result<PackageBuild, string> =
-        withTests package |> withHost store package.Manifest.Root Hosts.testPackage |> Result.map build
+        withTests store package |> Result.map build
 
     /// The modules of the package `build` built that mark a def `@test`, by name, in the order of its files, each with
     /// how many it marks.

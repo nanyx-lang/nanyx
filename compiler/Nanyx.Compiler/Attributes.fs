@@ -27,8 +27,9 @@ module Attributes =
     /// it runs the module's test at the index it is given, in the order they are written. No other build has it.
     let testDispatcher = "__tests"
 
-    /// `export def __tests: [Console, Random] int -> () = { index -> if index == 0 then t0() else ... else () }` for the tests
-    /// `tests`, each with where it is written, which is where its part of the def is (see `testDispatcher`).
+    /// `export def __tests = { index -> if index == 0 then t0() else if index == 1 then t1() else () }` for the tests
+    /// `tests`, each with where it is written, which is where its part of the def is (see `testDispatcher`). Its type,
+    /// and the contexts it requires, which are its tests', are inferred, as a def's written without a type are.
     let private dispatcherOf (tests: (string * SourceSpan) list) : TopLevelItem =
         let index = "index"
         let span = snd tests.Head
@@ -40,13 +41,22 @@ module Attributes =
                     expr (IfExpr(isPosition, expr (FunctionCall(test, None, [])), otherwise)))
                 (List.indexed tests)
                 (Expression.at span UnitExpr)
-        // Its type is written, not inferred: a def made up here and left unannotated loses the contexts its tests are
-        // inferred to require, and the backend then finds `Console`'s members out of scope in it (NYX0302). The test
-        // host's contexts are the most a test may require (see `TestChecks`), so writing them all costs nothing.
-        let typeExpr kind = TypeExpr.at span kind
-        let contexts = Hosts.testContexts |> List.map (TypeName >> typeExpr)
-        let signature = typeExpr (TypeWithContext(contexts, typeExpr (TypeFunc(typeExpr (TypeName "int"), typeExpr TypeUnit))))
-        TopLevelItem.at span (Def (ValueDef(true, testDispatcher, Some signature, Expression.at span (Lambda([ index, None ], body, false)))))
+        TopLevelItem.at span (Def (ValueDef(true, testDispatcher, None, Expression.at span (Lambda([ index, None ], body, false)))))
+
+    /// `declared`, the names `module'` declares as the parser found them, with those of the `testDispatcher` a test build
+    /// gave it, if it did: its name, at the first test, and its parameter. Inference finds a def's symbol, and the
+    /// contexts an unannotated one requires, by where it is declared.
+    let withDispatcherDeclared (declared: DeclaredNames) (module': Module) : DeclaredNames =
+        module'
+        |> List.tryPick (function
+            | Kind (Def (ValueDef(_, name, _, ({ Kind = Lambda(parameters, _, _) } as value)))) when name = testDispatcher ->
+                Some (value, parameters)
+            | _ -> None)
+        |> Option.map (fun (value, parameters) ->
+            declared
+            |> Map.add (value.Id, DefValue) [ testDispatcher, value.Span ]
+            |> Map.add (value.Id, LambdaParameters) (parameters |> List.map (fun (parameter, _) -> parameter, value.Span)))
+        |> Option.defaultValue declared
 
     /// The attribute that marks an exported definition as one a component built from the program exports:
     /// `@component export def area: Shape -> float = ...`, in the WIT interface its module names (see
