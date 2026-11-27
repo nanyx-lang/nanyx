@@ -606,6 +606,8 @@ module Compiler =
                             | MisspelledField(onlyLeft, rightRecord, onlyRight, leftRecord) ->
                                 MisspelledFields.diagnose state desugared span (onlyLeft, rightRecord, onlyRight, leftRecord)
                                 |> Option.defaultWith (fun () -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
+                            | FieldsDiffer(onlyLeft, onlyRight) ->
+                                Diagnostics.at (MemoryCells.mismatchCode state span) (MisspelledFields.writtenField state desugared span (onlyLeft, onlyRight)) message
                             | TypesDiffer
                             | CharAndString
                             | NominalShape _ -> Diagnostics.at (MemoryCells.mismatchCode state span) span message)
