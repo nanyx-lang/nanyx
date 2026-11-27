@@ -45,6 +45,8 @@ type ScopeKind =
     | LambdaScope
     /// A def, top-level or local, with the lambda that is its value if it is one.
     | FunctionScope
+    /// A `type`, `context`, `dimension` or `unit` declaration (see `TypeScopes.declarationsAround`).
+    | TypeScope
     /// The module.
     | ModuleScope
 
@@ -60,12 +62,18 @@ type Heading = { Label: string option; Code: string }
 /// contexts it carries, or a def's signature, as hover writes them; `Symbol` is the def's, whose doc comment the info view shows. `Names` are the parameters, locals and pattern variables it declares, nearest the position first, and for
 /// the module its top-level defs and imports, its own first, then by name, less intrinsics. `Contexts` are those it
 /// provides: a `use` in it, a def's signature or what a def was inferred to require, or the module's runtime.
+///
+/// A type's declaration is headed as declared (`context Iter(c)`) and links to the name it declares. Its `Type` is its
+/// definition as hover writes it, with `Note` after it, its `Symbol` the type's, its `Parameters` its type parameters,
+/// and its `Names` the definitions attached to it (see `TypeScopes.attachedTo`).
 type Scope =
     { Kind: ScopeKind
       Heading: Heading
       Span: SourceSpan
       Type: string option
+      Note: string option
       Symbol: Symbol option
+      Parameters: TypeScopes.TypeParameter list
       Names: ScopedName list
       Contexts: ScopedContext list }
 
@@ -82,13 +90,27 @@ type Info = { Scopes: Scope list; TypeNames: (string * Symbol) list }
 /// what a name refers to or declares, whose doc comment the info view shows.
 type Described = { Name: string; Type: string; Heading: Heading; Span: SourceSpan; Symbol: Symbol option }
 
+/// The type the info view describes at the top, in place of an expression (see `TypeScopes.typeAt`), headed by its
+/// code and linking to `Span`, where it is written. A type's name, `type Point`, has its `Definition` as hover writes
+/// it, with `Note` after it, and the type's `Symbol`, whose declaration it links to and whose doc comment the info view
+/// shows; a built-in type has no symbol. A selected type expression, `type list(Point)`, has its `Type`. A type
+/// variable, `type variable a`, links to its first use and has the `Contexts` the type it is written in requires of it.
+type DescribedType =
+    { Heading: Heading
+      Span: SourceSpan
+      Definition: string option
+      Note: string option
+      Type: string option
+      Contexts: ScopedContext list
+      Symbol: Symbol option }
+
 /// The most of a heading's code the info view writes; longer code is cut (see `headingCode`).
 let private headingLength = 40
 
 /// `written`, code as a heading writes it: on one line, with its runs of white space made one space, and cut with `…`
 /// past `headingLength` characters, or where `more` says code follows that the heading leaves out.
 let internal headingCode (more: bool) (written: string) : string =
-    let oneLine = System.Text.RegularExpressions.Regex.Replace(written.Trim(), @"\s+", " ")
+    let oneLine = TypeScopes.oneLine written
     if oneLine.Length > headingLength then oneLine.Substring(0, headingLength - 1).TrimEnd() + " …"
     elif more then oneLine + " …"
     else oneLine
@@ -357,6 +379,13 @@ let rec private splitAs (groups: 'a list list) (written: string list) : string l
         let here, after = List.splitAt group.Length written
         here :: splitAs rest after
 
+/// The type of `symbol`, a definition attached to a type in the compiled root module, compiled as `file`: a def's as
+/// `topLevelType` writes it, and a type's definition as hover writes it.
+let private attachedType (names: TypeNotation) (rename: Ty -> Ty) (file: string) (typed: TypedModule) (symbol: Symbol) : string option =
+    match symbol.Kind with
+    | TypeDefinition -> Definition.typeDefinitionOf typed symbol |> Option.map (Definition.typeDefinitionWritten names file typed symbol >> fst)
+    | _ -> topLevelType names rename typed symbol
+
 /// The module's scope, with no names or contexts yet: headed by the name its `module` declaration gives it, if any.
 let private moduleScope (syntax: Module) : Scope =
     let declared = syntax |> List.tryPick (fun item -> match item.Kind with ModuleDecl(_, name) -> Some (name, item.Span) | _ -> None)
@@ -364,7 +393,9 @@ let private moduleScope (syntax: Module) : Scope =
       Heading = { Label = None; Code = match declared with Some (name, _) -> $"module {name}" | None -> "this module" }
       Span = declared |> Option.map snd |> Option.defaultValue SourceSpan.none
       Type = None
+      Note = None
       Symbol = None
+      Parameters = []
       Names = []
       Contexts = [] }
 
@@ -373,8 +404,9 @@ let private moduleScope (syntax: Module) : Scope =
 /// together, so an `α` in a parameter's type is the `α` of a context; a local
 /// def that writes its contexts shows them before its type. Every type and context is named as the code at `offset`
 /// can name it (see `Signatures.relativeAt`): `Point` inside `module Points`. A name or context belongs to the innermost lambda or def
-/// whose value it is declared or provided in, and to the module if there is none. Empty when the module did not
-/// type-check.
+/// whose value it is declared or provided in, and to the module if there is none. A `type`, `context`, `dimension` or
+/// `unit` declaration around `offset` is a scope too, before the module's (see `TypeScopes.declarationsAround`). Empty
+/// when the module did not type-check.
 let at (names: TypeNotation) (file: string) (source: string) (result: CompileResult) (offset: int) : Info =
     match result.Syntax, result.Typed with
     | Some syntax, Some typed ->
@@ -430,7 +462,9 @@ let at (names: TypeNotation) (file: string) (source: string) (result: CompileRes
                       Heading = heading
                       Span = headed
                       Type = List.tryHead typeWritten
+                      Note = None
                       Symbol = None
+                      Parameters = []
                       Names = []
                       Contexts = [] },
                     lambda.Span)
@@ -447,12 +481,28 @@ let at (names: TypeNotation) (file: string) (source: string) (result: CompileRes
                            | None -> $"def {name}" }
                      Span = symbol.Declaration
                      Type = topLevelType names rename typed symbol
+                     Note = None
                      Symbol = Some symbol
+                     Parameters = []
                      Names = []
                      Contexts = [] },
                    value.Span))
+            @ (TypeScopes.declarationsAround names file source result offset
+               |> List.map (fun declaration ->
+                   { Kind = TypeScope
+                     Heading = { Label = None; Code = declaration.Heading }
+                     Span = declaration.Name
+                     Type = Some declaration.Definition
+                     Note = declaration.Note
+                     Symbol = declaration.Symbol
+                     Parameters = declaration.Parameters
+                     Names = declaration.Attached |> List.map (fun symbol -> scoped symbol (attachedType names rename file typed symbol))
+                     Contexts = [] },
+                   declaration.Span))
             |> List.sortBy (fun (_, covering) -> covering.End - covering.Start)
-        let ownerOf (span: SourceSpan) = enclosing |> List.tryFindIndex (fun (_, covering) -> SourceSpan.contains covering span)
+        // A type's declaration declares no locals and provides no contexts.
+        let ownerOf (span: SourceSpan) =
+            enclosing |> List.tryFindIndex (fun (scope, covering) -> scope.Kind <> TypeScope && SourceSpan.contains covering span)
         let namesIn index = localNames |> List.filter (fun name -> ownerOf name.Declaration = index)
         let contextsIn index = scopedContexts |> List.filter (fun (owner, _) -> ownerOf owner = index) |> List.map snd
         let topLevel =
@@ -461,7 +511,10 @@ let at (names: TypeNotation) (file: string) (source: string) (result: CompileRes
             |> List.sortBy (fun symbol -> symbol.Declaration.File <> file, symbol.Name)
             |> List.map (fun symbol -> scoped symbol (topLevelType names rename typed symbol))
         { Scopes =
-            (enclosing |> List.mapi (fun index (scope, _) -> { scope with Names = namesIn (Some index); Contexts = contextsIn (Some index) }))
+            (enclosing
+             |> List.mapi (fun index (scope, _) ->
+                 if scope.Kind = TypeScope then scope
+                 else { scope with Names = namesIn (Some index); Contexts = contextsIn (Some index) }))
             @ [ { moduleScope syntax with Names = namesIn None @ topLevel; Contexts = contextsIn None } ]
           TypeNames = Signatures.typeNamesAt typed.TypeDefs typed.Symbols syntax offset }
     | _ -> { Scopes = []; TypeNames = [] }
@@ -489,5 +542,33 @@ let expressionAt (names: TypeNotation) (source: string) (result: CompileResult) 
               Heading = { Label = Some "expression"; Code = headingCode false (SourceSpan.textIn source span) }
               Span = span
               Symbol = symbol })
+    | _ -> None
+
+/// The type the info view describes at `selection` in the compiled root module, compiled as `file` from `source`, with
+/// made-up type variables named by `names`, in place of an expression (see `TypeScopes.typeAt`). A selected type is
+/// written as everywhere else, named as the code there can name it. None where no type is there.
+let typeAt (names: TypeNotation) (file: string) (source: string) (result: CompileResult) (selection: SourceSpan) : DescribedType option =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        let described heading span =
+            { Heading = heading; Span = span; Definition = None; Note = None; Type = None; Contexts = []; Symbol = None }
+        TypeScopes.typeAt names file source result selection
+        |> Option.map (fun found ->
+            match found with
+            | TypeScopes.NamedType(heading, definition, note, symbol, span) ->
+                { described { Label = None; Code = heading } span with Definition = Some definition; Note = note; Symbol = symbol }
+            | TypeScopes.WrittenType(typeExpr, ty) ->
+                let rename = Signatures.relativeAt typed.TypeDefs syntax typeExpr.Span.Start
+                { described { Label = Some "type"; Code = headingCode false (SourceSpan.textIn source typeExpr.Span) } typeExpr.Span with
+                    Type = Some (Hover.typeWrittenAt names rename typed None ty) }
+            | TypeScopes.TypeVariable(name, firstUse, contexts) ->
+                let scopedContext (context: TypeExpr) : ScopedContext =
+                    let contextName = match context.Kind with TypeApply(name, _) | TypeName name -> name | _ -> ""
+                    { Context = TypeScopes.oneLine (SourceSpan.textIn source context.Span)
+                      Name = contextName
+                      Source = Signature
+                      Span = context.Span
+                      Documented = contextSymbol typed (TyApply(contextName, [])) |> Option.toList }
+                { described { Label = Some "type variable"; Code = name } firstUse with Contexts = contexts |> List.map scopedContext })
     | _ -> None
 

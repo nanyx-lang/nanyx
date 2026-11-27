@@ -294,7 +294,7 @@ See [Formatter](./formatter) for the style, the settings and what happens to a f
 `nanyx new acme.demo` makes a package in a new directory, named for the last part of the package's name, `demo`,
 unless you give another: `nanyx new acme.demo tools/demo`. The directory must be new or empty. The package has a
 manifest, `acme.demo.nyxp`, with the official linter on and the console host, both at the compiler's version, the
-compiler's minor version as the oldest the package builds with, `nanyx = "0.50"`, and `src/main.nyx`, whose `@entry` prints "Hello, World!". A package's name is lower case, with words separated by dots.
+compiler's minor version as the oldest the package builds with, `nanyx = "0.51"`, and `src/main.nyx`, whose `@entry` prints "Hello, World!". A package's name is lower case, with words separated by dots.
 
 ## `nanyx migrate`
 
