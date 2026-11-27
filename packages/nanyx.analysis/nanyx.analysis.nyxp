@@ -1,0 +1,9 @@
+(
+  package = (
+    name = "nanyx.analysis"
+    version = "0.53.0"
+    repository = "nanyx-lang/nanyx"
+    nanyx = "0.53"
+    sources = ["src/**/*.nyx"]
+  )
+)
