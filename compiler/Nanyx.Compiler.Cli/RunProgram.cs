@@ -32,14 +32,8 @@ internal static partial class CliCommands
 
         // The program runs as the compiler assembled it, so that the frames of a trap are where its table of places
         // says (see `SpanTable`).
-        byte[] wasm;
-        try
+        if (!TryAssemble(errors, wat, out var wasm))
         {
-            wasm = WasmBinary.assemble(wat);
-        }
-        catch (Exception ex) when (ex is WasmBinary.WasmAssemblyError or WatSyntax.WatSyntaxError)
-        {
-            errors.WriteLine($"Internal error in the compiler, whose WebAssembly can't be assembled ({ex.Message}): report it at https://github.com/nanyx-lang/nanyx/issues");
             return 1;
         }
 

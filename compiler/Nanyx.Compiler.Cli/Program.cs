@@ -433,7 +433,12 @@ internal static partial class CliCommands
             world = ComponentInterface.write(host.WitDirectory, hostWorld, witPackage, functions, imports, witDirectory);
         }
 
-        var built = Componentizer.componentize(WasmBinary.assemble(wat), witDirectory, world);
+        if (!TryAssemble(shell.Error, wat, out var wasm))
+        {
+            return null;
+        }
+
+        var built = Componentizer.componentize(wasm, witDirectory, world);
         if (built.IsError)
         {
             shell.Error.WriteLine($"The program can't be built as a component of {hostWorld}: {built.ErrorValue}");
@@ -441,8 +446,36 @@ internal static partial class CliCommands
             return null;
         }
 
+        return WriteOutput(shell, fullPath, path => File.WriteAllBytes(path, built.ResultValue));
+    }
+
+    /// <summary>
+    /// Assembles the program <paramref name="wat"/> into <paramref name="wasm"/>; false, said on <paramref name="errors"/>,
+    /// when the text can't be assembled, which is a bug in the compiler.
+    /// </summary>
+    internal static bool TryAssemble(TextWriter errors, string wat, out byte[] wasm)
+    {
+        try
+        {
+            wasm = WasmBinary.assemble(wat);
+            return true;
+        }
+        catch (Exception ex) when (ex is WasmBinary.WasmAssemblyError or WatSyntax.WatSyntaxError)
+        {
+            errors.WriteLine($"Internal error in the compiler, whose WebAssembly can't be assembled ({ex.Message}): report it at https://github.com/nanyx-lang/nanyx/issues");
+            wasm = [];
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes a build's output to <paramref name="fullPath"/> with <paramref name="write"/>, making its directory if need
+    /// be, and gives the path as the shell shows it.
+    /// </summary>
+    private static string WriteOutput(Shell shell, string fullPath, Action<string> write)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        File.WriteAllBytes(fullPath, built.ResultValue);
+        write(fullPath);
         return shell.DisplayPath(fullPath);
     }
 
@@ -459,32 +492,13 @@ internal static partial class CliCommands
     /// </summary>
     private static string? WriteProgram(Shell shell, string wat, ProgramFormat format, string outputPath)
     {
-        byte[]? wasm = null;
-        if (format == ProgramFormat.Binary)
-        {
-            try
-            {
-                wasm = WasmBinary.assemble(wat);
-            }
-            catch (Exception ex) when (ex is WasmBinary.WasmAssemblyError or WatSyntax.WatSyntaxError)
-            {
-                shell.Error.WriteLine($"Internal error in the compiler, whose WebAssembly can't be assembled ({ex.Message}): report it at https://github.com/nanyx-lang/nanyx/issues");
-                return null;
-            }
-        }
-
         var fullPath = shell.FullPath(outputPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        if (wasm is null)
+        if (format != ProgramFormat.Binary)
         {
-            File.WriteAllText(fullPath, wat);
-        }
-        else
-        {
-            File.WriteAllBytes(fullPath, wasm);
+            return WriteOutput(shell, fullPath, path => File.WriteAllText(path, wat));
         }
 
-        return shell.DisplayPath(fullPath);
+        return TryAssemble(shell.Error, wat, out var wasm) ? WriteOutput(shell, fullPath, path => File.WriteAllBytes(path, wasm)) : null;
     }
 
     /// <summary>The extension of a program written in <paramref name="format"/>: <c>.wasm</c> or <c>.wat</c>.</summary>
