@@ -247,10 +247,12 @@ let private command (arguments: string list) : Shell -> int =
             | name :: value :: rest when List.contains name named -> valued named (Map.add name value found) kept rest
             | argument :: rest -> valued named found (argument :: kept) rest
             | [] -> found, List.rev kept
-        let given, rest = valued [ "--filter"; "--seed"; "--timeout"; "--format" ] Map.empty [] rest
+        let given, rest = valued [ "--filter"; "--seed"; "--timeout"; "--format"; "--test"; "--module" ] Map.empty [] rest
         let value name = given |> Map.tryFind name |> Option.toObj
+        let list, rest = takeFlag "--list" rest
         let _, release, timings, _, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings, value "--format")
+        fun shell ->
+            CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings, value "--format", list, value "--test", value "--module")
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)
