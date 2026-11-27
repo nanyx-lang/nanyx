@@ -124,7 +124,9 @@ A test stops at the first `assert` that fails. Each test runs on its own (see [R
 
 Built: a test runs under the test host with `Console` and a seeded `Random`, a test that requires another context is
 `NYX0312`, and `@test(#io)` runs one with the console host's real `Console`, `Env` and `FileSystem`
-([`@test`](../tour/attributes#test), [Test builds](../deep-dives/test-builds#io-tests)). What is left:
+([`@test`](../tour/attributes#test), [Test builds](../deep-dives/test-builds#io-tests)). For code that reads and writes
+files, `filesystem.inMemory` runs a block with a `FileSystem` that holds its files in memory
+([#3080](https://github.com/nanyx-lang/nanyx/issues/3080)). What is left:
 
 - **A generated fake.** `NYX0312` could offer a fix that loads a fake of the missing context with `use`, each of its
   members a function that crashes until the test fills it in ([#2932](https://github.com/nanyx-lang/nanyx/issues/2932)).
@@ -169,7 +171,6 @@ These fit the design but are not part of the first version:
 - **Snapshot tests**, which compare a value's printed form with one stored in a file.
 - **Virtual time.** The test host providing `Async` and a `Clock` whose `sleep` advances at once, with tasks run in a
   fixed order, so tests of `sleep`, `race` and timeouts run instantly and the same way every time.
-- **A file system in memory.** A ready-made `FileSystem`, which a test loads with `use`, that holds its files in memory, so a test can write files and read them back without faking each member by hand.
 - **Docs as tests.** Running the code blocks in docs as tests. The compiler's own tests already run the docs' ([compilation](../deep-dives/compilation#docs-examples)); `nanyx test` could do the same for a package's.
 
 # Prior art
