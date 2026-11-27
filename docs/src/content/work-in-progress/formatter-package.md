@@ -183,9 +183,10 @@ The F# formatter isn't deleted until both hold.
 The F# printer and the package run side by side until the package writes exactly what the F# printer does, so that a
 difference is a bug in the port, found by a test:
 
-1. **`nanyx.syntax`.** The tree's types move out of `nanyx.analysis` into a package of their own, with `Trivia` and
-   `SourceModule`, and the host encodes trivia when the tree is for a formatter. This lands with or after the linter's
-   contract ([#3171](https://github.com/nanyx-lang/nanyx/issues/3171)).
+1. **Trivia.** The linter's contract puts the tree's types in `nanyx.syntax` from the start
+   ([#3171](https://github.com/nanyx-lang/nanyx/issues/3171)). This stage adds `Trivia` and `SourceModule` to it, and
+   the encoding of a module as written, `module name =` blocks kept, with its trivia, from the parser's
+   `SourceModule`.
 2. **The host.** `nanyx.format.host` and the `nanyx:format` import, format builds and their cache, and
    `compiler/Nanyx.Formatter` running a format build behind `FormatCommand.formatText` with the safety check, behind a
    setting that chooses it; the refactorings take the formatter as a function. A test formatter checks it end to end.
