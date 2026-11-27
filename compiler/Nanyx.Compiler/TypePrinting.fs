@@ -296,6 +296,8 @@ module TypePrinting =
             | closed -> $"{closed.Substring(0, closed.Length - 1)}, {rowText})"
         // Tags are written with their `#`, as in source: `#some(int) | #notFound`. A record payload's fields are
         // in the tag's own brackets: `#pair(int, string)`, `#authenticated(username: string)`.
+        // The tag a custom pattern's `_` stands for is written as the pattern declares it, `_` (#3064).
+        | TyTag(name, None) when name = PatternSyntax.noMatchTag -> "_"
         | TyTag(name, payloadOpt) ->
             match payloadOpt with
             | Some (TyRecord(fields, _) as payload) when not fields.IsEmpty ->
@@ -319,6 +321,9 @@ module TypePrinting =
         // A rest named nothing (see `displayRenaming`) is written as a bare spread: `#some(int) | ...`. The tags of a
         // union alias in scope are written as its name (see `withUnionAliases`).
         | TyUnion members ->
+            // A pattern's `_` goes last, as its declaration writes it: `#Num(float) | _`.
+            let isNoMatch = function TyTag(name, None) -> name = PatternSyntax.noMatchTag | _ -> false
+            let members = (members |> List.filter (isNoMatch >> not)) @ (members |> List.filter isNoMatch)
             withUnionAliases p.Unions members
             |> List.map (function TyPrimitive "" -> p.Spread | item -> grouped item)
             |> String.concat " | "

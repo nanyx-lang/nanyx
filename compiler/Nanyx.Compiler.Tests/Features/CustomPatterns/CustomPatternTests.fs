@@ -377,3 +377,14 @@ let ``The fix for a pattern's argument that is a call binds it with a def before
     let fixedSource = applyFix source fix
     Assert.Contains("  def divisibleByArgument = n + 1\n  match n\n    | #DivisibleBy(divisibleByArgument) -> 1", fixedSource)
     compileClean fixedSource |> ignore
+
+[<Theory>]
+[<InlineData("pattern string -> #Num(float) | _ = { s -> 3 }", "'int' vs '_'")>]
+[<InlineData("pattern string -> #Word(string) | _ = { s -> if s == \"\" then _ else #num(1.0) }",
+             "'#num(float) | _' vs '#Word(string) | _'")>]
+let ``A mismatch in a pattern's body writes its no-match case as _`` (source: string, expected: string) =
+    // The tag a pattern's `_` stands for is not a name the user wrote, so a message never shows it (#3064).
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    Assert.Contains(expected, diagnostic.Message)
+    Assert.DoesNotContain(Parser.Program.PatternSyntax.noMatchTag, diagnostic.Message)
