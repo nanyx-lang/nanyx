@@ -167,6 +167,34 @@ def longestFrom
           | #notFound -> found
   }
 
+--| The node below `node` that the characters of `key` from byte `at` on lead to, or `#none` when no
+  key starts with them: [`nodeAt`] for a string, read by position, so the key makes no list.
+def stringNodeAt: Node(char, v), string, int -> #some(Node(char, v)) | #none = { node, key, at ->
+  if at >= string.length(key) then #some(node) else
+    def #node(_, children, _) = node
+
+    match map.get(children, __stringCharAt(key, at))
+      | #some(child) -> stringNodeAt(child, key, __stringNextChar(key, at))
+      | #notFound -> #none
+}
+
+--| [`longestFrom`] for a string, read by position: the byte the longest key below `node` that the
+  rest of `key` from byte `at` starts with ends at, and its value, or `best` when there is none.
+def stringLongestFrom
+  : Node(char, v), string, int, (#some(int, v) | #none) -> #some(int, v) | #none
+  = { #node(own, children, _), key, at, best ->
+    def found =
+      match own
+        | #some(value) -> #some(at, value)
+        | #none -> best
+
+    if at >= string.length(key)
+      then found
+      else match map.get(children, __stringCharAt(key, at))
+        | #some(child) -> stringLongestFrom(child, key, __stringNextChar(key, at), found)
+        | #notFound -> found
+  }
+
 --| The trie with no keys.
 export def Trie.empty: Trie(k, v) = Trie(emptyNode)
 
@@ -298,13 +326,19 @@ export def StringTrie.remove: StringTrie(v), string -> StringTrie(v) = { StringT
 }
 
 --| The value `trie` maps `key` to, or `#none` when it has no `key`.
-export def StringTrie.get: StringTrie(v), string -> #some(v) | #none = { StringTrie(trie), key ->
-  Trie.get(trie, string.chars(key))
-}
+export def StringTrie.get
+  : StringTrie(v), string -> #some(v) | #none
+  = { StringTrie(Trie(root)), key ->
+    match stringNodeAt(root, key, 0)
+      | #some(#node(own, _, _)) -> own
+      | #none -> #none
+  }
 
 --| Whether `trie` maps `key` to a value.
-export def StringTrie.containsKey: StringTrie(v), string -> bool = { StringTrie(trie), key ->
-  Trie.containsKey(trie, string.chars(key))
+export def StringTrie.containsKey: StringTrie(v), string -> bool = { trie, key ->
+  match StringTrie.get(trie, key)
+    | #some(_) -> true
+    | #none -> false
 }
 
 --| How many keys `trie` holds.
@@ -347,17 +381,19 @@ export def StringTrie.withPrefix
   }
 
 --| Whether any key in `trie` starts with `prefix`, or is `prefix`.
-export def StringTrie.hasPrefix: StringTrie(v), string -> bool = { StringTrie(trie), prefix ->
-  Trie.hasPrefix(trie, string.chars(prefix))
+export def StringTrie.hasPrefix: StringTrie(v), string -> bool = { StringTrie(Trie(root)), prefix ->
+  match stringNodeAt(root, prefix, 0)
+    | #some(node) -> countOf(node) > 0
+    | #none -> false
 }
 
 --| The longest key in `trie` that `key` starts with, `key` itself included, and its value, or
   `#none` when no key in `trie` is a prefix of `key`.
 export def StringTrie.longestPrefixOf
   : StringTrie(v), string -> #some(string, v) | #none
-  = { StringTrie(trie), key ->
-    match Trie.longestPrefixOf(trie, string.chars(key))
-      | #some(prefix, value) -> #some(string.fromChars(prefix), value)
+  = { StringTrie(Trie(root)), key ->
+    match stringLongestFrom(root, key, 0, #none)
+      | #some(end, value) -> #some(string.take(key, end), value)
       | #none -> #none
   }
 
