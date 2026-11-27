@@ -33,7 +33,7 @@ packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   the compiler.
 - **A release publishes them to the index.** Each shipped manifest names this repository, `repository =
   "nanyx-lang/nanyx"`, and the compilers it builds with: a library the one it ships with or a later one, and a host or
-  a host library that one only, `=0.52.1`, since they use the compiler's internals. Each release attaches its
+  a host library that one only, `=0.53.0`, since they use the compiler's internals. Each release attaches its
   `.nyxpkg` to the `compiler/<version>` release, which the [package index](./package-index) records as it does any
   package's release ([Releases](./releases#the-shipped-packages)).
 - **The compiler seeds them into the package cache.** `SeededPackages.seed` packs each shipped package as the release
@@ -66,8 +66,8 @@ packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   and a host runs its program against the copies of the libraries it was built with, which define the types, such as
   `Console`, the two share. So the seeded version of a shipped package depends on each other shipped package it names
   at that package's seeded version only (`VersionRequirement.exactly`), whatever its manifest writes
-  (`Resolution.requirementIn`). Without it, a program under the seeded `nanyx.cli.host` 0.52.1 would lock a `nanyx.cli`
-  0.52.1 from the index, whose `nanyx` accepts the compiler, and meet two `Console`s. A package that no shipped host
+  (`Resolution.requirementIn`). Without it, a program under the seeded `nanyx.cli.host` 0.53.0 would lock a `nanyx.cli`
+  0.53.0 from the index, whose `nanyx` accepts the compiler, and meet two `Console`s. A package that no shipped host
   runs, such as a library checked alone, takes the newest version its requirements accept.
 - **The console host declares itself.** The compiler reads `nanyx.cli.host`'s manifest, as it reads any host's, rather
   than keeping a table of hosts; `HostPackages.console`, read from the compiler's own copy, is the host a loose file runs
