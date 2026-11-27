@@ -77,6 +77,9 @@ type internal CheckedModule =
       /// The rests of the unions each of the module's own top-level functions compares values of, which a call to it
       /// checks a well-known context of, by its symbol (see `InferState.CheckedRests`).
       CheckedRests: Map<SymbolId, Map<Identifier, int list>>
+      /// Where each of the module's defs writes the types of its parameters, by the def's symbol (see
+      /// `InferState.ParameterTypes`): a call from a module that imports it points back at them (#3109).
+      ParameterTypes: Map<SymbolId, SourceSpan option list>
       /// The ambient contexts (the runtime's, as `Console`) by the names the module knows them by, with their
       /// definitions: an importer that cannot name one still needs it where it calls a function that requires it.
       AmbientContexts: Map<string, TypeDefInfo>

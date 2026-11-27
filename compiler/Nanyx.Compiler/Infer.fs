@@ -966,7 +966,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 let ty, st = freshVar declaredState
                                 ty, st, selfVisible ty, true
                         let nextStateWithReq =
-                            let written = recordWrittenType name typeOpt preboundState
+                            let written = recordWrittenType name typeOpt preboundState |> ParameterTypes.record symbol declaredTypeExprOpt value
                             match contextOpt with
                             | Some contexts -> registerLocalContextRequirement written symbol name contexts declaredTypeExprOpt
                             | None -> written

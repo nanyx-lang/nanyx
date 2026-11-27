@@ -363,7 +363,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                         TypeEnv.declare name symbol { general with Quantified = Set.difference general.Quantified kept } envWithCtx
                     | None -> envWithCtx
                 let nextStateWithReq =
-                    let written = recordWrittenType name typeOpt nextState2
+                    let written = recordWrittenType name typeOpt nextState2 |> ParameterTypes.record symbol declaredTypeExprOpt expr
                     match contextOpt with
                     | Some contexts -> registerContextRequirement written name contexts declaredTypeExprOpt
                     | None -> written

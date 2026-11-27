@@ -39,3 +39,27 @@ let ``Arms that disagree point at the arms before the odd one, not at the return
     Assert.Equal(
         ("2", [ "\"zero\"", "this arm gives 'string'" ]),
         reported "def label: int -> string = { n ->\n  match n\n    | 0 -> \"zero\"\n    | _ -> 2\n}")
+
+[<Fact>]
+let ``An argument of another type than the callee's parameter points at the type the callee writes for it`` () =
+    // In the callee's type, or as its lambda's parameter's annotation (#3109).
+    Assert.Equal(("2", [ "string", "the type 'f' takes here" ]), reported "def f: int, string -> int = { n, s -> n }\ndef r = f(1, 2)")
+    Assert.Equal(("\"a\"", [ "int", "the type 'g' takes here" ]), reported "def g = { x: int -> x + 1 }\ndef r = g(\"a\")")
+
+[<Fact>]
+let ``A lambda argument whose parameter's annotation doesn't fit points at it and at the callee's parameter`` () =
+    Assert.Equal(
+        ("{ x: int -> \"a\" }", [ "string -> string", "the type 'apply' takes here"; "int", "the type written here" ]),
+        reported "def apply: (string -> string), string -> string = { f, s -> f(s) }\ndef r = apply({ x: int -> \"a\" }, \"s\")")
+
+[<Fact>]
+let ``An argument of a callee that writes no type for it points at nothing`` () =
+    Assert.Equal(("n + 1", []), reported "def k = { x -> x }\ndef h: int -> string = { n -> k(n + 1) }")
+
+[<Fact>]
+let ``An argument of another type than an imported callee's parameter points at the type in the callee's file`` () =
+    let source = withFinalNewline "def r = list.length(\"a\")"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TypeMismatch.Code, diagnostic.Code)
+    let span, label = Assert.Single diagnostic.Related
+    Assert.Equal(("nanyx/prelude-lists.nyx", "the type 'list.length' takes here"), (span.File, label))

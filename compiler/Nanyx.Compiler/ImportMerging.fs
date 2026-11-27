@@ -355,7 +355,12 @@ module internal ImportMerging =
                 CheckedRests =
                     imported.CheckedRests
                     |> Map.filter (fun symbol _ -> exportedSymbols.ContainsKey symbol)
-                    |> Map.fold (fun acc symbol checkedRests -> acc |> Map.add symbol checkedRests) state.CheckedRests }
+                    |> Map.fold (fun acc symbol checkedRests -> acc |> Map.add symbol checkedRests) state.CheckedRests
+                // A call to an imported function points back at the types it writes for its parameters, in its file.
+                ParameterTypes =
+                    imported.ParameterTypes
+                    |> Map.filter (fun symbol _ -> exportedSymbols.ContainsKey symbol)
+                    |> Map.fold (fun acc symbol written -> acc |> Map.add symbol written) state.ParameterTypes }
         let inlinedItems = ModuleLinking.inlinedItemsForImport qualifies item imported
         { merged with
             Env = env

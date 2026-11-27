@@ -447,10 +447,20 @@ type InferState =
             /// with those before it, worked out only if one is, with the related locations that say what the branches
             /// before it give (see `OddBranches`).
             BranchSpans: Map<SourceSpan, Lazy<(SourceSpan * MismatchText option * (SourceSpan * MismatchText) list) option>>;
-            /// The type written for what a constraint's origin is checked against, by that origin: where the type is
-            /// written, and the type, for a def's value checked against its annotation and a def's lambda's body against
-            /// the return type its annotation gives (see `noteAnnotation`). A mismatch there points back at it (#2717).
-            AnnotationSpans: Map<SourceSpan, SourceSpan * Ty>;
+            /// The types written for what a constraint's origin is checked against, by that origin: where each is
+            /// written, the type a constraint from there checks against, and what a mismatch there says of the place:
+            /// a def's value against its annotation, a def's lambda's body against the return type its annotation
+            /// gives, and a call's argument against the parameter's type where the callee writes it (see
+            /// `noteAnnotation`). A mismatch there points back at them (#2717, #3109).
+            AnnotationSpans: Map<SourceSpan, (SourceSpan * Ty * string) list>;
+            /// Where the type of each parameter of a def is written, by the def's symbol: in the type the def writes, or
+            /// as its lambda's parameter's annotation; none for a parameter whose type isn't written (see
+            /// `ParameterTypes`).
+            ParameterTypes: Map<SymbolId, SourceSpan option list>;
+            /// What a mismatch reported at an item of a tuple of a callee's arguments points back at, by the item's
+            /// span, as `AnnotationSpans` does for an argument alone: the type the callee writes for its parameter, and
+            /// the types a lambda writes for its own. Only a mismatch `ArgumentSpans` moves to the item is one of them.
+            ArgumentNotes: Map<SourceSpan, (SourceSpan * string) list>;
             /// The work variables (see `TaskWork`), each with where the def that starts tasks it is of was named.
             TaskWork: Map<int, SourceSpan>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
@@ -598,6 +608,8 @@ let emptyState =
             ArgumentSpans = Map.empty;
             BranchSpans = Map.empty;
             AnnotationSpans = Map.empty;
+            ParameterTypes = Map.empty;
+            ArgumentNotes = Map.empty;
             TaskWork = Map.empty;
             SupplyingCalls = Map.empty;
             EscapedContexts = Set.empty;
@@ -851,22 +863,32 @@ let internal addAssignableConstraint left right (state: InferState) =
     { state with Constraints = (left, right, Assignable, state.Origin) :: state.Constraints }
 
 /// `state` noting that what is at `origin` is checked against `declared`, the type written at `written`, as a def's value
-/// is against its annotation (see `AnnotationSpans`). A made-up span is left out.
-let internal noteAnnotation (origin: SourceSpan) (written: SourceSpan) (declared: Ty) (state: InferState) =
+/// is against its annotation, which a mismatch there calls `label` (see `AnnotationSpans`). A made-up span is left out.
+let internal noteAnnotationAs (label: string) (origin: SourceSpan) (written: SourceSpan) (declared: Ty) (state: InferState) =
     if SourceSpan.isNone origin || SourceSpan.isNone written then state
-    else { state with AnnotationSpans = state.AnnotationSpans |> Map.add origin (written, declared) }
+    else
+        let noted = state.AnnotationSpans |> Map.tryFind origin |> Option.defaultValue []
+        { state with AnnotationSpans = state.AnnotationSpans |> Map.add origin (noted @ [ written, declared, label ]) }
 
-/// Where the type a mismatch at `origin` was checked against is written, if it is the annotation's constraint that
-/// fails there: without it, the other constraints from `origin` agree with those from everywhere else. Another reported
-/// at the same place, such as an operator's in a lambda's body, fails without it too, and points at nothing.
-let internal annotationAt (origin: SourceSpan) (state: InferState) : SourceSpan option =
+/// `noteAnnotationAs` for a type an annotation writes, which a mismatch calls "the type written here".
+let internal noteAnnotation (origin: SourceSpan) (written: SourceSpan) (declared: Ty) (state: InferState) =
+    noteAnnotationAs "the type written here" origin written declared state
+
+/// Where each type a mismatch at `origin` was checked against is written, with what the mismatch says of it, if it is
+/// the constraint checking against that type that fails there: without it, the other constraints from `origin` agree
+/// with those from everywhere else. Another reported at the same place, such as an operator's in a lambda's body, fails
+/// without it too, and points at nothing.
+let internal annotationsAt (origin: SourceSpan) (state: InferState) : (SourceSpan * string) list =
     match state.AnnotationSpans |> Map.tryFind origin with
-    | Some (written, declared) ->
+    | Some noted ->
         let fromThere, elsewhere = state.Constraints |> List.partition (fun (_, _, _, span) -> span = origin)
-        let others = fromThere |> List.filter (fun (_, right, _, _) -> right <> declared)
-        if others.Length < fromThere.Length && Solving.unify (others @ Solving.agreeing elsewhere) |> Result.isOk then Some written
-        else None
-    | None -> None
+        let agreeing = lazy (Solving.agreeing elsewhere)
+        noted
+        |> List.filter (fun (_, declared, _) ->
+            let others = fromThere |> List.filter (fun (_, right, _, _) -> right <> declared)
+            others.Length < fromThere.Length && Solving.unify (others @ agreeing.Value) |> Result.isOk)
+        |> List.map (fun (written, _, label) -> written, label)
+    | None -> []
 
 /// `addConstraint`, reported at `span` rather than at the expression being inferred.
 let internal addConstraintAt (span: SourceSpan) left right (state: InferState) =
