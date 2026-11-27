@@ -135,7 +135,8 @@ type InterpolationPart =
     /// A hole, already evaluated into its local.
     | Hole of Var * HoleType
 
-/// Where the source an expression was lowered from is written: its file, as its span names it, and its line, from 1.
+/// Where the source an expression was lowered from is written: its file, as its span names it, and its line and column,
+/// each from 1.
 /// What a crash's stack reports for the code made from it (see `CoreIrEmit`'s markers). A place is not part of what an
 /// expression is: every place equals every other, so two expressions that differ only in where they were written
 /// compare equal, as the passes that compare expressions expect.
@@ -143,6 +144,8 @@ type InterpolationPart =
 type Place =
     { File: string
       Line: int
+      /// The column it starts at, from 1, which a crash's report names (#2950); a stack names the line alone.
+      Column: int
       /// For code inlined from a function, that function's name and the place of the call it was inlined at (see
       /// `CoreIrInline`), so that a stack shows the frame the call would have had.
       InlinedAt: (string * Place) option }
@@ -157,7 +160,7 @@ module Place =
     /// The place of the source `span` starts at; none for a span the compiler made up.
     let ofSpan (span: Parser.Program.SourceSpan) : Place option =
         if Parser.Program.SourceSpan.isNone span then None
-        else Some { File = span.File; Line = span.StartLine + 1; InlinedAt = None }
+        else Some { File = span.File; Line = span.StartLine + 1; Column = span.StartColumn + 1; InlinedAt = None }
 
 /// The place the expressions made now come from: set by the lowering as it lowers each source expression, so that
 /// `Expr.make` gives every expression made from one its place; none outside the lowering.

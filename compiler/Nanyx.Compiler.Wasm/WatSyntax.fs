@@ -14,11 +14,12 @@ type SExpr =
     | Atom of string
     /// A string, as the bytes its escapes stand for.
     | Text of byte array
-    /// A place marker, `;;@ main.nyx:12`: the code after it, up to the next, was made from source on this line of this
-    /// file. To WebAssembly it is a comment. Code inlined from other functions has a frame for each call it was inlined
-    /// through (`;;@ prelude.nyx:18 | crash | main.nyx:12`), innermost first, each with the name of the function whose
-    /// code it is; the outermost's is the function the marker is in, so it has none.
-    | Placed of frames: (string option * string * int) list
+    /// A place marker, `;;@ main.nyx:12:5`: the code after it, up to the next, was made from source at this line and
+    /// column of this file. To WebAssembly it is a comment. Code inlined from other functions has a frame for each call
+    /// it was inlined through (`;;@ prelude.nyx:18:3 | crash | main.nyx:12:5`), innermost first, each with the name of
+    /// the function whose code it is; the outermost's is the function the marker is in, so it has none. A place written
+    /// `file:line` has column 0, none.
+    | Placed of frames: (string option * string * int * int) list
     /// A probe's marker, `;;@probe 3 statement` or `;;@probe 1 entry count` (see `CoreIrEmit.Probe`): the probe of this
     /// number and kind, and for an entry the function's name, is at the place of the last place marker before it. To
     /// WebAssembly it is a comment.
@@ -104,22 +105,30 @@ let read (text: string) : SExpr list =
         else
             match text.[i] with
             | ';' ->
-                // A place marker: `file:line`, then a function's name and the `file:line` of its call for each call
-                // the code was inlined through. Each file runs to the last `:`, and the line number follows it.
+                // A place marker: `file:line:column`, then a function's name and the `file:line:column` of its call
+                // for each call the code was inlined through. A definition's marker is `file:line`. Each file runs to
+                // the `:` before the numbers.
                 let start = i
                 let lineEnd = match text.IndexOf('\n', i) with -1 -> text.Length | found -> found
                 let written = text.Substring(i + 3, lineEnd - i - 3).Trim()
                 let parts = written.Split(" | ")
-                let place (written: string) =
+                let numberAfter (written: string) =
                     let colon = written.LastIndexOf ':'
                     match (if colon < 0 then None else Some(Int32.TryParse(written.Substring(colon + 1)))) with
-                    | Some(true, line) -> written.Substring(0, colon), line
-                    | _ -> raise (WatSyntaxError("a place marker that is not ;;@ file:line", start))
+                    | Some(true, number) -> Some(written.Substring(0, colon), number)
+                    | _ -> None
+                let place (written: string) =
+                    match numberAfter written with
+                    | Some(rest, last) ->
+                        match numberAfter rest with
+                        | Some(file, line) -> file, line, last
+                        | None -> rest, last, 0
+                    | None -> raise (WatSyntaxError("a place marker that is not ;;@ file:line:column", start))
                 // A function's name, after `entry`, may hold spaces, as one in backticks does.
                 match written.Split(' ', 4) with
                 | _ when written.StartsWith "lib " -> items.Add(Library(written.Substring("lib ".Length).Trim()))
                 | _ when written.StartsWith "def " ->
-                    let file, line = place (written.Substring "def ".Length)
+                    let file, line, _ = place (written.Substring "def ".Length)
                     items.Add(Defined(file, line))
                 | [| "probe"; id; kind |]
                 | [| "probe"; id; kind; _ |] as probe ->
@@ -130,8 +139,8 @@ let read (text: string) : SExpr list =
                     if parts.Length % 2 = 0 then raise (WatSyntaxError("a place marker with a function but not its call", start))
                     let frames =
                         [ for index in 0..2 .. parts.Length - 1 ->
-                              let file, line = place parts.[index]
-                              (if index + 1 < parts.Length then Some parts.[index + 1] else None), file, line ]
+                              let file, line, column = place parts.[index]
+                              (if index + 1 < parts.Length then Some parts.[index + 1] else None), file, line, column ]
                     items.Add(Placed frames)
                 i <- lineEnd
             | '(' ->
