@@ -221,7 +221,28 @@ def size: Tree(a) -> int = {
 
 A type can name itself only inside a tag's payload, where each value ends at a tag that holds no more of it, such as `#num` or `#leaf`. Anywhere else, as in `type Pair = (int, Pair)`, it is the error `NYX0228`. Like every alias, a recursive type is the type it stands for: two types with the same tags, such as `Expr` and a `Term = #num(int) | #add(Term, Term)`, are the same type.
 
-Two types can't yet refer to each other, and the WebAssembly backend does not compile a type that holds itself at other type arguments, such as `#node(T(list(a)))` inside `T(a)`.
+Types can name each other in the same way, through records, lists and tags, which is how a syntax tree with more than one kind of node is written. Each cycle must pass through a tag's payload, or a nominal type, so that a value of them ends:
+
+```nanyx
+type Expr = (line: int, kind: #num(int) | #block(list(Statement)))
+
+type Statement = #print(Expr) | #def(string, Expr)
+
+def size: Expr -> int = { e ->
+  match e.kind
+    | #num(_) -> 1
+    | #block(statements) -> 1 + list.sum(list.map(statements, statementSize))
+}
+
+def statementSize: Statement -> int = {
+  | #print(e) -> size(e)
+  | #def(_, e) -> size(e)
+}
+
+println(size(line = 1, kind = #block([#print(line = 2, kind = #num(3))]))) -- 2
+```
+
+The WebAssembly backend does not compile a type that holds itself at other type arguments, such as `#node(T(list(a)))` inside `T(a)`.
 
 # Option types
 

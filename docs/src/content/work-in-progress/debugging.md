@@ -34,6 +34,10 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
   A program that needs more is re-run on save only once the user turns it on for its script or package, from the Live
   mode view in the Nanyx sidebar, and then with those contexts for real; its files are still in memory. A save stops a
   run still going, and runs have a time limit.
+- **Live mode can show every value, not only `dbg`'s.** A toggle switches it between `dbg` values only, the default,
+  and the value of each `def` and expression statement at the end of its line. Showing every value needs a live run
+  built with probes, or a cheaper write of its own at each binding
+  ([#3198](https://github.com/nanyx-lang/nanyx/issues/3198)).
 - **The console host first.** Debugging a request in the HTTP host, and a single test from the editor, come next; the
   browser host later.
 
@@ -55,6 +59,19 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 - **Evaluating an expression at a breakpoint** means compiling a snippet against the paused frame's scope. Not
   planned yet.
 - **Leak checks:** a debug run reporting reference-counted values still alive at exit, on top of the memory report.
+- **Traces,** as in Dark: keep the recorded calls of a function, an HTTP handler's requests among them, pick one in the
+  editor to see its values, and replay it through the code after an edit. A run is determined by what its contexts
+  returned, so a replay is exact and has no effects, whatever contexts the function needs
+  ([#3199](https://github.com/nanyx-lang/nanyx/issues/3199), after #2042).
+- **Typed holes,** as in Agda, Idris and Hazel: an expression left as a hole is reported with the type expected there
+  and the names in scope that fit, and in a debug build it is a deferred error, so the program still runs up to it
+  ([#3200](https://github.com/nanyx-lang/nanyx/issues/3200)).
+- **Watch expressions,** as in Unison: a line marked to be evaluated on save, its result shown beside it and cached by
+  the code it depends on. It would be the editor's way to evaluate an expression, before the debugger has one.
+- **Views of a value of one's own,** as in Glamorous Toolkit: a context through which a type says how the debugger and
+  live mode show it, as a table, a tree or a chart, as `ToString` says how it is written.
+- **Fix and continue,** as in Smalltalk: edit a function while stopped in it and go on. With a recording, it could be
+  replaying the run up to the same step through the new code, instead of changing the running program.
 
 # Plan
 
@@ -66,3 +83,6 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 | `dbg` output kept with each test by the test runner (Planning) | [#2103](https://github.com/nanyx-lang/nanyx/issues/2103) | `nanyx test` |
 | `dbg` values inline in the editor: built ([dbg values](../standard-tools/vs-code-extension#dbg-values)) | [#2054](https://github.com/nanyx-lang/nanyx/issues/2054) | |
 | Live mode: re-run on save when the entry needs only `Console`, `Async` and `FileSystem`: built ([Live mode](../standard-tools/vs-code-extension#live-mode)) | [#2055](https://github.com/nanyx-lang/nanyx/issues/2055) | #2054 |
+| Live mode: a toggle between `dbg` values only and every line's value | [#3198](https://github.com/nanyx-lang/nanyx/issues/3198) | |
+| Traces of a function's calls, shown and replayed in the editor (Planning) | [#3199](https://github.com/nanyx-lang/nanyx/issues/3199) | #2042 |
+| Typed holes (Planning) | [#3200](https://github.com/nanyx-lang/nanyx/issues/3200) | |

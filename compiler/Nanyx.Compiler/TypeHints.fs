@@ -123,7 +123,9 @@ let rec internal mentionsError (ty: Ty) =
        | TyApply(_, args)
        | TyRecursive(_, args)
        | TySelf args
+       | TyMember(_, args)
        | TyContexts args -> List.exists mentionsError args
+       | TyGroup _ -> false
        | TyFunc(arg, ret, contexts) -> List.exists mentionsError (arg :: ret :: contexts)
        | TyRecord(fields, _)
        | TyOpenRecord(fields, _) -> fields |> Map.exists (fun _ field -> mentionsError field)
