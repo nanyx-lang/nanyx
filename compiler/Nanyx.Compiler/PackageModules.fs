@@ -50,7 +50,8 @@ type PackageModules =
       /// not one. None for any other build.
       TestRoot: string option
       /// In a test build, the test host, which the build's root runs under, with its package's modules; the program's
-      /// own modules keep `Host`, whose prelude they see. None for any other build.
+      /// own modules keep `Host`, whose prelude they see. An editor's check of a test file has it with no `TestRoot`, so
+      /// that it compiles as a test build does, but with no def it didn't write. None for any other build.
       TestHost: (Host * PackageModules) option }
 
 module PackageModules =

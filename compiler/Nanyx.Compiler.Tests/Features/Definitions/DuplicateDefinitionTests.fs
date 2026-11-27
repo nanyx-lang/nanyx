@@ -14,8 +14,9 @@ def x = 2"""
     Assert.Equal(Severity.Error, diagnostic.Severity)
     Assert.Equal("The name 'x' is already defined in this module", diagnostic.Message)
     Assert.Equal((1, 4), (diagnostic.Span.Value.StartLine, diagnostic.Span.Value.StartColumn))
-    let related, _ = Assert.Single(diagnostic.Related)
-    Assert.Equal((0, 4), (related.StartLine, related.StartColumn))
+    let related, label = Assert.Single(diagnostic.Related)
+    Assert.Equal((0, 4, 5), (related.StartLine, related.StartColumn, related.End))
+    Assert.Equal("'x' is first defined here", label)
 
 [<Fact>]
 let ``A name defined again at another type is a duplicate, not a type mismatch`` () =

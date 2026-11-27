@@ -118,7 +118,7 @@ The tests of a package can also live in a package of their own, beside it, as a 
 
 A test package has no source files, rather than every file, as a manifest with no `sources` otherwise has; `sources = []` says the same. It needs no host and exports nothing. Its tests run under the test host, and import what the packages it depends on export, as any dependent does: here `import cart/pricing`, for a `cart` whose `pricing.nyx` starts `export module pricing`. So they see only what a package exports, and a private helper is tested beside its code.
 
-It can depend on any package, an application included. In the test build, the application's `@entry` is an ordinary def, as it is in its own test build, and its modules keep its host, whose prelude they see. `nanyx test cart-tests` runs the tests; `nanyx run` and `nanyx build` of a test package are an error that says to use `nanyx test` (`NYX0045`). A `sources` whose patterns match no file is still an error (`NYX0042`).
+It can depend on any package, an application included. In the test build, the application's `@entry` is an ordinary def, as it is in its own test build, and its modules keep its host, whose prelude they see. `nanyx test cart-tests` runs the tests, and `nanyx check cart-tests` and the editor check them as the test build compiles them; `nanyx run` and `nanyx build` of a test package are an error that says to use `nanyx test` (`NYX0045`). A `sources` whose patterns match no file is still an error (`NYX0042`).
 
 # Package dependencies
 

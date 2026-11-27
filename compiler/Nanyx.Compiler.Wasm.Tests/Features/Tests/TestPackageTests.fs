@@ -97,6 +97,46 @@ let ``A test package that writes sources = [] is one too`` () =
     Assert.Contains("2 passed", outcome.StandardOutput)
 
 [<Fact>]
+let ``A test package's test file is checked as its test build compiles it: the application's @entry is no error`` () =
+    let outcome = nanyxBeside testPackage [ "check"; "cart-tests/tests/main.tests.nyx" ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal(
+        """Phase: Typed
+No diagnostics.
+Types:
+greets : () -> ()
+""",
+        outcome.StandardOutput.ReplaceLineEndings "\n"
+    )
+
+[<Fact>]
+let ``nanyx test of a test package's test file runs its tests in the package's test build`` () =
+    let outcome = nanyxBeside testPackage [ "test"; "cart-tests/tests/pricing.tests.nyx" ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Equal(
+        """Running 1 test in cart.tests
+
+PASS pricing.tests.`the subtotal adds up every line`
+
+1 passed
+""",
+        outcome.StandardOutput.ReplaceLineEndings "\n"
+    )
+
+[<Fact>]
+let ``nanyx run of a test package's test file says it is a test file, and to use nanyx test`` () =
+    let outcome = nanyxBeside testPackage [ "run"; "cart-tests/tests/pricing.tests.nyx" ]
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Contains("error NYX0045", outcome.StandardError)
+    Assert.Contains("It is a test file of cart.tests", outcome.StandardError)
+
+[<Fact>]
+let ``nanyx check of a test package checks its test files`` () =
+    let outcome = nanyxBeside testPackage [ "check"; "cart-tests" ]
+    Assert.Equal(0, outcome.ExitCode)
+    Assert.Contains("Checked cart.tests (2 files).", outcome.StandardOutput)
+
+[<Fact>]
 let ``The application a test package depends on still runs its @entry`` () =
     let outcome = nanyxBeside testPackage [ "run"; "cart"; "a" ]
     Assert.Equal(0, outcome.ExitCode)

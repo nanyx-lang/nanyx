@@ -3,6 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using CompilerHover = NyxCompiler.Hover;
 using Definition = NyxCompiler.Definition;
+using LambdaCaptureHover = NyxCompiler.LambdaCaptureHover;
 
 namespace Nanyx.LanguageServer.Handlers;
 
@@ -63,6 +64,9 @@ public sealed class HoverHandler : HoverHandlerBase
             return null;
         }
 
+        // On a lambda's `{` or its parameters, what it captures (#1651).
+        var captures = compiled.Syntax?.Value is { } syntax ? LambdaCaptureHover.at(syntax, offset)?.Value : null;
+
         // The doc comment of the name there, if it has one.
         var docs = Definition.symbolAt(lastGood.FileName, compiled, offset) is { } symbol
             ? lastGood.DocReader(request.TextDocument.Uri, offset, _standardLibrary).ForSymbol(symbol.Value)?.Value
@@ -74,6 +78,7 @@ public sealed class HoverHandler : HoverHandlerBase
                 Kind = MarkupKind.Markdown,
                 Value = $"```nanyx\n{info.Value.Type}\n```"
                     + (info.Value.Note?.Value is { } note ? $"\n\n{note}" : "")
+                    + (captures is null ? "" : $"\n\n{captures}")
                     + (docs is null ? "" : $"\n\n---\n\n{docs}")
             }),
             Range = document.Positions.ToRange(span.Start, span.End)
