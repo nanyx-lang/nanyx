@@ -238,9 +238,11 @@ type InferState =
             /// its type it is in, if it is in one. A `==` or `!=` among them has its place here too, for its `Eq`
             /// (see `EqualityOperators`).
             HoleScopes: Map<NodeId, TypeEnv * Identifier option>;
-            /// The type variables each local function compares or orders values of, among those it is generic in, by
-            /// the function's symbol and then by the well-known context it needs of them (`Eq`, `Ord`): a call to it
-            /// needs that context of the types they are at the call (see `WellKnownContexts.checkLocalCall`).
+            /// The type variables each local function compares or orders structures of, as `[a] == [b]`, among those it
+            /// is generic in, by the function's symbol and then by the well-known context it needs of them (`Eq`, `Ord`):
+            /// a call to it needs that context of the types they are at the call (see `WellKnownContexts.checkLocalCall`).
+            /// One that compares values of the variable itself requires the context instead (see
+            /// `ContextInference.resolveLocal`).
             LocalComparisons: Map<SymbolId, Map<Identifier, Set<int>>>;
             /// The rests of the unions in its type each top-level function compares values of (`r` in `#none | r`),
             /// by the function's symbol and then by the well-known context it needs of them, each by its place among

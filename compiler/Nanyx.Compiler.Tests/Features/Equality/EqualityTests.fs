@@ -114,8 +114,11 @@ def b = {
 [<Fact>]
 let ``A def that calls a local function comparing its own type variable requires Eq of it`` () =
     let typed = compileClean "def g = { v ->\n  def same = { x, y -> x == y }\n  same(v, v)\n}\ndef b = g(1)\n"
-    match inferredContexts typed with
-    | [ TyApply("Eq", [ TyVar _ ]) ] -> ()
+    // `same` requires `Eq` of its own variable too, and is passed it (#2809).
+    let inferredOf (name: string) =
+        typed.InferredContextTypes |> Map.toList |> List.filter (fun (symbol, _) -> typed.Symbols.[symbol].Name = name) |> List.map snd
+    match inferredOf "g", inferredOf "same" with
+    | [ [ TyApply("Eq", [ TyVar _ ]) ] ], [ [ TyApply("Eq", [ TyVar _ ]) ] ] -> ()
     | other -> failwith $"Unexpected inferred contexts: %A{other}"
     let message, at = missingContext "def g = { v ->\n  def same = { x, y -> x == y }\n  same(v, v)\n}\ndef f = { n -> n + 1 }\ndef b = g(f)\n"
     Assert.Equal("'g' compares values of type 'int -> int', which cannot be compared: functions have no equality", message)
