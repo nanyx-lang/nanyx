@@ -434,6 +434,53 @@ module internal Units =
                     |> Diagnostics.about unit.Name)
             | _ -> None)
 
+    /// The largest number a value of the storage type `ty` holds, and the type as a message names it. A dimension stored
+    /// as any number (`dimension Length`) is held to a `float`'s, the widest: a literal of it that is past an `int` is a
+    /// `float`.
+    let private largestHeld (ty: Ty) : (bigint * string) option =
+        match Unifier.unalias ty with
+        | TyPrimitive "int" -> Some (bigint System.Int64.MaxValue, "int")
+        | SizedIntegerType integer -> Some (SizedInteger.maxValue integer, SizedInteger.name integer)
+        | TyPrimitive "F32" -> Some (bigint System.Single.MaxValue, "F32")
+        | TyPrimitive "float" | TyVar _ | TyParam _ -> Some (bigint System.Double.MaxValue, "float")
+        | _ -> None
+
+    /// A number of default storage units as a message writes it: exactly, or, past 20 digits, roughly, `about 1.0e320`.
+    let private countText (count: bigint) =
+        let digits = count.ToString()
+        if digits.Length <= 20 then digits else $"about {digits[0]}.{digits[1]}e{digits.Length - 1}"
+
+    /// The units of the module's own dimensions, each with the error for it, that are more default storage units than
+    /// the dimension's storage holds: no `float` holds one, which is `Infinity`, and no `int` one past
+    /// 9223372036854775807. A unit much smaller than the others makes them so, since it is then the default storage
+    /// unit (#3114).
+    let private pastStorage (state: InferState) (items: TopLevelItem list) (declared: (Declared * Dimension) list) (storage: Map<NominalId, string * Rational>) (found: Map<string, Rational>) =
+        let storageOf =
+            ownDimensions state items
+            |> List.choose (fun (id, name, _) ->
+                state.TypeDefs |> Map.tryFind name |> Option.bind (fun info -> largestHeld info.Underlying) |> Option.map (fun held -> id, (name, held)))
+            |> Map.ofList
+        declared
+        |> List.choose (fun (unit, dimension) ->
+            match dimension, found |> Map.tryFind unit.Name with
+            | [ id, 1 ], Some scale ->
+                match storageOf |> Map.tryFind id, storage |> Map.tryFind id with
+                | Some (dimensionName, (largest, tyName)), Some (storageName, storageScale) ->
+                    let count = Rational.divide scale storageScale
+                    if count.Numerator / count.Denominator <= largest then None
+                    else
+                        let storageText = if storageName = unit.Name then "" else $" of '{storageName}', the default storage unit of '{dimensionName}'"
+                        let fix =
+                            if tyName = "float" then $"define the units of '{dimensionName}' closer in size"
+                            else $"define the units of '{dimensionName}' closer in size, or store it as a `float`"
+                        Some (
+                            unit.Name,
+                            Diagnostics.at DiagnosticCodes.UnitPastStorage unit.Item.Span
+                                $"'{unit.Name}' is {countText (count.Numerator / count.Denominator)}{storageText}, more than its storage, '{tyName}', holds, so no value of it could be stored: {fix}"
+                            |> Diagnostics.about unit.Name)
+                | _ -> None
+            | _ -> None)
+
     /// `scale`, a unit of `dimension`'s scale as `scales` finds it, scaled to the default storage units `storage` of
     /// the module's own dimensions, by their identities.
     let private inStorageUnits (storage: Map<NominalId, string * Rational>) (dimension: Dimension) (scale: Rational) : Rational =
@@ -474,6 +521,8 @@ module internal Units =
                     |> Diagnostics.about name))
         let found, scaleErrors = scales state resolved
         let storage, storageUnitErrors = storageUnits state items resolved found
+        let past = pastStorage state items resolved storage found
+        let pastNames = past |> List.map fst |> Set.ofList
         // A dimension's default display unit is the unit `@baseUnit` marks, or else its default storage unit.
         let isDisplay (unit: Declared) (dimension: Dimension) =
             match dimension with
@@ -484,7 +533,8 @@ module internal Units =
                 | None, Some (storageName, _) -> unit.Name = storageName
                 | None, None -> false
             | _ -> false
-        // A unit whose scale is not found is at the scale 1, so its literals are not also reported.
+        // A unit whose scale is not found, or is more than its storage holds, is at the scale 1, so its literals, and the
+        // display of a value in it, are not also reported.
         let own, state =
             resolved
             |> List.mapFold
@@ -493,7 +543,12 @@ module internal Units =
                     (unit.Name,
                      { Name = unit.Name
                        Dimension = dimension
-                       Scale = found |> Map.tryFind unit.Name |> Option.map (inStorageUnits storage dimension) |> Option.defaultValue Rational.one
+                       Scale =
+                           found
+                           |> Map.tryFind unit.Name
+                           |> Option.filter (fun _ -> not (pastNames.Contains unit.Name))
+                           |> Option.map (inStorageUnits storage dimension)
+                           |> Option.defaultValue Rational.one
                        Home = state.Home
                        IsExport = unit.IsExport
                        Multiple = unit.Multiple
@@ -505,7 +560,7 @@ module internal Units =
         let units = own |> List.fold (fun acc (name, info) -> acc |> Map.add name info) state.Units
         let errors =
             storageErrors hasNum state items @ dimensionErrors @ duplicates @ unitErrors state items resolved @ scaleErrors
-            @ storageUnitErrors @ importedDimensionErrors state resolved found
+            @ storageUnitErrors @ importedDimensionErrors state resolved found @ List.map snd past
         // A unit of the module's own is the one its name means, though two imports bring in others of the name.
         let ambiguous = own |> List.fold (fun acc (name, _) -> acc |> Map.remove name) state.AmbiguousUnits
         let state = { state with Units = units; AmbiguousUnits = ambiguous }

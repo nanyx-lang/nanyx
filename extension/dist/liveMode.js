@@ -56,16 +56,20 @@ const readEvery = 200;
  * still going stops it and starts another, and a run past `nanyx.live.timeLimit` seconds is stopped.
  */
 class LiveMode {
-    constructor(state, compiler, client, dbg) {
+    constructor(state, compiler, client, dbg, tests) {
         this.state = state;
         this.compiler = compiler;
         this.client = client;
         this.dbg = dbg;
+        this.tests = tests;
         this.output = vscode.window.createOutputChannel("Nanyx Live");
         this.changed = new vscode.EventEmitter();
         this.onDidChangeTreeData = this.changed.event;
         this.infos = new Map();
         this.running = new Map();
+        /** The live test runs still going, by file, and how each file's last one went. */
+        this.testRuns = new Map();
+        this.lastTests = new Map();
         this.disposables = [];
         this.view = vscode.window.createTreeView("nanyx.live", { treeDataProvider: this });
         this.disposables.push(this.output, this.changed, this.view, vscode.commands.registerCommand(exports.COMMAND_TOGGLE_LIVE, () => this.toggle()), vscode.window.onDidChangeActiveTextEditor(() => void this.refresh()), vscode.workspace.onDidSaveTextDocument((document) => void this.saved(document)));
@@ -73,6 +77,7 @@ class LiveMode {
     }
     dispose() {
         this.running.forEach((run) => run.process.kill());
+        this.testRuns.forEach((cancel) => cancel.cancel());
         this.disposables.forEach((disposable) => disposable.dispose());
     }
     /** The script or package of the active editor's file, if it is a Nanyx file on disk. */
@@ -129,7 +134,9 @@ class LiveMode {
             return [{ label: "Open a .nyx file", tooltip: "Live mode re-runs a script, or a package's @entry, on every save." }];
         }
         const info = this.infos.get(active.target.key);
-        return (0, live_1.rowsOf)(active.target, info, (0, live_1.isOn)(info, this.setting(active.target)));
+        const setting = this.setting(active.target);
+        const tests = this.testsOf(active.document.fileName);
+        return (0, live_1.rowsOf)(active.target, info, (0, live_1.isOn)(info, setting), tests, (0, live_1.testsOn)(tests, setting));
     }
     /** Turns live mode on or off for the active file's script or package, and runs it once when it is turned on. */
     async toggle() {
@@ -138,20 +145,56 @@ class LiveMode {
             void vscode.window.showInformationMessage("Live mode is for a .nyx file: open one first.");
             return;
         }
-        await this.refresh();
+        await Promise.all([this.refresh(), this.tests.refresh()]);
         const info = this.infos.get(active.target.key);
-        if (!info || info.entry === null) {
-            void vscode.window.showInformationMessage(`${active.target.name} has no entry point to run.`);
+        const file = active.document.fileName;
+        const tests = this.testsOf(file);
+        const hasEntry = info !== undefined && info.entry !== null;
+        if (!hasEntry && tests.count === 0) {
+            void vscode.window.showInformationMessage(`${active.target.name} has no entry point or tests to run.`);
             return;
         }
-        const on = !(0, live_1.isOn)(info, this.setting(active.target));
+        const setting = this.setting(active.target);
+        const on = !((0, live_1.isOn)(info, setting) || (0, live_1.testsOn)(tests, setting));
         await this.state.update(settingsKey, { ...this.state.get(settingsKey, {}), [active.target.key]: on });
         this.changed.fire();
         if (on) {
-            void this.run(active.target);
+            if (hasEntry) {
+                void this.run(active.target);
+            }
+            if (tests.count > 0) {
+                void this.runTests(file);
+            }
         }
         else {
             this.running.get(active.target.key)?.process.kill();
+            this.testRuns.get(file)?.cancel();
+        }
+    }
+    /** The tests written in `file`, as the Testing view last listed them, and how its last live run of them went. */
+    testsOf(file) {
+        return { ...this.tests.testsOf(file), last: this.lastTests.get(file) };
+    }
+    /** Re-runs the tests written in `file`, after stopping a live run of them still going, within the time limit. */
+    async runTests(file) {
+        this.testRuns.get(file)?.cancel();
+        const cancel = new vscode.CancellationTokenSource();
+        this.testRuns.set(file, cancel);
+        const limit = vscode.workspace.getConfiguration("nanyx").get("live.timeLimit", 10);
+        const timer = setTimeout(() => cancel.cancel(), limit * 1000);
+        try {
+            const counts = await this.tests.liveRun(file, cancel.token);
+            if (counts && !cancel.token.isCancellationRequested) {
+                this.lastTests.set(file, counts);
+            }
+        }
+        finally {
+            clearTimeout(timer);
+            if (this.testRuns.get(file) === cancel) {
+                this.testRuns.delete(file);
+            }
+            cancel.dispose();
+            this.changed.fire();
         }
     }
     /** Re-runs the script or package of a saved file, if live mode is on for it. */
@@ -165,10 +208,19 @@ class LiveMode {
         if (info && (target.kind === "script" || info.entry !== null)) {
             this.infos.set(target.key, info);
         }
+        // The tests are listed again first, since the save may have added or removed some.
+        await this.tests.refresh();
         this.changed.fire();
-        if ((0, live_1.isOn)(this.infos.get(target.key), this.setting(target))) {
-            await this.run(target);
+        const setting = this.setting(target);
+        const runs = [];
+        if ((0, live_1.isOn)(this.infos.get(target.key), setting)) {
+            runs.push(this.run(target));
         }
+        // A file's own tests: the tests of the modules that import it aren't re-run (#3157).
+        if ((0, live_1.testsOn)(this.testsOf(document.fileName), setting)) {
+            runs.push(this.runTests(document.fileName));
+        }
+        await Promise.all(runs);
     }
     /** Runs `target` live, after stopping a run of it still going. */
     async run(target) {

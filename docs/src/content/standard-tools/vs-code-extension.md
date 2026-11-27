@@ -373,7 +373,7 @@ writes each `dbg` to standard error, as always.
 
 ## Live mode
 
-Live mode re-runs a program every time you save, like a notebook: its [`dbg` values](#dbg-values) update in the editor,
+Live mode re-runs a program, and a file's tests, every time you save, like a notebook: its [`dbg` values](#dbg-values) update in the editor,
 and what it prints is in the **Nanyx Live** output channel, with how the run ended and how long it took. It runs a
 script, or a package's `@entry`; saving any `.nyx` file of a package re-runs the package. A live run is
 [`nanyx run --files-in-memory`](./command-line#nanyx-run): it reads the real files, and keeps what it writes, appends,
@@ -394,6 +394,16 @@ remembers the choice for the workspace. A file of a package that isn't its `@ent
 
 A save while a run is still going stops it and starts another, and a run that takes longer than `nanyx.live.timeLimit`
 seconds is stopped, so a program that never ends doesn't keep a process busy.
+
+Live mode re-runs a file's [tests](../tour/attributes#test) on a save too, with the same switch: the tests written in
+the saved file, as the [Testing](#testing) view runs them, so its results update there and each test's `dbg` values
+show in the editor. Only the saved file's own tests re-run, not those of other files that import its module. Tests are
+safe to re-run by themselves, since every test runs with a `Console` whose output is kept and whose input is empty, a seeded `Random` and `Async`,
+and one that needs files can use [`filesystem.inMemory`](../stdlib/filesystem); but a `@test(#io)` test runs with the
+real files and environment, so a file with one re-runs its tests only once live mode is turned on for its script or
+package, and then all of them, `#io` ones too, as `nanyx test` runs them. The view says how many tests the file has, how
+the last live run of them went, and how many `#io` tests hold it back. A save while they are still running stops the run
+and starts another, and the same time limit stops a run of them that takes too long.
 
 | Setting | Default | What it does |
 |---------|---------|--------------|

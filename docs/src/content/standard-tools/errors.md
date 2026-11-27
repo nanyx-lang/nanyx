@@ -2958,6 +2958,22 @@ def twice = limit(2)  -- error NYX0305: 'limit' is an int, not a function, so it
 
 To fix it, call a function, or use the value without calling it.
 
+# NYX0306: Unit more than its dimension's storage holds
+
+A unit is more of its dimension's default storage unit than the dimension's storage can hold: past a `float`'s largest,
+about 1.8e308, or an `int`'s, 9223372036854775807. Every value of the dimension is held as a number of its default
+storage unit ([Units of measure](../advanced/units-of-measure#dimensions-and-units)), so no value of such a unit could
+be. A unit much smaller than the others makes them so, since it is then the default storage unit.
+
+```nanyx
+dimension Length(float)
+
+@baseUnit unit m: Length  -- error NYX0306: 'm' is about 1.0e320 of 'tiny', the default storage unit of 'Length', ...
+unit tiny: Length = 1.0e-320m
+```
+
+To fix it, define the dimension's units closer in size, or, for a dimension stored as an integer, store it as a `float`.
+
 # NYX0310: Test that isn't a test's type
 
 A def marked `@test` takes arguments or gives back a value. A test is run with nothing and gives back `()`: it is a

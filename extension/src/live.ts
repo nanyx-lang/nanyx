@@ -69,6 +69,25 @@ export function isOn(info: LiveInfo | undefined, setting: boolean | undefined): 
   return setting ?? info.offered;
 }
 
+/** The tests written in a file, as the Testing view lists them, and how its last live run of them went. */
+export interface LiveTests {
+  count: number;
+  /** How many are marked `@test(#io)`, which run with the real `Console`, `Env` and `FileSystem`. */
+  io: number;
+  last?: { passed: number; failed: number };
+}
+
+/**
+ * Whether a file's tests re-run on a save: as the user set it for its script or package, or else on where none of them
+ * is `@test(#io)`, since every other test runs with its files and its environment its own.
+ */
+export function testsOn(tests: LiveTests | undefined, setting: boolean | undefined): boolean {
+  if (!tests || tests.count === 0) {
+    return false;
+  }
+  return setting ?? tests.io === 0;
+}
+
 /** The arguments of `nanyx run` for a live run of `target`, its `dbg`s written to `dbgTo`. */
 export function liveArguments(target: string, dbgTo: string): string[] {
   return ["run", "--dbg-to", dbgTo, "--files-in-memory", target];
@@ -87,42 +106,75 @@ export interface Row {
   tooltip?: string;
 }
 
-/** What the sidebar says of `target`, whose entry point is `info` and whose live mode is `on`. */
-export function rowsOf(target: LiveTarget, info: LiveInfo | undefined, on: boolean): Row[] {
-  if (!info || info.entry === null) {
-    return [{ label: "No entry point", description: target.name, tooltip: "Live mode re-runs a script, or a package's @entry, on every save." }];
+/**
+ * What the sidebar says of `target`, whose entry point is `info`, run live when `on`, and of the tests of its active
+ * file, `tests`, re-run when `testsAreOn`.
+ */
+export function rowsOf(target: LiveTarget, info: LiveInfo | undefined, on: boolean, tests?: LiveTests, testsAreOn = false): Row[] {
+  const hasEntry = info !== undefined && info.entry !== null;
+  const hasTests = tests !== undefined && tests.count > 0;
+  if (!hasEntry && !hasTests) {
+    return [
+      {
+        label: "No entry point or tests",
+        description: target.name,
+        tooltip: "Live mode re-runs a script, or a package's @entry, and a file's tests, on every save."
+      }
+    ];
   }
+  const live = on || testsAreOn;
   const rows: Row[] = [
     {
-      label: on ? "Live mode is on" : "Live mode is off",
+      label: live ? "Live mode is on" : "Live mode is off",
       description: target.name,
-      tooltip: on ? "It re-runs on every save." : "Turn it on to re-run on every save."
-    },
-    {
-      label: "Needs",
-      description: info.contexts.length > 0 ? info.contexts.join(", ") : "no contexts",
-      tooltip: "The contexts the entry point requires, from its type."
-    },
-    {
-      label: "Files are in memory",
-      description: "writes never reach the disk",
-      tooltip: "A live run reads the real files, and keeps what it writes, appends, makes and deletes in memory (nanyx run --files-in-memory)."
-    },
-    {
-      label: "Input is empty",
-      description: "readLine sees the end of input",
-      tooltip: "A live run is given no input."
+      tooltip: live ? "It re-runs on every save." : "Turn it on to re-run on every save."
     }
   ];
-  const held = heldBackBy(info);
-  if (held.length > 0) {
+  if (hasEntry) {
+    rows.push(
+      {
+        label: "Needs",
+        description: info.contexts.length > 0 ? info.contexts.join(", ") : "no contexts",
+        tooltip: "The contexts the entry point requires, from its type."
+      },
+      {
+        label: "Files are in memory",
+        description: "writes never reach the disk",
+        tooltip: "A live run reads the real files, and keeps what it writes, appends, makes and deletes in memory (nanyx run --files-in-memory)."
+      },
+      {
+        label: "Input is empty",
+        description: "readLine sees the end of input",
+        tooltip: "A live run is given no input."
+      }
+    );
+    const held = heldBackBy(info);
+    if (held.length > 0) {
+      rows.push({
+        label: on ? "Runs for real" : "Held back",
+        description: held.join(", "),
+        tooltip: on
+          ? `It was turned on for this ${target.kind}, so these run as they do in a terminal.`
+          : `It needs ${held.join(", ")}, which a re-run on every save would use for real: turn live mode on for this ${target.kind} to run it anyway.`
+      });
+    }
+  }
+  if (hasTests) {
+    const last = tests.last ? `, last run: ${tests.last.passed} passed, ${tests.last.failed} failed` : "";
     rows.push({
-      label: on ? "Runs for real" : "Held back",
-      description: held.join(", "),
-      tooltip: on
-        ? `It was turned on for this ${target.kind}, so these run as they do in a terminal.`
-        : `It needs ${held.join(", ")}, which a re-run on every save would use for real: turn live mode on for this ${target.kind} to run it anyway.`
+      label: "Tests",
+      description: `${tests.count} in this file${last}`,
+      tooltip: testsAreOn ? "They re-run on every save, in the Testing view." : "They re-run on every save once live mode is on."
     });
+    if (tests.io > 0) {
+      rows.push({
+        label: testsAreOn ? "Runs for real" : "Held back",
+        description: `${tests.io} #io test${tests.io === 1 ? "" : "s"}`,
+        tooltip: testsAreOn
+          ? "A @test(#io) test runs with the real files and environment, as nanyx test runs it."
+          : `A @test(#io) test uses the real files and environment, so a re-run on every save would too: turn live mode on for this ${target.kind} to run them anyway.`
+      });
+    }
   }
   return rows;
 }

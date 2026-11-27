@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import * as assert from "node:assert/strict";
 import * as path from "path";
-import { endedText, heldBackBy, isOn, liveArguments, packageDirectoryOf, rowsOf, targetOf } from "../live";
+import { endedText, heldBackBy, isOn, liveArguments, packageDirectoryOf, rowsOf, targetOf, testsOn } from "../live";
 
 const printing = { entry: "statements" as const, contexts: ["Console"], offered: true };
 const fetching = { entry: "statements" as const, contexts: ["Console", "Http", "Env"], offered: false };
@@ -58,11 +58,35 @@ test("the sidebar says whether it is on, what the entry point needs, that files 
     tooltip: "It needs Http, Env, which a re-run on every save would use for real: turn live mode on for this script to run it anyway."
   });
   assert.equal(rowsOf(target, fetching, true).at(-1)?.label, "Runs for real");
-  assert.equal(rowsOf(target, { entry: null, contexts: [], offered: false }, false)[0].label, "No entry point");
+  assert.equal(rowsOf(target, { entry: null, contexts: [], offered: false }, false)[0].label, "No entry point or tests");
 });
 
 test("how a run ended is said in a line", () => {
   assert.equal(endedText(0, null, 120, false, 10), "Finished in 120 ms.");
   assert.equal(endedText(1, null, 80, false, 10), "Ended with exit code 1, after 80 ms.");
   assert.equal(endedText(null, "SIGTERM", 10000, true, 10), "Stopped after 10 s: give it longer with nanyx.live.timeLimit.");
+});
+
+test("a file's tests re-run by themselves unless one is #io, and otherwise only once turned on", () => {
+  assert.equal(testsOn({ count: 2, io: 0 }, undefined), true);
+  assert.equal(testsOn({ count: 2, io: 1 }, undefined), false);
+  assert.equal(testsOn({ count: 2, io: 1 }, true), true);
+  assert.equal(testsOn({ count: 2, io: 0 }, false), false);
+  assert.equal(testsOn({ count: 0, io: 0 }, true), false);
+  assert.equal(testsOn(undefined, true), false);
+});
+
+test("the sidebar says how many tests the file has, how their last run went, and what holds #io tests back", () => {
+  const target = targetOf("/work/app/src/geometry.nyx", "/work/app");
+  const rows = rowsOf(target, { entry: null, contexts: [], offered: false }, false, { count: 3, io: 1, last: { passed: 2, failed: 1 } }, false);
+  assert.deepEqual(
+    rows.map((row) => [row.label, row.description]),
+    [
+      ["Live mode is off", "app"],
+      ["Tests", "3 in this file, last run: 2 passed, 1 failed"],
+      ["Held back", "1 #io test"]
+    ]
+  );
+  const on = rowsOf(target, { entry: null, contexts: [], offered: false }, false, { count: 3, io: 2 }, true);
+  assert.deepEqual(on.map((row) => row.label), ["Live mode is on", "Tests", "Runs for real"]);
 });

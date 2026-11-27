@@ -25,6 +25,12 @@ import {
 /** The command a "Run test" link runs, with the test item's ID. */
 export const COMMAND_RUN_TEST = "nanyx.runTest";
 
+/** How many of a run's tests passed, and how many didn't. */
+export interface TestCounts {
+  passed: number;
+  failed: number;
+}
+
 /** What the explorer knows of a package, or a script: where `nanyx test` runs it, and its modules' tests. */
 interface Root {
   /** What `nanyx test` is given: the package's directory, or the script. */
@@ -61,7 +67,9 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
       }
     };
     this.controller.refreshHandler = () => this.refresh();
-    this.controller.createRunProfile("Run", vscode.TestRunProfileKind.Run, (request, token) => this.run(request, token), true);
+    this.controller.createRunProfile("Run", vscode.TestRunProfileKind.Run, async (request, token) => {
+      await this.run(request, token);
+    }, true);
     const watcher = vscode.workspace.createFileSystemWatcher("**/*.{nyx,nyxp}");
     const later = () => this.refreshLater();
     this.disposables.push(
@@ -90,6 +98,8 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
 
   /** Lists the tests of each package in the workspace, and of each script open outside one, again. */
   async refresh(): Promise<void> {
+    // A listing asked for later is this one.
+    clearTimeout(this.refreshTimer);
     const executable = this.compiler();
     if (!executable) {
       return;
@@ -172,14 +182,18 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
     }
   }
 
-  /** Runs what `request` chooses, a run of `nanyx test` for each package or script it chooses from. */
-  private async run(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<void> {
+  /**
+   * Runs what `request` chooses, a run of `nanyx test` for each package or script it chooses from, and gives how many
+   * of its tests passed and how many didn't.
+   */
+  private async run(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<TestCounts> {
     const executable = this.compiler();
     const run = this.controller.createTestRun(request);
+    const counts: TestCounts = { passed: 0, failed: 0 };
     try {
       if (!executable) {
         run.appendOutput("The Nanyx compiler isn't available.\r\n");
-        return;
+        return counts;
       }
       for (const [id, chosen] of this.chosenByRoot(request)) {
         if (token.isCancellationRequested) {
@@ -187,12 +201,46 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
         }
         const root = this.roots.get(id);
         if (root) {
-          await this.runRoot(executable, run, root, chosen, token);
+          await this.runRoot(executable, run, root, chosen, token, counts);
         }
       }
     } finally {
       run.end();
     }
+    return counts;
+  }
+
+  /** The tests written in `file`, a full path, with the root they are listed under. */
+  private testsIn(file: string): { root: Root; names: string[]; io: number } | undefined {
+    for (const root of this.roots.values()) {
+      const tests = root.modules
+        .flatMap((module) => module.tests)
+        .filter((test) => positionOf(root.directory, test.file, test.line).path === file);
+      if (tests.length > 0) {
+        return { root, names: tests.map((test) => test.name), io: tests.filter((test) => test.io).length };
+      }
+    }
+    return undefined;
+  }
+
+  /** How many tests are written in `file`, a full path, and how many of them are `@test(#io)`, as last listed. */
+  testsOf(file: string): { count: number; io: number } {
+    const found = this.testsIn(file);
+    return { count: found?.names.length ?? 0, io: found?.io ?? 0 };
+  }
+
+  /**
+   * Runs the tests written in `file`, a full path, as live mode does on a save, as they were last listed: in the Testing
+   * view, their `dbg` values shown in the editor. Gives how many passed and how many didn't, or none when the file has
+   * no tests.
+   */
+  async liveRun(file: string, token: vscode.CancellationToken): Promise<TestCounts | undefined> {
+    const found = this.testsIn(file);
+    if (!found || token.isCancellationRequested) {
+      return undefined;
+    }
+    const items = found.names.map((name) => this.itemOf(found.root, name)).filter((item): item is vscode.TestItem => item !== undefined);
+    return this.run(new vscode.TestRunRequest(items), token);
   }
 
   /** The items `request` chooses, by the root they are in: every root when it chooses none. */
@@ -211,7 +259,14 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
   }
 
   /** Runs the items `chosen` of `root` in `run`, each test's result shown as its object arrives. */
-  private async runRoot(executable: string, run: vscode.TestRun, root: Root, chosen: vscode.TestItem[], token: vscode.CancellationToken): Promise<void> {
+  private async runRoot(
+    executable: string,
+    run: vscode.TestRun,
+    root: Root,
+    chosen: vscode.TestItem[],
+    token: vscode.CancellationToken,
+    counts: TestCounts
+  ): Promise<void> {
     const rootChosen = chosen.some((item) => item.id === rootId(root.target));
     const chosenModules = root.modules.filter((module) => chosen.some((item) => item.id === moduleId(root.target, module.module))).map((module) => module.module);
     const chosenTests = root.modules.flatMap((module) => module.tests).filter((test) => chosen.some((item) => item.id === testId(root.target, test.name))).map((test) => test.name);
@@ -242,6 +297,11 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
         case "test":
           ended.add(event.name);
           this.show(run, root, items.get(event.name), event);
+          if (event.outcome === "passed") {
+            counts.passed++;
+          } else {
+            counts.failed++;
+          }
           if (event.dbg && event.dbg.length > 0) {
             this.dbg.add(dbgRun, testHits(root.directory, event.dbg));
           }
