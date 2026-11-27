@@ -68,6 +68,9 @@ let private expectedToken (kind: TokenKind) (text: string option) =
     | Some text -> $"`{text}`"
     | None -> describeKind kind
 
+module DebugLog =
+    let lines = System.Collections.Generic.List<string>()
+
 /// A cursor over `laid`, the layout pass's tokens of `source`, the text of the file at `file`.
 type Cursor(file: string, source: string, laid: Laid array) =
     let lines = LineTable source

@@ -77,7 +77,7 @@ module HostPackages =
                  if File.Exists path then
                      match DataValue.read path (File.ReadAllText path) with
                      | Ok manifest -> (match ofManifest Hosts.consolePackage directory manifest with Some h -> Ok h | None -> Error $"ofManifest None: %A{manifest}")
-                     | Error e -> Error $"read error: %A{e} TEXT: {File.ReadAllText path}"
+                     | Error e -> Error ("read error: " + sprintf "%A" e + " LOG: " + System.String.Join(" || ", Parser.Program.DescentCursor.DebugLog.lines |> Seq.truncate 20))
                  else
                      Error "missing"
              match declared with
