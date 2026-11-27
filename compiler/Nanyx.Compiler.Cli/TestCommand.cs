@@ -244,19 +244,23 @@ internal static partial class CliCommands
     /// <summary>
     /// Where the program's code that <paramref name="run"/> crashed in is, <c>src/geometry.nyx:14:5: </c>, to start what
     /// it wrote with, as a crash's report gives it (#2950); nothing for a run that didn't crash with a place, or one whose
-    /// message starts with its place already, as an <c>assert</c>'s and a deferred error's do.
+    /// message starts with a place already, as an <c>assert</c>'s does, and a deferred error's, which names where the
+    /// error is, though its trap may be in code inlined where it was called.
     /// </summary>
     private static string CrashPlace(TestRun run)
     {
-        if (run.Outcome is TestOutcome.Failed { Item: RunError.Crashed { place: { } place } } && FSharpOption<Tuple<string, int, int>>.get_IsSome(place))
+        if (run.Outcome is TestOutcome.Failed { Item: RunError.Crashed { place: { } place } } && FSharpOption<Tuple<string, int, int>>.get_IsSome(place)
+            && !StartsWithPlace.IsMatch(run.Errors))
         {
             var (file, line, column) = place.Value;
-            var at = column > 0 ? $"{file}:{line}:{column}: " : $"{file}:{line}: ";
-            return run.Errors.StartsWith(at, StringComparison.Ordinal) ? "" : at;
+            return column > 0 ? $"{file}:{line}:{column}: " : $"{file}:{line}: ";
         }
 
         return "";
     }
+
+    /// <summary>A message that starts with a place, <c>src/geometry.nyx:14:5: </c>.</summary>
+    private static readonly Regex StartsWithPlace = new(@"^[^\s:]*(:\d+){1,2}: ");
 
     /// <summary>Writes each line of <paramref name="text"/> to <paramref name="writer"/>, after <paramref name="indent"/>.</summary>
     private static void WriteIndented(TextWriter writer, string text, string indent)

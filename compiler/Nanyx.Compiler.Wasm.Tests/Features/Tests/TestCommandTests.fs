@@ -162,3 +162,20 @@ let ``A test that crashes is reported with the file, line and column of the cras
     let output = outcome.StandardOutput.ReplaceLineEndings "\n"
     Assert.Contains("FAIL checks.crashes  src/checks.nyx:4:1\n  src/checks.nyx:6:17: crash: boom\n", output)
     Assert.Contains("FAIL checks.asserts  src/checks.nyx:10:1\n  src/checks.nyx:11:3: assert(1 + 1 == 3)\n", output)
+
+[<Fact>]
+let ``A test that reaches a deferred error in a module it imports is reported with the error's place once`` () =
+    // The trap's place is where the error is, with its column, which the deferred error's message starts with already
+    // (#2950, #2967).
+    let shapes = "export module shapes\n\nexport def perimeter: int -> int = { n -> n * \"4\" }\n"
+    let checks = "export module checks\n\nimport shapes as (perimeter)\n\n@test\ndef `perimeters` = {\n  assert(perimeter(3) == 12)\n}\n"
+    let outcome = testing [ "--seed"; "1" ] [ "src/shapes.nyx", shapes; "src/checks.nyx", checks ]
+    Assert.Equal(1, outcome.ExitCode)
+    let output = outcome.StandardOutput.ReplaceLineEndings "\n"
+    let place = "src/shapes.nyx:3:43: "
+    Assert.Contains(
+        "FAIL checks.perimeters  src/checks.nyx:6:1\n  " + place
+        + "error NYX0201: Type mismatch: 'string' is not a number, so it cannot be used with * (deferred from compile time)\n",
+        output
+    )
+    Assert.Equal(1, (output.Split place).Length - 1)
