@@ -7,11 +7,12 @@
   fails ends only its own instance.
 
   The host provides [`Console`], whose output it gives the runtime, which shows it only for a test
-  that fails, and whose input is empty, and [`Random`], seeded with the runtime's seed, as
+  that fails, and whose input is empty; [`Random`], seeded with the runtime's seed, as
   [`random.seeded`] seeds it, so a test that draws random numbers draws the same ones each time it
-  runs with that seed. A test marked `@test(#io)` has the console host's real `Console`, `Env` and
-  `FileSystem` instead, with `Async`, in the package's directory, and its output is still kept. A test loads any
-  other context it needs with `use`.
+  runs with that seed; and `Async`, so a test waits as a program does, on a real clock. A test marked
+  `@test(#io)` has the console host's real `Console`, `Env` and `FileSystem` instead, in the
+  package's directory, and its output is still kept. A test loads any other context it needs with
+  `use`.
 export module test.host
 
 import (
@@ -56,7 +57,7 @@ def notIo: string -> undefined = { context ->
 }
 
 --| Runs the test the runtime asks for: `entry`, the test build's entry point, given the test's index,
-  with a `Random` seeded with the runtime's seed. A test marked `@test(#io)` runs with the console
+  with `Async` and a `Random` seeded with the runtime's seed. A test marked `@test(#io)` runs with the console
   host's real `Console`, `Env` and `FileSystem` (see `nanyx.wasi`'s `preview1.system`); any other,
   with a `Console` whose output goes to the runtime and whose input is empty. What `entry` returns is
   ignored.

@@ -59,8 +59,8 @@ module Attributes =
         | Some argument -> one argument
 
     /// The def a test build adds to each of its program's modules that has tests, which the build's root calls to run
-    /// one: exported, `[Console, Random] int -> ()`, requiring the contexts the test host provides (`Hosts.testContexts`),
-    /// it runs the module's test at the index it is given, in the order they are written. No other build has it.
+    /// one: exported, `int -> ()`, requiring the contexts its tests require, which are among those the test host provides
+    /// (`Hosts.testContexts`), it runs the module's test at the index it is given, in the order they are written. No other build has it.
     let testDispatcher = "__tests"
 
     /// `export def __tests = { index -> if index == 0 then t0() else if index == 1 then t1() else () }` for the tests

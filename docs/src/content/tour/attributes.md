@@ -128,8 +128,8 @@ Tests are part of a test build alone, and every other build leaves them out, so 
 [`nanyx test`](../standard-tools/command-line#nanyx-test) runs them.
 
 A test runs under the test host, which provides `Console`, whose output it keeps and shows only for a test that fails,
-and `Random`, seeded so that a test draws the same numbers when it runs with the same seed. A test that requires any
-other context is an error (`NYX0312`), as an entry point is that requires one its host doesn't provide, so a test never
+`Random`, seeded so that a test draws the same numbers when it runs with the same seed, and `Async`, so it can call
+code that waits, as code that reads files does. A test that requires any other context is an error (`NYX0312`), as an entry point is that requires one its host doesn't provide, so a test never
 touches the file system or the environment unless it says so. It loads what it needs with `use`, as a fake that does
 what the test wants:
 
@@ -155,7 +155,7 @@ def `saves the new port` = {
 }
 ```
 
-`@test(#io)` runs a test with the console host's real `Console`, `Env` and `FileSystem`, and `Async`, for a test that is
+`@test(#io)` runs a test with the console host's real `Console`, `Env` and `FileSystem`, for a test that is
 meant to read the package's files or the environment. It runs in the package's directory, or the script's, and what it
 prints is still kept:
 
