@@ -62,7 +62,7 @@ let private noUnitsNote =
 /// its units, `dimension Bytes(int)`, or `dimension Speed = Length / Time` and its units.
 let ofDimension (typed: TypedModule) (info: TypeDefInfo) : string * string option =
     if info.IsNominal then
-        let storage = if info.Parameters.IsEmpty then $"({Unifier.tyToString info.Underlying})" else ""
+        let storage = if info.Parameters.IsEmpty then $"({Unifier.typeText Map.empty info.Underlying})" else ""
         $"{UnitSyntax.dimensionKeyword} {info.Name}{storage}", unitsNote typed (Dimension.ofBase (TypeDefInfo.nominalId info))
     else
         match Unifier.unalias info.Underlying with

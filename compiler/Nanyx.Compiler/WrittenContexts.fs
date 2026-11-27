@@ -16,15 +16,16 @@ let associatedArguments (state: InferState) (ctxName: Identifier) (argTys: Ty li
 /// type something fixes by name, `Iter(Bag, elem = string)`. A context at no arguments is only its name.
 let instanceText (state: InferState) (ctxName: Identifier) (argTys: Ty list) =
     let associated = associatedArguments state ctxName argTys
-    let positional = argTys |> List.truncate (argTys.Length - associated.Length) |> List.map (resolveSoFar state >> Unifier.tyToString)
+    let positional = argTys |> List.truncate (argTys.Length - associated.Length) |> List.map (resolveSoFar state)
     let named =
         associated
         |> List.map (fun (name, ty) -> name, resolveSoFar state ty)
         |> List.filter (snd >> TypeEnv.freeTyVars >> Set.isEmpty)
-        |> List.map (fun (name, ty) -> $"{name} = {Unifier.tyToStringIn state.TypeDefs ty}")
-    match positional @ named with
-    | [] -> ctxName
-    | written -> $"""{ctxName}({String.concat ", " written})"""
+    // Its arguments are named together, as a message's types are.
+    Unifier.messageText state.TypeDefs (fun write ->
+        match (positional |> List.map write) @ (named |> List.map (fun (name, ty) -> $"{name} = {write ty}")) with
+        | [] -> ctxName
+        | written -> $"""{ctxName}({String.concat ", " written})""")
 
 /// The context `ctxName` a call requires at `argTys`, as an error names it: written with the arguments (see
 /// `instanceText`), unless one still holds a type variable nothing has named yet, which would mean nothing to the

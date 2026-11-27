@@ -69,7 +69,7 @@ let private given (env: TypeEnv) (state: InferState) : Given list =
 /// to load with `use`. A name for a context the lambda isn't given, or one that could name more than one, is an error.
 let bind (env: TypeEnv) (state: InferState) (lambda: Expression) (body: Expression) (names: (Identifier * TypeExpr option * SourceSpan) list) : Result<TypeEnv * InferState, Diagnostic list> =
     let contexts = given env state
-    let shown (context: Given) = Unifier.tyToStringIn state.TypeDefs context.Ty
+    let shown (context: Given) = Unifier.typeText state.TypeDefs context.Ty
     let quoted = contexts |> List.map (fun context -> $"'{shown context}'")
     // The given contexts `written` names: by the context's name, and for a parameterised one, the types it is for.
     let namedBy (written: TypeExpr) =

@@ -314,7 +314,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
         |> Result.bind (fun (typed, next) ->
             match Unifier.unalias (resolveSoFar next typed.Type) with
             | TyMeasure(_, storage) -> Ok (mkTypedExpr expr storage None None None, next)
-            | other -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch value.Span $"'{name}' takes a measured value, not a '{Unifier.tyToStringIn state.TypeDefs other}'" ])
+            | other -> Error [ Diagnostics.at DiagnosticCodes.TypeMismatch value.Span $"'{name}' takes a measured value, not a '{Unifier.typeText state.TypeDefs other}'" ])
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->
         let expectedInput, expectedReturn =

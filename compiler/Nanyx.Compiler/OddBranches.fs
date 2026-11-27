@@ -56,7 +56,7 @@ let note (rowVars: Set<int>) (branches: Branches) (typed: TypedExpr list) (state
                     let resolved ty = match solved with Ok subst -> Unifier.apply subst ty | Error _ -> ty
                     let odd, others = resolved types.[count - 1], resolved others
                     // The join failed on the branches' types themselves, not on something inside them.
-                    let plain (left: Ty) (right: Ty) = $"'{Unifier.tyToString left}' vs '{Unifier.tyToString right}'"
+                    let plain (left: Ty) (right: Ty) = Unifier.messageText Map.empty (fun write -> $"'{write left}' vs '{write right}'")
                     let said =
                         match joined count |> snd with
                         | Error (failure, _) when failure = plain others odd || failure = plain odd others -> Some (message branches odd others)

@@ -361,7 +361,7 @@ module internal NumericLiterals =
                 else $"write it as a decimal, `{WrittenNumber.text { number with Decimal = true; Digits = number.Digits * 10I; Exponent = number.Exponent - 1 }}{unitName}`, to store it as a `float`"
             Error (
                 Diagnostics.at DiagnosticCodes.TypeMismatch span
-                    $"'{written}' is {Rational.text value} of a '{baseUnit}', which is no whole number of '{baseUnit}', so it can't be stored as '{Unifier.tyToString ty}': {fix}")
+                    $"'{written}' is {Rational.text value} of a '{baseUnit}', which is no whole number of '{baseUnit}', so it can't be stored as '{Unifier.typeText state.TypeDefs ty}': {fix}")
         | TyPrimitive "int"
         | SizedIntegerType _ ->
             let integer = IntLit value.Numerator

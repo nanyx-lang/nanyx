@@ -232,7 +232,7 @@ module ComponentInterface =
                 |> Result.map (fun cases -> WitType.Variant(name, cases))
         | TyApply("list", [ item ]) -> witTypeOf None item |> Result.map WitType.List
         | TyPrimitive "unit" -> Error (NotYet "`()` as a value")
-        | other -> Error (NotYet $"'{TypePrinting.tyToString other}'")
+        | other -> Error (NotYet $"'{Unifier.typeText Map.empty other}'")
 
     /// The WIT type of a value of the type named `typeName` applied to `args`, which stands for `underlying`. A type
     /// named through an import's alias, `units.Length`, is named by its own name, as in its own module.

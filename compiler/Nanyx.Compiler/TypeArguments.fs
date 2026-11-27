@@ -271,7 +271,7 @@ let report (state: InferState) : InferState =
         let written =
             match Unifier.apply subst call.StandsFor with
             | TyVar _ -> "type T"
-            | known -> $"type {Unifier.tyToStringIn state.TypeDefs known}"
+            | known -> $"type {Unifier.typeText state.TypeDefs known}"
         let parameter, pass =
             match call.Parameter with
             | Some name -> $"the type argument '{name}'", $"'{name} = {written}'"

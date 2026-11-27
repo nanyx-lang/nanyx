@@ -12,7 +12,7 @@ module internal NotAFunction =
         | TyPrimitive name when name <> "unit" ->
             let article = if "aeiou".Contains name[0] then "an" else "a"
             $"{article} {name}"
-        | _ -> $"of type '{Unifier.tyToStringIn typeDefs ty}'"
+        | _ -> $"of type '{Unifier.typeText typeDefs ty}'"
 
     /// The error for a call of `name`, of the type `calleeTy` and written at `calleeSpan`, with `args`, when the type is
     /// known to be no function: a number, a string, a `bool`, `()`, a measured value, a record or tuple, a tag or union

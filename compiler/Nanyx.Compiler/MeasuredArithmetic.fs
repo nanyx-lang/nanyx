@@ -59,7 +59,7 @@ module internal MeasuredArithmetic =
             if isNumber then
                 error expr $"`{op}` takes two values of one dimension, and a number with no unit is of none, so it can't be beside a '{Dimension.text dimension}': give the number a unit of '{Dimension.text dimension}'"
             else
-                error expr $"`{op}` takes two values of one dimension, and a value of '{Unifier.tyToStringIn state.TypeDefs (resolveSoFar state other)}' is not a '{Dimension.text dimension}'"
+                error expr $"`{op}` takes two values of one dimension, and a value of '{Unifier.typeText state.TypeDefs (resolveSoFar state other)}' is not a '{Dimension.text dimension}'"
         match measured state leftTy, measured state rightTy with
         | None, None -> None
         | left, right ->
