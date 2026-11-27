@@ -8,6 +8,26 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.52.1
+
+*27 November 2026*
+
+Loops and literals do less work, and an argument of the wrong type points at the parameter type it was checked
+against. Nothing needs edits.
+
+**Tools**
+
+- An argument of the wrong type points at the type the callee writes for that parameter, in its signature, its
+  lambda's annotation or the file that declares it ([NYX0201](../standard-tools/errors#nyx0201)).
+
+**Performance**
+
+- A `for` loop over an `Array` walks it by index, with no allocation for each element, where it pulled a sequence
+  ([`for` loops](../deep-dives/lazy-sequences#for-loops)).
+- A `for` loop in a sequence's block that yields one value each time round is a map, not a `flatMap`, so it makes
+  what `seq.map` does ([`yield`](../deep-dives/lazy-sequences#yield)).
+- A list literal is parsed in time linear in its length, where a long one took time growing with its square.
+
 # 0.52.0
 
 *27 November 2026*
