@@ -41,8 +41,9 @@ export type SymbolKind =
   | #contextMember
   | #unitOfMeasure
 
---| Something a name can refer to: its name, what it is, where it is declared (`#none` for one the
-  compiler made up), and whether its module exports it.
+--| Something a name can refer to: its name, what it is, where in this module it is declared (`#none`
+  for one declared in another module, or that the compiler made up), and whether its module exports
+  it.
 export type Symbol = (
   id: SymbolId
   name: string
@@ -51,8 +52,13 @@ export type Symbol = (
   isExported: bool
 )
 
---| A doc comment, its text as written, and the node it documents, if it documents one.
-export type DocComment = (span: Span, text: string, documents: #some(NodeId) | #none)
+--| A doc comment: where it is written, its text as written, and what it documents: the declaration
+  whose name is written at the span, the tag written there, the module, or nothing it can document.
+export type DocComment = (
+  span: Span
+  text: string
+  documents: #declaration(Span) | #tag(Span) | #module | #nothing
+)
 
 --| An edit to the module's text: what `span` covers replaced by `newText`.
 export type TextEdit = (span: Span, newText: string)

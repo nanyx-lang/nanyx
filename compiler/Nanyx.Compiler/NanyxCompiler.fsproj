@@ -139,6 +139,10 @@
     <Compile Include="Signatures.fs" />
     <Compile Include="WrittenReferences.fs" />
     <Compile Include="LinterModel.fs" />
+    <Compile Include="MatchCoverage.fs" />
+    <Compile Include="LintData.fs" />
+    <Compile Include="LintSyntax.fs" />
+    <Compile Include="LintAnswers.fs" />
     <Compile Include="LinterResultRules.fs" />
     <Compile Include="LinterTaskRules.fs" />
     <Compile Include="LinterRepeatedPulls.fs" />

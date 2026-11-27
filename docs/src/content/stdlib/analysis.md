@@ -55,16 +55,18 @@ measure.
 type Symbol = (id: SymbolId, name: string, kind: SymbolKind, declaration: #some(Span) | #none, isExported: bool)
 ```
 
-Something a name can refer to: its name, what it is, where it is declared (`#none` for one the
-compiler made up), and whether its module exports it.
+Something a name can refer to: its name, what it is, where in this module it is declared (`#none`
+for one declared in another module, or that the compiler made up), and whether its module exports
+it.
 
 ## `DocComment`
 
 ```nanyx fragment
-type DocComment = (span: Span, text: string, documents: #some(NodeId) | #none)
+type DocComment = (span: Span, text: string, documents: #declaration(Span) | #tag(Span) | #module | #nothing)
 ```
 
-A doc comment, its text as written, and the node it documents, if it documents one.
+A doc comment: where it is written, its text as written, and what it documents: the declaration
+whose name is written at the span, the tag written there, the module, or nothing it can document.
 
 ## `TextEdit`
 
