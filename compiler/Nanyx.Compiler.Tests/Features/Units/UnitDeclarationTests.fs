@@ -158,7 +158,7 @@ let ``Two imports that bring in units of one name are NYX0105 where the name is 
     Assert.Empty(reportedAtIn own (compileImportingAll modules own))
 
 [<Fact>]
-let ``A unit of a float dimension past a float's largest is NYX0313 at the unit, and no value is Infinity (#3114)`` () =
+let ``A unit of a float dimension past a float's largest is NYX0306 at the unit, and no value is Infinity (#3114)`` () =
     // `tiny` is the default storage unit, so `m` is 1e320 of it.
     let source = "dimension Length(float)\n@baseUnit unit m: Length\nunit tiny: Length = 1.0e-320m\ndef a = 1.0m"
     let code, message, text = onlyDiagnostic (withFinalNewline source)
@@ -169,7 +169,7 @@ let ``A unit of a float dimension past a float's largest is NYX0313 at the unit,
         message)
 
 [<Fact>]
-let ``Each unit of an int dimension past an int's largest is NYX0313 at the unit, and no literal is out of range for it (#3114)`` () =
+let ``Each unit of an int dimension past an int's largest is NYX0306 at the unit, and no literal is out of range for it (#3114)`` () =
     let units = [ 1..64 ] |> List.map (fun n -> $"unit u{n}: Big = 2u{n - 1}") |> String.concat "\n"
     let source = $"dimension Big(int)\n@baseUnit unit u0: Big\n{units}\ndef a = 1u0"
     Assert.Equal<(string * string) list>(
