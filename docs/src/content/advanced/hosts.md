@@ -15,7 +15,7 @@ A package names its host in its manifest's `host` field. A host the compiler shi
 ```nanyx fragment
 (
   package = (name = "acme.tool", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.cli.host", version = "0.50.0")
+  host = (package = "nanyx.cli.host", version = "0.51.0")
 )
 ```
 
@@ -70,7 +70,7 @@ match args()
 ```nanyx fragment
 (
   package = (name = "acme.report", version = "0.1.0")
-  dependencies = [(package = "nanyx.cli", version = "0.50.0")]
+  dependencies = [(package = "nanyx.cli", version = "0.51.0")]
 )
 ```
 
@@ -118,7 +118,7 @@ def main: Request -> Response = { request ->
 }
 ```
 
-A package names it as its host with the port to serve on, `host = (package = "nanyx.http.host", version = "0.50.0",
+A package names it as its host with the port to serve on, `host = (package = "nanyx.http.host", version = "0.51.0",
 settings = (port = 8080))`, and `nanyx run` serves it there, on 3000 when no port is given. A host declares the
 settings it takes, each with its default, so a setting it doesn't take is an error at the setting. See the
 [HTTP server cookbook](../cookbook/http-server).

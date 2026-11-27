@@ -18,7 +18,7 @@ Then name the HTTP host in the manifest, `my_server.nyxp`, in place of the conso
 ```nanyx fragment
 (
   package = (name = "my_server", version = "0.1.0", sources = ["src/**/*.nyx"])
-  host = (package = "nanyx.http.host", version = "0.50.0", settings = (port = 3000))
+  host = (package = "nanyx.http.host", version = "0.51.0", settings = (port = 3000))
 )
 ```
 

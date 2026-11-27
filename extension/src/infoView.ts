@@ -66,13 +66,13 @@ interface InfoViewMessage {
 }
 
 /**
- * A scope around the position, innermost first: the line's messages, if it has any, then the expression selected or at
- * the cursor, if no scope below shows it, then each lambda, each def, the module. The view draws a rule between one scope
- * and the next.
+ * A scope around the position, innermost first: the line's messages, if it has any, then the expression or type selected
+ * or at the cursor, if no scope below shows it, then each lambda, each def, the type declaration around it, the module.
+ * The view draws a rule between one scope and the next.
  */
 interface InfoViewScope {
-  kind: "messages" | "expression" | "lambda" | "function" | "module";
-  /** What kind of code the heading is, where it doesn't say: `expression`, `lambda`. */
+  kind: "messages" | "expression" | "type" | "lambda" | "function" | "typeDefinition" | "module";
+  /** What kind of code the heading is, where it doesn't say: `expression`, `type`, `type variable`, `lambda`. */
   label?: string;
   /** The scope's code (`x + 1`, `{ message -> … } (line 30)`, `for xs | x -> … (line 4)`, `def greet`), or the messages' title. */
   heading: string;

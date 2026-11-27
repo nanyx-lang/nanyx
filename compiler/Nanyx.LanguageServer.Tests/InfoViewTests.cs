@@ -758,4 +758,114 @@ public sealed class InfoViewTests : LanguageServerTestBase
         // The tag a match arm uses is the pattern, written as declared.
         Assert.Equal("pattern string -> #Num(float) | _", Assert.Single(Section(await InfoViewAt(uri, 12, 7), "expression", "type")).Text);
     }
+
+    [Fact]
+    public async Task Info_view_describes_the_type_whose_name_is_at_the_cursor()
+    {
+        var uri = DocumentUri.FromFileSystemPath(TempPath("info-view-type-name.nyx"));
+
+        Open(uri, """
+            --| A point on the plane.
+            type Point = (x: int, y: int)
+
+            def p: Point = (x = 1, y = 2)
+            def n: int = 3
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var onPoint = await InfoViewAt(uri, 3, 8);
+        var top = onPoint.Scopes[0];
+        Assert.Equal(("type", "type Point", null), (top.Kind, top.Heading, top.Label));
+        var definition = Assert.Single(Section(onPoint, "type", "definition"));
+        Assert.Equal(("type Point = (x: int, y: int)", new Range(1, 5, 1, 10)), (definition.Text, definition.Location?.Range));
+        Assert.Equal("A point on the plane.", definition.Documentation);
+        Assert.DoesNotContain(onPoint.Scopes, scope => scope.Kind == "expression");
+
+        // A built-in type shows what hover says of it.
+        var onInt = await InfoViewAt(uri, 4, 8);
+        Assert.Equal(("type", "type int"), (onInt.Scopes[0].Kind, onInt.Scopes[0].Heading));
+        var builtIn = Assert.Single(Section(onInt, "type", "definition"));
+        Assert.Equal("type int = I64", builtIn.Text);
+        Assert.False(string.IsNullOrEmpty(builtIn.Documentation));
+    }
+
+    [Fact]
+    public async Task Info_view_describes_a_selected_type_by_the_rule_for_expressions()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-SelectedType");
+
+        Open(uri, """
+            type Point = (x: int, y: int)
+
+            def points: list(Point) = []
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        // The spaces around the selection are left out, as for an expression.
+        var selected = await InfoViewAt(uri, 2, 0, selection: new Range(2, 11, 2, 24));
+        var top = selected.Scopes[0];
+        Assert.Equal(("type", "type", "list(Point)"), (top.Kind, top.Label, top.Heading));
+        Assert.Equal("list(Point)", Assert.Single(Section(selected, "type", "type")).Text);
+
+        // Part of a type is no type.
+        var part = await InfoViewAt(uri, 2, 0, selection: new Range(2, 12, 2, 17));
+        Assert.DoesNotContain(part.Scopes, scope => scope.Kind is "type" or "expression");
+    }
+
+    [Fact]
+    public async Task Info_view_lists_the_contexts_a_signature_requires_of_a_type_variable()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-TypeVariable");
+
+        Open(uri, """
+            def twice: [Num(a)] a -> a = { x -> x + x }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 0, 20);
+
+        var top = view.Scopes[0];
+        Assert.Equal(("type", "type variable", "a"), (top.Kind, top.Label, top.Heading));
+        // The heading links to the variable's first use, in the context.
+        Assert.Equal(new Range(0, 16, 0, 17), top.Location?.Range);
+        var context = Assert.Single(Section(view, "type", "contexts"));
+        Assert.Equal(("Num(a)", "signature", new Range(0, 12, 0, 18)), (context.Text, context.Detail, context.Location?.Range));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_the_type_declaration_around_the_cursor()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-TypeDeclaration");
+
+        Open(uri, """
+            type Point = (x: int, y: int)
+
+            context Iter(c) = (elem: type, next: c -> #some(elem) | #none)
+
+            def Point.norm: Point -> int = { p -> p.x + p.y }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var inPoint = await InfoViewAt(uri, 0, 22);
+        Assert.Equal(["typeDefinition", "module"], inPoint.Scopes.Select(scope => scope.Kind).Where(kind => kind != "type"));
+        var scope = inPoint.Scopes.Single(scope => scope.Kind == "typeDefinition");
+        Assert.Equal(("type Point", new Range(0, 5, 0, 10)), (scope.Heading, scope.Location?.Range));
+        Assert.Equal("type Point = (x: int, y: int)", Assert.Single(Section(inPoint, "typeDefinition", "definition")).Text);
+        // An attached def is listed with its type, wherever in the module it is declared.
+        var attached = Assert.Single(Section(inPoint, "typeDefinition", "attached"));
+        Assert.Equal(("Point.norm: Point -> int", "attached", new Range(4, 4, 4, 14)), (attached.Text, attached.Detail, attached.Location?.Range));
+        // On the name it declares, the type is shown once, in its declaration's scope.
+        Assert.Equal(["typeDefinition", "module"], (await InfoViewAt(uri, 0, 6)).Scopes.Select(scope => scope.Kind));
+
+        // A context's declaration is headed with its parameters, and lists them with its associated types.
+        var inIter = await InfoViewAt(uri, 2, 40);
+        Assert.Equal("context Iter(c)", inIter.Scopes.Single(scope => scope.Kind == "typeDefinition").Heading);
+        Assert.Equal(
+            [("c", "parameter"), ("elem", "associated type")],
+            Section(inIter, "typeDefinition", "parameters").Select(item => (item.Text, item.Detail)));
+    }
 }
