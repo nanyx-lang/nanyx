@@ -151,6 +151,8 @@ type Cursor(file: string, source: string, laid: Laid array) =
     member this.Take() =
         match this.Token with
         | Some token ->
+            if index = 7 && file.EndsWith "cli.host.nyxp" && source.Substring(token.Start, token.End - token.Start) = "version" then
+                DebugLog.lines.Add("TAKE7 " + System.Environment.StackTrace.Replace("\n", " ## "))
             index <- index + 1
             tokensRead <- tokensRead + 1
             if index > furthest then
