@@ -886,6 +886,7 @@ module Compiler =
                           // Filled in for the root module only, by `compileChecked`.
                           InlinedExprTypes = Map.empty
                           InlinedCalleeTypes = Map.empty
+                          InlinedTypeDefs = Map.empty
                           ScriptEntryValues = state.ScriptEntryValues
                           Units = state.Units
                           Declared = state.Declared }
@@ -1259,7 +1260,16 @@ module Compiler =
                         checkedModule.Typed.InferredContextTypes |> Map.map (fun _ tys -> tys |> List.map (Unifier.applySolved checkedModule.Subst))
                     ContextTypes = checkedModule.Typed.ContextTypes |> Map.map (fun _ tys -> tys |> List.map (Unifier.applySolved checkedModule.Subst))
                     InlinedExprTypes = resolveInlined _.RawExprTypes
-                    InlinedCalleeTypes = resolveInlined _.RawCalleeTypes }
+                    InlinedCalleeTypes = resolveInlined _.RawCalleeTypes
+                    InlinedTypeDefs =
+                        imported
+                        |> List.collect (fun read ->
+                            match read.Value with
+                            | Result.Ok m -> m.Typed.TypeDefs |> Map.toList |> List.filter (fun (_, info) -> info.IsContext)
+                            | Result.Error _ -> [])
+                        |> List.filter (fun (name, _) -> not (checkedModule.Typed.TypeDefs.ContainsKey name))
+                        |> List.distinctBy fst
+                        |> Map.ofList }
             // Callers that stop at errors (`nanyx run`, say) look at the diagnostics, and the typed module is still
             // there for the editor's features. The linters only look at a module that type-checked; a rule
             // configured as an error fails the compile as a compiler error does.
