@@ -1298,6 +1298,18 @@ Where the type expected is a protected or private [nominal type](../advanced/nom
 module, a second line says that only that module makes values of it, and names the definitions attached to the type that
 make one, up to three, or says that none does. A value of the type's shape is the error NYX0260 instead.
 
+Where a `match`'s arms, an `if`'s branches or a list's items give different types, the error is at the first one that
+differs from those before it, and says what it gives and what they give. Each one before it is a related location,
+saying what it gives, which an editor links to and the command line shows under the error:
+
+```nanyx
+def describe = { n: int ->
+  match n
+    | 0 -> "zero"
+    | _ -> 2  -- error NYX0201: This arm gives 'int', but the arms before it give 'string'
+}
+```
+
 An `if` with no `else` gives `()` when its condition is false, so one whose `then` branch gives something else is
 reported at the `if`, saying that it has no `else`:
 
