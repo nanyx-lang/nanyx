@@ -246,6 +246,7 @@ module WasmRunner =
         (inspect: Instance -> 'b)
         (listener: IProbeListener option)
         (profiled: (Result<byte array, string> -> unit) option)
+        (dbg: DbgHit -> bool)
         : Result<'a, RunError> * 'b option =
         // On a thread of its own, so that the guest's stack limit comes before the end of the thread's (see `ProgramStack`).
         ProgramStack.run <| fun () ->
@@ -263,7 +264,7 @@ module WasmRunner =
             AsyncImport.define linker waits
             HttpImport.define linker waits
             Probing.define linker (spanTable program) listener
-            Probing.defineDbg linker (fun _ -> false)
+            Probing.defineDbg linker dbg
             let reported = ref None
             CrashImport.define linker reported (ref false)
             configure store
@@ -303,15 +304,16 @@ module WasmRunner =
         (inspect: Instance -> 'b)
         (listener: IProbeListener option)
         (profiled: (Result<byte array, string> -> unit) option)
+        (dbg: DbgHit -> bool)
         : Result<'a, RunError> * 'b option =
         let mutable finish = ignore
         try
-            executeIn (fun store -> finish <- configureIo io arguments directories store) program start read inspect listener profiled
+            executeIn (fun store -> finish <- configureIo io arguments directories store) program start read inspect listener profiled dbg
         finally
             finish ()
 
     let private execute (io: ProgramIo) (arguments: string list) (directories: string list) (program: Program) (start: string option) (read: Instance option -> 'a) : Result<'a, RunError> =
-        executeInspecting io arguments directories program start read ignore None None |> fst
+        executeInspecting io arguments directories program start read ignore None None Probing.leftToProgram |> fst
 
     /// The value of the exported global `name` of `instance`, an `i32` or an `i64`: 0 when it does not export it.
     let private globalValue (instance: Instance) (name: string) : int64 =
@@ -332,17 +334,22 @@ module WasmRunner =
     let runBinary (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) : Result<unit, RunError> =
         execute io arguments directories (Binary wasm) None ignore
 
+    /// `runBinary`, with each `dbg` the program reaches given to `dbg`, which says whether it dealt with it: one it didn't,
+    /// the program writes to its stderr (see `Probing.defineDbg`). `nanyx run --dbg-to` writes them to a channel.
+    let runBinaryWithDbg (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) (dbg: DbgHit -> bool) : Result<unit, RunError> =
+        executeInspecting io arguments directories (Binary wasm) None ignore ignore None None dbg |> fst
+
     /// `runBinary`, with the program's debug probes answered by `listener` (see `IProbeListener`).
     let runListening (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) (listener: IProbeListener) : Result<unit, RunError> =
-        executeInspecting io arguments directories (Binary wasm) None ignore ignore (Some listener) None |> fst
+        executeInspecting io arguments directories (Binary wasm) None ignore ignore (Some listener) None Probing.leftToProgram |> fst
 
     /// `runBinary`, with Wasmtime's guest profiler sampling the run every `profileInterval`, giving `profiled` the profile,
     /// in the Firefox profiler's format, once it has stopped, or why it couldn't be written (see `GuestProfiler`).
-    let runProfiled (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) (profiled: Result<byte array, string> -> unit) : Result<unit, RunError> =
-        executeInspecting io arguments directories (Binary wasm) None ignore ignore None (Some profiled) |> fst
+    let runProfiled (io: ProgramIo) (arguments: string list) (directories: string list) (wasm: byte array) (profiled: Result<byte array, string> -> unit) (dbg: DbgHit -> bool) : Result<unit, RunError> =
+        executeInspecting io arguments directories (Binary wasm) None ignore ignore None (Some profiled) dbg |> fst
 
     /// What `runCounting` gives, for any `Program`.
-    let private counting (io: ProgramIo) (arguments: string list) (directories: string list) (start: string) (globals: string array) (program: Program) =
+    let private counting (io: ProgramIo) (arguments: string list) (directories: string list) (start: string) (globals: string array) (dbg: DbgHit -> bool) (program: Program) =
         executeInspecting
             io
             arguments
@@ -359,6 +366,7 @@ module WasmRunner =
                     | memory -> memory.GetSize() * 65536L })
             None
             None
+            dbg
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned, as
@@ -372,18 +380,20 @@ module WasmRunner =
         (globals: string array)
         (wat: string)
         : Result<int array, RunError> * HeapCounters option =
-        counting io arguments directories start globals (Text wat)
+        counting io arguments directories start globals Probing.leftToProgram (Text wat)
 
-    /// `runCounting` for a module in the binary format, `wasm`.
+    /// `runCounting` for a module in the binary format, `wasm`, with each `dbg` it reaches given to `dbg` (see
+    /// `runBinaryWithDbg`).
     let runCountingBinary
         (io: ProgramIo)
         (arguments: string list)
         (directories: string list)
         (start: string)
         (globals: string array)
+        (dbg: DbgHit -> bool)
         (wasm: byte array)
         : Result<int array, RunError> * HeapCounters option =
-        counting io arguments directories start globals (Binary wasm)
+        counting io arguments directories start globals dbg (Binary wasm)
 
     /// Runs the module described by `wat`, which exports its start function as `start` rather than running it when
     /// instantiated, and gives the values of its exported `i32` globals `globals` once `start` has returned. A global
@@ -394,4 +404,4 @@ module WasmRunner =
 
     /// `runReading` for a module in the binary format, `wasm`.
     let runBinaryReading (io: ProgramIo) (arguments: string list) (directories: string list) (start: string) (globals: string array) (wasm: byte array) : Result<int array, RunError> =
-        counting io arguments directories start globals (Binary wasm) |> fst
+        counting io arguments directories start globals Probing.leftToProgram (Binary wasm) |> fst
