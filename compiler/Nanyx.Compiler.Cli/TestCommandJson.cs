@@ -122,6 +122,20 @@ internal static partial class CliCommands
 
             json.WriteString("output", run.Output);
             json.WriteString("errors", run.Errors);
+            // Each dbg it reached, in order, its file named as a failure's place names it, for an editor to show where
+            // it is written. The output has them too, as the text report shows them.
+            json.WriteStartArray("dbg");
+            foreach (var hit in run.Dbg)
+            {
+                json.WriteStartObject();
+                json.WriteString("file", hit.File);
+                json.WriteNumber("line", hit.Line);
+                json.WriteNumber("column", hit.Column);
+                json.WriteString("value", hit.Text);
+                json.WriteEndObject();
+            }
+
+            json.WriteEndArray();
         });
 
     /// <summary>

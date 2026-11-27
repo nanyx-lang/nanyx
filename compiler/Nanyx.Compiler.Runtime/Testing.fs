@@ -29,7 +29,9 @@ type TestRun =
       /// marked `@test(#io)`, what its real `Console` wrote to standard output.
       Output: string
       /// What it wrote to its standard error itself, as a crash's message and a deferred error are.
-      Errors: string }
+      Errors: string
+      /// Each `dbg` it reached, in order, which `Output` has too, for an editor to show where it is written.
+      Dbg: DbgHit list }
 
 /// Running the tests of a test build, whose host imports the runtime's own `nanyx:test` (the test host,
 /// `nanyx.test.host`). Each test runs in a fresh instance of the build, which runs the test at the index `nanyx:test`
@@ -98,6 +100,7 @@ module WasmTester =
     let private runOne (engine: Engine) (module': Module) (table: SpanTable option) (directory: string) (variables: (string * string) list) (seed: int64) (timeout: TimeSpan) (index: int) (test: ListedTest) =
         ProgramStack.run <| fun () ->
             let output = StringBuilder()
+            let hits = ResizeArray<DbgHit>()
             let input = IO.Path.GetTempFileName()
             let printed = new IO.MemoryStream()
             let errors = new IO.MemoryStream()
@@ -115,7 +118,9 @@ module WasmTester =
                     AsyncImport.define linker (AsyncImport.Waits())
                     Probing.define linker table None
                     Probing.defineDbg linker (fun hit ->
-                        lock output (fun () -> output.Append(string hit).Append('\n') |> ignore)
+                        lock output (fun () ->
+                            output.Append(string hit).Append('\n') |> ignore
+                            hits.Add hit)
                         true)
                     let reported = ref None
                     CrashImport.define linker reported deferred
@@ -141,7 +146,8 @@ module WasmTester =
               Test = test
               Outcome = expected test outcome deferred.Value written
               Output = lock output (fun () -> output.ToString()) + Encoding.UTF8.GetString(printed.ToArray())
-              Errors = written }
+              Errors = written
+              Dbg = lock output (fun () -> List.ofSeq hits) }
 
     /// Runs the tests of the test build `wasm` (see `TestTable`) that `selected` chooses, one at a time and each in an
     /// instance of its own, with `seed` for their `Random`, stopping each that runs for longer than `timeout`, and gives

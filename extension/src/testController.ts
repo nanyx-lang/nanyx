@@ -1,6 +1,8 @@
 import { ChildProcess, spawn } from "child_process";
 import * as path from "path";
 import * as vscode from "vscode";
+import { testHits } from "./dbgValues";
+import { DbgView } from "./dbgView";
 import {
   buildFailureMessage,
   DiagnosticEvent,
@@ -50,7 +52,8 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
 
   constructor(
     private readonly compiler: () => string | undefined,
-    private readonly log: (message: string) => void
+    private readonly log: (message: string) => void,
+    private readonly dbg: DbgView
   ) {
     this.controller.resolveHandler = async (item) => {
       if (!item) {
@@ -219,6 +222,8 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
     const items = new Map(tests.map((test) => [test.name, this.itemOf(root, test.name)] as const));
     items.forEach((item) => item && run.enqueued(item));
 
+    // The values of the tests' dbgs replace those of the run before, in each file they reach.
+    const dbgRun = this.dbg.beginRun();
     const process = spawn(executable, runArguments(root.target, selection), { cwd: root.directory });
     const cancelled = token.onCancellationRequested(() => process.kill());
     const diagnostics: DiagnosticEvent[] = [];
@@ -237,6 +242,9 @@ export class TestExplorer implements vscode.Disposable, vscode.CodeLensProvider 
         case "test":
           ended.add(event.name);
           this.show(run, root, items.get(event.name), event);
+          if (event.dbg && event.dbg.length > 0) {
+            this.dbg.add(dbgRun, testHits(root.directory, event.dbg));
+          }
           break;
         case "summary":
           if (!event.built) {

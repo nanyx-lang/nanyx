@@ -41,6 +41,7 @@ const compiler_1 = require("./compiler");
 const developmentMode_1 = require("./developmentMode");
 const infoView_1 = require("./infoView");
 const library_1 = require("./library");
+const dbgView_1 = require("./dbgView");
 const run_1 = require("./run");
 const testController_1 = require("./testController");
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
@@ -61,6 +62,7 @@ let outputChannel;
 let infoView;
 let libraryView;
 let testExplorer;
+let dbgView;
 let declinedDownload = false;
 let declinedUpdate = false;
 async function activate(context) {
@@ -70,9 +72,11 @@ async function activate(context) {
     infoView = view;
     const library = new library_1.LibraryView(() => client);
     libraryView = library;
-    const explorer = new testController_1.TestExplorer(() => compiler, log);
+    const values = new dbgView_1.DbgView(() => client);
+    dbgView = values;
+    const explorer = new testController_1.TestExplorer(() => compiler, log, values);
     testExplorer = explorer;
-    context.subscriptions.push(view, library, explorer, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
+    context.subscriptions.push(view, library, values, explorer, vscode.commands.registerCommand(COMMAND_INFO_VIEW, () => view.show()), vscode.commands.registerCommand(COMMAND_DOWNLOAD, async () => {
         declinedDownload = false;
         const settings = (0, compiler_1.readSettings)();
         const version = await (0, compiler_1.versionToDownload)(context, settings, log);
@@ -99,6 +103,7 @@ async function activate(context) {
     await startOrRestart(context);
 }
 async function deactivate() {
+    (0, run_1.deleteDbgChannels)();
     buildWatcher?.dispose();
     await stopClient();
 }
@@ -160,7 +165,7 @@ async function runCurrentFile(context, uri) {
             return;
         }
     }
-    await (0, run_1.runFile)(compiler, document.uri);
+    await (0, run_1.runFile)(compiler, document.uri, dbgView);
 }
 /**
  * Development mode: runs the language server from a copy of `build`, so `dotnet build` can overwrite

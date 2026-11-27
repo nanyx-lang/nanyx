@@ -405,21 +405,24 @@ module UnusedPrivateDefinitions =
         | PatternVariable
         | ImportedModule -> "It is never used"
 
-    /// The names of the defs marked `@test` in `items`, a `module name =` block's among them.
-    let rec private testsIn (items: TopLevelItem list) : Set<string> =
+    /// The names of the defs marked `@test` or `@entry` in `items`, a `module name =` block's among them: a test build
+    /// runs the one, and the host calls the other. A test build makes `@entry`'s def an ordinary one, which nothing
+    /// calls (#3094).
+    let rec private runIn (items: TopLevelItem list) : Set<string> =
         items
         |> List.pairwise
         |> List.choose (fun (first, second) ->
             match first.Kind, second.Kind with
-            | Attribute(name, _), Def (ValueDef(_, defName, _, _)) when name = Attributes.testAttribute -> Some defName
+            | Attribute(name, _), Def (ValueDef(_, defName, _, _)) when name = Attributes.testAttribute || name = Attributes.entryAttribute ->
+                Some defName
             | _ -> None)
         |> Set.ofList
-        |> Set.union (items |> List.choose (fun item -> match item.Kind with ModuleBlock(_, inner) -> Some (testsIn inner) | _ -> None) |> Set.unionMany)
+        |> Set.union (items |> List.choose (fun item -> match item.Kind with ModuleBlock(_, inner) -> Some (runIn inner) | _ -> None) |> Set.unionMany)
 
     let lint (model: SemanticModel) : Report list =
         let definitions = definitionsOf model.Syntax
         let picked = synthesizedMembers model
-        let tests = testsIn model.Syntax
+        let run = runIn model.Syntax
         // The span of each expression and type as written, so that a reference from within a definition to itself is
         // told apart: a def that calls itself, a type that names itself. Nodes desugaring made are not among them, and
         // their references count as uses: the call to `@entry`'s def that `applyAttributes` adds is one.
@@ -470,7 +473,7 @@ module UnusedPrivateDefinitions =
         |> Seq.choose (fun symbol -> definitionOf symbol |> Option.map (fun definition -> symbol, definition))
         |> Seq.filter (fun (symbol, definition) ->
             not (isUsed symbol definition)
-            && not (symbol.Kind = TopLevelValue && (picked.Contains symbol.Name || tests.Contains symbol.Name)))
+            && not (symbol.Kind = TopLevelValue && (picked.Contains symbol.Name || run.Contains symbol.Name)))
         |> Seq.sortBy (fun (symbol, _) -> symbol.Declaration.Start)
         |> Seq.map (fun (symbol, definition) ->
             { Rule = rule.Id
