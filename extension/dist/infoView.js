@@ -37,6 +37,7 @@ exports.InfoView = void 0;
 exports.openLocation = openLocation;
 const vscode = __importStar(require("vscode"));
 const contextLines_1 = require("./contextLines");
+const docsSite_1 = require("./docsSite");
 const highlighter_1 = require("./highlighter");
 const pinnedPosition_1 = require("./pinnedPosition");
 /** The language server's request for what the compiler knows at a position (see `InfoViewHandler` in the compiler). */
@@ -286,8 +287,10 @@ async function openLocation(location) {
     });
 }
 /**
- * Opens a link in an item's documentation. A doc comment's link to a name is the URI of its file with the line and
- * column (`file:///a.nyx#L3,5`), which opens at that place; any other link opens as VS Code opens links.
+ * Opens a link in an item's documentation or a message's code. A doc comment's link to a name is the URI of its file
+ * with the line and column (`file:///a.nyx#L3,5`), which opens at that place. A link to the docs site opens in VS
+ * Code's Simple Browser, unless `nanyx.infoView.openDocsIn` is `browser` or Simple Browser is disabled. Any other link
+ * opens as VS Code opens links.
  */
 async function openLink(href) {
     const uri = vscode.Uri.parse(href);
@@ -298,9 +301,16 @@ async function openLink(href) {
         const range = { start: { line, character }, end: { line, character } };
         await openLocation({ uri: uri.with({ fragment: "" }).toString(), range });
     }
+    else if ((0, docsSite_1.isDocsLink)(href) && openDocsIn() === "editor" && (await vscode.commands.getCommands(true)).includes("simpleBrowser.show")) {
+        await vscode.commands.executeCommand("simpleBrowser.show", href);
+    }
     else {
         await vscode.commands.executeCommand("vscode.open", uri);
     }
+}
+/** Where a link to the docs site opens, from the `nanyx.infoView.openDocsIn` setting. */
+function openDocsIn() {
+    return vscode.workspace.getConfiguration("nanyx").get("infoView.openDocsIn", "editor");
 }
 /**
  * The scopes with their documentation and each item's rendered to HTML by VS Code's Markdown renderer (the built-in

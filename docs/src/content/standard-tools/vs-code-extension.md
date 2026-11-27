@@ -254,6 +254,14 @@ view, such as a long parameter's, wraps.
 - **The module**: its doc comment, the top-level definitions and imports in scope, the file's own first, and the
   contexts the runtime supplies (`Console`, `Env` and `FileSystem`, from the host's prelude).
 
+A link to the docs site, such as a message's code, opens in VS Code's built-in Simple Browser, in a tab beside the
+editor, so you can read what an error means without leaving it. A link to a place in a file opens there, and any other
+link opens as VS Code opens links.
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `nanyx.infoView.openDocsIn` | `editor` | Where a link to the docs site opens: `editor` in a Simple Browser tab, or `browser` in the system browser. If the Simple Browser extension is disabled, `editor` opens it in the system browser too. Hover's links, and a Problems entry's code, are opened by VS Code itself, so they always open in the system browser. |
+
 A [custom pattern](../advanced/custom-patterns.md) is written as it was declared, `pattern string -> #Num(float) | _`,
 marked `pattern`, among the names of the scope it is declared in, and its own scope is headed by its tags,
 `pattern #Num`. Hover shows it the same way, on its declaration and on a tag a match arm uses, and the outline names it
