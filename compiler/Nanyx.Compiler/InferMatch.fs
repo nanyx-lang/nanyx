@@ -366,6 +366,7 @@ let internal inferMatch
                 else
                     MatchExhaustiveness.ofWitnesses arms (MatchExhaustiveness.patternColumns scrutinees) resolvedScrutineeTypes headSpan missingWitnesses
             let armTypes = armExprs |> List.rev |> List.map (fun typedExpr -> typedExpr.Type)
+            let current = OddBranches.note rowVars OddBranches.Arms (List.rev armExprs) current
             let resultTy, constrained = joinBranchTypes rowVars current armTypes
             // A match that does not handle every case is reported, and typed as if it did: a debug build gives it
             // an arm that traps on the cases it leaves out.

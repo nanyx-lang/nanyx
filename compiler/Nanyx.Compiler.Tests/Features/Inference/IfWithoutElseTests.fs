@@ -35,5 +35,5 @@ let ``An if with no else whose then branch is () or never gives a value checks``
 [<Fact>]
 let ``An if with a written else keeps its branches' mismatch`` () =
     Assert.Equal(
-        (DiagnosticCodes.TypeMismatch.Code, "'int' vs 'string'", "if true then 1 else \"b\""),
+        (DiagnosticCodes.TypeMismatch.Code, "The `else` branch gives 'string', but the `then` branch gives 'int'", "\"b\""),
         onlyDiagnostic (normalized "def h: int = if true then 1 else \"b\"\n"))
