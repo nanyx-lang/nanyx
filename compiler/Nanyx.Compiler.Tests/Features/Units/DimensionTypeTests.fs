@@ -10,11 +10,6 @@ open Nanyx.Compiler.Tests.TestSupport
 let private dimensions =
     "dimension Time\n@baseUnit unit ns: Time\ndimension Length(float)\n@baseUnit unit m: Length\ndimension Bytes(int)\n@baseUnit unit B: Bytes\n"
 
-/// The code and the text each diagnostic of compiling `source`, after the dimensions, is reported at.
-let private reported (source: string) =
-    let source = withFinalNewline (dimensions + source)
-    (Compiler.compile source).Diagnostics |> List.map (fun diagnostic -> diagnostic.Code, textAt source (spanOf diagnostic))
-
 /// The types of `names`, as compiling `source` after the dimensions infers them, which reports nothing.
 let private typesIn (source: string) (names: string list) =
     let result = Compiler.compile (withFinalNewline (dimensions + source))
@@ -30,7 +25,7 @@ let ``A signature that names a dimension requires Num of its storage`` () =
     // Called at a storage that is no number, it is missing its `Num`.
     Assert.Equal<string list>(
         [ DiagnosticCodes.MissingContextMembers.Code ],
-        reported "def isLong: Time -> bool = { t -> true }\ndef f: Time(bool) -> bool = { t -> isLong(t) }" |> List.map fst)
+        reportedAt (dimensions + "def isLong: Time -> bool = { t -> true }\ndef f: Time(bool) -> bool = { t -> isLong(t) }") |> List.map fst)
 
 [<Fact>]
 let ``The dimensions a function is passed written without their storage share one`` () =
@@ -43,10 +38,10 @@ let ``The dimensions a function is passed written without their storage share on
 [<Fact>]
 let ``A call that passes differently stored values to dimensions written without their storage is a mismatch`` () =
     let source = "def overlap: Time, Time -> bool = { a, b -> true }\ndef both = overlap(1ns, 2.0ns)"
-    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "2.0ns" ], reported source)
+    Assert.Equal<(string * string) list>([ DiagnosticCodes.TypeMismatch.Code, "2.0ns" ], reportedAt (dimensions + source))
     let message = (Compiler.compile (withFinalNewline (dimensions + source))).Diagnostics.Head.Message
     Assert.Equal("'float' vs 'int'", message)
-    Assert.Empty(reported "def apart: Time(a), Time(b) -> bool = { a, b -> true }\ndef both = apart(1ns, 2.0ns)")
+    Assert.Empty(reportedAt (dimensions + "def apart: Time(a), Time(b) -> bool = { a, b -> true }\ndef both = apart(1ns, 2.0ns)"))
 
 [<Fact>]
 let ``A dimension in a result written without its storage is of the one the body makes it`` () =
@@ -72,31 +67,31 @@ let ``A constrained dimension is of its one storage, and a concrete storage requ
 
 [<Fact>]
 let ``A generic function takes a measured value of any storage`` () =
-    Assert.Empty(reported "def same: Time(a) -> Time(a) = { t -> t }\ndef ints: Time(int) -> Time(int) = { t -> same(t) }\ndef floats: Time(float) -> Time(float) = { t -> same(t) }")
+    Assert.Empty(reportedAt (dimensions + "def same: Time(a) -> Time(a) = { t -> t }\ndef ints: Time(int) -> Time(int) = { t -> same(t) }\ndef floats: Time(float) -> Time(float) = { t -> same(t) }"))
 
 [<Fact>]
 let ``Measured values of other storages, other dimensions, or no dimension are different types`` () =
     let mismatch = DiagnosticCodes.TypeMismatch.Code
-    Assert.Equal(mismatch, (reported "def f: Time(int) -> Time(float) = { t -> t }").Head |> fst)
-    Assert.Equal(mismatch, (reported "def f: Time(float) -> Length = { t -> t }").Head |> fst)
-    Assert.Equal(mismatch, (reported "def f: Time(int) -> int = { t -> t }").Head |> fst)
-    Assert.Equal(mismatch, (reported "def f: int -> Time(int) = { t -> t }").Head |> fst)
+    Assert.Equal(mismatch, (reportedAt (dimensions + "def f: Time(int) -> Time(float) = { t -> t }")).Head |> fst)
+    Assert.Equal(mismatch, (reportedAt (dimensions + "def f: Time(float) -> Length = { t -> t }")).Head |> fst)
+    Assert.Equal(mismatch, (reportedAt (dimensions + "def f: Time(int) -> int = { t -> t }")).Head |> fst)
+    Assert.Equal(mismatch, (reportedAt (dimensions + "def f: int -> Time(int) = { t -> t }")).Head |> fst)
 
 [<Fact>]
 let ``A storage no parameter fixes is NYX0293 at the dimension`` () =
     let code = DiagnosticCodes.StorageOnlyInResult.Code
-    Assert.Equal<(string * string) list>([ code, "Time(a)" ], reported "def make: int -> Time(a) = { n -> make(n) }" |> List.filter (fst >> (=) code))
-    Assert.Empty(reported "def average: list(Time(a)) -> Time(a) = { ts -> average(ts) }")
+    Assert.Equal<(string * string) list>([ code, "Time(a)" ], reportedAt (dimensions + "def make: int -> Time(a) = { n -> make(n) }") |> List.filter (fst >> (=) code))
+    Assert.Empty(reportedAt (dimensions + "def average: list(Time(a)) -> Time(a) = { ts -> average(ts) }"))
 
 [<Fact>]
 let ``A storage written for a constrained dimension is NYX0294`` () =
     Assert.Equal<(string * string) list>(
         [ DiagnosticCodes.ConstrainedDimensionStorage.Code, "Bytes(a)" ],
-        reported "def f: Bytes(a) -> Bytes = { b -> b }")
+        reportedAt (dimensions + "def f: Bytes(a) -> Bytes = { b -> b }"))
 
 [<Fact>]
 let ``A local def's signature is read as a top-level one's`` () =
-    Assert.Empty(reported "def outer = { ->\n  def inner: Time -> bool = { t -> true }\n  inner\n}")
+    Assert.Empty(reportedAt (dimensions + "def outer = { ->\n  def inner: Time -> bool = { t -> true }\n  inner\n}"))
     Assert.Contains(
         DiagnosticCodes.StorageOnlyInResult.Code,
-        reported "def make: int -> Time(int) = { n -> make(n) }\ndef outer = { ->\n  def inner: int -> Time(b) = { n -> make(n) }\n  inner\n}" |> List.map fst)
+        reportedAt (dimensions + "def make: int -> Time(int) = { n -> make(n) }\ndef outer = { ->\n  def inner: int -> Time(b) = { n -> make(n) }\n  inner\n}") |> List.map fst)
