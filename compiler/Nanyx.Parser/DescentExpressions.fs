@@ -168,7 +168,7 @@ and private recordField (c: Cursor) : RecordField =
         else
             c.NoteAt(1, "`=`")
             false
-    DebugLog.lines.Add(sprintf "idx=%d at0=%A at1=%A isName=%b isKw=%b isAt1Eq=%b next=%b" c.Index (c.At 0) (c.At 1) (c.Is Name) (c.Is Keyword) (c.IsAt(1, Equals)) namedNext)
+    DebugLog.lines.Add(sprintf "F%d:%s:%b" c.Index (match c.Token with Some t -> c.Text t | None -> "-") namedNext)
     match c.AttemptIf(namedNext, named) with
     | Some field -> field
     | None -> PositionalField(expression Crossing c)

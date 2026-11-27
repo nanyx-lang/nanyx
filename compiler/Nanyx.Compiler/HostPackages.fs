@@ -75,9 +75,10 @@ module HostPackages =
              let path = Path.Combine(directory, Hosts.consolePackage + ".nyxp")
              let declared =
                  if File.Exists path then
+                     Parser.Program.DescentCursor.DebugLog.lines.Clear()
                      match DataValue.read path (File.ReadAllText path) with
                      | Ok manifest -> (match ofManifest Hosts.consolePackage directory manifest with Some h -> Ok h | None -> Error $"ofManifest None: %A{manifest}")
-                     | Error e -> Error ("read error: " + sprintf "%A" e + " LOG: " + System.String.Join(" || ", Parser.Program.DescentCursor.DebugLog.lines |> Seq.truncate 20))
+                     | Error e -> Error ("read error: " + sprintf "%A" e + " LOG: " + System.String.Join(" ", Parser.Program.DescentCursor.DebugLog.lines |> Seq.truncate 3000))
                  else
                      Error "missing"
              match declared with

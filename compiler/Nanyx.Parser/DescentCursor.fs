@@ -314,6 +314,7 @@ type Cursor(file: string, source: string, laid: Laid array) =
         try
             Some(read ())
         with NoMatch ->
+            DebugLog.lines.Add(sprintf "X%d->%d" start index)
             noMatches <- noMatches + 1
             index <- start
             declared <- declaredBefore
