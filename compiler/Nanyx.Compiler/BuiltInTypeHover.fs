@@ -21,7 +21,7 @@ let private descriptions : Map<string, string * string> =
       "bool", "type bool", $"`true` or `false`, also written `Boolean`. See {types}."
       "string", "type string", $"Text, as UTF-8, also written `String`. See {types}."
       Chars.name, $"type {Chars.name}", $"One Unicode scalar value, written `'a'`. See {types}."
-      "unit", "type unit", $"The type of `()`, the value that says nothing, also written `Unit`. See {types}."
+      "unit", "type ()", $"The type of `()`, the value that says nothing. See {types}."
       Lists.typeName, $"type {Lists.typeName}(a)", $"The built-in list type, also written `List`: `List(int)` is `list(int)`, the same type. See {types}."
       Maps.typeName, $"type {Maps.typeName}(k, v)", $"The built-in map type, also written `Map`. See {types}."
       Sets.typeName, $"type {Sets.typeName}(a)", $"The built-in set type, also written `Set`. See {types}."

@@ -3,18 +3,18 @@ namespace NyxCompiler
 open Parser.Program
 open NyxCompiler.ExpressionRewrites
 
-/// The names of the built-in types. `String`, `List`, `Unit`, `Map`, `Set`, `Array`, `I64`, `F64` and `Boolean` are the
+/// The names of the built-in types. `String`, `List`, `Map`, `Set`, `Array`, `I64`, `F64` and `Boolean` are the
 /// types, and `string`, `list` and the rest (`int`, `float` and `bool` for the last three) are keyword aliases that
 /// mean exactly them, before the dot of an attached definition (`def String.trim` is `def string.trim`) as in a type
 /// (`List(I64)` is `list(int)`). The compiler works with the alias, so it prints `list(string)`: this pass writes each
 /// type's name as its alias before inference (#692). `Int`, `Float` and `Bool` are not types, and are an error with a
-/// fix that writes `int`, `float` and `bool`.
+/// fix that writes `int`, `float` and `bool`. The type of `()` is written `()`: `unit` and `Unit` in a type are an
+/// error with a fix that writes it (#2630).
 module internal BuiltinTypeNames =
     /// Each built-in type's name and the alias the compiler works with.
     let private aliases =
         Map.ofList
             [ "String", "string"
-              "Unit", "unit"
               "List", Lists.typeName
               "Map", Maps.typeName
               "Set", Sets.typeName
@@ -38,6 +38,14 @@ module internal BuiltinTypeNames =
     let private error (span: SourceSpan) (written: string) (alias: string) : Diagnostic =
         { (Diagnostics.at DiagnosticCodes.NotABuiltInType span $"A built-in type's name is in lower case: write '{alias}'" |> Diagnostics.about written) with
             Fixes = [ { Title = $"Write `{alias}`"; Edits = [ { Span = span; NewText = alias } ] } ] }
+
+    /// The names `()`'s type is not written by, though the compiler calls it `unit`.
+    let private unitNames = set [ "unit"; "Unit" ]
+
+    /// The error for `written`, one of `unitNames`, written as a type at `span`, with the fix that writes `()`.
+    let private unitError (span: SourceSpan) (written: string) : Diagnostic =
+        { (Diagnostics.at DiagnosticCodes.NotABuiltInType span $"The type of `()` is written '()', not '{written}'" |> Diagnostics.about written) with
+            Fixes = [ { Title = "Write `()`"; Edits = [ { Span = span; NewText = "()" } ] } ] }
 
     /// The part of `span`, where `name` is written, that its `length` characters from `offset` are written at.
     let private partOf (span: SourceSpan) (offset: int) (length: int) : SourceSpan =
@@ -90,7 +98,14 @@ module internal BuiltinTypeNames =
                 notTypes |> Map.tryFind name |> Option.iter (fun alias -> errors.Add(error (partOf span 0 name.Length) name alias))
 
         let rec typeExpr (t: TypeExpr) : TypeExpr =
-            let renamed (written: string) = tryAlias (partOf t.Span 0 written.Length) written |> Option.defaultValue written
+            let renamed (written: string) =
+                let span = partOf t.Span 0 written.Length
+                if unitNames.Contains written && not (own.Contains written) then
+                    // Reported, and read as `()`'s type, so that nothing else is reported for it.
+                    errors.Add(unitError span written)
+                    "unit"
+                else
+                    tryAlias span written |> Option.defaultValue written
             // The name is renamed first, so that errors are reported in the order the names are written.
             let t =
                 match t.Kind with

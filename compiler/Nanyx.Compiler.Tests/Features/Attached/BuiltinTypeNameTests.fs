@@ -57,7 +57,6 @@ def b = string.shout("hi")
 def c = "hi" \shout
 def List.second = { (xs: List(int)) -> xs }
 def d = list.second([1])
-def u: Unit = ()
 def e = String.toString("ab")
 def f = List.map
 def m: Map(string, int) = ["a" => 1]
@@ -66,7 +65,6 @@ def s: Set(int) = set.fromList([1])"""
     Assert.Equal(TyPrimitive "string", typed.Types.["c"])
     Assert.Equal(TyFunc(TyPrimitive "string", TyPrimitive "string", []), typed.Types.["string.shout"])
     Assert.Equal(TyApply("list", [ TyPrimitive "int" ]), typed.Types.["d"])
-    Assert.Equal(TyPrimitive "unit", typed.Types.["u"])
 
 [<Fact>]
 let ``I64, F64 and Boolean are the types int, float and bool name`` () =
@@ -119,6 +117,22 @@ let ``An error for Int is the only one when the alias would check`` () =
     let diagnostic = Assert.Single(result.Diagnostics)
     Assert.Equal(DiagnosticCodes.NotABuiltInType.Code, diagnostic.Code)
     Assert.Equal("A built-in type's name is in lower case: write 'int'", diagnostic.Message)
+
+[<Fact>]
+let ``unit and Unit are not types, and the fix writes ()`` () =
+    let source = "def f: unit -> list(Unit) = { _ -> [()] }"
+    Assert.Equal<(string * string) list>(
+        [ "unit", "def f: () -> list(Unit) = { _ -> [()] }"; "Unit", "def f: unit -> list(()) = { _ -> [()] }" ],
+        notTypes source)
+    let result = Compiler.compile "def f: unit -> int = { _ -> 0 }"
+    let diagnostic = Assert.Single(result.Diagnostics)
+    Assert.Equal("The type of `()` is written '()', not 'unit'", diagnostic.Message)
+    // A value may still be named `unit`, and a module may define a type `Unit`.
+    compileClean "def unit = 1
+def g = { unit -> unit + 1 }
+def h = g(unit)" |> ignore
+    compileClean "type Unit = #metre | #foot
+def u: Unit = #metre" |> ignore
 
 [<Fact>]
 let ``A type the module defines with a capitalised name is that type`` () =

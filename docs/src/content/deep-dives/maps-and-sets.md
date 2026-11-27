@@ -81,7 +81,7 @@ map can be passed where its lookup's function type is wanted ([#2763](https://gi
   prelude's `__mapEqualsBy` or `__setEqualsBy`, which takes time in proportion to the product of the sizes, and the
   derived `hash` calls `__mapHashBy` or `__setHashBy`, which combine the entries' hashes in no order. A type variable
   nothing solves in a derived comparison, as the element of an empty list's type, holds no value, so it is compared as
-  `unit`, which the backend makes it (`ContextInstances.derivedComparison`,
+  `()`, which the backend makes it (`ContextInstances.derivedComparison`,
   [#2522](https://github.com/nanyx-lang/nanyx/issues/2522)). A map or a set has no order: `<` on one is an error.
 - **A call that needs `Eq` of a type with variables in it**, such as `list.distinct` on a `list(set(a))` inside a
   function that requires `[Eq(a)]`, is passed the derived `==` as a closure over the `Eq(a)` the function was given
