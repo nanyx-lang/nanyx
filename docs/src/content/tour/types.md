@@ -131,9 +131,9 @@ The items of a list literal are joined the same way, so `[1, crash("no")]` is a 
 
 Using a value of type `undefined`, as in `crash("no").name`, or `x + 1` after `def x = crash("no")`, is not an error either: the value is worked out first and stops the program, so what uses it is never reached. `???`, the placeholder for [code not written yet](../getting-started/basics#unimplemented-code), has this type too.
 
-A function that doesn't write its type and never returns is inferred to give back `undefined` too, where its result
-is a type variable found nowhere else in its type. No value of such a variable could be made, so the function can only
-call itself, or something else that never returns:
+A top-level function that doesn't write its type and never returns is inferred to give back `undefined` too, where its
+result is a type variable found nowhere else in its type. No value of such a variable could be made, so the function can
+only call itself, or something else that never returns:
 
 ```nanyx
 def loop = { x -> loop(x) } -- a -> undefined
@@ -142,7 +142,8 @@ def empty = { -> [] } -- () -> list(a)
 ```
 
 `first`'s result comes from its input, and `empty`'s variable is inside a `list`, so both stay as they are. A type that
-writes a variable for the result, `def loop: a -> b`, keeps it.
+writes a variable for the result, `def loop: a -> b`, keeps it, and so does a function that requires a context with a
+type parameter, which can make a value of it, as `[Decode(a)] string -> a` can.
 
 # Tuple types
 
