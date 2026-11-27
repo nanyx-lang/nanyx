@@ -177,7 +177,8 @@ host's to decide. A debug build that `nanyx run` runs gives each `dbg` it reache
 written and the value's text:
 
 - **The console host** writes it to standard error, `[main.nyx:12] 84`, in order with what the program writes there
-  itself.
+  itself, or, run with [`--dbg-to`](../standard-tools/command-line#nanyx-run), as the editor runs it, to that file, a
+  line of JSON each, and nothing to standard error.
 - **The HTTP host** writes it to the server's log, with the request it came from, `dbg (GET /hello): [src/main.nyx:5]
   "Ada"`, and never into the response.
 - **A host of your own** gets the console host's: the line on standard error. So does a module written by `nanyx build`
