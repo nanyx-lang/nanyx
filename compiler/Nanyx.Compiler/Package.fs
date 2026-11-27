@@ -703,13 +703,13 @@ module Package =
     /// at the index the test host gives it, counting through each module's tests in turn, by calling its
     /// `Attributes.testDispatcher`.
     let testRootSource (modules: (string * int) list) =
-        let imports = modules |> List.mapi (fun index (imported, _) -> $"import {imported} as __test{index}\n") |> String.concat ""
+        let imports = modules |> List.mapi (fun index (imported, _) -> $"import {imported} as {TestRootSyntax.alias index}\n") |> String.concat ""
         let starts = modules |> List.scan (fun start (_, count) -> start + count) 0
         let arms =
             modules
             |> List.mapi (fun index (_, count) ->
                 let start = starts.[index]
-                $"if index < {start + count} then __test{index}.{Attributes.testDispatcher}(index - {start}) else ")
+                $"if index < {start + count} then {TestRootSyntax.alias index}.{Attributes.testDispatcher}(index - {start}) else ")
             |> String.concat ""
         $"{imports}\n@entry\ndef run = {{ index -> {arms}() }}\n"
 

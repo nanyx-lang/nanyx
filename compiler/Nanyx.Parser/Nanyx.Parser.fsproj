@@ -10,6 +10,7 @@
     <Compile Include="LargeStack.fs" />
     <Compile Include="Ast.fs" />
     <Compile Include="IsSyntax.fs" />
+    <Compile Include="TestRootSyntax.fs" />
     <Compile Include="Keywords.fs" />
     <Compile Include="LineTable.fs" />
     <Compile Include="Operators.fs" />

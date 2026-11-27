@@ -51,3 +51,15 @@ let ``The runner runs only the tests it is asked to, in the order of their index
         Assert.Equal<int list>([ 0; 2 ], runs |> List.map _.Index)
         Assert.Equal<string list>([ "1"; "3" ], List.ofSeq reported)
     | Error error -> Assert.Fail $"%A{error}"
+
+[<Fact>]
+let ``A deferred error in a def of the test's own module keeps the def's frame, at the error`` () =
+    // The root imports the module as `__test0`, which the def's name starts with in the build (#3081).
+    let runs, _ =
+        runsOf WasmTester.defaultTimeout "export def perimeter: int -> int = { n -> n * \"4\" }\n\n@test\ndef `perimeters` = {\n  assert(perimeter(3) == 12)\n}\n"
+    match runs.["perimeters"].Outcome with
+    | Failed(Crashed(Some message, place, stack)) ->
+        Assert.StartsWith("src/checks.nyx:5:43: error NYX0201", message)
+        Assert.Equal(Some("src/checks.nyx", 5, 43), place)
+        Assert.Equal<string list>([ "perimeter (src/checks.nyx:5)"; "checks_perimeters (src/checks.nyx:9)" ], stack |> List.map string)
+    | other -> Assert.Fail $"%A{other}"
