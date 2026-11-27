@@ -66,16 +66,13 @@ let private defType (c: Cursor) : TypeExpr option =
         Some(DescentTypes.typeSignature c)
     else None
 
-/// A statement: `def`, `export def`, `rec`, `mut`, `pattern`, or an expression.
+/// A statement: `def`, `rec`, `mut`, `pattern`, or an expression.
 let rec statement (c: Cursor) : Statement =
     let start = c.Start
     match c.Token with
     | Some token when token.Kind = Keyword ->
         match c.Text token with
-        | "def" -> definition c start false
-        | "export" when (match c.At 1 with Code next -> c.Text next = "def" | _ -> false) ->
-            c.Take() |> ignore
-            definition c start true
+        | "def" -> definition c start
         | "rec" -> wrappedDefinition c start RecSyntax.builtIn
         | "mut" when (match c.At 1 with Code next -> next.Kind = Name || next.Kind = BacktickedName | _ -> false) -> wrappedDefinition c start MutSyntax.builtIn
         | "mut" when (match c.At 1 with Code next -> next.Kind <> Operator && next.Kind <> Equals | _ -> false) ->
@@ -114,11 +111,13 @@ and private typeDefinitionStatement (c: Cursor) (start: int) =
     | TypeDef(name, modifiers, parameters, body) -> statementFrom c start (TypeDefStatement(name, modifiers, parameters, body))
     | ValueDef _ -> raise NoMatch
 
-/// One line's statement as the statements it stands for: one, or the defs a destructuring def desugars into.
+/// One line's statement as the statements it stands for: one, or the defs a destructuring def desugars into. A def
+/// written `export` is an error, as only a module exports (#2960).
 and private statementItems (c: Cursor) : Statement list =
     let start = c.Start
-    let isDef = c.IsKeyword "def" || (c.IsKeyword "export" && (match c.At 1 with Code next -> c.Text next = "def" | _ -> false))
-    if isDef then
+    if c.IsKeyword "export" && (match c.At 1 with Code next -> c.Text next = "def" | _ -> false) then
+        c.Report start "A def in a function's block is local to it, so it can't be exported: declare it at the top level, or in a module block, to export it"
+    if c.IsKeyword "def" then
         match c.Attempt(fun () -> destructuringDefinition c start) with
         | Some statements -> statements
         | None -> [ statement c ]
@@ -317,14 +316,14 @@ and exceptArms (c: Cursor) : MatchArm list =
         skipLayout c
         arm c
 
-/// `def name: T = value`, from `start`, where an `export` before it starts.
-and private definition (c: Cursor) (start: int) (isExport: bool) =
+/// `def name: T = value`, from `start`.
+and private definition (c: Cursor) (start: int) =
     c.Expect(Keyword, "def") |> ignore
     let name, nameSpan, typeOpt = nameAndType c
     let value = defValue c
     c.Declare DefValue value.Id [ name, nameSpan ]
     c.NoteDocumentable start nameSpan.Start
-    statementFrom c start (DefStatement(isExport, name, typeOpt, value))
+    statementFrom c start (DefStatement(false, name, typeOpt, value))
 
 /// `pattern T -> #A | #B = { ... }`, from `start`, where an `export` before it starts: a custom pattern, as the def of
 /// its function, whose name is made up from its type (see `PatternSyntax`); whether it is exported, that name, its type
