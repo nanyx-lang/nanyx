@@ -74,7 +74,9 @@ module internal WellKnownContexts =
             | TyApply _
             | TyScope _
             | TyRecursive _
-            | TySelf _ -> Ty.children ty |> List.tryPick (inPart "a value it holds" false)
+            | TySelf _
+            | TyMember _
+            | TyGroup _ -> Ty.children ty |> List.tryPick (inPart "a value it holds" false)
             | TyUnion items -> items |> List.tryPick (offendingPart kindOf)
 
     /// Why values of the type `ty` have no `property`, if they have none: they are, or hold, a part `kindOf` names
@@ -234,6 +236,8 @@ module internal WellKnownContexts =
                     | TyScope _
                     | TyRecursive _
                     | TySelf _
+                    | TyMember _
+                    | TyGroup _
                     | TyUnion _ -> Ty.children ty |> List.tryPick find
                     | TyFunc _
                     | TyContexts _
@@ -265,7 +269,9 @@ module internal WellKnownContexts =
             | TyApply _
             | TyScope _
             | TyRecursive _
-            | TySelf _ -> Ty.children ty |> List.collect collect
+            | TySelf _
+            | TyMember _
+            | TyGroup _ -> Ty.children ty |> List.collect collect
             | TyUnion items ->
                 let unionRests, tags = items |> List.partition (function TyVar _ -> true | _ -> false)
                 (if rests then unionRests |> List.choose (function TyVar v -> Some v | _ -> None) else []) @ List.collect collect tags

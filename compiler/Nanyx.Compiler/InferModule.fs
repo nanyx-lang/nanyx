@@ -174,7 +174,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     // declared later in the module (forward references, mutual recursion). An annotated def is bound
     // at its declared type; an unannotated one at a fresh variable that its inferred type is unified
     // with once its body has been checked. Type definitions are registered first, each after the types it names (see
-    // `inDependencyOrder`), so an annotation or another type can name a type declared further down.
+    // `inDependencyGroups`), so an annotation or another type can name a type declared further down.
     // A block the file imports (`import money`) brings its exports in under other names: each is bound wherever the
     // definition it stands for is, so it has the same type and refers to the same symbol.
     // A block can re-export another file's module, whose names are bound here already, by its imports.
@@ -267,15 +267,15 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                 env <- declareTopLevel name symbol (TypeEnv.mono ty) env
         | _ -> ()
     // A dimension is registered as the private nominal type it is (see `Units`), and its units after every type.
-    for name, modifiers, parameters, body in inDependencyOrder (Units.withDimensionsAsTypes module') do
-        state <- registerTypeDef state name modifiers parameters body
+    let typeGroups = inDependencyGroups (Units.withDimensionsAsTypes module')
+    state <- registerTypeDefs state typeGroups
+    let groupCycleErrors = unguardedGroupReferences typeGroups
     state <- Units.markDimensions module' state
     // A derived dimension, `dimension Speed = Length / Time`, is registered again once the dimensions are marked as such,
     // so that what it names is read as dimensions (see `Units.withDimensionsAsTypes`).
     let derived = module' |> List.filter (fun item -> match item.Kind with DimensionDecl(_, _, _, Some _) -> true | _ -> false)
     if not derived.IsEmpty then
-        for name, modifiers, parameters, body in inDependencyOrder (Units.withDimensionsAsTypes derived) do
-            state <- registerTypeDef state name modifiers parameters body
+        state <- registerTypeDefs state (inDependencyGroups (Units.withDimensionsAsTypes derived))
         state <- Units.markDimensions module' state
     let withUnits, unitErrors = Units.declare (hasInstance env state "Num") state module'
     state <- withUnits
@@ -516,6 +516,7 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
         | Def (TypeDef(name, modifiers, parameters, body)) ->
             // Registered in the pre-binding pass above.
             errors <- errors @ DefAnnotations.typeDefErrors state name modifiers parameters body
+            errors <- errors @ (groupCycleErrors |> Map.tryFind name |> Option.defaultValue [])
             emit (TypedDef (TypedTypeDef(name, modifiers, parameters, body)))
 
     // A def is checked after the defs it uses that are not in a cycle with it, so that it sees their types. Each item

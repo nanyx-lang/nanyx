@@ -213,6 +213,13 @@ type Ty =
     | TySelf of Ty list
     /// The parameter at this position of the recursive alias whose definition this is in.
     | TyParam of int
+    /// In a member's definition in a group of types that name each other (see `TyGroup`), the member at this position,
+    /// with its arguments.
+    | TyMember of int * Ty list
+    /// What a type of a group of types that name each other is closed over, as the body of its `TyRecursive`: the
+    /// definition of every member of the group, in each of which a member's parameters are `TyParam`s and each name of a
+    /// member is a `TyMember`, and which member this type is (see `RecursiveAliases`).
+    | TyGroup of selected: int * members: GroupMember list
     /// A scoped context's scope, a type variable, as the context and a cell's type hold it (see
     /// `FunctionContexts.scoped`). A reader never sees it.
     | TyScope of Ty
@@ -223,20 +230,29 @@ type Ty =
     /// measured in the dimension's default storage unit (see `Units`).
     | TyMeasure of Dimension * storage: Ty
 
+/// A member of a group of types that name each other (see `TyGroup`): its name, its identity and whether it is private
+/// when it is a nominal type rather than an alias, and its closed definition.
+and GroupMember =
+    { Name: string
+      Nominal: (NominalId * bool) option
+      Body: Ty }
+
 /// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
 /// treats differently, and hands the others to `Ty.map`, `Ty.fold` or `Ty.exists`.
 module Ty =
     /// The types `ty` is made of, one level down: a nominal's or an alias's arguments then what it stands for, a function's input, result and contexts, a record's fields in order of their names, an open record's fields
     /// then its row as a variable, a tag's payload, an applied type's arguments, a union's members, the contexts a type
-    /// carries, a closed recursive definition then its arguments, the arguments of a reference to the alias inside
-    /// one, and a measured value's storage.
+    /// carries, a closed recursive definition then its arguments, the arguments of a reference to the alias or to a
+    /// member of a group inside one, the definitions of a group's members, and a measured value's storage.
     let children (ty: Ty) : Ty list =
         match ty with
         | TyVar _
         | TyPrimitive _
         | TyParam _ -> []
         | TyRecursive(body, args) -> body :: args
-        | TySelf args -> args
+        | TySelf args
+        | TyMember(_, args) -> args
+        | TyGroup(_, members) -> members |> List.map _.Body
         | TyNominal(_, args, underlying, _) -> args @ [ underlying ]
         | TyAlias(_, args, underlying) -> args @ [ underlying ]
         | TyFunc(input, output, contexts) -> input :: output :: contexts
@@ -258,6 +274,8 @@ module Ty =
         | TyParam _ -> ty
         | TyRecursive(body, args) -> TyRecursive(f body, List.map f args)
         | TySelf args -> TySelf(List.map f args)
+        | TyMember(index, args) -> TyMember(index, List.map f args)
+        | TyGroup(selected, members) -> TyGroup(selected, members |> List.map (fun m -> { m with Body = f m.Body }))
         | TyNominal(id, args, underlying, isPrivate) -> TyNominal(id, List.map f args, f underlying, isPrivate)
         | TyAlias(name, args, underlying) -> TyAlias(name, List.map f args, f underlying)
         | TyFunc(input, output, contexts) -> TyFunc(f input, f output, List.map f contexts)

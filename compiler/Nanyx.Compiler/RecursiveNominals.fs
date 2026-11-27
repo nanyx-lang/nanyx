@@ -23,6 +23,7 @@ module RecursiveNominals =
     /// names itself: its closed definition at those arguments.
     let instantiate (underlying: Ty) (args: Ty list) : Ty option =
         match underlying with
+        | TyRecursive(TyGroup _ as body, _) -> Some (TyRecursive(body, args))
         | TyRecursive(body, _) -> Some (TyRecursive(body, List.map valueOf args))
         | _ -> None
 
@@ -51,6 +52,8 @@ module RecursiveNominals =
     /// that each place it does is the type at the arguments it is written with there. `ty` itself when it isn't nominal.
     let underlying (ty: Ty) : Ty =
         match ty with
+        // A member of a group holds its arguments as they are, for what its definition's variables stand for.
+        | TyNominal(_, _, TyRecursive(TyGroup(selected, members), args), _) -> RecursiveAliases.unfoldMember valueOf selected members args
         | TyNominal(id, _, TyRecursive(body, values), isPrivate) ->
             let rec replace ty =
                 match ty with
