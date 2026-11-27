@@ -160,7 +160,15 @@ and private recordField (c: Cursor) : RecordField =
         let value = expression Crossing c
         c.Declare NamedFieldValue value.Id [ fieldName, nameSpan ]
         NamedField(fieldName, value)
-    match c.Attempt named with
+    // `named` takes a name and then expects `=`: where a name has no `=` after it, it would fail there, and is not tried.
+    let namedNext =
+        if c.Is BacktickedName then true
+        elif not (c.Is Name || c.Is Keyword) then false
+        elif c.IsAt(1, Equals) then true
+        else
+            c.NoteAt(1, "`=`")
+            false
+    match c.AttemptIf(namedNext, named) with
     | Some field -> field
     | None -> PositionalField(expression Crossing c)
 
@@ -211,6 +219,28 @@ and private call (c: Cursor) : Expression =
         result <- Expression.at span (Block [ definition; calling ])
     result
 
+/// Whether `contextMember` can read past the name at the cursor: a capitalised name with `(` straight after it. Where a
+/// name is there without them, it would fail having taken the name, and this notes that (see `Cursor.AttemptIf`).
+and private contextMemberNext (c: Cursor) =
+    match c.Token with
+    | Some token when token.Kind = Name || token.Kind = Keyword ->
+        if Char.IsUpper((c.Text token)[0]) && c.AdjacentAt 1 && c.IsAt(1, LeftParen) then true
+        else
+            c.NoteAt 1
+            false
+    | _ -> false
+
+/// Whether `call` can read past the name at the cursor: a name with `[`, `(` or a lambda after it. Where a name that no
+/// `.` follows is there without one, `call` would fail having taken it, and this notes that. A qualified name, a name in
+/// backticks and a `$` are left to `call`.
+and private callNext (c: Cursor) =
+    if not (c.Is Name || c.Is Keyword) || (c.AdjacentAt 1 && c.IsAt(1, Dot)) then true
+    elif c.AdjacentAt 1 && (c.IsAt(1, LeftBracket) || c.IsAt(1, LeftParen)) then true
+    elif c.IsAt(1, LeftBrace) && c.OnSameLineAt 1 then true
+    else
+        c.NoteAt 1
+        false
+
 /// `C(T).member` or `C(T).member(args)`: a member of a context's instance for a type, named by a capitalised context.
 and private contextMember (c: Cursor) : Expression =
     let start = c.Start
@@ -224,7 +254,7 @@ and private contextMember (c: Cursor) : Expression =
         | _ -> raise NoMatch
     | None -> ()
     c.Take() |> ignore
-    let types = sepBy1 c (fun () -> DescentTypes.typeExpr c) (fun () -> c.Expect Comma |> ignore)
+    let types = sepBy1If c (fun () -> DescentTypes.typeExpr c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
     c.Expect RightParen |> ignore
     let contextType = TypeExpr.at (c.SpanFrom start) (TypeApply(contextName, types))
     if not (c.Adjacent && c.Is Dot) then raise NoMatch
@@ -234,7 +264,7 @@ and private contextMember (c: Cursor) : Expression =
     let kind =
         if c.Adjacent && c.Is LeftParen then
             c.Take() |> ignore
-            let args = if c.Is RightParen then [] else sepBy1 c (fun () -> expression Crossing c) (fun () -> c.Expect Comma |> ignore)
+            let args = if c.Is RightParen then [] else sepBy1If c (fun () -> expression Crossing c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
             c.Expect RightParen |> ignore
             ContextMemberCall(contextType, memberName, args)
         else ContextMemberAccess(contextType, memberName)
@@ -397,10 +427,10 @@ and private primary (c: Cursor) : Expression =
     | Keyword
     | BacktickedName
     | Dollar ->
-        match c.Attempt(fun () -> contextMember c) with
+        match c.AttemptIf(contextMemberNext c, fun () -> contextMember c) with
         | Some expr -> expr
         | None ->
-            match c.Attempt(fun () -> call c) with
+            match c.AttemptIf(callNext c, fun () -> call c) with
             | Some expr -> expr
             | None when token.Kind = Name && (c.Text token = "true" || c.Text token = "false") ->
                 let literal, span = literal c
@@ -465,7 +495,7 @@ and private accessed (c: Cursor) : Operand =
         | _ -> name c
     let mutable going = true
     while going do
-        match c.Attempt field with
+        match c.AttemptIf((c.Adjacent || first) && c.Is Dot, field) with
         | Some(fieldName, fieldSpan) ->
             text <- SourceSpan.between text fieldSpan
             expr <- Expression.at text (MemberAccess(expr, fieldName, Some fieldSpan))
@@ -493,7 +523,7 @@ and private withUpdates (c: Cursor) ((expr: Expression), (text: SourceSpan)) : O
                 let value = expression Crossing c
                 c.Declare NamedFieldValue value.Id [ field, fieldSpan ]
                 NamedField(field, value)
-            sepBy1 c update (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore; across c (fun c -> c.Token.IsSome) |> ignore)
+            sepBy1If c update (fun () -> c.OnSameLine && c.Expects Comma) (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore; across c (fun c -> c.Token.IsSome) |> ignore)
     let updatesSpan = c.SpanFrom updatesStart
     let updated = Expression.at updatesSpan (RecordExpr updates)
     let span = SourceSpan.between text updatesSpan
@@ -711,7 +741,7 @@ and expression (lines: Lines) (c: Cursor) : Expression =
 /// (`ParseState.singleOrTuple`).
 let defValue (c: Cursor) : Expression =
     let start = c.Start
-    let items = sepBy1 c (fun () -> expression Crossing c) (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore)
+    let items = sepBy1If c (fun () -> expression Crossing c) (fun () -> c.OnSameLine && c.Expects Comma) (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore)
     match items with
     | [ single ] -> single
     | several -> Expression.at (c.SpanFrom start) (TupleExpr several)
@@ -731,7 +761,7 @@ let attributeArgument (c: Cursor) : Expression =
             let ruleName, ruleSpan = identifierWithSpan c
             Expression.at (c.SpanFrom ruleStart)
                 (BinaryOp(LinterRuleSyntax.separator, Some(c.SpanOf slash), Expression.at linterSpan (IdentifierExpr linter), Expression.at ruleSpan (IdentifierExpr ruleName)))
-        let rules = sepBy1 c rule (fun () -> c.Expect Comma |> ignore)
+        let rules = sepBy1If c rule (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
         c.Expect RightParen |> ignore
         match rules with
         | [ single ] -> single

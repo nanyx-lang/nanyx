@@ -24,6 +24,7 @@
     <Compile Include="Features\Corpus\DescentBlockTests.fs" />
     <Compile Include="Features\Corpus\DescentControlTests.fs" />
     <Compile Include="Features\Corpus\DescentTopLevelTests.fs" />
+    <Compile Include="Features\Corpus\FailedReadingTests.fs" />
     <Compile Include="Features\CustomPatterns\CustomPatternTests.fs" />
     <Compile Include="Features\Directives\DirectiveTests.fs" />
     <Compile Include="Features\Errors\BracketErrorTests.fs" />

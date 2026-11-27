@@ -35,7 +35,7 @@ let private matchExpression (c: Cursor) =
             if armsColumn |> Option.exists (fun arms -> arms >= column blockStart) then
                 c.Report (nextCodeStart c) "The arms of a match are indented as far as the block before them: indent them less than the block"
             [ block ]
-        | Code _ when c.OnSameLine -> sepBy1 c (fun () -> expression Crossing c) (fun () -> c.Expect Comma |> ignore)
+        | Code _ when c.OnSameLine -> sepBy1If c (fun () -> expression Crossing c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
         | _ -> c.GiveUp "a match's scrutinee the layout pass doesn't open"
     let written = try arms c with NoMatch -> c.GiveUp "a `match` with no arms, which is a mistake"
     Expression.at (c.SpanFrom start) (Match(scrutinees, written))
@@ -111,7 +111,7 @@ let private ifExpression (c: Cursor) =
 let private forExpression (c: Cursor) =
     let start = c.Start
     c.Expect(Keyword, "for") |> ignore
-    let iterables = sepBy1 c (fun () -> expression Crossing c) (fun () -> c.Expect Comma |> ignore)
+    let iterables = sepBy1If c (fun () -> expression Crossing c) (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
     let elements = List.init iterables.Length (fun index -> ForSyntax.element (index + 1), None)
     let body =
         if nextCodeIs c Bar then

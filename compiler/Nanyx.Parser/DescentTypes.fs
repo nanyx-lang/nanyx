@@ -37,7 +37,7 @@ let private dotName (c: Cursor) =
 /// A name qualified with dots, written with no spaces: `m.Email`.
 let private dottedName (c: Cursor) =
     let head = identifier c
-    let tail = many c (fun () -> dotName c)
+    let tail = manyIf c (fun () -> c.Adjacent && c.Expects Dot) (fun () -> dotName c)
     String.concat "." (head :: tail)
 
 /// A `?` straight after a type or a field's name, which is reported with `message`: a value that may be absent has its
@@ -93,6 +93,44 @@ let private mayHoldField (c: Cursor) (offset: int) =
             current <- nextToken
     found
 
+/// Whether a `->` is next, across line breaks, as a reading of a function type's result asks first.
+let private arrowNext (c: Cursor) = c.AcrossFits(fun c -> c.Is Arrow)
+
+/// Whether a `,` is next on the line, as the separator of a list of types asks: where it isn't on the line, the separator
+/// fails noting nothing, and where something else is, it notes that a `,` was expected.
+let private commaNext (c: Cursor) = c.OnSameLine && c.Expects Comma
+
+/// Whether a context's member, `name: T`, can be read past its name at the cursor: where a name is there and no `:`
+/// after it on its line, `contextMember` would fail having taken the name, and this notes what it would have noted. A
+/// name in backticks is left to `contextMember`, which may report it.
+let private memberNext (c: Cursor) =
+    if c.Is BacktickedName then true
+    elif not (c.Is Name || c.Is Keyword) then false
+    elif not (c.OnSameLineAt 1) then
+        c.NoteAt 1
+        false
+    elif c.IsAt(1, Colon) then true
+    else
+        c.NoteAt(1, "`:`")
+        false
+
+/// Whether `typeApply` can read past the name at the cursor: whether a name qualified with dots, as `dottedName` reads
+/// it, is there with `(` straight after it. Where it isn't, `typeApply` would fail, having taken the name, and this notes
+/// what it would have noted (see `Cursor.AttemptIf`).
+let private appliedNext (c: Cursor) =
+    let isName (offset: int) = c.IsAt(offset, Name) || c.IsAt(offset, Keyword)
+    if not (isName 0) then false
+    else
+        // The offset of the dotted name's last part: `dotName` takes a `.` and a name, each straight after the one before.
+        let mutable last = 0
+        while c.AdjacentAt(last + 1) && c.IsAt(last + 1, Dot) && c.AdjacentAt(last + 2) && isName (last + 2) do
+            last <- last + 2
+        if c.AdjacentAt(last + 1) && c.IsAt(last + 1, Dot) then true
+        elif c.AdjacentAt(last + 1) && c.IsAt(last + 1, LeftParen) then true
+        else
+            if c.AdjacentAt(last + 1) then c.NoteAt(last + 1, "`.`") else c.NoteAt(last + 1)
+            false
+
 let private typeIdentifier (c: Cursor) =
     noDollar c
     let start = c.Start
@@ -110,7 +148,7 @@ let rec private typeOf (c: Cursor) =
     let path () =
         let head = c.Expect Name
         let headSpan = c.SpanOf head
-        let fields = many c (fun () ->
+        let fields = manyIf c (fun () -> c.Expects Dot) (fun () ->
             c.Expect Dot |> ignore
             let field = c.Expect Name
             c.Text field, c.SpanOf field)
@@ -155,7 +193,7 @@ and private fieldAttribute (c: Cursor) =
 /// `name: T` in a record type, with its default after `=` if it has one, and the attributes before it, with the names
 /// it declares noted for the record (`declared`).
 and private typeField (c: Cursor) (declared: ResizeArray<Identifier * SourceSpan>) : TypeRecordField list =
-    let attributes = many c (fun () -> fieldAttribute c)
+    let attributes = manyIf c (fun () -> c.StartsWith At) (fun () -> fieldAttribute c)
     let fieldStart = c.Start
     let isMut =
         if c.IsKeyword "mut" then
@@ -249,7 +287,7 @@ and private typeTag (c: Cursor) =
                     TypeField(fieldName, false, Some(typeExpr c), None)
                 let fields () =
                     let fieldsStart = c.Start
-                    let items = sepBy1 c field (fun () -> c.Expect Comma |> ignore)
+                    let items = sepBy1If c field (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
                     TypeExpr.at (c.SpanFrom fieldsStart) (TypeRecord items)
                 // Positional types, then named fields, as a record type writes them: `#rect(string, width: float)`.
                 let mixed () =
@@ -262,7 +300,7 @@ and private typeTag (c: Cursor) =
                             item)
                         |> List.mapi (fun index typeValue -> TypeField(string index, false, Some typeValue, None))
                     if positional.IsEmpty then raise NoMatch
-                    let named = sepBy1 c field (fun () -> c.Expect Comma |> ignore)
+                    let named = sepBy1If c field (fun () -> c.Expects Comma) (fun () -> c.Expect Comma |> ignore)
                     TypeExpr.at (c.SpanFrom fieldsStart) (TypeRecord(positional @ named))
                 let closed (payload: unit -> TypeExpr) () =
                     let r = payload ()
@@ -298,8 +336,18 @@ and private typeApply (c: Cursor) =
     // The arguments are read once, each as `name = T` or as a type, and are named arguments if any of them is named, or
     // else types, which an arrow after them makes one function type (#2218).
     let arguments () =
+        // A named argument takes a name and expects `=` after it on its line.
+        let namedNext () =
+            if not (c.Is Name || c.Is Keyword) then false
+            elif not (c.OnSameLineAt 1) then
+                c.NoteAt 1
+                false
+            elif c.IsAt(1, Equals) then true
+            else
+                c.NoteAt(1, "`=`")
+                false
         let argument () =
-            match c.Attempt(fun () ->
+            match c.AttemptIf(namedNext (), fun () ->
                 let argStart = c.Start
                 let argName = identifier c
                 if not c.OnSameLine then raise NoMatch
@@ -309,16 +357,27 @@ and private typeApply (c: Cursor) =
             | Some named -> named
             | None -> typeUnion c
         let listStart = c.Start
-        let args = sepBy1 c argument (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore)
+        let args = sepBy1If c argument (fun () -> commaNext c) (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore)
         if args |> List.exists (fun arg -> match arg.Kind with TypeNamedArgument _ -> true | _ -> false) then
             if not (c.Is RightParen) then raise NoMatch
             args
         else
-            match c.Attempt(fun () -> (if not (across c Arrow None) then raise NoMatch); c.Take() |> ignore; typeExpr c) with
+            match c.AttemptIf(arrowNext c, fun () -> (if not (across c Arrow None) then raise NoMatch); c.Take() |> ignore; typeExpr c) with
             | Some result -> [ typeListToType ((args, Some result), c.SpanFrom listStart) ]
             | None -> args
+    // A record argument's first field is what `typeField` reads: its attributes, `mut`, and a name with `:` or `::`
+    // after it on its line.
+    let recordNext () =
+        c.Token.IsSome
+        && (c.StartsWith At
+            || c.IsKeyword "mut"
+            || c.Is BacktickedName
+            || ((c.Is Name || c.Is Keyword)
+                && ((c.AdjacentAt 1 && c.IsAt(1, Operator, "?"))
+                    || (c.OnSameLineAt 1 && (c.IsAt(1, Colon) || c.IsAt(1, DoubleColon)))
+                    || (c.NoteAt 1; false))))
     let args =
-        match c.Attempt recordArgument with
+        match c.AttemptIf(recordNext (), recordArgument) with
         | Some args -> args
         | None -> arguments ()
     c.Expect RightParen |> ignore
@@ -328,7 +387,7 @@ and private typeApply (c: Cursor) =
 and private typeApplyOrAssociated (c: Cursor) =
     let start = c.Start
     let applied = typeApply c
-    match c.Attempt(fun () -> dotName c) with
+    match c.AttemptIf(c.Adjacent && c.Expects Dot, fun () -> dotName c) with
     | Some memberName -> TypeExpr.at (c.SpanFrom start) (TypeAssociated(applied, memberName))
     | None -> applied
 
@@ -351,34 +410,37 @@ and private contextSet (c: Cursor) =
             let inner = contextMember c
             c.Expect RightParen |> ignore
             { inner with Span = c.SpanFrom open'.Start }
-        c.Attempt bracketed
-        |> Option.orElseWith (fun () -> c.Attempt(fun () -> contextMember c))
-        |> Option.orElseWith (fun () -> c.Attempt(fun () -> typeApply c))
+        c.AttemptIf(c.Expects LeftParen, bracketed)
+        |> Option.orElseWith (fun () -> c.AttemptIf(memberNext c, fun () -> contextMember c))
+        |> Option.orElseWith (fun () -> c.AttemptIf(appliedNext c, fun () -> typeApply c))
         |> Option.defaultWith (fun () -> typeIdentifier c)
     let separator () =
         if not c.OnSameLine then raise NoMatch
         if not (c.Skip Comma || c.Skip Ampersand || c.Skip(Operator, "+")) then raise NoMatch
-    let items = if c.Is RightBracket then [] else sepBy1 c item separator
+    let separates () = c.OnSameLine && (c.Is Comma || c.Is Ampersand || c.Is(Operator, "+"))
+    let items = if c.Is RightBracket then [] else sepBy1If c item separates separator
     c.Expect RightBracket |> ignore
     TypeExpr.at (c.SpanFrom start) (TypeContext items)
 
 and private typeAtom (c: Cursor) : TypeExpr =
-    let first (alternatives: (unit -> TypeExpr) list) =
+    // Each alternative is tried only where the token at the cursor lets it match (see `Cursor.AttemptIf`).
+    let first (alternatives: (unit -> TypeExpr option) list) =
         alternatives
-        |> List.tryPick (fun read -> c.Attempt read)
+        |> List.tryPick (fun attempt -> attempt ())
         |> Option.defaultWith (fun () -> raise NoMatch)
     if c.Is Name && (match c.At 1 with Code next -> next.Kind = DoubleColon | _ -> false) then
         c.GiveUp "a constrained type, whose `where` is an expression"
     first
-        [ fun () -> typeOf c
-          fun () -> typeArgument c
-          fun () -> typeTag c
-          fun () -> typeApplyOrAssociated c
-          fun () -> contextSet c
-          fun () -> if c.Is LeftParen && not (mayHoldField c 0) then raise NoMatch else typeRecord c
-          fun () -> typeTupleOrParen c
-          fun () -> typeIdentifier c
-          fun () -> c.Fail "a type" ]
+        [ fun () -> c.AttemptIf(c.StartsWith(Keyword, "typeof"), fun () -> typeOf c)
+          fun () -> c.AttemptIf(c.StartsWith(Keyword, "type"), fun () -> typeArgument c)
+          fun () -> c.AttemptIf(c.StartsWith Hash, fun () -> typeTag c)
+          fun () -> c.AttemptIf(appliedNext c, fun () -> typeApplyOrAssociated c)
+          fun () -> c.AttemptIf(c.StartsWith LeftBracket, fun () -> contextSet c)
+          fun () ->
+              c.AttemptIf((if c.Is LeftParen then mayHoldField c 0 else c.StartsWith LeftParen), fun () -> typeRecord c)
+          fun () -> c.AttemptIf(c.StartsWith LeftParen, fun () -> typeTupleOrParen c)
+          fun () -> c.Attempt(fun () -> typeIdentifier c)
+          fun () -> c.Attempt(fun () -> c.Fail "a type") ]
 
 /// A type, `mut T` (a cell's type), and no `?` after it.
 and internal typePostfix (c: Cursor) =
@@ -404,7 +466,8 @@ and private typeDimension (c: Cursor) =
     let mutable result = typePostfix c
     let mutable going = true
     while going do
-        match c.Attempt next with
+        let fits = (c.Is(Operator, UnitSyntax.times) || c.Is(Operator, UnitSyntax.over)) && c.OnSameLine
+        match c.AttemptIf(fits, next) with
         | Some(isTimes, right) ->
             result <- TypeExpr.at (c.SpanFrom start) (if isTimes then TypeProduct(result, right) else TypeQuotient(result, right))
         | None -> going <- false
@@ -412,7 +475,8 @@ and private typeDimension (c: Cursor) =
 
 and private typeIntersection (c: Cursor) =
     let start = c.Start
-    sepBy1 c (fun () -> typeDimension c) (fun () -> if not (across c Ampersand None) then raise NoMatch else c.Take() |> ignore)
+    sepBy1If c (fun () -> typeDimension c) (fun () -> c.AcrossFits(fun c -> c.Is Ampersand)) (fun () ->
+        if not (across c Ampersand None) then raise NoMatch else c.Take() |> ignore)
     |> singleOrCombined c start TypeIntersection
 
 /// A `|`, before a union's first type or between two. A doc comment before it documents the type after it.
@@ -438,7 +502,7 @@ and internal typeUnion (c: Cursor) =
     let mutable inBlock = false
     let mutable going = true
     while going do
-        match c.Attempt next with
+        match c.AttemptIf(c.AcrossFits(fun c -> c.Is Bar), next) with
         | Some(opensBlock, case) ->
             inBlock <- inBlock || opensBlock
             rest.Add case
@@ -449,7 +513,7 @@ and internal typeUnion (c: Cursor) =
 and private typeArrow (c: Cursor) =
     let start = c.Start
     let left = typeUnion c
-    match c.Attempt(fun () -> (if not (across c Arrow None) then raise NoMatch); c.Take() |> ignore; typeExpr c) with
+    match c.AttemptIf(arrowNext c, fun () -> (if not (across c Arrow None) then raise NoMatch); c.Take() |> ignore; typeExpr c) with
     | Some right -> TypeExpr.at (c.SpanFrom start) (TypeFunc(left, right))
     | None -> left
 
@@ -463,15 +527,15 @@ and typeExpr (c: Cursor) : TypeExpr =
             let items = match contexts.Kind with TypeContext items -> items | _ -> []
             TypeExpr.at (c.SpanFrom start) (TypeWithContext(items, t))
         | None -> contexts
-    match c.Attempt withContext with
+    match c.AttemptIf(c.StartsWith LeftBracket, withContext) with
     | Some t -> t
     | None -> typeArrow c
 
 /// Types separated by `,`, and the result after `->` if there is one, spanning them all.
 and private typeList (c: Cursor) : (TypeExpr list * TypeExpr option) * SourceSpan =
     let start = c.Start
-    let items = sepBy1 c (fun () -> typeUnion c) (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore)
-    let result = c.Attempt(fun () -> (if not (across c Arrow None) then raise NoMatch); c.Take() |> ignore; typeExpr c)
+    let items = sepBy1If c (fun () -> typeUnion c) (fun () -> commaNext c) (fun () -> (if not c.OnSameLine then raise NoMatch); c.Expect Comma |> ignore)
+    let result = c.AttemptIf(arrowNext c, fun () -> (if not (across c Arrow None) then raise NoMatch); c.Take() |> ignore; typeExpr c)
     (items, result), c.SpanFrom start
 
 /// A def's annotation: a type list, after the contexts it needs if it has any.
@@ -486,7 +550,7 @@ and typeSignature (c: Cursor) : TypeExpr =
             let first = TypeExpr.at (SourceSpan.between contexts.Span first.Span) (TypeWithContext(items, first))
             typeListToType ((first :: rest, None), span)
         | _ -> TypeExpr.at (c.SpanFrom start) (TypeWithContext(items, typeListToType list))
-    match c.Attempt withContext with
+    match c.AttemptIf(c.StartsWith LeftBracket, withContext) with
     | Some t -> t
     | None -> typeListToType (typeList c)
 
