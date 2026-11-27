@@ -312,7 +312,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
     | FunctionCall(name, spanOpt, args) -> InferCalls.inferCall inferExpr inferLambdaWithExpected env (ExpectedLiterals.intoMapEntries state expr) expr name spanOpt args
     | Lambda(args, body, _) ->
         let expectedInput, expectedReturn =
-            match state.ExpectedLambdaTypes |> Map.tryFind expr.Id with
+            match ExpectedLiterals.lambdaTypeOf state expr with
             | Some (TyFunc(input, ret, _)) -> Some input, Some ret
             | _ -> None, None
         // Checked against a function type, as a record field's or a lambda's result, it can use the contexts that type
@@ -789,7 +789,7 @@ and internal inferDefValue (env: TypeEnv) (state: InferState) (expr: Expression)
             match expr.Kind, annotation.Declared with
             | Block statements, Some declared ->
                 match SyntaxTree.blockValue statements with
-                | Some last -> { state with ExpectedBlockResults = state.ExpectedBlockResults |> Map.add last.Id declared }
+                | Some last -> ExpectedLiterals.expectBlockResult declared state last
                 | None -> state
             | _, Some declared -> ExpectedLiterals.expect declared state expr
             | _ -> state
@@ -875,7 +875,7 @@ and private inferLambdaAfterTypeOfs (env: TypeEnv) (state: InferState) (lambda: 
         | _ -> None
     let expectReturned (current: InferState) =
         match returnedLambda body, expectedReturnOpt |> Option.map (resolveSoFar current >> Unifier.unalias) with
-        | Some inner, Some (TyFunc _ as expected) -> { current with ExpectedLambdaTypes = current.ExpectedLambdaTypes |> Map.add inner.Id expected }
+        | Some inner, Some (TyFunc _ as expected) -> ExpectedLiterals.expectLambda expected current inner
         | _, Some expected -> TypeMatches.expectResult body expected current
         | _ -> current
     named
@@ -1051,8 +1051,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
             | ExprStatement expr ->
                 if errors.IsEmpty then
                     let inferred =
-                        current.ExpectedBlockResults
-                        |> Map.tryFind expr.Id
+                        ExpectedLiterals.blockResultOf current expr
                         |> Option.bind (CollectionLiterals.targeted inferExpr env' current expr)
                         |> Option.defaultWith (fun () -> inferExpr env' current expr)
                     match inferred with

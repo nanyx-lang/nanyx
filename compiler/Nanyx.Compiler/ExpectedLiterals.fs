@@ -13,6 +13,30 @@ open NyxCompiler.InferState
 let expect (expected: Ty) (state: InferState) (expr: Expression) : InferState =
     { state with ExpectedTypes = state.ExpectedTypes |> Map.add expr.Id expected }
 
+/// `state` with `expected`, a function type, the type the lambda `lambda` is checked against: it takes the input that
+/// type says, and its result is checked against the type's result (see `InferState.ExpectedLambdaTypes`).
+let expectLambda (expected: Ty) (state: InferState) (lambda: Expression) : InferState =
+    { state with ExpectedLambdaTypes = state.ExpectedLambdaTypes |> Map.add lambda.Id expected }
+
+/// The function type the lambda `lambda` is checked against, as it was written down, if one is (see `expectLambda`).
+let lambdaTypeOf (state: InferState) (lambda: Expression) : Ty option =
+    state.ExpectedLambdaTypes |> Map.tryFind lambda.Id
+
+/// `state` with `declared` the type the statement `last`, the last of the block that is a typed def's value, builds
+/// (see `InferState.ExpectedBlockResults`).
+let expectBlockResult (declared: Ty) (state: InferState) (last: Expression) : InferState =
+    { state with ExpectedBlockResults = state.ExpectedBlockResults |> Map.add last.Id declared }
+
+/// The type the statement `expr` builds, if it is the last of the block that is a typed def's value (see
+/// `expectBlockResult`).
+let blockResultOf (state: InferState) (expr: Expression) : Ty option =
+    state.ExpectedBlockResults |> Map.tryFind expr.Id
+
+/// The type `expr` is checked against, as it was written down: the one what it is written in expects of it (see
+/// `expect`), or else the one it builds as the last statement of a typed def's block (see `expectBlockResult`).
+let expectedOrBlockResultOf (state: InferState) (expr: Expression) : Ty option =
+    state.ExpectedTypes |> Map.tryFind expr.Id |> Option.orElse (blockResultOf state expr)
+
 /// The type `expr` is checked against, as far as `state` has settled it, aliases looked through, if what it is written in
 /// expects one.
 let private expectedOf (state: InferState) (expr: Expression) : Ty option =
@@ -69,13 +93,13 @@ let intoLambdas (expected: Ty) (state: InferState) (exprs: Expression list) : In
             match expr.Kind with
             | Lambda _ ->
                 let result, state = freshVar state
-                { state with ExpectedLambdaTypes = state.ExpectedLambdaTypes |> Map.add expr.Id (TyFunc(input, result, contexts)) }
+                expectLambda (TyFunc(input, result, contexts)) state expr
             | _ -> state) state
     | _ -> state
 
 /// The function type the lambda `expr` is checked against, if what it is written in expects one: a record field's, or the
 /// result of a lambda around it (see `InferState.ExpectedLambdaTypes`).
 let functionOf (state: InferState) (expr: Expression) : Ty option =
-    match state.ExpectedLambdaTypes |> Map.tryFind expr.Id |> Option.map (resolveSoFar state >> Unifier.unalias) |> Option.orElse (expectedOf state expr) with
+    match lambdaTypeOf state expr |> Option.map (resolveSoFar state >> Unifier.unalias) |> Option.orElse (expectedOf state expr) with
     | Some (TyFunc _ as ty) -> Some ty
     | _ -> None
