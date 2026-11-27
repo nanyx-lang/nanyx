@@ -107,7 +107,9 @@ Memory
 ## `nanyx check`
 
 `nanyx check` checks a script, or every source file of a package, and writes nothing. Unlike `run`, it fails on any
-error, including one a debug build would defer, and it shows every diagnostic, info and hints included.
+error, including one a debug build would defer, and it shows every diagnostic, info and hints included. A test file,
+which the manifest's `tests` selects, is checked as `nanyx test` compiles it, and so is every file of a
+[test package](../tour/packages#test-packages).
 
 For a script, it also prints the type of each top-level definition the file declares, in the order they are written,
 as hover in the editor writes them, with type variables `a`, `b`, …:

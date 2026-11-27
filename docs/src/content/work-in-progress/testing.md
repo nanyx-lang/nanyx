@@ -82,10 +82,8 @@ holds only the tests of the packages it depends on, in a sibling folder, as a .N
 ([Test packages](../tour/packages#test-packages)). It has no source files, needs no host and exports nothing; only
 `nanyx test` builds it. It can depend on an application, whose `@entry` is an ordinary def in the test build and whose
 modules keep its host ([Test builds](../deep-dives/test-builds#test-packages)). Its tests import what the package exports,
-so a private helper is still tested beside its code.
-
-An editor checks a file under the manifest's `sources` as one of its package's; a file that only `tests` selects, as all
-of a test package's are, is still checked on its own, as a script ([#3098](https://github.com/nanyx-lang/nanyx/issues/3098)).
+so a private helper is still tested beside its code. The editor and `nanyx check` check a test file as the test build
+compiles it ([#3098](https://github.com/nanyx-lang/nanyx/issues/3098)).
 
 ## Scripts
 

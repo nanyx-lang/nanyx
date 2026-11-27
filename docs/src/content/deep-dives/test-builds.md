@@ -38,6 +38,16 @@ build, its imports of the host resolve in that host's package, and its `@entry` 
 checked from their source, not from a checked file in the package cache (`Library.fromCheckedPackage`), which has them
 as the application's own build does. In any other build, a package the program depends on is a library's.
 
+`nanyx check` of a test package checks it as `withTests` has it, since it has no other files.
+
+## In the editor
+
+The editor, and `nanyx check` of one file, compile a file that only the manifest's `tests` selects as a test build
+does (`Package.modulesFor`): with the package's sources and test files, under `withTests`'s hosts, so its imports find
+the package's modules and its dependencies' exported ones, and an application it depends on keeps its host and its
+`@entry` is an ordinary def. Its modules have a `TestHost` but no `TestRoot`, so no module gets a
+`testDispatcher`, which the editor would show as a def of the file's, declared over its first test.
+
 # Checking them
 
 `TestChecks.errors` checks a module's tests when it is compiled, in every build:

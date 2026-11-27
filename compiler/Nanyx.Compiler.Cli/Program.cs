@@ -113,6 +113,19 @@ internal static partial class CliCommands
             return failed;
         }
 
+        // A test package has only test files, so it is checked as its test build compiles them.
+        if (ManifestModule.isTestPackage(package.Manifest))
+        {
+            var withTests = PackageModule.withTests(shell.Packages, package);
+            if (withTests.IsError)
+            {
+                shell.Error.WriteLine($"error: the test host can't be read: {withTests.ErrorValue}");
+                return 1;
+            }
+
+            package = withTests.ResultValue;
+        }
+
         var build = BuildPackage(shell, package, timings);
         PrintDiagnostics(shell, build.Diagnostics, shell.Out);
         shell.Out.WriteLine($"{Checked(package)}.");
