@@ -9,9 +9,8 @@ A call in tail position uses no stack. The guarantee and the rules for tail posi
 [Compiler optimisations](../meta/compiler-optimisations#optimisation-model), and the linter's rule in
 [Recursion not in tail position](../standard-tools/official-linter#recursion-not-in-tail-position). This page says how
 the compiler keeps the guarantee. What is still planned or open is in issues:
-`@tailrec` ([#2723](https://github.com/nanyx-lang/nanyx/issues/2723)), tail recursion modulo cons
-([#2724](https://github.com/nanyx-lang/nanyx/issues/2724)), and which constructs that run code at the end of a scope
-take their body out of tail position ([#2725](https://github.com/nanyx-lang/nanyx/issues/2725)).
+`@tailrec` ([#2723](https://github.com/nanyx-lang/nanyx/issues/2723)) and tail recursion modulo cons
+([#2724](https://github.com/nanyx-lang/nanyx/issues/2724)).
 
 # Code generation
 
@@ -64,12 +63,28 @@ runner, the server (for a program whose host answers HTTP requests, each request
 program on a thread of its own, of 8 MB
 (`ProgramStack.threadStack`), whichever thread called them: Windows gives its main thread 1 MB.
 
+# Code at the end of a scope
+
+A construct that runs code when its scope ends runs it after the last call in its body, so that call is no tail call.
+Nanyx has no `defer`; these are the constructs, each with a test in `RunTailCallTests`, `StackOverflowTests` or
+`RunScopeTailCallTests`:
+
+- **A `memory { ... }` block** frees its region when its body is done (see `CoreIrRegions`), so a call last in the body
+  is not a tail call.
+- **A def that starts tasks** waits for them before it returns, so a call last in it is not a tail call, but for a call
+  of another def that starts tasks in the same module, whose tasks join the caller's scope and which stays a tail call
+  (see `TaskScopes`).
+- **`use C(...) in body`** runs nothing when it ends: the instance is only in scope for `body`, so `body` is in tail
+  position.
+- **Reference counting** drops a variable after its last use, but never after a tail call (see above).
+
 # Checking tail position
 
 The official linter's `nonTailRecursion` rule reports a function that calls itself other than in tail position. It
 uses the backend's rules: `TailPosition.callsIn` applies them to the syntax, so a call it does not report is one the
 backend lowers to `return_call`. It looks at one function at a time, so a call from a lambda written in the function,
-and mutual recursion, are not reported.
+and mutual recursion, are not reported. A `memory` block's lambda is the exception: the block runs in the function, so a
+call in it is reported, as no tail call.
 
 # The standard library
 
