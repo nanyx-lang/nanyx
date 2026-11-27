@@ -179,7 +179,7 @@ FAIL geometry.`scales points`  src/geometry.nyx:18:1
     geometry_scales-20-points (src/geometry.nyx:20)
   Output:
     scaling (x = 1, y = 2)
-PASS geometry.`moves points`
+PASS geometry.`reads the sample config` (io)
 
 2 passed, 1 failed
 Seed 4812: run them again with the same random numbers with --seed 4812
@@ -188,7 +188,9 @@ Seed 4812: run them again with the same random numbers with --seed 4812
 A test passes if it finishes, and fails if it crashes, as an `assert` that doesn't hold does, or runs for longer than
 its time limit. A failure shows why, with the stack, and what the test printed, which a test that passes doesn't show.
 A test's `Random` is seeded, so a test that draws random numbers draws the same ones when it is run with the same seed.
-A test may require only `Console` and `Random`, which the test host provides (`NYX0312`).
+A test may require only `Console` and `Random`, which the test host provides (`NYX0312`), but one marked
+[`@test(#io)`](../tour/attributes#test), which runs with the console host's real `Console`, `Env` and `FileSystem`,
+in the package's directory or the script's, with the environment's variables; the report marks it `(io)`.
 
 `nanyx test` exits with 0 when every test passes, and 1 when one fails or the tests can't be built. A type or name
 error in a module with tests, or in a module one imports, stops the build, and no test runs, as an error in a module a

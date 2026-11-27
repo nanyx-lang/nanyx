@@ -209,12 +209,17 @@ in progress.
   ([#2150](https://github.com/nanyx-lang/nanyx/issues/2150)). The runtime's own helpers still import WASI's `fd_write`
   and `proc_exit`, for a deferred error or crash, so whatever runs the module provides those two as well.
 - **The test host.** `packages/nanyx.test.host` declares itself a host with `host = (root = "test.host", prelude =
-  "test.prelude")`, and depends only on `nanyx.cli`. Its `run` takes `[Console, Random] int -> a`, a test build's entry
-  point (see [Test builds](./test-builds#running-one)), asks the runtime's `nanyx:test` `index` which test to run, and
-  calls the entry point with it under a `Console` whose `write` and `writeError` give the text to `nanyx:test`'s, each
-  with its address and byte length, whose `readLine` gives `#endOfInput`, and under `random.seeded` with
-  `nanyx:test`'s `seed`. Its prelude re-exports `Console`, with `print`, `println`, `eprint` and `eprintln`, and
-  `Random`. The contexts it provides are `Hosts.testContexts`, which the compiler checks a test against (`NYX0312`).
+  "test.prelude")`, and depends on `nanyx.cli`, `nanyx.fs` and `nanyx.wasi`. Its `run` takes
+  `[Async, Console, Env, FileSystem, Random] int -> a`, a test build's entry point (see
+  [Test builds](./test-builds#running-one)), asks the runtime's `nanyx:test` `index` which test to run, and calls the
+  entry point with it under `random.seeded` with `nanyx:test`'s `seed`. For a test that isn't `#io` (`nanyx:test`'s
+  `io` gives 0), it `use`s a `Console` whose `write` and `writeError` give the text to `nanyx:test`'s, each with its
+  address and byte length, and whose `readLine` gives `#endOfInput`, and an `Env` and a `FileSystem` whose members
+  crash, which `NYX0312` keeps any test from reaching. For a `#io` test, it calls `nanyx.wasi`'s
+  `preview1.system.provide`, which loads the console host's real `Console`, `Env` and `FileSystem`. Its prelude
+  re-exports `Console`, with `print`, `println`, `eprint` and `eprintln`, `Random` and `Async`. The contexts it provides
+  are `Hosts.testContexts`, and `Hosts.ioTestContexts` for a `#io` test, which the compiler checks a test against
+  (`NYX0312`).
 - **The playground host's runner.** `packages/nanyx.playground.host/runner` is the JavaScript that runs a module compiled for
   the playground host; it isn't a source of the package (its `sources` are `src/**/*.nyx`), and the compiler built for
   the browser publishes it with the page. `playground.js`'s `run(wasm, { seed, onStdout, onStderr, onDbg, onRead })`

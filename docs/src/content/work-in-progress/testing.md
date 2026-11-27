@@ -111,42 +111,14 @@ A test stops at the first `assert` that fails. Each test runs on its own (see [R
 
 # Contexts
 
-A test runs under the test host, which provides `Console` and `Random`, and nothing else. What a test prints is captured, and shown only if the test fails. Its `Random` is [`random.seeded`](../stdlib/random)'s, with a seed the runner prints when a test fails and takes back to run it again, so a test that draws random numbers fails the same way twice.
+Built: a test runs under the test host with `Console` and a seeded `Random`, a test that requires another context is
+`NYX0312`, and `@test(#io)` runs one with the console host's real `Console`, `Env` and `FileSystem`
+([`@test`](../tour/attributes#test), [Test builds](../deep-dives/test-builds#io-tests)). What is left:
 
-The code under test often needs more, such as `FileSystem` or `Clock`. A test provides those itself, with the `use` that any code has for [loading a context](../advanced/contexts#loading-a-context):
-
-```nanyx fragment
-@test
-def `loads the defaults when there is no config file` = {
-  use FileSystem(read = { _ -> #notFound })
-  assert(config.load("app.toml") == Config.default)
-}
-```
-
-A test that needs a context it does not load is a compile-time error, as an entry is that needs a context its host doesn't provide:
-
-```text
-error NYX0312: Context the test host doesn't provide
-  = The test 'loads the defaults when there is no config file' requires the context 'FileSystem', which the test host does not provide: load an instance of it, such as a fake, with `use` in the test
-```
-
-The check is built, with the test host's `Console` and `Random`; `@test(#io)`
-([#2935](https://github.com/nanyx-lang/nanyx/issues/2935)) adds its advice to the message.
-
-So a unit test never touches the file system, the clock or the environment unless it says so, and the compiler checks that. This is the check [Hosts](./hosts#the-test-runner-is-a-host) wants: the same program runs under a test host with no IO.
-
-## Integration tests
-
-A test marked `@test(#io)` runs with the console host's contexts (`Console`, `Env` and `FileSystem`), real ones, for tests that are meant to read files or the environment:
-
-```nanyx fragment
-@test(#io)
-def `reads the sample config` = {
-  assert(config.load("tests/sample.toml") == #some(Config(port = 8080)))
-}
-```
-
-Its output is still captured.
+- **A generated fake.** `NYX0312` could offer a fix that loads a fake of the missing context with `use`, each of its
+  members a function that crashes until the test fills it in ([#2932](https://github.com/nanyx-lang/nanyx/issues/2932)).
+- **`@test(#io)` under another host.** It gives the console host's contexts, which a program under the HTTP host, whose
+  prelude has no `Env` or `FileSystem`, can't name, so such a test is `NYX0312` for now.
 
 # Running tests
 
@@ -207,7 +179,7 @@ These fit the design but are not part of the first version:
 | 3. `@test` and test builds: built ([Test builds](../deep-dives/test-builds)) | [#2930](https://github.com/nanyx-lang/nanyx/issues/2930) |
 | 4. `nanyx test`, `nanyx.test.host` and `nanyx:test`: built, but for deferred errors ([Deferred errors](#deferred-errors)) | [#2931](https://github.com/nanyx-lang/nanyx/issues/2931) |
 | 4a. Defer a type error in an imported module | [#2967](https://github.com/nanyx-lang/nanyx/issues/2967) |
-| 5. A context the test host lacks, and `@test(#io)` | [#2935](https://github.com/nanyx-lang/nanyx/issues/2935) |
+| 5. A context the test host lacks, and `@test(#io)`: built ([Contexts](#contexts)) | [#2935](https://github.com/nanyx-lang/nanyx/issues/2935) |
 | 6. Virtual time, editors, `@test(#crashes)` and later items | [#2932](https://github.com/nanyx-lang/nanyx/issues/2932) |
 
 # Open questions
