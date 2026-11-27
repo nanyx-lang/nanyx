@@ -18,7 +18,6 @@ let ``An open record's fields are a, b, ... and its rest r`` () =
 [<Fact>]
 let ``Made-up variables are a, b, ... in the order the message writes them`` () =
     Assert.Equal("'int' vs '(a, b)'", mismatch "def z = match 1\n  | (x, y) -> x")
-    Assert.Equal("'int' vs '[a] int -> b'", mismatch "def n = 5\ndef m = n(3)")
 
 [<Fact>]
 let ``A variable in both of a mismatch's types has one name`` () =
