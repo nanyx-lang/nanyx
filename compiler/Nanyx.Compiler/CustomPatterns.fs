@@ -29,16 +29,24 @@ module internal CustomPatterns =
     type Scope =
         { ByTag: Map<Identifier, InScope list>
           AmbiguousImports: Map<Identifier, string list>
-          Locals: Local list }
+          Locals: Local list
+          /// The patterns `module name =` blocks declare and don't export, by the tags they return, with the block's
+          /// name: in scope only within their blocks, as `Locals`, and named by the error for a tag outside them.
+          Unexported: Map<Identifier, ModuleName * InScope> }
 
-    /// The patterns the module declares itself, as top-level defs (see `PatternSyntax`).
-    let private ownPatterns (items: Module) : InScope list =
+    /// The patterns the module declares itself, as top-level defs (see `PatternSyntax`), each with whether it is
+    /// exported and where its def is.
+    let private declaredPatterns (items: Module) : (InScope * bool * SourceSpan) list =
         items
         |> List.choose (fun item ->
             match item.Kind with
-            | Def(ValueDef(_, name, Some signature, _)) ->
-                PatternSyntax.shapeOf name |> Option.map (fun shape -> { Name = name; Shape = shape; Origin = Own signature.Span })
+            | Def(ValueDef(isExport, name, Some signature, _)) ->
+                PatternSyntax.shapeOf name
+                |> Option.map (fun shape -> { Name = name; Shape = shape; Origin = Own signature.Span }, isExport, item.Span)
             | _ -> None)
+
+    /// The patterns the module declares itself, as top-level defs (see `PatternSyntax`).
+    let private ownPatterns (items: Module) : InScope list = declaredPatterns items |> List.map (fun (pattern, _, _) -> pattern)
 
     /// The patterns the blocks of `items` declare, outer blocks' first and each block's in order.
     let private localPatterns (items: Module) : Local list =
@@ -60,15 +68,24 @@ module internal CustomPatterns =
             | _ -> [])
 
     /// The patterns in scope in `items`, a module whose imports gave the names in `env`, more than one import giving
-    /// those of `ambiguousImports` (see `InferState.AmbiguousImports`).
-    let scopeOf (env: TypeEnv) (ambiguousImports: Map<string, SymbolId * string list>) (items: Module) : Scope =
+    /// those of `ambiguousImports` (see `InferState.AmbiguousImports`), with the `module name =` blocks `moduleBlocks`.
+    /// A pattern a block declares and doesn't export is in scope only within the block (#2961).
+    let scopeOf (env: TypeEnv) (ambiguousImports: Map<string, SymbolId * string list>) (moduleBlocks: (ModuleName * SourceSpan) list) (items: Module) : Scope =
+        let blockOf (_, isExport, span) = if isExport then None else InferState.blockAround moduleBlocks span
+        let declared = declaredPatterns items
+        let unexported =
+            declared |> List.choose (fun ((pattern, _, _) as each) -> blockOf each |> Option.map (fun (block, blockSpan) -> block, blockSpan, pattern))
+        let own = declared |> List.filter (blockOf >> Option.isNone) |> List.map (fun (pattern, _, _) -> pattern)
+        // The names of a block's unexported patterns are in `env` too, qualified with the block's name.
+        let hidden = unexported |> List.map (fun (_, _, pattern) -> pattern.Name) |> Set.ofList
         let imported =
             env.Names
             |> Map.toList
+            |> List.filter (fun (name, _) -> not (hidden.Contains name))
             |> List.choose (fun (name, scheme) ->
                 PatternSyntax.shapeOf name |> Option.map (fun shape -> { Name = name; Shape = shape; Origin = Imported scheme.Symbol }))
         let byTag =
-            ownPatterns items @ imported
+            own @ imported
             |> List.collect (fun pattern -> pattern.Shape.Tags |> List.map (fun tag -> tag, pattern))
             |> List.groupBy fst
             |> List.map (fun (tag, patterns) -> tag, patterns |> List.map snd)
@@ -78,7 +95,12 @@ module internal CustomPatterns =
             ambiguousImports
             |> Map.filter (fun name _ -> (PatternSyntax.shapeOf name).IsSome)
             |> Map.map (fun _ (_, sources) -> sources)
-          Locals = localPatterns items }
+          // A block's own patterns come before those of the blocks of functions within it.
+          Locals = (unexported |> List.map (fun (_, blockSpan, pattern) -> { Region = blockSpan; Pattern = pattern })) @ localPatterns items
+          Unexported =
+            unexported
+            |> List.collect (fun (block, _, pattern) -> pattern.Shape.Tags |> List.map (fun tag -> tag, (block, pattern)))
+            |> Map.ofList }
 
     /// `scope` as it is at `span`: with the patterns of the blocks `span` is written in from their declarations on, which
     /// come before the others that return their tags, as a local def hides another of its name, the innermost and
@@ -131,6 +153,16 @@ module internal CustomPatterns =
                $"No pattern in scope returns `#{tag}`, and a capitalised tag is a custom pattern's: write an ordinary tag in lower case, as `#{lowered}`"
            |> Diagnostics.about $"#{tag}") with
             Fixes = [ { Title = $"Write `#{lowered}`"; Edits = [ { Span = firstLetter span; NewText = string lowered[0] } ] } ] }
+
+    /// The tag `tag`, written at `span`, outside the `module name =` block `block`, which declares `pattern`, the
+    /// pattern that returns it, and doesn't export it.
+    let private unexportedPattern (tag: Identifier) (span: SourceSpan) (block: ModuleName) (pattern: InScope) =
+        { (Diagnostics.at
+               DiagnosticCodes.UnknownPattern
+               span
+               $"`#{tag}` is a pattern of module block '{block}', which doesn't export it: write `export pattern` there to use it here"
+           |> Diagnostics.about $"#{tag}") with
+            Related = [ match pattern.Origin with Own declared -> declared, "declared here" | Imported _ -> () ] }
 
     let private ambiguousPattern (tag: Identifier) (span: SourceSpan) (sources: string list) =
         Diagnostics.at
@@ -198,7 +230,10 @@ module internal CustomPatterns =
             |> List.choose (fun (tag, span) ->
                 match resolve (at scope span) tag with
                 | Found _ -> None
-                | NoPattern -> Some (unknownPattern tag span)
+                | NoPattern ->
+                    match scope.Unexported |> Map.tryFind tag with
+                    | Some (block, pattern) -> Some (unexportedPattern tag span block pattern)
+                    | None -> Some (unknownPattern tag span)
                 | Ambiguous sources -> Some (ambiguousPattern tag span sources))
         clashingDeclarations items @ atUses
 

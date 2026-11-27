@@ -293,3 +293,48 @@ def f = {{ x: int ->
 """
     let result = Compiler.compile (source.ReplaceLineEndings "\n")
     Assert.Empty(result.Diagnostics |> List.filter Diagnostics.isError)
+
+/// A module block that declares a pattern, `export pattern` if `exported`, and a use of its `#Pos` outside the block.
+let private blockPatternUsedOutside (exported: bool) =
+    $"""
+module shapes =
+  {(if exported then "export " else "")}pattern int -> #Neg | #Zero | #Pos = {{ n -> if n < 0 then #Neg else if n == 0 then #Zero else #Pos }}
+
+import shapes
+
+def described = match 5
+  | #Pos -> "positive"
+  | _ -> "other"
+"""
+        .ReplaceLineEndings "\n"
+
+[<Fact>]
+let ``A module block's unexported pattern used outside the block is an error at its tag, naming the block`` () =
+    let source = blockPatternUsedOutside false
+    let result = Compiler.compile source
+    let unknown = Assert.Single(result.Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = DiagnosticCodes.UnknownPattern.Code))
+    Assert.Equal("#Pos", textAt source (spanOf unknown))
+    Assert.Equal("`#Pos` is a pattern of module block 'shapes', which doesn't export it: write `export pattern` there to use it here", unknown.Message)
+    Assert.Equal<string list>([ "int -> #Neg | #Zero | #Pos" ], unknown.Related |> List.map (fst >> textAt source))
+    Assert.DoesNotContain(DiagnosticCodes.NotExported.Code, codesOf result)
+
+[<Fact>]
+let ``A module block's exported pattern is in scope outside the block`` () =
+    let result = Compiler.compile (blockPatternUsedOutside true)
+    Assert.Empty(result.Diagnostics |> List.filter Diagnostics.isError)
+
+[<Fact>]
+let ``A module block's unexported pattern is in scope within the block`` () =
+    let source =
+        """
+module shapes =
+  pattern int -> #Neg | #Pos = { n -> if n < 0 then #Neg else #Pos }
+
+  export def sign = { n: int ->
+    match n
+      | #Neg -> "negative"
+      | #Pos -> "positive"
+  }
+"""
+    let result = Compiler.compile (source.ReplaceLineEndings "\n")
+    Assert.Empty(result.Diagnostics |> List.filter Diagnostics.isError)

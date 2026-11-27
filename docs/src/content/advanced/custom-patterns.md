@@ -42,7 +42,9 @@ A local pattern hides another that returns the same tags, as a local def hides a
 # Sharing patterns
 
 `export pattern ...` shares a pattern from its module, or from its module block, and importing the module brings it
-into scope. A pattern in a function's block is local to it, so it can't be exported. Two patterns in scope that return
+into scope. A module block's pattern that isn't exported is in scope only within the block: its tag outside the block
+is an error that names the block ([`NYX0118`](../standard-tools/errors#nyx0118)). A pattern in a function's block is
+local to it, so it can't be exported. Two patterns in scope that return
 the same tag are an error, as two imports of the same name are, since a match couldn't tell which one to run
 ([`NYX0119`](../standard-tools/errors#nyx0119)).
 
