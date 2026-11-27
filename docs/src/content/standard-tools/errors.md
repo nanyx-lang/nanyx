@@ -1239,6 +1239,9 @@ def answer = #Some(42)  -- error NYX0118: No pattern in scope returns `#Some`
 To fix it, write the tag in lower case, `#some(42)`, which the editor offers to do; or declare or import the pattern
 that returns it.
 
+A pattern a module block declares without `export` is in scope only within the block. Its tag outside the block is this
+error, which names the block and says to write `export pattern` there.
+
 # NYX0119: Tag that more than one pattern returns
 
 Two [custom patterns](../advanced/custom-patterns) in scope return the same tag, so a match on the tag couldn't tell

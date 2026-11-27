@@ -514,7 +514,7 @@ module Compiler =
                         kept, [], components.Provided |> List.map (Hosts.unprovidedExport host)
                     | provided, _ -> desugared, provided, []
                 // A capitalised tag is a custom pattern's, and a match on one runs the pattern (see `CustomPatterns`).
-                let patternScope = CustomPatterns.scopeOf env ambiguousImports desugared
+                let patternScope = CustomPatterns.scopeOf env ambiguousImports state.ModuleBlocks desugared
                 let desugared, rewriteErrors = CustomPatterns.rewrite patternScope desugared
                 let patternErrors = CustomPatterns.check patternScope desugared @ rewriteErrors
                 // A parameter that takes a type is written as one of type `Type(a)` (see `TypeArguments`), and a
