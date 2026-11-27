@@ -266,6 +266,37 @@ module Unifier =
         | other, TyVar _ -> isTagUnion other
         | _ -> false
 
+    /// Whether `ty` holds `undefined` where a value of it gives one out: as itself, a type's argument, a tag's payload, a
+    /// record's field or a function's result, but not a function's input, nor a nominal type's argument, which is its
+    /// own. Given where a variable is expected, such a type is only a lower bound: `[]` of `list(undefined)` and `[1]`
+    /// given for one `list(a)` make it a `list(int)` (#3129).
+    let rec holdsBottom (ty: Ty) =
+        match ty with
+        | TyUnion [] -> true
+        | TyApply(_, args) -> List.exists holdsBottom args
+        | TyUnion items -> List.exists holdsBottom items
+        | TyTag(_, Some payload) -> holdsBottom payload
+        | TyRecord(fields, _) -> fields |> Map.exists (fun _ field -> holdsBottom field)
+        | TyFunc(_, output, _) -> holdsBottom output
+        | TyAlias(_, _, underlying) -> holdsBottom underlying
+        | _ -> false
+
+    /// Whether `l` and `r`, a nominal type's arguments, which are its own and so must be the same, differ by `undefined`:
+    /// one has it where the other has a type that is no variable, at any depth. `Equal` lets `undefined` agree with any
+    /// type, as a value that never comes fits anywhere, but an `MArray(undefined)` is no `MArray(int)`: it could be
+    /// written values of any type (#3129).
+    let rec private bottomClash (l: Ty) (r: Ty) =
+        let isVar ty = match ty with TyVar _ -> true | _ -> false
+        match unalias l, unalias r with
+        | l, r when isBottom l || isBottom r -> isBottom l <> isBottom r && not (isVar l || isVar r)
+        | TyApply(lName, lArgs), TyApply(rName, rArgs) when lName = rName && lArgs.Length = rArgs.Length -> List.exists2 bottomClash lArgs rArgs
+        | TyNominal(lId, lArgs, _, _), TyNominal(rId, rArgs, _, _) when lId = rId && lArgs.Length = rArgs.Length -> List.exists2 bottomClash lArgs rArgs
+        | TyTag(lName, Some lPayload), TyTag(rName, Some rPayload) when lName = rName -> bottomClash lPayload rPayload
+        | TyRecord(lFields, _), TyRecord(rFields, _) when keySet lFields = keySet rFields ->
+            lFields |> Map.exists (fun key field -> bottomClash field rFields.[key])
+        | TyFunc(lIn, lOut, _), TyFunc(rIn, rOut, _) -> bottomClash lIn rIn || bottomClash lOut rOut
+        | _ -> false
+
     let empty : Subst = Map.empty
 
     /// `ty` with each variable replaced by what `resolve` gives for it: a substitution applied (see `apply`).
@@ -1082,6 +1113,14 @@ module Unifier =
                         | _ when kind = Assignable && isPendingUnion l r ->
                             putOff <- (left, right, kind, origin) :: putOff
                             loop subst (rest @ [ (left, right, AssignableLater, origin) ])
+                        // A type that holds `undefined` given where a variable is expected is solved after the other
+                        // constraints, so that a type given for the variable that says what the `undefined` stands for
+                        // binds it first: `[1, 2] ++ e`, `e` a `list(undefined)`, is a `list(int)`, not a mismatch
+                        // (#3129). Given last, it is assignable to what the others made the variable, or else it binds
+                        // the variable itself.
+                        | _, TyVar _ when kind = Assignable && holdsBottom l ->
+                            putOff <- (left, right, kind, origin) :: putOff
+                            loop subst (rest @ [ (left, right, AssignableLater, origin) ])
                         | TyVar _, _
                         | _, TyVar _ ->
                             unifyEqual false origin l r rest
@@ -1204,6 +1243,9 @@ module Unifier =
                         // A nominal type's arguments are its own, not only what it is made from, so they are the same. The
                         // contexts a type generic in contexts carries are like a function type's: one with fewer fits where
                         // one with more is expected (see `FunctionContexts.carried`).
+                        | TyNominal(lNominal, lArgs, _, _), TyNominal(rNominal, rArgs, _, _) when
+                            lNominal = rNominal && lArgs.Length = rArgs.Length && List.exists2 bottomClash lArgs rArgs ->
+                            Error (mismatchMessage l r, origin, TypesDiffer)
                         | TyNominal(lNominal, lArgs, _, _), TyNominal(rNominal, rArgs, _, _) when lNominal = rNominal && lArgs.Length = rArgs.Length ->
                             let equalArguments lArgs rArgs = List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs
                             match l, r with

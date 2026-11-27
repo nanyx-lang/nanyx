@@ -230,13 +230,21 @@ let rec internal joinBranchTypes (rowVars: Set<int>) (state: InferState) (branch
                 // other tags would be made that tag, so `| [] -> #e | [node] -> node | _ -> #c(nodes)` would make
                 // `#c(...)` an `#e` (#2052).
                 let isNamed ty = match settled ty with TyAlias _ | TyNominal _ -> true | _ -> false
+                // A branch that holds `undefined` where a value of it gives one out, as `[]` of `list(undefined)`
+                // does, is only a lower bound: the whole is what the others say it stands for (#3129). So the anchor is
+                // a branch that holds none, and a branch that holds it is given where the anchor's type is expected,
+                // where `undefined` binds no variable (see `Unifier.bottomType`).
+                let holdsBottom ty = Unifier.holdsBottom (resolveSoFar state ty)
                 let anchorIndex =
                     match tagsOf head with
                     | Some _ -> branchTypes |> List.tryFindIndex isNamed |> Option.defaultValue 0
-                    | None -> 0
+                    | None -> branchTypes |> List.tryFindIndex (holdsBottom >> not) |> Option.defaultValue 0
                 let anchor = branchTypes.[anchorIndex]
                 let others = branchTypes |> List.removeAt anchorIndex
-                anchor, others |> List.fold (fun st ty -> addConstraint (settled anchor) (settled ty) st) state
+                let constrain st ty =
+                    if holdsBottom ty && not (holdsBottom anchor) then addAssignableConstraint (settled ty) (settled anchor) st
+                    else addConstraint (settled anchor) (settled ty) st
+                anchor, others |> List.fold constrain state
 
 /// The error for `expr`, an `if` whose `else` is left out (see `IfSyntax`), so that it gives `()` when its condition is
 /// false, where its then branch `thenExpr` gives a value of `thenTy`, which is known not to be `()`: the mismatch with
