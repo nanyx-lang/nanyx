@@ -34,3 +34,20 @@ let ``A program may define a name a library it depends on selects from one of it
     directory.Write "app/src/main.nyx" "module main\n\nimport acme.util/util as (twice)\n\ndef helper: int -> int = { n -> n + 1 }\n\n@entry\ndef main = { println(\"{twice(1)} {helper(1)}\") }\n"
     let outcome = nanyxIn (System.IO.Path.Combine(directory.Path, "app")) [ "run" ]
     Assert.Equal("20 2\n", outcome.StandardOutput)
+
+[<Fact>]
+let ``Two modules of a library that each select a within from a different module keep their own, beside the program's`` () =
+    use directory = new TempDirectory()
+    directory.Write "pair/acme.pair.nyxp" """(package = (name = "acme.pair", version = "0.1.0", sources = ["src/**/*.nyx"]))"""
+    directory.Write "pair/src/ones.nyx" "export module ones\n\nexport def within: int -> int = { n -> n + 1 }\n"
+    directory.Write "pair/src/tens.nyx" "export module tens\n\nexport def within: int -> int = { n -> n + 10 }\n"
+    directory.Write "pair/src/left.nyx" "export module left\n\nimport ones as (within)\n\nexport def step: int -> int = { n -> within(n) }\n"
+    directory.Write "pair/src/right.nyx" "export module right\n\nimport tens as (within)\n\nexport def leap: int -> int = { n -> within(n) }\n"
+    directory.Write
+        "app/app.nyxp"
+        $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), dependencies = [(package = "acme.pair", path = "../pair")], {consoleHostEntry})"""
+    directory.Write
+        "app/src/main.nyx"
+        "module main\n\nimport acme.pair/left as (step)\nimport acme.pair/right as (leap)\n\ndef within: int -> int = { n -> n * 100 }\n\n@entry\ndef main = { println(\"{step(1)} {leap(1)} {within(1)}\") }\n"
+    let outcome = nanyxIn (System.IO.Path.Combine(directory.Path, "app")) [ "run" ]
+    Assert.Equal("2 11 100\n", outcome.StandardOutput)
