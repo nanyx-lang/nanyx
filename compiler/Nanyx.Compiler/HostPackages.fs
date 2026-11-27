@@ -76,10 +76,10 @@ module HostPackages =
              let declared =
                  if File.Exists path then
                      match DataValue.read path (File.ReadAllText path) with
-                     | Ok manifest -> ofManifest Hosts.consolePackage directory manifest
-                     | Error _ -> None
+                     | Ok manifest -> (match ofManifest Hosts.consolePackage directory manifest with Some h -> Ok h | None -> Error $"ofManifest None: %A{manifest}")
+                     | Error e -> Error $"read error: %A{e} TEXT: {File.ReadAllText path}"
                  else
-                     None
+                     Error "missing"
              match declared with
-             | Some host -> host
-             | None -> raise (InvalidDataException $"The compiler is not installed correctly: its console host, '{path}', can't be read"))
+             | Ok host -> host
+             | Error why -> raise (InvalidDataException $"The compiler is not installed correctly: its console host, '{path}', can't be read: {why}"))
