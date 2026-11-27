@@ -87,7 +87,10 @@ The linter's root module exports `lint`:
 ```nanyx fragment
 export module acme.lint
 
-import nanyx.analysis/analysis as (Analysis, Module, Report)
+import (
+  nanyx.analysis/analysis as (Analysis, Report)
+  nanyx.analysis/syntax as (Module)
+)
 
 export def lint: [Analysis] Module -> list(Report) = { m ->
   ...
@@ -96,49 +99,33 @@ export def lint: [Analysis] Module -> list(Report) = { m ->
 
 ## What a linter sees
 
-The module is given as data, its syntax tree as written: before desugaring, with its attributes and doc comments, so
-that a rule reports what the user wrote and a fix edits it. Each node is a record of its kind, its `span`, and its
-`id`, by which the `Analysis` context answers questions about it:
+The module is given as data, its syntax tree as written: before desugaring, with its attributes, so that a rule reports
+what the user wrote and a fix edits it. The tree's types are `nanyx.analysis`'s [`syntax`](../stdlib/syntax) module.
+Each node is a record of its `id`, its `span` and its `kind`, by whose `id` the `Analysis` context answers questions
+about it:
 
 ```nanyx fragment
-export type Span = (start: int, end: int, line: int, column: int)
-
 export type Expr = (id: NodeId, span: Span, kind: ExprKind)
 
 export type ExprKind =
   | #literal(Literal)
   | #name(string)
-  | #call(Expr, list(Expr))
-  | #lambda(list(Pattern), Expr)
+  | #call(name: string, nameSpan: #some(Span) | #none, arguments: list(Expr))
   | #block(list(Statement))
-  | #match(list(Expr), list(MatchArm))
+  | #match(values: list(Expr), arms: list(MatchArm))
   | ...
 ```
 
 The node kinds mirror the parser's (`Ast.fs`): `Module`, `TopLevelItem`, `Statement`, `Expr`, `Pattern`, `TypeExpr`,
-`ImportItem`, and the records they hold. A rule pattern-matches on them, as the F# rules match on `ExpressionKind`
-today. Spans are offsets into the module's text, with its line endings made `\n`, as the compiler's are.
+`Import`, and the records they hold, which name each other, as types can since
+[#3186](https://github.com/nanyx-lang/nanyx/issues/3186). A rule pattern-matches on them, as the F# rules match on
+`ExpressionKind` today. Spans are offsets into the module's text, with its line endings made `\n`, as the compiler's
+are. Constructs the compiler desugars before checking, such as a `for` loop, are the calls they are desugared to, for
+now; giving them nodes of their own, when the rules that read them move, is open.
 
-What type checking found out is asked of the context, by node or by symbol:
-
-```nanyx fragment
-export context Analysis = (
-  source: () -> string
-  typeOf: NodeId -> #some(Ty) | #unknown
-  calleeTypeOf: NodeId -> #some(Ty) | #unknown
-  symbolOf: NodeId -> #some(Symbol) | #none
-  importOf: NodeId -> #some(Symbol) | #none
-  symbol: SymbolId -> Symbol
-  typeOfSymbol: SymbolId -> #some(Ty) | #unknown
-  contextsOf: SymbolId -> list(Ty)
-  referencesTo: SymbolId -> list(NodeId)
-  lowered: NodeId -> list(NodeId)
-  describe: Ty -> string
-  coveringArms: NodeId -> list(NodeId)
-  redundantTypeName: NodeId -> bool
-  docComments: () -> list(DocComment)
-)
-```
+What type checking found out is asked of the context, by node or by symbol: `nanyx.analysis`'s
+[`analysis`](../stdlib/analysis) module, whose page lists its members and the types they answer with, `Ty`, `Symbol` and
+`DocComment`.
 
 - `typeOf` is the type of an expression; `calleeTypeOf` the type of the function a call or pipe calls there, with the
   contexts it requires.
@@ -167,8 +154,8 @@ narrows #107's direction, which had the tree behind queries too.
 Some rules lean on what the compiler works out for its own errors. Each of these is a query on `Analysis`, which every
 linter gets, rather than written again in Nanyx, where it would drift from the compiler's (decided by the maintainer):
 
-- `coveringArms: NodeId -> list(NodeId)`, the arms before a match arm that between them match every value it does, from
-  the pattern space that exhaustiveness checking uses (`PatternSpace.fs`), for `unreachableArms`;
+- `coveringArms: (NodeId, int) -> list(int)`, of a `match`, the arms before an arm that between them match every value
+  it does, from the pattern space that exhaustiveness checking uses (`PatternSpace.fs`), for `unreachableArms`;
 - `redundantTypeName: NodeId -> bool`, whether a pipe's target is written with a type's name that the name without it
   reaches as well (`InferState.RedundantTypeNames`), for `redundantTypeNames`;
 - `docComments: () -> list(DocComment)`, each doc comment with what it documents, as the parser attaches them, for
@@ -207,10 +194,15 @@ diagnostic with the rule's code, `<name>/<rule>`, and the severity the project c
 - **Built once.** The compiler builds a lint build of the linter, its `lint` passed to the linter host's `run` as a
   test build passes its tests, compiles it to WebAssembly, and keeps it in the package cache by the linter's SHA-256 and
   the compiler's version. A shipped linter is built when it is seeded.
-- **Run per module.** For each module that type-checked, the host starts an instance, writes the module's tree into
-  its memory (an encoding of its own, which the host decodes into `nanyx.analysis`'s types), answers the `Analysis`
-  queries as imports from the compiler's side tables, and reads the reports back. One instance is kept per linter and
-  reused, so a keystroke in the editor costs an encode and a call, not a compile.
+- **Run per module.** For each module that type-checked, the host starts an instance of the lint build, as the test
+  runner starts one per test, answers the `Analysis` queries as imports from the compiler's side tables, and reads the
+  reports back. The compiled module is kept per linter, so a keystroke in the editor costs an instance and a call, not a
+  compile.
+- **Values cross as data.** The tree, each query's answer, and the reports cross the boundary as one small binary
+  format of data: ints, floats, text, booleans, lists, records of named fields and tags with a payload. The host turns
+  data into `nanyx.analysis`'s types, and its reports into data, through their type descriptions
+  ([Inspecting a type](../tour/functions#inspecting-a-type)), matching fields and tags by name. So the compiler's
+  encoder and the package's types agree on names alone, and nothing hand-writes a decoder for each kind of node.
 - **The compiler keeps the host.** `Linters.fs` becomes the host: configuration, severities, `@allow`, the reports a
   linter gets wrong, and `linterFailed`. A linter that traps, runs out of fuel, or reports a rule it doesn't declare is
   one `<name>/linterFailed` warning, as today, and the module still compiles.
