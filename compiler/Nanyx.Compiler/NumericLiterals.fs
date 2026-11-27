@@ -5,17 +5,44 @@ open NyxCompiler.InferState
 
 /// Number literals of the type the code around them expects (see "Sized numbers" in the docs' work in progress):
 /// `def small: U8 = 200`. A literal's type is a variable of its own (`typeOf`), which the code around it settles. One
-/// that nothing settles is `int`, or `float` with a decimal point, once the def it is in is generalised (`settle`).
+/// that nothing settles is `int`, or `float` with a decimal point, once the def it is in is generalised (`settle`); a
+/// number with a unit is `int` when it is a whole number of its dimension's default storage unit that fits one.
 /// Once every type is known, each literal is checked (`check`): an integer literal must be of an integer type, and fit
 /// it, and a decimal one of a floating-point type.
 module internal NumericLiterals =
-    /// The type a literal is when nothing settles it.
-    let private defaultType (literal: Literal) =
+    /// How many default storage units of its dimension the number with a unit `number unitName` is, exactly.
+    let inStorageUnits (state: InferState) (number: WrittenNumber) (unitName: Identifier) : Rational =
+        let scale = state.Units |> Map.tryFind unitName |> Option.map _.Scale |> Option.defaultValue Rational.one
+        Rational.multiply (Rational.ofWritten number) scale
+
+    /// The type a literal is when nothing settles it. A number with a unit is stored as an `int` when it is a whole
+    /// number of its dimension's default storage unit that fits one, however it is written: `0.5s` and `500ms` are both
+    /// 500000000 `ns`. One that is a fraction of that unit, `0.25ns`, or too many of it for an `int`, is a `float`.
+    let private defaultType (state: InferState) (literal: Literal) =
         match literal with
         | FloatLit _ -> TyPrimitive "float"
-        // A number with a unit is stored as the number it is written as: `0.5s` in a `float`, `500ms` in an `int`.
-        | UnitLit(number, _) when number.Decimal -> TyPrimitive "float"
+        | UnitLit(number, unitName) ->
+            let value = inStorageUnits state number unitName
+            if Rational.isWhole value && value.Numerator >= bigint System.Int64.MinValue && value.Numerator <= bigint System.Int64.MaxValue then
+                TyPrimitive "int"
+            else
+                TyPrimitive "float"
         | _ -> TyPrimitive "int"
+
+    /// The type each of `literals` is when nothing settles it. A number with a unit of the same type (a variable `resolve`
+    /// gives) as one that is a `float` is a `float` too, so that `2.0 * 1.5s` scales a `Time(float)` and `[0.5s, 0.25ns]`
+    /// holds two. An integer literal with no unit stays an `int`, as `1` is never a `float`.
+    let private sharedDefaults (state: InferState) (resolve: Ty -> Ty) (literals: NumericLiteral list) : NumericLiteral -> Ty =
+        let varOf (literal: NumericLiteral) = match resolve literal.Type with TyVar v -> Some v.Id | _ -> None
+        let floatVars =
+            literals
+            |> List.filter (fun literal -> defaultType state literal.Value = TyPrimitive "float")
+            |> List.choose varOf
+            |> Set.ofList
+        fun literal ->
+            match literal.Value, varOf literal with
+            | UnitLit _, Some id when floatVars.Contains id -> TyPrimitive "float"
+            | value, _ -> defaultType state value
 
     /// The type of `literal`, written at `span` (as the expression `node`, unless it is a pattern), and `state` with it
     /// recorded: a variable of its own for a number, and the literal's type for any other. For a number with a unit, it
@@ -133,13 +160,14 @@ module internal NumericLiterals =
             let written = if operands then writtenVariables subst state else Map.empty
             let settling, unsettled = state.UnsettledLiterals |> List.partition (fun literal -> isFor literal && (openVar literal.Type).IsNone)
             keepUnsettled operands (unsettled |> List.filter isFor |> List.choose (_.Type >> openVar) |> List.distinctBy _.Id) unsettled state.Constraints
+            let defaultOf = sharedDefaults state (Unifier.applySolved subst) settling
             settling
             |> List.fold (fun current literal ->
                 match Unifier.applySolved subst literal.Type, literal.Operator with
                 | TyVar v, Some (op, node) when literal.Requires.IsSome && written.ContainsKey v.Id ->
                     let error = undeclared current literal.At op literal.Requires.Value { v with Name = Some written.[v.Id] }
                     { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
-                | TyVar _, _ -> addConstraint literal.Type (defaultType literal.Value) current
+                | TyVar _, _ -> addConstraint literal.Type (defaultOf literal) current
                 | ty, Some (op, node) when isKnownNonNumber ty ->
                     let error = Diagnostics.at DiagnosticCodes.TypeMismatch literal.At (notANumber op ty)
                     { current with FailedExprs = (node, [ error ]) :: current.FailedExprs }
@@ -212,7 +240,8 @@ module internal NumericLiterals =
 
     /// `state` with each of `literals` made its default type.
     let settleLiterals (literals: NumericLiteral list) (state: InferState) : InferState =
-        literals |> List.fold (fun current literal -> addConstraint literal.Type (defaultType literal.Value) current) state
+        let defaultOf = sharedDefaults state (resolveSoFar state) literals
+        literals |> List.fold (fun current literal -> addConstraint literal.Type (defaultOf literal) current) state
 
     /// The literals with no unit not yet settled that are where a measured value is, `isLong(0)` for a `Time`, each with
     /// the measured type's storage, still a variable, that is in `tys`. `check` reports such a literal, and makes its
@@ -236,7 +265,7 @@ module internal NumericLiterals =
         | [], [] -> None
         | settling, measured ->
             let state = settleLiterals settling state
-            Some (measured |> List.fold (fun current (literal, storage) -> addConstraint (TyVar storage) (defaultType literal.Value) current) state)
+            Some (measured |> List.fold (fun current (literal, storage) -> addConstraint (TyVar storage) (defaultType current literal.Value) current) state)
 
     /// Whether a value of the type `ty`, as far as `state` knows it, can be of the type `target`: `ty` is `target`, or
     /// it is still a literal's own variable and `target` is a number of the literal's kind.
@@ -304,11 +333,6 @@ module internal NumericLiterals =
         Diagnostics.at DiagnosticCodes.TypeMismatch span
             $"'{written}' has no unit, so it is no '{Dimension.text dimension}': write it with a unit of '{Dimension.text dimension}', or `zero` for nothing of it"
 
-    /// How many default storage units of its dimension the number with a unit `number unitName` is, exactly.
-    let inStorageUnits (state: InferState) (number: WrittenNumber) (unitName: Identifier) : Rational =
-        let scale = state.Units |> Map.tryFind unitName |> Option.map _.Scale |> Option.defaultValue Rational.one
-        Rational.multiply (Rational.ofWritten number) scale
-
     /// What the number with a unit `number unitName`, at `span`, stored as `ty`, is at run time, the plain number of
     /// default storage units it is, or why it can't be stored so: a fraction of a default storage unit is no integer,
     /// and one outside the storage's range doesn't fit it.
@@ -371,11 +395,11 @@ module internal NumericLiterals =
                 | Ok _, None -> current, errors
                 | Error error, _ -> report literal error (current, errors)
             | UnitLit _, resolved, _ when Unifier.isError resolved -> current, errors
-            | UnitLit _, _, _ -> addConstraintAt literal.At literal.Type (defaultType literal.Value) current, errors
+            | UnitLit _, _, _ -> addConstraintAt literal.At literal.Type (defaultType current literal.Value) current, errors
             // Its storage is the literal's kind, so that what the measured value requires of it is found, and not reported too.
             | (IntLit _ | FloatLit _), TyMeasure(dimension, storage), _ ->
-                report literal (withoutUnit literal.At literal.Value dimension) (addConstraintAt literal.At storage (defaultType literal.Value) current, errors)
+                report literal (withoutUnit literal.At literal.Value dimension) (addConstraintAt literal.At storage (defaultType current literal.Value) current, errors)
             | IntLit value, TyPrimitive ("float" | "F32"), _ -> report literal (integerAsFloat literal.At value ty) (current, errors)
-            | _ when not (ofItsKind literal ty) -> addConstraintAt literal.At literal.Type (defaultType literal.Value) current, errors
+            | _ when not (ofItsKind literal ty) -> addConstraintAt literal.At literal.Type (defaultType current literal.Value) current, errors
             | _, _, None -> current, errors
             | _, _, Some message -> report literal (Diagnostics.at DiagnosticCodes.LiteralOutOfRange literal.At message) (current, errors)) (settled, [])
