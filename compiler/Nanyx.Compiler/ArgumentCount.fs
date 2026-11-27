@@ -21,10 +21,14 @@ module internal ArgumentCount =
 
     /// How many parameters a function whose input is `input` takes, where that is plain: as many as a tuple input has
     /// items, or one, for an input that is one value (see `isOneValue`). None for any other input, such as a type
-    /// variable, a record with named fields or `()`.
+    /// variable, a record with named fields or `()`, and for a function that takes a type argument, which a call that
+    /// leaves out is reported for that (see `TypeArguments`).
     let parametersOf (input: Ty) =
+        let isTypeParameter (ty: Ty) = match Unifier.unalias ty with TypeValues.TypeValueType _ -> true | _ -> false
         match Unifier.unalias input with
-        | TyRecord(fields, _) when fields.Count >= 2 && WellKnownContexts.isTuple fields -> Some fields.Count
+        | TyRecord(fields, _) when fields.Count >= 2 && WellKnownContexts.isTuple fields ->
+            if fields |> Map.exists (fun _ ty -> isTypeParameter ty) then None else Some fields.Count
+        | ty when isTypeParameter ty -> None
         | ty when isOneValue ty -> Some 1
         | _ -> None
 
@@ -57,6 +61,8 @@ module internal ArgumentCount =
             let given = if piped then $"this pipe gives it {args.Length}, counting the piped value" else $"this call gives {args.Length}"
             Some (Diagnostics.at DiagnosticCodes.ArgumentCount span $"'{name}' takes {arguments taken}, but {given}" |> Diagnostics.about name)
         match Unifier.unalias (resolveSoFar state calleeTy) with
+        // A function the compiler made, as a custom pattern's, is called as the syntax it stands for says.
+        | _ when MadeUpNames.isMadeUp name -> None
         | TyFunc(input, _, _) ->
             match parametersOf (resolveSoFar state input), args with
             | Some taken, [ single ] when taken >= 2 ->
