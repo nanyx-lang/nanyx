@@ -7,10 +7,12 @@ module internal Transpiler.Wasm.CoreIrReuseFields
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrRewrite
 
-/// The size of the block of a record of type `ty`, if it is a record with fields.
+/// The size of the block of a record of type `ty`, if it is a record with fields that a `memory` block's region does
+/// not track: a tracked object is on its region's list until it is freed (see `CoreIrRegions`), and is never reused.
 let private recordBlock (ty: IrType) =
     match IrType.unfold ty with
-    | IrRecord fields when not fields.IsEmpty -> Some(CoreIrLayout.headerSize ty + CoreIrLayout.recordSize fields)
+    | IrRecord fields when not fields.IsEmpty && not (fields |> List.exists (fun (name, _) -> name = CoreIrRegions.dropField)) ->
+        Some(CoreIrLayout.headerSize ty + CoreIrLayout.recordSize fields)
     | _ -> None
 
 /// Whether `e` uses `record` only to read its fields, and makes a record whose block is the size `size`.
