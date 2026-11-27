@@ -42,6 +42,11 @@ type internal CheckedModule =
       Errors: Diagnostic list
       /// Those of `Errors` that are not compiled to a trap in `Own`, so a debug build cannot run the module.
       Undeferred: Diagnostic list
+      /// The errors of the modules it imports, directly or through others, each through the import here that brings
+      /// it in, and each once: they are all compiled to traps in their modules, which are imported as clean ones are,
+      /// so a debug build runs up to them. A module with an error that can't be deferred fails its importers instead
+      /// (#2967).
+      ImportedErrors: Diagnostic list
       /// The warnings found checking the module itself, such as a type parameter written the old way (NYX0282). A
       /// module with warnings is run and imported as one without; only the module compiled reports them.
       Warnings: Diagnostic list

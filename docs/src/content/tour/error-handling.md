@@ -249,7 +249,9 @@ The error stays where it was found, so the program fails no sooner than it has t
 - **A definition whose type is wrong**, such as one whose body doesn't fit its annotation, is reported once. Calling it stops the program with its error, and the functions that call it are not errors themselves.
 - **`???`**, the [placeholder for unwritten code](../getting-started/basics#unimplemented-code), stops the program when it is reached.
 
-Some errors can't be deferred, and with any of them nothing runs: a syntax error, an error in a type definition, an import that can't be found or has errors of its own, an error in a `::` directive, and a [linter](../advanced/linters) rule configured as an error.
+An error in a module the program imports is deferred too. The module's other definitions work as usual, and the program stops when it reaches the error, which names the file and line in that module. It is reported once, however many modules import the one that has it.
+
+Some errors can't be deferred, and with any of them nothing runs: a syntax error, an error in a type definition, an import that can't be found, an imported module with one of these errors, an error in a `::` directive, and a [linter](../advanced/linters) rule configured as an error.
 
 ## Debug and release builds
 

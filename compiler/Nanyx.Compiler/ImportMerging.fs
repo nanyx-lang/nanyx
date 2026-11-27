@@ -14,6 +14,10 @@ module internal ImportMerging =
         { Env: TypeEnv
           State: NyxCompiler.Infer.InferState
           Errors: Diagnostic list
+          /// The errors of the modules imported that are each compiled to a trap where it was found (see
+          /// `CheckedModule.ImportedErrors`), through the import that brings them in: such a module is imported, and
+          /// a debug build runs up to the trap (#2967).
+          DeferredImportErrors: Diagnostic list
           Inlined: TopLevelItem list
           /// Kept apart and inlined last, so that where an explicit import defines the same name, its definition is kept.
           PreludeInlined: TopLevelItem list
