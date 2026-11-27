@@ -193,7 +193,7 @@ Seed 4812: run them again with the same random numbers with --seed 4812
 A test passes if it finishes, and fails if it crashes, as an `assert` that doesn't hold does, or runs for longer than
 its time limit. A failure shows why, with the stack, and what the test printed, which a test that passes doesn't show.
 A test's `Random` is seeded, so a test that draws random numbers draws the same ones when it is run with the same seed.
-A test may require only `Console` and `Random`, which the test host provides (`NYX0312`), but one marked
+A test may require only `Async`, `Console` and `Random`, which the test host provides (`NYX0312`), but one marked
 [`@test(#io)`](../tour/attributes#test), which runs with the console host's real `Console`, `Env` and `FileSystem`,
 in the package's directory or the script's, with the environment's variables; the report marks it `(io)`. One marked
 [`@test(#crashes)`](../tour/attributes#test) passes only if it crashes, and the report marks it `(crashes)`; if it

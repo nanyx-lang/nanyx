@@ -40,6 +40,13 @@ let ``A test may require Console and Random, which the test host provides`` () =
     Assert.Equal(1, typed.Tests.Length)
 
 [<Fact>]
+let ``A test may require Async, which the test host provides every test`` () =
+    let typed =
+        compileClean
+            "def doubled: [Async] int -> int = { n ->\n  def task = start! n * 2\n  await(task)\n}\n\n@test\ndef `doubles in a task` = {\n  assert(doubled(21) == 42)\n}\n"
+    Assert.Equal<(string * bool) list>([ "doubles in a task", false ], typed.Tests |> List.map (fun test -> test.Name, test.Io))
+
+[<Fact>]
 let ``@test takes no argument but #io, #crashes, #crashes with a text, or #io with one of them`` () =
     for argument in [ "#fast"; "#crashes(1)"; "(#io, #io)"; "(#crashes, #crashes(\"x\"))"; "#io(\"x\")" ] do
         let code, message, place = onlyDiagnostic $"@test({argument})\ndef `adds` = {{\n  assert(1 + 1 == 2)\n}}\n"

@@ -205,3 +205,11 @@ let ``A test that reaches a deferred error in a module it imports is reported wi
         output
     )
     Assert.Equal(1, (output.Split place).Length - 1)
+
+[<Fact>]
+let ``A test that isn't #io has the test host's Async, and runs code that starts and awaits tasks`` () =
+    let tasks =
+        "export module tasks\n\nexport def doubled: [Async] int -> int = { n ->\n  def task = start! n * 2\n  await(task)\n}\n\n@test\ndef `doubles in a task` = {\n  assert(doubled(21) == 42)\n}\n"
+    let outcome = testing [] [ "src/tasks.nyx", tasks ]
+    Assert.Equal("Running 1 test in tested\n\nPASS tasks.`doubles in a task`\n\n1 passed\n", outcome.StandardOutput.ReplaceLineEndings "\n")
+    Assert.Equal(0, outcome.ExitCode)
