@@ -239,6 +239,7 @@ pattern int, int -> int -> #Between | _ = { low, high ->
 def size = { (n: int), (limit: int) ->
   def half = limit // 2
   def bigFrom = half + 1
+
   match n
     | #Between(0, half) -> "small"
     | #Between(bigFrom, limit) -> "big"
