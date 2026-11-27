@@ -25,9 +25,10 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 2, 3);
 
-        // With no message on the line, the innermost def comes first, and no scope has an Expression or This call.
-        Assert.Equal(["function", "module"], view.Scopes.Select(scope => scope.Kind));
-        Assert.DoesNotContain(view.Scopes.SelectMany(scope => scope.Sections), section => section.Id is "expression" or "call");
+        // With no message on the line, the expression at the cursor comes first, then the innermost def.
+        Assert.Equal(["expression", "function", "module"], view.Scopes.Select(scope => scope.Kind));
+        Assert.Equal("shout: string", Assert.Single(Section(view, "expression", "expression")).Text);
+        Assert.DoesNotContain(view.Scopes.SelectMany(scope => scope.Sections), section => section.Id is "call");
         Assert.Equal(
             [("shout: string", "local", new Range(1, 6, 1, 11)), ("name: string", "parameter", new Range(0, 32, 0, 36))],
             Section(view, "function", "names").Select(item => (item.Text, item.Detail, item.Location?.Range)));
@@ -117,14 +118,14 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 1, 3);
 
-        Assert.Equal(["messages", "function", "module"], view.Scopes.Select(scope => scope.Kind));
+        Assert.Equal(["messages", "expression", "function", "module"], view.Scopes.Select(scope => scope.Kind));
         var message = Assert.Single(view.Scopes[0].Messages!);
         Assert.Equal(("error", "NYX0201", "Type mismatch"), (message.Severity, message.Code, message.Headline));
         Assert.Equal(["'float' vs 'int'"], message.Notes);
         Assert.Equal(new Uri("https://nanyx.dev/docs/standard-tools/errors#nyx0201"), message.Reference);
         Assert.Equal(new Range(1, 2, 1, 5), message.Location.Range);
-        // The messages don't push the def's own scopes towards being collapsed.
-        Assert.False(view.Scopes[1].Collapsed);
+        // The messages and the expression don't push the def's own scopes towards being collapsed.
+        Assert.False(view.Scopes[2].Collapsed);
     }
 
     [Fact]
@@ -214,6 +215,81 @@ public sealed class InfoViewTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task Info_view_shows_the_selected_expression_with_its_type_at_the_top()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Selection");
+
+        Open(uri, "def f = { x -> x + 1 }\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 0, 20, selection: new Range(0, 15, 0, 20));
+
+        Assert.Equal(("expression", "Selection"), (view.Scopes[0].Kind, view.Scopes[0].Heading));
+        var selected = Assert.Single(Section(view, "expression", "expression"));
+        Assert.Equal(("x + 1: int", new Range(0, 15, 0, 20)), (selected.Text, selected.Location?.Range));
+        // The spaces around a selection are left out.
+        var spaced = await InfoViewAt(uri, 0, 21, selection: new Range(0, 14, 0, 21));
+        Assert.Equal("x + 1: int", Assert.Single(Section(spaced, "expression", "expression")).Text);
+    }
+
+    [Fact]
+    public async Task Info_view_shows_no_expression_for_a_selection_that_is_not_one()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Part");
+
+        Open(uri, "def f = { x -> x + 1 }\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 0, 18, selection: new Range(0, 15, 0, 18));
+
+        Assert.Equal(["function", "module"], view.Scopes.Select(scope => scope.Kind));
+    }
+
+    [Fact]
+    public async Task Info_view_shows_the_expression_at_the_cursor_with_no_selection()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-Cursor");
+
+        Open(uri, "def f = { x -> x + 1 }\n");
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        var view = await InfoViewAt(uri, 0, 15, selection: new Range(0, 15, 0, 15));
+
+        Assert.Equal(("expression", "At the cursor"), (view.Scopes[0].Kind, view.Scopes[0].Heading));
+        var atCursor = Assert.Single(Section(view, "expression", "expression"));
+        Assert.Equal(("x: int", new Range(0, 15, 0, 16)), (atCursor.Text, atCursor.Location?.Range));
+        // The parameter it names is still shown where it is declared.
+        Assert.Contains(Section(view, "function", "names"), item => item.Text == "x: int");
+    }
+
+    [Fact]
+    public async Task Info_view_shows_a_defs_signature_once_with_the_cursor_on_its_name()
+    {
+        var uri = DocumentUri.Parse("untitled:InfoView-DefName");
+
+        Open(uri, """
+            def twice: int -> int = { n -> n * 2 }
+            def f = { x -> x + 1 }
+
+            """.ReplaceLineEndings("\n"));
+        Assert.Empty((await NextPublished(uri)).Diagnostics!);
+
+        foreach (var (line, character, signature, detail) in new[] { (0, 5, "twice: int -> int", "declared"), (1, 4, "f: int -> int", "inferred") })
+        {
+            var view = await InfoViewAt(uri, line, character);
+
+            // The def's scope shows it, with its context; the expression at the cursor would only repeat it.
+            Assert.Equal(["function", "module"], view.Scopes.Select(scope => scope.Kind));
+            var shown = view.Scopes
+                .Where(scope => scope.Kind != "module")
+                .SelectMany(scope => scope.Sections)
+                .SelectMany(section => section.Items)
+                .Where(item => item.Text == signature);
+            Assert.Equal(detail, Assert.Single(shown).Detail);
+        }
+    }
+
+    [Fact]
     public async Task Info_view_shows_only_the_cursor_and_the_module_at_the_top_level()
     {
         var uri = DocumentUri.Parse("untitled:InfoView-14");
@@ -223,9 +299,10 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         var view = await InfoViewAt(uri, 1, 1);
 
-        Assert.Equal([("module", "this module")], view.Scopes.Select(scope => (scope.Kind, scope.Heading)));
+        Assert.Equal([("expression", "At the cursor"), ("module", "this module")], view.Scopes.Select(scope => (scope.Kind, scope.Heading)));
+        Assert.Equal("one: int", Assert.Single(Section(view, "expression", "expression")).Text);
         // The module's contexts are the ones the runtime supplies, from the host's prelude.
-        Assert.Equal(["names", "contexts"], view.Scopes[0].Sections.Select(section => section.Id));
+        Assert.Equal(["names", "contexts"], view.Scopes[1].Sections.Select(section => section.Id));
     }
 
     [Fact]
@@ -253,22 +330,22 @@ public sealed class InfoViewTests : LanguageServerTestBase
 
         Assert.Equal(
             [
-                ("lambda", "{ x -> … } (line 5)", false), ("function", "def report", false), ("function", "def run", false),
-                ("module", "this module", true)
+                ("expression", "At the cursor", false), ("lambda", "{ x -> … } (line 5)", false), ("function", "def report", false),
+                ("function", "def run", false), ("module", "this module", true)
             ],
             view.Scopes.Select(scope => (scope.Kind, scope.Heading, scope.Collapsed)));
-        var lambda = view.Scopes[0];
+        var lambda = view.Scopes[1];
         Assert.Equal(new Range(4, 10, 7, 5), lambda.Location?.Range);
         Assert.Equal(["type", "names"], lambda.Sections.Select(section => section.Id));
         Assert.Equal("[Log] int -> ()", Assert.Single(lambda.Sections[0].Items).Text);
         Assert.Equal([("line: string", "local"), ("x: int", "parameter")], lambda.Sections[1].Items.Select(item => (item.Text, item.Detail)));
 
-        var report = view.Scopes[1];
+        var report = view.Scopes[2];
         Assert.Equal(new Range(3, 6, 3, 12), report.Location?.Range);
         Assert.Equal(("report: [Log] int -> ()", "inferred"), (report.Sections[0].Items[0].Text, report.Sections[0].Items[0].Detail));
         Assert.Equal(["count: int"], Section(view, "function", "names").Select(item => item.Text));
 
-        var run = view.Scopes[2];
+        var run = view.Scopes[3];
         Assert.Equal(
             [
                 ("signature", ["run: [Log] string -> ()"]),
@@ -308,7 +385,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
         Assert.Equal([("Log", "signature")], Section(inLambda, "function", "contexts").Select(item => (item.Text, item.Detail)));
 
         var inMemory = await InfoViewAt(uri, 9, 5);
-        Assert.Equal(["function", "module"], inMemory.Scopes.Select(scope => scope.Kind));
+        Assert.Equal(["expression", "function", "module"], inMemory.Scopes.Select(scope => scope.Kind));
         Assert.Equal(["sum: int", "n: int"], Section(inMemory, "function", "names").Select(item => item.Text));
     }
 
@@ -334,7 +411,7 @@ public sealed class InfoViewTests : LanguageServerTestBase
         var view = await InfoViewAt(uri, 4, 3);
         var flow = Section(view, "function", "flow");
 
-        Assert.Equal("def main", view.Scopes[0].Heading);
+        Assert.Equal("def main", view.Scopes.First(scope => scope.Kind == "function").Heading);
         Assert.Equal(
             [("Log", "signature · 1 call", new Range(2, 11, 2, 14)), ("Log", "use · 1 call", new Range(4, 6, 4, 28)), ("Log", "use · unused", new Range(6, 6, 6, 28))],
             flow.Select(item => (item.Text, item.Detail, item.Location?.Range)));

@@ -1,12 +1,13 @@
 "use strict";
 /**
- * Moving a position with a document's edits, as a decoration moves: the info view's pinned position follows the text it
- * was on, so that an edit above it doesn't leave the view showing another place (#2780). It works on plain positions,
- * so that it can be tested without VS Code.
+ * Moving a position, or a range, with a document's edits, as a decoration moves: the info view's pinned position and
+ * selection follow the text they were on, so that an edit above them doesn't leave the view showing another place
+ * (#2780). It works on plain positions, so that it can be tested without VS Code.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.moved = moved;
 exports.movedThrough = movedThrough;
+exports.rangeMovedThrough = rangeMovedThrough;
 /** Whether `a` comes before `b`. */
 function before(a, b) {
     return a.line < b.line || (a.line === b.line && a.character < b.character);
@@ -44,6 +45,28 @@ function movedThrough(position, changes) {
             return undefined;
         }
         current = moved(current, change);
+    }
+    return current;
+}
+/** Whether `a` and `b` are the same position. */
+function same(a, b) {
+    return a.line === b.line && a.character === b.character;
+}
+/**
+ * Where `range` is after `changes`, applied in the order given: its start moves as `moved` moves a position, and so
+ * does its end, except that text inserted at the end of a range that isn't empty goes after it, outside the range.
+ * `undefined` once one of them replaces the text at either end.
+ */
+function rangeMovedThrough(range, changes) {
+    let current = range;
+    for (const change of changes) {
+        if (current === undefined) {
+            return undefined;
+        }
+        const empty = same(current.start, current.end);
+        const start = moved(current.start, change);
+        const end = !empty && same(change.start, current.end) && same(change.end, current.end) ? current.end : moved(current.end, change);
+        current = start && end && { start, end: empty ? start : end };
     }
     return current;
 }

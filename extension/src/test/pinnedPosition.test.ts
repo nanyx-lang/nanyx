@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import * as assert from "node:assert/strict";
-import { moved, movedThrough } from "../pinnedPosition";
+import { moved, movedThrough, rangeMovedThrough } from "../pinnedPosition";
 
 // The pinned position is on `total` in `  def total = a + b`, line 3, character 6.
 const pinned = { line: 3, character: 6 };
@@ -41,4 +41,27 @@ test("several changes are applied in turn, as VS Code gives them", () => {
   ];
   assert.deepEqual(movedThrough(pinned, changes), at(5, 6));
   assert.equal(movedThrough(pinned, [{ start: at(3, 0), end: at(4, 0), text: "" }, changes[1]]), undefined);
+});
+
+// The pinned selection is `a + b` in `  def total = a + b`, line 3, characters 14 to 19.
+const selection = { start: at(3, 14), end: at(3, 19) };
+
+test("a pinned selection moves with the edits above it", () => {
+  assert.deepEqual(rangeMovedThrough(selection, [{ start: at(1, 0), end: at(1, 0), text: "def added = 1\n" }]), { start: at(4, 14), end: at(4, 19) });
+});
+
+test("text inserted at its end goes after it, and text inserted inside it widens it", () => {
+  assert.deepEqual(rangeMovedThrough(selection, [{ start: at(3, 19), end: at(3, 19), text: " + c" }]), selection);
+  assert.deepEqual(rangeMovedThrough(selection, [{ start: at(3, 16), end: at(3, 17), text: "-" }]), selection);
+  assert.deepEqual(rangeMovedThrough(selection, [{ start: at(3, 15), end: at(3, 15), text: "  " }]), { start: at(3, 14), end: at(3, 21) });
+});
+
+test("an edit that replaces the text at either end of it drops it", () => {
+  assert.equal(rangeMovedThrough(selection, [{ start: at(3, 12), end: at(3, 15), text: "" }]), undefined);
+  assert.equal(rangeMovedThrough(selection, [{ start: at(3, 18), end: at(3, 20), text: "" }]), undefined);
+});
+
+test("an empty selection moves as a position does", () => {
+  const empty = { start: pinned, end: pinned };
+  assert.deepEqual(rangeMovedThrough(empty, [{ start: at(3, 6), end: at(3, 6), text: "grand" }]), { start: at(3, 11), end: at(3, 11) });
 });

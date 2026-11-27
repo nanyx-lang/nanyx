@@ -9,15 +9,17 @@ using SymbolKind = NyxCompiler.SymbolKind;
 namespace Nanyx.LanguageServer.Handlers;
 
 /// <summary>
-/// The parameters of <c>nanyx/infoView</c>: the document and the position to describe, and the width, in characters,
-/// the client shows an item's text in, if it says: a signature that doesn't fit it is laid out as the formatter lays
-/// out a def's (see <see cref="Nanyx.Formatter.SignatureLayout.layOut"/>).
+/// The parameters of <c>nanyx/infoView</c>: the document and the position to describe; the selection, if the client
+/// sends one, whose expression it describes at the top, or with none or an empty one the expression at the position;
+/// and the width, in characters, the client shows an item's text in, if it says: a signature that doesn't fit it is
+/// laid out as the formatter lays out a def's (see <see cref="Nanyx.Formatter.SignatureLayout.layOut"/>).
 /// </summary>
 [Parallel, Method(InfoViewHandler.Method, Direction.ClientToServer)]
 public sealed record InfoViewParams : IRequest<InfoViewResult?>
 {
     public required TextDocumentIdentifier TextDocument { get; init; }
     public required Position Position { get; init; }
+    public Range? Selection { get; init; }
     public int? Width { get; init; }
 }
 
@@ -33,13 +35,15 @@ public sealed record InfoViewResult
 
 /// <summary>
 /// A scope at the position. <see cref="Kind"/> is one of <c>messages</c> (first, only when the position's line has a
-/// diagnostic, with its <see cref="Messages"/> and no sections), <c>lambda</c> (<c>type</c>, <c>names</c>,
+/// diagnostic, with its <see cref="Messages"/> and no sections), <c>expression</c> (next, headed <c>Selection</c> or
+/// <c>At the cursor</c>, with the section <c>expression</c>, only when there is an expression there that no scope below
+/// shows), <c>lambda</c> (<c>type</c>, <c>names</c>,
 /// <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>, <c>contexts</c>, <c>flow</c>) and <c>module</c>
 /// (always last, with <c>names</c> and <c>contexts</c>); a lambda or function scope comes once for each lambda or def
 /// around the position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the scope and
 /// <see cref="Location"/> is where it links: a lambda by its parameters and line, a def by its name, the module by its
 /// declared name. <see cref="Documentation"/> is the module's doc comment. <see cref="Collapsed"/> says whether a client
-/// shows it closed at first: the module, and the scopes after the third, not counting the messages.
+/// shows it closed at first: the module, and the scopes after the third, not counting the messages and the expression.
 /// </summary>
 public sealed record InfoViewScope
 {
@@ -133,7 +137,9 @@ public sealed record InfoViewName(int Start, int Length)
 
 /// <summary>
 /// <c>nanyx/infoView</c>: what the compiler knows at a position, for the info view panel, by scope, innermost first.
-/// First, if the position's line has any, its diagnostics, each in full (see <see cref="InfoViewMessage"/>). Then each
+/// First, if the position's line has any, its diagnostics, each in full (see <see cref="InfoViewMessage"/>). Then the
+/// expression selected, or with no selection the one at the position, with its type, as hover writes it (see
+/// <see cref="InfoView.expressionAt"/>). Then each
 /// lambda and def around the position (see <see cref="InfoView.Scope"/>): a lambda's type, with the contexts it
 /// carries, a def's signature and doc comment, the parameters, locals and pattern variables each declares, the
 /// contexts each provides, and in the innermost def the flow of contexts through it, each provider with the calls it
@@ -144,7 +150,8 @@ public sealed record InfoViewName(int Start, int Length)
 /// text's own. Each item links to what it describes: a name to its declaration, a context to what provides it. Each
 /// item whose name or context has a doc comment carries it, read as hover reads it (see
 /// <see cref="NyxCompiler.Documentation.Reader"/>): a context's is that of the def a <c>use</c> names, if it has
-/// one, or else the context's own.
+/// one, or else the context's own. An item that repeats one a scope further out shows is left out (see
+/// <see cref="WithoutRepeats"/>).
 /// </summary>
 public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, InfoViewResult?>
 {
@@ -174,6 +181,7 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
 
         var offset = document.Positions.ToOffset(request.Position);
         InfoView.Info? info = null;
+        InfoView.Described? expression = null;
         NyxCompiler.ContextFlow.Flow? flow = null;
         NyxCompiler.ContextFlow.Highlights? highlights = null;
         NyxCompiler.Documentation.Reader? docs = null;
@@ -182,6 +190,11 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         {
             fileName = lastGood.FileName;
             info = InfoView.at(_settings.TypeNotation, lastGood.FileName, compiled, nearest);
+            if (SelectedInLastGood(request, document, offset) is { } selected)
+            {
+                expression = InfoView.expressionAt(_settings.TypeNotation, lastGood.Positions.NormalizedText, compiled, selected)?.Value;
+            }
+
             var contexts = NyxCompiler.ContextFlow.at(_settings.TypeNotation, compiled, nearest);
             flow = contexts.Flow?.Value;
             highlights = contexts.Highlights;
@@ -211,6 +224,32 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         };
 
         var scopes = new List<InfoViewScope>();
+        if (expression is not null)
+        {
+            scopes.Add(new InfoViewScope
+            {
+                Kind = "expression",
+                Heading = request.Selection is { } range && range.Start != range.End ? "Selection" : "At the cursor",
+                Sections =
+                [
+                    new InfoViewSection
+                    {
+                        Id = "expression",
+                        Title = "Expression",
+                        Items =
+                        [
+                            new InfoViewItem
+                            {
+                                Text = Signature(expression.Name, expression.Type),
+                                Location = Locate(expression.Span),
+                                Documentation = expression.Symbol?.Value is { } symbol ? DocOf(symbol) : null
+                            }
+                        ]
+                    }
+                ]
+            });
+        }
+
         // The flow of contexts is through the innermost def around the position.
         var flowShown = false;
         foreach (var scope in info?.Scopes ?? [])
@@ -296,15 +335,18 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         IEnumerable<InfoViewScope> messagesScope = messages.Count == 0
             ? []
             : [new InfoViewScope { Kind = "messages", Heading = "Messages", Sections = [], Messages = messages }];
+        var shown = WithoutRepeats(scopes);
+        var expressionScopes = shown.Count(scope => scope.Kind == "expression");
         return new InfoViewResult
         {
-            // The side bar is narrow: past the third scope they start closed, as the module always does.
+            // The side bar is narrow: past the third scope around the position they start closed, as the module always
+            // does.
             Scopes =
             [
                 .. messagesScope,
-                .. scopes.Select((scope, index) => scope with
+                .. shown.Select((scope, index) => scope with
                 {
-                    Collapsed = index >= 3 || scope.Kind == "module",
+                    Collapsed = index - expressionScopes >= 3 || scope.Kind == "module",
                     Sections = scope.Sections
                         .Select(section => section with { Items = section.Items.Select(item => InfoViewTypeLinks.WithLinks(item, types)).ToList() })
                         .ToList()
@@ -318,6 +360,73 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
                     .. Highlighted(highlights.Calls, "call", Locate, uri)
                 ]
         };
+    }
+
+    /// <summary>
+    /// The span in the document's last typed text that the expression at the top describes: the request's selection,
+    /// or, where it sends none or an empty one, the position at <paramref name="offset"/>, as an empty span. <c>null</c>
+    /// where that text has been edited since, as hover is.
+    /// </summary>
+    private static Parser.Program.SourceSpan? SelectedInLastGood(InfoViewParams request, OpenDocument document, int offset)
+    {
+        var (start, end) = request.Selection is { } range
+            ? (document.Positions.ToOffset(range.Start), document.Positions.ToOffset(range.End))
+            : (offset, offset);
+        if (end <= start)
+        {
+            (start, end) = (offset, offset);
+        }
+
+        // The end is past the selection's last character, which is the one mapped.
+        var typedStart = document.ToLastGood(start);
+        var typedEnd = end > start ? document.ToLastGood(end - 1) + 1 : typedStart;
+        return document.LastGood is { } lastGood && typedStart is { } from && typedEnd is { } to
+            ? new Parser.Program.SourceSpan(lastGood.FileName, from, to, 0, 0)
+            : null;
+    }
+
+    /// <summary>
+    /// <paramref name="scopes"/>, innermost first, less each item that repeats one a scope further out shows, which is
+    /// kept, with its context: the same text, naming the same thing, at the same place, and saying the same of it. An
+    /// item's detail says what it is, a local or a def's signature, so two that say different things are both kept, but
+    /// one that says nothing, as the expression at the top, repeats any. So the cursor on a def's name shows its
+    /// signature only in the def's scope, marked <c>declared</c> or <c>inferred</c>. A section left with no items is
+    /// left out, and so is a scope left with no sections.
+    /// </summary>
+    internal static IReadOnlyList<InfoViewScope> WithoutRepeats(IReadOnlyList<InfoViewScope> scopes)
+    {
+        static (string, string?, Range?) Place(InfoViewItem item) => (item.Text, item.Location?.Uri.ToString(), item.Location?.Range);
+
+        // The details of the items shown further out, by their text and place.
+        var shownFurtherOut = new Dictionary<(string, string?, Range?), HashSet<string?>>();
+        bool Repeats(InfoViewItem item) =>
+            shownFurtherOut.TryGetValue(Place(item), out var details) && (item.Detail is null || details.Contains(item.Detail));
+
+        var kept = new List<InfoViewScope>();
+        foreach (var scope in scopes.Reverse())
+        {
+            var sections = scope.Sections
+                .Select(section => section with { Items = section.Items.Where(item => !Repeats(item)).ToList() })
+                .Where(section => section.Items.Count > 0)
+                .ToList();
+            foreach (var item in scope.Sections.SelectMany(section => section.Items))
+            {
+                if (!shownFurtherOut.TryGetValue(Place(item), out var details))
+                {
+                    shownFurtherOut[Place(item)] = details = [];
+                }
+
+                details.Add(item.Detail);
+            }
+
+            if (sections.Count > 0 || scope.Sections.Count == 0)
+            {
+                kept.Add(scope with { Sections = sections });
+            }
+        }
+
+        kept.Reverse();
+        return kept;
     }
 
     /// <summary>
