@@ -880,7 +880,7 @@ module Compiler =
                                            |> Option.exists ComponentInterface.requiresAsync })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           Tests =
-                            let own = components.Tests |> List.map (fun test -> { Module = moduleName; Name = test.Name; Definition = test.Name; Span = test.Span; Io = test.Io })
+                            let own = components.Tests |> List.map (fun test -> { Module = moduleName; Name = test.Name; Definition = test.Name; Span = test.Span; Io = test.Io; Crashes = test.Crashes })
                             own @ merged.Tests |> List.distinctBy (fun test -> test.Module, test.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.

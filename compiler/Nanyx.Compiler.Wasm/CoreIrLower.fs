@@ -302,7 +302,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         | CrashSyntax.Call message ->
             // One the type checker added (the last arm of a match that does not handle every case) has no type.
             let ty = if input.ExprTypes.ContainsKey expr.Id then tyOf expr else IrError
-            k (Expr.make (Crash [ message ]) ty)
+            k (Expr.make (Crash([ message ], true)) ty)
         | FunctionCall(name, nameSpan, args) when name = DbgSyntax.builtIn && not (scope.Vars.ContainsKey name) && not (definitions.ContainsKey name) ->
             // Prints the value's text, which the printer of its type writes, and leaves the value.
             // The one argument, which may be a tuple, as the type checker has it.
@@ -1272,7 +1272,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         // when it is reached instead.
         let lowerExpression (expr: Expression) =
             try this.Tail scope expr
-            with CannotLower _ when not (deferredMessages expr).IsEmpty -> Expr.make (Crash(deferredMessages expr)) IrError
+            with CannotLower _ when not (deferredMessages expr).IsEmpty -> Expr.make (Crash(deferredMessages expr, true)) IrError
         let body =
             List.foldBack (fun (expr: Expression) (rest: Expr) -> Expr.make (Do(lowerExpression expr, rest)) IrUnit) input.TopLevel (Expr.make (Atom AUnit) IrUnit)
         { Name = startFunctionName
@@ -1289,7 +1289,7 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
     /// function value calls it at the signature the value's type gives. Where even those cannot be lowered, it takes
     /// the parameters the definition does, context members included, as values of no known type.
     member this.Trap (lowering: Lowering) (name: string) (functionName: string) (typeArguments: IrType list) (messages: string list) : Function =
-        let crash = Expr.make (Crash messages) IrError
+        let crash = Expr.make (Crash(messages, true)) IrError
         let asWritten =
             match lowering with
             | AsDefined

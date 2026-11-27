@@ -125,7 +125,7 @@ let collect (functions: Function list) : ModuleFacts =
             strings.Add site.Prefix
             atom text
             usesDbgHelpers.Value <- true
-        | Crash messages ->
+        | Crash(messages, _) ->
             strings.AddRange messages
             // What `Helpers.crashed` is given: the messages as one.
             strings.Add(String.concat "" messages)

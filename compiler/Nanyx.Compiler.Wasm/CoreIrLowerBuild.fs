@@ -135,7 +135,7 @@ let makingFunction (tools: TypeMatchTools) (functionName: string) (recordType: T
         | ((name, fieldType), box) :: rest -> decanonical tools fieldType box (fun value -> unboxAll rest ((name, value) :: acc))
     let arms =
         [ { Patterns = [ PList(boxes |> List.map PBind, None) ]; Body = unboxAll (List.zip fields boxes) [] }
-          { Patterns = [ PWildcard ]; Body = Expr.make (Crash [ "A record made from the wrong number of fields" ]) IrBox } ]
+          { Patterns = [ PWildcard ]; Body = Expr.make (Crash([ "A record made from the wrong number of fields" ], false)) IrBox } ]
     { Name = functionName
       Source = functionName
       TypeArguments = []

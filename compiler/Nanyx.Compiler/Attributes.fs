@@ -4,13 +4,15 @@ open Parser.Program
 
 /// The `@attribute` lines of a module, which the compiler resolves before inference.
 module Attributes =
-    /// A def marked `@test`: its name, where it is written, where its attribute is, and whether the attribute is
-    /// `@test(#io)` (see `ioTestArgument`).
+    /// A def marked `@test`: its name, where it is written, where its attribute is, whether the attribute is
+    /// `@test(#io)` (see `ioTestArgument`), and the crash it expects, if it is `@test(#crashes)` (see
+    /// `crashesTestArgument`).
     type MarkedTest =
         { Name: string
           Span: SourceSpan
           Attribute: SourceSpan
-          Io: bool }
+          Io: bool
+          Crashes: ExpectedCrash option }
 
     /// The defs of a module marked `@component`, which a component exports, and `@import`, which it imports, each by name
     /// with where it is written; and those marked `@test`.
@@ -34,11 +36,27 @@ module Attributes =
     /// (see `Hosts.ioTestContexts`).
     let ioTestArgument = "io"
 
-    /// Whether `argument`, an attribute's, is `#io`.
-    let private isIoArgument (argument: Expression) =
-        match argument.Kind with
-        | TagExpr(tag, None) -> tag = ioTestArgument
-        | _ -> false
+    /// The argument of `@test(#crashes)`, which passes a test only if it crashes, and of `@test(#crashes("too big"))`,
+    /// only if it crashes with a message that contains the text (#3078).
+    let crashesTestArgument = "crashes"
+
+    /// What `@test`'s argument, `argument`, asks for: whether the test is `#io`, and the crash it expects. It is `#io`,
+    /// `#crashes`, `#crashes("text")`, or a tuple of `#io` and one of the others, in either order; none for any other.
+    let private testArguments (argument: Expression option) : (bool * ExpectedCrash option) option =
+        let one (argument: Expression) =
+            match argument.Kind with
+            | TagExpr(tag, None) when tag = ioTestArgument -> Some(true, None)
+            | TagExpr(tag, None) when tag = crashesTestArgument -> Some(false, Some AnyCrash)
+            | TagExpr(tag, Some (Kind (LiteralExpr(StringLit text)))) when tag = crashesTestArgument -> Some(false, Some(CrashContaining text))
+            | _ -> None
+        match argument with
+        | None -> Some(false, None)
+        | Some (Kind (TupleExpr [ first; second ])) ->
+            match one first, one second with
+            | Some(true, None), Some(false, Some crash)
+            | Some(false, Some crash), Some(true, None) -> Some(true, Some crash)
+            | _ -> None
+        | Some argument -> one argument
 
     /// The def a test build adds to each of its program's modules that has tests, which the build's root calls to run
     /// one: exported, `[Console, Random] int -> ()`, requiring the contexts the test host provides (`Hosts.testContexts`),
@@ -468,14 +486,17 @@ module Attributes =
         let rec loop (remaining: TopLevelItem list) (acc: TopLevelItem list) (entries: (EntryPoint * TopLevelItem) list) (externs: (string * Extern * SourceSpan) list) (errors: Diagnostic list) =
             match remaining with
             | [] -> List.rev acc, List.rev entries, List.rev externs, List.rev errors
-            | Kind (Attribute(name, Some argument)) :: rest when name = testAttribute && not (isIoArgument argument) ->
+            | Kind (Attribute(name, Some argument)) :: rest when name = testAttribute && (testArguments (Some argument)).IsNone ->
                 let error =
                     Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span
-                        $"It takes no argument, or `#{ioTestArgument}`, to run the test with the console host's real `Console`, `Env` and `FileSystem`"
+                        ($"It takes no argument; `#{ioTestArgument}`, to run the test with the console host's real `Console`, `Env` and `FileSystem`; "
+                         + $"`#{crashesTestArgument}`, to pass it only if it crashes, or `#{crashesTestArgument}(\"text\")`, only if it crashes with a message that "
+                         + $"contains the text; or `(#{ioTestArgument}, #{crashesTestArgument})`")
                     |> Diagnostics.about $"@{name}"
                 loop rest acc entries externs (error :: errors)
             | Kind (Attribute(name, argument)) as attribute :: (Kind (Def (ValueDef(_, defName, _, _))) as def) :: rest when name = testAttribute ->
-                tests.Add({ Name = defName; Span = def.Span; Attribute = attribute.Span; Io = argument.IsSome })
+                let io, crashes = testArguments argument |> Option.defaultValue (false, None)
+                tests.Add({ Name = defName; Span = def.Span; Attribute = attribute.Span; Io = io; Crashes = crashes })
                 loop rest (def :: acc) entries externs (List.rev (bodilessErrors [ def ]) @ errors)
             | Kind (Attribute(name, Some argument)) :: rest when name = componentAttribute ->
                 let error = Diagnostics.at DiagnosticCodes.UnexpectedAttributeArgument argument.Span "It takes no argument" |> Diagnostics.about $"@{name}"

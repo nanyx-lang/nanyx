@@ -639,13 +639,14 @@ type private FunctionEmitter(context: EmitContext) =
         | FloatConstant value when expr.Type = IrF32 -> $"f32.const {wasmFloatConst value}"
         | FloatConstant value -> $"f64.const {wasmFloatConst value}"
         | Probe(kind, locals) -> join "\n    " [ this.Probe expr kind locals (fun _ -> false); "i32.const 0" ]
-        | Crash messages ->
+        | Crash(messages, deferred) ->
             // Writes each message to stderr and traps in `Helpers.crashed`, given them all as one, so the runtime reports
             // them and the stack. `unreachable` after it, which is never reached, lets the code stand wherever a value is
-            // expected.
+            // expected. A deferred error says so first (see `Helpers.deferredCrash`).
             let writes = messages |> List.map (fun message -> $"i32.const {context.StringOffset message}\n    call ${helper Helpers.writeStderr}")
             let all = context.StringOffset(String.concat "" messages)
-            writes @ [ $"i32.const {all}"; $"call ${helper Helpers.crashed}"; "unreachable" ] |> String.concat "\n    "
+            let deferral = if deferred then [ $"call ${helper Helpers.deferredCrash}" ] else []
+            writes @ deferral @ [ $"i32.const {all}"; $"call ${helper Helpers.crashed}"; "unreachable" ] |> String.concat "\n    "
         | CrashWith message ->
             // As `Crash`, with a message made at run time, which `Helpers.crashed` is given too.
             join "\n    " [ atoms [ message ]; $"call ${helper Helpers.writeStderr}"; atoms [ message ]; $"call ${helper Helpers.crashed}"; "unreachable" ]

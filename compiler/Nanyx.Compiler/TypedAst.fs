@@ -457,6 +457,13 @@ type ComponentExport =
       Waits: bool }
 
 /// A definition marked `@test`, which a test build runs (see `TypedModule.Tests`).
+/// The crash a test marked `@test(#crashes)` expects, which it passes only by reaching (#3078).
+type ExpectedCrash =
+    /// Any crash: `@test(#crashes)`.
+    | AnyCrash
+    /// A crash whose message contains the text: `@test(#crashes("too big"))`.
+    | CrashContaining of text: string
+
 type Test =
     { /// The module it is defined in, which groups it with the module's other tests.
       Module: string
@@ -468,7 +475,9 @@ type Test =
       Span: SourceSpan
       /// Whether it is marked `@test(#io)`, and so runs with the console host's real `Console`, `Env` and `FileSystem`
       /// (see `Hosts.ioTestContexts`).
-      Io: bool }
+      Io: bool
+      /// The crash it is marked to expect, if it is: it passes only by reaching one.
+      Crashes: ExpectedCrash option }
 
 /// A member of an ambient context (one the runtime supplies, as the host's prelude's definitions are its `Console`) and the
 /// top-level definition that stands in for it (see `TypedModule.AmbientMembers`).
