@@ -277,3 +277,11 @@ def both = { (step: int) ->
 
 println(both(10))"""
     assertPrints "111 133\n" "111 133\n" source
+    // With the probes, which `nanyx run` leaves out (#2225), straight through and with every wait stopping, with
+    // nothing left allocated.
+    for yieldAtEveryWait in [ false; true ] do
+        let options = { probedOptions with CheckMemory = true; YieldAtEveryWait = yieldAtEveryWait }
+        let wat = Nanyx.LargeStack.run (fun () -> transpileWatWith options (withFinalNewline source))
+        match runCheckedHost [ "main" ] wat with
+        | Ok(printed, live) -> Assert.Equal(("111 133\n", 0), (printed, live))
+        | Error error -> failwith $"%A{error}"
