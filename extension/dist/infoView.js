@@ -317,8 +317,8 @@ async function withRenderedDocumentation(scopes) {
     })));
 }
 /**
- * The scopes with their code highlighted: each heading but the messages' and the expression's, and the text of each
- * item, and of the items under it. Those headings, and the messages, are prose.
+ * The scopes with their code highlighted: each heading but the messages', and the text of each item, and of the items
+ * under it. The messages' heading, and the messages, are prose.
  */
 async function withHighlightedCode(highlighter, scopes) {
     const highlighted = async (item) => ({
@@ -328,7 +328,7 @@ async function withHighlightedCode(highlighter, scopes) {
     });
     return Promise.all(scopes.map(async (scope) => ({
         ...scope,
-        headingCode: scope.kind === "messages" || scope.kind === "expression" ? undefined : await highlighter.highlight(scope.heading),
+        headingCode: scope.kind === "messages" ? undefined : await highlighter.highlight(scope.heading),
         sections: await Promise.all(scope.sections.map(async (section) => ({
             ...section,
             items: await Promise.all(section.items.map(highlighted))
@@ -624,8 +624,8 @@ function page(webview) {
     details.open = open[key] ?? !data.collapsed;
     details.addEventListener("toggle", () => { open[key] = details.open; });
     const summary = element("summary");
-    // A def's and the module's headings say what they are; a lambda's is only its parameters.
-    if (data.kind === "lambda") summary.appendChild(element("span", "kind", "lambda"));
+    // A def's, a loop's and the module's headings say what they are; the server labels the others.
+    if (data.label) summary.appendChild(element("span", "kind", data.label));
     if (data.location) {
       const link = element("a");
       link.appendChild(data.headingCode ? highlightedCode(data.heading, data.headingCode) : document.createTextNode(data.heading));
