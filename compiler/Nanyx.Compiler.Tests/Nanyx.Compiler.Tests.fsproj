@@ -288,6 +288,7 @@
     <Compile Include="Features\Types\TagNotInUnionTests.fs" />
     <Compile Include="Features\Types\RecordFieldOrderTests.fs" />
     <Compile Include="Features\Types\RecordSpreadTests.fs" />
+    <Compile Include="Features\Types\MutuallyRecursiveTypesTests.fs" />
     <Compile Include="Features\Types\RecursiveAliasesTests.fs" />
     <Compile Include="Features\Types\RecursiveNominalsTests.fs" />
     <Compile Include="Features\Types\TypeHoleTests.fs" />
