@@ -163,6 +163,24 @@ let private fixFor (source: string) (nominal: NominalId) (shape: Ty) (value: Exp
         | _ -> []
     | _ -> []
 
+/// The note for a mismatch where a value of no nominal type is given for `nominal`, private when `isPrivate`, outside
+/// the type's home module, whatever the value's shape: only that module makes values of it, and the ways among `names`
+/// to make one, or that no code outside the module can when it exports none (#1804). A private type's representation is
+/// not named.
+let homeNote (state: InferState) (names: (string * TypeScheme) list) (nominal: NominalId) (isPrivate: bool) : string =
+    let typeName = lastPart nominal.Name
+    let kind = if isPrivate then "private" else "protected"
+    let home = homeModule nominal
+    let maker =
+        match home with
+        | Some home -> $"only the module '{home}'"
+        | None -> "only its own module"
+    match makers state.BlockAliases names nominal with
+    | [] ->
+        let outside = match home with Some home -> $"outside '{home}'" | None -> "outside its module"
+        $"'{typeName}' is {kind}, so {maker} makes values of it, and it exports nothing that makes one: no code {outside} can make a '{typeName}'"
+    | found -> $"'{typeName}' is {kind}, so {maker} makes values of it{makeOne found}"
+
 /// The error for a value of the shape `shape` of the nominal type `nominal`, private when `isPrivate`, given for it at
 /// `span`, outside the type's home module: only that module makes values of it. It names the ways to make one in
 /// `names`, and offers to make the value with the one way when there is one that fits (see `fixFor`).
