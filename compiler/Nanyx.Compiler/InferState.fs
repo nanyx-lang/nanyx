@@ -442,6 +442,9 @@ type InferState =
             /// The local defs that are cells, made with `mut`, each with the scope of the `memory` block it belongs to (see
             /// `MemoryCells`).
             Cells: Map<SymbolId, Ty>;
+            /// The cells made outside any `memory` block, which is an error (NYX0221): their uses need no `Memory`, so that
+            /// the error is not reported again as a context the def around them requires (#3117).
+            CellsOutsideMemory: Set<SymbolId>;
             /// Where a mismatch of a call's arguments, written as one tuple, is reported instead of at the tuple, by the
             /// tuple's span: worked out only if one is (see `LambdaArguments.reportedSpan`). A record literal that a
             /// record type is expected of is one too, its fields' values the arguments.
@@ -610,6 +613,7 @@ let emptyState =
             DerivedDefs = [];
             DerivedCalls = Map.empty;
             Cells = Map.empty;
+            CellsOutsideMemory = Set.empty;
             ArgumentSpans = Map.empty;
             BranchSpans = Map.empty;
             AnnotationSpans = Map.empty;

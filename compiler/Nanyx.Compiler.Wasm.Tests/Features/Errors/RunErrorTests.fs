@@ -116,6 +116,29 @@ println("after")
     Assert.DoesNotContain("Runtime error", outcome.StandardError)
 
 [<Fact>]
+let ``Run - a mut outside a memory block is its one error, and the program runs up to it (#3117)`` () =
+    // The cell's uses need no `Memory`: it would reach the script's run as a context the host doesn't provide.
+    let source =
+        normalized """def bump = { mut c: int -> c := c + 1 }
+
+def f = { () ->
+  mut x = 0
+  x := x + 1
+  bump(mut x)
+  x
+}
+
+println("before")
+println(f())
+"""
+    let outcome = runSource source
+    Assert.Equal(1, outcome.ExitCode)
+    Assert.Equal("before\n", outcome.StandardOutput)
+    Assert.DoesNotContain("NYX0227", outcome.StandardError)
+    Assert.Contains(":4:3: error NYX0221: mut outside a memory block", outcome.StandardError)
+    Assert.Contains("Running with 1 deferred error", outcome.StandardError)
+
+[<Fact>]
 let ``Run - a lambda that cannot be compiled because of a deferred error reports it when a function value calls it`` () =
     // The set can't be compiled, as the value set is not of the cell's type, so the lambda `memory` calls only reports
     // the error: it still takes and returns what its type says, as `memory` calls it through a function value. The
