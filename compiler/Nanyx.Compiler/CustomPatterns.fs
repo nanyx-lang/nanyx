@@ -283,9 +283,37 @@ module internal CustomPatterns =
     let private wrongArguments (span: SourceSpan) (message: string) =
         Diagnostics.at DiagnosticCodes.PatternArguments span message
 
+    /// The first part of `arguments`, a pattern's arguments written as an expression, that is not one of the kinds an
+    /// argument may be: a literal, a name or a qualified name, or a tuple, list or tag of those (#2064). Anything else, as
+    /// a call, is bound with a `def` first: in a pattern it would read as a payload, and run each time the arm is tried.
+    let rec private firstDisallowed (arguments: Expression) : Expression option =
+        match arguments.Kind with
+        | LiteralExpr _
+        | IdentifierExpr _
+        | UnitExpr
+        | TagExpr(_, None) -> None
+        | MemberAccess({ Kind = IdentifierExpr _ | MemberAccess _ } as qualifier, _, _) -> firstDisallowed qualifier
+        | TagExpr(_, Some payload) -> firstDisallowed payload
+        | TupleExpr items
+        | ListExpr items -> items |> List.tryPick firstDisallowed
+        | _ -> Some arguments
+
+    /// The name a fix binds an argument of the pattern tag `tag` to: `matchesRegexArgument` for `#MatchesRegex`.
+    let private argumentName (tag: Identifier) =
+        let own = Names.ownPart tag
+        string (System.Char.ToLowerInvariant own[0]) + own.Substring 1 + "Argument"
+
+    /// The error for `value`, an argument of the pattern tag `tag` of a kind an argument can't be (see
+    /// `firstDisallowed`), with the fixes `bind` gives for binding it to a name first.
+    let private notAnArgument (bind: Identifier -> Expression -> Fix list) (tag: Identifier) (value: Expression) =
+        { wrongArguments
+              value.Span
+              $"A pattern's arguments are literals, names, and tuples, lists and tags of them: bind this value with a `def` before the `match`, and give `#{tag}` its name" with
+            Fixes = bind (argumentName tag) value }
+
     /// The use `part`, a pattern at the top of an arm's pattern for one value or one part of an and-pattern there, is,
     /// if it is a pattern's tag that the match is rewritten for; or the error in how it is given arguments.
-    let private useOf (scope: Scope) (part: Pattern) : Result<Use, Diagnostic> option =
+    let private useOf (bind: Identifier -> Expression -> Fix list) (scope: Scope) (part: Pattern) : Result<Use, Diagnostic> option =
         let found tag = match resolve scope tag with Found pattern -> Some pattern | _ -> None
         // A pattern that returns a `bool` returns `true` for its tag (see `lowerDeclaration`). A use that leaves out the
         // payload of a tag that carries one matches the tag whatever its payload is.
@@ -312,16 +340,20 @@ module internal CustomPatterns =
         | ArgumentTagPattern(tag, arguments, payload) when PatternSyntax.isPatternTag tag ->
             found tag
             |> Option.map (fun pattern ->
-                if pattern.Shape.TakesArguments then Ok { Pattern = pattern; Arguments = Some arguments; Result = result pattern tag payload }
-                else Error (wrongArguments arguments.Span $"`#{tag}` is a pattern that takes no arguments, so it has only the brackets of its payload"))
+                if not pattern.Shape.TakesArguments then
+                    Error (wrongArguments arguments.Span $"`#{tag}` is a pattern that takes no arguments, so it has only the brackets of its payload")
+                else
+                    match firstDisallowed arguments with
+                    | Some value -> Error (notAnArgument bind tag value)
+                    | None -> Ok { Pattern = pattern; Arguments = Some arguments; Result = result pattern tag payload })
         | _ -> None
 
     /// `pattern`, an arm's pattern for one value, split into what is matched against the value itself, which is `_` if
     /// nothing is, and the patterns' tags it uses; and the errors in those that are given arguments wrongly, which are
     /// matched as `_`.
-    let private split (scope: Scope) (pattern: Pattern) : (Pattern * Use list) * Diagnostic list =
+    let private split (bind: Identifier -> Expression -> Fix list) (scope: Scope) (pattern: Pattern) : (Pattern * Use list) * Diagnostic list =
         let parts = match pattern.Kind with AndPattern parts -> parts | _ -> [ pattern ]
-        let used = parts |> List.map (fun part -> part, useOf scope part)
+        let used = parts |> List.map (fun part -> part, useOf bind scope part)
         let uses = used |> List.choose (function _, Some (Ok used) -> Some used | _ -> None)
         let errors = used |> List.choose (function _, Some (Error error) -> Some error | _ -> None)
         let rest = used |> List.filter (snd >> Option.isNone) |> List.map fst
@@ -352,11 +384,11 @@ module internal CustomPatterns =
     /// first, and what it gives back runs on the value: `__pattern_A_...(3)(n)`. Patterns are pure, so running each one
     /// before the arms are tried can't be told from running it when an arm first needs it. Also the errors in the uses
     /// given arguments wrongly.
-    let private rewriteMatch (scope: Scope) (matchExpr: Expression) (scrutinees: Expression list) (arms: MatchArm list) : ExpressionKind option * Diagnostic list =
+    let private rewriteMatch (bind: Identifier -> Expression -> Fix list) (scope: Scope) (matchExpr: Expression) (scrutinees: Expression list) (arms: MatchArm list) : ExpressionKind option * Diagnostic list =
         let splitArms, errors =
             arms
             |> List.map (fun (patterns, body) ->
-                let split = patterns |> List.map (split scope)
+                let split = patterns |> List.map (split bind scope)
                 (split |> List.map fst, body), split |> List.collect snd)
             |> List.unzip
         let errors = List.concat errors
@@ -488,14 +520,30 @@ module internal CustomPatterns =
     /// `rewriteMatch` and `at`), and each pattern the module declares, at its top level or in a block, as the function it
     /// is (see `lowerDeclaration`); and the errors for pattern tags
     /// written where a match can't use them, and for `_` as a value outside a pattern's body (see `withoutUnknownNoMatch`).
-    let rewrite (scope: Scope) (items: Module) : Module * Diagnostic list =
+    let rewrite (source: string) (scope: Scope) (items: Module) : Module * Diagnostic list =
         let errors = ResizeArray<Diagnostic>()
+        // The fix that binds `value`, an argument a pattern can't be given, to `name` with a `def` on a line of its own
+        // before the match `matchExpr`, and gives the pattern the name: offered where the match starts its line, so that
+        // the def goes in the same block.
+        let bindBefore (matchExpr: Expression) (name: Identifier) (value: Expression) : Fix list =
+            let span = matchExpr.Span
+            let valid (s: SourceSpan) = not (SourceSpan.isNone s) && s.End <= source.Length
+            if not (valid span && valid value.Span) then []
+            else
+                let lineStart = if span.Start = 0 then 0 else source.LastIndexOf('\n', span.Start - 1) + 1
+                let indent = source.Substring(lineStart, span.Start - lineStart)
+                if indent |> Seq.exists (System.Char.IsWhiteSpace >> not) then []
+                else
+                    let text = source.Substring(value.Span.Start, value.Span.End - value.Span.Start)
+                    let lineSpan = { span with Start = lineStart; End = lineStart; StartColumn = 0 }
+                    [ { Title = $"Bind it with `def {name}`"
+                        Edits = [ { Span = lineSpan; NewText = $"{indent}def {name} = {text}\n" }; { Span = value.Span; NewText = name } ] } ]
         let visit (current: Expression) (kind: ExpressionKind) =
             match kind with
             | Match(scrutinees, arms) ->
                 let scope = at scope current.Span
                 arms |> List.collect fst |> List.collect (nestedUses scope) |> List.map nestedPattern |> errors.AddRange
-                let rewritten, argumentErrors = rewriteMatch scope current scrutinees arms
+                let rewritten, argumentErrors = rewriteMatch (bindBefore current) scope current scrutinees arms
                 errors.AddRange argumentErrors
                 rewritten |> Option.defaultValue kind
             | IdentifierExpr name when name = PatternSyntax.noMatch ->
