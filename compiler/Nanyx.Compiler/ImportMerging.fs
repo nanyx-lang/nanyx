@@ -44,7 +44,10 @@ module internal ImportMerging =
           /// The module's re-exports as each is merged, with the module it re-exports from.
           ReExports: ReExported list
           /// The modules merged, by `originKey`.
-          Merged: Set<string> }
+          Merged: Set<string>
+          /// Whether the module is not the program's own, as a host's or a library's, whose imports' definitions are
+          /// all inlined under qualified names (see `ModuleLinking.inlinedRenames`).
+          QualifiesImports: bool }
 
     /// The modules each host's prelude re-exports from, by the prelude's file, as `originKey`s.
     let private preludeSources = System.Collections.Concurrent.ConcurrentDictionary<string, Set<string>>()
@@ -97,6 +100,14 @@ module internal ImportMerging =
         let state = merged.State
         let importedKey = originKey importedOrigin
         let qualifier = ModuleLinking.importQualifier item
+        // In a module that isn't the program's own, an import's definitions are inlined under qualified names, but the
+        // standard library's, which every module shares under one name.
+        let qualifies =
+            merged.QualifiesImports
+            && (match importedOrigin with
+                | StandardLibraryModule _ -> false
+                | SourceFile _
+                | InMemory -> true)
         // The members of each context a host provides, `Console`, are brought in as the module's
         // exports would be, each a name of its own, so that the context is an ambient one (see `InferModule`): code at a
         // script's top level, or in a def that infers the context, calls `readLine()`. The host supplies the instance.
@@ -314,34 +325,48 @@ module internal ImportMerging =
                     |> List.fold (fun acc (name, target) ->
                         let written = ModuleLinking.importedName qualifier name
                         match imported.Exports |> Map.tryFind target, imported.Typed.TypeDefs |> Map.tryFind target |> Option.bind _.Symbol with
-                        | Some symbol, _ -> acc |> Map.add written (symbol.Id, ModuleLinking.inlinedName item imported target)
+                        | Some symbol, _ -> acc |> Map.add written (symbol.Id, ModuleLinking.inlinedName qualifies item imported target)
                         // A type is inlined under its own name.
                         | None, Some symbol -> acc |> Map.add written (symbol, target)
                         | None, None -> acc) state.ImportedBlockNames
+                    // In a module that isn't the program's own, a name an import brings in unqualified is written as
+                    // the name its definition is inlined under, which is qualified.
+                    |> fun names ->
+                        if qualifies && qualifier.IsNone then
+                            exportedValues
+                            |> Set.filter isSelected
+                            |> Set.fold (fun acc name ->
+                                match exports |> Map.tryFind name with
+                                | Some symbol when not (acc.ContainsKey name) ->
+                                    let inlined = ModuleLinking.inlinedName true item imported name
+                                    if inlined = name then acc else acc |> Map.add name (symbol.Id, inlined)
+                                | _ -> acc) names
+                        else
+                            names
                 // A call to an imported function checks what it compares the rests of its unions with as a
                 // call to one of the module's own does.
                 CheckedRests =
                     imported.CheckedRests
                     |> Map.filter (fun symbol _ -> exportedSymbols.ContainsKey symbol)
                     |> Map.fold (fun acc symbol checkedRests -> acc |> Map.add symbol checkedRests) state.CheckedRests }
-        let inlinedItems = ModuleLinking.inlinedItemsForImport item imported
+        let inlinedItems = ModuleLinking.inlinedItemsForImport qualifies item imported
         { merged with
             Env = env
             State = state
             Inlined = if importedKey = preludeKey then merged.Inlined else merged.Inlined @ inlinedItems
             PreludeInlined = if importedKey = preludeKey then inlinedItems else merged.PreludeInlined
             PreludeTypeNames = preludeTypeNames
-            InlinedTypes = ModuleLinking.inlinedTypesForImport item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
-            InlinedInstances = ModuleLinking.inlinedInstancesForImport item imported |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
+            InlinedTypes = ModuleLinking.inlinedTypesForImport qualifies item imported |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
+            InlinedInstances = ModuleLinking.inlinedInstancesForImport qualifies item imported |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.InlinedInstances
             InlinedUseContexts = imported.Typed.UseContexts |> Map.fold (fun acc id context -> acc |> Map.add id context) merged.InlinedUseContexts
             InlinedAssociatedArguments = imported.Typed.AssociatedArguments |> Map.fold (fun acc id named -> acc |> Map.add id named) merged.InlinedAssociatedArguments
             ImportedContextTypes =
                 RequiredContexts.ofImport imported.Subst imported.Typed.ContextTypes imported.RawSymbolTypes exportedSymbols.Keys
                 |> Map.fold (fun acc id found -> acc |> Map.add id found) merged.ImportedContextTypes
             CarriedAmbientMembers =
-                merged.CarriedAmbientMembers @ ModuleLinking.ambientMembersForImport item imported (carried |> List.map fst |> Set.ofList)
-            ComponentExports = merged.ComponentExports @ ModuleLinking.componentExportsForImport item imported
-            Tests = merged.Tests @ ModuleLinking.testsForImport item imported
+                merged.CarriedAmbientMembers @ ModuleLinking.ambientMembersForImport qualifies item imported (carried |> List.map fst |> Set.ofList)
+            ComponentExports = merged.ComponentExports @ ModuleLinking.componentExportsForImport qualifies item imported
+            Tests = merged.Tests @ ModuleLinking.testsForImport qualifies item imported
             UnqualifiedSources = unqualifiedSources
             ImportedFiles = importedFiles
             Merged = merged.Merged.Add importedKey },

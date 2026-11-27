@@ -254,8 +254,12 @@ module internal ModuleLinking =
     /// their names, or take the import's alias as a qualifier; private ones are qualified with the module's own
     /// name so they cannot collide with anything in the importer.
     /// An import that selects names without an alias, `as (a, b)`, brings in only the exports it selects (see
-    /// `selectedExports`) unqualified; the others are inlined as private definitions are.
-    let private inlinedRenames (item: ImportItem) (checkedModule: CheckedModule) : Map<string, string> =
+    /// `selectedExports`) unqualified; the others are inlined as private definitions are. In a module that isn't the
+    /// program's own, as a host's or a library's, `qualified`, an export an import brings in unqualified is inlined as
+    /// a private definition is, under its module's name, too, so that it can't collide with a definition of the
+    /// program's, or with another module's of the same name; the module's references to it are written as that name
+    /// (see `writeBlockAliases`).
+    let private inlinedRenames (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Map<string, string> =
         let qualifier = importQualifier item
         let moduleName =
             checkedModule.Name
@@ -268,14 +272,15 @@ module internal ModuleLinking =
                 match qualifier, selected with
                 | Some q, _ -> Some (name, $"{q}.{name}")
                 | None, Some selected when not (selected.Contains name) -> Some (name, $"{moduleName}.{name}")
+                | None, _ when qualified -> Some (name, $"{moduleName}.{name}")
                 | None, _ -> None
             | Kind (Def (ValueDef(false, name, _, _))) -> Some (name, $"{moduleName}.{name}")
             | _ -> None)
         |> Map.ofList
 
     /// The name the import `item` of `checkedModule` inlines its definition `name` under (see `inlinedItemsForImport`).
-    let internal inlinedName (item: ImportItem) (checkedModule: CheckedModule) (name: string) =
-        inlinedRenames item checkedModule |> Map.tryFind name |> Option.defaultValue name
+    let internal inlinedName (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) (name: string) =
+        inlinedRenames qualified item checkedModule |> Map.tryFind name |> Option.defaultValue name
 
     /// The names `imported`, from `origin`, gives its importers, each with the module that defines it: its own exports,
     /// and what it re-exports, which for a whole-module re-export (`export m`) is everything `m` gives, so through
@@ -381,27 +386,27 @@ module internal ModuleLinking =
 
     /// The members of the ambient contexts `carried` names that `checkedModule` records (see
     /// `TypedModule.AmbientMembers`), each under the name `inlinedItemsForImport` inlines its definition under.
-    let internal ambientMembersForImport (item: ImportItem) (checkedModule: CheckedModule) (carried: Set<string>) : AmbientMember list =
-        let renames = inlinedRenames item checkedModule
+    let internal ambientMembersForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) (carried: Set<string>) : AmbientMember list =
+        let renames = inlinedRenames qualified item checkedModule
         checkedModule.Typed.AmbientMembers
         |> List.filter (fun ambient -> carried.Contains ambient.Context)
         |> List.map (fun ambient -> { ambient with Definition = renames |> Map.tryFind ambient.Definition |> Option.defaultValue ambient.Definition })
 
     /// The definitions `checkedModule` exports from a component (see `TypedModule.ComponentExports`), by the names the
     /// import `item` inlines them under.
-    let internal componentExportsForImport (item: ImportItem) (checkedModule: CheckedModule) : ComponentExport list =
-        let renames = inlinedRenames item checkedModule
+    let internal componentExportsForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : ComponentExport list =
+        let renames = inlinedRenames qualified item checkedModule
         checkedModule.Typed.ComponentExports
         |> List.map (fun export -> { export with Definition = renames |> Map.tryFind export.Definition |> Option.defaultValue export.Definition })
 
     /// The tests of `checkedModule`, by the names `item` inlines them under.
-    let internal testsForImport (item: ImportItem) (checkedModule: CheckedModule) : Test list =
-        let renames = inlinedRenames item checkedModule
+    let internal testsForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Test list =
+        let renames = inlinedRenames qualified item checkedModule
         checkedModule.Typed.Tests
         |> List.map (fun test -> { test with Definition = renames |> Map.tryFind test.Definition |> Option.defaultValue test.Definition })
 
-    let internal inlinedItemsForImport (item: ImportItem) (checkedModule: CheckedModule) : TopLevelItem list =
-        let renames = inlinedRenames item checkedModule
+    let internal inlinedItemsForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : TopLevelItem list =
+        let renames = inlinedRenames qualified item checkedModule
         let rename (name: string) = renames |> Map.tryFind name |> Option.defaultValue name
         let ownItems =
             checkedModule.Own
@@ -414,16 +419,16 @@ module internal ModuleLinking =
 
     /// The types of the definitions `inlinedItemsForImport` inlines, by the names they are inlined under, so that
     /// the backend knows them as it knows the importer's own (the layout of an imported record, say).
-    let internal inlinedTypesForImport (item: ImportItem) (checkedModule: CheckedModule) : Map<string, Ty> =
-        let renames = inlinedRenames item checkedModule
+    let internal inlinedTypesForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Map<string, Ty> =
+        let renames = inlinedRenames qualified item checkedModule
         checkedModule.Typed.Types
         |> Seq.map (fun (KeyValue(name, ty)) -> (renames |> Map.tryFind name |> Option.defaultValue name), ty)
         |> Map.ofSeq
 
     /// The instances the calls in the definitions `inlinedItemsForImport` inlines find, with the definitions they name
     /// by the names those are inlined under: a private `__toString_1` a module derives is `two.__toString_1` (#1812).
-    let internal inlinedInstancesForImport (item: ImportItem) (checkedModule: CheckedModule) : Map<NodeId, ContextInstance option list> =
-        let renames = inlinedRenames item checkedModule
+    let internal inlinedInstancesForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Map<NodeId, ContextInstance option list> =
+        let renames = inlinedRenames qualified item checkedModule
         let rename (name: string) = renames |> Map.tryFind name |> Option.defaultValue name
         let renameInstance instance =
             match instance with
