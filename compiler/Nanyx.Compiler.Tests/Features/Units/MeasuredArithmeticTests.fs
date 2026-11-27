@@ -5,16 +5,7 @@ module Nanyx.Compiler.Tests.Features.MeasuredArithmetic
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
-
-let private dimensions =
-    "dimension Time\n@baseUnit unit ns: Time\nunit ms: Time = 1_000_000ns\nunit s: Time = 1_000ms\n"
-    + "dimension Length(float)\n@baseUnit unit m: Length\n"
-
-/// The type of each def `source` declares after the dimensions, by name, which compiles with no diagnostic.
-let private typesIn (source: string) (names: string list) =
-    let result = Compiler.compile (withFinalNewline (dimensions + source))
-    Assert.Empty(result.Diagnostics)
-    names |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name])
+open Nanyx.Compiler.Tests.Features.UnitsFixture
 
 /// The code and message of the one diagnostic compiling `source` after the dimensions gives.
 let private only (source: string) =
@@ -25,15 +16,15 @@ let private only (source: string) =
 let ``Sums, differences, scalings and remainders keep the dimension`` () =
     Assert.Equal<string list>(
         [ "Time(int)"; "Time(int)"; "Time(int)"; "Time(int)"; "Time(int)"; "Time(int)" ],
-        typesIn "def a = 1s + 2ms\ndef b = 1s - 2ms\ndef c = 2 * 1s\ndef d = 1s * 2\ndef e = -1500ms % 1s\ndef f = -(1s)" [ "a"; "b"; "c"; "d"; "e"; "f" ])
+        typesAfter dimensions "def a = 1s + 2ms\ndef b = 1s - 2ms\ndef c = 2 * 1s\ndef d = 1s * 2\ndef e = -1500ms % 1s\ndef f = -(1s)" [ "a"; "b"; "c"; "d"; "e"; "f" ])
 
 [<Fact>]
 let ``A measured value divided by a number is of the storage's fraction, and floored of the storage`` () =
-    Assert.Equal<string list>([ "Time(float)"; "Time(int)" ], typesIn "def a = 1s / 2\ndef b = 1s // 3" [ "a"; "b" ])
+    Assert.Equal<string list>([ "Time(float)"; "Time(int)" ], typesAfter dimensions "def a = 1s / 2\ndef b = 1s // 3" [ "a"; "b" ])
 
 [<Fact>]
 let ``A measured value divided by one of its dimension is a plain number`` () =
-    Assert.Equal<string list>([ "float"; "int" ], typesIn "def a = 1s / 1ms\ndef b = 1500ms // 1s" [ "a"; "b" ])
+    Assert.Equal<string list>([ "float"; "int" ], typesAfter dimensions "def a = 1s / 1ms\ndef b = 1500ms // 1s" [ "a"; "b" ])
 
 [<Fact>]
 let ``Each row holds at a generic storage`` () =
@@ -48,17 +39,17 @@ let ``Each row holds at a generic storage`` () =
     Assert.Equal<string list>(
         [ "Time(a), Time(a) -> Time(a)"; "Time(a) -> Time(fraction)"; "Time(a) -> Time(a)"; "Time(a), Time(a) -> fraction"
           "Time(a) -> Time(a)"; "Time(a) -> Time(a)"; "Time(a), Time(a) -> Time(a)" ],
-        typesIn source [ "add"; "half"; "halfDown"; "ratio"; "twice"; "later"; "left" ])
+        typesAfter dimensions source [ "add"; "half"; "halfDown"; "ratio"; "twice"; "later"; "left" ])
 
 [<Fact>]
 let ``A dimension has Add and Sub of its storage, so a function generic in Add sums times`` () =
     Assert.Equal<string list>(
         [ "Time(int)"; "Time(float)"; "Time(int)" ],
-        typesIn "def sum: [Add(a)] a, a -> a = { x, y -> x + y }\ndef a = sum(100ms, 200ms)\ndef b = sum(0.5s, 0.25s)\ndef none: [Add(a)] a -> a = { x -> zero }\ndef c = none(5ms)" [ "a"; "b"; "c" ])
+        typesAfter dimensions "def sum: [Add(a)] a, a -> a = { x, y -> x + y }\ndef a = sum(100ms, 200ms)\ndef b = sum(0.5s, 0.25s)\ndef none: [Add(a)] a -> a = { x -> zero }\ndef c = none(5ms)" [ "a"; "b"; "c" ])
 
 [<Fact>]
 let ``Measured values compare as their storages do`` () =
-    Assert.Equal<string list>([ "bool"; "bool" ], typesIn "def a = 1s == 1_000ms\ndef b = 1s < 2s" [ "a"; "b" ])
+    Assert.Equal<string list>([ "bool"; "bool" ], typesAfter dimensions "def a = 1s == 1_000ms\ndef b = 1s < 2s" [ "a"; "b" ])
 
 [<Fact>]
 let ``Adding two dimensions is an error naming both`` () =

@@ -5,8 +5,7 @@ module Nanyx.Compiler.Tests.Features.MeasuredDisplay
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
-
-let private time = "dimension Time\n@baseUnit unit ns: Time\nunit ms: Time = 1_000_000ns\n"
+open Nanyx.Compiler.Tests.Features.UnitsFixture
 
 [<Fact>]
 let ``A hole on a measured value of a known storage needs no context`` () =

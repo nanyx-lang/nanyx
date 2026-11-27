@@ -6,22 +6,14 @@ module Nanyx.Compiler.Tests.Features.DimensionTypes
 open Xunit
 open NyxCompiler
 open Nanyx.Compiler.Tests.TestSupport
-
-let private dimensions =
-    "dimension Time\n@baseUnit unit ns: Time\ndimension Length(float)\n@baseUnit unit m: Length\ndimension Bytes(int)\n@baseUnit unit B: Bytes\n"
-
-/// The types of `names`, as compiling `source` after the dimensions infers them, which reports nothing.
-let private typesIn (source: string) (names: string list) =
-    let result = Compiler.compile (withFinalNewline (dimensions + source))
-    Assert.Empty(result.Diagnostics)
-    names |> List.map (fun name -> Unifier.tyToString result.Typed.Value.Types[name])
+open Nanyx.Compiler.Tests.Features.UnitsFixture
 
 [<Fact>]
 let ``A signature that names a dimension requires Num of its storage`` () =
     let source =
         "def same: Time(a) -> Time(a) = { t -> t }\ndef isLong: Time -> bool = { t -> true }\ndef twice: Time(a), a -> Time(a) = { t, n -> t }"
     Assert.Equal<string list>(
-        [ "Time(a) -> Time(a)"; "Time(a) -> bool"; "Time(a), a -> Time(a)" ], typesIn source [ "same"; "isLong"; "twice" ])
+        [ "Time(a) -> Time(a)"; "Time(a) -> bool"; "Time(a), a -> Time(a)" ], typesAfter dimensions source [ "same"; "isLong"; "twice" ])
     // Called at a storage that is no number, it is missing its `Num`.
     Assert.Equal<string list>(
         [ DiagnosticCodes.MissingContextMembers.Code ],
@@ -31,7 +23,7 @@ let ``A signature that names a dimension requires Num of its storage`` () =
 let ``The dimensions a function is passed written without their storage share one`` () =
     Assert.Equal<string list>(
         [ "Time(a), Time(a) -> bool"; "Time(a), Time(b) -> bool"; "Time(a), Time(b), Time(b) -> bool" ],
-        typesIn
+        typesAfter dimensions
             "def overlap: Time, Time -> bool = { a, b -> true }\ndef apart: Time(a), Time(b) -> bool = { a, b -> true }\ndef mixed: Time(a), Time, Time -> bool = { s, t, u -> true }"
             [ "overlap"; "apart"; "mixed" ])
 
@@ -47,7 +39,7 @@ let ``A call that passes differently stored values to dimensions written without
 let ``A dimension in a result written without its storage is of the one the body makes it`` () =
     Assert.Equal<string list>(
         [ "list(Time(a)) -> Time(a)"; "Time(int)"; "int -> Time(int)" ],
-        typesIn
+        typesAfter dimensions
             "def total: list(Time) -> Time = { ts -> list.sum(ts) }\ndef second: Time = 1_000_000_000ns\ndef seconds: int -> Time = { n -> n * 1_000_000_000ns }"
             [ "total"; "second"; "seconds" ])
 
@@ -63,7 +55,7 @@ let ``Hover shows the one Num of the storage the parameters share`` () =
 let ``A constrained dimension is of its one storage, and a concrete storage requires nothing`` () =
     Assert.Equal<string list>(
         [ "Bytes(int) -> Bytes(int)"; "Time(int) -> Time(int)" ],
-        typesIn "def size: Bytes -> Bytes = { b -> b }\ndef ints: Time(int) -> Time(int) = { t -> t }" [ "size"; "ints" ])
+        typesAfter dimensions "def size: Bytes -> Bytes = { b -> b }\ndef ints: Time(int) -> Time(int) = { t -> t }" [ "size"; "ints" ])
 
 [<Fact>]
 let ``A generic function takes a measured value of any storage`` () =
