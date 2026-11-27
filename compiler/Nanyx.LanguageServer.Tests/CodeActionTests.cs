@@ -59,6 +59,25 @@ public sealed class CodeActionTests : LanguageServerTestBase
     }
 
     [Fact]
+    public async Task A_fix_after_an_import_whose_file_has_errors_is_its_own_diagnostics()
+    {
+        // The import's errors are published as one diagnostic at the import, so the published diagnostics are fewer
+        // than the compiler's, and the fix after it is still its own diagnostic's (#3048).
+        File.WriteAllText(TempPath("mod.nyx"), "module mod\nexport def value = missing + other\n");
+        var uri = DocumentUri.FromFileSystemPath(TempPath("main.nyx"));
+        const string text = "module main\nimport mod\ndef s = max(1, 2)\n";
+
+        Open(uri, text);
+        var published = (await NextPublished(uri)).Diagnostics!;
+        Assert.Equal(["'mod.nyx' has errors", "NYX0102"], published.Select(d => d.Code?.String ?? d.Message.String));
+
+        var import = Assert.Single(await CodeActionsIn(uri, new Range(2, 8, 2, 8)), action => action.Kind == CodeActionKind.QuickFix);
+        Assert.Equal("Add `import nanyx/math`", import.Title);
+        var diagnostic = Assert.Single(import.Diagnostics!);
+        Assert.Equal(("NYX0102", new Range(2, 8, 2, 11)), (diagnostic.Code?.String, diagnostic.Range));
+    }
+
+    [Fact]
     public async Task An_unknown_name_the_standard_library_exports_offers_its_import()
     {
         var uri = DocumentUri.Parse("untitled:Untitled-12");
