@@ -62,20 +62,26 @@ let private scopeOf (env: TypeEnv) (state: InferState) (name: Identifier) : Ty o
 let isCell (env: TypeEnv) (state: InferState) (name: Identifier) = (scopeOf env state name).IsSome
 
 /// `state` once `name`, as `env` binds it, is read or changed: a cell's use needs `Memory` of the cell's block, which
-/// the lambda around it requires (see `LambdaContexts`).
+/// the lambda around it requires (see `LambdaContexts`). A cell made outside a block, which is an error already, has
+/// none, and its uses need nothing.
 let recordUse (env: TypeEnv) (state: InferState) (name: Identifier) : InferState =
-    match scopeOf env state name with
-    | Some scope -> LambdaContexts.record [ FunctionContexts.scoped context scope ] state
-    | None -> state
+    match TypeEnv.tryFind name env |> Option.bind _.Symbol with
+    | Some symbol when not (state.CellsOutsideMemory.Contains symbol) ->
+        match state.Cells.TryFind symbol with
+        | Some scope -> LambdaContexts.record [ FunctionContexts.scoped context scope ] state
+        | None -> state
+    | _ -> state
 
 /// Records that the local def `symbol` is a cell, of the scope of the `memory` block `env` is in. One made outside a
-/// block, which is an error, has a scope of its own.
+/// block, which is an error, has a scope of its own, and its uses need no `Memory` (see `recordUse`).
 let declareCell (env: TypeEnv) (symbol: SymbolId option) (state: InferState) =
     match symbol, env.BlockScope with
     | Some symbol, Some scope -> { state with Cells = state.Cells |> Map.add symbol scope }
     | Some symbol, None ->
         let scope, next = freshVar state
-        { next with Cells = next.Cells |> Map.add symbol scope }
+        { next with
+            Cells = next.Cells |> Map.add symbol scope
+            CellsOutsideMemory = next.CellsOutsideMemory.Add symbol }
     | None, _ -> state
 
 /// `state` with the declaration `expr`, `mut x = value`, of the cell's type `cellTy`, which can be wider than its first
