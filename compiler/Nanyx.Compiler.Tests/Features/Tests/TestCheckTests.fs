@@ -40,6 +40,39 @@ let ``A test may require Console and Random, which the test host provides`` () =
     Assert.Equal(1, typed.Tests.Length)
 
 [<Fact>]
-let ``@test takes no argument`` () =
-    let code, _, _ = onlyDiagnostic "@test(1)\ndef `adds` = {\n  assert(1 + 1 == 2)\n}\n"
+let ``@test takes no argument but #io`` () =
+    let code, message, place = onlyDiagnostic "@test(#fast)\ndef `adds` = {\n  assert(1 + 1 == 2)\n}\n"
     Assert.Equal(DiagnosticCodes.UnexpectedAttributeArgument.Code, code)
+    Assert.Equal("#fast", place)
+    Assert.StartsWith("It takes no argument, or `#io`", message)
+
+[<Fact>]
+let ``A test marked @test(#io) may require Env, and is one of the module's tests`` () =
+    let typed = compileClean "@test(#io)\ndef `reads the arguments` = {\n  assert(args() == [])\n}\n"
+    Assert.Equal<(string * bool) list>([ "reads the arguments", true ], typed.Tests |> List.map (fun test -> test.Name, test.Io))
+
+[<Fact>]
+let ``NYX0312 for a context @test(#io) provides says to mark the test so, and its fix does`` () =
+    let source = "@test\ndef `reads the arguments` = {\n  assert(args() == [])\n}\n"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TestContextNotProvided.Code, diagnostic.Code)
+    Assert.EndsWith("with `use` in the test, or mark the test `@test(#io)` to use the real one", diagnostic.Message)
+    let fix = Assert.Single(diagnostic.Fixes)
+    Assert.Equal("Mark the test `@test(#io)`", fix.Title)
+    Assert.Equal("@test(#io)\ndef `reads the arguments` = {\n  assert(args() == [])\n}\n", applyFix source fix)
+
+[<Fact>]
+let ``NYX0312 for a context @test(#io) doesn't provide says only to load one, with no fix`` () =
+    let source = "def fetch: [Http] () -> () = { _ -> () }\n\n@test(#io)\ndef `fetches` = {\n  fetch()\n}\n"
+    let diagnostic = Assert.Single((Compiler.compile source).Diagnostics)
+    Assert.Equal(DiagnosticCodes.TestContextNotProvided.Code, diagnostic.Code)
+    Assert.Equal(
+        "The test 'fetches' requires the context 'Http', which the test host does not provide: load an instance of it, such as a fake, with `use` in the test",
+        diagnostic.Message)
+    Assert.Empty(diagnostic.Fixes)
+
+[<Fact>]
+let ``NYX0312 holds for a context a test requires only through a function whose contexts are inferred`` () =
+    let code, message, _ = onlyDiagnostic "def count = { list.length(args()) }\n\n@test\ndef `counts the arguments` = {\n  assert(count() == 0)\n}\n"
+    Assert.Equal(DiagnosticCodes.TestContextNotProvided.Code, code)
+    Assert.StartsWith("The test 'counts the arguments' requires the context 'Env'", message)

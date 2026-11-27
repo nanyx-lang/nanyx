@@ -1142,8 +1142,8 @@ let testBuildOf (directory: TempDirectory) : byte array * Diagnostic list =
     | Error problems -> failwith $"%A{problems}"
 
 /// Each test of the test build `wasm`, by its full name, run as `nanyx test` runs it, with `seed` and a time limit of
-/// `timeout`.
+/// `timeout`, a `#io` test in this process's directory.
 let runTestsOf (wasm: byte array) (seed: int64) (timeout: TimeSpan) : Map<string, Nanyx.Runtime.TestRun> =
-    match Nanyx.Runtime.WasmTester.run wasm (fun _ -> true) seed timeout ignore with
+    match Nanyx.Runtime.WasmTester.run wasm (Directory.GetCurrentDirectory()) [] (fun _ -> true) seed timeout ignore with
     | Ok runs -> runs |> List.map (fun run -> run.Test.FullName, run) |> Map.ofList
     | Error error -> failwith $"%A{error}"

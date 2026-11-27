@@ -46,7 +46,7 @@ let ``The runner runs only the tests it is asked to, in the order of their index
     use directory = testedPackage "" [ "src/checks.nyx", "export module checks\n\nexport def answer: int = 42\n\n@test\ndef `one` = {\n  print(\"1\")\n}\n\n@test\ndef `two` = {\n  print(\"2\")\n}\n\n@test\ndef `three` = {\n  print(\"3\")\n}\n" ]
     let wasm, _ = testBuildOf directory
     let reported = ResizeArray<string>()
-    match WasmTester.run wasm (fun test -> test.Name <> "two") 0L WasmTester.defaultTimeout (fun run -> reported.Add run.Output) with
+    match WasmTester.run wasm directory.Path [] (fun test -> test.Name <> "two") 0L WasmTester.defaultTimeout (fun run -> reported.Add run.Output) with
     | Ok runs ->
         Assert.Equal<int list>([ 0; 2 ], runs |> List.map _.Index)
         Assert.Equal<string list>([ "1"; "3" ], List.ofSeq reported)

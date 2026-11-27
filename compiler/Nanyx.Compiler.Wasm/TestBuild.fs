@@ -15,4 +15,12 @@ let assemble (options: WasmOptions) (typed: TypedModule) : byte array =
     let wat, _ = transpileTypedModuleWithOptions { options with DbgToEmbedder = true; CrashToRuntime = true } typed
     let shown = NyxCompiler.PackageModules.shownFile options.SourceRoot
     WasmBinary.assemble wat
-    |> WasmBinary.withTests (typed.Tests |> List.map (fun test -> test.Module, test.Name, shown test.Span.File, test.Span.StartLine + 1, test.Span.StartColumn + 1))
+    |> WasmBinary.withTests (
+        typed.Tests
+        |> List.map (fun test ->
+            { Module = test.Module
+              Name = test.Name
+              File = shown test.Span.File
+              Line = test.Span.StartLine + 1
+              Column = test.Span.StartColumn + 1
+              Io = test.Io }))

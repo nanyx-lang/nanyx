@@ -1,8 +1,8 @@
 --| The console's system on WASI preview 1, which the console host's core root provides: a
   `Console` that reads and writes the standard streams, an `Env` that reads what the program was
   started with, and a `FileSystem` that reads and writes the directories the runtime opened for it.
-  A host that runs programs on WASI preview 1 writes them on these functions, as the console host's
-  `provide` does.
+  A host that runs programs on WASI preview 1 loads them with [`provide`], or writes them on these
+  functions itself, as the console host does.
 @partial export module preview1.system
 
 import (
@@ -134,4 +134,54 @@ export def exitProcess: [HostRuntime] int -> undefined = { code ->
 
   procExit(exitCode)
   exitProcess(code)
+}
+
+--| Calls `f` with a `Console` that reads and writes the standard streams, an `Env` that reads what
+  the program was started with, and a `FileSystem` that reads and writes the directories the
+  runtime opened for it, and gives back what `f` returns: what the test host runs a test marked
+  `@test(#io)` with. The console host's `provide` loads the same, in place, so that a crash's stack
+  in a program it runs has no frame for this function.
+export def provide: [c, HostRuntime, Async] ([c, Console, Env, FileSystem] () -> a) -> a = { f ->
+  use Console(
+    write = { text -> writeTo(1, text) }
+    writeError = { text -> writeTo(2, text) }
+    readLine = { _ -> readLineAfter(fill, []) }
+    readToEnd = { _ -> #some(readToEndAfter(fill, [])) }
+    flush = { _ -> () }
+  )
+
+  use Env(
+    args = { _ -> arguments() }
+    variable = { name -> environmentVariable(name) }
+    exit = { code -> exitProcess(code) }
+  )
+
+  use FileSystem(
+    readFile = { at -> if cancelled()
+        then #cancelled
+        else readWith(at, { address, count -> stringAt(address, count) })
+    }
+    readFileBytes = { at -> if cancelled()
+        then #cancelled
+        else readWith(at, { address, count -> bytesAt(address, count) })
+    }
+    readFileChunk = { at, offset, length -> if cancelled()
+        then #cancelled
+        else chunkAt(at, offset, length)
+    }
+    writeFile = { at, text -> if cancelled() then #cancelled else writeWith(at, text, 9, 0) }
+    appendFile = { at, text -> if cancelled() then #cancelled else writeWith(at, text, 1, 1) }
+    pathExists = { at -> if cancelled() then false else existsAt(at) }
+    deleteFile = { at -> if cancelled() then #cancelled else deleteAt(at) }
+    listDirectory = { at -> if cancelled() then #cancelled else namesAt(at) }
+    createDirectory = { at ->
+      if cancelled() then #cancelled else
+        atPath(
+          at
+          { directory, address, length -> pathCreateDirectory(directory, address, length) }
+        )
+    }
+  )
+
+  f()
 }

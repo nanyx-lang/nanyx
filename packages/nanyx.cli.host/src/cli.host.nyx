@@ -41,6 +41,8 @@ import (
 export def provide
   : [HostRuntime, Async] ([Async, Clock, Console, Env, FileSystem, Http, Random] () -> a) -> a
   = { f ->
+    -- As `nanyx.wasi`'s `preview1.system.provide` loads them, written here so that a crash's stack has no
+    -- frame for a function that loads them.
     use Console(
       write = { text -> wasiSystem.writeTo(1, text) }
       writeError = { text -> wasiSystem.writeTo(2, text) }

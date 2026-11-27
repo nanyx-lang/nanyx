@@ -91,6 +91,33 @@ let private testingApplication (hostEntry: string) (files: (string * string) lis
         directory.Write ("src/" + path) text
     nanyxIn directory.Path [ "test" ]
 
+/// What `nanyx test` printed for an application under the console host that depends on `nanyx.fs`, whose files, by
+/// their paths relative to its directory, are `files`.
+let private testingWithFiles (files: (string * string) list) =
+    use directory = new TempDirectory()
+    directory.Write
+        "app.nyxp"
+        $"""(package = (name = "app", version = "0.1.0", sources = ["src/**/*.nyx"]), dependencies = [(package = "nanyx.fs", version = "{NyxCompiler.Toolchain.version}")], {consoleHostEntry})"""
+    for path, text in files do
+        directory.Write path text
+    nanyxWithVariables [ "NANYX_TEST_GREETING", "hello" ] [ "test"; directory.Path ]
+
+/// A module whose `#io` tests read a file in the package's directory and an environment variable, and one that prints
+/// and fails, beside a test that isn't `#io`.
+let private ioTests =
+    "module main\n\nimport nanyx.fs/path as path\n\ndef load: [Async, FileSystem] string -> #some(string) | FsError = { at -> readFile(path.of(at)) }\n\n@test(#io)\ndef `reads the sample config` = {\n  assert(load(\"tests/sample.toml\") == #some(\"port = 8080\\n\"))\n}\n\n@test(#io)\ndef `reads the greeting` = {\n  assert(variable(\"NANYX_TEST_GREETING\") == #some(\"hello\"))\n}\n\n@test(#io)\ndef `prints and fails` = {\n  println(\"to the real console\")\n  assert(1 == 2)\n}\n\n@test\ndef `adds up` = {\n  assert(1 + 1 == 2)\n}\n"
+
+[<Fact>]
+let ``A test marked @test(#io) reads the package's files and the environment, and its output is still kept`` () =
+    let outcome = testingWithFiles [ "src/main.nyx", ioTests; "tests/sample.toml", "port = 8080\n" ]
+    Assert.Equal(1, outcome.ExitCode)
+    let lines = outcome.StandardOutput.ReplaceLineEndings("\n").Split('\n') |> List.ofArray
+    Assert.Contains("PASS main.`reads the sample config` (io)", lines)
+    Assert.Contains("PASS main.`reads the greeting` (io)", lines)
+    Assert.Contains("PASS main.`adds up`", lines)
+    Assert.Contains("FAIL main.`prints and fails` (io)  src/main.nyx:18:1", lines)
+    Assert.Contains("    to the real console", lines)
+
 [<Fact>]
 let ``A test build keeps the console host's prelude for the program's modules, so a module that reads its arguments and files runs its tests`` () =
     let main =

@@ -7,6 +7,8 @@ open Parser.Program
 module TestChecks =
     let private hostContexts = Set.ofList Hosts.testContexts
 
+    let private ioContexts = Set.ofList Hosts.ioTestContexts
+
     /// The name a context of a def's requirements is written by: `Console`, `Async`.
     let private contextName (context: Ty) =
         match context with
@@ -25,22 +27,39 @@ module TestChecks =
            | TyFunc(input, output, _) -> Unifier.unalias input = TyPrimitive "unit" && isResult (Unifier.unalias output)
            | _ -> false
 
-    /// The errors about the module's tests, `tests`, each by name with where it is written: a test whose type `typeOf`
-    /// gives is not a test's (`NYX0310`); one that requires a context, as `contextsOf` gives them, that the test host
-    /// doesn't provide (`NYX0312`); and each reference to a test, by the module's `references` to its `symbols`, from
-    /// code that isn't a test, among the module's `items` (`NYX0311`). A test may refer to another.
+    /// The error for `test` requiring `context`, which the test host doesn't provide it (`NYX0312`): one that
+    /// `@test(#io)` provides comes with that advice, when every context the test lacks is one, and a fix that marks the
+    /// test so, after its attribute.
+    let private contextNotProvided (test: Attributes.MarkedTest) (missing: string list) (context: string) =
+        let ioWouldDo = not test.Io && missing |> List.forall ioContexts.Contains
+        let advice = if ioWouldDo then $", or mark the test `@test(#{Attributes.ioTestArgument})` to use the real one" else ""
+        let diagnostic =
+            Diagnostics.at DiagnosticCodes.TestContextNotProvided test.Span
+                $"The test '{test.Name}' requires the context '{context}', which the test host does not provide: load an instance of it, such as a fake, with `use` in the test{advice}"
+            |> Diagnostics.about test.Name
+        if ioWouldDo then
+            let after = { test.Attribute with Start = test.Attribute.End; StartColumn = test.Attribute.StartColumn + (test.Attribute.End - test.Attribute.Start) }
+            { diagnostic with
+                Fixes = [ { Title = $"Mark the test `@test(#{Attributes.ioTestArgument})`"; Edits = [ { Span = after; NewText = $"(#{Attributes.ioTestArgument})" } ] } ] }
+        else
+            diagnostic
+
+    /// The errors about the module's tests, `tests`: a test whose type `typeOf` gives is not a test's (`NYX0310`); one
+    /// that requires a context, as `contextsOf` gives them, that the test host doesn't provide it, which for one marked
+    /// `@test(#io)` are `Hosts.ioTestContexts` (`NYX0312`); and each reference to a test, by the module's `references` to
+    /// its `symbols`, from code that isn't a test, among the module's `items` (`NYX0311`). A test may refer to another.
     let errors
-        (tests: (string * SourceSpan) list)
+        (tests: Attributes.MarkedTest list)
         (typeOf: string -> Ty option)
         (contextsOf: string -> Ty list)
         (references: Map<NodeId, SymbolId>)
         (symbols: Map<SymbolId, Symbol>)
         (items: TopLevelItem list)
         : Diagnostic list =
-        let testNames = tests |> List.map fst |> Set.ofList
+        let testNames = tests |> List.map _.Name |> Set.ofList
         let shapeErrors =
             tests
-            |> List.choose (fun (name, span) ->
+            |> List.choose (fun { Name = name; Span = span } ->
                 match typeOf name with
                 | Some ty when not (isTestType ty) ->
                     Some (
@@ -50,15 +69,10 @@ module TestChecks =
                 | _ -> None)
         let contextErrors =
             tests
-            |> List.collect (fun (name, span) ->
-                contextsOf name
-                |> List.choose contextName
-                |> List.distinct
-                |> List.filter (hostContexts.Contains >> not)
-                |> List.map (fun context ->
-                    Diagnostics.at DiagnosticCodes.TestContextNotProvided span
-                        $"The test '{name}' requires the context '{context}', which the test host does not provide: load an instance of it, such as a fake, with `use` in the test"
-                    |> Diagnostics.about name))
+            |> List.collect (fun test ->
+                let provided = if test.Io then ioContexts else hostContexts
+                let missing = contextsOf test.Name |> List.choose contextName |> List.distinct |> List.filter (provided.Contains >> not)
+                missing |> List.map (contextNotProvided test missing))
         // The code that isn't a test: the top-level expressions, and the defs not marked `@test`, a block's among them,
         // but the dispatcher a test build gives the module to run them (see `Attributes.testDispatcher`).
         let rec notTests (items: TopLevelItem list) =
