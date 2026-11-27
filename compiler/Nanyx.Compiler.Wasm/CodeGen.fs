@@ -772,7 +772,8 @@ let private optimised (options: WasmOptions) (cachedNames: Set<string>) (exporte
     // How each function uses its parameters, which a probe reads too (see `CoreIrEmit.EmitContext.TakesOver`).
     let definitions =
         CoreIrClosureEntries.withOwningEntries closureTargets (CoreIrClosureEntries.memberCounts (definitionFunctions @ Option.toList startFunction)) definitionFunctions
-    let all = definitions @ Option.toList startFunction
+    // A record built from the fields of one that dies there takes the one apart, to reuse its block (#2209).
+    let all = CoreIrReuseFields.rewrite (definitions @ Option.toList startFunction)
     let ownership = CoreIrCounting.inferOwnership all
     let counted = CoreIrCounting.insert ownership all |> CoreIrReuse.insert
     let start = startFunction |> Option.map (fun _ -> List.last counted)

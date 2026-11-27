@@ -503,6 +503,22 @@
     i64.store
     local.get $base
   )
+  (func $__nanyx_reuse_object (param $block i32) (param $size i32) (param $info i32) (result i32)
+    local.get $block
+    i32.eqz
+    if
+      local.get $size
+      local.get $info
+      call $__nanyx_new_object
+      return
+    end
+    local.get $block
+    local.get $info
+    i32.store offset=4
+    local.get $block
+    i32.const 8
+    i32.add
+  )
   (func $__nanyx_escape_byte (param $c i32) (result i32)
     local.get $c
     i32.const 34
@@ -804,7 +820,7 @@
   )
   (export "printPerson" (func $printPerson))
 
-  (func $main (result i32) (local $p i32) (local $__dbg_value_1__in1_i64 i64) (local $__dbg_value_2__in1_i64 i64) (local $p2 i32) (local $__dbg_value_1__in2_i64 i64) (local $__dbg_value_2__in2_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32) (local $__owned_6 i32) (local $__owned_7 i32)
+  (func $main (result i32) (local $p i32) (local $__dbg_value_1__in1_i64 i64) (local $__dbg_value_2__in1_i64 i64) (local $p2 i32) (local $__dbg_value_1__in2_i64 i64) (local $__dbg_value_2__in2_i64 i64) (local $__field_name_15 i32) (local $__field_score_16_i64 i64) (local $__interp_len i32) (local $__interp_base i32) (local $__interp_cursor i32) (local $__interp_ptr i32) (local $__interp_copy_len i32) (local $__reuse_1 i32) (local $__owned_0 i32) (local $__owned_1 i32) (local $__owned_2 i32) (local $__owned_3 i32) (local $__owned_4 i32) (local $__owned_5 i32) (local $__owned_6 i32) (local $__owned_7 i32)
     i32.const 20
     i32.const 1
     call $__nanyx_new_object
@@ -818,10 +834,40 @@
     i32.const 12
     call $__nanyx_record_set_i64
     local.set $p
-    i32.const 276
+    i32.const 1
+    (if (result i32)
+      (then
+        local.get $p
+      i32.load offset=8
+        local.set $__field_name_15
     local.get $p
-    i32.load offset=8
+      i64.load offset=12
+        local.set $__field_score_16_i64
+    local.get $p
+    i32.const 8
+    i32.sub
+    i32.load
+    i32.const 1
+    i32.eq
+    if
+      local.get $p
+      i32.const 8
+      i32.sub
+      local.set $__reuse_1
+    else
+      local.get $__field_name_15
     call $__nanyx_dup_string
+    drop
+      local.get $p
+      i32.const 8
+      i32.sub
+      call $__nanyx_release
+      drop
+      i32.const 0
+      local.set $__reuse_1
+    end
+    i32.const 276
+    local.get $__field_name_15
     local.tee $__owned_1
     call $__nanyx_string_quote
     local.get $__owned_1
@@ -859,10 +905,7 @@
     local.get $__owned_2
     call $__nanyx_drop_string
     drop
-    local.get $p
-    i64.load offset=12
-    local.get $p
-    call $__nanyx_drop_rec_age_int_name_string_score_int
+    local.get $__field_score_16_i64
     local.set $__dbg_value_2__in1_i64
     i32.const 308
     i32.const 0
@@ -889,9 +932,10 @@
     local.get $__owned_3
     call $__nanyx_drop_string
     drop
+    local.get $__reuse_1
     i32.const 20
     i32.const 1
-    call $__nanyx_new_object
+    call $__nanyx_reuse_object
     i64.const 25
     i32.const 0
     call $__nanyx_record_set_i64
@@ -974,6 +1018,11 @@
     call $__nanyx_drop_string
     drop
     i32.const 0
+      )
+      (else
+        unreachable
+      )
+    )
   )
   (export "main" (func $main))
 

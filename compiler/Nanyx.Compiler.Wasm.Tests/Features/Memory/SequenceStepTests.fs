@@ -84,8 +84,9 @@ let ``A seq block with a for loop and a yield into seq.toList makes seven blocks
 [<Fact>]
 let ``A for loop whose body yields twice goes through seq.flatMap`` () =
     // Its body is a sequence of its own: four for the range, two for each of seq.flatMap's steps, four for each yield's
-    // sequence and one for each of the list's cells, less what reuse saves.
-    Assert.Equal(21, perElement "yieldTwiceToList" (fun n -> 2 * n))
+    // sequence and one for each of the list's cells, less what reuse saves: a step's record built from the fields of the
+    // one before it is written into its block (#2209).
+    Assert.Equal(20, perElement "yieldTwiceToList" (fun n -> 2 * n))
 
 [<Fact>]
 let ``seq.filter and seq.map folded make two blocks per stage per element over the range's four`` () =
