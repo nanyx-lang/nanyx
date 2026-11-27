@@ -45,6 +45,9 @@ module Maps =
     /// entries, as a `for` loop and `dbg` do, so that only the prelude knows how a map is held.
     let toList = typeName + ".toList"
 
+    /// The type of an entry of a map with keys of `key` and values of `value`, as its `toList` gives them: a pair.
+    let entryType (key: Ty) (value: Ty) : Ty = TyRecord(Map.ofList [ "0", key; "1", value ], FieldOrder.none)
+
     /// The prelude's function that gives a map's store with each key and each value converted, its shape as
     /// it is: how the backend boxes a map's keys and values for its type's description, and unboxes them again,
     /// without hashing anything.
