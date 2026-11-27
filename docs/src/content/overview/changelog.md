@@ -8,6 +8,70 @@ Each release of the compiler, newest first: what it is about, and the changes yo
 release are on the [GitHub releases page](https://github.com/nanyx-lang/nanyx/releases?q=compiler); see
 [Installation](../getting-started/installation) for how to get them. The VS Code extension is released on its own.
 
+# 0.52.0
+
+*27 November 2026*
+
+Testing grows up: a test can expect a crash, use files kept in memory, and wait on tasks, and `nanyx test` can list,
+select and report tests as JSON, which the VS Code extension's Testing view builds on. Errors point at the code that
+explains them. Three changes may need edits: the old `type a` parameter forms are errors, a custom pattern's arguments
+are simple values, and a number with a unit that is a whole number of storage units is an `int`.
+
+**Language**
+
+- `type a` as a parameter and `into: type` are errors ([NYX0282](../standard-tools/errors#nyx0282)), with the fix
+  that writes `Type(a)`, as they have been warnings since 0.39.0.
+- A custom pattern's arguments are literals, names, and tuples, lists or tags of them, in both its forms. Anything
+  else is [NYX0264](../standard-tools/errors#nyx0264), with a fix that binds it with a `def` first
+  ([Custom patterns](../advanced/custom-patterns#patterns-with-arguments)).
+- A number with a unit that nothing settles is an `int` when it is a whole number of its dimension's storage units, so
+  `0.5s == 500ms` checks, and a `float` when it isn't
+  ([Numbers with units](../advanced/units-of-measure#numbers-with-units)). A dimension that no declared unit can store
+  gets a storage unit made up for it, where it was NYX0299
+  ([Dimensions and units](../advanced/units-of-measure#dimensions-and-units)).
+- An open record can be spread to update the fields it is known to have, `(...p, x = 2)`
+  ([Closed and open records](../tour/records#closed-and-open-records)).
+- `context x` can name any context a lambda is given, a parameterised one's instance or one with no members
+  ([Naming the instance a lambda is given](../advanced/contexts#naming-the-instance-a-lambda-is-given)).
+- A collection literal takes the type expected of it from a lambda's result and a record field's type
+  ([Collections](../tour/collections#syntax)).
+- A function that writes no type and never returns is inferred to give back `undefined`
+  ([Top and bottom types](../tour/types#top-and-bottom-types)), and one that loops over its parameter requires
+  `Iterable` of it instead of taking a list.
+
+**Standard library**
+
+- `filesystem.inMemory(files, body)` runs a block with a `FileSystem` that keeps its files in memory, for tests
+  ([`filesystem`](../stdlib/filesystem)).
+
+**Tools**
+
+- `@test(#crashes)` and `@test(#crashes("text"))` pass only if the test crashes, and every test now has `Async`
+  ([`@test`](../tour/attributes#test)).
+- `nanyx test --list`, `--test`, `--module` and `--format json` list and select tests and report them for a tool to
+  read; the VS Code extension shows them in its Testing view
+  ([`nanyx test`](../standard-tools/command-line#nanyx-test), [VS Code extension](../standard-tools/vs-code-extension#testing)).
+- A test package holds only another package's tests, and a test file is checked, run and tested as part of its package
+  ([Test packages](../tour/packages#test-packages)).
+- A crash's report names its column, as `src/geometry.nyx:14:5`
+  ([Crash stacks](../deep-dives/crash-stacks#the-crash-report)).
+- Errors point at the code that explains them: the CLI shows each related location with its source, the arms before
+  an odd one say what they give, and a mismatch against an annotation points at the type written there. A non-tag
+  value against a union names the whole union, and a nominal type's mismatch outside its module says how to make one.
+- Hover on a lambda says what it captures; the info view describes types and the def a call calls
+  ([VS Code extension](../standard-tools/vs-code-extension#info-view)).
+
+**Fixes**
+
+- A test can load a fake of a context with `use` and call the code it tests; an imported module's private def that
+  requires a context the module keeps to itself compiles.
+- A test build's crash stack keeps the frames of the test's own module.
+- A `use` of a context with no members, `use Tx(())`, compiles.
+- On Windows, writing a file where a directory is gives `#isDirectory`, as elsewhere.
+- Quick fixes pair with the right diagnostic after an import with errors.
+- `nanyx check` no longer lists the made-up `__inScope_` defs, and the linters `repeatedPulls` and
+  `unusedPrivateDefinitions` miss fewer cases.
+
 # 0.51.0
 
 *27 November 2026*
