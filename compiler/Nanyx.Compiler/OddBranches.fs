@@ -23,10 +23,18 @@ let private message (branches: Branches) (odd: Ty) (others: Ty) : MismatchText =
     | IfBranches -> $"The `else` branch gives '{tyToString odd}', but the `then` branch gives '{tyToString others}'"
     | Items -> $"This item is '{tyToString odd}', but the items before it are '{tyToString others}'"
 
+/// What a related location at a branch before the odd one out, of type `ty`, says (#2717).
+let private relatedLabel (branches: Branches) (ty: Ty) : MismatchText = fun tyToString ->
+    match branches with
+    | Arms -> $"this arm gives '{tyToString ty}'"
+    | IfBranches -> $"the `then` branch gives '{tyToString ty}'"
+    | Items -> $"this item is '{tyToString ty}'"
+
 /// `state` with where a mismatch of `branches`, the typed branches of a construct about to be joined with `rowVars` (see
 /// `joinBranchTypes`), is reported: the first branch that doesn't join with those before it, as the join's constraints,
 /// which `state`'s origin is the span of, would fail. A number literal that nothing has settled yet is taken to be of its
-/// default type, as it is once the def is generalised.
+/// default type, as it is once the def is generalised. Where the mismatch says what the branches give, each branch
+/// before the odd one out is a related location, saying what it gives.
 let note (rowVars: Set<int>) (branches: Branches) (typed: TypedExpr list) (state: InferState) : InferState =
     if typed.Length < 2 || SourceSpan.isNone state.Origin then state
     else
@@ -53,5 +61,9 @@ let note (rowVars: Set<int>) (branches: Branches) (typed: TypedExpr list) (state
                         match joined count |> snd with
                         | Error (failure, _) when failure = plain others odd || failure = plain odd others -> Some (message branches odd others)
                         | _ -> None
-                    typed.[count - 1].Expr.Span, said))
+                    let related =
+                        match said with
+                        | Some _ -> [ for index in 0 .. count - 2 -> typed.[index].Expr.Span, relatedLabel branches (resolved types.[index]) ]
+                        | None -> []
+                    typed.[count - 1].Expr.Span, said, related))
         { state with BranchSpans = state.BranchSpans |> Map.add state.Origin reported }
