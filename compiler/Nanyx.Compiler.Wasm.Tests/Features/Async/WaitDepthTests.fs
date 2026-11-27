@@ -4,8 +4,6 @@
 /// of the first wait.
 module TranspilerWasmTests.Features.Async.WaitDepth
 
-open System.IO
-open System.Text.RegularExpressions
 open Xunit
 open TranspilerWasmTestHelpers
 
@@ -32,15 +30,10 @@ def main = {{
 
 /// The blocks `nanyx run --memory`, with `options`, says `source` allocated, once it printed `expected`.
 let private allocations (options: string list) (expected: string) (source: string) =
-    use directory = new TempDirectory()
-    File.WriteAllText(Path.Combine(directory.Path, "main.nyx"), source)
-    let outcome = nanyxIn directory.Path ([ "run"; "--memory" ] @ options @ [ "main.nyx" ])
+    let outcome = runWithMemoryReportUsing options source
     Assert.Equal(0, outcome.ExitCode)
     Assert.StartsWith(expected, outcome.StandardOutput.ReplaceLineEndings "\n")
-    let report = outcome.StandardOutput + outcome.StandardError
-    let found = Regex.Match(report, @"allocations\s+([\d,]+)")
-    Assert.True(found.Success, $"no allocations in {report}")
-    int (found.Groups.[1].Value.Replace(",", ""))
+    reportedMemory "allocations" outcome
 
 [<Fact>]
 let ``A wait 50 calls deep allocates no more than one at the top, but for the frames of the first wait`` () =

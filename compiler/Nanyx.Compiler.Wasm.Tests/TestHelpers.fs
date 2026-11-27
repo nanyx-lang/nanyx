@@ -378,11 +378,15 @@ type TempDirectory() =
     interface IDisposable with
         member _.Dispose() = try Directory.Delete(path, true) with _ -> ()
 
-/// `nanyx run --memory` on a script of `source`, which writes its memory report to stderr after the program's own.
-let runWithMemoryReport (source: string) : RunOutcome =
+/// `nanyx run --memory` with `options` on a script of `source`, which writes its memory report to stderr after the
+/// program's own.
+let runWithMemoryReportUsing (options: string list) (source: string) : RunOutcome =
     use directory = new TempDirectory()
     directory.Write "main.nyx" source
-    nanyxWithInput "" [ "run"; "--memory"; Path.Combine(directory.Path, "main.nyx") ]
+    nanyxWithInput "" ([ "run"; "--memory" ] @ options @ [ Path.Combine(directory.Path, "main.nyx") ])
+
+/// `nanyx run --memory` on a script of `source`, which writes its memory report to stderr after the program's own.
+let runWithMemoryReport (source: string) : RunOutcome = runWithMemoryReportUsing [] source
 
 /// The number the memory report in `outcome`'s stderr gives on the line of `measure`, such as `"peak live bytes"`.
 let reportedMemory (measure: string) (outcome: RunOutcome) : int64 =
