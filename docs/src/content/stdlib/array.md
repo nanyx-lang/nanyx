@@ -146,14 +146,14 @@ def array.foldBack: [c] array(a), b, ([c] (b, a) -> b) -> b
 ## `array.foldWhile`
 
 ```nanyx fragment
-def array.foldWhile: [c] array(a), b, ([c] (b, a) -> #continue(b) | #stop(b)) -> b
+def array.foldWhile: [c] array(a), b, ([c] (b, a) -> #some(b) | r) -> #some(b) | r
 ```
 
-[`array.fold`](#arrayfold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next
-element, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
-or after the last element. `step` isn't called again after a `#stop`:
-`array.foldWhile(Array[1, 2, 3, 4, 5], 0, { total, x -> if total + x > 6 then #stop(total) else
-#continue(total + x) })` is `6`.
+[`array.fold`](#arrayfold) that can stop part-way: `step` gives `#some(acc)` to go on to the next element,
+and anything else it gives ends the fold there and is its result, as it is. A fold that runs to the
+end gives `#some(acc)`. `step` isn't called again after it stops:
+`array.foldWhile(Array[1, 2, 3, 4, 5], 0, { total, x -> if total + x > 6 then #full(total) else
+#some(total + x) })` is `#full(6)`.
 
 ## `array.isEmpty`
 

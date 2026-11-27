@@ -101,25 +101,25 @@ export def Slice.foldBack: [c] Slice(a), b, ([c] b, a -> b) -> b = { s, initial,
   foldBackFrom(s, s.length - 1, initial, step)
 }
 
---| [`Slice.fold`] that can stop part-way: `step` gives `#continue(acc)` to go on to the next
-  element, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
-  or after the last element. `step` isn't called again after a `#stop`.
+--| [`Slice.fold`] that can stop part-way: `step` gives `#some(acc)` to go on to the next element,
+  and anything else it gives ends the fold there and is its result, as it is. A fold that runs to the
+  end gives `#some(acc)`. `step` isn't called again after it stops.
 export def Slice.foldWhile
-  : [c] Slice(a), b, ([c] b, a -> #continue(b) | #stop(b)) -> b
+  : [c] Slice(a), b, ([c] b, a -> #some(b) | r) -> #some(b) | r
   = { s, initial, step ->
     foldWhileFrom(s, 0, initial, step)
   }
 
 -- [`Slice.foldWhile`] of the elements of `s` from `index` on.
 def foldWhileFrom
-  : [c] Slice(a), int, b, ([c] b, a -> #continue(b) | #stop(b)) -> b
+  : [c] Slice(a), int, b, ([c] b, a -> #some(b) | r) -> #some(b) | r
   = { s, index, acc, step ->
     match Slice.at(s, index)
       | #some(element) ->
         match step(acc, element)
-          | #continue(next) -> foldWhileFrom(s, index + 1, next, step)
-          | #stop(last) -> last
-      | #notFound -> acc
+          | #some(next) -> foldWhileFrom(s, index + 1, next, step)
+          | r -> r
+      | #notFound -> #some(acc)
   }
 
 --| The elements of `s`, in order, each read when the sequence is pulled. A slice is [`Iterable`] by

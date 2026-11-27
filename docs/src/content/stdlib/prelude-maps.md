@@ -193,12 +193,12 @@ def map.fold: [c] map(k, v), b, ([c] (b, k, v) -> b) -> b
 ## `map.foldWhile`
 
 ```nanyx fragment
-def map.foldWhile: [c] map(k, v), b, ([c] (b, k, v) -> #continue(b) | #stop(b)) -> b
+def map.foldWhile: [c] map(k, v), b, ([c] (b, k, v) -> #some(b) | r) -> #some(b) | r
 ```
 
-[`map.fold`](#mapfold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next key and
-value, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
-or after the last entry. `step` isn't called again after a `#stop`.
+[`map.fold`](#mapfold) that can stop part-way: `step` gives `#some(acc)` to go on to the next key and
+value, and anything else it gives ends the fold there and is its result, as it is. A fold that
+runs to the end gives `#some(acc)`. `step` isn't called again after it stops.
 
 ## `map.reduce`
 
@@ -390,12 +390,12 @@ def set.fold: [c] set(a), b, ([c] (b, a) -> b) -> b
 ## `set.foldWhile`
 
 ```nanyx fragment
-def set.foldWhile: [c] set(a), b, ([c] (b, a) -> #continue(b) | #stop(b)) -> b
+def set.foldWhile: [c] set(a), b, ([c] (b, a) -> #some(b) | r) -> #some(b) | r
 ```
 
-[`set.fold`](#setfold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next
-element, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
-or after the last element. `step` isn't called again after a `#stop`.
+[`set.fold`](#setfold) that can stop part-way: `step` gives `#some(acc)` to go on to the next element,
+and anything else it gives ends the fold there and is its result, as it is. A fold that runs to the
+end gives `#some(acc)`. `step` isn't called again after it stops.
 
 ## `set.reduce`
 

@@ -136,12 +136,12 @@ def Slice.foldBack: [c] Slice(a), b, ([c] (b, a) -> b) -> b
 ## `Slice.foldWhile`
 
 ```nanyx fragment
-def Slice.foldWhile: [c] Slice(a), b, ([c] (b, a) -> #continue(b) | #stop(b)) -> b
+def Slice.foldWhile: [c] Slice(a), b, ([c] (b, a) -> #some(b) | r) -> #some(b) | r
 ```
 
-[`Slice.fold`](#slicefold) that can stop part-way: `step` gives `#continue(acc)` to go on to the next
-element, or `#stop(acc)` to end there, and the fold gives the accumulator from the first `#stop`,
-or after the last element. `step` isn't called again after a `#stop`.
+[`Slice.fold`](#slicefold) that can stop part-way: `step` gives `#some(acc)` to go on to the next element,
+and anything else it gives ends the fold there and is its result, as it is. A fold that runs to the
+end gives `#some(acc)`. `step` isn't called again after it stops.
 
 ## `Slice.toSeq`
 
