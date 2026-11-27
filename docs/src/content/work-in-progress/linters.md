@@ -38,7 +38,7 @@ asked through a context.
 
 | Package | What it is |
 |---------|------------|
-| `nanyx.analysis` | The contract: the types of the syntax tree, of types and symbols, of a report and a fix, and the `Analysis` context whose members answer questions about the module. A linter depends on it. |
+| `nanyx.analysis` | The contract: the types of types and symbols, of a report and a fix, and the `Analysis` context whose members answer questions about the module. A linter depends on it. The syntax tree's types are in `nanyx.syntax`, which it depends on and which the formatter shares ([Formatter: a Nanyx package](formatter-package#the-tree)). |
 | `nanyx.analysis.host` | The linter host. It runs a linter for the compiler: it reads the module the compiler gives it through `nanyx:lint`, an import of the runtime's own, runs the linter's `lint` with `Analysis`, and gives the reports back. |
 | `nanyx.lint` | The official linter, written against `nanyx.analysis` like any other. |
 
