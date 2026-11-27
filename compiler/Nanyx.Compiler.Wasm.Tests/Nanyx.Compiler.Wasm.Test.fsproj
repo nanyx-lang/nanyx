@@ -178,6 +178,7 @@
     <Compile Include="Features\Memory\MemoryReportTests.fs" />
     <Compile Include="Features\Memory\ReuseTests.fs" />
     <Compile Include="Features\Memory\NestedPatternReuseTests.fs" />
+    <Compile Include="Features\Memory\RecordFieldReuseTests.fs" />
     <Compile Include="Features\Memory\TupleParameterTests.fs" />
     <Compile Include="Features\Memory\UnprobedMemoryBlockTests.fs" />
     <Compile Include="Features\Memory\RecordUpdateTests.fs" />
