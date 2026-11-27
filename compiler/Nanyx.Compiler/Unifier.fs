@@ -491,6 +491,32 @@ module Unifier =
     /// alias.
     let tyToDisplayString (notation: TypeNotation) (ty: Ty) : string = tyToDisplayStringIn Map.empty notation ty
 
+    /// Names for the variables the compiler made up in `tys`, the types one message writes, shared by all of them: a
+    /// rest of an open record or union is `r`, then `r1`, `r2`, ..., and any other `a`, `b`, `c`, ..., then `a1`, ..., in
+    /// the order the message writes them, skipping the names the variables an annotation named have.
+    let private messageRenaming (tys: Ty list) : Subst =
+        let vars = tys |> List.collect varsInPrintOrder |> List.distinctBy (fun v -> v.Id)
+        let taken = vars |> List.choose (fun v -> v.Name) |> Set.ofList
+        let rests = tys |> List.map (restVarIds true) |> Set.unionMany
+        let free (names: seq<string>) = names |> Seq.filter (fun name -> not (taken.Contains name))
+        let letters = latinLetters |> String.filter (fun letter -> letter <> 'r')
+        let ordinaryNames = Seq.initInfinite (fun i -> if i < letters.Length then string letters[i] else $"{letters[i % letters.Length]}{i / letters.Length}") |> free
+        let restNames = Seq.initInfinite (fun i -> if i = 0 then "r" else $"r{i}") |> free
+        let made = vars |> List.filter (fun v -> v.Name.IsNone)
+        let rest, ordinary = made |> List.partition (fun v -> rests.Contains v.Id)
+        Seq.append (Seq.zip ordinary ordinaryNames) (Seq.zip rest restNames)
+        |> Seq.map (fun (v, name) -> v.Id, TyVar { v with Name = Some name })
+        |> Map.ofSeq
+
+    /// The text of a message `text` writes, given how to write each type it names: as `tyToStringIn typeDefs` writes it,
+    /// with the variables the compiler made up named across all its types (see `messageRenaming`), so that one that
+    /// appears in two of them has one name: `'int' vs '(name: a, ...r)'`, not `'int' vs '(name: t1, ...t6)'` (#2077).
+    let messageText (typeDefs: Map<string, TypeDefInfo>) (text: (Ty -> string) -> string) : string =
+        let written = ResizeArray<Ty>()
+        text (fun ty -> written.Add ty; "") |> ignore
+        let renaming = messageRenaming (List.ofSeq written)
+        text (fun ty -> tyToStringIn typeDefs (apply renaming ty))
+
     /// The rests of `tys` that are lone (see `loneRests`) in every one of them they appear in.
     let private loneAcross (notation: TypeNotation) (tys: Ty list) : Set<int> =
         let loneIn = tys |> List.map (fun ty -> loneRests notation ty, varOccurrences ty |> List.map (fun v -> v.Id) |> Set.ofList)

@@ -118,6 +118,7 @@
     <Compile Include="Features\Diagnostics\DiagnosticCodeTests.fs" />
     <Compile Include="Features\Diagnostics\DiagnosticSpanTests.fs" />
     <Compile Include="Features\Diagnostics\LookAlikeTests.fs" />
+    <Compile Include="Features\Diagnostics\MismatchVariableNameTests.fs" />
     <Compile Include="Features\Diagnostics\SyntaxErrorTests.fs" />
     <Compile Include="Features\Diagnostics\ErrorPartTests.fs" />
     <Compile Include="Features\Equality\EqualityTests.fs" />
