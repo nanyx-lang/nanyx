@@ -206,7 +206,7 @@ scope it is in.
 
 The view shows nothing twice. An item that repeats one a scope further down shows, the same text naming the same thing
 at the same place, is left out, and the one further down is kept, where it has its context. With the cursor on a
-definition's name, its signature shows once, in the definition's own scope, marked `declared` or `inferred`.
+definition's name, its signature shows once, in the definition's own scope, with its doc comment.
 
 Types and contexts are named as the code at the cursor would name them, so a signature reads as you would write it:
 inside `module Points`, which declares `Point`, it is `Point`, not `Points.Point`; elsewhere in the file it is `Point`
@@ -225,15 +225,14 @@ view, such as a long parameter's, wraps.
   reported. Under that, its notes, such as `= 'float' vs 'int'`, and the advice after `help:`; each other place that
   explains it, such as where a name was first defined, linked; and a button for each of its fixes, which makes the fix
   as its quick fix does. With no message on the line, the view starts at the expression, or the innermost scope.
-- **The expression**, headed by its text, `expression x + 1`: the type of what you selected or clicked on, as hover
-  writes it. Select an expression to read its type: selecting `x + 1` in `def f = { x -> x + 1 }` shows
-  `x + 1: int`, with the spaces around the selection left out. A selection that is not a whole expression, such as
-  `x +`, or that runs across two statements, shows nothing here. With nothing selected it is the innermost expression at
-  the cursor, as hover finds it: on `x`, `x: int`. A name's doc comment shows under it.
+- **The expression**, headed by its text, `expression x + 1`: its **Type**, the type of what you selected or clicked
+  on, as hover writes it, as a definition has its signature. Select an expression to read its type: selecting `x + 1`
+  in `def f = { x -> x + 1 }` shows `int`, with the spaces around the selection left out. A selection that is not a
+  whole expression, such as `x +`, or that runs across two statements, shows nothing here. With nothing selected it is
+  the innermost expression at the cursor, as hover finds it: on `x`, `int`. A name's doc comment shows under it.
 - **A lambda**: its type, with the contexts it carries, such as `[Log] int -> ()`; its parameters, locals and pattern
   variables, each with its type, nearest first; and each `use` in it, with the context it gives.
-- **A definition**: its signature, marked `declared` if it writes its type and `inferred` if not, with its doc
-  comment; its parameters and locals; its contexts, each with where it comes from (its signature, inference, or a
+- **A definition**: its signature, with its doc comment; its parameters and locals; its contexts, each with where it comes from (its signature, inference, or a
   `use` in it); and, in the innermost definition, its **Context flow**: each context its signature writes or it was
   inferred to need, each `use` in it, and each instance the compiler builds for a call in it, from the definitions
   attached to the type (`attached Point.show`), derived from the type's parts (`derived`), or its own (`built in`), with

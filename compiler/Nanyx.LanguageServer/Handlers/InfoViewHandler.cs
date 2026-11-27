@@ -36,7 +36,7 @@ public sealed record InfoViewResult
 /// <summary>
 /// A scope at the position. <see cref="Kind"/> is one of <c>messages</c> (first, only when the position's line has a
 /// diagnostic, with its <see cref="Messages"/> and no sections), <c>expression</c> (next, with the section
-/// <c>expression</c>, only when there is an expression there that no scope below shows), <c>lambda</c> (<c>type</c>,
+/// <c>type</c>, only when there is an expression there that no scope below shows), <c>lambda</c> (<c>type</c>,
 /// <c>names</c>, <c>uses</c>), <c>function</c> (<c>signature</c>, <c>names</c>, <c>contexts</c>, <c>flow</c>) and
 /// <c>module</c> (always last, with <c>names</c> and <c>contexts</c>); a lambda or function scope comes once for each
 /// lambda or def around the position, and leaves out the sections it has nothing for. <see cref="Heading"/> names the
@@ -295,16 +295,14 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
             else if (scope.Kind.IsFunctionScope)
             {
                 kind = "function";
-                var detail = scope.Declared ? "declared" : "inferred";
                 var signature = scope.Type?.Value is { } type
                     ? AsDeclared(scope.Symbol?.Value.Name ?? "", type, new InfoViewItem
                     {
                         Text = Signature(scope.Symbol?.Value.Name ?? "", type),
                         Name = scope.Symbol?.Value is { } named ? new InfoViewName(0, named.Name.Length) : null,
-                        Detail = detail,
                         Location = Locate(scope.Span),
                         Documentation = scope.Symbol?.Value is { } def ? DocOf(def) : null
-                    }, detail)
+                    }, null)
                     : null;
                 Add("signature", "Signature", signature is null ? [] : [signature]);
                 Add("names", "Parameters and locals", names);
@@ -349,7 +347,13 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         IEnumerable<InfoViewScope> messagesScope = messages.Count == 0
             ? []
             : [new InfoViewScope { Kind = "messages", Heading = "Messages", Sections = [], Messages = messages }];
-        var shown = WithoutRepeats(scopes);
+        // The expression's item is compared with the others as `name: type`, as a def's signature or a local is written,
+        // and then shown as its type alone, as a lambda's is: its heading already writes the expression.
+        var shown = WithoutRepeats(scopes)
+            .Select(scope => scope.Kind == "expression" && expression is not null
+                ? scope with { Sections = scope.Sections.Select(section => AsType(section, expression.Type)).ToList() }
+                : scope)
+            .ToList();
         var expressionScopes = shown.Count(scope => scope.Kind == "expression");
         return new InfoViewResult
         {
@@ -377,6 +381,22 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
     }
 
     /// <summary>
+    /// The expression scope's <paramref name="section"/> as its <c>type</c> section, each item written as
+    /// <paramref name="type"/> alone; but a custom pattern's, which is written as it was declared.
+    /// </summary>
+    private static InfoViewSection AsType(InfoViewSection section, string type) =>
+        section.Id != "expression"
+            ? section
+            : section with
+            {
+                Id = "type",
+                Title = "Type",
+                Items = section.Items
+                    .Select(item => item.Text.StartsWith(Parser.Program.PatternSyntax.keyword + " ") ? item : item with { Text = type })
+                    .ToList()
+            };
+
+    /// <summary>
     /// The span in the document's last typed text that the expression at the top describes: the request's selection,
     /// or, where it sends none or an empty one, the position at <paramref name="offset"/>, as an empty span. <c>null</c>
     /// where that text has been edited since, as hover is.
@@ -402,10 +422,11 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
     /// <summary>
     /// <paramref name="scopes"/>, innermost first, less each item that repeats one a scope further out shows, which is
     /// kept, with its context: the same text, naming the same thing, at the same place, and saying the same of it. An
-    /// item's detail says what it is, a local or a def's signature, so two that say different things are both kept, but
-    /// one that says nothing, as the expression at the top, repeats any. So the cursor on a def's name shows its
-    /// signature only in the def's scope, marked <c>declared</c> or <c>inferred</c>. A section left with no items is
-    /// left out, and so is a scope left with no sections.
+    /// item's detail says what it is, a local or a parameter, so two that say different things are both kept, but one
+    /// that says nothing, as the expression at the top, repeats any. A def's signature is never left out, though the
+    /// module's names list the def too: it is what the def's scope is about. So the cursor on a def's name shows its
+    /// signature only in the def's scope, with its doc comment. A section left with no items is left out, and so is a
+    /// scope left with no sections.
     /// </summary>
     internal static IReadOnlyList<InfoViewScope> WithoutRepeats(IReadOnlyList<InfoViewScope> scopes)
     {
@@ -419,8 +440,9 @@ public sealed class InfoViewHandler : IJsonRpcRequestHandler<InfoViewParams, Inf
         var kept = new List<InfoViewScope>();
         foreach (var scope in scopes.Reverse())
         {
+            // A def's signature is what its scope is about, so it is kept though the module's names list the def too.
             var sections = scope.Sections
-                .Select(section => section with { Items = section.Items.Where(item => !Repeats(item)).ToList() })
+                .Select(section => section.Id == "signature" ? section : section with { Items = section.Items.Where(item => !Repeats(item)).ToList() })
                 .Where(section => section.Items.Count > 0)
                 .ToList();
             foreach (var item in scope.Sections.SelectMany(section => section.Items))
