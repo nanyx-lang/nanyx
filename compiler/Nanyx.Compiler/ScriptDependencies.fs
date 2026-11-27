@@ -16,18 +16,19 @@ module ScriptDependencies =
         match pins with
         | [] -> Result.Ok { Lines = []; Warnings = [] }
         | _ ->
-            let name = Path.GetFileName script
-            match Resolution.resolvePinned store name pins with
-            | Result.Error(Conflict diagnostic) -> Result.Error [ diagnostic.Message ]
-            | Result.Error(IndexUnreadable message) -> Result.Error [ message ]
-            | Result.Ok resolved ->
-                let packages = resolved.Lockfile.Packages
-                match packages |> List.map (PackageIndex.download store) |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
-                | [] ->
-                    Result.Ok
-                        { Lines = packages |> List.map (fun locked -> $"{locked.Name} {locked.Version}")
-                          Warnings = (resolved.Unlisted |> List.map (fun (package, version) -> Resolution.pinnedUnlisted name package version)) @ resolved.Warnings }
-                | errors -> Result.Error errors
+            PackageIndex.reading (fun () ->
+                let name = Path.GetFileName script
+                match Resolution.resolvePinned store name pins with
+                | Result.Error(Conflict diagnostic) -> Result.Error [ diagnostic.Message ]
+                | Result.Error(IndexUnreadable message) -> Result.Error [ message ]
+                | Result.Ok resolved ->
+                    let packages = resolved.Lockfile.Packages
+                    match packages |> List.map (PackageIndex.download store) |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
+                    | [] ->
+                        Result.Ok
+                            { Lines = packages |> List.map (fun locked -> $"{locked.Name} {locked.Version}")
+                              Warnings = (resolved.Unlisted |> List.map (fun (package, version) -> Resolution.pinnedUnlisted name package version)) @ resolved.Warnings }
+                    | errors -> Result.Error errors)
 
     /// The versions of `name` in the cache of `store`, and the one the compiler seeded, as the solver reads them: each
     /// with the dependencies its manifest names by their version.
@@ -96,3 +97,11 @@ module ScriptDependencies =
                               Dependencies = [] }) }
             | NoSolution lines -> Result.Error [ String.concat "\n" lines + $"\nThe package cache may not hold every package the script needs: {pullHint}" ]
             | IndexFailed message -> Result.Error [ message ]
+
+    /// What `nanyx run` does with `pins` before the script `script` (its path) builds: nothing, if the cache of `store`
+    /// already holds every package the build uses (see `cached`), as a package's build reads nothing from the index
+    /// once its lockfile locks what its manifest asks for, so that a run needs no network (#2221); otherwise `pull`.
+    let pullUnlessCached (store: PackageStore) (script: string) (pins: (string * SemanticVersion) list) : Result<Pulled, string list> =
+        match cached store script pins with
+        | Result.Ok _ -> Result.Ok { Lines = []; Warnings = [] }
+        | Result.Error _ -> pull store script pins

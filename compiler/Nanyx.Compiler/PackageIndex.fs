@@ -52,6 +52,38 @@ module PackageIndex =
         else
             Result.Ok None
 
+    /// The index files one operation has read, by where they are, while it runs `reading`: each is read once.
+    let private session = System.Threading.AsyncLocal<Collections.Concurrent.ConcurrentDictionary<string, Result<byte array option, string>> option>()
+
+    /// Where each index file read is, where `startCounting` asks for them.
+    let private counted = System.Threading.AsyncLocal<Collections.Concurrent.ConcurrentQueue<string> option>()
+
+    /// Runs `operation`, which reads the index, reading each index file once, as `config.json` and a package's listing
+    /// are read for each package a resolution asks about and again for each it downloads (#2221). Within another
+    /// operation's `reading`, it shares what that one has read.
+    let reading (operation: unit -> 'T) : 'T =
+        match session.Value with
+        | Some _ -> operation ()
+        | None ->
+            session.Value <- Some(Collections.Concurrent.ConcurrentDictionary())
+            try operation () finally session.Value <- None
+
+    /// Starts listing where each index file read from here on is, in this flow of work and those it starts: for the
+    /// tests that count them. Gives the list.
+    let startCounting () : Collections.Concurrent.ConcurrentQueue<string> =
+        let reads = Collections.Concurrent.ConcurrentQueue()
+        counted.Value <- Some reads
+        reads
+
+    /// `tryRead` for an index file, `config.json` or a package's listing: once in an operation's `reading`.
+    let private tryReadIndexFile (location: string) : Result<byte array option, string> =
+        let readCounted location =
+            counted.Value |> Option.iter (fun reads -> reads.Enqueue location)
+            tryRead location
+        match session.Value with
+        | Some files -> files.GetOrAdd(location, readCounted)
+        | None -> readCounted location
+
     /// The bytes at `location`, or why they can't be read, as when there is nothing there.
     let private read (location: string) : Result<byte array, string> =
         tryRead location |> Result.bind (function Some bytes -> Result.Ok bytes | None -> Result.Error $"there is no {location}")
@@ -64,10 +96,6 @@ module PackageIndex =
         with :? JsonException as error ->
             Result.Error $"{location} is not JSON: {error.Message}"
 
-    /// The JSON at `location`, or why it can't be read.
-    let private readJson (location: string) : Result<JsonElement, string> =
-        read location |> Result.bind (parseJson location)
-
     let private property (name: string) (element: JsonElement) =
         match element.TryGetProperty name with
         | true, value -> Some value
@@ -76,7 +104,9 @@ module PackageIndex =
     /// Where the index files of the index at `index` are, from its `config.json`.
     let private indexFiles (index: string) : Result<string, string> =
         let config = if isAddress index then (if index.EndsWith "/" then index else index + "/") + "config.json" else Path.Combine(index, "config.json")
-        readJson config
+        tryReadIndexFile config
+        |> Result.bind (function Some bytes -> Result.Ok bytes | None -> Result.Error $"there is no {config}")
+        |> Result.bind (parseJson config)
         |> Result.bind (fun config' ->
             match property "format" config', property "index" config' with
             | Some found, _ when found.ValueKind <> JsonValueKind.Number || found.GetInt32() <> format ->
@@ -93,7 +123,7 @@ module PackageIndex =
         |> Result.bind (fun files ->
             let file = resolve (files + "config.json") $"{namespaceOf name}/{name}.json"
             // A package the index doesn't list has no index file, on disk or at an address (404).
-            match tryRead file |> Result.bind (Option.map (parseJson file >> Result.map Some) >> Option.defaultValue (Result.Ok None)) with
+            match tryReadIndexFile file |> Result.bind (Option.map (parseJson file >> Result.map Some) >> Option.defaultValue (Result.Ok None)) with
             | Result.Ok None -> Result.Ok(file, [])
             | Result.Error message -> Result.Error message
             | Result.Ok(Some listing) ->

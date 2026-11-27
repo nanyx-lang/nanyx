@@ -149,35 +149,36 @@ module PackageDependencies =
     /// dependencies. With them is a warning for each version it locks that the index has unlisted, when it read the index
     /// for it.
     let pull (store: PackageStore) (manifestPath: string) : Result<Pulled, LockFailure> =
-        let root = Path.GetDirectoryName(Path.GetFullPath manifestPath)
-        let before = Lockfile.read (Lockfile.pathIn root) |> Result.map (Option.defaultValue Lockfile.empty) |> Result.defaultValue Lockfile.empty
-        let wasCached = before.Packages |> List.filter (fun locked -> Directory.Exists(PackageStore.directoryOf store locked.Name locked.Version))
-        update store manifestPath false
-        |> Result.bind (fun locked ->
-            Lockfile.read (Lockfile.pathIn root)
-            |> Result.map (Option.defaultValue Lockfile.empty)
-            |> Result.mapError LockErrors
-            |> Result.bind (fun lockfile -> download store lockfile)
-            |> Result.bind (fun warnings -> Package.ofManifestFrom store manifestPath |> Result.mapError LockErrors |> Result.map (fun package -> package, warnings))
-            |> Result.map (fun (package, warnings) ->
-                let root = package.Manifest.Root
-                let listed =
-                    match reached package.Dependencies with
-                    | [] -> [ $"{package.Manifest.Name} has no dependencies" ]
-                    | dependencies ->
-                        dependencies
-                        |> List.map (fun dependency ->
-                            let name, version = dependency.Manifest.Name, dependency.Manifest.Version
-                            let where =
-                                if PackageStore.seededCopy store name |> Option.exists (fun copy -> PackageModules.samePath copy.Source dependency.Manifest.Root) then
-                                    "shipped with the compiler"
-                                elif PackageModules.samePath dependency.Manifest.Root (PackageStore.directoryOf store name (SemanticVersion.tryParse version).Value) then
-                                    if wasCached |> List.exists (fun cached -> cached.Name = name && string cached.Version = version) then "in the cache" else "downloaded"
-                                else
-                                    PackageModules.relativePath root dependency.Manifest.Root
-                            $"{name} {version} ({where})")
-                { Lines = locked.Lines @ listed
-                  Warnings = List.distinct (locked.Warnings @ warnings) }))
+        PackageIndex.reading (fun () ->
+            let root = Path.GetDirectoryName(Path.GetFullPath manifestPath)
+            let before = Lockfile.read (Lockfile.pathIn root) |> Result.map (Option.defaultValue Lockfile.empty) |> Result.defaultValue Lockfile.empty
+            let wasCached = before.Packages |> List.filter (fun locked -> Directory.Exists(PackageStore.directoryOf store locked.Name locked.Version))
+            update store manifestPath false
+            |> Result.bind (fun locked ->
+                Lockfile.read (Lockfile.pathIn root)
+                |> Result.map (Option.defaultValue Lockfile.empty)
+                |> Result.mapError LockErrors
+                |> Result.bind (fun lockfile -> download store lockfile)
+                |> Result.bind (fun warnings -> Package.ofManifestFrom store manifestPath |> Result.mapError LockErrors |> Result.map (fun package -> package, warnings))
+                |> Result.map (fun (package, warnings) ->
+                    let root = package.Manifest.Root
+                    let listed =
+                        match reached package.Dependencies with
+                        | [] -> [ $"{package.Manifest.Name} has no dependencies" ]
+                        | dependencies ->
+                            dependencies
+                            |> List.map (fun dependency ->
+                                let name, version = dependency.Manifest.Name, dependency.Manifest.Version
+                                let where =
+                                    if PackageStore.seededCopy store name |> Option.exists (fun copy -> PackageModules.samePath copy.Source dependency.Manifest.Root) then
+                                        "shipped with the compiler"
+                                    elif PackageModules.samePath dependency.Manifest.Root (PackageStore.directoryOf store name (SemanticVersion.tryParse version).Value) then
+                                        if wasCached |> List.exists (fun cached -> cached.Name = name && string cached.Version = version) then "in the cache" else "downloaded"
+                                    else
+                                        PackageModules.relativePath root dependency.Manifest.Root
+                                $"{name} {version} ({where})")
+                    { Lines = locked.Lines @ listed
+                      Warnings = List.distinct (locked.Warnings @ warnings) })))
 
     /// The name of the package whose manifest is in `directory`, or why there is none.
     let private packageIn (directory: string) : Result<string, string> =

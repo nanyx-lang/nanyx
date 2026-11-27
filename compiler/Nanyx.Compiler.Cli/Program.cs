@@ -581,9 +581,10 @@ internal static partial class CliCommands
 
     /// <summary>
     /// Downloads into the package cache the packages from the index that the script <paramref name="inputFile"/> pins
-    /// with its <c>::install</c> lines, and the packages they depend on (see <c>Script.pull</c>); false, with each
-    /// error reported, if they can't be. With <paramref name="listPulled"/>, each package is listed on stdout, as
-    /// <c>nanyx pull</c> lists them. A file that isn't there is left for its compile to report.
+    /// with its <c>::install</c> lines, and the packages they depend on, unless the cache holds them all already (see
+    /// <c>Script.pullForRun</c>); false, with each error reported, if they can't be. With <paramref name="listPulled"/>,
+    /// as for <c>nanyx pull</c>, it reads the index whatever the cache holds (see <c>Script.pull</c>), and lists each
+    /// package on stdout. A file that isn't there is left for its compile to report.
     /// </summary>
     internal static bool TryPullScript(Shell shell, string inputFile, bool listPulled = false)
     {
@@ -593,7 +594,9 @@ internal static partial class CliCommands
             return true;
         }
 
-        var pulled = Script.pull(PackageStoreModule.downloading(shell.Packages), path, File.ReadAllText(path));
+        var store = PackageStoreModule.downloading(shell.Packages);
+        var source = File.ReadAllText(path);
+        var pulled = listPulled ? Script.pull(store, path, source) : Script.pullForRun(store, path, source);
         if (pulled.IsError)
         {
             foreach (var error in pulled.ErrorValue)
