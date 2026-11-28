@@ -471,6 +471,10 @@ type private FunctionEmitter(context: EmitContext) =
             | Entry functionName -> $"entry {functionName}"
             | ProbeKind.Statement -> "statement"
             | Return -> "return"
+            | Crashing -> "crashing"
+        // A probe before a call that never returns reads its locals, so each is alive at it, though nothing after it
+        // reads them (see `ProbeKind.Crashing`).
+        let isAlive = match kind with Crashing -> (fun _ -> true) | _ -> isAlive
         let writes =
             locals
             |> List.filter (fun local -> isAlive local.Var && declared.Contains (localName local.Var))
