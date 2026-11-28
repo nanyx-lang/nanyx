@@ -165,6 +165,7 @@
     <Compile Include="PackageExports.fs" />
     <Compile Include="ShippedPackages.fs" />
     <Compile Include="HostPackages.fs" />
+    <Compile Include="LinterPackages.fs" />
     <Compile Include="PartialModules.fs" />
     <Compile Include="WorkflowDesugaring.fs" />
     <Compile Include="DeferredErrors.fs" />
@@ -193,6 +194,7 @@
     <Compile Include="Manifest.fs" />
     <Compile Include="HostSettings.fs" />
     <Compile Include="Package.fs" />
+    <Compile Include="LintBuilds.fs" />
     <Compile Include="PackageArchive.fs" />
     <Compile Include="GitHubApi.fs" />
     <Compile Include="PackageIndex.fs" />

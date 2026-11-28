@@ -100,8 +100,8 @@ type Report =
       /// report is about. None for a headline that is the title alone.
       Subject: string option }
 
-/// A set of rules, run over each module the compiler checks. Linters are compiled into the compiler for now: there
-/// is no way yet to write one in Nanyx (#107).
+/// A set of rules, run over each module the compiler checks: one compiled into the compiler (see `Linters.all`), or a
+/// linter package's lint build, which `LintBuilds.make` makes one of.
 type Linter =
     { /// The first part of its rules' codes: `default`.
       Name: string
@@ -111,8 +111,8 @@ type Linter =
       Lint: SemanticModel -> Report list }
 
 /// Which linters run, and how serious their diagnostics are. `Severities` is keyed by code: `Some` severity
-/// overrides the rule's default, and `None` turns the rule off. Until the package manifest exists, this is how a
-/// project configures its linters.
+/// overrides the rule's default, and `None` turns the rule off. A manifest's `linters` and a script's `::linter`
+/// directives come to these.
 type LinterOptions =
     { Linters: Linter list
       Severities: Map<string, Severity option> }
