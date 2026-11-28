@@ -600,6 +600,15 @@ module Compiler =
                         | Some export when diagnostic.Code = DiagnosticCodes.MissingContextMembers.Code || diagnostic.Code = DiagnosticCodes.UndeclaredContext.Code ->
                             exportMismatch export
                         | _ -> diagnostic)
+                    // A missing `Num` where a def divides two values of a dimension says how to write it (see
+                    // `DimensionDivisions`).
+                    |> List.map (
+                        DimensionDivisions.withoutNum
+                            desugared
+                            (normalizeSource source)
+                            (fun node -> state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst))
+                            (Unifier.typeText state.TypeDefs)
+                    )
                     |> List.distinct
                 let dividedDimensions =
                     DimensionDivisions.diagnostic

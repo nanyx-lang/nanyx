@@ -38,3 +38,20 @@ let ``A local value whose call's context type only a later use fixes is an error
 [<InlineData("def read = { s -> parse(s) }\ndef person: Person = read(\"x\")\n")>]
 let ``A value whose def writes the type, or a function, finds the context`` (rest: string) =
     Assert.Empty((Compiler.compile (decode + rest)).Diagnostics)
+
+[<Fact>]
+let ``A context with an associated type whose own argument is open is still an error at the def`` () =
+    let source =
+        normalized """type Person = (name: string)
+context Load(a) = (source: type, load: string -> a)
+def Person.load: string -> Person = { s -> Person(name = s) }
+def Person.source = "text"
+def read: [Load(a)] string -> a = { text -> load(text) }
+
+def obj = read("x")
+def person: Person = obj
+println(person.name)
+"""
+    let code, _, at = onlyDiagnostic source
+    Assert.Equal(DiagnosticCodes.ValueContextTypeOpen.Code, code)
+    Assert.Equal("obj", at)

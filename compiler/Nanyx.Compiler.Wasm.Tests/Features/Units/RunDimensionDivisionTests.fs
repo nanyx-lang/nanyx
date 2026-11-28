@@ -14,3 +14,8 @@ let ``Run - a call that divides two dimensions in a def that writes no types sto
     Assert.Contains("error NYX0201", outcome.StandardError)
     Assert.Contains("write the parameters' types", outcome.StandardError)
     Assert.DoesNotContain("NYX0302", outcome.StandardError)
+
+[<Fact>]
+let ``Run - the def the message shows for two values of one dimension divides them`` () =
+    runSource "dimension Distance\n@baseUnit unit cm: Distance\n\ndef ratio = { a: Distance(int), b: Distance(int) -> a / b }\n\nprintln(ratio(4cm, 2cm))\n"
+    |> assertRan "2.0\n"
