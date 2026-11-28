@@ -8,15 +8,17 @@ open Nanyx.Runtime
 
 /// The program a debug session runs: the module, with debug probes and places; its command-line arguments, its name
 /// first; the directories it may reach, its current directory first; how a file the table of places names is found on
-/// disk (`fileOf`) and the other way round (`shownOf`); and the words that say how a run that went wrong ended, with
-/// the exit code it ends with (see `RunError`).
+/// disk (`fileOf`) and the other way round (`shownOf`); the words that say how a run that went wrong ended, with
+/// the exit code it ends with (see `RunError`); and whether the program has this process's standard streams, a
+/// terminal's, rather than an empty input and its output sent to the client (`InTerminal`).
 type DebugTarget =
     { Wasm: byte array
       Arguments: string list
       Directories: string list
       FileOf: string -> string option
       ShownOf: string -> string
-      Report: RunError -> string * int }
+      Report: RunError -> string * int
+      InTerminal: bool }
 
 /// A frame where the program stopped, with the locals the debugger has for it and the line it had them at: the last
 /// time it asked for them, which for a frame it didn't stop in may be never (see `DebugServer`).
@@ -32,7 +34,7 @@ exception private Terminated
 /// stack is the shadow stack's, and a frame's variables are the locals its probes wrote, read into trees (see
 /// `ValueTree`). It asks for the locals only where it stops, so a frame further out has those of the last time the
 /// program stopped in it, and none if it never did. What the program writes is sent as `output` events, and its input is
-/// empty.
+/// empty, but for one that runs in a terminal (`DebugTarget.InTerminal`), whose streams are the process's.
 module DebugServer =
     /// The thread the program runs on, the only one the protocol knows.
     let private threadId = 1
@@ -225,7 +227,8 @@ module DebugServer =
             let outcome =
                 try
                     WasmRunner.runListening
-                        (ToFiles(emptyInput, (let _, file, _ = streams.[0] in file), (let _, file, _ = streams.[1] in file), []))
+                        (if target.InTerminal then Inherited
+                         else ToFiles(emptyInput, (let _, file, _ = streams.[0] in file), (let _, file, _ = streams.[1] in file), []))
                         target.Arguments
                         target.Directories
                         target.Wasm
@@ -238,7 +241,9 @@ module DebugServer =
                 | Error _ when terminating -> 0
                 | Error error ->
                     let text, code = target.Report error
-                    if text <> "" then event "output" [ "category", Dap.string "stderr"; "output", Dap.string text ]
+                    // Where the program wrote, after what it wrote.
+                    if text <> "" && target.InTerminal then eprintf "%s" text
+                    elif text <> "" then event "output" [ "category", Dap.string "stderr"; "output", Dap.string text ]
                     code
             event "exited" [ "exitCode", Dap.number exitCode ]
             event "terminated" []
