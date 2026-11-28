@@ -20,6 +20,21 @@ runs, in VS Code's Debug Console. Its standard input is empty, so `readLine` see
 given with `--profile`, `--check-memory`, `--memory` or `--dbg-to`, and a program that is served, such as an HTTP
 host's, can't be debugged yet.
 
+# In a terminal
+
+With `--dap-port`, the debugger speaks the protocol on that port of 127.0.0.1 instead, for one editor to connect to,
+and the program has the process's own standard streams. Run in a terminal, it reads what you type there and writes
+there, as `nanyx run` does. Port 0 has the system choose a free one. The debugger writes the port it listens on to
+standard error, and with `--dap-port-file`, to that file too, whole, for the editor that started it:
+
+```text
+nanyx run --debug --dap-port 0 --dap-port-file /tmp/nanyx.port tool.nyx
+```
+
+It listens on 127.0.0.1 alone, so nothing off the machine can reach it, and for one connection. This is how the
+[VS Code extension](./vs-code-extension#debugging) runs a program by default: in a terminal of its own, which the
+session connects to.
+
 # Breakpoints and stepping
 
 - **A breakpoint** is on a line. It stops the program at a statement that starts on that line, before the statement
@@ -60,9 +75,12 @@ If the program never stopped in that frame, it says its locals weren't recorded:
 A crash, an `assert` that fails, or an error the compiler deferred to run time stops the program where it crashed,
 before it ends, with the crash's message. The stack shows the frame that crashed, and the frames that called it. A
 function whose last call never returns, such as a call of `crash`, keeps its frame for it, which a tail call wouldn't.
-The frame's locals are those of the last time the program stopped in it, as for a frame further out
-([#3257](https://github.com/nanyx-lang/nanyx/issues/3257)). Continuing ends
-the program, as `nanyx run` ends it: the crash's stack goes to the Debug Console, and the program's exit code is 1.
+The frame that called a function that never returns, such as `crash`, shows its locals as they were at that call, as
+**Locals at line N**, though the program never stopped there: all those in scope, but for a list, record or other value
+on the heap that the code had already handed on, or taken apart, on the way to the call, which it may have reused. A
+crash of another kind, such as an index out of range, shows a frame's locals from the last time the program stopped
+in it, as for a frame further out. Continuing ends the program, as `nanyx run` ends it: the crash's stack goes to the
+Debug Console, or to the terminal the program runs in, and the program's exit code is 1.
 
 How the runtime keeps the stack, answers the probes and stops is described in
 [Debug probes](../deep-dives/debug-probes#the-debugger).

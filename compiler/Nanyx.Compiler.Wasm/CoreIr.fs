@@ -288,6 +288,10 @@ and ProbeKind =
     /// A function's end, where the runtime pops its frame: before the call a function ends in, so that a tail call
     /// stays one, or after the value it gives back.
     | Return
+    /// Just before a call that never returns, such as `crash`'s (see `CoreIrProbes.endsTheProgram`), where the runtime
+    /// always asks for the locals, which the debugger shows at the crash. Unlike the other probes, it reads its locals
+    /// (see `CoreIrCounting`), so that they are still there to write.
+    | Crashing
 
 /// A local a probe writes if the runtime asks: its name in the source, its variable, and the printer of its type (see
 /// `CoreIrLowerDbg`).

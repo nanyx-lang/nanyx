@@ -31,10 +31,10 @@ def tree: Expr = (id = 1, kind = #case1((left = (id = 2, kind = #leaf), right = 
         .ReplaceLineEndings "\n"
 
 [<Fact>]
-let ``Lowering code over a group of types that name each other walks the group no more often for a larger group`` () =
-    // The group's types were compared structurally, walking all of them, at each reference to one of them met in
-    // lowering a type of the group, so the more references the group held, the more walks: a build of `nanyx.lint`, which
-    // matches on the 30 types of `nanyx.analysis`'s syntax, took minutes (#3260). Now they are compared by reference,
-    // and each copy of the group that type checking made is walked once.
-    let walks cases = snd (CoreIrLowerTypes.countingGroupWalks (fun () -> transpileWat (groupOfCases cases)))
-    Assert.Equal(walks 10, walks 40)
+let ``Lowering code over a group of types that name each other walks each copy of the group once at most`` () =
+    // The group's types were compared structurally, walking all of them, wherever lowering asked whether a reference was
+    // to one of them, thousands of times for a large group: a build of `nanyx.lint`, which matches on the 30 types of
+    // `nanyx.analysis`'s syntax, took minutes (#3260). Now they are compared by reference, and two copies of the group's
+    // types found equal are kept as one, so a copy is walked when it is first met, and the first copy never.
+    let _, walks, copies = CoreIrLowerTypes.countingGroupWalks (fun () -> transpileWat (groupOfCases 40))
+    Assert.InRange(walks, 0, copies - 1)

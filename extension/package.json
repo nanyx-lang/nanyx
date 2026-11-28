@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.45",
+  "version": "0.9.46",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -404,6 +404,19 @@
                 "type": "string",
                 "description": "The directory the program runs in. Without it, the script's directory, or the package's.",
                 "default": "${workspaceFolder}"
+              },
+              "console": {
+                "type": "string",
+                "enum": [
+                  "integratedTerminal",
+                  "debugConsole"
+                ],
+                "enumDescriptions": [
+                  "The program runs in a terminal of its own, which it reads and writes; the debugger listens on a port of 127.0.0.1 that the session connects to.",
+                  "What the program writes is in the Debug Console, and its input is empty."
+                ],
+                "description": "Where the program reads and writes.",
+                "default": "integratedTerminal"
               }
             }
           }

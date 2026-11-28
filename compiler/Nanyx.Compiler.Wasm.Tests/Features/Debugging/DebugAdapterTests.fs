@@ -32,7 +32,8 @@ type private Client(directory: string, file: string) =
               Directories = [ directory ]
               FileOf = fun shown -> let path = Path.Combine(directory, shown) in if File.Exists path then Some path else None
               ShownOf = Path.GetFileName
-              Report = fun error -> $"{error}\n", 1 }
+              Report = fun error -> $"{error}\n", 1
+              InTerminal = false }
         let serverIn = new AnonymousPipeClientStream(PipeDirection.In, toServer.ClientSafePipeHandle)
         let serverOut = new AnonymousPipeClientStream(PipeDirection.Out, fromServer.ClientSafePipeHandle)
         Thread(
@@ -252,6 +253,17 @@ let ``A crash stops the program at the frame that crashed, with its message, and
     Assert.StartsWith("1\n", client.Output.ToString())
 
 [<Fact>]
+let ``A crash shows the crashing frame's locals as they were at the call that crashed, though it never stopped there`` () =
+    use client = session "def inner = { n: int ->\n  def limit = 2\n  if n > limit then crash(\"too big\") else n\n}\n\nprintln(inner(1))\nprintln(inner(5))\n"
+    client.Launch [] |> ignore
+    Assert.Equal(("exception", Some "too big"), client.Stopped())
+    Assert.Equal<string list>([ "crash"; "inner"; "<top level>" ], client.Stack() |> List.map fst)
+    // `inner` is the second frame, and the program ran freely to the crash: the locals are the crash probe's.
+    Assert.Equal(("Locals at line 3", [ "limit", "2"; "n", "5" ]), client.Locals 2)
+    client.Resume "continue"
+    Assert.Equal(1, client.Exited())
+
+[<Fact>]
 let ``--debug with --profile, a memory check or --dbg-to is a usage error, and the program doesn't run`` () =
     use directory = new TempDirectory()
     directory.Write "main.nyx" "println(\"ran\")\n"
@@ -259,4 +271,66 @@ let ``--debug with --profile, a memory check or --dbg-to is a usage error, and t
         let outcome = nanyxIn directory.Path ([ "run"; "--debug" ] @ extra @ [ "main.nyx" ])
         Assert.Equal(2, outcome.ExitCode)
         Assert.StartsWith("error: --debug runs the program under the debugger", outcome.StandardError)
+        Assert.Equal("", outcome.StandardOutput)
+
+/// Starts `nanyx run --debug --dap-port 0` for `main.nyx` in `directory` as a process of its own, with `input` for its
+/// standard input, and gives it and the socket its debugger listens on, once it has written the port to its file.
+let private terminalSession (directory: string) (input: string) =
+    let host = Environment.GetEnvironmentVariable "DOTNET_HOST_PATH" |> Option.ofObj |> Option.defaultValue "dotnet"
+    let portFile = Path.Combine(directory, "port")
+    let start = Diagnostics.ProcessStartInfo(host, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, WorkingDirectory = directory)
+    for argument in [ Path.Combine(AppContext.BaseDirectory, "nanyx.dll"); "run"; "--debug"; "--dap-port"; "0"; "--dap-port-file"; portFile; "main.nyx" ] do
+        start.ArgumentList.Add argument
+    let program = Diagnostics.Process.Start start
+    program.StandardInput.Write(input: string)
+    program.StandardInput.Close()
+    let deadline = DateTime.UtcNow.AddSeconds 60.0
+    while not (File.Exists portFile) && DateTime.UtcNow < deadline && not program.HasExited do
+        Thread.Sleep 50
+    let port = int (File.ReadAllText portFile)
+    let client = new Net.Sockets.TcpClient("127.0.0.1", port)
+    program, client
+
+[<Fact>]
+let ``With --dap-port 0, the debugger listens on a port of 127.0.0.1 it writes to a file, and the program has the process's own streams`` () =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" "def line = readLine()\n\nmatch line\n  | #some(text) -> println(\"read {text}\")\n  | _ -> println(\"nothing\")\n"
+    let program, client = terminalSession directory.Path "typed\n"
+    use program = program
+    use client = client
+    let stream = client.GetStream()
+    let mutable sequence = 0
+    let request (command: string) (arguments: (string * JsonNode) list) =
+        sequence <- sequence + 1
+        Dap.write stream (Dap.object [ "seq", Dap.number sequence; "type", Dap.string "request"; "command", Dap.string command; "arguments", Dap.object arguments ])
+    let rec until (name: string) =
+        match Dap.read stream with
+        | Some message when Dap.text "event" message = Some name -> message
+        | Some _ -> until name
+        | None -> failwith $"The debugger ended before the {name} event"
+    request "initialize" [ "adapterID", Dap.string "nanyx" ]
+    until "initialized" |> ignore
+    request "launch" []
+    request "configurationDone" []
+    let exited = until "exited"
+    Assert.Equal(0, exited.["body"].["exitCode"].GetValue<int>())
+    request "disconnect" []
+    let output = program.StandardOutput.ReadToEnd()
+    program.WaitForExit()
+    // What it read and wrote went through the process's own streams, a terminal's, not to the editor.
+    Assert.Equal("read typed\n", output.ReplaceLineEndings "\n")
+    Assert.Equal(0, program.ExitCode)
+    Assert.Matches(@"listening on 127\.0\.0\.1:\d+", program.StandardError.ReadToEnd())
+
+[<Fact>]
+let ``--dap-port without --debug, a port file without a port and a port out of range are usage errors`` () =
+    use directory = new TempDirectory()
+    directory.Write "main.nyx" "println(\"ran\")\n"
+    for arguments, says in
+        [ [ "run"; "--dap-port"; "0"; "main.nyx" ], "give --debug too"
+          [ "run"; "--debug"; "--dap-port-file"; "p"; "main.nyx" ], "give --dap-port too"
+          [ "run"; "--debug"; "--dap-port"; "70000"; "main.nyx" ], "from 0 to 65535" ] do
+        let outcome = nanyxProcess (arguments |> List.map (fun argument -> if argument = "main.nyx" then Path.Combine(directory.Path, argument) else argument))
+        Assert.Equal(2, outcome.ExitCode)
+        Assert.Contains(says, outcome.StandardError)
         Assert.Equal("", outcome.StandardOutput)

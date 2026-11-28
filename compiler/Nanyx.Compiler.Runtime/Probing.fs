@@ -52,8 +52,10 @@ type ShadowStack() =
         | Entry functionName ->
             let name = FunctionNames.shown functionName |> Option.defaultValue functionName
             frames.Add { Name = name; Place = place; Column = column }
-        | Statement when frames.Count > 0 -> frames.[frames.Count - 1] <- { frames.[frames.Count - 1] with Place = place; Column = column }
-        | Statement -> ()
+        | Statement
+        | Crashing when frames.Count > 0 -> frames.[frames.Count - 1] <- { frames.[frames.Count - 1] with Place = place; Column = column }
+        | Statement
+        | Crashing -> ()
         | Return when frames.Count > 0 -> frames.RemoveAt(frames.Count - 1)
         | Return -> ()
 

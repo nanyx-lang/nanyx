@@ -86,7 +86,9 @@ package index, from GitHub or shipped with the compiler is in a directory that n
 once and keeps it, and a keystroke in the editor finds it made: it costs an instance and a call per module. A linter
 found by its `path` may be being edited, so a keystroke reads its package under the linter host and its files again to
 make the key, tens of milliseconds, and finds the build compiled already unless they changed. `LintBuilds.count` says how many lint builds the process has built, which a test of the
-language server counts.
+language server counts. The first lint with `nanyx.lint` after a compiler upgrade builds its lint build: about 1.5
+seconds to check it and 4 to compile it to WebAssembly, most of that the backend lowering `nanyx.analysis`'s syntax
+tree types ([Recursive types](./recursive-types)).
 
 Running it is stage 1a's: `LintAnswers.lintWith` answers the questions the build asks through `nanyx:lint`
 (`Nanyx.Runtime.WasmLinter`), from the module's `SemanticModel`, and reads its reports, and `Linters.run` makes them
