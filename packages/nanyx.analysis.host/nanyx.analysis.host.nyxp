@@ -1,11 +1,11 @@
 (
   package = (
     name = "nanyx.analysis.host"
-    version = "0.53.0"
+    version = "0.54.0"
     repository = "nanyx-lang/nanyx"
-    nanyx = "=0.53.0"
+    nanyx = "=0.54.0"
     sources = ["src/**/*.nyx"]
     host = (root = "analysis.host", prelude = "analysis.prelude")
   )
-  dependencies = [(package = "nanyx.analysis", version = "0.53.0")]
+  dependencies = [(package = "nanyx.analysis", version = "0.54.0")]
 )

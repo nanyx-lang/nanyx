@@ -1,9 +1,9 @@
 (
   package = (
     name = "nanyx.cli"
-    version = "0.53.0"
+    version = "0.54.0"
     repository = "nanyx-lang/nanyx"
-    nanyx = "0.53"
+    nanyx = "0.54"
     sources = ["src/**/*.nyx"]
   )
 )
