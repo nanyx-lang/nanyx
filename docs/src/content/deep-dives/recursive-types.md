@@ -38,6 +38,26 @@ holds such a type, which would otherwise never end, and how the WebAssembly back
   agree while it does, so a pair met again inside them agrees if nothing else differs (`unfoldBoth` in `Unifier.fs`).
   That is why two aliases of the same shape, `Expr` and a `Term` with the same tags, are the same type.
 
+# Variance
+
+Each parameter of a nominal type has a variance, which `Variances` works out from the type's definition once its module
+has read it (`TypeResolution.settleVariances`), and which the definition keeps (`TypeDefInfo.Variances`) and each
+`TyNominal` of the type carries (`NominalFacts`). A parameter named only where a value of the type gives it out, in a
+field, an element or a function's result, is covariant; one named only in a function's input is contravariant; one named
+in both, in an argument of `marray`, `box` or `Type`, or in another nominal type's invariant argument, is invariant; and
+one never named is unused. A type that names itself is read from its closed definition, its `TyParam`s and `TySelf`s, and
+a group from its members' bodies, their `TyParam`s and `TyMember`s: each parameter starts unused and the definitions are
+read again until no variance changes, which takes a few passes, as a variance only ever moves towards invariant.
+
+The type checker reads them where one nominal type is given for another (`Unifier`'s assignability): a covariant or
+unused argument is assignable one way, a contravariant one the other, and an invariant one must be the same, with no
+`undefined` on one side only (`bottomClash`). `holdsBottom` looks through a covariant argument, so a `Stack(undefined)`
+given for a `Stack(a)` is only a lower bound, as a `list(undefined)` is. A `TyNominal` made while its own definition is
+read holds no variances yet, and reads as invariant; `NominalFacts` compare by privacy only, so it is still the same type.
+A member of a group unfolds to `TyNominal`s with the facts its group holds, which are brought up to date with the
+variances (`Variances.withGroupVariances`). A module that imports the type reads the variances from its definition, from
+the checked package when it comes from one, and never works them out again: a private type's body is hidden from it.
+
 # Compiling
 
 - **The backend lowers a recursive type to a group, `IrRecursive(selected, bodies)`.** `CoreIrLowerTypes.toIrTypeIn`

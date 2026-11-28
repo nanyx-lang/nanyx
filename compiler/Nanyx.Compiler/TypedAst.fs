@@ -104,6 +104,38 @@ type NominalId =
     { Home: ModuleOrigin
       Name: string }
 
+/// How a parameter of a nominal type lets a value of the type at one argument be given where one at another is expected
+/// (see `Variances`): at an argument that it can be given for, `Covariant`, as a `list(undefined)` can be for a
+/// `list(int)`; at one that can be given for it, `Contravariant`, as a function's input; at the same one only,
+/// `Invariant`; or at any, `Unused`, when the definition never names the parameter.
+type Variance =
+    | Unused
+    | Covariant
+    | Contravariant
+    | Invariant
+
+/// What a nominal type holds besides its identity and arguments: whether what it is made from is private to its home
+/// module, and the variance of each of its parameters, which its definition decides (see `Variances`). Two values are
+/// equal when they agree on privacy: a type's variances are those of its definition wherever it is written, and a
+/// `TyNominal` made while its definition was still being read holds none yet.
+[<CustomEquality; CustomComparison>]
+type NominalFacts =
+    { IsPrivate: bool
+      Variances: Variance list }
+
+    override this.Equals(other: obj) =
+        match other with
+        | :? NominalFacts as facts -> this.IsPrivate = facts.IsPrivate
+        | _ -> false
+
+    override this.GetHashCode() = hash this.IsPrivate
+
+    interface System.IComparable with
+        member this.CompareTo(other: obj) =
+            match other with
+            | :? NominalFacts as facts -> compare this.IsPrivate facts.IsPrivate
+            | _ -> invalidArg (nameof other) "A NominalFacts is compared only with another"
+
 /// The order a record type's named fields are written in, for showing it as written: `(string, start: int, length: int)`
 /// rather than in the order of the names. It is no part of the type: two records with the same fields are one type
 /// whatever the order of each, so an order equals every other. A record whose fields were never written in an order
@@ -183,9 +215,9 @@ type Ty =
     | TyVar of TyVar
     | TyPrimitive of string
     /// A nominal type: its identity, the arguments it is applied to, the type it is made from (its definition's, with
-    /// those arguments for its parameters), and whether that is private to its home module. It is written by its own
-    /// name and its arguments, `Person` or `Box(int)`.
-    | TyNominal of NominalId * Ty list * Ty * bool
+    /// those arguments for its parameters), and whether that is private to its home module and its parameters'
+    /// variances. It is written by its own name and its arguments, `Person` or `Box(int)`.
+    | TyNominal of NominalId * Ty list * Ty * NominalFacts
     /// A function: its input, its result, and the contexts it requires where it is called (see `FunctionContexts`).
     /// Each context is one applied to its arguments, `TyApply("Console", [])` or `TyApply("Show", [a])`, or a context
     /// variable, `c` in `[c] a -> b`, which stands for any contexts. A function that requires none is pure.
@@ -234,7 +266,7 @@ type Ty =
 /// when it is a nominal type rather than an alias, and its closed definition.
 and GroupMember =
     { Name: string
-      Nominal: (NominalId * bool) option
+      Nominal: (NominalId * NominalFacts) option
       Body: Ty }
 
 /// The types a type is made of, one level down, for walks that treat most cases alike: such a walk matches the cases it
@@ -399,6 +431,9 @@ type TypeDefInfo =
       /// Declared `protected` or `private`: a nominal type, as opposed to an alias of its shape.
       IsNominal: bool
       IsPrivate: bool
+      /// The variance of each of `Parameters`, as its definition decides it (see `Variances`), all `Invariant` until it
+      /// is worked out.
+      Variances: Variance list
       IsContext: bool
       /// Declared `scoped context`.
       IsScoped: bool
@@ -428,6 +463,9 @@ type TypeDefInfo =
 module TypeDefInfo =
     /// The identity of the nominal type `info` defines.
     let nominalId (info: TypeDefInfo) : NominalId = { Home = info.Home; Name = info.Name }
+
+    /// What a nominal type `info` defines holds besides its identity (see `NominalFacts`).
+    let facts (info: TypeDefInfo) : NominalFacts = { IsPrivate = info.IsPrivate; Variances = info.Variances }
 
 /// An attribute that marks a unit: `@storageUnit`, which sets its dimension's default storage unit by hand, or
 /// `@baseUnit`, which marks its default display unit (see `Units`).

@@ -18,13 +18,13 @@ def email2: Email = addr"""
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
     match typed.Types.["email"] with
-    | TyNominal({ Name = name }, _, underlying, false) ->
+    | TyNominal({ Name = name }, _, underlying, { IsPrivate = false }) ->
         Assert.Equal("Email", name)
         Assert.Equal(TyPrimitive "string", underlying)
     | other -> Assert.True(false, $"Unexpected nominal type: %A{other}")
     Assert.Equal(TyPrimitive "string", typed.Types.["addr"])
     match typed.Types.["email2"] with
-    | TyNominal({ Name = name }, _, _, false) -> Assert.Equal("Email", name)
+    | TyNominal({ Name = name }, _, _, { IsPrivate = false }) -> Assert.Equal("Email", name)
     | other -> Assert.True(false, $"Unexpected nominal type: %A{other}")
 
 [<Fact>]
@@ -48,7 +48,7 @@ let ``Typecheck allows local private nominal construction`` () =
     Assert.True(result.Diagnostics.IsEmpty)
     let typed = result.Typed.Value
     match typed.Types.["token"] with
-    | TyNominal({ Name = name }, _, underlying, true) ->
+    | TyNominal({ Name = name }, _, underlying, { IsPrivate = true }) ->
         Assert.Equal("Token", name)
         Assert.Equal(TyPrimitive "string", underlying)
     | other -> Assert.True(false, $"Unexpected token type: %A{other}")
@@ -148,5 +148,5 @@ let ``A private type is nominal without a $`` () =
     let result = Compiler.compile "type UserId = private int\ndef id: UserId = UserId(1)\n"
     Assert.Empty(result.Diagnostics)
     match result.Typed.Value.Types.["id"] with
-    | TyNominal({ Name = "UserId" }, _, TyPrimitive "int", true) -> ()
+    | TyNominal({ Name = "UserId" }, _, TyPrimitive "int", { IsPrivate = true }) -> ()
     | other -> Assert.Fail($"Unexpected type: %A{other}")

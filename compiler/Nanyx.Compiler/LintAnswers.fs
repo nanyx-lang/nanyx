@@ -51,7 +51,7 @@ let rec private ofTyData (data: LintData) : Ty option =
     | DTag("primitive", DText name) -> Some (TyPrimitive name)
     | DTag("named", named) ->
         match field "name" named, field "arguments" named |> Option.bind all, field "isNominal" named with
-        | Some(DText name), Some args, Some(DBool true) -> Some (TyNominal({ Name = name; Home = InMemory }, args, TyUnion [], false))
+        | Some(DText name), Some args, Some(DBool true) -> Some (TyNominal({ Name = name; Home = InMemory }, args, TyUnion [], { IsPrivate = false; Variances = [] }))
         | Some(DText name), Some args, Some(DBool false) -> Some (TyAlias(name, args, TyUnion []))
         | _ -> None
     | DTag("function", value) ->

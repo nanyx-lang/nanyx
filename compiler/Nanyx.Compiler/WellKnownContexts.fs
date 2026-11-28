@@ -52,7 +52,7 @@ module internal WellKnownContexts =
         // A private type that is a part with no instance itself, a mutable reference, is reported as that part.
         | Some kind ->
             match ty with
-            | TyNominal(_, _, underlying, true) ->
+            | TyNominal(_, _, underlying, { IsPrivate = true }) ->
                 match offendingPart kindOf underlying with
                 | Some ([], representation) -> Some ([], representation)
                 | _ -> Some ([], kind)
@@ -115,7 +115,7 @@ module internal WellKnownContexts =
     /// and it has only the member it attaches (see "Private (opaque) types" in the docs).
     let private privateType (memberName: Identifier) (ty: Ty) =
         match ty with
-        | TyNominal(_, _, _, true) ->
+        | TyNominal(_, _, _, { IsPrivate = true }) ->
             Some ($"the private type '{Unifier.tyToDisplayString Ascii ty}'", $"private types without their own {memberName}")
         | _ -> None
 

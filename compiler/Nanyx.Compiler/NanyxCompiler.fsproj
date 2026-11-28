@@ -35,6 +35,7 @@
     <Compile Include="Sets.fs" />
     <Compile Include="Boxes.fs" />
     <Compile Include="TypeValues.fs" />
+    <Compile Include="Variances.fs" />
     <Compile Include="TaskWork.fs" />
     <Compile Include="InferState.fs" />
     <Compile Include="FieldCalls.fs" />
