@@ -17,6 +17,7 @@ import { LibraryView } from "./library";
 import { DbgView } from "./dbgView";
 import { LiveMode } from "./liveMode";
 import { deleteDbgChannels, runFile } from "./run";
+import { registerDebugger } from "./debugger";
 import { TestExplorer } from "./testController";
 
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
@@ -79,6 +80,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand(COMMAND_RESTART, () => startOrRestart(context)),
     vscode.commands.registerCommand(COMMAND_RUN, (uri?: vscode.Uri) => runCurrentFile(context, uri)),
+    ...registerDebugger(() => compiler),
     vscode.commands.registerCommand(COMMAND_RENAME_AT, renameAt),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (

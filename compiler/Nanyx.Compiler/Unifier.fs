@@ -352,6 +352,10 @@ module Unifier =
             | _ when spliced |> List.exists isError -> errorType
             | [ single ] when items.Length > 1 -> single
             | _ -> TyUnion spliced
+        // A recursive alias's definition is closed, with no variables to replace: only its arguments change. Left as it
+        // is, a group of types that name each other stays one list wherever its types are reached from, rather than a
+        // copy of every type of the group for each type that holds one (#3260).
+        | TyRecursive(body, args) -> TyRecursive(body, args |> List.map apply)
         | _ -> Ty.map apply ty
 
     /// `ty` with `subst` applied: each variable it solves replaced by what it was solved to, itself with `subst`

@@ -208,12 +208,19 @@ module Package =
     /// into the cache, or else from the cache. One the lockfile doesn't lock yet is read from the copy the compiler
     /// seeded, if `requirement` accepts its version, so that a package needs no `nanyx pull` to build with the packages
     /// the compiler ships, and the next one locks it. Or why it can't be read: it isn't locked, the version locked isn't
-    /// one it accepts, or that version isn't in the cache, which `nanyx pull` fills.
+    /// one it accepts, that version isn't in the cache, which `nanyx pull` fills, or the packages the compiler ships
+    /// can't be seeded (see `PackageStore.Seed`).
     let private locked (lookup: Lookup) (what: Requested) (name: string) (span: SourceSpan) (requirement: VersionRequirement) : Result<Found, Problem list> =
         let error code message = Result.Error [ AtManifest(Diagnostics.at code span message |> Diagnostics.about name) ]
         let seeded = PackageStore.seededCopy lookup.Store name
-        match Lockfile.tryFind name lookup.Locked with
-        | None ->
+        match lookup.Store.Seed lookup.Store, Lockfile.tryFind name lookup.Locked with
+        // Which packages the compiler ships, and where the cache holds them, is what seeding says: without it, no
+        // package from the index is read, rather than one of them being read as any other package is.
+        | Result.Error messages, _ ->
+            error
+                DiagnosticCodes.ShippedPackagesNotSeeded
+                $"""'{name}' can't be read, since the packages the compiler ships can't be seeded into the package cache, '{lookup.Store.Cache}': {String.concat "; " messages}"""
+        | Result.Ok _, None ->
             match seeded with
             | Some copy when VersionRequirement.accepts requirement copy.Version -> Result.Ok(Seeded copy)
             | _ ->
@@ -230,11 +237,11 @@ module Package =
                     error
                         DiagnosticCodes.DependencyNotLocked
                         $"The linter '{name}' {requirement} is not locked in '{Lockfile.fileName}': run `nanyx pull` to choose its version from the package index and lock it, or give the directory it is in, as in `(package = \"{name}\", path = \"../{name}\")`"
-        | Some locked when not (VersionRequirement.accepts requirement locked.Version) ->
+        | Result.Ok _, Some locked when not (VersionRequirement.accepts requirement locked.Version) ->
             error
                 DiagnosticCodes.InvalidManifestValue
                 $"'{Lockfile.fileName}' locks '{name}' {locked.Version}, but this dependency accepts only {requirement} and the versions compatible with it"
-        | Some locked ->
+        | Result.Ok _, Some locked ->
             let directory = PackageStore.directoryOf lookup.Store name locked.Version
             match seeded with
             | Some copy when copy.Version = locked.Version -> Result.Ok(Seeded copy)

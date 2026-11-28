@@ -8,7 +8,7 @@ order: 0
 and is the language server for editors. `nanyx --help` lists its commands, and `nanyx <command> --help` describes one.
 
 ```text
-nanyx run [--check-memory | --memory | --profile <file>] [--timings] [--host <host>] [--dbg-to <file> [--show-values]] [--files-in-memory] [<file.nyx | package>] [--] [<arguments>]
+nanyx run [--check-memory | --memory | --profile <file> | --debug [--dap-port <port> [--dap-port-file <file>]]] [--timings] [--host <host>] [--dbg-to <file> [--show-values]] [--files-in-memory] [<file.nyx | package>] [--] [<arguments>]
 nanyx check [--timings] [--host <host>] [<file.nyx | package>]
 nanyx build [--out <path>] [--release] [--core] [--wat] [--locked] [--timings] [--host <host>] [<package>]
 nanyx wasm <file.nyx> [--out <path>] [--release] [--wat]
@@ -90,6 +90,9 @@ program is answered with a 500, and the reason is written to standard error. See
 | `--files-in-memory` | Runs the program with its files in memory, over the real ones: it reads a real file until it writes, appends to or deletes it, and then what it left; a directory's listing has what it made and not what it deleted; and nothing it does reaches the disk (see [`filesystem.overlay`](../stdlib/filesystem)). The program is built from its host's root for this, the console host's `cli.host.memory` ([Writing a host](../advanced/hosts#writing-a-host)), and a program built without the flag is unchanged. A host with no such root is an error. The editor's live mode runs a program so. |
 | `--profile <file>` | Samples the run with Wasmtime's guest profiler, every 10 ms, and writes the profile to `<file>` in the Firefox profiler's format, to open at [profiler.firefox.com](https://profiler.firefox.com). Its functions have the names the program gives them, and the file and line each is defined on. The run is of the code `run` always runs, which has no [debug probes](../deep-dives/debug-probes). It can't be given with `--check-memory` or `--memory`, nor for a program that is served. |
 | `--dbg-to <file>` | Writes each [`dbg`](../stdlib/console#dbg) the program reaches to `<file>`, made anew, and none to standard error: one JSON object a line, written as it is reached, with its `kind`, `dbg`, its `file`, a full path, its `line` and `column`, from 1, its `value` as `dbg` writes it, and its `seq`, counted from 0. It is for an editor, which reads the file as it grows and shows each value where its `dbg` is written, as the [VS Code extension](./vs-code-extension#dbg-values) does. A served program writes its `dbg`s to its log, with the request, whether or not it is given. |
+| `--debug` | Runs the program under the [debugger](./debugger): built with debug probes, it speaks the Debug Adapter Protocol on standard input and output, for an editor such as VS Code, which stops it at breakpoints, steps it and shows its stack and variables. What the program writes goes to the editor, and its input is empty. It can't be given with `--profile`, `--check-memory`, `--memory` or `--dbg-to`, nor for a program that is served. |
+| `--dap-port <port>` | With `--debug`, speaks the protocol on that port of 127.0.0.1 instead of standard input and output, for one editor to connect to, and gives the program this process's standard streams, so that run in a terminal, it reads and writes there (see [In a terminal](./debugger#in-a-terminal)). 0 has the system choose the port, which is written to standard error. A port out of range, or the flag without `--debug`, is an error. |
+| `--dap-port-file <file>` | With `--dap-port`, writes the port the debugger listens on to `<file>` too, whole, for the editor that started it. |
 | `--show-values` | With `--dbg-to`, writes to its file each value the program's own code binds or gives too, a line whose `kind` is `value`: each `def` that isn't a function, at the `def`, or at the value of one at the top level; each statement whose value isn't `()`, a block's last among them and a script's top-level ones; and the body of a lambda that isn't a block. A value of a type `dbg` couldn't write is written by its type, `<value of MArray(int)>`, and a sequence always is, `<sequence of int>`, so that writing it never runs it. Only the code of the script, or of the package's own files, is shown, not the library's. It is how the editor's [live mode](./vs-code-extension#live-mode) shows every value, and without `--dbg-to` it is an error. |
 | `--timings` | Writes how long each module took to check (see [Timings](#timings)). |
 
@@ -184,7 +187,7 @@ FAIL geometry.`scales points`  src/geometry.nyx:18:1
   src/geometry.nyx:20:3: assert(scale(p, 2) == Point(x = 2, y = 4))
     scale(p, 2) = (x = 2, y = 5)
     p = (x = 1, y = 2)
-    geometry_scales-20-points (src/geometry.nyx:20)
+    scales points (src/geometry.nyx:20)
   Output:
     scaling (x = 1, y = 2)
 PASS geometry.`reads the sample config` (io)
@@ -194,7 +197,8 @@ Seed 4812: run them again with the same random numbers with --seed 4812
 ```
 
 A test passes if it finishes, and fails if it crashes, as an `assert` that doesn't hold does, or runs for longer than
-its time limit. A failure shows why, with the stack, and what the test printed, which a test that passes doesn't show.
+its time limit. A failure shows why, with the stack, and what the test printed, each [`dbg`](../stdlib/console#dbg) it
+reached among it, in order. A test that passes doesn't show what it printed, unless `--show-output` asks for it.
 A test's `Random` is seeded, so a test that draws random numbers draws the same ones when it is run with the same seed.
 A test may require only `Async`, `Console` and `Random`, which the test host provides (`NYX0312`), but one marked
 [`@test(#io)`](../tour/attributes#test), which runs with the console host's real `Console`, `Env` and `FileSystem`,
@@ -213,6 +217,7 @@ can't be deferred, such as a syntax error, stops the build, and no test runs.
 | `--filter <text>` | Runs only the tests whose full name, as `` geometry.`adds points` ``, contains the text. |
 | `--test <name>` | Runs only the test of that full name, exactly, as the report writes it or without its backticks. Several names go one on each line, a form mainly for tools such as an editor: in a shell, ``--test $'geometry.adds\nshapes.squares'``. A name that names no test is an error, which exits with 2. |
 | `--module <name>` | Runs only the tests of that module. A module with no tests is an error, which exits with 2. |
+| `--show-output` | Shows what each test printed, each `dbg` it reached among it, under its line, a passing test's too. Without it, only a failing test's is shown. |
 | `--files-in-memory` | Runs each `@test(#io)` test with its files in memory, over the real ones, as [`nanyx run --files-in-memory`](#nanyx-run) runs a program: it reads the real files, and nothing it writes, appends, makes or deletes reaches the disk. Its `Console` and `Env` are still the real ones. The tests are built from the test host's root for this, `test.host.memory`, and a test build without the flag is built as before. The editor's live mode runs tests so. |
 | `--list` | Lists the tests that would run, each with where it is written, and runs none. |
 | `--seed <number>` | Seeds each test's `Random` with the number. Without it, the seed is chosen at random, and printed when a test fails. |

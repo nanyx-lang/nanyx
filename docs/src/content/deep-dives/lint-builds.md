@@ -86,10 +86,14 @@ module it would lint, as `<name>/linterFailed`, with the root's first errors, an
 `LintBuilds.make` keys a lint build by the SHA-256 of what it is built from: the root's source, and each source file of
 the linter's package, of the packages it depends on and of the linter host's, by its path and its text. The build is
 kept in the package cache, at `.lint/<compiler version>/<sha>.wasm`, so the next process reads it rather than building
-it, and each process compiles each lint build once, keeping the function `Load` gives by its key. A keystroke in the
-editor reads the linter's files to make the key and finds the build it compiled already: it costs an instance and a
-call per module, not a compile. `LintBuilds.count` says how many lint builds the process has built, which a test of the
-language server counts.
+it, and each process compiles each lint build once, keeping the function `Load` gives by its key. A linter from the
+package index, from GitHub or shipped with the compiler is in a directory that never changes, so each process makes it
+once and keeps it, and a keystroke in the editor finds it made: it costs an instance and a call per module. A linter
+found by its `path` may be being edited, so a keystroke reads its package under the linter host and its files again to
+make the key, tens of milliseconds, and finds the build compiled already unless they changed. `LintBuilds.count` says how many lint builds the process has built, which a test of the
+language server counts. The first lint with `nanyx.lint` after a compiler upgrade builds its lint build: about 1.5
+seconds to check it and 4 to compile it to WebAssembly, most of that the backend lowering `nanyx.analysis`'s syntax
+tree types ([Recursive types](./recursive-types)).
 
 Running it is stage 1a's: `LintAnswers.lintWith` answers the questions the build asks through `nanyx:lint`
 (`Nanyx.Runtime.WasmLinter`), from the module's `SemanticModel`, and reads its reports, and `Linters.run` makes them

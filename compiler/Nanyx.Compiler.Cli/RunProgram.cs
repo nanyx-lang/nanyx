@@ -19,9 +19,10 @@ internal static partial class CliCommands
     /// profile is written to that file, in the Firefox profiler's format. With <paramref name="dbgTo"/>, each <c>dbg</c> the
     /// program reaches is written to that file (see <see cref="DbgChannel"/>), and not to its stderr. With
     /// <paramref name="showValuesOf"/>, a script's full path or a package's directory, so is each value the code of its
-    /// files binds or gives (see <c>ShownValues</c>).
+    /// files binds or gives (see <c>ShownValues</c>). With <paramref name="debugFrom"/>, a package's directory or a script's,
+    /// it runs under the debugger instead (see <see cref="Debug"/>).
     /// </summary>
-    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null, string? showValuesOf = null)
+    private static int RunProgram(Shell shell, CompileResult result, bool errorsDeferred = false, MemoryCheck memoryCheck = MemoryCheck.Off, bool timings = false, string[]? arguments = null, bool inlineCalls = true, string[]? allowedDirectories = null, int port = 3000, string? packageRoot = null, string? profile = null, bool yieldAtEveryWait = false, string? dbgTo = null, string? showValuesOf = null, string? debugFrom = null, DebugMode? debugMode = null)
     {
         var programArguments = ListModule.OfSeq(arguments ?? ["nanyx"]);
         var directories = ListModule.OfSeq<string>([shell.Directory, .. allowedDirectories ?? []]);
@@ -29,7 +30,7 @@ internal static partial class CliCommands
         // Without debug probes: nothing listens to them on a run, and they made most of a program's code. The debugger
         // will compile with them when it attaches. A dbg still gives what it prints to the runtime, which the console
         // runner leaves to the program and a server writes to its log.
-        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, false, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait, frameDrops: false, showValuesIn: ListModule.OfSeq(OwnFiles(result, showValuesOf)));
+        var options = new CodeGen.WasmOptions(memoryCheck != MemoryCheck.Off, inlineCalls, false, SourceRoot(packageRoot), true, debugFrom is not null, crashToRuntime: true, dbgToEmbedder: true, exportStart: false, component: null, componentExports: FSharpList<Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: yieldAtEveryWait, frameDrops: false, showValuesIn: ListModule.OfSeq(OwnFiles(result, showValuesOf)));
         if (!TryEmitWat(shell, result, errors, out var wat, options, errorsDeferred, timings))
         {
             return 1;
@@ -40,6 +41,11 @@ internal static partial class CliCommands
         if (!TryAssemble(errors, wat, out var wasm))
         {
             return 1;
+        }
+
+        if (debugFrom is not null)
+        {
+            return Debug(shell, result, wasm, wat, programArguments, directories, packageRoot, debugFrom, debugMode, errors);
         }
 
         // The program's output follows the run's box, unmarked, and so does what the run reports after it.

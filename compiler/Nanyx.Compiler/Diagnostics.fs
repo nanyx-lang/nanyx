@@ -118,6 +118,11 @@ module DiagnosticCodes =
     let UnlistedVersion = code 51 "Unlisted version" Severity.Warning
     /// A package the compiler ships, at a version the package index records with another SHA-256.
     let ShippedPackageDiffers = code 303 "Shipped package that differs from the index's" Severity.Warning
+    /// A package the compiler ships, whose copy in the package cache at its version wasn't this compiler's, and which
+    /// seeding replaced with its own.
+    let ShippedPackageReplaced = code 308 "Stale copy of a shipped package replaced" Severity.Warning
+    /// The packages the compiler ships can't be seeded into the package cache, so no package from the index is read.
+    let ShippedPackagesNotSeeded = code 309 "Shipped packages that can't be seeded" Severity.Error
     let NeedsOtherCompiler = code 52 "Package that needs another compiler" Severity.Error
     let HostNameConvention = code 53 "Host package not named for a host" Severity.Error
     let RenamedPackage = code 54 "Shipped package named by its old name" Severity.Error
@@ -269,7 +274,7 @@ module DiagnosticCodes =
           NamedModuleImportedByPath; EntrypointImported; ScriptInPackage; DuplicateModule; UnknownKeywordKind
           CodeInManifest; UnknownManifestField; MissingManifestField; InvalidManifestValue; UnsupportedManifestField
           ModuleNotPublic; IndirectDependency; PackageCycle; PackageReachedTwice; VersionNotShipped; DefinitionWithoutValue; EntryInLibrary; ContextsJoined
-          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; VersionConflict; DependencyNotLocked; PackageFileNotUtf8; KeywordsOutOfOrder; UnlistedVersion; ShippedPackageDiffers; NeedsOtherCompiler; HostNameConvention; RenamedPackage; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
+          LibraryExportsNothing; TomlManifest; OldFormDirective; LintWithoutLinter; LookAlikeCharacter; GitHubReferenceNotPinned; GitHubReferenceNotPublishable; InvalidReferencedFile; PackageNotDownloaded; NoSourceFiles; SeveralEntryPoints; InvalidLockfile; NothingToRun; KeywordMemberType; VersionConflict; DependencyNotLocked; PackageFileNotUtf8; KeywordsOutOfOrder; UnlistedVersion; ShippedPackageDiffers; ShippedPackageReplaced; ShippedPackagesNotSeeded; NeedsOtherCompiler; HostNameConvention; RenamedPackage; UnknownIdentifier; UnknownFunction; UnknownMember; NotExported; AmbiguousName; AmbiguousAttachedFunction
           UnknownAttachedType; UnknownContext; UnknownType; OutsideModuleBlock; NotImplemented
           DuplicateDefinition; NotABuiltInType; InitialisationCycle; InvalidTypeName; DuplicateField; UnknownPattern; AmbiguousPattern; ReExportClash
           TypeMismatch; AnnotationTooGeneral; NonExhaustiveMatch; MissingCatchAllArm; MissingContextMembers

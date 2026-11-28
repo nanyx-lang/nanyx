@@ -100,6 +100,9 @@
     <Compile Include="Features\Dbg\RunDbgChannelTests.fs" />
     <Compile Include="Features\Dbg\ShowValuesTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
+    <Compile Include="Features\Debugging\ValueTreeTests.fs" />
+    <Compile Include="Features\Debugging\DebugSessionTests.fs" />
+    <Compile Include="Features\Debugging\DebugAdapterTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />
     <Compile Include="Features\Components\ComponentBuildTests.fs" />
     <Compile Include="Features\Components\LibraryComponentTests.fs" />
@@ -236,6 +239,7 @@
     <Compile Include="Features\Packages\ScriptIndexDependencyTests.fs" />
     <Compile Include="Features\Packages\UnlistedVersionTests.fs" />
     <Compile Include="Features\Packages\OfflineShippedPackageTests.fs" />
+    <Compile Include="Features\Packages\ShortPathTests.fs" />
     <Compile Include="Features\Packages\PackageIndexAddressTests.fs" />
     <Compile Include="Features\Packages\PartialModuleTests.fs" />
     <Compile Include="Features\Packages\SelectiveImportTests.fs" />
@@ -313,6 +317,8 @@
     <Compile Include="Features\Types\RunTypeMatchTests.fs" />
     <Compile Include="Features\Types\RunTypeBuildTests.fs" />
     <Compile Include="Features\Types\RunMutuallyRecursiveTypeTests.fs" />
+    <Compile Include="Features\Types\MutuallyRecursiveTypeLoweringTests.fs" />
+    <Compile Include="Features\Types\IrTypeConversionTests.fs" />
     <Compile Include="Features\Types\RunTypeCollectionNarrowingTests.fs" />
     <Compile Include="Features\Units\RunUnitLiteralTests.fs" />
     <Compile Include="Features\Units\RunMeasuredArithmeticTests.fs" />
@@ -334,6 +340,7 @@
     <Compile Include="Features\Tests\TestCommandTests.fs" />
     <Compile Include="Features\Tests\ExpectedCrashTests.fs" />
     <Compile Include="Features\Tests\TestJsonFormatTests.fs" />
+    <Compile Include="Features\Tests\TestDbgOutputTests.fs" />
     <Compile Include="Features\Tests\TestSelectionTests.fs" />
     <Compile Include="Features\Tests\TestPackageTests.fs" />
     <Compile Include="Features\Tests\TestUseInstanceTests.fs" />

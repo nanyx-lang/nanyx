@@ -19,18 +19,31 @@ let probeLimit = 64
 let probe (kind: ProbeKind) (locals: ProbeLocal list) (place: Place option) : Expr =
     { Kind = Probe(kind, locals); Type = IrUnit; Place = place }
 
+/// Whether a call of the function `callee`, whose type `definitionTypes` gives, never returns: its result is `undefined`,
+/// as `crash`'s is.
+let endsTheProgram (definitionTypes: Map<string, NyxCompiler.Ty>) (callee: string) =
+    match definitionTypes |> Map.tryFind callee |> Option.map NyxCompiler.Unifier.unalias with
+    | Some (NyxCompiler.TyFunc(_, result, _)) -> NyxCompiler.Unifier.unalias result = NyxCompiler.Unifier.bottomType
+    | _ -> false
+
+/// `call`, a call at `place`, with a crashing probe just before it that writes `locals ()` if it `neverReturns`, as a
+/// call of `crash` doesn't: the locals in scope there, which the debugger shows at the crash (see `ProbeKind.Crashing`).
+let beforeCrash (neverReturns: bool) (locals: unit -> ProbeLocal list) (place: Place option) (call: Expr) : Expr =
+    if neverReturns then { call with Kind = Do(probe Crashing (locals ()) place, call) } else call
+
 /// `body`, the function `name`'s, with an entry probe writing `locals` at its start, at `place`, and a return probe at
 /// each place it ends, at the place of what it ends in. A function that ends in a call ends before the call, so that a
-/// tail call stays one, and the callee's entry follows. One that ends in another value ends once it has the value, in a
-/// local `newLocal` makes, so that a loop or a crash at the end is still inside the function's frame.
-let around (newLocal: IrType -> Var) (name: string) (place: Place option) (locals: ProbeLocal list) (body: Expr) : Expr =
+/// tail call stays one, and the callee's entry follows, but for a call that `endsTheProgram` says never returns, such
+/// as `crash`'s, so that the debugger shows the frame that crashed. One that ends in another value ends once it has the
+/// value, in a local `newLocal` makes, so that a loop or a crash at the end is still inside the function's frame.
+let around (newLocal: IrType -> Var) (neverReturns: string -> bool) (name: string) (place: Place option) (locals: ProbeLocal list) (body: Expr) : Expr =
     let rec ending (e: Expr) =
         let links, last = Chain.split e
         let last =
             match last.Kind with
             | If(condition, ifTrue, ifFalse) -> { last with Kind = If(condition, ending ifTrue, ending ifFalse) }
             | Match(scrutinees, arms) -> { last with Kind = Match(scrutinees, arms |> List.map (fun arm -> { arm with Body = ending arm.Body })) }
-            | Call _
+            | Call(callee, _) when not (neverReturns callee) -> { last with Kind = Do(probe Return [] last.Place, last) }
             | CallClosure _
             | Atom _ -> { last with Kind = Do(probe Return [] last.Place, last) }
             | _ ->

@@ -29,7 +29,9 @@ packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   others in `packages/`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
-  executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
+  executable. On Windows that path is written with long names, though the compiler is started through a short 8.3 one,
+  as `C:\Users\RICHAR~1\...` (`LongPaths.ofPath`), so a path to a shipped package is spelt one way
+  ([#3116](https://github.com/nanyx-lang/nanyx/issues/3116)). A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
   the compiler.
 - **A release publishes them to the index.** Each shipped manifest names this repository, `repository =
   "nanyx-lang/nanyx"`, and the compilers it builds with: a library the one it ships with or a later one, and a host or
@@ -43,25 +45,30 @@ packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   of the shipped packages' sources (`ShippedPackages.fingerprint`), so a compiler built from other sources seeds its
   own. `PackageIndex.listing` lists the seeded version with those the package index has, and alone when the index
   can't be read, so a build offline finds it. Where the index records the version with another SHA-256, the seeded copy
-  is the one listed, with the warning `NYX0303`; where the cache already holds another copy of the version, which is
-  never changed, seeding says to delete it. Seeding writes the index beside its place and moves it there, so a process
-  never reads one another is still writing.
+  is the one listed, with the warning `NYX0303`. Where the cache already holds another copy of the version, seeding
+  replaces it with its own, unpacked beside it and swapped in, and `nanyx build`, `run` and `pull` warn with `NYX0308`
+  (`PackageIndex.shippedReplaced`): a package in the cache is otherwise never changed, but a shipped package's version is
+  the compiler's, and a compiler of that version built from other sources, as one built from source whose `packages/`
+  have changed, leaves a stale copy there ([#3215](https://github.com/nanyx-lang/nanyx/issues/3215)). Seeding writes the
+  index beside its place and moves it there, so a process never reads one another is still writing.
 - **Every store seeds.** A `PackageStore` is made with the function that seeds it, `Seed`: seeding packs, which needs
   modules compiled after the ones that read the store, so it is passed in where a store is made, and a store can't be
   made without one. `SeededPackages.user` is the user's store, which the CLI, the language server and the tests use, and
   `SeededPackages.store` one at a cache and an index of the caller's. `PackageIndex.listing` seeds the store before it
-  lists anything, and a build before it reads a package from the index. A process seeds each store once, and packs the
-  shipped packages once for every store it seeds; a cache seeded already for this compiler isn't packed again. The test
-  projects run with a cache of their own, made empty for each run (`TestPackageCache.fs`, and `TestPackageCache.cs` in
-  the language server's), so a test run seeds this build's shipped packages and never meets a copy an earlier build left
-  in the user's cache.
+  lists anything, and a build before it reads a package from the index; a store that can't be seeded reads no package
+  from the index, and the build stops with `NYX0309` and seeding's message (`Package.locked`). A process seeds each
+  store once, and packs the shipped packages once for every store it seeds; a cache seeded already for this compiler
+  isn't packed again. The test projects run with a cache of their own, made empty for each run (`TestPackageCache.fs`,
+  and `TestPackageCache.cs` in the language server's), so a test run seeds this build's shipped packages and never meets
+  a copy an earlier build left in the user's cache.
 - **They are resolved as packages from the index.** A dependency or a host the compiler ships is named at a version,
   resolved by `Resolution` with the index's packages, and locked with its SHA-256. Seeding is the one place that knows
   which packages the compiler ships (`PackageStore.seededCopy`): a locked version that is the one the compiler seeded
   is read from the compiler's own copy in `packages/` (`Package.locked`), which seeding checked holds the same files as
   the cache, so the checked library's modules of it apply and a build under a shipped host checks none of its modules
   from source ([#2702](https://github.com/nanyx-lang/nanyx/issues/2702)); any other version is read from the cache, as
-  any package's is. One the lockfile doesn't lock yet is read from the seeded copy, if its requirement accepts that
+  any package's is. A seeded version is read so whatever SHA-256 the lockfile locks it with, as one a compiler built
+  from other sources wrote. One the lockfile doesn't lock yet is read from the seeded copy, if its requirement accepts that
   version, until the next resolution locks it, which `nanyx pull`, `build` and `run` do without a line for it. A script
   names one with no version, `::install nanyx.fs`, at the version the compiler seeded, and a script with no `::host`
   runs under the console host at it.

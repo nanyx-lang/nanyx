@@ -165,6 +165,19 @@ module PackageIndex =
             $"This compiler's {name} {version} isn't the one the package index has: the copy it ships packs to the SHA-256 {shipped}, and the index records {indexed}. It builds with its own copy, which a lockfile it writes locks, and a download of {name} {version} won't match that. A compiler built from source whose packages/ have changed since its release does this; a released compiler doesn't, so report it if yours does"
         |> Diagnostics.about $"{name} {version}"
 
+    /// The warnings (`NYX0308`) that seeding `store` replaced the stale copy the cache held of a package the compiler
+    /// ships, one for each package, or none if it replaced none or couldn't seed.
+    let shippedReplaced (store: PackageStore) : Diagnostic list =
+        match store.Seed store with
+        | Result.Ok seeded ->
+            seeded.Replaced
+            |> List.map (fun copy ->
+                Diagnostics.general
+                    DiagnosticCodes.ShippedPackageReplaced
+                    $"The package cache held a copy of {copy.Name} {copy.Version}, in '{PackageStore.directoryOf store copy.Name copy.Version}', that wasn't the one this compiler ships, so the compiler replaced that stale copy with its own. A compiler of the same version built from other sources, as one built from source whose packages/ have changed since, leaves such a copy behind"
+                |> Diagnostics.about $"{copy.Name} {copy.Version}")
+        | Result.Error _ -> []
+
     /// The versions of the package `name` that `store` lists, oldest first, with where the index file that lists them
     /// is, which a version's relative `url` is relative to: those its index lists and, for a package the compiler ships,
     /// the version it seeded in the store's cache, seeding it first if it hasn't (`PackageStore.Seed`), whose `url` is

@@ -101,9 +101,13 @@ def lint: [Analysis] Module -> list(Report) = {{ m -> linter.lint(m) }}
                     let shown = errors |> List.truncate 3 |> List.map Manifest.describe |> String.concat "; "
                     Result.Error $"its lint build has errors: {shown}"
 
-    /// The linter `linter` declares, which runs its lint build, built with `runner` and kept in the cache of `store` (see
-    /// `wasmOf`); or why it can't be made, which its `linterFailed` reports.
-    let make (store: PackageStore) (runner: LintRunner) (linter: LinterPackage) : Result<Linter, string> =
+    /// The linters this process has made from packages that never change, by the store's cache, the package's directory
+    /// and its name (see `make`).
+    let private made = ConcurrentDictionary<string * string * string, Linter>()
+
+    /// `make`, with the package read under the linter host and its files read and hashed again: what a linter found by
+    /// its `path` is made with each time, since its files may have changed.
+    let private makeAfresh (store: PackageStore) (runner: LintRunner) (linter: LinterPackage) : Result<Linter, string> =
         underHost store linter
         |> Result.bind (fun package ->
             let sha = fingerprint linter.Declaration package
@@ -113,3 +117,20 @@ def lint: [Analysis] Module -> list(Report) = {{ m -> linter.lint(m) }}
               Package = linter.Entry.Package
               Rules = linter.Declaration.Rules
               Lint = LintAnswers.lintWith run })
+
+    /// The linter `linter` declares, which runs its lint build, built with `runner` and kept in the cache of `store` (see
+    /// `wasmOf`); or why it can't be made, which its `linterFailed` reports. The language server asks for it on every
+    /// compile. A linter from the package index, from GitHub or shipped with the compiler is in a directory that never
+    /// changes, so it is made once a process; one found by its `path` is made each time, which reads its package under
+    /// the linter host and hashes its files, so that an edit to it is linted with, and builds only what changed.
+    let make (store: PackageStore) (runner: LintRunner) (linter: LinterPackage) : Result<Linter, string> =
+        match linter.Entry.Path with
+        | Some _ -> makeAfresh store runner linter
+        | None ->
+            let key = store.Cache, linter.Package.Manifest.Root, linter.Entry.Package
+            match made.TryGetValue key with
+            | true, found -> Result.Ok found
+            | false, _ ->
+                let result = makeAfresh store runner linter
+                result |> Result.iter (fun found -> made.TryAdd(key, found) |> ignore)
+                result
