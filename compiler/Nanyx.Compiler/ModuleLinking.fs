@@ -78,6 +78,13 @@ module internal ModuleLinking =
                 | Expr value -> { item with Kind = Expr (rename value) }
                 | _ -> item)
 
+    /// The name the definition `name` of the module whose file declares `moduleName` is written by: its name in its
+    /// block for a block's (`twice` for `lib.outer.twice`), and otherwise `name` (see `TypedModule.WrittenNames`).
+    let internal nameAsWritten (moduleName: string option) (name: string) =
+        match moduleName with
+        | Some declared when name.StartsWith(declared + ".") -> name.Substring(name.LastIndexOf '.' + 1)
+        | _ -> name
+
     /// The types of `checkedModule`'s definitions by the names it writes: its own under their own names, though `Typed`
     /// knows those it renames by their new ones (see `CheckedModule.OwnRenames`).
     let internal ownTypes (checkedModule: CheckedModule) : Map<string, Ty> =
@@ -334,6 +341,18 @@ module internal ModuleLinking =
     /// The name the import `item` of `checkedModule` inlines its definition `name` under (see `inlinedItemsForImport`).
     let internal inlinedName (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) (name: string) =
         inlinedRenames qualified item checkedModule |> Map.tryFind name |> Option.defaultValue name
+
+    /// The names the definitions an import of `checkedModule` inlines are written by, by the names they are inlined
+    /// under (see `TypedModule.WrittenNames`): those it inlined itself, and its own.
+    let internal writtenNamesForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Map<string, string> =
+        checkedModule.Own
+        |> List.fold (fun acc own ->
+            match own.Kind with
+            | Def (ValueDef(_, name, _, _)) ->
+                let inlined = inlinedName qualified item checkedModule name
+                let written = nameAsWritten checkedModule.Name name
+                if inlined = written then acc else acc |> Map.add inlined written
+            | _ -> acc) checkedModule.Typed.WrittenNames
 
     /// The names `imported`, from `origin`, gives its importers, each with the module that defines it: its own exports,
     /// and what it re-exports, which for a whole-module re-export (`export m`) is everything `m` gives, so through

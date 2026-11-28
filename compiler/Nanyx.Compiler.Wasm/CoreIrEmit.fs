@@ -86,6 +86,10 @@ let placeMarker (shownFile: string -> string) (place: Place) =
 /// module's fields, `;;@lib prelude.nyx`.
 let libraryMarker (shown: string) = $"  ;;@lib {shown}"
 
+/// The marker that says the function the module names `functionName` is written `written` in the source, as a stack
+/// names it (see `WatSyntax.Named`): a line comment among the module's fields, `;;@name shapes_perimeter perimeter`.
+let nameMarker (functionName: string) (written: string) = $"  ;;@name {functionName} {written}"
+
 /// Whether `file`, a place's, is a file of the standard library's, which is named by its module (`nanyx/prelude.nyx`)
 /// rather than by a path.
 let isLibraryFile (file: string) =

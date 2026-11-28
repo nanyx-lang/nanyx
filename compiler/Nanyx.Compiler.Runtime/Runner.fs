@@ -164,11 +164,11 @@ module WasmRunner =
             |> Seq.collect (fun frame ->
                 let place = table |> Option.map (fun table -> SpanTable.placeAt table (int frame.ModuleOffset)) |> Option.defaultValue []
                 match place with
-                | [] -> FunctionNames.shown frame.FunctionName |> Option.map (fun name -> { Name = name; Place = None; Column = 0 }) |> Option.toList
+                | [] -> SpanTable.shownName table frame.FunctionName |> Option.map (fun name -> { Name = name; Place = None; Column = 0 }) |> Option.toList
                 | inlined ->
                     inlined
                     |> List.choose (fun (functionName, file, line, column) ->
-                        FunctionNames.shown (defaultArg functionName frame.FunctionName)
+                        SpanTable.shownName table (defaultArg functionName frame.FunctionName)
                         |> Option.map (fun name -> { Name = name; Place = Some(file, line); Column = column })))
             |> List.ofSeq
 
@@ -190,10 +190,10 @@ module WasmRunner =
                 |> List.tryPick (fun frame ->
                     frame.Place |> Option.filter (fst >> isLibrary >> not) |> Option.map (fun (file, line) -> file, line, frame.Column))
             Crashed(reported, place, stack)
-        | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick FunctionNames.source)
+        | :? TrapException as trap when trap.Type = TrapCode.StackOverflow -> StackOverflow(frameNames trap |> List.tryPick (SpanTable.sourceName table))
         | :? TrapException as trap ->
             match arithmeticFault trap with
-            | Some fault -> ArithmeticError(fault, frameNames trap |> List.tryPick FunctionNames.source, stackOf table trap)
+            | Some fault -> ArithmeticError(fault, frameNames trap |> List.tryPick (SpanTable.sourceName table), stackOf table trap)
             | None -> Trapped(ex.Message, stackOf table trap)
         | _ -> Trapped(ex.Message, [])
 

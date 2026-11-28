@@ -114,7 +114,7 @@ module ProfilePlaces =
 
     /// `profile`, in the Firefox profiler's format, with the file and line of each function's definition that `table`
     /// has, by the function's name, in each thread's `funcTable` (its `fileName`, an index into the thread's
-    /// `stringArray`, and its `lineNumber`). Wasmtime's guest profiler gives a frame's address in its machine code, not
+    /// `stringArray`, and its `lineNumber`), and its name as it is written in the source, where the table has that. Wasmtime's guest profiler gives a frame's address in its machine code, not
     /// in the module, so a profile places functions, not the lines they ran.
     let withDefinitions (table: SpanTable option) (profile: byte array) : byte array =
         match table with
@@ -140,5 +140,10 @@ module ProfilePlaces =
                     | Some(file, line) ->
                         fileNames.[index] <- JsonValue.Create(fileIndex file)
                         lineNumbers.[index] <- JsonValue.Create line
+                    | None -> ()
+                    match SpanTable.writtenName table functionName with
+                    | Some written ->
+                        strings.Add(JsonValue.Create written)
+                        names.[index] <- JsonValue.Create(strings.Count - 1)
                     | None -> ()
             Text.Encoding.UTF8.GetBytes(root.ToJsonString())

@@ -672,4 +672,9 @@ type TypedModule =
       Units: Map<string, UnitInfo>
       /// The names the module's own nodes declare, as the parser recorded them, each where it is written: a record's
       /// fields and a context's members among them, which have no nodes of their own (see `DeclaredNames`).
-      Declared: DeclaredNames }
+      Declared: DeclaredNames
+      /// The name each definition of `Module` is written by where its name differs, by the name the backend knows it by:
+      /// `perimeter` for an import's `shapes.perimeter`, `helper` for a private `shapes.helper`, `twice` for a block's
+      /// `lib.outer.twice`, `ignore` for a module's own `main.ignore` (see `ModuleLinking.nameAsWritten`). A stack names a
+      /// function so (see `Nanyx.Runtime.SpanTable`).
+      WrittenNames: Map<string, string> }
