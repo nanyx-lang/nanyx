@@ -283,25 +283,30 @@ let ``Run - a map is written as its literal is, each key and value by its own to
     |> runSource
     |> assertRan "[tea => 3, cake => 1]\n[tea => 3, cake => 1]\n[[tea => 3, cake => 1], [pie => 4]]\n(count = 2, prices = [1 => #some(2.5)])\n[=>]\nhas [#tea => [1, 2]]\n"
 
-/// A program that builds a map of `size` keys, then looks up, inserts and removes 100,000 of them.
-let private churning (size: int) =
-    $"""def size = {size}
-def built = (0..size - 1) \seq.fold(map.empty, {{ m, k -> map.insert(m, k, k) }})
-def found = (0..99999) \seq.fold(0, {{ total, i -> total + (built(i %% size) \someOr(0)) }})
-def changed = (0..99999) \seq.fold(built, {{ m, i -> map.insert(m, i %% size, i) }})
-def removed = (0..99999) \seq.fold(changed, {{ m, i -> map.remove(m, i %% size) }})
-println("{{found > 0}} {{map.length(changed)}} {{map.length(removed)}}")
+/// A program whose functions build a map of `size` keys, and build one and then look up, insert and remove 100,000 of
+/// its keys, so that the work the lookups, inserts and removes take at a size is the one's less the other's.
+let private churnable =
+    normalized """def built: int -> map(int, int) = { size -> (0..size - 1) \seq.fold(map.empty, { m, k -> map.insert(m, k, k) }) }
+
+def building: int -> int = { size -> map.length(built(size)) }
+
+def churned: int -> int = { size ->
+  def m = built(size)
+  def found = (0..99999) \seq.fold(0, { total, i -> total + (m(i % size) \someOr(0)) })
+  def changed = (0..99999) \seq.fold(m, { kept, i -> map.insert(kept, i % size, i) })
+  def removed = (0..99999) \seq.fold(changed, { kept, i -> map.remove(kept, i % size) })
+  if found > 0 then map.length(changed) + map.length(removed) else -1
+}
 """
 
-[<Fact; Trait("Category", "Timing")>]
-let ``Run - a lookup, an insert and a remove take time that grows with the log of the map's size`` () =
-    let timed (size: int) =
-        Nanyx.TestTiming.millisecondsOf (fun () -> runSourceWith false "" (churning size) |> assertRan $"true {size} 0\n") / 1000.0
-    timed 1000 |> ignore
-    let small = timed 1000
-    let large = timed 100000
-    // 100 times the keys: a list's linear walk takes some 100 times as long; a trie's few levels more take little.
-    Assert.True(large < small * 4.0, $"1,000 keys took {small:F2}s, 100,000 took {large:F2}s")
+[<Fact>]
+let ``Run - a lookup, an insert and a remove take work that grows with the log of the map's size`` () =
+    use program = instantiateWasm churnable []
+    Assert.Equal(1000, program.Call("churned", 1000))
+    let churning (size: int) = float (program.Work("churned", size) - program.Work("building", size))
+    let small, large = churning 1000, churning 100000
+    // 100 times the keys: a list's linear walk takes some 100 times the work; a trie's few levels more take little.
+    Assert.True(large < small * 4.0, $"300,000 operations on 1,000 keys took {small} fuel, on 100,000 keys {large}, {large / small:F1} times")
 
 [<Fact>]
 let ``Run - keys whose hashes are all the same are kept in one order however they were added, and found and removed`` () =
