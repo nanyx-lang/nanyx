@@ -13,8 +13,12 @@ type SeededCopy =
       Source: string }
 
 /// What seeding a store gave: the index of the packages the compiler ships it seeded (`PackageStore.shippedIndex`),
-/// and each package.
-type Seeded = { Index: string; Copies: SeededCopy list }
+/// each package, and those of them whose copy in the cache, at that version, wasn't this compiler's, and which seeding
+/// replaced with its own.
+type Seeded =
+    { Index: string
+      Copies: SeededCopy list
+      Replaced: SeededCopy list }
 
 /// Where a build finds what it doesn't have on disk beside it: the per-user cache of downloaded packages, the package
 /// index it downloads them from, how it fetches from GitHub, and how the packages the compiler ships are seeded into it.

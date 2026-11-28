@@ -44,6 +44,7 @@ const library_1 = require("./library");
 const dbgView_1 = require("./dbgView");
 const liveMode_1 = require("./liveMode");
 const run_1 = require("./run");
+const debugger_1 = require("./debugger");
 const testController_1 = require("./testController");
 const COMMAND_DOWNLOAD = "nanyx.downloadCompiler";
 const COMMAND_RESTART = "nanyx.restartServer";
@@ -91,7 +92,7 @@ async function activate(context) {
                 (0, compiler_1.removeDownloadedExcept)(context, version);
             }
         }
-    }), vscode.commands.registerCommand(COMMAND_RESTART, () => startOrRestart(context)), vscode.commands.registerCommand(COMMAND_RUN, (uri) => runCurrentFile(context, uri)), vscode.commands.registerCommand(COMMAND_RENAME_AT, renameAt), vscode.workspace.onDidChangeConfiguration((event) => {
+    }), vscode.commands.registerCommand(COMMAND_RESTART, () => startOrRestart(context)), vscode.commands.registerCommand(COMMAND_RUN, (uri) => runCurrentFile(context, uri)), ...(0, debugger_1.registerDebugger)(() => compiler), vscode.commands.registerCommand(COMMAND_RENAME_AT, renameAt), vscode.workspace.onDidChangeConfiguration((event) => {
         if (event.affectsConfiguration("nanyx.path") ||
             event.affectsConfiguration("nanyx.developmentMode") ||
             event.affectsConfiguration("nanyx.compilerVersion") ||

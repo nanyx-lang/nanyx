@@ -27,6 +27,7 @@ internal static partial class CliCommands
     /// <param name="test">Run only the test of this full name, as the report writes it, geometry.`adds points`; several, one on each line. A name that names no test is an error.</param>
     /// <param name="module">Run only the tests of the module of this name. A name that names no module with tests is an error.</param>
     /// <param name="filesInMemory">Run each @test(#io) test with its files in memory, over the real ones: it reads the real files, and nothing it writes, appends, makes or deletes reaches the disk. The tests are built from the test host's root for this.</param>
+    /// <param name="showOutput">Write what each test printed, each dbg it reached among it, under its line, a passing test's too. Without it, only a failing test's is written: a passing test's is dropped.</param>
     [Consolo("test")]
     public static int Test(
         [Consolo("filter")] string? filter = null,
@@ -39,11 +40,12 @@ internal static partial class CliCommands
         [Consolo("test")] string? test = null,
         [Consolo("module")] string? module = null,
         [Consolo("files-in-memory")] bool filesInMemory = false,
+        [Consolo("show-output")] bool showOutput = false,
         params string[] path) =>
-        TestIn(Shell.Process, path, filter, seed, timeout, release, timings, format, list, test, module, filesInMemory);
+        TestIn(Shell.Process, path, filter, seed, timeout, release, timings, format, list, test, module, filesInMemory, showOutput);
 
     /// <summary>What <c>nanyx test</c> does, run in <paramref name="shell"/>.</summary>
-    internal static int TestIn(Shell shell, string[] path, string? filter = null, string? seed = null, string? timeout = null, bool release = false, bool timings = false, string? format = null, bool list = false, string? test = null, string? module = null, bool filesInMemory = false)
+    internal static int TestIn(Shell shell, string[] path, string? filter = null, string? seed = null, string? timeout = null, bool release = false, bool timings = false, string? format = null, bool list = false, string? test = null, string? module = null, bool filesInMemory = false, bool showOutput = false)
     {
         if (!TrySinglePath(shell, path, out var single))
         {
@@ -276,7 +278,7 @@ internal static partial class CliCommands
                 }
                 else
                 {
-                    Report(shell.Out, run);
+                    Report(shell.Out, run, showOutput);
                 }
             }));
         if (runs.IsError)
@@ -334,13 +336,20 @@ internal static partial class CliCommands
 
     /// <summary>
     /// Writes how <paramref name="run"/> ended to <paramref name="writer"/>: PASS and its name, or FAIL, its name and
-    /// where it is written, then why it failed, and what it printed, indented under it.
+    /// where it is written, then why it failed, and what it printed, each <c>dbg</c> it reached among it, indented under
+    /// it. A passing test's output is dropped, but with <paramref name="showOutput"/> (#2103).
     /// </summary>
-    private static void Report(TextWriter writer, TestRun run)
+    private static void Report(TextWriter writer, TestRun run, bool showOutput)
     {
         if (run.Outcome.IsPassed)
         {
             writer.WriteLine($"PASS {Shown(run.Test)}{Io(run.Test)}{Crashes(run)}");
+            if (showOutput && run.Output.Length > 0)
+            {
+                writer.WriteLine("  Output:");
+                WriteIndented(writer, run.Output, "    ");
+            }
+
             return;
         }
 
