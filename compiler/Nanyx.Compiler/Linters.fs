@@ -965,7 +965,7 @@ module UnconstructibleTypes =
         | TyNominal(id, _, _, _) when id = target -> positive
         | TyNominal(id, args, underlying, isPrivate) ->
             args |> List.exists (givesOut target seen positive)
-            || (not isPrivate && not (seen.Contains id) && givesOut target (seen.Add id) positive underlying)
+            || (not isPrivate.IsPrivate && not (seen.Contains id) && givesOut target (seen.Add id) positive underlying)
         | TyFunc(input, output, contexts) ->
             givesOut target seen (not positive) input
             || givesOut target seen positive output

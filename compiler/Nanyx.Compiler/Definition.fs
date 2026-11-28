@@ -118,7 +118,7 @@ let internal writtenTypeDefinition (writeShape: Ty -> string) (symbol: Symbol) (
                     TyNominal(nominal, args, underlying, isPrivate)
                 | TyRecursive _ -> ty
                 | _ -> Ty.map asWritten ty
-            let shape = asWritten (RecursiveNominals.underlying (TyNominal(id, [], info.Underlying, info.IsPrivate)))
+            let shape = asWritten (RecursiveNominals.underlying (TyNominal(id, [], info.Underlying, TypeDefInfo.facts info)))
             $"{keyword} {symbol.Name}{parameters} = {scopedKind} {writeShape shape}"
         else $"{keyword} {symbol.Name}{parameters} = {writeShape info.Underlying}"
     let note =

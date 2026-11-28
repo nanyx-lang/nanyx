@@ -266,12 +266,18 @@ module Unifier =
         | other, TyVar _ -> isTagUnion other
         | _ -> false
 
+    /// The variance of the parameter at `index` of a nominal type whose facts are `facts`: `Invariant` past the parameters
+    /// it has variances for, as for the contexts a type generic in contexts carries, or while its definition is read.
+    let varianceAt (facts: NominalFacts) (index: int) =
+        if index < facts.Variances.Length then facts.Variances.[index] else Invariant
+
     /// Whether `ty` holds `undefined` where a value of it gives one out: as itself, a type's argument, a tag's payload, a
-    /// record's field or a function's result, but not a function's input, nor a nominal type's argument, which is its
-    /// own. Given where a variable is expected, such a type is only a lower bound: `[]` of `list(undefined)` and `[1]`
-    /// given for one `list(a)` make it a `list(int)` (#3129).
+    /// record's field, a function's result or a nominal type's covariant argument, but not a function's input, nor a
+    /// nominal type's other arguments. Given where a variable is expected, such a type is only a lower bound: `[]` of
+    /// `list(undefined)` and `[1]` given for one `list(a)` make it a `list(int)` (#3129, #3206).
     let rec holdsBottom (ty: Ty) =
         match ty with
+        | TyNominal(_, args, _, facts) -> args |> List.indexed |> List.exists (fun (index, arg) -> varianceAt facts index = Covariant && holdsBottom arg)
         | TyUnion [] -> true
         | TyApply(_, args) -> List.exists holdsBottom args
         | TyUnion items -> List.exists holdsBottom items
@@ -281,7 +287,7 @@ module Unifier =
         | TyAlias(_, _, underlying) -> holdsBottom underlying
         | _ -> false
 
-    /// Whether `l` and `r`, a nominal type's arguments, which are its own and so must be the same, differ by `undefined`:
+    /// Whether `l` and `r`, a nominal type's arguments at an invariant parameter, which must be the same, differ by `undefined`:
     /// one has it where the other has a type that is no variable, at any depth. `Equal` lets `undefined` agree with any
     /// type, as a value that never comes fits anywhere, but an `MArray(undefined)` is no `MArray(int)`: it could be
     /// written values of any type (#3129).
@@ -296,6 +302,12 @@ module Unifier =
             lFields |> Map.exists (fun key field -> bottomClash field rFields.[key])
         | TyFunc(lIn, lOut, _), TyFunc(rIn, rOut, _) -> bottomClash lIn rIn || bottomClash lOut rOut
         | _ -> false
+
+    /// The arguments `args` of a nominal type whose facts are `lFacts` and `rFacts` gives at its invariant parameters,
+    /// which must be the same type, and so differ by no `undefined` (see `bottomClash`).
+    let private invariantArguments (lFacts: NominalFacts) (rFacts: NominalFacts) (args: Ty list) =
+        let facts = if lFacts.Variances.Length >= rFacts.Variances.Length then lFacts else rFacts
+        args |> List.indexed |> List.filter (fun (index, _) -> varianceAt facts index = Invariant) |> List.map snd
 
     let empty : Subst = Map.empty
 
@@ -927,7 +939,7 @@ module Unifier =
                         | None ->
                         let argConstraints = argConstraints |> List.collect (function Ok constraints -> constraints | Error _ -> [])
                         match lUnderlying, rUnderlying with
-                        | _ when lPrivate || rPrivate -> loop subst (argConstraints @ rest)
+                        | _ when lPrivate.IsPrivate || rPrivate.IsPrivate -> loop subst (argConstraints @ rest)
                         | TyRecursive _, _
                         | _, TyRecursive _ -> loop subst (argConstraints @ rest)
                         | _ -> loop subst (argConstraints @ (lUnderlying, rUnderlying, Equal, origin) :: rest)
@@ -1240,14 +1252,27 @@ module Unifier =
                             | Error extra -> Error (contextsNotAllowedMessage extra l r, origin, ContextsNotAllowed)
                         | _ ->
                         match l, r with
-                        // A nominal type's arguments are its own, not only what it is made from, so they are the same. The
-                        // contexts a type generic in contexts carries are like a function type's: one with fewer fits where
-                        // one with more is expected (see `FunctionContexts.carried`).
-                        | TyNominal(lNominal, lArgs, _, _), TyNominal(rNominal, rArgs, _, _) when
-                            lNominal = rNominal && lArgs.Length = rArgs.Length && List.exists2 bottomClash lArgs rArgs ->
+                        // A nominal type's arguments are its own, not only what it is made from: each is given as the
+                        // type's parameter's variance says (see `Variances`). One that the type only gives out may be given
+                        // for another, `Stack(undefined)` for a `Stack(int)`; one it only takes in, the other way; and one
+                        // it does both with, or holds to change, must be the same. The contexts a type generic in contexts
+                        // carries are like a function type's: one with fewer fits where one with more is expected (see
+                        // `FunctionContexts.carried`).
+                        | TyNominal(lNominal, lArgs, _, lFacts), TyNominal(rNominal, rArgs, _, rFacts) when
+                            lNominal = rNominal && lArgs.Length = rArgs.Length
+                            && List.exists2 bottomClash (invariantArguments lFacts rFacts lArgs) (invariantArguments lFacts rFacts rArgs) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
-                        | TyNominal(lNominal, lArgs, _, _), TyNominal(rNominal, rArgs, _, _) when lNominal = rNominal && lArgs.Length = rArgs.Length ->
-                            let equalArguments lArgs rArgs = List.map2 (fun lTy rTy -> (lTy, rTy, Equal, origin)) lArgs rArgs
+                        | TyNominal(lNominal, lArgs, _, lFacts), TyNominal(rNominal, rArgs, _, rFacts) when lNominal = rNominal && lArgs.Length = rArgs.Length ->
+                            let facts = if lFacts.Variances.Length >= rFacts.Variances.Length then lFacts else rFacts
+                            let equalArguments lArgs rArgs =
+                                List.mapi2
+                                    (fun index lTy rTy ->
+                                        match varianceAt facts index with
+                                        | Covariant
+                                        | Unused -> (lTy, rTy, Assignable, origin)
+                                        | Contravariant -> (rTy, lTy, Assignable, origin)
+                                        | Invariant -> (lTy, rTy, Equal, origin))
+                                    lArgs rArgs
                             match l, r with
                             | FunctionContexts.CarryingNominal(_, lOwn, given), FunctionContexts.CarryingNominal(_, rOwn, expected) ->
                                 let arguments = equalArguments lOwn rOwn
@@ -1278,14 +1303,14 @@ module Unifier =
                             not (match other with TyNominal _ -> true | _ -> false)
                             && fitsWithoutEffect (fun () -> loop subst [ (other, underlying, Assignable, origin) ]) ->
                             Error (mismatchMessage l r, origin, NominalShape(nominal, isPrivate, underlying))
-                        | other, TyNominal(nominal, _, _, true) when not (match other with TyNominal _ -> true | _ -> false) ->
+                        | other, TyNominal(nominal, _, _, { IsPrivate = true }) when not (match other with TyNominal _ -> true | _ -> false) ->
                             Error (mismatchMessage l r, origin, NominalExpected(nominal, true))
-                        | TyNominal(_, _, _, true), _
-                        | _, TyNominal(_, _, _, true) ->
+                        | TyNominal(_, _, _, { IsPrivate = true }), _
+                        | _, TyNominal(_, _, _, { IsPrivate = true }) ->
                             Error (mismatchMessage l r, origin, TypesDiffer)
                         | RecursiveNominals.Nominal(_, _, underlying, false), other when not (match other with TyNominal _ -> true | _ -> false) ->
                             loop subst ((underlying, other, Equal, origin) :: rest)
-                        | other, TyNominal(nominal, _, _, false) when not (match other with TyNominal _ -> true | _ -> false) ->
+                        | other, TyNominal(nominal, _, _, { IsPrivate = false }) when not (match other with TyNominal _ -> true | _ -> false) ->
                             Error (mismatchMessage l r, origin, NominalExpected(nominal, false))
                         | TyNominal _, TyNominal _ ->
                             Error (mismatchMessage l r, origin, TypesDiffer)

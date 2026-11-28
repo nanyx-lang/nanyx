@@ -127,7 +127,7 @@ let rec internal inferCall
                 | None, _ -> Error [ Diagnostics.at DiagnosticCodes.InvalidRecordUpdate baseExpr.Span "`with` needs a record whose fields are known here" ]
                 // An updated value of a nominal type is a new one, and only the type's home module makes those.
                 | Some _, TyNominal(nominal, _, _, isPrivate) when not (inNominalHome afterBase nominal baseExpr.Span) ->
-                    let message = ProtectedShapes.updatedOutside afterBase (Map.toList env.Names) nominal isPrivate
+                    let message = ProtectedShapes.updatedOutside afterBase (Map.toList env.Names) nominal isPrivate.IsPrivate
                     Error [ Diagnostics.at DiagnosticCodes.NominalConstructedOutsideItsModule baseExpr.Span message ]
                 | Some fields, _ ->
                     let mutable current = afterBase
