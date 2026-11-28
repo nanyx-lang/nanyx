@@ -322,6 +322,22 @@ parts' default display units (see [Units of a derived dimension](#units-of-a-der
 no whole number of them in their default storage units. `dbg` writes a measured value as its dimension around its number of default storage units,
 `Time(1500000000)`.
 
+[`format`](../stdlib/prelude-format) writes a measured value with a float's spec, in the unit named after a space at the
+spec's end, or else in the unit it prints in, then the unit:
+
+```nanyx
+println(format(1500ms, ".1f ms"))
+println(format(1500ms, "+.2f"))
+println(format(2hr, ",.0f s"))
+-- 1500.0ms
+-- +1.50s
+-- 7,200s
+```
+
+The spec may name any unit of the dimension the module can write, a derived dimension's own units among them, `kmh`.
+Formatting needs the number as a float, so only a dimension stored as an `int`, a float or a sized integer narrower
+than 64 bits has it.
+
 # Time in the standard library
 
 `Clock`'s [`sleep`](../stdlib/clock) takes a `Time(int)`, `sleep(500ms)`, and waits at least that long, and `ticks()` is

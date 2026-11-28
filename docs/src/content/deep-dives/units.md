@@ -166,6 +166,15 @@ nanosecond, and is written `35.0m/s`. Any other storage, a type variable's among
 definition for a `Time(a)` requires `ToString(a)`. A module that can't write its dimension's default storage unit writes
 a number of default storage units as `dbg` does, `Time(1500000000)`.
 
+The prelude's `Format` is derived for a measured value the same way, but only for one whose storage converts to a
+`float` without loss: an `int`, a sized integer narrower than 64 bits, a `float` or an `F32` (`StructuralInstances.formattedShapeOf`).
+The derived `tryFormat` calls the prelude's `__measuredTryFormat` with the number as a `float`, the spec, the names
+and scales of the units a spec may name (the dimension's own, a derived dimension's own declared units among them), the
+units to pick from when the spec names none (the same, or for a derived dimension its parts' display units multiplied
+and divided), the default display unit's name, the text around a number of default storage units, and the dimension's
+name for a `BadFormat`. The helper takes the unit named after the spec's last space, writes the number in it with
+`float.tryFormat`'s reader, and appends the unit's name. A name no unit has is `#badFormat` at the name.
+
 # Derived dimensions
 
 A derived dimension is written in a type as dimensions joined by `*` and `/`, with brackets: `Length / Time`,

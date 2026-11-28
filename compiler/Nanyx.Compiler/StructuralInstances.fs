@@ -52,15 +52,26 @@ open NyxCompiler.InferState
 /// part that has a `hash` of its own is hashed by a definition that hashes each part with `__hashOf`, which finds the
 /// part's own `Hash`, and folds the hashes with `__hashCombine`.
 module internal StructuralInstances =
+    /// The prelude's `Format` context, which a measured value has an instance of derived from the units its module
+    /// sees, as it has a derived `ToString` (see `measuredFormat`).
+    let formatting = "Format"
+
+    let private formatMember = "tryFormat"
+
+    /// The prelude function the derived `tryFormat` of a measured value calls.
+    let private measuredTryFormat = "__measuredTryFormat"
+
     /// Whether a call that requires the context `ctxName` of a structure with no instance of its own finds a derived
-    /// one: `ToString`. `Eq` has the compiler's own, and a derived one only as `comparesParts` says.
-    let derives (ctxName: Identifier) = ctxName = InterpolationHoles.context
+    /// one: `ToString`, and `Format` of a measured value. `Eq` has the compiler's own, and a derived one only as
+    /// `comparesParts` says.
+    let derives (ctxName: Identifier) = ctxName = InterpolationHoles.context || ctxName = formatting
 
     /// The member of the context `ctxName` a derived definition is.
-    let private memberOf (ctxName: Identifier) =
+    let memberOf (ctxName: Identifier) =
         if ctxName = EqualityOperators.context then EqualityOperators.equals
         elif ctxName = WellKnownContexts.hashing.Context then WellKnownContexts.hashing.Member
         elif ctxName = WellKnownContexts.ordering.Context then WellKnownContexts.ordering.Member
+        elif ctxName = formatting then formatMember
         else InterpolationHoles.memberName
 
     /// What a type is built from, as far as writing a value of it goes.
@@ -83,7 +94,8 @@ module internal StructuralInstances =
         | ArrayShape of Ty
         /// A measured value's dimension and storage, and the units the module sees that it is written in, which `derive`
         /// fills in: a dimension's, the largest first (see `Units.seenOf`), and a derived dimension's parts' default
-        /// storage and display units. Only `ToString` is derived for one: it is compared and hashed as its storage.
+        /// storage and display units, and for `Format` the derived dimension's own units too. Only `ToString` and
+        /// `Format` are derived for one: it is compared and hashed as its storage.
         | MeasureShape of Dimension * storage: Ty * units: UnitInfo list
 
     let private isTuple (fields: Map<string, Ty>) = not fields.IsEmpty && WellKnownContexts.isTuple fields
@@ -186,6 +198,18 @@ module internal StructuralInstances =
         | TyMeasure(dimension, storage) -> Some (MeasureShape(dimension, storage, []))
         | _ -> shapeOf ty
 
+    /// What `ty` is built from, as far as writing it by a format spec goes: only a measured value is, and only one stored
+    /// as a number `float.tryFormat` can write without losing it, an `int`, a sized integer narrower than 64 bits, a
+    /// `float` or an `F32`. Any other type has its own `tryFormat`, or none.
+    let private formattedShapeOf (ty: Ty) : Shape option =
+        match Unifier.unalias ty with
+        | TyMeasure(dimension, storage) ->
+            match Unifier.unalias storage with
+            | TyPrimitive("int" | "float" | "F32") -> Some (MeasureShape(dimension, storage, []))
+            | SizedIntegerType integer when SizedInteger.bits integer < 64 -> Some (MeasureShape(dimension, storage, []))
+            | _ -> None
+        | _ -> None
+
     /// What `ty` is built from, as far as ordering two values of it goes: only a tuple and a list are, since a
     /// record's fields and a union's tags have no order of their own.
     let private orderedShapeOf (ty: Ty) : Shape option =
@@ -198,6 +222,7 @@ module internal StructuralInstances =
     let private shapeFor (ctxName: Identifier) =
         if ctxName = EqualityOperators.context || ctxName = WellKnownContexts.hashing.Context then comparedShapeOf
         elif ctxName = InterpolationHoles.context then writtenShapeOf
+        elif ctxName = formatting then formattedShapeOf
         elif ctxName = WellKnownContexts.ordering.Context then orderedShapeOf
         else shapeOf
 
@@ -265,10 +290,10 @@ module internal StructuralInstances =
                 Some (ty, shape, vars |> List.filter (fun var -> not (rests.Contains var.Id)))
             | _ -> None)
 
-    /// The variables an instance of `ToString` derived for the type `ty` requires the context of, if one can be
+    /// The variables an instance of `ctxName` derived for the type `ty` requires the context of, if one can be
     /// derived (see `derivable`).
-    let variables (rigid: Set<int>) (ty: Ty) : TyVar list option =
-        derivable rigid InterpolationHoles.context ty |> Option.map (fun (_, _, vars) -> vars)
+    let variables (rigid: Set<int>) (ctxName: Identifier) (ty: Ty) : TyVar list option =
+        derivable rigid ctxName ty |> Option.map (fun (_, _, vars) -> vars)
 
     let private valueName = "__v"
 
@@ -287,30 +312,49 @@ module internal StructuralInstances =
     /// and divided, `10.4m/s`, and never in its own units: an integer that is no whole number of them in its parts'
     /// default storage units, `1500mm*mm`, and any value as `dbg` writes it if the module sees no default display unit
     /// of a part.
+    /// The unit of a part of a derived dimension, `id`, among `units`, that `pick` picks.
+    let private partUnit (units: UnitInfo list) (pick: UnitInfo -> bool) (id: NominalId) =
+        units |> List.tryFind (fun info -> pick info && info.Dimension = Dimension.ofBase id)
+
+    /// What a measured value of `dimension` is written between when it is written as its number of default storage
+    /// units: nothing before and the unit after, `500ms`, or, if the module sees no default storage unit, its
+    /// dimension around it, `Time(500)`. A derived dimension's default storage units are its parts', `1500mm*mm`.
+    let private measuredFrame (dimension: Dimension) (units: UnitInfo list) : string * string =
+        let storageOf = partUnit units UnitInfo.isStorage
+        match units |> List.tryFind (fun info -> UnitInfo.isStorage info && info.Dimension = dimension) with
+        | _ when Dimension.isDerived dimension && dimension |> List.forall (fst >> storageOf >> Option.isSome) ->
+            "", Dimension.writtenWith (fun id -> (storageOf id).Value.Name) "*" "/" dimension
+        | Some storageUnit when not (Dimension.isDerived dimension) -> "", storageUnit.Name
+        | _ -> $"{Dimension.applied dimension}(", ")"
+
+    /// `stored`, a number stored as `storage`, as an `int` or as a `float`, through the prelude's conversion to one where
+    /// its storage has one that loses nothing.
+    let private storedNumber (call: Identifier -> Expression list -> Expression) (storage: Ty) (stored: Expression) =
+        match Unifier.unalias storage with
+        | TyPrimitive "int" -> Some stored, None
+        | SizedIntegerType integer when SizedInteger.bits integer < 64 -> Some (call $"{SizedInteger.name integer}.toInt" [ stored ]), None
+        | TyPrimitive "float" -> None, Some stored
+        | TyPrimitive "F32" -> None, Some (call "F32.toFloat" [ stored ])
+        | _ -> None, None
+
+    /// The name a derived dimension's value is written in, its parts' default display units multiplied and divided,
+    /// `m/s`, and how many of its parts' default storage units that is, if the module sees a display unit of each part.
+    let private derivedDisplay (dimension: Dimension) (units: UnitInfo list) : (string * Rational) option =
+        let displayOf = partUnit units _.IsDisplay
+        match dimension |> List.choose (fun (id, power) -> displayOf id |> Option.map (fun info -> info.Scale, power)) with
+        | displayed when displayed.Length = dimension.Length ->
+            let name = Dimension.writtenWith (fun id -> (displayOf id).Value.Name) "*" "/" dimension
+            Some (name, displayed |> List.fold (fun scale (part, power) -> Rational.multiply scale (Rational.power part power)) Rational.one)
+        | _ -> None
+
     let private measuredText (span: SourceSpan) (dimension: Dimension) (storage: Ty) (units: UnitInfo list) (value: Expression) : Expression =
         let expr = Expression.at span
         let call (callee: Identifier) (args: Expression list) = expr (FunctionCall(callee, None, args))
         let text (s: string) = expr (LiteralExpr (StringLit s))
         let integer (n: bigint) = expr (LiteralExpr (IntLit n))
         let stored = call Units.storageIntrinsic [ value ]
-        let partUnit (pick: UnitInfo -> bool) (id: NominalId) = units |> List.tryFind (fun info -> pick info && info.Dimension = Dimension.ofBase id)
-        let storageOf = partUnit UnitInfo.isStorage
-        let displayOf = partUnit _.IsDisplay
-        let before, after =
-            match units |> List.tryFind (fun info -> UnitInfo.isStorage info && info.Dimension = dimension) with
-            | _ when Dimension.isDerived dimension && dimension |> List.forall (fst >> storageOf >> Option.isSome) ->
-                "", Dimension.writtenWith (fun id -> (storageOf id).Value.Name) "*" "/" dimension
-            | Some storageUnit when not (Dimension.isDerived dimension) -> "", storageUnit.Name
-            | _ -> $"{Dimension.applied dimension}(", ")"
-        // The value as an `int` or as a `float`, through the prelude's conversion to one where its storage has one that
-        // loses nothing.
-        let asInt, asFloat =
-            match Unifier.unalias storage with
-            | TyPrimitive "int" -> Some stored, None
-            | SizedIntegerType integer when SizedInteger.bits integer < 64 -> Some (call $"{SizedInteger.name integer}.toInt" [ stored ]), None
-            | TyPrimitive "float" -> None, Some stored
-            | TyPrimitive "F32" -> None, Some (call "F32.toFloat" [ stored ])
-            | _ -> None, None
+        let before, after = measuredFrame dimension units
+        let asInt, asFloat = storedNumber call storage stored
         let inUnits (helper: Identifier) (number: Expression) (names: string list) (scales: Expression list) (display: string) =
             call helper [
                 number
@@ -321,10 +365,8 @@ module internal StructuralInstances =
                 text after ]
         let asStored () = expr (InterpolatedString [ StringText before; StringExpr (call InterpolationHoles.holeFunction [ stored ]); StringText after ])
         if Dimension.isDerived dimension then
-            match dimension |> List.choose (fun (id, power) -> displayOf id |> Option.map (fun info -> info.Scale, power)) with
-            | displayed when displayed.Length = dimension.Length ->
-                let name = Dimension.writtenWith (fun id -> (displayOf id).Value.Name) "*" "/" dimension
-                let scale = displayed |> List.fold (fun scale (part, power) -> Rational.multiply scale (Rational.power part power)) Rational.one
+            match derivedDisplay dimension units with
+            | Some (name, scale) ->
                 match asInt, asFloat with
                 | Some number, _ ->
                     call InterpolationHoles.measuredRatioFunction [
@@ -334,7 +376,7 @@ module internal StructuralInstances =
                     let inDisplayUnits = expr (BinaryOp("*", None, number, expr (LiteralExpr (FloatLit (Rational.toFloat (Rational.divide Rational.one scale))))))
                     inUnits InterpolationHoles.measuredFloatFunction inDisplayUnits [ name ] [ expr (LiteralExpr (FloatLit 1.0)) ] name
                 | None, None -> asStored ()
-            | _ -> asStored ()
+            | None -> asStored ()
         else
             let display = units |> List.tryFind (fun info -> info.IsDisplay && info.Dimension = dimension) |> Option.map _.Name |> Option.defaultValue ""
             let units = units |> List.filter (fun info -> info.Dimension = dimension)
@@ -358,6 +400,53 @@ module internal StructuralInstances =
                 let scales = units |> List.map (fun info -> expr (LiteralExpr (FloatLit (Rational.toFloat info.Scale))))
                 inUnits InterpolationHoles.measuredFloatFunction number (units |> List.map _.Name) scales display
             | None, None -> asStored ()
+
+    /// What a derived `tryFormat` gives for `value`, a measured value of `dimension` stored as `storage`, written by
+    /// `spec`: its number, as a `float`, written by a float's spec, in the unit of `units` named after a space at the
+    /// spec's end, `".1f ms"`, or else in the unit its `toString` writes a float in, then that unit's name, `500.0ms`
+    /// (see `__measuredTryFormat` in the prelude). A spec may name the units of the dimension itself, a derived
+    /// dimension's own too, and with none named a derived dimension's value is written in its parts' default display
+    /// units.
+    let private measuredFormat (span: SourceSpan) (dimension: Dimension) (storage: Ty) (units: UnitInfo list) (value: Expression) (spec: Expression) : Expression =
+        let expr = Expression.at span
+        let call (callee: Identifier) (args: Expression list) = expr (FunctionCall(callee, None, args))
+        let text (s: string) = expr (LiteralExpr (StringLit s))
+        let number (scale: Rational) = expr (LiteralExpr (FloatLit (Rational.toFloat scale)))
+        let names (units: UnitInfo list) = expr (ListExpr (units |> List.map (_.Name >> text)))
+        let scales (units: UnitInfo list) = expr (ListExpr (units |> List.map (_.Scale >> number)))
+        let x =
+            match storedNumber call storage (call Units.storageIntrinsic [ value ]) with
+            | _, Some x -> x
+            | Some n, _ -> call "int.toFloat" [ n ]
+            | None, None -> invalidOp "Format is derived only for a value stored as a number (see formattedShapeOf)"
+        let own = units |> List.filter (fun info -> info.Dimension = dimension)
+        let picks, pickScales, display =
+            if Dimension.isDerived dimension then
+                match derivedDisplay dimension units with
+                | Some (name, scale) -> expr (ListExpr [ text name ]), expr (ListExpr [ number scale ]), name
+                | None -> expr (ListExpr []), expr (ListExpr []), ""
+            else names own, scales own, own |> List.tryFind _.IsDisplay |> Option.map _.Name |> Option.defaultValue ""
+        let before, after = measuredFrame dimension units
+        call measuredTryFormat [
+            x
+            spec
+            names own
+            scales own
+            picks
+            pickScales
+            text display
+            text before
+            text after
+            text (Dimension.text dimension) ]
+
+    let private specName = "__spec"
+
+    /// What a derived `tryFormat` gives for a value of the type `shape` is, read from `value`, written by the spec `spec`.
+    let private tryFormatBody (span: SourceSpan) (shape: Shape) : Expression =
+        let name (identifier: Identifier) = Expression.at span (IdentifierExpr identifier)
+        match shape with
+        | MeasureShape(dimension, storage, units) -> measuredFormat span dimension storage units (name valueName) (name specName)
+        | _ -> invalidOp "Format is derived only for a measured value (see formattedShapeOf)"
 
     /// The text a derived `toString` writes for a value of the type `shape` is, read from `value`.
     let private toStringBody (span: SourceSpan) (shape: Shape) : Expression =
@@ -563,6 +652,13 @@ module internal StructuralInstances =
                 let order = typeExpr (TypeUnion(orderTags |> List.map (fun tag -> typeExpr (TypeTag(tag, None)))))
                 typeExpr (TypeFunc(typeExpr (TypeTuple [ written; written ]), order)),
                 expr (Lambda([ valueName, None; otherName, None ], compareBody span shape, false))
+            elif ctxName = formatting then
+                // `BadFormat` written out, as the module may see another type by that name.
+                let field (name: Identifier) (ty: string) = TypeField(name, false, Some (typeExpr (TypeName ty)), None)
+                let bad = typeExpr (TypeRecord [ field "spec" "string"; field "at" "int"; field "expected" "string"; field "of" "string" ])
+                let result = typeExpr (TypeUnion [ typeExpr (TypeTag("some", Some (typeExpr (TypeName "string")))); typeExpr (TypeTag("badFormat", Some bad)) ])
+                typeExpr (TypeFunc(typeExpr (TypeTuple [ written; typeExpr (TypeName "string") ]), result)),
+                expr (Lambda([ valueName, None; specName, None ], tryFormatBody span shape, false))
             else
                 typeExpr (TypeFunc(written, typeExpr (TypeName "string"))), expr (Lambda([ valueName, None ], toStringBody span shape, false))
         let annotation =
@@ -618,7 +714,8 @@ module internal StructuralInstances =
                 // storage units.
                 | MeasureShape(dimension, storage, _) ->
                     let parts = dimension |> List.collect (fun (id, _) -> Units.seenOf state (Dimension.ofBase id))
-                    MeasureShape(dimension, storage, parts |> List.filter (fun info -> UnitInfo.isStorage info || info.IsDisplay))
+                    let own = if ctxName = formatting then Units.seenOf state dimension else []
+                    MeasureShape(dimension, storage, own @ (parts |> List.filter (fun info -> UnitInfo.isStorage info || info.IsDisplay)))
                 | _ -> shape
             let names = ContextInference.varNames ty
             let state = namingUnseen names ty state
@@ -632,6 +729,7 @@ module internal StructuralInstances =
                         if ctxName = EqualityOperators.context then EqualityOperators.builtInFunction
                         elif ctxName = WellKnownContexts.hashing.Context then WellKnownContexts.hashing.BuiltInFunction
                         elif ctxName = WellKnownContexts.ordering.Context then WellKnownContexts.ordering.BuiltInFunction
+                        elif ctxName = formatting then "__tryFormat"
                         else "__toString"
                     let name = $"{prefix}_{NodeId.next ()}"
                     let item = definition span ctxName name written (vars |> List.map (fun var -> names.[var.Id])) shape
