@@ -178,6 +178,7 @@
     <Compile Include="Features\Linters\LintAnswersTests.fs" />
     <Compile Include="Features\Linters\UnusedBindingsTests.fs" />
     <Compile Include="Features\Linters\OfficialLinterPackageTests.fs" />
+    <Compile Include="Features\Linters\FirstLintTimeTests.fs" />
     <Compile Include="Features\Linters\NonTailRecursionTests.fs" />
     <Compile Include="Features\Linters\UnreachableArmsTests.fs" />
     <Compile Include="Features\Linters\UnusedImportsTests.fs" />
