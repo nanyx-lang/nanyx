@@ -36,6 +36,9 @@ type SourceText(source: string) =
     /// Whether the text at `span` starts with `s`.
     member _.StartsWith (span: SourceSpan) (s: string) = startsWith span s
 
+    /// The character at `offset`, or `'\000'` outside the source.
+    member _.CharAt offset = if offset >= 0 && offset < source.Length then source[offset] else '\000'
+
     /// The first character at or after `offset` that is not whitespace.
     member _.NextChar offset =
         let mutable i = offset

@@ -551,7 +551,8 @@ let format (options: Options) (parsed: SourceModule) : string =
     ///     | #circle(radius: float)
     ///     | #rectangle(width: float, height: float)
     ///
-    /// A union written on one line that fits stays on it. A record of more than three fields, or with a comment among
+    /// A union written on one line that fits stays on it. The comments among a union's cases stay where they were written
+    /// (see `unionPerLine`). A record of more than three fields, or with a comment among
     /// them, or too long for one line, has one field per line, named fields separated by newlines and positional ones
     /// followed by commas (the parser takes nothing else after them):
     ///
@@ -578,6 +579,10 @@ let format (options: Options) (parsed: SourceModule) : string =
             cat [ afterEquals; text " "; Doc.group (Doc.IfBreak(recordPerLine body fields, typeExpr body)) ]
         | TypeUnion cases ->
             let writtenOnLines = sourceText.Valid body.Span && sourceText.LineOf body.Span.Start <> sourceText.LineOf(max body.Span.Start (body.Span.End - 1))
+            let headEnd = if writtenOnLines then unionHeadEnd body.Span.Start else body.Span.Start
+            if writtenOnLines && hasCommentsIn headEnd (sourceText.LineEnd(body.Span.End - 1) + 1) then
+                cat [ afterEquals; unionPerLine headEnd body cases ]
+            else
             let separator = if writtenOnLines then hard else Doc.line
             let caseLines =
                 cases
@@ -589,6 +594,32 @@ let format (options: Options) (parsed: SourceModule) : string =
             let written = typeExpr body
             if Doc.hasHardLine written then cat [ afterEquals; text " "; written ]
             else Doc.group (cat [ afterEquals; nest (cat [ Doc.line; written ]) ])
+
+    /// Where the text before the union starting at `bodyStart` ends: past the `=` or modifier before it, and not past
+    /// the first case's `|` or the comments before it.
+    and unionHeadEnd (bodyStart: int) : int =
+        let commentEndingAt offset =
+            placement.UnplacedIn(0, bodyStart)
+            |> List.tryPick (fun i ->
+                let _, span = placement.Comment i
+                if span.Start <= offset && offset < span.End then Some span.Start else None)
+        let rec back offset =
+            if offset <= 0 then 0
+            else
+                match commentEndingAt (offset - 1) with
+                | Some start -> back start
+                | None ->
+                    let c = sourceText.CharAt(offset - 1)
+                    if c = '|' || Char.IsWhiteSpace c then back (offset - 1) else offset
+        back bodyStart
+
+    /// A union with a comment among its cases, one case per line: the comment after the `=` stays at the end of its
+    /// line, a comment after a case at the end of that case's line, and any other on a line of its own before the case
+    /// it comes before.
+    and unionPerLine (headEnd: int) (body: TypeExpr) (cases: TypeExpr list) : Doc =
+        let headComments = placement.PlaceAfter headEnd body.Span.Start
+        let children = [ for case in cases -> case.Span.Start, case.Span.End, fun () -> cat [ text "| "; (types ()).UnionCase case ] ]
+        nest (cat [ cat headComments; hard; sequence false body.Span.Start body.Span.End children ])
 
     /// A record type with one field per line (see `typeBody`).
     and recordPerLine (body: TypeExpr) (fields: TypeRecordField list) : Doc =
