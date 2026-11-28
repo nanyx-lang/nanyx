@@ -16,13 +16,13 @@ let private unusedImportsIn (result: CompileResult) (source: string) =
         let span = diagnostic.Span.Value
         diagnostic.Message, source.Substring(span.Start, span.End - span.Start))
 
-let private reported (source: string) = unusedImportsIn (Compiler.compileWith Linters.everyLinter source) source
+let private reported (source: string) = unusedImportsIn (Compiler.compileWith (everyLinter ()) source) source
 
 /// `source` with the only fix of its only `unusedImports` diagnostic applied, and the fix's title.
 let private fixed' (source: string) =
     let diagnostic =
         Assert.Single(
-            (Compiler.compileWith Linters.everyLinter source).Diagnostics
+            (Compiler.compileWith (everyLinter ()) source).Diagnostics
             |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports")
         )
     let fix = Assert.Single(diagnostic.Fixes)
@@ -53,13 +53,13 @@ let ``An import used only through a name the module re-exports is not reported``
         let source = "module main\nimport c\ndef x = double(3)\n"
         let mainPath = Path.Combine(dir, "main.nyx")
         File.WriteAllText(mainPath, source)
-        Assert.Empty(unusedImportsIn (Compiler.compileFileWith Linters.everyLinter mainPath) source))
+        Assert.Empty(unusedImportsIn (Compiler.compileFileWith (everyLinter ()) mainPath) source))
 
 [<Fact>]
 let ``An import used only in a type is not reported`` () =
     let aliased = "module main\nimport nanyx.cli/console as c\ndef e: c.IoError = #endOfInput\n"
     Assert.Empty(
-        (compileWithConsoleCoreUsing Linters.everyLinter aliased).Diagnostics
+        (compileWithConsoleCoreUsing (everyLinter ()) aliased).Diagnostics
         |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports"))
     Assert.Empty(reported "def e: IoError = #endOfInput\n")
 
@@ -79,7 +79,7 @@ module inner =
   export def a = 1
 def b = string.trim(" y ")"""
     let reportedAt =
-        (Compiler.compileWith Linters.everyLinter source).Diagnostics
+        (Compiler.compileWith (everyLinter ()) source).Diagnostics
         |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports")
         |> List.map (fun diagnostic -> diagnostic.Span.Value.StartLine)
     Assert.Equal<int list>([ 2 ], reportedAt)
@@ -105,14 +105,14 @@ let ``An unused import in a file that imports it by path is reported`` () =
         let source = withFinalNewline """import "./lib.nyx" as lib
 def answer = 2"""
         File.WriteAllText(mainPath, source)
-        let result = Compiler.compileFileWith Linters.everyLinter mainPath
+        let result = Compiler.compileFileWith (everyLinter ()) mainPath
         Assert.Equal<(string * string) list>([ "It is imported but never used", "\"./lib.nyx\" as lib" ], unusedImportsIn result source))
 
 [<Fact>]
 let ``The rule's severity can be configured, or the rule turned off`` () =
     let source = "import nanyx/math as m\ndef x = 1\n"
     let compileWith severity =
-        Compiler.compileWith { Linters.everyLinter with Severities = Map.ofList [ "default/unusedImports", severity ] } source
+        Compiler.compileWith { (everyLinter ()) with Severities = Map.ofList [ "default/unusedImports", severity ] } source
     let importDiagnostics severity =
         (compileWith severity).Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = "default/unusedImports")
     Assert.Empty(importDiagnostics None)

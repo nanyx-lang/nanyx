@@ -2,12 +2,13 @@ module Nanyx.Compiler.Tests.Features.Linters.UseInBraces
 
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 /// What `default/useInBraces` reports for `source`, compiled with every linter on: each message with the text it is
 /// reported at. The module must type-check, or no linter would run. Its line endings are made `\n`, as for spans.
 let private reported (source: string) =
     let source = source.ReplaceLineEndings "\n"
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     Assert.True(result.TypeChecked && not (result.Diagnostics |> List.exists Diagnostics.isError), sprintf "%A" result.Diagnostics)
     result.Diagnostics
     |> List.filter (fun diagnostic -> diagnostic.Code = "default/useInBraces")

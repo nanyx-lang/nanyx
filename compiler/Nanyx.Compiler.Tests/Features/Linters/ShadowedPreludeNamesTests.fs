@@ -3,6 +3,7 @@ module Nanyx.Compiler.Tests.Features.Linters.ShadowedPreludeNames
 open System.IO
 open Xunit
 open NyxCompiler
+open Nanyx.Compiler.Tests.TestSupport
 
 let private code = "default/shadowedPreludeNames"
 
@@ -26,12 +27,12 @@ let private reportedIn (source: string) (diagnostics: Diagnostic list) =
 /// `\n`, as for spans.
 let private reported (source: string) =
     let source = source.ReplaceLineEndings "\n"
-    Compiler.compileWith Linters.everyLinter source |> checkedDiagnostics |> reportedIn source
+    Compiler.compileWith (everyLinter ()) source |> checkedDiagnostics |> reportedIn source
 
 /// The names `default/shadowedPreludeNames` reports in `source`, compiled as the file `file`.
 let private reportedAsFile (file: string) (source: string) =
     let source = source.ReplaceLineEndings "\n"
-    Compiler.compileSourceWith Linters.everyLinter file source |> checkedDiagnostics |> reportedIn source |> List.map fst
+    Compiler.compileSourceWith (everyLinter ()) file source |> checkedDiagnostics |> reportedIn source |> List.map fst
 
 [<Fact>]
 let ``A top-level def is reported at its name, saying what it hides`` () =

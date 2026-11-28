@@ -9,7 +9,7 @@ open Nanyx.Compiler.Tests.TestSupport
 /// must have no compiler errors, or no linter would run.
 let private reported (source: string) =
     let source = (withFinalNewline source).ReplaceLineEndings "\n"
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     let compilerErrors = result.Diagnostics |> List.filter (fun diagnostic -> Diagnostics.isError diagnostic && not (diagnostic.Code.StartsWith "default/"))
     Assert.True(result.TypeChecked && compilerErrors.IsEmpty, sprintf "%A" result.Diagnostics)
     result.Diagnostics

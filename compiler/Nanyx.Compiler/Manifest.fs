@@ -58,7 +58,8 @@ type HostEntry =
 
 /// A linter package an entry of a manifest's `linters` names: one from the package index, at a version,
 /// `(package = "acme.lint", version = "1.0.0")`, or one found by its path, `(package = "acme.lint", path = "../lint")`.
-/// The linters the compiler has built in are not these, but `LinterOptions` (see `Linters.all`).
+/// A linter the compiler has built in (see `Linters.all`) is both: its own rules, in `LinterOptions`, and the shipped
+/// package its rules are moving to, at the compiler's version, which runs beside them (see `Package.linterOptions`).
 type LinterEntry =
     { /// The linter's package.
       Package: string
@@ -336,7 +337,7 @@ module Manifest =
             match builtIn name with
             | Some linter -> Result.Ok linter
             | None -> Result.Error $"There is no linter '{name}': the linters are {quoted (Linters.all |> List.map _.Package)}"
-        let read (value: DataValue) : Choice<Linter * (string * Severity option) list, LinterEntry> option =
+        let read (value: DataValue) : Choice<Linter * (string * Severity option) list * LinterEntry option, LinterEntry> option =
             let packageEntry =
                 match root, value.Data with
                 | Some root, DataRecord fields ->
@@ -357,15 +358,28 @@ module Manifest =
                     |> Option.iter (fun path ->
                         problems.Add DiagnosticCodes.InvalidManifestValue path.NameSpan $"The compiler has '{linter.Package}' built in, so it has no `path`: name it at the compiler's version")
                     let severities = DataValue.field "settings" fields |> Option.map (fun field -> settingsOf problems linter.Package linter.Name linter.Rules field.Value) |> Option.defaultValue []
-                    Choice1Of2(linter, severities))
+                    // It is a shipped linter package too, which runs beside the rules the compiler has built in (see
+                    // `Package.linterOptions`), at the version the entry names, which is the compiler's.
+                    let package =
+                        match DataValue.field "version" fields with
+                        | Some { DataField.Value = { DataValue.Data = DataString written } } ->
+                            VersionRequirement.tryParse written
+                            |> Option.map (fun requirement ->
+                                { Package = linter.Package
+                                  Path = None
+                                  Version = Some requirement
+                                  Span = value.Location
+                                  Settings = DataValue.field "settings" fields |> Option.map _.Value })
+                        | _ -> None
+                    Choice1Of2(linter, severities, package))
         let chosen =
             match value.Data with
             | DataList entries -> entries |> List.choose read
             | _ ->
                 problems.Add DiagnosticCodes.InvalidManifestValue value.Location $"`linters` must be a list of linters, `[(package = ...)]`, not {DataValue.describe value}"
                 []
-        let builtInChosen = chosen |> List.choose (function Choice1Of2 linter -> Some linter | Choice2Of2 _ -> None)
-        let packages = chosen |> List.choose (function Choice2Of2 entry -> Some entry | Choice1Of2 _ -> None)
+        let builtInChosen = chosen |> List.choose (function Choice1Of2(linter, severities, _) -> Some(linter, severities) | Choice2Of2 _ -> None)
+        let packages = chosen |> List.choose (function Choice2Of2 entry -> Some entry | Choice1Of2(_, _, entry) -> entry)
         problems.Repeats
             (packages |> List.map (fun entry -> entry.Package, entry.Span))
             (fun name -> $"The linter '{name}' is listed twice, but a package lists each linter it runs once: remove one")
@@ -700,10 +714,10 @@ module Manifest =
 
     /// The linter options `value` sets, written as a manifest's `linters` is, with what is wrong with it, as `check`
     /// reports it: how a script's `::linter` and `::lint` directives are read (see `Script`).
-    let internal linterEntries (value: DataValue) : LinterOptions * Diagnostic list =
+    let internal linterEntries (value: DataValue) : LinterOptions * LinterEntry list * Diagnostic list =
         let problems = Problems()
-        let options, _ = readLinters problems None value
-        options, problems.All
+        let options, packages = readLinters problems None value
+        options, packages, problems.All
 
     /// The severities the `settings` of `entry` give the rules of the linter `linter` declares, by code, with what is
     /// wrong with them: a rule it doesn't declare is an error that names those it does.

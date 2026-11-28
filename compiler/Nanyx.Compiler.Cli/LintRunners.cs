@@ -10,9 +10,7 @@ using Transpiler.Wasm;
 internal static class LintRunners
 {
     /// <summary>The runner the CLI, and the language server it starts, make linters from linter packages with.</summary>
-    internal static LintRunner Wasm { get; } = new(
-        FuncConvert.FromFunc((TypedModule typed) => Nanyx.LargeStack.run(FuncConvert.FromFunc(() => LintBuild.assemble(CodeGen.WasmOptions.Default, typed)))),
-        FuncConvert.FromFunc((byte[] wasm) => WasmLinter.load(wasm)));
+    internal static LintRunner Wasm { get; } = LintBuild.runner(FuncConvert.FromFunc((byte[] wasm) => WasmLinter.load(wasm)));
 
     /// <summary>Makes linters from linter packages read from <paramref name="store"/>, with <see cref="Wasm"/>.</summary>
     internal static FSharpFunc<LinterPackage, FSharpResult<Linter, string>> MakerFor(PackageStore store) =>

@@ -8,7 +8,7 @@ open Nanyx.Compiler.Tests.TestSupport
 /// text it is reported at. The module must type-check, or no linter would run.
 let private diagnostics (source: string) =
     let source = withFinalNewline source
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
     result.Diagnostics
     |> List.filter (fun diagnostic -> diagnostic.Code = "default/unconstructibleType")
@@ -122,7 +122,7 @@ let ``An allow before the type suppresses it`` () =
         """module noms =
   @allow(default/unconstructibleType)
   export type Marker = private ()"""
-    let result = Compiler.compileWith Linters.everyLinter (withFinalNewline source)
+    let result = Compiler.compileWith (everyLinter ()) (withFinalNewline source)
     Assert.True(result.TypeChecked, sprintf "%A" result.Diagnostics)
     let codes = result.Diagnostics |> List.map _.Code
     Assert.DoesNotContain("default/unconstructibleType", codes)

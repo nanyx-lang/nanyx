@@ -82,7 +82,7 @@ public sealed record ServerSettings(
     /// </summary>
     public LinterOptions LinterOptionsFor(string? path, ScriptDirectives directives) =>
         Linters
-        ?? directives.Linters?.Value
+        ?? (directives.Linters is null ? null : Script.linterOptions(Microsoft.FSharp.Core.FuncConvert.FromFunc((LinterPackage linter) => MakeLinter(linter)), directives))
         ?? (path is null ? null : PackageModule.lintersFor(PackageStore(), Microsoft.FSharp.Core.FuncConvert.FromFunc((LinterPackage linter) => MakeLinter(linter)), path)?.Value)
         ?? NyxCompiler.Linters.none;
 
