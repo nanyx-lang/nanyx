@@ -91,3 +91,22 @@ module WasmLinter =
         | Ok module' ->
             let table = SpanTable.read wasm
             Ok(fun answer -> runIn engine module' table defaultTimeout answer)
+
+    /// Why a lint build gave no reports, as the `linterFailed` it is reported as says it, after "failed: ".
+    let describe (error: RunError) =
+        match error with
+        | Crashed(Some message, _, _) -> $"it crashed: {message}"
+        | Crashed(None, _, _) -> "it crashed"
+        | Trapped(message, _) -> message
+        | InvalidModule message -> $"its lint build isn't a valid module: {message}"
+        | OutOfMemory -> "it ran out of memory"
+        | StackOverflow(Some name) -> $"it ran out of stack in '{name}'"
+        | StackOverflow None -> "it ran out of stack"
+        | ArithmeticError(fault, name, _) -> WasmRunner.describeFault fault name
+        | Exited code -> $"it exited with {code}"
+        | CannotServe(port, reason) -> $"it can't serve on port {port}: {reason}"
+
+    /// `compile`, with why it failed, or why a run did, as `describe` says it: how the CLI loads a linter package's lint
+    /// build (see `NyxCompiler.LintRunner`).
+    let load (wasm: byte array) : Result<(byte array -> Result<byte array, string>) -> Result<byte array, string>, string> =
+        compile wasm |> Result.map (fun run answer -> run answer |> Result.mapError describe) |> Result.mapError describe

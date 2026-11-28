@@ -229,6 +229,7 @@
     <Compile Include="Features\Packages\KeptModuleTests.fs" />
     <Compile Include="Features\Packages\LockfileAndCacheTests.fs" />
     <Compile Include="Features\Packages\ManifestTests.fs" />
+    <Compile Include="Features\Packages\LinterManifestTests.fs" />
     <Compile Include="Features\Packages\PackageTests.fs" />
     <Compile Include="Features\Packages\PathDependencyTests.fs" />
     <Compile Include="Features\Packages\SemanticVersioningTests.fs" />

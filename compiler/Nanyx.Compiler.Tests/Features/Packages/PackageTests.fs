@@ -91,7 +91,7 @@ let ``The manifest's linters check every source file at the severities it sets``
     let diagnostic = Assert.Single(build.Diagnostics)
     Assert.Equal("default/unusedBindings", diagnostic.Code)
     Assert.Equal(Severity.Error, diagnostic.Severity)
-    Assert.Equal(Some(Some Severity.Error), (Package.lintersFor (package.Path "main.nyx")) |> Option.map (fun o -> o.Severities |> Map.tryFind "default/unusedBindings" |> Option.flatten))
+    Assert.Equal(Some(Some Severity.Error), (Package.lintersFor (SeededPackages.user ()) (fun _ -> Result.Error "no linter packages here") (package.Path "main.nyx")) |> Option.map (fun o -> o.Severities |> Map.tryFind "default/unusedBindings" |> Option.flatten))
 
 [<Fact>]
 let ``The example package builds cleanly`` () =

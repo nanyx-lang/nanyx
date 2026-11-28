@@ -858,7 +858,8 @@ internal static partial class CliCommands
             return false;
         }
 
-        package = found.ResultValue;
+        // Its linter packages run as lint builds, which the CLI can build and run and the compiler's core can't.
+        package = PackageModule.withLinters(LintRunners.MakerFor(shell.Packages), found.ResultValue);
         return true;
     }
 
@@ -1095,7 +1096,8 @@ internal static partial class CliCommands
             ParameterTypeHints: !noParameterTypeHints,
             PatternVariableTypeHints: !noPatternVariableTypeHints,
             Timings: timings,
-            FormattingHints: !noFormatHints);
+            FormattingHints: !noFormatHints,
+            LintRunner: LintRunners.Wasm);
         Nanyx.LanguageServer.NanyxLanguageServer.RunStdioAsync(settings).GetAwaiter().GetResult();
         return 0;
     }
