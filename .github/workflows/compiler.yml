@@ -97,6 +97,12 @@ jobs:
 
       # The Wasm tests run in the job below, and the timing tests in the Timing workflow.
       - name: Test
+        # On the Windows runner a test host can take more than vstest's default 90 seconds to connect when the four test
+        # projects' hosts start at once: the Parser tests' host twice aborted the run so, with no test having started
+        # (#3235). Nothing in that project runs at start-up or discovery (its corpus is parsed lazily, by its first
+        # test), and its tests are listed locally faster than the formatter's, so the hosts are given longer to connect.
+        env:
+          VSTEST_CONNECTION_TIMEOUT: 300
         run: dotnet test Nyx.Compiler.slnx --no-build --configuration Release -p:SkipWasmTests=true --filter "Category!=Timing"
 
       # A WASI 0.3 component must run outside nanyx too: each example package is built as one and run under Wasmtime,
