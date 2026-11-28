@@ -1,5 +1,6 @@
 /// `Format` and `format` (#3173): a value written by a format spec, after Python's format-spec mini-language, for the
-/// numbers, strings, chars, bools, instants and unit quantities, and a spec a type doesn't take.
+/// numbers, strings, chars, bools, instants and unit quantities, a spec a type doesn't take, and a spec written in a
+/// hole.
 module TranspilerWasmTests.Features.StdLib.Format
 
 open Xunit
@@ -293,3 +294,32 @@ show(1500ms, "x")
               "Length '.1f s' at 4: the name of a unit of Length: `km` or `m`\n"
               "Time '.1d ms' at 2: one of `e`, `E`, `f`, `F`, `g`, `G` or `%`\n"
               "Time 'x' at 0: one of `e`, `E`, `f`, `F`, `g`, `G` or `%`\n" ])
+
+[<Fact>]
+let ``Run - the prelude reads each spec of the shared table as the compiler does`` () =
+    let literal (text: string) = "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("{", "\\{") + "\""
+    let source =
+        "def show: [Format(a), Console] a, string -> () = { value, spec ->\n"
+        + "  match tryFormat(value, spec)\n"
+        + "    | #some(_) -> println(\"takes\")\n"
+        + "    | #badFormat(bad) -> println(\"{bad.at}|{bad.expected}\")\n"
+        + "}\n\n"
+        + (FormatSpecTable.rows
+           |> List.map (fun (_, value, spec, _) -> $"show({value}, {literal spec})")
+           |> String.concat "\n")
+        + "\n"
+    let written (outcome: FormatSpecTable.Outcome) =
+        match outcome with
+        | FormatSpecTable.Takes -> "takes\n"
+        | FormatSpecTable.Rejects(at, expected) -> $"{at}|{expected}\n"
+    runSource source |> assertRan (FormatSpecTable.rows |> List.map (fun (_, _, _, outcome) -> written outcome) |> String.concat "")
+
+[<Fact>]
+let ``Run - a hole with a spec writes its value by it, and one without uses ToString`` () =
+    runSource
+        """def price = 3.14159
+def n = -1234567
+println("{price:.2f}|{price:>9.3f}|{n:,}|{n:=+12_}|{255:#x}|{"ab":*^6}|{true:>5}|{price}")
+println("{Instant.epoch:%Y-%m-%d}|{n:}|{[1, 2] \list.length:03}|{price * 2.0:e}")
+"""
+    |> assertRan "3.14|    3.142|-1,234,567|-  1_234_567|0xff|**ab**| true|3.14159\n1970-01-01|-1234567|002|6.283180e+00\n"

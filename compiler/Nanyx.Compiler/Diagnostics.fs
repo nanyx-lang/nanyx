@@ -248,6 +248,9 @@ module DiagnosticCodes =
     // Units, continued.
     let UnitPastStorage = code 306 "Unit more than its dimension's storage holds" Severity.Error
 
+    // Format specs.
+    let BadFormatSpec = code 307 "Format spec its value's type doesn't take" Severity.Error
+
     // Tests.
     let NotATest = code 310 "Test that isn't a test's type" Severity.Error
     let ReferenceToTest = code 311 "Reference to a test" Severity.Error
@@ -286,7 +289,7 @@ module DiagnosticCodes =
           ParameterNamesNoField; TopLevelCell; OldFormTypeParameter; ValueContextTypeOpen; NotOneChar
           UnitsNotFromOne; MisplacedUnitAttribute; UnitCycle; UnitOfAnotherDimension; DimensionStorageNotNumber; UnknownUnit
           NegativePowerOfFraction; StorageOnlyInResult; ConstrainedDimensionStorage; DerivedDimensionStorages; NotADimension; UnitOfDerivedDimension; UnitWorthNothing; UnitNotWholeStorageUnits
-          ArgumentCount; NotAFunction; UnitPastStorage
+          ArgumentCount; NotAFunction; UnitPastStorage; BadFormatSpec
           NotATest; ReferenceToTest; TestContextNotProvided
           UnsupportedByBackend; BackendInternalError ]
 

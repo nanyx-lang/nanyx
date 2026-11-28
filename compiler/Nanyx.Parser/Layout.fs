@@ -49,6 +49,7 @@ let private isCloser (token: Token) =
     | RightBracket
     | RightBrace
     | StringMiddle
+    | FormatSpec
     | StringEnd -> true
     | _ -> false
 

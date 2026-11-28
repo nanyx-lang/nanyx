@@ -198,6 +198,9 @@ let format (options: Options) (parsed: SourceModule) : string =
             let part start p =
                 match p with
                 | StringText s -> sourceText.WrittenStringText start s, None
+                // A spec is kept as it is written.
+                | StringExpr({ Kind = FormatSyntax.Call(value, spec, _) } as inner) ->
+                    cat [ text "{"; expr full value; text (":" + spec); text "}" ], sourceText.AfterHole inner
                 | StringExpr inner -> cat [ text "{"; expr full inner; text "}" ], sourceText.AfterHole inner
             let opening = if sourceText.StartsWith e.Span "\"" then Some (e.Span.Start + 1) else None
             cat [ text "\""; cat (List.mapFold part opening parts |> fst); text "\"" ]

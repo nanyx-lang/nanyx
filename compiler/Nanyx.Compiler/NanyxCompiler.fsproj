@@ -19,6 +19,7 @@
     <Compile Include="Rationals.fs" />
     <Compile Include="TypedAst.fs" />
     <Compile Include="SizedIntegers.fs" />
+    <Compile Include="FormatSpecs.fs" />
     <Compile Include="RecursiveAliases.fs" />
     <Compile Include="TypeEnv.fs" />
     <Compile Include="Constraints.fs" />
@@ -167,6 +168,7 @@
     <Compile Include="WorkflowDesugaring.fs" />
     <Compile Include="DeferredErrors.fs" />
     <Compile Include="Asserts.fs" />
+    <Compile Include="FormatSpecChecks.fs" />
     <Compile Include="LookAlikes.fs" />
     <Compile Include="CheckedModule.fs" />
     <Compile Include="BinaryData.fs" />

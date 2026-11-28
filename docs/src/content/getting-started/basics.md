@@ -97,12 +97,16 @@ def where = "{total} items at {Point(x = 1, y = 2)}" -- "3 items at (1, 2)"
 
 A function has no `ToString`, so putting one in a hole is an error, as is a list or a record that holds one.
 
-A hole holds an expression, so to write a value some other way than its `ToString` does, call a function in it. There is no format mini-language: [`float.format`](../stdlib/prelude-conversions#floatformat) writes a float to a number of decimals, and `string.padStart` and `string.padEnd`, from [`nanyx/text`](../stdlib/text), pad text to a width:
+A hole can say how to write its value: a `:` after the value starts a format spec, after Python's, which the value's [`Format`](../stdlib/prelude-format) reads. `{price:.2f}` writes a price to two decimals, `{count:,}` groups a number's digits by thousands, and `{name:>8}` pads text to a width:
 
 ```nanyx
 def price = 2.5
-println("Total: {price \float.format(decimals = 2)}") -- "Total: 2.50"
+def count = 1234567
+def name = "left"
+println("Total: {price:.2f}, {count:,} sold, [{name:<8}]") -- "Total: 2.50, 1,234,567 sold, [left    ]"
 ```
+
+A spec the value's type doesn't take, `{price:.2d}`, is an error as the program compiles ([NYX0307](../standard-tools/errors#nyx0307)). A `:` inside brackets in the hole, as in a lambda's annotation, is part of the value, and a hole with no spec writes its value with its `ToString`. To write a value some other way, call a function in the hole.
 
 Double-quoted strings have backslash escapes:
 

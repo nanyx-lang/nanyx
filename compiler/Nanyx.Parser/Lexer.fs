@@ -44,6 +44,9 @@ type TokenKind =
     | StringMiddle
     /// The text after a string's last hole, with its `}` and the closing quote: `} items"`.
     | StringEnd
+    /// A hole's format spec, from the `:` that starts it, outside any bracket the hole opens, to the hole's `}`, as it
+    /// is written: `:.2f` in `"{price:.2f}"` (see `FormatSyntax`).
+    | FormatSpec
     /// A binary operator written with symbols (see `Operators.binaryOperators`), or `!` or `?`.
     | Operator
     | LeftParen
@@ -160,7 +163,7 @@ let private scan (filePath: string) (source: string) : Piece list * ParseError l
             j <- j + 1
         j
     let lineBreakLength (i: int) = if at i = '\r' && at (i + 1) = '\n' then 2 elif isLineEnd i && i < source.Length then 1 else 0
-    // The holes of the strings the text is in, innermost first: how many `{` are open in each.
+    // The holes of the strings the text is in, innermost first: how many brackets and braces are open in each.
     let mutable holes: int list = []
     // Whether only spaces and tabs come before the current offset on its line, and where that line starts.
     let mutable atLineStart = true
@@ -293,14 +296,25 @@ let private scan (filePath: string) (source: string) : Piece list * ParseError l
         elif c = '}' && not holes.IsEmpty && holes.Head = 0 then
             holes <- holes.Tail
             doubleQuoted (i + 1) false
+        elif c = ':' && not holes.IsEmpty && holes.Head = 0 then
+            // A `:` outside any bracket the hole opens starts its format spec, which runs to the hole's `}`, though the
+            // spec starts with `:` or `=`, as `"{x::^5}"` and `"{n:=+6}"` do.
+            let mutable j = i + 1
+            while not (isLineEnd j) && source[j] <> '}' do
+                j <- j + 1
+            if isLineEnd j then error i j "This format spec is never closed: end it, and its hole, with a `}` on the same line"
+            token FormatSpec j
         else
             match symbols |> List.tryFind (fun (text, _) -> String.CompareOrdinal(source, i, text, 0, text.Length) = 0) with
             | Some(text, kind) ->
                 match kind, holes with
-                | LeftBrace, depth :: outer -> holes <- (depth + 1) :: outer
-                | RightBrace, depth :: outer -> holes <- (depth - 1) :: outer
-                | _ -> ()
-                token kind (i + text.Length)
+                | (LeftBrace | LeftParen | LeftBracket), depth :: outer ->
+                    holes <- (depth + 1) :: outer
+                    token kind (i + text.Length)
+                | (RightBrace | RightParen | RightBracket), depth :: outer ->
+                    holes <- max 0 (depth - 1) :: outer
+                    token kind (i + text.Length)
+                | _ -> token kind (i + text.Length)
             | None ->
                 let width = if Char.IsHighSurrogate c && Char.IsLowSurrogate(at (i + 1)) then 2 else 1
                 let character = source.Substring(i, width)
