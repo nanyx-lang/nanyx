@@ -9,6 +9,10 @@ open Parser.Program
 open Transpiler.Wasm.CodeGen
 open Xunit
 
+/// The tests run with a package cache of their own (see `TestPackageCache`).
+[<assembly: TestFramework("Nanyx.TestPackageCache+PackageCacheFramework", "Nanyx.Compiler.Wasm.Test")>]
+do ()
+
 let private testRootDir = __SOURCE_DIRECTORY__
 let private featureRootDir = Path.Combine(testRootDir, "Features")
 
