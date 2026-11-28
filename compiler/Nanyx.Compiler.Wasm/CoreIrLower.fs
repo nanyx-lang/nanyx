@@ -699,11 +699,12 @@ type internal FunctionLowering(input: LowerInput, definitions: Map<string, Expre
         let parameterTys =
             try parameterTypes parameters (substitute subst instanceTy) true |> fst |> List.map toIrType
             with CannotLower _ -> []
+        let crashing = CoreIrProbes.beforeCrash (input.Probes && CoreIrProbes.endsTheProgram input.DefinitionTypes name) (fun () -> probeLocals (probedInScope scope)) (Place.ofSpan expr.Span)
         // The context members the callee requires follow its arguments.
         let call atoms =
             CoreIrLowerMembers.coerceAll this.MemberTools scope atoms (if parameterTys.Length = atoms.Length then parameterTys else []) (fun atoms ->
                 CoreIrLowerMembers.contextMembers this.MemberTools scope name expr.Id instanceTy Set.empty knownMembers (fun members ->
-                    k (Expr.make (Call(target, atoms @ List.map snd members)) ty)))
+                    k (crashing (Expr.make (Call(target, atoms @ List.map snd members)) ty))))
         // Arguments one of which is adapted to its parameter's type by storing are held in locals, so that no other
         // waits on the stack across the stores (#1949).
         let atomsOf (arguments: Expression list) =

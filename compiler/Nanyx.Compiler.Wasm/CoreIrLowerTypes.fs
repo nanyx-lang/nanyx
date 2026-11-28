@@ -117,6 +117,38 @@ let private recursiveGroup (ty: Ty) : ((Ty * Ty list) * Ty) list =
                 grow (found @ [ reference, unfolded ]) (rest @ referencesIn key unfolded)
     grow [] [ ty ] |> List.sortBy (fun ((body, args), _) -> selectedIn body, args |> List.map Unifier.tyToString |> String.concat ", ")
 
+/// What converting types to IR types has found for a module, by its contexts' layouts (see `toIrTypeIn`): each type's IR
+/// type, each recursive type's group (see `recursiveGroup`), and the IR types of each group's types where no other
+/// group is around them, by the group and the contexts being expanded. A module's lowering asks for the IR type of every
+/// expression it lowers, and one of a type of a large group of recursive types, as a syntax tree's, unfolds the whole
+/// group: `nanyx.lint`'s lint build spent 37 of its 38 seconds there before they were kept (#3261). They are a module's
+/// own, so a process that compiles many, as the language server, keeps none beyond the module.
+type private Converted =
+    { IrTypes: System.Collections.Concurrent.ConcurrentDictionary<Ty, IrType>
+      Groups: System.Collections.Concurrent.ConcurrentDictionary<Ty, ((Ty * Ty list) * Ty) list>
+      GroupTypes: System.Collections.Concurrent.ConcurrentDictionary<(Ty * Ty list) list * Set<string>, IrType list> }
+
+let private converted = System.Runtime.CompilerServices.ConditionalWeakTable<ContextLayouts, Converted>()
+
+let private convertedIn (layouts: ContextLayouts) : Converted =
+    converted.GetValue(
+        layouts,
+        fun _ ->
+            { IrTypes = System.Collections.Concurrent.ConcurrentDictionary(HashIdentity.Structural)
+              Groups = System.Collections.Concurrent.ConcurrentDictionary(HashIdentity.Structural)
+              GroupTypes = System.Collections.Concurrent.ConcurrentDictionary(HashIdentity.Structural) })
+
+/// Whether what `toIrTypeIn` finds on this thread is kept (see `Converted`): for a test, which compares the code made
+/// either way. A module is lowered on one thread, and a test's setting is its own.
+let internal keepingConverted = new System.Threading.ThreadLocal<bool>(fun () -> true)
+
+/// How many types this thread has converted to IR types itself, rather than found kept (see `Converted`): for a test,
+/// which counts the work of lowering a module, as other tests lower theirs on other threads.
+let private conversions = new System.Threading.ThreadLocal<int64>(fun () -> 0L)
+
+/// How many types this thread has converted itself (see `conversions`).
+let internal conversionCount () = conversions.Value
+
 /// `ty` without the contexts its function types require, to compare types as values alone.
 let rec private withoutContexts (ty: Ty) : Ty =
     match ty with
@@ -270,13 +302,23 @@ let boxOwnVariables (memberTy: Ty) : Ty =
 /// `layouts` gives (see `IrFunction`): those of a parameterised one at the types it requires it at, each keyed by the
 /// instance (`show` of `Show(Point)`, see `Identifiers.typeKeyOfType`). One required at a type with a variable in it
 /// is found where the function is made, so it takes none for that.
-let rec toIrTypeIn (layouts: ContextLayouts) (ty: Ty) : IrType = toIrTypeExpanding layouts Set.empty [] ty
+let rec toIrTypeIn (layouts: ContextLayouts) (ty: Ty) : IrType =
+    if not keepingConverted.Value then toIrTypeExpanding layouts Set.empty [] ty
+    else
+        let kept = (convertedIn layouts).IrTypes
+        match kept.TryGetValue ty with
+        | true, found -> found
+        | false, _ ->
+            let found = toIrTypeExpanding layouts Set.empty [] ty
+            kept.[ty] <- found
+            found
 
 /// `toIrTypeIn`, inside the members of the contexts `expanding`: a member's type that requires one of them again takes
 /// none of its members, so that a context whose member requires the context itself has an IR type. `recursing` is the
 /// groups of recursive types `ty` is inside, innermost first, each its types by their definitions and arguments: one of
 /// them again is `IrSelf` of where its group is among them and where it is in its group.
 and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>) (recursing: (Ty * Ty list) list list) (ty: Ty) : IrType =
+    conversions.Value <- conversions.Value + 1L
     let toIrType = toIrTypeExpanding layouts expanding recursing
     match recursiveReference ty with
     // A recursive type it is inside, the innermost group's at depth 0.
@@ -287,9 +329,15 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     | Some(body, _) when (recursing |> List.filter (List.exists (fst >> groupKey >> (=) (groupKey body))) |> List.length) > 8 ->
         cannot "a recursive type that holds itself at other type arguments"
     | Some reference ->
-        let group = recursiveGroup ty
+        let group =
+            if keepingConverted.Value then (convertedIn layouts).Groups.GetOrAdd(ty, recursiveGroup) else recursiveGroup ty
         let frame = group |> List.map fst
-        IrRecursive(frame |> List.findIndex ((=) reference), group |> List.map (snd >> toIrTypeExpanding layouts expanding (frame :: recursing)))
+        let groupTypes () = group |> List.map (snd >> toIrTypeExpanding layouts expanding (frame :: recursing))
+        // Where no other group is around it, a group's types are the same IR types whichever of them is reached.
+        let types =
+            if keepingConverted.Value && recursing.IsEmpty then (convertedIn layouts).GroupTypes.GetOrAdd((frame, expanding), fun _ -> groupTypes ())
+            else groupTypes ()
+        IrRecursive(frame |> List.findIndex ((=) reference), types)
     | None ->
     match Unifier.unalias ty with
     | TyPrimitive "int" -> IrInt

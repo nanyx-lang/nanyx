@@ -26,11 +26,22 @@ of 8,000 ran the compiler out of memory ([#2488](https://github.com/nanyx-lang/n
 place it ends. A function that ends in a call ends before the call, so that a tail call stays one, and the callee's
 entry follows, but for a call that never returns, one of a function whose result is `undefined`, as `crash`'s is
 (`CoreIrProbes.endsTheProgram`), which keeps the frame, so that the debugger shows the frame that crashed; one that ends
-in another value ends once it has it, in a local. A local is written only if a `dbg`
+in another value ends once it has it, in a local. Such a call, wherever it is, has a probe of its own just before it,
+a crashing probe (`CoreIrProbes.beforeCrash`, from `CoreIrLower`'s `CallDefinition`), which writes the locals in scope
+there, as a statement's does. A
+local is written only if a `dbg`
 printer can write its type (`CoreIrLowerDbg.printable`), and not a cell's, whose local holds its box.
 
 A probe uses none of its locals, so reference counting never keeps a value alive for one, and a debug build frees and
-reuses memory as a release build does. The inliner doesn't count probes in a function's size, so debug and release
+reuses memory as a release build does. The crashing probe is the exception: nothing after it reads anything, so every
+local but the call's arguments would be dead there, and given up. It borrows the locals it writes
+(`CoreIrCounting.operands`), which keeps them alive to it; the program ends there, so that costs nothing on the way
+out. But it writes only those whose keeping changes nothing before it (`CoreIrCounting`'s `crashingProbesTrimmed`): not
+a value on the heap the code took over on the way there, by an owning use, such as passing a list to `list.map`, or as
+a value a `match` takes apart, either of which may reuse its memory in place. Keeping such a value would copy where the
+code reused, on every run of a debug build, not only one that crashes: a loop that maps a list it owns before a check
+that calls `crash` copied the list each time round, 51 times the allocations and 2.8 times the work for 50 maps of
+1,000 elements. The inliner doesn't count probes in a function's size, so debug and release
 builds inline alike, and a probe inlined with its function keeps the place it was written at, with the calls it was
 inlined through.
 
@@ -47,6 +58,8 @@ in full (`LocalsWanted`): before each local the probe sets the global `$__nanyx_
 bind it again (`CoreIrEmitReads.ChainReads`, worked out once for each chain): one never read again may have been given up
 already. A probe that a printer
 takes its argument over from first gives it a reference of its own.
+
+A crashing probe writes its locals whatever the rest of the code reads, since it reads them itself.
 
 In a build with probes, the printers keep to that budget (`PrinterTools.Budgeted`): each first checks whether it is
 spent (`__nanyx_show_spent`), and writes `…` if it is, so that it stops going into the value, not only writing it; one
@@ -66,8 +79,8 @@ an entry, and its place, so the runtime knows each probe without the program tel
 `Probing.define` answers the imports. Without a listener, `enabled` gives 0 and the program never calls the runtime;
 with one (`WasmRunner.runListening`, an `IProbeListener`), each probe the program passes is given to it by its number in
 the table, and it says whether it wants the locals. `ShadowStack` keeps the frames from the probes, innermost first,
-each at the place of the last probe it passed: an entry pushes a frame, a statement moves the top one, and a return pops
-it. A function inlined into another has a frame of its own, since its probes were inlined with it. A crash's `nanyx:crash`
+each at the place of the last probe it passed: an entry pushes a frame, a statement or a crashing probe moves the top
+one, and a return pops it. A function inlined into another has a frame of its own, since its probes were inlined with it. A crash's `nanyx:crash`
 `report` tells the listener too (`IProbeListener.Crashed`, through `CrashImport.defineWith`), before the trap, while the
 frames are still on the stack.
 
@@ -94,7 +107,10 @@ left there, so a frame further out has its locals as of its last statement, the 
 characters. The budget is what makes asking at every statement affordable: a recursion over a list of 5,000, whose
 locals at each call include the rest of the list, wrote 74.5 million characters in 1,934 ms asking for them in full at
 each statement, and writes 2 million in 303 ms within the budget, against 421 ms asking for none
-([#3253](https://github.com/nanyx-lang/nanyx/issues/3253)). A crash's `report` stops it with reason `exception`.
+([#3253](https://github.com/nanyx-lang/nanyx/issues/3253)). A crashing probe always asks for them in full, without
+stopping, and keeps what it writes as its frame's: it runs once, on the way into a crash, so a run that doesn't crash
+never pays for it. The crash then shows the frame that called the function that never returns with those locals,
+**Locals at line N**. A crash's `report` stops it with reason `exception`.
 The Variables view gets each local's text read back into a tree (`ValueTree`), whose parts are references the client
 expands, numbered afresh at each stop.
 

@@ -476,6 +476,10 @@ type private FunctionEmitter(context: EmitContext) =
             | Entry functionName -> $"entry {functionName}"
             | ProbeKind.Statement -> "statement"
             | Return -> "return"
+            | Crashing -> "crashing"
+        // A probe before a call that never returns reads its locals, so each is alive at it, though nothing after it
+        // reads them (see `ProbeKind.Crashing`).
+        let isAlive = match kind with Crashing -> (fun _ -> true) | _ -> isAlive
         // The runtime answers 1 for the locals within a budget each, and 2 for them in full (see `Helpers.showBudget`).
         let budget =
             join "\n    " [
