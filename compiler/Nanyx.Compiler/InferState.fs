@@ -475,6 +475,9 @@ type InferState =
             /// span, as `AnnotationSpans` does for an argument alone: the type the callee writes for its parameter, and
             /// the types a lambda writes for its own. Only a mismatch `ArgumentSpans` moves to the item is one of them.
             ArgumentNotes: Map<SourceSpan, (SourceSpan * string) list>;
+            /// The def each item of a tuple of a callee's arguments is given to, by the item's span, with all the items,
+            /// so that a mismatch reported at one can say what the def does with them (see `DimensionDivisions`).
+            ArgumentCallees: Map<SourceSpan, Identifier * Expression list>;
             /// The work variables (see `TaskWork`), each with where the def that starts tasks it is of was named.
             TaskWork: Map<int, SourceSpan>;
             /// The scoped contexts each call supplies to its arguments, by the call's node, each with the scope the call
@@ -628,6 +631,7 @@ let emptyState =
             AnnotationSpans = Map.empty;
             ParameterTypes = Map.empty;
             ArgumentNotes = Map.empty;
+            ArgumentCallees = Map.empty;
             TaskWork = Map.empty;
             SupplyingCalls = Map.empty;
             EscapedContexts = Set.empty;

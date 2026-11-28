@@ -54,6 +54,7 @@
     <Compile Include="Features\Units\PreludeTimeTests.fs" />
     <Compile Include="Features\Units\InstantTests.fs" />
     <Compile Include="Features\Units\DerivedDimensionTests.fs" />
+    <Compile Include="Features\Units\DimensionDivisionTests.fs" />
     <Compile Include="Features\Units\DerivedUnitTests.fs" />
     <Compile Include="Features\Units\AttachedMeasuredOperatorTests.fs" />
     <Compile Include="Features\Components\ComponentInterfaceTests.fs" />
