@@ -56,13 +56,26 @@ export type BadFormat = (
   its number is written in that unit by the spec, then the unit, so `format(1500ms, ".1f s")` is
   `"1.5s"`. With no unit named, it is written in the unit its `toString` writes it in, so
   `format(1500ms, ".2f")` is `"1.50s"`. The width and the padding are the number's.
+
+  A hole in a string writes its value by a spec written after a `:`, `"{price:.2f}"`, and the
+  compiler checks the spec against the value's type, for a type the prelude formats and a unit
+  quantity, whose units it knows.
 export context Format(a) = (tryFormat: (a, string) -> #some(string) | #badFormat(BadFormat))
 
 --| `value` written by `spec` (see [`Format`]): `format(1234.5, ",.1f")` is `"1,234.5"`, and
   `format(255, "#x")` is `"0xff"`. A spec the value's type doesn't take stops the program, with a
   message that names the spec, the type and where the spec goes wrong. The type's `tryFormat`, as
-  `x \tryFormat(spec)` calls it, gives that as `#badFormat` instead.
+  `x \tryFormat(spec)` calls it, gives that as `#badFormat` instead. A hole with a spec, `"{x:.2f}"`,
+  writes its value as `format` does.
 export def format: [Format(a)] a, string -> string = { value, spec ->
+  __format(value, spec)
+}
+
+--| What a hole with a spec calls, `"{x:.2f}"` as `__format(x, ".2f")`: `value` written by `spec`,
+  as [`format`] writes it. A spec written in a hole is checked as the program compiles, where the
+  value's type is one the prelude can format, so only one a type of its own rejects stops the
+  program.
+export def __format: [Format(a)] a, string -> string = { value, spec ->
   match tryFormat(value, spec)
     | #some(text) -> text
     | #badFormat(bad) ->
@@ -137,7 +150,9 @@ def fmtBad
 
 --| `spec`, a spec for a value of the type `of`, read as Python's format-spec mini-language: `[[fill]
   align][sign][z][#][0][width][grouping][.precision][type]`. Which of its parts a type takes is
-  for the type to say.
+  for the type to say. The compiler reads a spec written in a hole with its own reader of the same
+  language, and the types' rules, `FormatSpecs`, and one table of specs, `compiler/FormatSpecTable.fs`,
+  tests both: a change here, or to a `tryFormat`'s rules, is a change there.
 def fmtSpec: string, string -> #some(FormatSpec) | #badFormat(BadFormat) = { spec, of ->
   def length = __nanyx_string_length(spec)
   def firstLength = fmtCharLength(fmtByte(spec, 0))

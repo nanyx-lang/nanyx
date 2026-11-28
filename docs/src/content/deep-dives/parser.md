@@ -12,7 +12,9 @@ tree is needed ([#2730](https://github.com/nanyx-lang/nanyx/issues/2730)).
 
 - **The lexer** (`Lexer.fs`): text in, tokens out, each with its offsets and its leading and trailing trivia, lossless
   whatever the text. A string with holes is a `StringStart`, the hole's tokens, a `StringMiddle` between holes and a
-  `StringEnd`. Operators come from `Operators.binaryOperators`, and keywords from `Keywords.reserved`, the one list of
+  `StringEnd`. In a hole, a `:` outside the brackets and braces the hole opens starts its format spec, `"{price:.2f}"`,
+  which is one `FormatSpec` token, the `:` and the text after it as written, to the hole's `}` on the same line; the
+  parser makes the hole a call to `__format` with the spec as a string written where it is (`FormatSyntax`). Operators come from `Operators.binaryOperators`, and keywords from `Keywords.reserved`, the one list of
   reserved words, so a keyword is never read as part of a longer name. A number with a unit straight after it, `500ms`
   or `1.5e3ms`, is one `Number` token, and `Lexer.numberEnd` says where its number ends; a hexadecimal, octal or
   binary number takes no unit, so a letter after one is an error.

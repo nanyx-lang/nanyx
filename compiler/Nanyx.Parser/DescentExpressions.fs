@@ -142,7 +142,14 @@ let rec private doubleQuoted (c: Cursor) : Expression =
     let mutable going = true
     while going do
         let hole = try expression Crossing c with NoMatch -> c.GiveUp "a hole that doesn't read, which is a mistake"
-        parts.Add(StringExpr hole)
+        if c.Is FormatSpec then
+            let token = c.Take()
+            // The spec is written after its `:`, on the same line.
+            let written = c.SpanOf token
+            let span = { written with Start = written.Start + 1; StartColumn = written.StartColumn + 1 }
+            let spec = Expression.at span (LiteralExpr(StringLit(SourceSpan.textIn c.Source span)))
+            parts.Add(StringExpr(Expression.at (c.SpanFrom hole.Span.Start) (FunctionCall(FormatSyntax.builtIn, None, [ hole; spec ]))))
+        else parts.Add(StringExpr hole)
         if not (c.Is StringMiddle || c.Is StringEnd) then c.GiveUp "a hole that doesn't read, which is a mistake"
         if c.Is StringMiddle then addText (c.Take())
         else

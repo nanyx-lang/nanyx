@@ -2974,6 +2974,22 @@ unit tiny: Length = 1.0e-320m
 
 To fix it, define the dimension's units closer in size, or, for a dimension stored as an integer, store it as a `float`.
 
+# NYX0307: Format spec its value's type doesn't take
+
+A spec written in a string's hole, after a `:`, is one the type of the value it writes doesn't take: a precision for an
+integer, a sign for text, a type letter the value has no form for, a unit a unit quantity's dimension doesn't have in
+the module. The compiler reads the spec as the value's
+[`tryFormat`](../stdlib/prelude-format) would, and reports where in it the spec goes wrong and what could come there.
+
+```nanyx
+def count = 42
+def s = "{count:.2d}"  -- error NYX0307: '.2d' is no format spec for a 'int': at 0, it could have no precision: ...
+```
+
+To fix it, write a spec the type takes: `{count:05d}` pads the integer with zeros, and `{count:.2f}` writes it as a
+float with two decimals. A spec for a value of a type variable, or of a type with a `tryFormat` of its own, is checked
+as the program runs, by `format`.
+
 # NYX0310: Test that isn't a test's type
 
 A def marked `@test` takes arguments or gives back a value. A test is run with nothing and gives back `()`: it is a
