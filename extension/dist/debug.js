@@ -35,6 +35,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolvedLaunch = resolvedLaunch;
 exports.debugArguments = debugArguments;
+exports.consoleOf = consoleOf;
+exports.portIn = portIn;
 exports.workingDirectory = workingDirectory;
 const path = __importStar(require("path"));
 /**
@@ -54,9 +56,34 @@ function resolvedLaunch(config, active) {
         program
     };
 }
-/** The arguments of `nanyx` for a session that debugs `program` with `args`, which follow a `--`. */
-function debugArguments(program, args = []) {
-    return ["run", "--debug", program, ...(args.length > 0 ? ["--", ...args] : [])];
+/**
+ * The arguments of `nanyx` for a session that debugs `program` with `args`, which follow a `--`: on its standard
+ * streams, or, given `portFile`, on a port of 127.0.0.1 the system chooses and `nanyx` writes to that file, the program
+ * then having the terminal it runs in.
+ */
+function debugArguments(program, args = [], portFile) {
+    const listening = portFile ? ["--dap-port", "0", "--dap-port-file", portFile] : [];
+    return ["run", "--debug", ...listening, program, ...(args.length > 0 ? ["--", ...args] : [])];
+}
+/**
+ * Where a session's program reads and writes, and why it isn't where `config` asked: in a terminal, as by default,
+ * unless the configuration asks for the Debug Console, or there is no terminal to run it in (`terminals`), as in VS Code
+ * for the web.
+ */
+function consoleOf(config, terminals) {
+    const asked = config.console ?? "integratedTerminal";
+    if (asked === "integratedTerminal" && !terminals) {
+        return {
+            console: "debugConsole",
+            note: "Nanyx: there is no terminal to run the program in here, so what it writes is in the Debug Console, and its input is empty."
+        };
+    }
+    return { console: asked };
+}
+/** The port `nanyx` wrote to its port file, `text`, if it is one. */
+function portIn(text) {
+    const port = Number(text.trim());
+    return Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined;
 }
 /** The directory a session for `program` runs in: `cwd`, or the script's directory, or the package's. */
 function workingDirectory(program, cwd) {
