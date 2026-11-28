@@ -469,16 +469,7 @@ module Compiler =
                   UnqualifiedSources = Map.empty
                   ImportedFiles = Map.empty
                   ReExports = []
-                  Merged = Set.empty
-                  // A module of a host's package, or of a package the program depends on, isn't the program's own: its
-                  // imports' definitions are inlined under qualified names, so none collides with one of the program's.
-                  QualifiesImports =
-                    match origin with
-                    | SourceFile path ->
-                        inHostPackage path
-                        || checkedModules.Package |> Option.exists (fun package -> not (PackageModules.isProgramFile package path))
-                    | StandardLibraryModule _
-                    | InMemory -> false }
+                  Merged = Set.empty }
             // A re-export written in a block counts for the block's exports, not the file's (see `Visibility.blockExports`).
             let reExportItems =
                 ModuleLinking.reExportsOf desugared |> List.filter (fun item -> (NyxCompiler.InferState.blockAround moduleBlocks item.Span).IsNone)

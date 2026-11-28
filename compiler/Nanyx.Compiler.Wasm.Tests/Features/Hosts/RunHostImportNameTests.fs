@@ -1,6 +1,6 @@
 /// A name a host, or a library, brings in from one of its own imports unqualified is its own: a program that defines a
-/// def of the same name keeps its own, and the host keeps its (#2995). In a module that isn't the program's own, an
-/// import's definitions are inlined under qualified names (see `ModuleLinking.inlinedRenames`).
+/// def of the same name keeps its own, and the host keeps its (#2995). Every import's definitions but the standard
+/// library's are inlined under qualified names (see `ModuleLinking.inlinedRenames`).
 module TranspilerWasmTests.Features.Hosts.HostImportNames
 
 open Xunit

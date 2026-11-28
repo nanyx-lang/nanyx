@@ -302,17 +302,14 @@ module internal ModuleLinking =
         |> Set.filter (fun name -> types |> Set.exists (fun typeName -> name.StartsWith(typeName + ".")))
         |> Set.union names
 
-    /// The items an importer inlines for the backend from a module it imports: the module's own value
-    /// definitions and type definitions (plus whatever that module inlined itself). Exported definitions keep
-    /// their names, or take the import's alias as a qualifier; private ones are qualified with the module's own
-    /// name so they cannot collide with anything in the importer.
-    /// An import that selects names without an alias, `as (a, b)`, brings in only the exports it selects (see
-    /// `selectedExports`) unqualified; the others are inlined as private definitions are. In a module that isn't the
-    /// standard library's, `qualified`, an export an import brings in unqualified is inlined as a private definition
-    /// is, under its module's name, too, so that it can't collide with a definition of the importer's, of the library's,
-    /// or of another module's of the same name; the module's references to it are written as that name (see
-    /// `writeBlockAliases`). A definition attached to a type (`Regex.toString`) keeps its name: an instance finds it by
-    /// its type's, which every module shares.
+    /// The names an importer inlines a module's own value definitions under, for the backend (see
+    /// `inlinedItemsForImport`). An export takes the import's alias as a qualifier, and a private definition the
+    /// module's own name, so that it can't collide with anything in the importer. Of a module that isn't the standard
+    /// library's (`qualified`), an export an import brings in unqualified, whole or selected, `as (a, b)`, is named after
+    /// its module too, so that it can't collide with a definition of the importer's, of the library's, or of another
+    /// module's of the same name; the importer's references to it are written as that name (see `writeBlockAliases`).
+    /// The standard library's keep their names, which every module shares, and so does a definition attached to a type
+    /// (`Regex.toString`), which an instance finds by its type's, and a block's, named after its module already.
     let private inlinedRenames (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Map<string, string> =
         let qualifier = importQualifier item
         let moduleName =

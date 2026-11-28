@@ -171,7 +171,8 @@ def size: string -> int = { s -> s.length }
 def main = heads(([1, 2] ++ []) ++ [3]) + word("yes") + size(greet("Ada"))
 """
     let wat, report = compileWithReport source
-    Assert.Equal<string list>([ "greet"; "differ"; "isNone"; "heads"; "word"; "size"; "main" ], report.Functions)
+    // Its own `isNone` is named after its module, since the prelude exports one too (#3221).
+    Assert.Equal<string list>([ "greet"; "differ"; "main_isNone"; "heads"; "word"; "size"; "main" ], report.Functions)
     Assert.Contains("call $__nanyx_string_equals\n    i32.eqz", wat)
     Assert.Contains("call $__nanyx_list_concat", wat)
     Assert.Contains("call $__nanyx_equals_tags_none", wat)

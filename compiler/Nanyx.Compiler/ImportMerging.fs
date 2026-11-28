@@ -48,10 +48,7 @@ module internal ImportMerging =
           /// The module's re-exports as each is merged, with the module it re-exports from.
           ReExports: ReExported list
           /// The modules merged, by `originKey`.
-          Merged: Set<string>
-          /// Whether the module is not the program's own, as a host's or a library's, whose imports' definitions are
-          /// all inlined under qualified names (see `ModuleLinking.inlinedRenames`).
-          QualifiesImports: bool }
+          Merged: Set<string> }
 
     /// The modules each host's prelude re-exports from, by the prelude's file, as `originKey`s.
     let private preludeSources = System.Collections.Concurrent.ConcurrentDictionary<string, Set<string>>()
@@ -104,11 +101,11 @@ module internal ImportMerging =
         let state = merged.State
         let importedKey = originKey importedOrigin
         let qualifier = ModuleLinking.importQualifier item
-        // In a module that isn't the program's own, an import's definitions are inlined under qualified names, but the
-        // standard library's, which every module shares under one name. That is safe only because the standard library
-        // selects nothing but types from its imports (`import nanyx/async as (Async)`), so no program's def can take the
-        // place of one of its functions (#2995). If it ever selects a function by name, that import has to be
-        // qualified like the rest.
+        // An import's definitions are inlined under qualified names, so that none takes the place of the importer's, of
+        // the library's or of another module's of its name (#2995, #3221), but the standard library's, which every module
+        // shares under one name. That is safe only because the standard library selects nothing but types from its
+        // imports (`import nanyx/async as (Async)`), so no program's def can take the place of one of its functions. If
+        // it ever selects a function by name, that import has to be qualified like the rest.
         let qualifies =
             match importedOrigin with
             | StandardLibraryModule _ -> false
@@ -343,8 +340,8 @@ module internal ImportMerging =
                         // A type is inlined under its own name.
                         | None, Some symbol -> acc |> Map.add written (symbol, target)
                         | None, None -> acc) state.ImportedBlockNames
-                    // In a module that isn't the program's own, a name an import brings in unqualified is written as
-                    // the name its definition is inlined under, which is qualified.
+                    // A name an import brings in unqualified is written as the name its definition is inlined under,
+                    // which is qualified, but for the standard library's.
                     |> fun names ->
                         if qualifies && qualifier.IsNone then
                             exportedValues
