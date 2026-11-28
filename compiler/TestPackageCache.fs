@@ -12,13 +12,17 @@ module Nanyx.TestPackageCache
 open System
 open System.IO
 
-/// Sets `NANYX_PACKAGES` to a new, empty directory, which disposing it deletes.
+/// Sets `NANYX_PACKAGES` to a new, empty directory, which disposing it deletes, and seeds the packages the compiler
+/// ships into it before any test runs: seeding packs them, which takes seconds, and would otherwise fall to whichever
+/// test first reads a package, and could take it past a timeout.
 type Cache() =
     let directory = Path.Combine(Path.GetTempPath(), "nanyx-test-packages-" + Guid.NewGuid().ToString "N")
 
     do
         Directory.CreateDirectory directory |> ignore
         Environment.SetEnvironmentVariable("NANYX_PACKAGES", directory)
+        // A store that can't be seeded is reported by the tests that read a package.
+        NyxCompiler.SeededPackages.seed (NyxCompiler.SeededPackages.user ()) |> ignore
 
     /// The cache's directory.
     member _.Directory = directory
