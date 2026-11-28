@@ -80,7 +80,7 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 
 | Step | Issue | After |
 |---|---|---|
-| The debug adapter: breakpoints, stepping and variables: the server built ([Debugger](../standard-tools/debugger)); VS Code's side next | [#2041](https://github.com/nanyx-lang/nanyx/issues/2041) | |
+| The debug adapter: breakpoints, stepping and variables, in VS Code: built ([Debugger](../standard-tools/debugger), [VS Code](../standard-tools/vs-code-extension#debugging)); the program's input next | [#2041](https://github.com/nanyx-lang/nanyx/issues/2041) | |
 | Every frame's locals as of its call, by printers with a budget | [#3253](https://github.com/nanyx-lang/nanyx/issues/3253) | #2041 |
 | The crashing frame's locals, from a probe before each call that never returns | [#3257](https://github.com/nanyx-lang/nanyx/issues/3257) | #2041 |
 | Recording a run's effects and replaying it (Planning) | [#2042](https://github.com/nanyx-lang/nanyx/issues/2042) | |

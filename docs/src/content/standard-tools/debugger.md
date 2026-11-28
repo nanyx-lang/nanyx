@@ -7,8 +7,9 @@ order: 6
 `nanyx run --debug` runs a program under the debugger. It builds the program with
 [debug probes](../deep-dives/debug-probes), so that it can stop at any statement, and speaks the
 [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/) on its standard input and output. An
-editor that speaks it, such as VS Code, is the other end: it sets breakpoints, steps the program and shows its stack and
-variables. The command takes what `nanyx run` takes, a script or a package, and the program's arguments after it:
+editor that speaks it is the other end: it sets breakpoints, steps the program and shows its stack and variables. The
+[VS Code extension](./vs-code-extension#debugging) runs it for its `nanyx` debug type, so pressing F5 in a `.nyx` editor
+debugs the file. The command takes what `nanyx run` takes, a script or a package, and the program's arguments after it:
 
 ```text
 nanyx run --debug tool.nyx -- --verbose

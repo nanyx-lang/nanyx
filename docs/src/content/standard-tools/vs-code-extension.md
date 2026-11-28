@@ -421,6 +421,39 @@ stops the run and starts another, and the same time limit stops a run of them th
 | `nanyx.live.timeLimit` | 10 | How many seconds a live run may take before it is stopped. |
 | `nanyx.live.show` | `dbg` | What a live run shows in the editor: `dbg`, what each `dbg` writes, or `every`, every value its code binds or gives as well. |
 
+# Debugging
+
+The extension adds a `nanyx` debug type, run by the [debugger](./debugger), `nanyx run --debug`, which the extension
+starts with the `nanyx` it [found](#finding-the-compiler). Press F5 in a `.nyx` editor, or choose **Debug** from the run
+button at the top right of the editor, or **Nanyx: Debug the current file** from the command palette, and the active
+file is debugged with no `launch.json`. Breakpoints are set in the gutter of a `.nyx` file. The Run and Debug view then
+steps the program, shows its stack and a frame's variables, and stops where it crashes. What the program writes is in
+the Debug Console, and its input is empty.
+
+A `launch.json` configuration of type `nanyx` names what to debug. Its snippets, **Nanyx: Debug the current file** and
+**Nanyx: Debug a package**, write one:
+
+```json
+{
+  "type": "nanyx",
+  "request": "launch",
+  "name": "Debug the package",
+  "program": "${workspaceFolder}",
+  "args": ["--verbose"],
+  "stopOnEntry": false
+}
+```
+
+| Attribute | What it does |
+|-----------|--------------|
+| `program` | The script, or a package's directory, to debug. Without it, the active file. |
+| `args` | The program's command-line arguments. |
+| `stopOnEntry` | Stops the program at its first statement. |
+| `cwd` | The directory the program runs in. Without it, the script's directory, or the package's. |
+
+How breakpoints move to a line with a statement, how stepping goes, and which locals a frame further out shows are on
+the [Debugger](./debugger) page.
+
 # Testing
 
 The **Testing** view lists the [tests](../tour/attributes#test) of each package in the workspace, and of each `.nyx`
@@ -442,6 +475,7 @@ test the run would have run is marked errored, with the build's errors. Stopping
 | Command | What it does |
 |---------|--------------|
 | **Nanyx: Run the current file** | Saves the file and runs it in a terminal. See [Running a file](#running-a-file). |
+| **Nanyx: Debug the current file** | Debugs the active file with the debugger. See [Debugging](#debugging). |
 | **Nanyx: Show dbg values** | Lists every value the `dbg` on the cursor's line gave in the last run, in order, or else the value shown there, and copies the one you choose. See [dbg values](#dbg-values). |
 | **Nanyx: Toggle live mode** | Turns live mode on or off for the active file's script or package. See [Live mode](#live-mode). |
 | **Nanyx: Toggle showing every value** | Switches a live run between showing its `dbg`s' values and every value, `nanyx.live.show`. See [Live mode](#live-mode). |
