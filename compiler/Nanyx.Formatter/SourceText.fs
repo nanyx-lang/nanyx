@@ -36,6 +36,17 @@ type SourceText(source: string) =
     /// Whether the text at `span` starts with `s`.
     member _.StartsWith (span: SourceSpan) (s: string) = startsWith span s
 
+    /// The offsets between `start` and `finish` where `word` is written as a word of its own, in order.
+    member _.WordOffsets (word: string) (start: int) (finish: int) =
+        let isWordChar i = i >= 0 && i < source.Length && (Char.IsLetterOrDigit source[i] || source[i] = '_')
+        [ let mutable i = max 0 start
+          while i >= 0 && i + word.Length <= min finish source.Length do
+              let found = source.IndexOf(word, i, min finish source.Length - i, StringComparison.Ordinal)
+              if found < 0 then i <- -1
+              else
+                  if not (isWordChar (found - 1)) && not (isWordChar (found + word.Length)) then yield found
+                  i <- found + 1 ]
+
     /// The first character at or after `offset` that is not whitespace.
     member _.NextChar offset =
         let mutable i = offset
