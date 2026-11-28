@@ -253,6 +253,12 @@ export def string.hash: string -> int = { s ->
   measured value is written in the largest unit it is a whole number of: `1500ms`, `2min`.
 export context ToString(a) = (toString: a -> string)
 
+--| What `x \toString` calls where `x`'s type attaches no `toString`, as a list, a record, a tag or
+  a unit quantity does not: `x` written by its [`ToString`], so `[1, 2] \toString` is `"[1, 2]"`.
+export def __toStringOf: [ToString(a)] a -> string = { x ->
+  "{x}"
+}
+
 --| What the compiler makes a hole in a string call: `"{x}"` is `"{__interpolate(x)}"`, so a hole
   needs a [`ToString`] of its value's type, as a call to a function that requires one does.
 export def __interpolate: [ToString(a)] a -> string = { value ->

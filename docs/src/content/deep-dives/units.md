@@ -145,7 +145,8 @@ need the storage's `Eq` or `Ord`, which a signature writes.
 
 # Printing
 
-A measured value has no `toString` attached, so a hole of one, `"{t}"`, or a call that requires `ToString` of it, finds
+A measured value has no `toString` attached, so a hole of one, `"{t}"`, a call that requires `ToString` of it, or a pipe
+to `toString` (through the prelude's `__toStringOf`, see `PipedMemberSyntax`), finds
 one derived from its structure, as a record's is (`StructuralInstances`): a definition the compiler writes for the
 type, with the dimension's units the module can write in it (`Units.seenOf`), the largest first. Its body reads the
 value's number of default storage units with the intrinsic `__nanyx_measured_storage`, which `Infer` types as its argument's

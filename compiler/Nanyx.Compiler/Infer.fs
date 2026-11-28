@@ -669,8 +669,12 @@ and private inferPipe (env: TypeEnv) (state: InferState) (expr: Expression) (val
         // number literal the code before it has not settled is of its default type, `3 \toFloat` an int's.
         let nextState = NumericLiterals.settleWithin [ typedValue.Type ] nextState
         let valueTy = resolveSoFar nextState typedValue.Type
+        // A member of a context the compiler derives for a type, `toString` or `tryFormat`, piped from a value whose type
+        // attaches none and with nothing in scope by that name, is the prelude's wrapper of it, which finds the instance
+        // as a call that requires the context does (see `PipedMemberSyntax`).
         let resolvedName =
             tryResolveAttachedFunction env valueTy name
+            |> Option.orElse (if (TypeEnv.tryFind name env).IsNone then PipedMemberSyntax.wrapperOf name else None)
             |> Option.defaultValue name
         let nextState =
             if resolvedName = name then nextState
