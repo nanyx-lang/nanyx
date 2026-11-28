@@ -8,7 +8,7 @@ let private code = "default/unannotatedExports"
 
 /// The diagnostics of `source`, compiled with every linter on. The module must type-check, or no linter would run.
 let private compiled (source: string) =
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     Assert.True(result.TypeChecked && not (result.Diagnostics |> List.exists Diagnostics.isError), sprintf "%A" result.Diagnostics)
     result.Diagnostics
 

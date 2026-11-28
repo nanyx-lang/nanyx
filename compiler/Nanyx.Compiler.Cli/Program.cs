@@ -636,8 +636,8 @@ internal static partial class CliCommands
         using var progress = CompileProgress.Start(shell.Error, shell.DisplayPath(shell.FullPath(inputFile)), shell.DisplayPath, timings);
         // With its files in memory, the script is built from its host's root for that (see `Host.InMemory`).
         var result = filesInMemory
-            ? Script.compileFileRehostedReportingIn(FuncConvert.FromFunc<Host, Host>(host => host.InMemory?.Value ?? host), shell.Packages, progress.Listener, shell.FullPath(inputFile))
-            : Script.compileFileReportingIn(shell.Packages, progress.Listener, shell.FullPath(inputFile));
+            ? Script.compileFileRehostedMakingIn(FuncConvert.FromFunc<Host, Host>(host => host.InMemory?.Value ?? host), LintRunners.MakerFor(shell.Packages), shell.Packages, progress.Listener, shell.FullPath(inputFile))
+            : Script.compileFileMakingIn(LintRunners.MakerFor(shell.Packages), shell.Packages, progress.Listener, shell.FullPath(inputFile));
         progress.Finish();
         return result;
     }
@@ -858,7 +858,8 @@ internal static partial class CliCommands
             return false;
         }
 
-        package = found.ResultValue;
+        // Its linter packages run as lint builds, which the CLI can build and run and the compiler's core can't.
+        package = PackageModule.withLinters(LintRunners.MakerFor(shell.Packages), found.ResultValue);
         return true;
     }
 
@@ -1095,7 +1096,8 @@ internal static partial class CliCommands
             ParameterTypeHints: !noParameterTypeHints,
             PatternVariableTypeHints: !noPatternVariableTypeHints,
             Timings: timings,
-            FormattingHints: !noFormatHints);
+            FormattingHints: !noFormatHints,
+            LintRunner: LintRunners.Wasm);
         Nanyx.LanguageServer.NanyxLanguageServer.RunStdioAsync(settings).GetAwaiter().GetResult();
         return 0;
     }

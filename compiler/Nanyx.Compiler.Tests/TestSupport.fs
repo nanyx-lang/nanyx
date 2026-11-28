@@ -78,11 +78,31 @@ let reportedAt (source: string) : (string * string) list =
     let source = withFinalNewline source
     reportedAtIn source (Compiler.compile source)
 
+/// The official linter as a project that turns it on runs it: its package, `nanyx.lint`, seeded, built into a lint build
+/// and run, beside the compiler's own rules for each rule the package doesn't implement yet (see `Linters.withPackage`).
+let officialLinter : Lazy<Linter> =
+    lazy
+        (let store = SeededPackages.user ()
+         let entry : LinterEntry =
+             { Package = Linters.official.Package
+               Path = None
+               Version = VersionRequirement.tryParse Toolchain.version
+               Span = SourceSpan.none
+               Settings = None }
+         let runner = Transpiler.Wasm.LintBuild.runner Nanyx.Runtime.WasmLinter.load
+         match Package.scriptLinters store SourceSpan.none [ entry ] with
+         | [ linter ], [] -> Linters.withPackage (LintBuilds.make store runner linter |> Result.defaultWith failwith) Linters.official
+         | _, errors -> failwith $"nanyx.lint can't be read: %A{errors}")
+
+/// Every linter the compiler has, each rule at its default severity, as `Linters.everyLinter` is, with the official one
+/// run as its package (see `officialLinter`).
+let everyLinter () : LinterOptions = { Linters.everyLinter with Linters = [ officialLinter.Value ] }
+
 /// Compiles `source` with every linter the compiler has turned on, at its defaults, but for `unusedPrivateDefinitions`:
 /// these tests write top-level defs nothing uses, and that rule has tests of its own.
 let compileWithOfficial (source: string) =
     Compiler.compileWith
-        { Linters.everyLinter with Severities = Map.ofList [ "default/unusedPrivateDefinitions", None ] }
+        { everyLinter () with Severities = Map.ofList [ "default/unusedPrivateDefinitions", None ] }
         source
 
 /// A new directory holding `files` (relative path, contents), deleted when disposed: a package, with its manifest.

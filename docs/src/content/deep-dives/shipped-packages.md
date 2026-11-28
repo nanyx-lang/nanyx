@@ -102,7 +102,8 @@ packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
 - **Only what must be shipped.** The compiler ships a package only when a program can't build or run without it: a
   host, its interface packages and the host library they are written on. The linter host, `nanyx.analysis.host`, and
   the package linters are written against, `nanyx.analysis`, are shipped too, since the compiler runs linters through
-  them ([Linters](../work-in-progress/linters)). A package that is pure Nanyx over the
+  them, and so is the official linter, `nanyx.lint`, so that a project lints offline
+  ([Lint builds](./lint-builds#the-official-linter)). A package that is pure Nanyx over the
   standard library, which nothing in the compiler, a host or the runtime depends on, is an ordinary package from the
   [package index](./package-index), released on its own rather than with every compiler release. `nanyx.json` is one,
   from [nanyx-lang/json](https://github.com/nanyx-lang/json), and so is `nanyx.regex`, from

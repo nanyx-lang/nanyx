@@ -133,7 +133,7 @@ let ``Every shipped package is published from this repository, at the compiler's
                 else NewPackage.nanyxOf Toolchain.version
             name, Toolchain.version, Some "nanyx-lang/nanyx", Some nanyx)
     Assert.Equal<(string * string * string option * string option) list>(expected, manifests)
-    Assert.Equal(10, manifests.Length)
+    Assert.Equal(11, manifests.Length)
 
 [<Fact>]
 let ``The tests seed the shipped packages into a package cache of their own, not the user's`` () =
