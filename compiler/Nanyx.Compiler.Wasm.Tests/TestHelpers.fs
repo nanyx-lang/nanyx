@@ -211,6 +211,7 @@ let private command (arguments: string list) : Shell -> int =
         let yieldAtEveryWait, rest = takeFlag "--yield-at-every-wait" rest
         let filesInMemory, rest = takeFlag "--files-in-memory" rest
         let showValues, rest = takeFlag "--show-values" rest
+        let debug, rest = takeFlag "--debug" rest
         let checkMemory, rest = takeFlag "--check-memory" rest
         let memory, rest = takeFlag "--memory" rest
         let memoryCheck = if memory then MemoryCheck.Report elif checkMemory then MemoryCheck.Check else MemoryCheck.Off
@@ -231,7 +232,7 @@ let private command (arguments: string list) : Shell -> int =
             | "--dbg-to" :: file :: rest -> file, rest
             | _ -> null, rest
         let _, _, timings, host, path = options (null, false, false, null, []) rest
-        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile, yieldAtEveryWait, dbgTo, filesInMemory, showValues)
+        fun shell -> CliCommands.RunIn(shell, memoryCheck, path, timings, host, not noInline, Array.ofList allowed, profile, yieldAtEveryWait, dbgTo, filesInMemory, showValues, debug)
     | "build" :: rest ->
         let noInline, rest = takeFlag "--no-inline" rest
         let wat, rest = takeFlag "--wat" rest

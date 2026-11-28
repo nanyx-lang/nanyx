@@ -19,6 +19,10 @@
     <Compile Include="Serving.fs" />
     <Compile Include="Testing.fs" />
     <Compile Include="Linting.fs" />
+    <Compile Include="Debugging/ValueTree.fs" />
+    <Compile Include="Debugging/DebugSession.fs" />
+    <Compile Include="Debugging/Dap.fs" />
+    <Compile Include="Debugging/DebugServer.fs" />
     <Compile Include="Componentizer.fs" />
   </ItemGroup>
 
