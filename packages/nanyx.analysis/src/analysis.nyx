@@ -92,6 +92,9 @@ export context Analysis = (
   importOf: NodeId -> #some(Symbol) | #none
   --| A symbol by its id.
   symbol: SymbolId -> #some(Symbol) | #none
+  --| The symbols the module declares: its definitions, types, parameters, pattern variables and
+    imports, each with where it is declared.
+  symbols: () -> list(Symbol)
   --| The type of a declaration.
   typeOfSymbol: SymbolId -> #some(Ty) | #unknown
   --| The contexts a top-level def requires, written or inferred.
