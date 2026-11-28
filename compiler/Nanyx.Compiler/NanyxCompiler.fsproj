@@ -163,6 +163,7 @@
     <Compile Include="PackageModules.fs" />
     <Compile Include="DbgSites.fs" />
     <Compile Include="PackageExports.fs" />
+    <Compile Include="LongPaths.fs" />
     <Compile Include="ShippedPackages.fs" />
     <Compile Include="HostPackages.fs" />
     <Compile Include="LinterPackages.fs" />
