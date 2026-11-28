@@ -124,10 +124,12 @@ module PackageDependencies =
     /// the lockfile: when the manifest asks for something the lockfile doesn't satisfy (a new dependency, a changed
     /// requirement), chooses versions again from the index of `store`, keeping those still allowed, writes the lockfile and
     /// downloads what it locks. Gives a line for each package it locks anew, none when it changes nothing, and a warning
-    /// for each version it keeps that the index has unlisted. With `frozen`, as `--locked` asks, a lockfile that doesn't
+    /// for each version it keeps that the index has unlisted, and for each stale copy of a package the compiler ships that
+    /// seeding the store replaced (see `PackageIndex.shippedReplaced`). With `frozen`, as `--locked` asks, a lockfile that doesn't
     /// satisfy the manifest is an error. A manifest or lockfile that doesn't read is left for the build to report.
     let update (store: PackageStore) (manifestPath: string) (frozen: bool) : Result<Pulled, LockFailure> =
-        let unchanged = { Lines = []; Warnings = [] }
+        let replaced = PackageIndex.shippedReplaced store
+        let unchanged = { Lines = []; Warnings = replaced }
         match Manifest.read manifestPath, Lockfile.read (Lockfile.pathIn (Path.GetDirectoryName(Path.GetFullPath manifestPath))) with
         | Result.Ok manifest, Result.Ok lockfile ->
             relock store manifest (defaultArg lockfile Lockfile.empty) frozen
@@ -138,7 +140,7 @@ module PackageDependencies =
                     download store relocked.Lockfile
                     |> Result.map (fun warnings ->
                         { Lines = relocked.Lines
-                          Warnings = List.distinct (relocked.Warnings @ warnings) }))
+                          Warnings = List.distinct (replaced @ relocked.Warnings @ warnings) }))
         | _ -> Result.Ok unchanged
 
     /// Pulls the dependencies of the package whose manifest is at `manifestPath`, from `store`: brings its lockfile up to
