@@ -13,11 +13,12 @@ compiler writes, under a host the compiler ships, run once per thing it checks.
 
 # Reading a linter package
 
-`Manifest.check` reads a manifest's `linters`. An entry naming a linter the compiler has built in (`Linters.all`, the
-official `nanyx.lint` until it moves) is read as before, into `Manifest.Linters`. Any other is a `LinterEntry`, in
-`Manifest.LinterPackages`: a package found by its `path`, or one from the index at a `version`, which `Resolution`
-locks in `nanyx.lock` as it locks a host, though it is no part of the program. A script's `::linter` can still name only
-a linter the compiler has built in.
+`Manifest.check` reads a manifest's `linters`. Each entry is a `LinterEntry`, in `Manifest.LinterPackages`: a package
+found by its `path`, or one from the index at a `version`, which `Resolution` locks in `nanyx.lock` as it locks a host,
+though it is no part of the program. An entry naming a linter the compiler has built in (`Linters.all`: the official
+linter, whose package is the shipped `nanyx.lint`) is read into `Manifest.Linters` too, with its rules' severities. A
+script's `::linter` directives are read the same way (`Manifest.linterEntries`), but can name only a linter the compiler
+has built in; `Package.scriptLinters` reads its package from the seeded copy, with no lockfile.
 
 The package's own manifest declares it a linter in its `package`'s `linter` field, which `Manifest.check` checks
 (`checkLinterDeclaration`) and `LinterPackages.ofManifest` reads into a `LinterDeclaration`: its root module, its name,
@@ -39,9 +40,21 @@ from a `LinterPackage` given a `LintRunner`: `Assemble`, which turns a lint buil
 `Transpiler.Wasm.LintBuild.assemble` and `Nanyx.Runtime.WasmLinter.load`.
 
 The CLI makes a package's linters as it finds the package (`CliCommands.TryFindPackage`, with `Package.withLinters`), so
-`nanyx check`, `build`, `run` and `test` all lint with them; `Package.buildReporting` runs `Package.Linters`. `nanyx lsp`
+`nanyx check`, `build`, `run` and `test` all lint with them; `Package.buildReporting` runs `Package.Linters`. A script's
+are made as `nanyx run` and `check` compile it (`Script.compileFileMakingIn`, with `Script.linterOptions`). `nanyx lsp`
 gives the language server the same runner (`ServerSettings.LintRunner`), and `ServerSettings.LinterOptionsFor` makes a
 document's linters with it (`Package.lintersFor`). A server started without one runs only the built-in linters.
+
+## The official linter
+
+The official linter is moving from F# rules compiled into the compiler (`Linters.official`) into its package,
+`nanyx.lint`, whose manifest declares every rule `Linters.official` has, with the same ids, titles, severities and
+descriptions; a test checks that they stay the same. `Package.linterOptions` runs the package's lint build as the
+official linter (`Linters.withPackage`): the package's reports, and those of the compiler's own rules for each rule the
+package doesn't implement yet. `Linters.packageRules` names those it does, and grows as each group of rules moves. Where
+the package can't be made, in the compiler's core or the browser's, which can't run a lint build, the compiler's rules
+run alone. The linter tests (`Features/Linters`) run the official linter as a project does, through the package
+(`TestSupport.officialLinter`).
 
 ## The lint build
 

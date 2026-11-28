@@ -518,8 +518,10 @@ module Package =
 
     /// The linter options of `builtIn`, those built into the compiler that a manifest turns on, with the linters `make`
     /// makes from `linters`, each at the severities its entry's `settings` give. A linter that can't be made fails each
-    /// module it would lint, with why, as a linter that fails does (`Linters.failedRule`), and the compile goes on.
-    let private linterOptions (make: LinterPackage -> Result<Linter, string>) (builtIn: LinterOptions) (linters: LinterPackage list) : LinterOptions =
+    /// module it would lint, with why, as a linter that fails does (`Linters.failedRule`), and the compile goes on. The
+    /// package of a linter the compiler has built in runs as that linter, beside its rules (`Linters.withPackage`); where
+    /// it can't be made (the compiler's core, or the browser's, can't run one), its rules run alone.
+    let linterOptions (make: LinterPackage -> Result<Linter, string>) (builtIn: LinterOptions) (linters: LinterPackage list) : LinterOptions =
         let made (linter: LinterPackage) =
             match make linter with
             | Result.Ok made -> made
@@ -528,8 +530,27 @@ module Package =
                   Package = linter.Entry.Package
                   Rules = linter.Declaration.Rules
                   Lint = fun _ -> failwith reason }
-        { Linters = builtIn.Linters @ (linters |> List.map made)
+        let withPackages, others =
+            linters
+            |> List.fold
+                (fun (running: Linter list, others: Linter list) linter ->
+                    match running |> List.tryFindIndex (fun known -> known.Package = linter.Entry.Package) with
+                    | Some index ->
+                        match make linter with
+                        | Result.Ok made -> running |> List.updateAt index (Linters.withPackage made running.[index]), others
+                        | Result.Error _ -> running, others
+                    | None -> running, others @ [ made linter ])
+                (builtIn.Linters, [])
+        { Linters = withPackages @ others
           Severities = linters |> List.fold (fun severities linter -> Map.foldBack Map.add linter.Severities severities) builtIn.Severities }
+
+    /// The linter packages `entries` name, a script's `::linter` directives' (see `Script`), each read as a manifest's
+    /// are, with no lockfile, so that a shipped linter is its seeded copy, from `store`; and what is wrong with them, at
+    /// `span` where a problem is about a package as a whole.
+    let scriptLinters (store: PackageStore) (span: SourceSpan) (entries: LinterEntry list) : LinterPackage list * Diagnostic list =
+        let read = entries |> List.map (linterIn { Store = store; Locked = Lockfile.empty })
+        read |> List.choose Result.toOption,
+        read |> List.collect (function Result.Error problems -> problems |> List.map (diagnosticOf span) | Result.Ok _ -> [])
 
     /// `package`, whose linter packages are read (see `ofManifestFrom`), with the linters `make` makes from them among
     /// those its builds run (see `linterOptions`). The compiler's core can't run a linter package, whose lint build runs on
@@ -549,6 +570,13 @@ module Package =
                 let linters = manifest.LinterPackages |> List.choose (linterIn lookup >> Result.toOption)
                 Some(linterOptions make manifest.Linters linters)
             | Result.Error _ -> None
+        | _ -> None
+
+    /// The linters built into the compiler that the package manifest a file is under turns on, if it has one that reads,
+    /// with its linter packages left unread: for a compile that can't run them.
+    let builtInLintersFor (filePath: string) : LinterOptions option =
+        match Manifest.tryFind (Path.GetDirectoryName(Path.GetFullPath filePath)) with
+        | Result.Ok (Some manifest) -> Manifest.read manifest |> Result.toOption |> Option.map _.Linters
         | _ -> None
 
     /// An error for each `::` directive at the top of the file at `filePath`, whose text is `source`, which is in the

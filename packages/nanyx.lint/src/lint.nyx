@@ -1,0 +1,17 @@
+--| The official linter, `default`: the rules its manifest declares, written against
+  `nanyx.analysis` as any linter is.
+
+  Its rules are moving here from the compiler a group at a time. Until a rule is here, the
+  compiler runs its own copy of it beside this package, so a project that turns the linter on
+  gets every rule either way.
+export module lint
+
+import (
+  nanyx.analysis/analysis as (Analysis, Report)
+  nanyx.analysis/syntax as (Module)
+)
+
+--| The reports of every rule implemented here about a module.
+export def lint: [Analysis] Module -> list(Report) = { _ ->
+  []
+}

@@ -9,7 +9,7 @@ let private code = "default/uselessExpressions"
 /// The diagnostics of `source`, compiled with every linter on, which must have no compiler errors, or no linter would
 /// run. The linters' own errors do not count.
 let private compiled (source: string) =
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     let compilerErrors = result.Diagnostics |> List.filter (fun diagnostic -> Diagnostics.isError diagnostic && not (diagnostic.Code.StartsWith "default/"))
     Assert.True(result.TypeChecked && compilerErrors.IsEmpty, sprintf "%A" result.Diagnostics)
     result.Diagnostics

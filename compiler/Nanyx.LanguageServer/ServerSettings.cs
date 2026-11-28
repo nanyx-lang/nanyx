@@ -78,19 +78,18 @@ public sealed record ServerSettings(
     /// <summary>
     /// The linter options the document at <paramref name="path"/> (<c>null</c> if not on disk) is compiled with, given
     /// its <paramref name="directives"/> (which give none in a package). A linter package's lint build is built once, and
-    /// kept, so a keystroke doesn't build it again (see <c>LintBuilds</c>).
+    /// kept, so a keystroke doesn't build it again (see <c>LintBuilds</c>). Without <see cref="LintRunner"/>, only the
+    /// linters built into the compiler run, and a manifest's linter packages aren't read.
     /// </summary>
     public LinterOptions LinterOptionsFor(string? path, ScriptDirectives directives) =>
         Linters
-        ?? directives.Linters?.Value
-        ?? (path is null ? null : PackageModule.lintersFor(PackageStore(), Microsoft.FSharp.Core.FuncConvert.FromFunc((LinterPackage linter) => MakeLinter(linter)), path)?.Value)
+        ?? (directives.Linters is null ? null : LintRunner is null ? directives.Linters.Value : Script.linterOptions(MakeLinter(LintRunner), directives))
+        ?? (path is null ? null : LintRunner is null ? PackageModule.builtInLintersFor(path)?.Value : PackageModule.lintersFor(PackageStore(), MakeLinter(LintRunner), path)?.Value)
         ?? NyxCompiler.Linters.none;
 
-    /// <summary>The linter a linter package's lint build runs, made with <see cref="LintRunner"/>, or why it can't be.</summary>
-    private Microsoft.FSharp.Core.FSharpResult<Linter, string> MakeLinter(LinterPackage linter) =>
-        LintRunner is null
-            ? Microsoft.FSharp.Core.FSharpResult<Linter, string>.NewError("the language server was started without a way to run linter packages: start it with `nanyx lsp`")
-            : LintBuilds.make(PackageStore(), LintRunner, linter);
+    /// <summary>Makes the linter a linter package's lint build runs with <paramref name="runner"/>, or why it can't be.</summary>
+    private Microsoft.FSharp.Core.FSharpFunc<LinterPackage, Microsoft.FSharp.Core.FSharpResult<Linter, string>> MakeLinter(LintRunner runner) =>
+        Microsoft.FSharp.Core.FuncConvert.FromFunc((LinterPackage linter) => LintBuilds.make(PackageStore(), runner, linter));
 }
 
 /// <summary>Where the inferred type of a top-level def that does not write its own is shown.</summary>

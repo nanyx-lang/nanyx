@@ -7,7 +7,7 @@ open Nanyx.Compiler.Tests.TestSupport
 /// The codes of the diagnostics of `source`, compiled with every linter on, each with the text it is reported at.
 let private reported (source: string) =
     let source = source.ReplaceLineEndings "\n"
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     result.Diagnostics
     |> List.map (fun diagnostic ->
         diagnostic.Code, diagnostic.Span |> Option.map (textAt source) |> Option.defaultValue "")
@@ -67,7 +67,7 @@ def main = { ->
   ()
 }
 """
-    let result = compileWithConsoleCoreUsing Linters.everyLinter (source.ReplaceLineEndings "\n")
+    let result = compileWithConsoleCoreUsing (everyLinter ()) (source.ReplaceLineEndings "\n")
     Assert.Empty(result.Diagnostics)
 
 [<Fact>]
@@ -80,7 +80,7 @@ let ``An allow that suppresses nothing is reported, and its fix removes it`` () 
 }
 """
     let source = source.ReplaceLineEndings "\n"
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     match result.Diagnostics with
     | [ diagnostic ] ->
         Assert.Equal("default/unusedAllows", diagnostic.Code)
@@ -114,7 +114,7 @@ let ``An allow of a rule there is not says so`` () =
         """@allow(default/noSuchRule, other/unusedBindings)
 export def total: () -> int = { -> 100 }
 """
-    let result = Compiler.compileWith Linters.everyLinter (source.ReplaceLineEndings "\n")
+    let result = Compiler.compileWith (everyLinter ()) (source.ReplaceLineEndings "\n")
     Assert.Equal<string list>(
         [ "The linter 'default' has no rule 'noSuchRule', so `@allow(default/noSuchRule)` suppresses nothing: remove it"
           "There is no linter 'other', so `@allow(other/unusedBindings)` suppresses nothing: remove it" ],

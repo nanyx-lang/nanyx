@@ -10,7 +10,7 @@ let private code = "default/unusedPrivateDefinitions"
 /// text it is reported at. The other rules' diagnostics are left out. The module must type-check, or no linter would
 /// run.
 let private reported (source: string) =
-    let result = Compiler.compileWith Linters.everyLinter source
+    let result = Compiler.compileWith (everyLinter ()) source
     Assert.True(result.TypeChecked && not (result.Diagnostics |> List.exists Diagnostics.isError), sprintf "%A" result.Diagnostics)
     result.Diagnostics
     |> List.filter (fun diagnostic -> diagnostic.Code = code)
@@ -22,7 +22,7 @@ let private reported (source: string) =
 /// `source` with the only fix of its only `unusedPrivateDefinitions` diagnostic applied, and the fix's title.
 let private fixed' (source: string) =
     let diagnostic =
-        Assert.Single((Compiler.compileWith Linters.everyLinter source).Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = code))
+        Assert.Single((Compiler.compileWith (everyLinter ()) source).Diagnostics |> List.filter (fun diagnostic -> diagnostic.Code = code))
     let fix = Assert.Single(diagnostic.Fixes)
     applyFix source fix, fix.Title
 
@@ -123,13 +123,13 @@ let ``The fix removes the definition's lines`` () =
 [<Fact>]
 let ``An unused context member has no fix`` () =
     let source = "module m\ncontext Scale = (factor: () -> int, offset: () -> int)\nexport def f: [Scale] int -> int = { n -> n * factor() }\n"
-    let diagnostic = (Compiler.compileWith Linters.everyLinter source).Diagnostics |> List.find (fun diagnostic -> diagnostic.Code = code)
+    let diagnostic = (Compiler.compileWith (everyLinter ()) source).Diagnostics |> List.find (fun diagnostic -> diagnostic.Code = code)
     Assert.Empty(diagnostic.Fixes)
 
 [<Fact>]
 let ``The rule can be turned off on its own`` () =
     let source = "module m\ndef scale = 2\n"
-    let result = Compiler.compileWith { Linters.everyLinter with Severities = Map.ofList [ code, None ] } source
+    let result = Compiler.compileWith { (everyLinter ()) with Severities = Map.ofList [ code, None ] } source
     Assert.Empty(result.Diagnostics)
 
 [<Fact>]
