@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import * as assert from "node:assert/strict";
 import * as path from "path";
-import { endedText, heldBackBy, isOn, liveArguments, packageDirectoryOf, rowsOf, targetOf, testsOn } from "../live";
+import { endedText, heldBackBy, isOn, liveArguments, packageDirectoryOf, rowsOf, showRow, targetOf, testsOn } from "../live";
 
 const printing = { entry: "statements" as const, contexts: ["Console"], offered: true };
 const fetching = { entry: "statements" as const, contexts: ["Console", "Http", "Env"], offered: false };
@@ -41,6 +41,24 @@ test("a live run writes its dbgs to a file and keeps its files in memory", () =>
   assert.deepEqual(liveArguments("/work/tool.nyx", "/tmp/hits.jsonl"), ["run", "--dbg-to", "/tmp/hits.jsonl", "--files-in-memory", "/work/tool.nyx"]);
 });
 
+test("a live run that shows every value asks nanyx run for them", () => {
+  assert.deepEqual(liveArguments("/work/tool.nyx", "/tmp/hits.jsonl", "every"), [
+    "run",
+    "--dbg-to",
+    "/tmp/hits.jsonl",
+    "--show-values",
+    "--files-in-memory",
+    "/work/tool.nyx"
+  ]);
+});
+
+test("the sidebar says what a live run shows, which its row switches", () => {
+  const target = targetOf("/work/tool.nyx", undefined);
+  assert.equal(rowsOf(target, printing, true)[1].label, "Shows dbg values");
+  assert.deepEqual(rowsOf(target, printing, true, undefined, false, "every")[1], showRow("every"));
+  assert.equal(showRow("every").label, "Shows every value");
+});
+
 test("the contexts beyond Console, Async and FileSystem hold it back", () => {
   assert.deepEqual(heldBackBy(fetching), ["Http", "Env"]);
   assert.deepEqual(heldBackBy({ entry: "statements", contexts: ["Async", "FileSystem"], offered: true }), []);
@@ -49,7 +67,7 @@ test("the contexts beyond Console, Async and FileSystem hold it back", () => {
 test("the sidebar says whether it is on, what the entry point needs, that files are in memory and input empty, and what holds it back", () => {
   const target = targetOf("/work/tool.nyx", undefined);
   const offered = rowsOf(target, printing, true).map((row) => row.label);
-  assert.deepEqual(offered, ["Live mode is on", "Needs", "Files are in memory", "Input is empty"]);
+  assert.deepEqual(offered, ["Live mode is on", "Shows dbg values", "Needs", "Files are in memory", "Input is empty"]);
   const held = rowsOf(target, fetching, false);
   assert.equal(held[0].label, "Live mode is off");
   assert.deepEqual(held[held.length - 1], {

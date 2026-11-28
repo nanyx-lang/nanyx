@@ -46,7 +46,7 @@ public static partial class BrowserCompiler
     /// memory, and what its <c>dbg</c>s print given to the page, apart from what it writes.
     /// </summary>
     private static readonly CodeGen.WasmOptions Options =
-        new(checkMemory: false, @inline: true, release: false, sourceRoot: FSharpOption<string>.None, places: false, probes: false, crashToRuntime: false, dbgToEmbedder: true, exportStart: true, component: null, componentExports: Microsoft.FSharp.Collections.FSharpList<System.Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false);
+        new(checkMemory: false, @inline: true, release: false, sourceRoot: FSharpOption<string>.None, places: false, probes: false, crashToRuntime: false, dbgToEmbedder: true, exportStart: true, component: null, componentExports: Microsoft.FSharp.Collections.FSharpList<System.Tuple<string, ComponentFunction>>.Empty, yieldAtEveryWait: false, frameDrops: false, showValuesIn: Microsoft.FSharp.Collections.FSharpList<string>.Empty);
 
     /// <summary>
     /// Compiles <paramref name="source"/> as <c>nanyx build</c> compiles a script, but under the playground host,

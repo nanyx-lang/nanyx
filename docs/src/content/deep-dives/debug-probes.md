@@ -66,6 +66,20 @@ from ([Hosts](../advanced/hosts#where-dbg-prints)). A module compiled with `Wasm
 `nanyx:debug` `dbg` in the same way but none of the probes' imports, for an embedder that only wants `dbg`, such as a
 page.
 
+`nanyx run --show-values` builds a program that writes every value its own code binds or gives as if it were a `dbg`
+(`WasmOptions.ShowValuesIn`, the files whose code it shows). Before it is lowered, `ShownValues.wrap` puts a call of
+`__show`, a name no code can write, around each such value: a local `def`'s that isn't a function, at the `def`; a
+top-level one's, at its value, since a top-level item comes back from the type checker without a span of its own; each
+statement whose value isn't `()`, a block's last among them; and a lambda's body that isn't a block. It leaves out a
+written `dbg`, whatever the compiler made up, a node with no file and a definition whose name starts `__`, such as a
+derived instance's, written at the code that needed it, and the script's own entry point, `__script`, is the one such
+definition it goes into. `__show` is lowered as `dbg` is, but calls `nanyx:debug` `value` in place of `dbg`, with the
+same arguments, and its printer, `ShowingAny`, writes a value as `dbg`'s does only where `CoreIrLowerDbg.printable`
+says it can, and otherwise by its type, `<value of MArray(int)>`, so that showing a value never makes a program fail
+to compile. A sequence is always written by its type, `<sequence of int>`, and never pulled. The runtime's `value` is
+`Probing.defineDbg`'s handler too, with the hit marked `Shown`, and the channel `--dbg-to` writes says so in each line's
+`kind`. A program built without it is unchanged: it imports `value` only when it shows a value.
+
 # What it costs
 
 Without a listener, a probe is a read of a local and a branch. Against the same program built without probes, with the

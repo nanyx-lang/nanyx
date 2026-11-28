@@ -28,7 +28,7 @@ and private storesBeforeValueOf callStores found (expr: Expression) =
     | BinaryOp(_, _, left, right) -> storesBeforeValue left || storesBeforeValue right
     // `dbg` holds its value in a local while it prints it, a `for` loop stores its elements, and a `while` loop's
     // condition and body run again each time round.
-    | FunctionCall(name, _, _) when name = DbgSyntax.builtIn || name = ForSyntax.builtIn -> true
+    | FunctionCall(name, _, _) when name = DbgSyntax.builtIn || name = DbgSyntax.shown || name = ForSyntax.builtIn -> true
     // A collection literal's array is held in a local while its items are written into it.
     | FunctionCall(name, _, [ _ ]) when name = CollectionSyntax.arrayOf -> true
     | WhileSyntax.Call _ -> true

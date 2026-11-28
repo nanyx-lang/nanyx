@@ -109,7 +109,11 @@ type WasmOptions =
       /// `TaskLowering.Names.frameDrop`, which frees a stopped frame and every frame it stopped in, with what each keeps,
       /// without resuming them (#2426).
       /// Nothing in the language drops a frame yet, so a program has none; a test turns it on.
-      FrameDrops: bool }
+      FrameDrops: bool
+      /// The files, full paths, whose values a debug build shows as it runs, each where it is bound or given, as a `dbg`
+      /// of it would be (see `ShownValues`): what `nanyx run --show-values` gives, the program's own files. None for any
+      /// other build, which has nothing of it.
+      ShowValuesIn: string list }
 
     static member Default =
         { CheckMemory = false
@@ -124,7 +128,8 @@ type WasmOptions =
           Component = None
           ComponentExports = []
           YieldAtEveryWait = false
-          FrameDrops = false }
+          FrameDrops = false
+          ShowValuesIn = [] }
 
 /// What a module the runtime runs reports a crash through (see `WasmOptions.CrashToRuntime`): the runtime's `nanyx:crash`
 /// `report`, given the address and the length of the message's bytes, which `Helpers.crashed` calls before it traps; and
@@ -535,6 +540,8 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
     let checkedTypes = typed.ExprTypes
     let allExprTypes = typed.InlinedExprTypes |> Map.fold (fun acc id ty -> acc |> Map.add id ty) checkedTypes
     let externs, module' = foreignFunctions typed
+    // The values the program's own code binds and gives, each made a `dbg` of it, when it shows them.
+    let module', allExprTypes = ShownValues.wrap (Set.ofList options.ShowValuesIn) allExprTypes module'
     // The definitions synthesized instances are made of are passed as function values.
     let synthesizedMembers =
         contextInstances
@@ -1318,7 +1325,9 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               $"""  (import "{CoreIrEmitImports.probeModule}" "probe" (func ${CoreIrEmitImports.probeCall} (param i32) (result i32)))"""
               $"""  (import "{CoreIrEmitImports.probeModule}" "local" (func ${CoreIrEmitImports.probeLocal} (param i32 i32)))"""
           if facts.UsesDbgHelpers && (options.Probes || options.DbgToEmbedder) then
-              $"""  (import "{CoreIrEmitImports.probeModule}" "dbg" (func ${CoreIrEmitImports.dbgImport} (param i32 i32 i32 i32) (result i32)))""" ]
+              $"""  (import "{CoreIrEmitImports.probeModule}" "dbg" (func ${CoreIrEmitImports.dbgImport} (param i32 i32 i32 i32) (result i32)))"""
+          if facts.UsesShownValues && (options.Probes || options.DbgToEmbedder) then
+              $"""  (import "{CoreIrEmitImports.probeModule}" "value" (func ${CoreIrEmitImports.valueImport} (param i32 i32 i32 i32) (result i32)))""" ]
         |> String.concat "\n"
     let probeGlobal = if facts.UsesProbes then $"  (global ${CoreIrEmitImports.probing} (mut i32) (i32.const 0))" else ""
 

@@ -15,9 +15,10 @@ open Transpiler.Wasm.WasmRuntime
 open Transpiler.Wasm.CoreIr
 open Transpiler.Wasm.CoreIrLowerTypes
 
-/// Where a `dbg` at `span` is written, in a debug build that names files from `root` (see `DbgBuild`).
-let site (root: string option) (span: Parser.Program.SourceSpan) : DbgSite =
-    { File = PackageModules.shownFile root span.File; Line = span.StartLine + 1; Column = span.StartColumn + 1 }
+/// Where a `dbg` at `span` is written, in a debug build that names files from `root` (see `DbgBuild`); with `shown`,
+/// a value `--show-values` shows there (see `ShownValues`).
+let site (shown: bool) (root: string option) (span: Parser.Program.SourceSpan) : DbgSite =
+    { File = PackageModules.shownFile root span.File; Line = span.StartLine + 1; Column = span.StartColumn + 1; Shown = shown }
 
 /// A function that writes values as text.
 type Printer =
@@ -26,6 +27,9 @@ type Printer =
     /// Writes the elements of a list after its first, each after `, `, onto the text written so far, which it takes
     /// second. Each element is of the type; with `entries`, each is a map's entry, a tuple written `key => value`.
     | ShowingRest of Ty * entries: bool
+    /// Writes a value `--show-values` shows (see `ShownValues`): as `Showing` does where `printable` says it can, and
+    /// otherwise by its type alone (see `unprintableText`).
+    | ShowingAny of Ty
 
 /// What a printer needs from the lowering of the function around the `dbg` (see `CoreIrLower.FunctionLowering`).
 type PrinterTools =
@@ -60,7 +64,14 @@ let rec private tagsOf (ty: Ty) : (string * Ty option) list =
     | _ -> []
 
 /// Whether a printer can write a value of `ty` (see `printerFunction`), whose type `toIrType` gives: a debug build's
-/// probe writes only such locals (see `CoreIrProbes`).
+/// probe writes only such locals (see `CoreIrProbes`). A type variable a specialisation leaves, and any type the
+/// printer has no case for, it can't: asked for one, it fails the compile (`NYX0301`), which a `dbg` the program writes
+/// reports as it should.
+///
+/// The rule for a value `--show-values` shows, which the program didn't ask to print: it is written by `Showing` only
+/// where this says it can, and otherwise by its type alone (`unprintableText`), so that showing values never makes a
+/// program fail to compile. Whatever case is added to the printer, add it here, or a shown value of that type is written
+/// by its type alone; never make a shown value call the printer at a type this says no to.
 let printable (toIrType: Ty -> IrType) (ty: Ty) =
     // A type that holds itself is written by printers that call each other, so its parts are looked at only so deep.
     let rec writable (depth: int) (ty: Ty) =
@@ -121,10 +132,18 @@ let rec private mangle (ty: Ty) : string =
     | TyGroup _
     | TyParam _ -> internalError "a recursive alias's definition outside the alias"
 
+/// What a shown value the printer can't write is written as (see `printable`): a sequence as `<sequence of int>`, never
+/// pulled, and any other value as `<value of T>`.
+let unprintableText (ty: Ty) : string =
+    match ty with
+    | Seqs.SeqType element -> $"<sequence of {Unifier.tyToDisplayString Ascii element}>"
+    | _ -> $"<value of {Unifier.tyToDisplayString Ascii ty}>"
+
 /// The name a printer is asked for by, and its function's name.
 let key (printer: Printer) : string =
     match printer with
     | Showing ty -> $"__dbg_show_{mangle ty}"
+    | ShowingAny ty -> $"__dbg_any_{mangle ty}"
     | ShowingRest(ty, false) -> $"__dbg_rest_{mangle ty}"
     | ShowingRest(ty, true) -> $"__dbg_entries_{mangle ty}"
 
@@ -208,6 +227,14 @@ let printerFunction (tools: PrinterTools) (callee: string -> Ty -> string) (name
           Place = None }
 
     match printer with
+    // A sequence is written by its type, though the printer could write its fields: so that what a shown value says of
+    // it is plain, and its `next` is never called.
+    | ShowingAny ty ->
+        let value = tools.NewVar "__dbg_value" Param (tools.ToIrType ty)
+        match ty with
+        | Seqs.SeqType _ -> make [ value ] (Expr.make (Atom(AString (unprintableText ty))) IrString)
+        | _ when printable tools.ToIrType ty -> make [ value ] (Expr.make (Call(tools.PrinterOf (Showing ty), [ AVar value ])) IrString)
+        | _ -> make [ value ] (Expr.make (Atom(AString (unprintableText ty))) IrString)
     | ShowingRest(elementTy, entries) ->
         let elementIr = tools.ToIrType elementTy
         let list = tools.NewVar "__dbg_list" Param (IrList elementIr)
