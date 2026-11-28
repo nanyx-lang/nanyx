@@ -317,9 +317,11 @@ declares with `export module`, with their types. `nanyx pack` records it in the 
 manifest:
 
 - **Major:** an export removed or renamed, a def's type changed other than made more general, a new context it
-  requires, a field or a tag added to or removed from an exported type, a type's parameters changed, or a type made
-  protected or private.
-- **Minor:** a new export or module, a def's type made more general, or a context it no longer requires.
+  requires, a field or a tag added to or removed from an exported type, a type's parameters changed, a type made
+  protected or private, or a nominal type's parameter made stricter in what it takes, as one it only gave out made one
+  it also takes in ([Top and bottom types](./types#top-and-bottom-types)).
+- **Minor:** a new export or module, a def's type made more general, a context it no longer requires, or a nominal
+  type's parameter made looser in what it takes.
 - **Patch:** no change to the public API.
 
 Below `1.0.0`, a breaking change needs a minor bump, `0.3.1` to `0.4.0`, and any other a patch. A dependant that asks
