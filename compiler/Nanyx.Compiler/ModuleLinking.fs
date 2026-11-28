@@ -6,6 +6,15 @@ open NyxCompiler.ExpressionRewrites
 /// Linking a checked module into the modules that import it: what an import brings into scope, the items it inlines
 /// for the backend and the names they are inlined under.
 module internal ModuleLinking =
+    /// Whether `name` is a definition attached to a type (`Regex.toString`, `int.double`), one of `typeNames` or a
+    /// built-in one, which an instance finds by its type's name: not a block's (`outer.twice`).
+    let internal isAttachedName (typeNames: string -> bool) (name: string) =
+        match name.LastIndexOf '.' with
+        | -1 -> false
+        | index ->
+            let qualifier = name.Substring(0, index)
+            TypeResolution.isBuiltInTypeName qualifier || typeNames qualifier
+
     let internal importQualifier (item: ImportItem) =
         item.Alias |> Option.map IdentifierNames.sanitizeIdentifier
 
@@ -44,13 +53,13 @@ module internal ModuleLinking =
 
     /// The module's own top-level definitions, of `own`, that are named like one of the library's inlined into it
     /// (`library`), each with the name the backend knows it by: after the module, `moduleName`, as an importer names a
-    /// private definition of it (see `CheckedModule.OwnRenames`). A definition attached to a type, or one of a block,
-    /// whose name is dotted, keeps it, and wins over the library's of its name (see `Library`).
-    let internal ownRenames (moduleName: string) (library: Set<string>) (own: Module) : Map<string, string> =
+    /// private definition of it (see `CheckedModule.OwnRenames`). A definition attached to a type, one of `typeNames`,
+    /// keeps its name, and wins over the library's of its name (see `Library`).
+    let internal ownRenames (moduleName: string) (typeNames: string -> bool) (library: Set<string>) (own: Module) : Map<string, string> =
         let qualifier = IdentifierNames.sanitizeIdentifier moduleName
         own
         |> List.choose (function
-            | Kind (Def (ValueDef(_, name, _, _))) when library.Contains name && not (name.Contains '.') -> Some (name, $"{qualifier}.{name}")
+            | Kind (Def (ValueDef(_, name, _, _))) when library.Contains name && not (isAttachedName typeNames name) -> Some (name, $"{qualifier}.{name}")
             | _ -> None)
         |> Map.ofList
 
@@ -105,7 +114,8 @@ module internal ModuleLinking =
             let resolved (node: Expression) (name: string) =
                 let reference = state.References |> Map.tryFind node.Id
                 match state.BlockAliases |> Map.tryFind name, reference |> Option.bind (fun id -> state.Symbols |> Map.tryFind id) with
-                | Some qualified, Some symbol when symbol.Name = qualified -> qualified
+                // A block's re-export of a name another module defines (`export util (double)`) is no alias of its own.
+                | Some qualified, Some symbol when symbol.Name = qualified && qualified <> name -> qualified
                 | _ ->
                     match state.ImportedBlockNames |> Map.tryFind name with
                     | Some (symbol, inlined) when reference = Some symbol -> inlined
@@ -316,7 +326,9 @@ module internal ModuleLinking =
                 match qualifier, selected with
                 | Some q, _ -> Some (name, $"{q}.{name}")
                 | None, Some selected when not (selected.Contains name) -> Some (name, $"{moduleName}.{name}")
-                | None, _ when qualified && not (name.Contains '.') -> Some (name, $"{moduleName}.{name}")
+                // A block's definition is named after its file's module already (`lib.outer.twice`).
+                | None, _ when qualified && not (isAttachedName checkedModule.Typed.TypeDefs.ContainsKey name) && not (name.StartsWith $"{moduleName}.") ->
+                    Some (name, $"{moduleName}.{name}")
                 | None, _ -> None
             | Kind (Def (ValueDef(false, name, _, _))) -> Some (name, $"{moduleName}.{name}")
             | _ -> None)

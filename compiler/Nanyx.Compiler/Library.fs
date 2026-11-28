@@ -814,11 +814,11 @@ module Compiler =
                     match origin with
                     | StandardLibraryModule _ -> Map.empty
                     | SourceFile _
-                    | InMemory -> ModuleLinking.ownRenames moduleName libraryNames own
+                    | InMemory -> ModuleLinking.ownRenames moduleName state.TypeDefs.ContainsKey libraryNames own
                 let backendOwn = ModuleLinking.renameOwn state ownRenames own
                 // In a module of the standard library, its own definitions win over imported ones of the same name, a
-                // script's values that run in its entry point among them; anywhere else, only those whose names are dotted,
-                // attached to a type or of a block, which keep their names (see `ModuleLinking.ownRenames`).
+                // script's values that run in its entry point among them; anywhere else, only those attached to a type,
+                // which keep their names (see `ModuleLinking.ownRenames`).
                 let ownNames =
                     let written =
                         exported
@@ -826,7 +826,7 @@ module Compiler =
                     match origin with
                     | StandardLibraryModule _ -> written |> Set.union state.ScriptEntryValues
                     | SourceFile _
-                    | InMemory -> written |> Set.filter (fun name -> name.Contains '.')
+                    | InMemory -> written |> Set.filter (ModuleLinking.isAttachedName state.TypeDefs.ContainsKey)
                 let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =
                     merged.Inlined @ merged.PreludeInlined
