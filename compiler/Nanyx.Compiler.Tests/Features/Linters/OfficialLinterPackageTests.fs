@@ -56,3 +56,14 @@ let ``Where the package can't be run, the official linter's own rules run alone`
 let ``The official linter runs as its package, with the compiler's rules for those it doesn't implement yet`` () =
     let result = Compiler.compileWith { Linters = [ officialLinter.Value ]; Severities = Map.empty } "def unused = 1\n\nprintln(\"hi\")\n"
     Assert.Equal<string list>([ "default/unusedPrivateDefinitions" ], result.Diagnostics |> List.map _.Code)
+
+[<Fact>]
+let ``A shipped linter is made once a process, so a compile that asks for it again reads none of its files`` () =
+    officialLinter.Value |> ignore
+    let store = SeededPackages.user ()
+    let directives = Script.readFrom store "" "::linter nanyx.lint\n\nprintln(\"hi\")\n"
+    let linter = Assert.Single(directives.LinterPackages)
+    let runner = Transpiler.Wasm.LintBuild.runner Nanyx.Runtime.WasmLinter.load
+    let first = okOf (LintBuilds.make store runner linter |> Result.mapError List.singleton)
+    let again = okOf (LintBuilds.make store runner linter |> Result.mapError List.singleton)
+    Assert.Same(first, again)
