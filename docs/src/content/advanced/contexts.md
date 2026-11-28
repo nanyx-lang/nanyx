@@ -844,6 +844,8 @@ A record's fields are written in alphabetical order. A string is written without
 
 `println` and the other printing functions require `ToString` of what they print, so `println(Point(x = 1, y = 2))` prints `(1, 2)` without a hole.
 
+A structure has no `toString` attached, but a pipe to `toString` from one writes it as a hole would: `[1, 2] \toString` is `"[1, 2]"`. The pipe calls the prelude's `__toStringOf`, which requires `ToString`, wherever the value's type attaches no `toString` and nothing in scope is named `toString`. A pipe to `tryFormat` does the same through [`Format`](../stdlib/prelude-format), for a unit quantity.
+
 A [private type](./nominal-and-protected-types#private-opaque-types) such as `UserId` can be written only if its module exports a `UserId.toString`. Outside its module the type has no shape to write, so the module chooses how its values are shown, as it chooses everything else that can be done with them.
 
 A value whose type has no `ToString`, such as a function, a private type without a `toString`, or a structure that holds one, is an error at its hole, or at the call to a function that requires `ToString` of it, such as `println`. So is a union open to tags a caller chooses, `#x(a) | r` in a function's type, since those tags may be any: name every tag in the type, or match on the tags it names.

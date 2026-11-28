@@ -631,6 +631,20 @@ module RangeSyntax =
         | FunctionCall(name, _, [ first ]) when name = builtIn -> Some (first, None)
         | _ -> None
 
+/// `x \toString` and `x \tryFormat(spec)` on a value whose type attaches no such function, as a list, a record, a tag or
+/// a unit quantity does not: the pipe calls the prelude's wrapper of the context's member, which requires the context, so
+/// the call finds its instance as any call that requires `ToString` or `Format` does (see the compiler's `inferPipe`).
+module PipedMemberSyntax =
+    let toString = "__toStringOf"
+    let tryFormat = "__tryFormatOf"
+
+    /// The wrapper a pipe to the member `name` calls, if `name` is a member with one.
+    let wrapperOf (name: string) =
+        match name with
+        | "toString" -> Some toString
+        | "tryFormat" -> Some tryFormat
+        | _ -> None
+
 /// `"{x:.2f}"` (see the strings page): a hole with a format spec is a call to the prelude's "__format" with the hole's
 /// value and the spec, without its `:`, as a string literal written where the spec is. `__format` writes the value by
 /// the spec as `format` does, and no def of the program's own hides it.

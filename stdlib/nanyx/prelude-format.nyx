@@ -62,6 +62,14 @@ export type BadFormat = (
   quantity, whose units it knows.
 export context Format(a) = (tryFormat: (a, string) -> #some(string) | #badFormat(BadFormat))
 
+--| What `x \tryFormat(spec)` calls where `x`'s type attaches no `tryFormat`, as a unit quantity
+  does not: its [`Format`]'s `tryFormat`, so `1500ms \tryFormat(".1f s")` is `#some("1.5s")`.
+export def __tryFormatOf
+  : [Format(a)] a, string -> #some(string) | #badFormat(BadFormat)
+  = { value, spec ->
+    tryFormat(value, spec)
+  }
+
 --| `value` written by `spec` (see [`Format`]): `format(1234.5, ",.1f")` is `"1,234.5"`, and
   `format(255, "#x")` is `"0xff"`. A spec the value's type doesn't take stops the program, with a
   message that names the spec, the type and where the spec goes wrong. The type's `tryFormat`, as
