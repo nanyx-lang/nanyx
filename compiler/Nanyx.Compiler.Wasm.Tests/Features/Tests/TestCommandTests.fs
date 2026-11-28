@@ -148,7 +148,7 @@ let ``nanyx test shows a failed assert's place as its stack does, from the packa
     // Not by the file's full path, which would show the machine's directories (#2969).
     let outcome = testing [] [ "src/geometry.nyx", geometry ]
     let output = outcome.StandardOutput.ReplaceLineEndings "\n"
-    Assert.Contains("\n  src/geometry.nyx:13:3: assert(double(3) == 5)\n    double(3) = 6\n    geometry_halves (src/geometry.nyx:13)\n", output)
+    Assert.Contains("\n  src/geometry.nyx:13:3: assert(double(3) == 5)\n    double(3) = 6\n    halves (src/geometry.nyx:13)\n", output)
 
 /// What `nanyx test` printed for the application `app` under the host `hostEntry` names, whose files, in `src`, are
 /// `files`.
