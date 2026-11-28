@@ -24,7 +24,9 @@ open Transpiler.Wasm.WatSyntax
 /// its number: the number, its kind (see `probeKindCode`), for an entry the function's name (else 0), and its place. And each
 /// function with a definition marker (`;;@def main.nyx:3`), in order: its name, as the name section gives it, and the
 /// frame of its definition, which has no function's name. And the files of the standard library's, each by its name's
-/// number (see `WatSyntax.Library`), so that a crash's report can name the program's code that called it. A function's
+/// number (see `WatSyntax.Library`), so that a crash's report can name the program's code that called it. And each
+/// function whose name a stack shows as it is written (see `WatSyntax.Named`): its name, as the name section gives it,
+/// and the name it is written by, each by its number. A function's
 /// code starts a stretch of place 0, none, so
 /// that the code before its first marker has none. Each number is an unsigned LEB128. The runtime reads it to name the
 /// file and line of each frame of a trap, and of each function in a profile (see `Nanyx.Runtime.SpanTable`).
@@ -348,6 +350,8 @@ type private Assembler(fields: SExpr list) =
     let mutable start: int option = None
     // The files of the standard library's (see `WatSyntax.Library`).
     let libraryFiles = ResizeArray<string>()
+    // The names functions are written by (see `WatSyntax.Named`).
+    let writtenNames = ResizeArray<string * string>()
     // The names of the functions, by index, for the name section.
     let functionNamesByIndex = SortedDictionary<int, string>()
     let mutable importedFunctions = 0
@@ -407,12 +411,13 @@ type private Assembler(fields: SExpr list) =
             | _ -> false
         for field in fields |> List.filter isImport do
             this.Import field
-        let isLibrary (field: SExpr) = match field with Library _ -> true | _ -> false
+        let isLibrary (field: SExpr) = match field with Library _ | Named _ -> true | _ -> false
         for field in fields |> List.filter (fun field -> not (isImport field) && not (isLibrary field)) do
             this.Define field
         for field in fields do
             match field with
             | Library file -> libraryFiles.Add file
+            | Named(functionName, written) -> writtenNames.Add((functionName, written))
             | _ -> ()
         for field in fields do
             match field with
@@ -560,6 +565,7 @@ type private Assembler(fields: SExpr list) =
     member _.Imports = imports
     member _.Functions = functions
     member _.LibraryFiles = libraryFiles
+    member _.WrittenNames = writtenNames
     member _.Globals = globals
     member _.Memories = memories
     member _.Tables = tables
@@ -708,6 +714,7 @@ type private CodeWriter
                 // A function's definition is read by `assemble`.
                 | Defined _ :: rest -> rest
                 | Library _ :: _ -> fail "a standard library's file among instructions"
+                | Named _ :: _ -> fail "a function's written name among instructions"
                 | Text _ :: _ -> fail "a string among instructions"
                 | [] -> []
 
@@ -966,6 +973,8 @@ let assemble (wat: string) : byte array =
                 |> List.ofSeq
             // Each function's name and the frame of its definition.
             let defined = definitions |> Seq.map (fun (functionName, file, line) -> stringNumber functionName, frameNumber [ None, file, line, 0 ]) |> List.ofSeq
+            // Each function's name and the name it is written by.
+            let named = assembler.WrittenNames |> Seq.map (fun (functionName, written) -> stringNumber functionName, stringNumber written) |> List.ofSeq
             // The strings and frames are all numbered by now.
             let table = Bytes()
 
@@ -989,6 +998,9 @@ let assemble (wat: string) : byte array =
             // The files of the standard library's that frames name.
             let library = assembler.LibraryFiles |> Seq.choose (fun file -> match strings.TryGetValue file with | true, number -> Some number | _ -> None) |> List.ofSeq
             vector table library (fun out number -> unsigned out (uint64 number))
+            vector table named (fun out (functionName, written) ->
+                unsigned out (uint64 functionName)
+                unsigned out (uint64 written))
             section out 0uy table
         out.ToArray()
 

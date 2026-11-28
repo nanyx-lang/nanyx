@@ -85,7 +85,10 @@ type SpanTable =
           Probes: Collections.Generic.Dictionary<int, Probe>
           Definitions: Collections.Generic.Dictionary<string, string * int>
           /// The files of the standard library's, as the frames name them.
-          Library: Set<string> }
+          Library: Set<string>
+          /// The name each function is written by in the source, by its name in the module's name section, where they
+          /// differ: `perimeter` for `shapes_perimeter`, `list.fold` for `list_fold__int`.
+          Written: Map<string, string> }
 
 module SpanTable =
     /// The name of the custom section that holds the table.
@@ -180,8 +183,43 @@ module SpanTable =
                         | [] -> ()
                 let library =
                     if at < finish then Set.ofList [ for _ in 1 .. number () -> strings.[number () - 1] ] else Set.empty
-                { Starts = entries |> Array.map fst; Places = entries |> Array.map snd; Probes = probes; Definitions = definitions; Library = library })
+                let written =
+                    if at < finish then Map.ofList [ for _ in 1 .. number () -> let functionName = strings.[number () - 1] in functionName, strings.[number () - 1] ]
+                    else Map.empty
+                // A probe's entry names its function as it is written, as a stack does.
+                let entryNamed (probe: Probe) =
+                    match probe.Kind with
+                    | Entry functionName when written.ContainsKey functionName -> { probe with Kind = Entry written.[functionName] }
+                    | _ -> probe
+                for id in List.ofSeq probes.Keys do
+                    probes.[id] <- entryNamed probes.[id]
+                { Starts = entries |> Array.map fst; Places = entries |> Array.map snd; Probes = probes; Definitions = definitions; Library = library; Written = written })
         with :? IndexOutOfRangeException -> None
+
+    /// The name the function the module's name section calls `functionName` is written by in the source, if the table
+    /// has it: it has none for one whose name is its name in the source, or one the compiler made up.
+    let writtenName (table: SpanTable) (functionName: string) = table.Written |> Map.tryFind functionName
+
+    /// `named`, the name a function's name gives (see `FunctionNames`), of the function the module's name section calls
+    /// `functionName`, as the source writes it, where `table` says: by the function's name, or by `named`, which a
+    /// function made from a definition, as a closure's entry (`__fn_main_ignore`), shares with it.
+    let private written (table: SpanTable option) (functionName: string) (named: string option) =
+        match table with
+        | None -> named
+        | Some table ->
+            match table.Written |> Map.tryFind functionName with
+            | Some found -> Some found
+            | None -> named |> Option.map (fun name -> table.Written |> Map.tryFind name |> Option.defaultValue name)
+
+    /// The name a stack shows for the function the module's name section calls `functionName`: as it is written in the
+    /// source, if the table says (see `Written`), else as `FunctionNames.shown` gives it; none for one a stack leaves out.
+    let shownName (table: SpanTable option) (functionName: string) =
+        written table functionName (FunctionNames.shown functionName)
+
+    /// The name the source gives the function the module's name section calls `functionName`, as `FunctionNames.source`
+    /// does, but as it is written where the table says.
+    let sourceName (table: SpanTable option) (functionName: string) =
+        written table functionName (FunctionNames.source functionName)
 
     /// Whether `file`, as a frame names it, is a file of the standard library's.
     let isLibrary (table: SpanTable) (file: string) = table.Library.Contains file

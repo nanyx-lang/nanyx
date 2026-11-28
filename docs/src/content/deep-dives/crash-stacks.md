@@ -16,7 +16,11 @@ crash: too big: 5
   <top level> (main.nyx:15)
 ```
 
-Each frame is a function, by the name its source gives it, with the file and line of the code it had reached. A lambda
+Each frame is a function, by the name its source gives it, with the file and line of the code it had reached: the name
+a call to it in its own module writes, `perimeter` for an export of a module the program imports, `helper` for a
+private definition of one, `list.map` for a definition attached to a type, a block's definition by its name in the
+block, and a module's own definition by its own name, though the backend names one that shadows a library definition
+after its module ([#3223](https://github.com/nanyx-lang/nanyx/issues/3223)). A lambda
 is `<lambda>` and a script's top-level code `<top level>`; the functions the compiler makes, such as the runtime helpers
 and the start function that runs the host, are left out. Files are named by their path in their package, or for a
 script by its name, as [`dbg`](../stdlib/console#dbg) names them. Debug and release builds both keep what the stack
@@ -57,7 +61,14 @@ and the frame of the call it was inlined at, so that inlined code shares its out
 far after the last it starts, the probes of a build with them (see [Debug probes](./debug-probes)), and each function's
 definition, by its name: the frame of the marker `;;@def main.nyx:3` that starts its body, which has no column and a
 profile gives the function (see [Profiling](./command-line#profiling)). The function names the frames fall back on are
-in the name section. A frame is kept once for each place, so two places on one line at different columns are two frames:
+in the name section. The backend names a function after its module where two could share a name (`shapes_perimeter`,
+see [Compilation](./compilation)), so the table names it as it is written, too: the code generator writes a
+`;;@name shapes_perimeter perimeter` marker among the module's fields for each function of a definition whose written
+name (`TypedModule.WrittenNames`, which linking records as it renames an import's definitions) differs from its name in
+the module, those inlining leaves out among them (`CoreIrEmit.nameMarker`), and `WasmBinary` writes each pair of
+names' numbers after the library's files. The runtime names a frame by it (`SpanTable.shownName`), or by the function
+whose name the frame's is made from, as a closure's entry `__fn_main_ignore` is from `main_ignore`; so does a debug
+probe's entry, and a profile's function. A frame is kept once for each place, so two places on one line at different columns are two frames:
 the columns made the table about 38% larger across the examples, and their modules about 7% larger
 ([#2950](https://github.com/nanyx-lang/nanyx/issues/2950)). A stack prints each frame's file and line; a crash's report
 names the column too.

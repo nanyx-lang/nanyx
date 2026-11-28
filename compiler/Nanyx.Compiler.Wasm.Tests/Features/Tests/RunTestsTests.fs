@@ -61,5 +61,5 @@ let ``A deferred error in a def of the test's own module keeps the def's frame, 
     | Failed(Crashed(Some message, place, stack)) ->
         Assert.StartsWith("src/checks.nyx:5:43: error NYX0201", message)
         Assert.Equal(Some("src/checks.nyx", 5, 43), place)
-        Assert.Equal<string list>([ "perimeter (src/checks.nyx:5)"; "checks_perimeters (src/checks.nyx:9)" ], stack |> List.map string)
+        Assert.Equal<string list>([ "perimeter (src/checks.nyx:5)"; "perimeters (src/checks.nyx:9)" ], stack |> List.map string)
     | other -> Assert.Fail $"%A{other}"

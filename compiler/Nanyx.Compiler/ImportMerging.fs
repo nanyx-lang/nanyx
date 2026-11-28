@@ -48,7 +48,10 @@ module internal ImportMerging =
           /// The module's re-exports as each is merged, with the module it re-exports from.
           ReExports: ReExported list
           /// The modules merged, by `originKey`.
-          Merged: Set<string> }
+          Merged: Set<string>
+          /// The names the definitions inlined are written by, by the names they are inlined under (see
+          /// `TypedModule.WrittenNames`).
+          WrittenNames: Map<string, string> }
 
     /// The modules each host's prelude re-exports from, by the prelude's file, as `originKey`s.
     let private preludeSources = System.Collections.Concurrent.ConcurrentDictionary<string, Set<string>>()
@@ -383,6 +386,7 @@ module internal ImportMerging =
                 merged.CarriedAmbientMembers @ ModuleLinking.ambientMembersForImport qualifies item imported (carried |> List.map fst |> Set.ofList)
             ComponentExports = merged.ComponentExports @ ModuleLinking.componentExportsForImport qualifies item imported
             Tests = merged.Tests @ ModuleLinking.testsForImport qualifies item imported
+            WrittenNames = ModuleLinking.writtenNamesForImport qualifies item imported |> Map.fold (fun acc name written -> acc |> Map.add name written) merged.WrittenNames
             UnqualifiedSources = unqualifiedSources
             ImportedFiles = importedFiles
             Merged = merged.Merged.Add importedKey },
