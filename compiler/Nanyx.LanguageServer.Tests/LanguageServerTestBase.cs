@@ -49,8 +49,16 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
     /// test's timeout, so whichever test compiled first timed out. The process keeps what it checked, so it is done
     /// once, before any test's timeout starts.
     /// </summary>
+    /// <summary>
+    /// The standard library checked, and the official linter's lint build built, once, before any test's timeout starts:
+    /// a cold lint build takes minutes (#3260).
+    /// </summary>
     private static readonly Lazy<Task> StandardLibraryChecked =
-        new(() => Task.Run(() => NyxCompiler.Compiler.compile("def warmUp = 1")));
+        new(() => Task.Run(() =>
+        {
+            NyxCompiler.Compiler.compile("def warmUp = 1");
+            TestSettings.LinterOptionsFor(null, Script.readFrom(TestSettings.PackageStore(), "", "::linter nanyx.lint\n"));
+        }));
 
     /// <summary>Cancels the test's requests; its timeout starts when the server does (see <see cref="StartAsync"/>).</summary>
     protected readonly CancellationTokenSource _cancellation = new();
@@ -68,9 +76,14 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
 
     /// <summary>
     /// The settings the tests start the server with: the defaults, without formatting hints, so that a test's diagnostics
-    /// are the compiler's alone however its code is laid out. <c>FormattingHintTests</c> turns them on.
+    /// are the compiler's alone however its code is laid out (<c>FormattingHintTests</c> turns them on), and with the
+    /// way <c>nanyx lsp</c> runs linter packages, so the official linter runs as its package, <c>nanyx.lint</c>.
     /// </summary>
-    protected static readonly ServerSettings TestSettings = ServerSettings.Default with { FormattingHints = false };
+    protected static readonly ServerSettings TestSettings = ServerSettings.Default with
+    {
+        FormattingHints = false,
+        LintRunner = Transpiler.Wasm.LintBuild.runner(Microsoft.FSharp.Core.FuncConvert.FromFunc((byte[] wasm) => Nanyx.Runtime.WasmLinter.load(wasm)))
+    };
 
     public Task InitializeAsync() => StartAsync(TestSettings);
 

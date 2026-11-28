@@ -113,6 +113,9 @@ context Analysis = (
   coveringArms: NodeId, int -> list(int)
   redundantTypeName: NodeId -> bool
   docComments: () -> list(DocComment)
+  isContext: string -> bool
+  contextOfMember: NodeId -> #some(string) | #none
+  instanceDefinitions: () -> list(string)
 )
 ```
 
@@ -128,7 +131,9 @@ What type checking found out about the module a linter checks, asked by node or 
   imports, each with where it is declared.
 - `typeOfSymbol`: The type of a declaration.
 - `contextsOf`: The contexts a top-level def requires, written or inferred.
-- `referencesTo`: The nodes in the module that refer to a symbol.
+- `referencesTo`: The nodes in the module that refer to a symbol: for an import, the names that came in
+  through it. A call the compiler made for a node, rather than one written, refers to what the
+  node is written to refer to.
 - `lowered`: The nodes desugaring made for a node as written, such as a workflow bind's call, whose types
   `typeOf` has too.
 - `describe`: A type written as the compiler's messages and hover write it.
@@ -138,5 +143,11 @@ What type checking found out about the module a linter checks, asked by node or 
 - `redundantTypeName`: Whether a pipe's target is written with a type's name that the name without it reaches as
   well, as in `xs \list.map` where `xs` is a list.
 - `docComments`: The module's doc comments, each with what it documents.
+- `isContext`: Whether the module can name a context by this name: one it declares or imports, not a
+  type or a context variable.
+- `contextOfMember`: The name of the context whose member a name, call or operator refers to, if it refers to a
+  member of one the module can name, as `x + y` does to `Add`'s.
+- `instanceDefinitions`: The names of the module's defs that an instance built from a type's attached definitions
+  picks up somewhere in it, which nothing names but are used.
 
 <!-- End of the generated reference. -->

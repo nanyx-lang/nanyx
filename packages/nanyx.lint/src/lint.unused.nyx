@@ -1,0 +1,472 @@
+--| The rules about what is never used: `unusedBindings`, `unusedImports`,
+  `unusedPrivateDefinitions` and `unusedContexts`.
+module lint.unused
+
+import (
+  lint.edits as (backOverSpaces, removal, spanBetween)
+  lint.tree as (blocksWithin, contains, exprsWithin, itemExprs, moduleExprs, sameSpan, writtenSpans)
+  nanyx.analysis/analysis as (Analysis, Fix, Report, Symbol, TextEdit, Ty)
+  nanyx.analysis/syntax as (Expr, Import, Module, Span, TopLevelItem, TypeExpr)
+)
+
+--| A report of the rule `rule` about the symbol `symbol`, at `span`.
+def report
+  : string, Symbol, Span, string, list(Fix) -> Report
+  = { rule, symbol, span, message, fixes ->
+    (
+      rule = rule
+      span = span
+      message = message
+      subject = #some(symbol.name)
+      related = []
+      fixes = fixes
+    )
+  }
+
+--| Whether nothing in the module refers to a symbol.
+def unreferenced: [Analysis] Symbol -> bool = { symbol ->
+  list.isEmpty(referencesTo(symbol.id))
+}
+
+--| Whether a name says it is unused on purpose.
+def unusedOnPurpose: string -> bool = { name ->
+  string.startsWith(name, "_")
+}
+
+--| `unusedBindings`: a local def, a lambda's argument or a variable a pattern binds that nothing
+  refers to. Top-level defs are `unusedPrivateDefinitions`', and names starting with `_`, which say
+  they are unused on purpose, are left alone. A def is removed, unless it is one of the defs a
+  destructuring def stands for (they share its span), where removing it would remove the others
+  too: those, and any other name, become `_`.
+export def unusedBindings: [Analysis] Module -> list(Report) = { m ->
+  def text = source()
+
+  def defs =
+    list.filter(
+      list.flatten(list.flatMap(list.flatMap(m, itemExprs), blocksWithin))
+      { statement ->
+        match statement.kind
+          | #def(_) -> true
+          | _ -> false
+      }
+    )
+
+  def fixFor: Symbol, Span -> Fix = { symbol, at ->
+    def rename = (title = "Rename `{symbol.name}` to `_`", edits = [(span = at, newText = "_")])
+
+    match (symbol.kind, list.find(defs, { statement -> contains(statement.span, at) }))
+      | (#local, #some(found)) ->
+        if list.count(defs, { other -> sameSpan(other.span, found.span) }) == 1 then
+          (title = "Remove `{symbol.name}`", edits = [removal(text, found.span)])
+        else
+          rename
+      | _ -> rename
+  }
+
+  def messageFor = {
+    | #parameter -> "The parameter is never used"
+    | #patternVariable -> "A pattern introduces it, but it is never used"
+    | _ -> "It is never used"
+  }
+
+  def isBinding = {
+    | #local -> true
+    | #parameter -> true
+    | #patternVariable -> true
+    | _ -> false
+  }
+
+  list.filterMap(
+    symbols()
+    { symbol ->
+      match symbol.declaration
+        | #some(at) ->
+          if isBinding(symbol.kind) and not unusedOnPurpose(symbol.name) and unreferenced(symbol) then
+            #some(
+              report("unusedBindings", symbol, at, messageFor(symbol.kind), [fixFor(symbol, at)])
+            )
+          else
+            #skip
+        | #none -> #skip
+    }
+  )
+}
+
+--| Each import statement of the module, a `module name =` block's among them, with its imports.
+def importsOf: list(TopLevelItem) -> list((TopLevelItem, list(Import))) = { items ->
+  list.flatMap(
+    items
+    { item ->
+      match item.kind
+        | #import(imports) -> [(item, imports)]
+        | #moduleBlock(b) -> importsOf(b.items)
+        | _ -> []
+    }
+  )
+}
+
+--| `unusedImports`: an import nothing in the module uses. Its fix removes the whole statement when
+  it is the statement's only import, and otherwise the import, with its line when it has one to
+  itself, or with the space before it.
+export def unusedImports: [Analysis] Module -> list(Report) = { m ->
+  def text = source()
+  def statements = importsOf(m)
+
+  def removing: TopLevelItem, list(Import), Import -> TextEdit = { statement, siblings, imported ->
+    if list.length(siblings) == 1 then
+      removal(text, statement.span)
+    else
+      def edit = removal(text, imported.span)
+
+      if not sameSpan(edit.span, imported.span) then
+        edit
+      else
+        def start = backOverSpaces(text, imported.span.start)
+
+        (
+          span = imported.span with (
+            start = start
+            column = imported.span.column - (imported.span.start - start)
+          )
+          newText = ""
+        )
+  }
+
+  def importAt: Span -> list((TopLevelItem, list(Import), Import)) = { at ->
+    list.filterMap(
+      statements
+      { entry ->
+        match list.find(entry.1, { imported -> sameSpan(imported.span, at) })
+          | #some(imported) -> #some(entry.0, entry.1, imported)
+          | #notFound -> #skip
+      }
+    )
+  }
+
+  list.filterMap(
+    symbols()
+    { symbol ->
+      match (symbol.kind, symbol.declaration)
+        | (#importedModule, #some(at)) ->
+          if not unusedOnPurpose(symbol.name) and unreferenced(symbol) then
+            match importAt(at)
+              | [(statement, siblings, imported), ..._] ->
+                def fix = (
+                  title = "Remove the import of `{symbol.name}`"
+                  edits = [removing(statement, siblings, imported)]
+                )
+
+                #some(
+                  report(
+                    "unusedImports"
+                    symbol
+                    imported.span
+                    "It is imported but never used"
+                    [fix]
+                  )
+                )
+              | [] -> #skip
+          else
+            #skip
+        | _ -> #skip
+    }
+  )
+}
+
+--| The definitions the module writes, each the item that writes it, a `module name =` block's
+  among them.
+def definitionsOf: list(TopLevelItem) -> list(TopLevelItem) = { items ->
+  list.flatMap(
+    items
+    { item ->
+      match item.kind
+        | #def(_) -> [item]
+        | #typeDef(_) -> [item]
+        | #moduleBlock(b) -> definitionsOf(b.items)
+        | _ -> []
+    }
+  )
+}
+
+--| The name of the def `second` is, when `first` marks it `@test` or `@entry`.
+def markedRun: TopLevelItem, TopLevelItem -> #some(string) | #skip = { first, second ->
+  match (first.kind, second.kind)
+    | (#attribute(a), #def(d)) -> (if a.name == "test" or a.name == "entry"
+      then #some(d.name)
+      else #skip)
+    | _ -> #skip
+}
+
+--| The names of the defs marked `@test` or `@entry`, a `module name =` block's among them: a test
+  build runs the one, and the host calls the other.
+def runIn: list(TopLevelItem) -> list(string) = { items ->
+  def marked =
+    list.filterMap(
+      list.windows(items, 2)
+      {
+        | [first, second] -> markedRun(first, second)
+        | _ -> #skip
+      }
+    )
+
+  def inBlocks =
+    list.flatMap(
+      items
+      { item ->
+        match item.kind
+          | #moduleBlock(b) -> runIn(b.items)
+          | _ -> []
+      }
+    )
+
+  list.flatten([marked, inBlocks])
+}
+
+--| `unusedPrivateDefinitions`: a top-level def, type or context the module does not export, or a
+  member of such a context, that nothing refers to. A reference from within the definition itself
+  (a function calling itself, a type naming itself) is not a use, and one from a node desugaring
+  made is. Left alone: `@entry`'s def, a `@test`, a def an instance picks up from a type's
+  attached definitions, and names starting with `_`.
+export def unusedPrivateDefinitions: [Analysis] Module -> list(Report) = { m ->
+  def text = source()
+  def definitions = definitionsOf(m)
+  def picked = instanceDefinitions()
+  def run = runIn(m)
+  def spans = writtenSpans(m)
+
+  def isUsed: Symbol, TopLevelItem -> bool = { symbol, definition ->
+    list.any(
+      referencesTo(symbol.id)
+      { node ->
+        match map.get(spans, node)
+          | #some(at) -> not contains(definition.span, at)
+          | #notFound -> true
+      }
+    )
+  }
+
+  def messageFor = {
+    | #typeDefinition -> "The type is never used"
+    | #contextMember -> "The context's member is never used"
+    | #unitOfMeasure -> "The unit is never used"
+    | _ -> "It is never used"
+  }
+
+  def isCandidate = {
+    | #topLevel -> true
+    | #typeDefinition -> true
+    | #contextMember -> true
+    | _ -> false
+  }
+
+  def calledAnyway: Symbol -> bool = { symbol ->
+    match symbol.kind
+      | #topLevel -> list.contains(picked, symbol.name) or list.contains(run, symbol.name)
+      | _ -> false
+  }
+
+  def unusedAt: Symbol, Span -> #some(Report) | #skip = { symbol, at ->
+    match list.find(definitions, { item -> contains(item.span, at) })
+      | #some(definition) ->
+        if isUsed(symbol, definition) then
+          #skip
+        else
+          -- A member is one field of its context, which has no span of its own to remove.
+          def fixes =
+            match symbol.kind
+              | #contextMember -> []
+              | _ -> [(title = "Remove `{symbol.name}`", edits = [removal(text, definition.span)])]
+
+          #some(report("unusedPrivateDefinitions", symbol, at, messageFor(symbol.kind), fixes))
+      | #notFound -> #skip
+  }
+
+  list.filterMap(
+    symbols()
+    { symbol ->
+      match symbol.declaration
+        | #some(at) ->
+          if isCandidate(symbol.kind) and not symbol.isExported and
+            not unusedOnPurpose(symbol.name) and not calledAnyway(symbol) then
+            unusedAt(symbol, at)
+          else
+            #skip
+        | #none -> #skip
+    }
+  )
+}
+
+--| The names of the contexts among `contexts`, types a def requires.
+def contextNames: list(Ty) -> list(string) = { contexts ->
+  list.filterMap(
+    contexts
+    {
+      | #named(n) -> #some(n.name)
+      | #applied(a) -> #some(a.name)
+      | _ -> #skip
+    }
+  )
+}
+
+--| The names of the contexts the expressions within a def's value use: those each call or pipe in
+  it, or one desugaring made for it, requires of its callee, those the defs it names require, and
+  those whose members it names, an operator among them.
+def usedIn: [Analysis] Expr -> list(string) = { value ->
+  def nodes = list.flatMap(exprsWithin(value), { e -> [e.id, ...lowered(e.id)] })
+
+  def ofCallee =
+    list.flatMap(
+      nodes
+      { node ->
+        match calleeTypeOf(node)
+          | #some(#function(f)) -> contextNames(f.contexts)
+          | _ -> []
+      }
+    )
+
+  def referenced =
+    list.filterMap(
+      nodes
+      { node ->
+        match symbolOf(node)
+          | #some(symbol) -> #some(symbol.id)
+          | #none -> #skip
+      }
+    )
+
+  def ofDefs = list.flatMap(referenced, { id -> contextNames(contextsOf(id)) })
+
+  def members =
+    list.filterMap(
+      nodes
+      { node ->
+        match contextOfMember(node)
+          | #some(name) -> #some(name)
+          | #none -> #skip
+      }
+    )
+
+  list.flatten([ofCallee, ofDefs, members])
+}
+
+--| The name of the context a type written in a def's contexts names, if it names one the module
+  knows: not a context variable.
+def contextNamed: [Analysis] TypeExpr -> #some(string) | #none = { context ->
+  def name =
+    match context.kind
+      | #name(n) -> #some(n)
+      | #apply(a) -> #some(a.name)
+      | _ -> #none
+
+  match name
+    | #some(n) -> (if isContext(n) then #some(n) else #none)
+    | #none -> #none
+}
+
+--| A def that isn't exported, whose value is a lambda, with its name, its signature and its
+  value; none for another.
+def lambdaDef
+  : bool, string, (#some(TypeExpr) | #none), Expr -> list((string, TypeExpr, Expr))
+  = { isExport, name, annotation, value ->
+    match (isExport, annotation, value.kind)
+      | (false, #some(signature), #lambda(_)) -> [(name, signature, value)]
+      | _ -> []
+  }
+
+--| Each def that isn't exported, a local one too, whose value is a lambda, among `items`.
+def topLevelLambdaDefs: list(TopLevelItem) -> list((string, TypeExpr, Expr)) = { items ->
+  list.flatMap(
+    items
+    { item ->
+      match item.kind
+        | #def(d) -> lambdaDef(d.isExport, d.name, d.annotation, d.value)
+        | #moduleBlock(b) -> topLevelLambdaDefs(b.items)
+        | _ -> []
+    }
+  )
+}
+
+--| Each def that isn't exported, a local one too, whose value is a lambda.
+def lambdaDefs: Module -> list((string, TypeExpr, Expr)) = { m ->
+  def local =
+    list.flatMap(
+      moduleExprs(m)
+      { e ->
+        match e.kind
+          | #block(statements) ->
+            list.flatMap(
+              statements
+              { statement ->
+                match statement.kind
+                  | #def(d) -> lambdaDef(d.isExport, d.name, d.annotation, d.value)
+                  | _ -> []
+              }
+            )
+          | _ -> []
+      }
+    )
+
+  list.flatten([topLevelLambdaDefs(m), local])
+}
+
+--| `unusedContexts`: a context a def's signature requires that nothing in its body uses, so that
+  every caller must supply it for nothing. Its fix removes the context with the `, ` after it, or
+  before it if it is the last, or the whole `[...] ` if it is the only one.
+export def unusedContexts: [Analysis] Module -> list(Report) = { m ->
+  def text = source()
+
+  def removing
+    : Span, list(TypeExpr), TypeExpr, TypeExpr -> TextEdit
+    = { annotation, contexts, inner, context ->
+      def count = list.length(contexts)
+
+      match list.findIndex(contexts, { other -> sameSpan(other.span, context.span) })
+        | #some(index) ->
+          if count == 1 then
+            (span = spanBetween(text, annotation.start, inner.span.start), newText = "")
+          else if index < count - 1 then
+            def next = list.at(contexts, index + 1) \orCrash("There is no context after it")
+            (span = spanBetween(text, context.span.start, next.span.start), newText = "")
+          else
+            def previous = list.at(contexts, index - 1) \orCrash("There is no context before it")
+            (span = spanBetween(text, previous.span.end, context.span.end), newText = "")
+        | #notFound -> (span = context.span, newText = "")
+    }
+
+  def reportsOf: string, TypeExpr, Expr -> list(Report) = { name, annotation, value ->
+    match annotation.kind
+      | #withContexts(w) ->
+        def used = usedIn(value)
+
+        list.filterMap(
+          w.contexts
+          { context ->
+            match contextNamed(context)
+              | #some(contextName) ->
+                if context.span.start >= 0 and not list.contains(used, contextName) then
+                  def fix = (
+                    title = "Remove `{contextName}`"
+                    edits = [removing(annotation.span, w.contexts, w.inner, context)]
+                  )
+
+                  #some(
+                    rule = "unusedContexts"
+                    span = context.span
+                    message = "'{contextName}' is required but not used by '{name}'"
+                    subject = #some(contextName)
+                    related = []
+                    fixes = [fix]
+                  )
+                else
+                  #skip
+              | #none -> #skip
+          }
+        )
+      | _ -> []
+  }
+
+  list.sortBy(
+    list.flatMap(lambdaDefs(m), { found -> reportsOf(found.0, found.1, found.2) })
+    { r -> r.span.start }
+  )
+}
