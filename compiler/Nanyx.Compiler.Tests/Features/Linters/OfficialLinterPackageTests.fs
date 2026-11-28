@@ -49,8 +49,8 @@ let ``Where the package can't be run, the official linter's own rules run alone`
     let directives = Script.readFrom (SeededPackages.user ()) "" "::linter nanyx.lint\n\nprintln(\"hi\")\n"
     let options = Script.linterOptions (fun _ -> Result.Error "not here") directives
     Assert.Equal<string list>([ "default" ], options.Linters |> List.map _.Name)
-    let result = Compiler.compileWith options "def unused = 1\n\nprintln(\"hi\")\n"
-    Assert.Contains(result.Diagnostics, fun diagnostic -> diagnostic.Code = "default/unusedPrivateDefinitions")
+    let result = Compiler.compileWith options "def count = { n -> if n == 0 then 0 else 1 + count(n - 1) }\n\nprintln(\"{count(3)}\")\n"
+    Assert.Contains(result.Diagnostics, fun diagnostic -> diagnostic.Code = "default/nonTailRecursion")
 
 [<Fact>]
 let ``The official linter runs as its package, with the compiler's rules for those it doesn't implement yet`` () =

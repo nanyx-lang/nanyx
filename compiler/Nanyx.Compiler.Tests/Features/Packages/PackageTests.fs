@@ -87,7 +87,8 @@ let ``The manifest's linters check every source file at the severities it sets``
         new TempPackage(
             [ "demo.nyxp", (manifest $"""linters = [(package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (unusedBindings = #error)))]""")
               "main.nyx", entrySource ])
-    let build = Package.build (okOf (Package.findIn (SeededPackages.user ()) package.Root))
+    let store = SeededPackages.user ()
+    let build = Package.build (Package.withLinters (makeLinter store) (okOf (Package.findIn store package.Root)))
     let diagnostic = Assert.Single(build.Diagnostics)
     Assert.Equal("default/unusedBindings", diagnostic.Code)
     Assert.Equal(Severity.Error, diagnostic.Severity)

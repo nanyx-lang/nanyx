@@ -15,7 +15,8 @@ let private unusedBinding = withFinalNewline """export def main: [Console] () ->
 
 /// `source` compiled as a script with no package around it, in a new directory under the temporary directory.
 let private compile (source: string) =
-    withTempDir (fun directory -> Script.compileSourceIn (SeededPackages.user ()) (Path.Combine(directory, "script.nyx")) source)
+    let store = SeededPackages.user ()
+    withTempDir (fun directory -> Script.compileSourceMakingIn (makeLinter store) store CompileListener.none (Path.Combine(directory, "script.nyx")) source)
 
 let private codesOf (result: CompileResult) = result.Diagnostics |> List.map _.Code
 

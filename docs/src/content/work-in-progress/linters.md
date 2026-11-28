@@ -163,7 +163,10 @@ linter gets, rather than written again in Nanyx, where it would drift from the c
   `strayDocComments`.
 
 A rule that needs another such answer adds a query in the same way. A purely syntactic walk, such as which calls are in
-tail position, is the linter's own.
+tail position, is the linter's own. The `unused*` rules added three
+([#3175](https://github.com/nanyx-lang/nanyx/issues/3175)): `isContext`, whether the module can name a context by a
+name; `contextOfMember`, the context whose member a node refers to, an operator among them; and `instanceDefinitions`,
+the defs an instance built from attached definitions picks up, which nothing names.
 
 ## What a linter reports
 
@@ -259,7 +262,9 @@ and its tests show it reports what it did:
    official linter, with the F# rule for each rule it doesn't implement (`Linters.packageRules`), as
    [Lint builds](../deep-dives/lint-builds#the-official-linter) describes. Its lint build is built the first time a
    project uses it, not when it is seeded: seeding is the compiler's core, which can't build one.
-3. **The rules**, a group at a time: the `unused*` rules; `unreachableArms` and `unreachableCode`; `unusedResults`,
+3. **The rules**, a group at a time: the `unused*` rules (built,
+   [#3175](https://github.com/nanyx-lang/nanyx/issues/3175): `lint.unused` in the package); `unreachableArms` and
+   `unreachableCode`; `unusedResults`,
    `uselessExpressions` and `unawaitedTask`; the style rules (`semicolons`, `strayDocComments`, `useInBraces`,
    `shadowedPreludeNames`); the rules about types (`unannotatedExports`, `resultOnlyTypeVariable`,
    `unconstructibleType`, `noTagInCommon`, `redundantTypeNames`); `repeatedPulls`; `nonTailRecursion`. The tests in

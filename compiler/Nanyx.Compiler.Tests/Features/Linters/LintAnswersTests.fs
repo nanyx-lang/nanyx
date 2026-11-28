@@ -203,3 +203,23 @@ let ``A symbol, its type and the contexts it requires are answered by its id`` (
     match answers.["contextsOf"] with
     | DList [ context ] -> Assert.Contains("Log", $"%A{context}")
     | other -> failwith $"%A{other}"
+[<Fact>]
+let ``A def from another module is asked about by its symbol, as one of the module's own is`` () =
+    // `println` comes from the prelude, whose symbols' ids don't fit 32 bits.
+    let (symbol, contexts), _ =
+        asking "def greet: [Console] () -> () = { () -> println(\"hi\") }\n" (fun answer ->
+            let calls =
+                answer (ask "module" DUnit)
+                |> item 0
+                |> get "kind"
+                |> payloadOf "def"
+                |> get "value"
+                |> get "kind"
+                |> payloadOf "lambda"
+                |> get "body"
+            let symbol = answer (ask "symbolOf" (DInt(idOf calls))) |> payloadOf "some"
+            (symbol, answer (ask "contextsOf" (get "id" symbol))), [])
+    Assert.Equal(DText "println", get "name" symbol)
+    match contexts with
+    | DList items -> Assert.Contains(Some(DText "Console"), items |> List.map (payloadOf "named" >> field "name"))
+    | other -> failwith $"%A{other} isn't println's contexts"
