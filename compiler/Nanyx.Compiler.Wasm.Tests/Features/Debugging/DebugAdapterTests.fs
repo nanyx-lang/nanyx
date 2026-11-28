@@ -68,7 +68,7 @@ type private Client(directory: string, file: string) =
                 if Dap.text "type" message = Some "event" && Dap.text "event" message = Some "output" then
                     this.Output.Append(message.["body"].["output"].GetValue<string>()) |> ignore
                 if predicate message then found <- Some message
-            | _ -> failwith "The debugger said nothing for 30 seconds"
+            | _ -> failwith $"The debugger said nothing for 30 seconds, the program having written:\n{this.Output}"
         found.Value
 
     /// Sends the request `command` with `arguments`, and gives its response's body.
@@ -99,10 +99,19 @@ type private Client(directory: string, file: string) =
         this.Request "configurationDone" |> ignore
         set.["breakpoints"].AsArray() |> Seq.map (fun breakpoint -> breakpoint.["line"].GetValue<int>()) |> List.ofSeq
 
-    /// The reason the program stopped next, and the text that says why, if it says.
+    /// The reason the program stopped next, and the text that says why, if it says. A program that ends instead fails
+    /// the test at once, with what it wrote.
     member this.Stopped() =
-        let body = this.Event "stopped"
+        let message =
+            this.Wait(fun message -> Dap.text "type" message = Some "event" && List.contains (Dap.text "event" message) [ Some "stopped"; Some "terminated" ])
+        if Dap.text "event" message = Some "terminated" then failwith $"The program ended instead of stopping, having written:\n{this.Output}"
+        let body = message.["body"]
         body.["reason"].GetValue<string>(), Dap.text "text" body
+
+    /// Waits until the program has written `text`.
+    member this.Written(text: string) =
+        if not (this.Output.ToString().Contains text) then
+            this.Wait(fun _ -> this.Output.ToString().Contains text) |> ignore
 
     /// The stack where the program stopped: each frame's name and line, innermost first.
     member this.Stack() =
@@ -237,9 +246,10 @@ let ``A program launched to stop on entry stops at its first statement`` () =
 
 [<Fact>]
 let ``A pause stops a program that is running, at the next statement`` () =
-    use client = session "def spin: int -> int = { n ->\n  def next = if n > 0 then n - 1 else 1000\n  spin(next)\n}\n\nprintln(spin(10))\n"
+    use client = session "def spin: int -> int = { n ->\n  def next = if n > 0 then n - 1 else 1000\n  spin(next)\n}\n\nprintln(\"spinning\")\nprintln(spin(10))\n"
     client.Launch [] |> ignore
-    Thread.Sleep 200
+    // Paused once it is running, in the loop that never ends.
+    client.Written "spinning"
     client.Request "pause" |> ignore
     Assert.Equal("pause", fst (client.Stopped()))
     Assert.Equal("spin", fst (List.head (client.Stack())))
