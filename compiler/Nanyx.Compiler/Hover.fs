@@ -301,6 +301,26 @@ let builtInTypeAt (result: CompileResult) (offset: int) : HoverInfo option =
             | _ -> None)
     | _ -> None
 
+/// The hover on a `???` at `offset` in the compiled root module whose expected type the code around it says (see
+/// `TypedHoles`): that type, with made-up type variables named by `names`, and what would fill it. `None` on anything
+/// else, and on a hole whose type nothing says, which `typeAt` shows as `undefined`.
+let holeAt (names: TypeNotation) (result: CompileResult) (offset: int) : HoverInfo option =
+    match result.Syntax, result.Typed with
+    | Some syntax, Some typed ->
+        let atOffset =
+            expressionsAt offset syntax
+            |> List.tryFind (fun expr -> expr.Kind = IdentifierExpr ImplicitNames.notImplemented && contains offset expr.Span)
+        atOffset
+        |> Option.bind (fun hole ->
+            TypedHoles.holes (TypedHoles.ofTypedModule typed) syntax
+            |> Map.tryFind hole.Span
+            |> Option.map (fun found ->
+                let written = Unifier.tyToDisplayStringIn typed.TypeDefs names
+                { Type = written found.Expected
+                  Span = hole.Span
+                  Note = Some $"`???` stands for code not written yet: {TypedHoles.describe written found}." }))
+    | _ -> None
+
 /// A module a hover is on: the file it is read from, as its spans name it (see `ImportedFile`), the name it is shown
 /// by, and the span of the syntax that names it.
 type ModuleHover = { File: string; Name: string; Span: SourceSpan }
