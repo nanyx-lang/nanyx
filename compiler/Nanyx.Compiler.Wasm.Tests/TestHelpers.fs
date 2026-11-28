@@ -10,7 +10,7 @@ open Transpiler.Wasm.CodeGen
 open Xunit
 
 /// The tests run with a package cache of their own (see `TestPackageCache`).
-[<assembly: TestFramework("Nanyx.TestPackageCache+PackageCacheFramework", "Nanyx.Compiler.Wasm.Test")>]
+[<assembly: AssemblyFixture(typeof<Nanyx.TestPackageCache.Cache>)>]
 do ()
 
 let private testRootDir = __SOURCE_DIRECTORY__

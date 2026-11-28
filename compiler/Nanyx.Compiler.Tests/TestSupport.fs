@@ -7,7 +7,7 @@ open NyxCompiler
 open Parser.Program
 
 /// The tests run with a package cache of their own (see `TestPackageCache`).
-[<assembly: TestFramework("Nanyx.TestPackageCache+PackageCacheFramework", "Nanyx.Compiler.Tests")>]
+[<assembly: Nanyx.TestPackageCache.Framework("Nanyx.TestPackageCache+PackageCacheFramework", "Nanyx.Compiler.Tests")>]
 do ()
 
 /// Matches an `IntLit` whose value fits an `int64`, which a pattern can name: F# has no `bigint` constant patterns.
