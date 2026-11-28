@@ -29,7 +29,9 @@ packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   others in `packages/`. Every build of the compiler copies the directory beside it (a `None` item in
   `NanyxCompiler.fsproj` with `CopyToOutputDirectory` and `CopyToPublishDirectory`), so the tests, the language server
   and the published `nanyx` all find it at `ShippedPackages.directory`, and each release archive holds it beside the
-  executable. A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
+  executable. On Windows that path is written with long names, though the compiler is started through a short 8.3 one,
+  as `C:\Users\RICHAR~1\...` (`LongPaths.ofPath`), so a path to a shipped package is spelt one way
+  ([#3116](https://github.com/nanyx-lang/nanyx/issues/3116)). A test checks each shipped manifest's version against `Toolchain.version`, so a release bumps them with
   the compiler.
 - **A release publishes them to the index.** Each shipped manifest names this repository, `repository =
   "nanyx-lang/nanyx"`, and the compilers it builds with: a library the one it ships with or a later one, and a host or

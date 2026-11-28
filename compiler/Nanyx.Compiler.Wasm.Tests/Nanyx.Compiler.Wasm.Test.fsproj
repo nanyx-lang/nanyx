@@ -239,6 +239,7 @@
     <Compile Include="Features\Packages\ScriptIndexDependencyTests.fs" />
     <Compile Include="Features\Packages\UnlistedVersionTests.fs" />
     <Compile Include="Features\Packages\OfflineShippedPackageTests.fs" />
+    <Compile Include="Features\Packages\ShortPathTests.fs" />
     <Compile Include="Features\Packages\PackageIndexAddressTests.fs" />
     <Compile Include="Features\Packages\PartialModuleTests.fs" />
     <Compile Include="Features\Packages\SelectiveImportTests.fs" />
