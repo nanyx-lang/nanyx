@@ -223,7 +223,7 @@ module UnreachableArms =
     /// An edit that removes the arm whose patterns are `patterns` and whose value is `body`: from its `|` to the end of
     /// its value, and its lines with them when nothing else is written on them (a comment after it goes too). `None`
     /// when no `|` comes before the arm, as for the `else` of an `if ... is`, which is no arm to remove.
-    let private removal (source: string) (patterns: Pattern list) (body: Expression) : TextEdit option =
+    let internal removal (source: string) (patterns: Pattern list) (body: Expression) : TextEdit option =
         let first = (List.head patterns).Span
         let mutable bar = first.Start - 1
         while bar >= 0 && (source.[bar] = ' ' || source.[bar] = '\t') do
@@ -290,6 +290,58 @@ module UnreachableArms =
                                     spanOf others, (if covering.Length = 1 then "matches every value first" else "matches some of them first"))
                               Fixes =
                                 removal model.Source patterns body
+                                |> Option.map (fun edit -> { Title = "Remove the unreachable arm"; Edits = [ edit ] })
+                                |> Option.toList }))
+            | _ -> [])
+        |> List.sortBy (fun report -> report.Span.Start)
+
+/// The official linter's `undefinedPayloadArm` rule: an arm for a tag whose payload is `undefined`, which no value has,
+/// so the matched value's type leaves the tag out (see `Unifier.apply`): `| #some(x) -> ...` on the head of a
+/// `list(undefined)`, which is only ever `#emptyList` (#3129). The arm checks, as code after a `crash` does, since it
+/// is no mistake in the types, only code that can't run; this is a hint, drawn faint, whose fix removes the arm. An arm
+/// for a tag the type has nowhere is an error the type checker reports.
+module UndefinedPayloadArms =
+    let rule =
+        { Id = "undefinedPayloadArm"
+          Title = "Arm for a tag whose payload is undefined"
+          DefaultSeverity = Severity.Hint
+          Unnecessary = true
+          Description =
+            "A match arm for a tag whose payload is `undefined`, such as `#some(x)` on the head of a `list(undefined)`: no value has that tag, so the arm can never match." }
+
+    /// The tags `ty` can be, if it is a tag or a closed union of them.
+    let private closedTags (ty: Ty) : Set<string> option =
+        let tagOf (item: Ty) = match Unifier.unalias item with TyTag(name, _) -> Some name | _ -> None
+        match Unifier.unalias ty with
+        | TyTag(name, _) -> Some (Set.singleton name)
+        | TyUnion items when not items.IsEmpty && items |> List.forall (tagOf >> Option.isSome) -> Some (items |> List.choose tagOf |> Set.ofList)
+        | _ -> None
+
+    let lint (model: SemanticModel) : Report list =
+        model.Syntax
+        |> List.collect SyntaxTree.ofItem
+        |> List.collect SyntaxTree.expressionsWithin
+        |> List.collect (fun expr ->
+            match expr.Kind with
+            | Match(values, arms) ->
+                let tags = values |> List.map (fun value -> model.Types |> Map.tryFind value.Id |> Option.bind closedTags)
+                arms
+                |> List.choose (fun (patterns, body) ->
+                    if patterns.Length <> values.Length then None
+                    else
+                        List.zip patterns tags
+                        |> List.tryPick (fun (pattern, tags) ->
+                            match pattern.Kind, tags with
+                            | TagPattern(name, Some _), Some tags when not (tags.Contains name) -> Some name
+                            | _ -> None)
+                        |> Option.map (fun tag ->
+                            { Rule = rule.Id
+                              Subject = Some tag
+                              Span = SourceSpan.between (List.head patterns).Span (if SourceSpan.isNone body.Span then (List.last patterns).Span else body.Span)
+                              Message = $"This arm can never match: `#{tag}` would hold a value of type `undefined`, of which there is none"
+                              Related = []
+                              Fixes =
+                                UnreachableArms.removal model.Source patterns body
                                 |> Option.map (fun edit -> { Title = "Remove the unreachable arm"; Edits = [ edit ] })
                                 |> Option.toList }))
             | _ -> [])
@@ -1195,14 +1247,15 @@ module Linters =
             [ UnusedBindings.rule; NonTailRecursion.rule; UnreachableArms.rule; UnusedImports.rule; NoTagInCommon.rule
               UnusedPrivateDefinitions.rule; UnreachableCode.rule; UseInBraces.rule; StrayDocComments.rule
               UnannotatedExports.rule; ResultOnlyTypeVariables.rule; UnusedResults.rule; UselessExpressions.rule; UnawaitedTasks.rule; ShadowedPreludeNames.rule; Semicolons.rule
-              UnconstructibleTypes.rule; UnusedContexts.rule; RepeatedPulls.rule; RedundantTypeNames.rule; Allows.rule ]
+              UnconstructibleTypes.rule; UnusedContexts.rule; RepeatedPulls.rule; RedundantTypeNames.rule; UndefinedPayloadArms.rule; Allows.rule ]
           Lint =
             fun model ->
                 UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
                 @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ UnannotatedExports.lint model @ ResultOnlyTypeVariables.lint model
                 @ UnusedResults.lint model @ UselessExpressions.lint model @ UnawaitedTasks.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model
-                @ UnconstructibleTypes.lint model @ UnusedContexts.lint model @ RepeatedPulls.lint model @ RedundantTypeNames.lint model }
+                @ UnconstructibleTypes.lint model @ UnusedContexts.lint model @ RepeatedPulls.lint model @ RedundantTypeNames.lint model
+                @ UndefinedPayloadArms.lint model }
 
     /// The linters the compiler has, which a manifest's `linters` or a script's `::linter` directives can turn on.
     let all = [ official ]

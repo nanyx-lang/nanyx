@@ -12,7 +12,7 @@ Linters run during compilation and emit diagnostics. The official Nanyx style li
 
 Each rule's diagnostics have the code `default/<rule>`, such as `default/unusedBindings`. That is the name to use in [`@allow`](#suppressing-a-rule-in-one-place); in a manifest's `settings` and in a `::lint` directive, a rule is named on its own, `unusedBindings`. Many rules come with a fix, which the editor offers as a quick fix.
 
-The rules that report code which is unused or can never run also tell the editor so, and it draws that code faint, as well as showing the warning: `unusedBindings`, `unusedImports`, `unusedPrivateDefinitions`, `unusedContexts`, `unreachableArms` and `unreachableCode`, marked *faint* in the table below. `redundantTypeName` reports code that is redundant rather than unused: it is a hint, drawn faint with no warning. An exported definition is never drawn faint, whether or not anything uses it, since an export is part of what its package offers. Turning a rule off turns off its faint drawing too.
+The rules that report code which is unused or can never run also tell the editor so, and it draws that code faint, as well as showing the warning: `unusedBindings`, `unusedImports`, `unusedPrivateDefinitions`, `unusedContexts`, `unreachableArms` and `unreachableCode`, marked *faint* in the table below. `redundantTypeName` reports code that is redundant rather than unused, and `undefinedPayloadArm` code that can't run but is no mistake: each is a hint, drawn faint with no warning. An exported definition is never drawn faint, whether or not anything uses it, since an export is part of what its package offers. Turning a rule off turns off its faint drawing too.
 
 | Rule | Default | Reports |
 |------|---------|---------|
@@ -23,6 +23,7 @@ The rules that report code which is unused or can never run also tell the editor
 | [`unusedPrivateDefinitions`](#unused-private-definition) | warning, faint | a definition the module does not export and does not use |
 | [`unusedContexts`](#unused-context) | warning, faint | a context a def's signature requires that its body does not use |
 | [`unreachableArms`](#unreachable-match-branch) | warning, faint | a match arm the arms before it already cover |
+| [`undefinedPayloadArm`](#arm-for-a-tag-that-holds-undefined) | hint, faint | a match arm for a tag whose payload is `undefined`, which no value has |
 | [`noTagInCommon`](#comparison-that-is-always-false) | warning | `==` or `!=` on two unions with no tag in common |
 | [`useInBraces`](#use--in-with-a-body-in-braces) | warning | `use ... in { ... }`, whose body is a function, not a block |
 | [`strayDocComments`](#doc-comment-that-documents-nothing) | warning | a doc comment that documents nothing |
@@ -153,6 +154,18 @@ match n
 ```
 
 The rule (`unreachableArms`) reports an arm that the arms before it already match every value of: one after a catch-all such as `_` or a name, one after an arm that matches everything it does (`#some(5)` after `#some(_)`, `5` after `1..10`), and one after arms that between them match every value it does: every tag of a union, both booleans, every length of list, every int of a range (`3..8` after `1..5` and `6..10`), or every combination of the values a match is on. It reports the whole arm, its patterns and its value, and points at the arms that cover it; its fix removes the arm. An arm with a guard (`{ > 0 }`) never counts as covering another, since whether it matches depends on more than the value's shape.
+
+## Arm for a tag that holds `undefined`
+
+```nanyx
+def items = []
+
+def size = match items \head
+  | #emptyList -> 0
+  | #some(x) -> 1 -- Linter hint: this arm can never match: `#some` would hold a value of type `undefined`, of which there is none
+```
+
+The rule (`undefinedPayloadArm`) reports an arm for a tag whose payload is [`undefined`](../tour/types#top-and-bottom-types). No value has such a tag, so the value's type leaves it out: the head of `items`, a `list(undefined)`, is only ever `#emptyList`, and the match needs no arm for `#some`. An arm for it is no mistake in the types, only code that can't run, as code after a `crash` is, so it checks, and this rule is a hint: the editor draws the arm faint and shows no warning, and its fix removes the arm. An arm for a tag the value's type has nowhere, such as `#none` on a list's head, is an error the type checker reports.
 
 ## Comparison that is always false
 

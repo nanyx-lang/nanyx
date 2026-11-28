@@ -38,11 +38,12 @@ module internal ArithmeticInference =
     /// read on what the literals are.
     let private settleLiterals (generalizeDef: InferState -> TypeScheme * InferState) (generalising: Generalising) (state: InferState) =
         match generalising with
-        | _ when state.UnsettledLiterals.IsEmpty -> state
-        | TopLevelDef _ -> Fractions.settleLiterals (fun _ -> true) state
+        | _ when state.UnsettledLiterals.IsEmpty && state.BottomGiven.IsEmpty -> state
+        | TopLevelDef _ -> Fractions.settleLiterals (fun _ -> true) state |> LowerBounds.settle (fun _ -> true)
         | LocalDef ->
             let tentative, _ = generalizeDef state
-            Fractions.settleLiterals (function TyVar v -> tentative.Quantified.Contains v.Id | _ -> false) state
+            let isOwn = function TyVar v -> tentative.Quantified.Contains v.Id | _ -> false
+            Fractions.settleLiterals isOwn state |> LowerBounds.settle isOwn
 
     /// The type of the def about to be generalised, by `generalizeDef`, once the arithmetic operators left pending that
     /// the def settles (see `Generalising`) are read. An operator found to be on numbers constrains its operands, so

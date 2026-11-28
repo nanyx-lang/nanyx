@@ -188,6 +188,7 @@
     <Compile Include="Features\Linters\ShadowedPreludeNamesTests.fs" />
     <Compile Include="Features\Linters\SemicolonsTests.fs" />
     <Compile Include="Features\Linters\RedundantTypeNameTests.fs" />
+    <Compile Include="Features\Linters\UndefinedPayloadArmTests.fs" />
     <Compile Include="Features\Linters\UnconstructibleTypeTests.fs" />
     <Compile Include="Features\Linters\AllowTests.fs" />
     <Compile Include="Features\Loops\ForLoopTests.fs" />
@@ -277,6 +278,7 @@
     <Compile Include="Features\Types\UndefinedUseTests.fs" />
     <Compile Include="Features\Types\UndefinedJoinTests.fs" />
     <Compile Include="Features\Types\EmptyListTests.fs" />
+    <Compile Include="Features\Types\UndefinedPayloadTests.fs" />
     <Compile Include="Features\Types\GenericNominalsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
     <Compile Include="Features\Types\NominalUpdatesTests.fs" />

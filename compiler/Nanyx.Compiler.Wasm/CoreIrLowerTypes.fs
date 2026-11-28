@@ -150,7 +150,12 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
                 | TyTag(name, _) ->
                     match items' |> List.tryFind (fun item' -> tagName item' = Some name) with
                     | Some item' -> bindScheme acc item item'
-                    | None -> cannot $"the tag `#{name}` is not in the type it is used at"
+                    // A tag whose payload is `undefined` has no values, so a union leaves it out (see `Unifier.apply`):
+                    // `list.head` used at a `#emptyList`, the head of a `list(undefined)`, has its `a` `undefined`.
+                    | None ->
+                        match item with
+                        | TyTag(_, Some payload) when not (TypeEnv.freeTyVars payload).IsEmpty -> bindScheme acc payload Unifier.bottomType
+                        | _ -> cannot $"the tag `#{name}` is not in the type it is used at"
                 | _ -> acc) bindings
         let rest = items' |> List.filter (fun item' -> match tagName item' with Some name -> not (named.Contains name) | None -> true)
         match items |> List.filter (fun item -> (tagName item).IsNone) with

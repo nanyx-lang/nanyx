@@ -68,6 +68,7 @@
     <Compile Include="CoalesceOperator.fs" />
     <Compile Include="ContextShapes.fs" />
     <Compile Include="ContextInference.fs" />
+    <Compile Include="LowerBounds.fs" />
     <Compile Include="ArithmeticInference.fs" />
     <Compile Include="InlineContexts.fs" />
     <Compile Include="StructuralInstances.fs" />

@@ -170,6 +170,11 @@ def numbers: list(int) = items
 def words: list(string) = items
 ```
 
+A tag whose payload is `undefined`, such as the `#some` of a `list(undefined)`'s head, has no values, so the type
+leaves it out and a match needs no arm for it. An arm for it still checks, since it is only code that can't run, as code
+after a `crash` is; the [official linter](../standard-tools/official-linter#arm-for-a-tag-that-holds-undefined) points
+it out.
+
 A list in a function's input is left generic, as `{ ys -> ys ++ [] }` takes a list of any type, and so is one that
 something later says the elements of, as a `[]` that a loop then adds to.
 
