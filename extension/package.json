@@ -8,7 +8,7 @@
     "url": "https://github.com/nanyx-lang/nanyx"
   },
   "license": "MIT",
-  "version": "0.9.44",
+  "version": "0.9.45",
   "icon": "img/nanyx.png",
   "galleryBanner": {
     "color": "#5b5bf2",
@@ -22,7 +22,8 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onLanguage:nanyx"
+    "onLanguage:nanyx",
+    "onDebugResolve:nanyx"
   ],
   "contributes": {
     "languages": [
@@ -142,6 +143,12 @@
         "enablement": "editorLangId == nanyx || resourceLangId == nanyx"
       },
       {
+        "command": "nanyx.debugFile",
+        "title": "Nanyx: Debug the current file",
+        "icon": "$(debug-alt)",
+        "enablement": "editorLangId == nanyx || resourceLangId == nanyx"
+      },
+      {
         "command": "nanyx.showInfoView",
         "title": "Nanyx: Show info view"
       },
@@ -215,6 +222,11 @@
       "editor/title/run": [
         {
           "command": "nanyx.runFile",
+          "when": "resourceExtname == .nyx && !isInDiffEditor",
+          "group": "navigation"
+        },
+        {
+          "command": "nanyx.debugFile",
           "when": "resourceExtname == .nyx && !isInDiffEditor",
           "group": "navigation"
         }
@@ -353,6 +365,79 @@
           "highContrast": "#4FC1FF",
           "highContrastLight": "#0070C1"
         }
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "nanyx"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "nanyx",
+        "label": "Nanyx",
+        "languages": [
+          "nanyx"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "The script, or a package's directory, to debug. Without it, the active file.",
+                "default": "${file}"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The program's command-line arguments.",
+                "default": []
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Stop at the program's first statement.",
+                "default": false
+              },
+              "cwd": {
+                "type": "string",
+                "description": "The directory the program runs in. Without it, the script's directory, or the package's.",
+                "default": "${workspaceFolder}"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "nanyx",
+            "request": "launch",
+            "name": "Debug the current file",
+            "program": "${file}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Nanyx: Debug the current file",
+            "description": "Debug the active .nyx file with nanyx run --debug.",
+            "body": {
+              "type": "nanyx",
+              "request": "launch",
+              "name": "Debug the current file",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "Nanyx: Debug a package",
+            "description": "Debug a package's @entry with nanyx run --debug.",
+            "body": {
+              "type": "nanyx",
+              "request": "launch",
+              "name": "Debug the package",
+              "program": "^\"\\${workspaceFolder}\""
+            }
+          }
+        ]
       }
     ]
   },
