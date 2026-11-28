@@ -131,6 +131,9 @@ let answerer (model: SemanticModel) : LintData -> Result<LintData, string> =
         | DTag("symbolOf", DInt node) -> Ok (symbolAt model.References node)
         | DTag("importOf", DInt node) -> Ok (symbolAt model.ImportReferences node)
         | DTag("symbol", DInt id) -> Ok (model.Symbols |> Map.tryFind (int id) |> Option.map symbolData |> option "none")
+        | DTag("symbols", _) ->
+            let own = model.Symbols |> Map.toList |> List.map snd |> List.filter (fun symbol -> symbol.Declaration.File = model.File && not (SourceSpan.isNone symbol.Declaration))
+            Ok (DList(own |> List.sortBy (fun symbol -> symbol.Declaration.Start) |> List.map symbolData))
         | DTag("typeOfSymbol", DInt id) -> Ok (tyAt model.SymbolTypes (int id))
         | DTag("contextsOf", DInt id) ->
             let contexts =
@@ -204,3 +207,13 @@ let reports (file: string) (data: LintData) : Result<Report list, string> =
         | Some index -> Error $"Its report at position {index} isn't a `Report`"
         | None -> Ok (read |> List.choose id)
     | _ -> Error "What it gave back isn't a list of reports"
+
+/// What a linter written in Nanyx reports about `model`, run by `run`: given the answers to its questions, in their
+/// binary form, it gives its reports in theirs, or why it gave none. A question that can't be answered, or reports that
+/// aren't `Report`s, fail it, as the linter host reports (see `Linters`).
+let lintWith (run: (byte array -> Result<byte array, string>) -> Result<byte array, string>) (model: SemanticModel) : Report list =
+    let answer = answerer model
+    let answering (question: byte array) = LintData.ofBytes question |> Result.bind answer |> Result.map LintData.toBytes
+    match run answering |> Result.bind LintData.ofBytes |> Result.bind (reports model.File) with
+    | Ok reports -> reports
+    | Error reason -> failwith reason

@@ -1,0 +1,88 @@
+--| The linter host: it runs a linter over one module for the compiler.
+
+  A lint build's entry point is a linter's `lint`, which `run` is given. The compiler starts an
+  instance of the build for each module it lints, and `run` asks it about the module through
+  `nanyx:lint`, an import of the runtime's own: it writes each question as data in the module's
+  memory and gives it to `ask`, which answers with the length of the answer, and `answer` writes the
+  answer where it is asked to. It asks for the module's syntax tree, gives `lint` an [`Analysis`]
+  whose members ask the questions they stand for, and gives `lint`'s reports to `report`. How data
+  is written is in `analysis.data`.
+export module analysis.host
+
+import (
+  nanyx/host.memory
+  nanyx/host.runtime
+  nanyx.analysis.host/analysis.data as (Data, fromData, readAt, sizeOf, toData, writeAt)
+  nanyx.analysis/analysis as (Analysis, DocComment, Report, Symbol, Ty)
+  nanyx.analysis/syntax as (Module, NodeId)
+)
+
+@extern("nanyx:lint", "ask")
+def askImport: [HostRuntime] I32, I32 -> I32
+
+@extern("nanyx:lint", "answer")
+def answerImport: [HostRuntime] I32 -> ()
+
+@extern("nanyx:lint", "report")
+def reportImport: [HostRuntime] I32, I32 -> ()
+
+--| `data` written in the module's memory, given to `give` with its address and length, then freed.
+def giving: [HostRuntime] Data, ([HostRuntime] I32, I32 -> a) -> a = { data, give ->
+  def size = sizeOf(data)
+  def address = allocate(I32.fromInt(size))
+  writeAt(address, data) \ignore
+  def given = give(address, I32.fromInt(size))
+  free(address)
+  given
+}
+
+--| The compiler's answer to `question`, read as a value of the type `t`.
+def ask: [HostRuntime] Type(a), Data -> a = { t, question ->
+  def length = giving(question, askImport)
+  def address = allocate(length)
+  answerImport(address)
+  def (answer, _) = readAt(address)
+  free(address)
+
+  match fromData(t, answer)
+    | #some(value) -> value
+    | #error(message) -> crash("The answer to {question} isn't what was asked for: {message}")
+}
+
+type MaybeTy = #some(Ty) | #unknown
+
+type MaybeSymbol = #some(Symbol) | #none
+
+--| The question `name` about the node or symbol `id`.
+def about: string, int -> Data = { name, id ->
+  #tag(name, #int(id))
+}
+
+--| Runs `lint` over the module the compiler asks about, with an `Analysis` whose members ask the
+  compiler, and gives the compiler its reports.
+export def run: [HostRuntime] ([Analysis] Module -> list(Report)) -> () = { lint ->
+  def reports =
+    use Analysis(
+      source = { () -> ask(type string, #tag("source", #unit)) }
+      typeOf = { node -> ask(type MaybeTy, about("typeOf", node)) }
+      calleeTypeOf = { node -> ask(type MaybeTy, about("calleeTypeOf", node)) }
+      symbolOf = { node -> ask(type MaybeSymbol, about("symbolOf", node)) }
+      importOf = { node -> ask(type MaybeSymbol, about("importOf", node)) }
+      symbol = { id -> ask(type MaybeSymbol, about("symbol", id)) }
+      symbols = { () -> ask(type list(Symbol), #tag("symbols", #unit)) }
+      typeOfSymbol = { id -> ask(type MaybeTy, about("typeOfSymbol", id)) }
+      contextsOf = { id -> ask(type list(Ty), about("contextsOf", id)) }
+      referencesTo = { id -> ask(type list(NodeId), about("referencesTo", id)) }
+      lowered = { node -> ask(type list(NodeId), about("lowered", node)) }
+      describe = { ty -> ask(type string, #tag("describe", toData(ty, type Ty))) }
+      coveringArms = { node, index -> ask(
+          type list(int)
+          #tag("coveringArms", #record([("0", #int(node)), ("1", #int(index))]))
+        )
+      }
+      redundantTypeName = { node -> ask(type bool, about("redundantTypeName", node)) }
+      docComments = { () -> ask(type list(DocComment), #tag("docComments", #unit)) }
+    ) in lint(ask(type Module, #tag("module", #unit)))
+
+  giving(toData(reports, type list(Report)), reportImport)
+}

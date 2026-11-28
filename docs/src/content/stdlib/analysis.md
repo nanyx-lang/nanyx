@@ -104,6 +104,7 @@ context Analysis = (
   symbolOf: NodeId -> #some(Symbol) | #none
   importOf: NodeId -> #some(Symbol) | #none
   symbol: SymbolId -> #some(Symbol) | #none
+  symbols: () -> list(Symbol)
   typeOfSymbol: SymbolId -> #some(Ty) | #unknown
   contextsOf: SymbolId -> list(Ty)
   referencesTo: SymbolId -> list(NodeId)
@@ -123,6 +124,8 @@ What type checking found out about the module a linter checks, asked by node or 
 - `symbolOf`: The symbol a name, call, pipe target or qualified name refers to, as written.
 - `importOf`: The import a name came in through.
 - `symbol`: A symbol by its id.
+- `symbols`: The symbols the module declares: its definitions, types, parameters, pattern variables and
+  imports, each with where it is declared.
 - `typeOfSymbol`: The type of a declaration.
 - `contextsOf`: The contexts a top-level def requires, written or inferred.
 - `referencesTo`: The nodes in the module that refer to a symbol.

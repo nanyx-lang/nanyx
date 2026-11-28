@@ -91,6 +91,7 @@
     <Compile Include="WatSyntax.fs" />
     <Compile Include="WasmBinary.fs" />
     <Compile Include="TestBuild.fs" />
+    <Compile Include="LintBuild.fs" />
   </ItemGroup>
 
   <ItemGroup>

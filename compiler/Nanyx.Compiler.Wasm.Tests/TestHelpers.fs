@@ -1186,3 +1186,29 @@ let runTestsOf (wasm: byte array) (seed: int64) (timeout: TimeSpan) : Map<string
     match Nanyx.Runtime.WasmTester.run wasm (Directory.GetCurrentDirectory()) [] (fun _ -> true) seed timeout ignore with
     | Ok runs -> runs |> List.map (fun run -> run.Test.FullName, run) |> Map.ofList
     | Error error -> failwith $"%A{error}"
+
+/// The lint build of the linter script at `inputPath`, whose `@entry` is a linter's `lint` and whose host is the linter
+/// host, `nanyx.analysis.host`, compiled as `nanyx run` compiles a script, with the tests' package store: the module, in
+/// the binary format (see `Transpiler.Wasm.LintBuild`).
+let lintBuildOf (inputPath: string) : byte array =
+    let mutable compiled = None
+    let compiling =
+        inProcess (Path.GetDirectoryName inputPath) "" [] (fun shell ->
+            if CliCommands.TryPullScript(shell, inputPath) then
+                compiled <- Some(CliCommands.CompileScript(shell, inputPath, false))
+                0
+            else 1)
+    match compiled with
+    | Some result when result.Diagnostics |> List.exists NyxCompiler.Diagnostics.isError ->
+        failwith $"{inputPath} has errors:\n%A{result.Diagnostics |> List.filter NyxCompiler.Diagnostics.isError}"
+    | Some { Typed = Some typed } -> Nanyx.LargeStack.run (fun () -> Transpiler.Wasm.LintBuild.assemble WasmOptions.Default typed)
+    | _ -> failwith $"{inputPath} didn't compile:\n{compiling.StandardError}"
+
+/// The linter `name`, with the rules `rules`, that runs the lint build `wasm` (see `lintBuildOf`) over each module, as
+/// the compiler runs a linter package.
+let lintBuildLinter (name: string) (rules: NyxCompiler.Rule list) (wasm: byte array) : NyxCompiler.Linter =
+    let run = Nanyx.Runtime.WasmLinter.compile wasm |> Result.defaultWith (fun error -> failwith $"%A{error}")
+    { Name = name
+      Package = $"{name}.lint"
+      Rules = rules
+      Lint = NyxCompiler.LintAnswers.lintWith (fun answer -> run answer |> Result.mapError (fun error -> $"%A{error}")) }

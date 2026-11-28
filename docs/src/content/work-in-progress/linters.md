@@ -240,8 +240,13 @@ The F# rules and the package run side by side until the last rule moves, so that
 and its tests show it reports what it did:
 
 1. **The contract.** `nanyx.analysis` and `nanyx.analysis.host`, the encoding of the tree and the `Analysis` imports,
-   lint builds and their cache, and running a linter package from a manifest's `linters` in the CLI and the language
-   server. A test linter in the tests' packages checks it end to end.
+   and lint builds ([#3171](https://github.com/nanyx-lang/nanyx/issues/3171)): built. `nanyx.analysis` holds the
+   types; `LintData`, `LintSyntax` and `LintAnswers` in the compiler encode the module and answer its questions;
+   `nanyx.analysis.host` asks them through the runtime's `nanyx:lint` (`Nanyx.Runtime.WasmLinter`); and
+   `Transpiler.Wasm.LintBuild` makes a lint build of a linter written as a script under the linter host. A probe
+   linter in the Wasm tests (`RunLintBuildTests.fs`) runs end to end. Left for
+   [#3172](https://github.com/nanyx-lang/nanyx/issues/3172): a linter package declaring itself in its manifest,
+   building and caching its lint build, and running it from a manifest's `linters` in the CLI and the language server.
 2. **The package.** `nanyx.lint` under `packages/`, at the compiler's version, declaring every rule. The host runs it
    as the official linter, and runs the F# rule for each rule the package doesn't implement yet.
 3. **The rules**, a group at a time: the `unused*` rules; `unreachableArms` and `unreachableCode`; `unusedResults`,
