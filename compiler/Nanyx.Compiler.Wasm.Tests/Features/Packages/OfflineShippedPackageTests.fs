@@ -58,3 +58,11 @@ let ``A lockfile written before the compiler locked the packages it ships gains 
     let locked = lockedIn package |> List.map (fun (name, _, _) -> name)
     Assert.Contains(Hosts.consolePackage, locked)
     Assert.Contains("nanyx.cli", locked)
+
+[<Fact>]
+let ``The tests seed the shipped packages into a package cache of their own, not the user's`` () =
+    let cache = PackageStore.defaultCache ()
+    let home = System.Environment.GetFolderPath System.Environment.SpecialFolder.UserProfile
+    Assert.StartsWith(Path.GetFullPath(Path.GetTempPath()), cache)
+    Assert.NotEqual<string>(Path.Combine(home, ".nanyx", "packages"), cache)
+    Assert.True(Directory.Exists cache)
