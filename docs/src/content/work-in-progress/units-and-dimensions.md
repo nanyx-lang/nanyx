@@ -50,6 +50,13 @@ dimension](../advanced/units-of-measure#units-of-a-derived-dimension)). What is 
 4. **Units in patterns.** A number with a unit is not a pattern yet: `| 0ms ->` is a syntax error, and a guard,
    `| == 0ms ->`, compares with one. Open: whether a pattern matches a measured value exactly, which for a `float`
    storage is as fragile as matching a `float`, and whether a range of them, `0ms..1s`, is a pattern.
+5. **Dividing two dimensions with the types unwritten.** `def speed = { d, t -> d / t }` reads `/` through `Num`, whose
+   `/` takes its operands as one type, so `speed(100cm, 2s)` is a mismatch, which says to write the parameters' types,
+   `{ d: Distance(int), t: Time(int) -> d / t }` (#2880). Inferring the quotient instead would read an unwritten `/` and
+   `*` through a context of three types, the operands' and the result's, `[Div(a, b, c)] a, b -> c`, with an instance for
+   each type with a `Num` and one the compiler derives for each two dimensions. Open: whether that is worth what it
+   changes, the type inferred for every unannotated division and which context an operator is read through (see
+   [Operators find their context](../advanced/contexts#operators-find-their-context)).
 
 # Prior art
 

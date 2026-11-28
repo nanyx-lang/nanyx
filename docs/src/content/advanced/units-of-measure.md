@@ -243,6 +243,11 @@ println(1km / 1m)
 Two storages on its parts, and a part that is no dimension, are errors
 ([NYX0295](../standard-tools/errors#nyx0295), [NYX0296](../standard-tools/errors#nyx0296)).
 
+A function that divides or multiplies two of its parameters writes their types, as `speed` does. Without them, `/` is
+read through [`Num`](./contexts#operators-find-their-context), whose `/` takes its operands as one type, so
+`def speed = { d, t -> d / t }` called with a `Length` and a `Time` is a mismatch, which shows the def with the
+parameters' types written.
+
 ## Units of a derived dimension
 
 A derived dimension's units are defined from its parts' units, multiplied and divided, on one line and read from the

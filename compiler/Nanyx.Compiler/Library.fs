@@ -601,6 +601,13 @@ module Compiler =
                             exportMismatch export
                         | _ -> diagnostic)
                     |> List.distinct
+                let dividedDimensions =
+                    DimensionDivisions.diagnostic
+                        state
+                        desugared
+                        (normalizeSource source)
+                        (fun node -> state.ExprTypes |> Map.tryFind node |> Option.map (Unifier.apply subst))
+                        (Unifier.typeText state.TypeDefs)
                 let mismatchErrors =
                     mismatches
                     // A mismatch of a call's arguments is reported at the one that doesn't fit (see `ArgumentSpans`).
@@ -631,6 +638,9 @@ module Compiler =
                             HiddenKeywords.diagnostic (Unifier.apply subst >> Unifier.typeText state.TypeDefs) state.HiddenKeywords.[span]
                         | Some entry, _ -> entryMismatch entry
                         | None, Some export -> exportMismatch export
+                        // Two dimensions given to a def that divides them with its parameters' types unwritten say how
+                        // to write them (see `DimensionDivisions`).
+                        | None, None when (dividedDimensions span).IsSome -> (dividedDimensions span).Value
                         | None, None ->
                             match kind with
                             // Outside a nominal type's home module, a value of its shape is no value of it: the error says
