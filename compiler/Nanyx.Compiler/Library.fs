@@ -469,7 +469,8 @@ module Compiler =
                   UnqualifiedSources = Map.empty
                   ImportedFiles = Map.empty
                   ReExports = []
-                  Merged = Set.empty }
+                  Merged = Set.empty
+                  WrittenNames = Map.empty }
             // A re-export written in a block counts for the block's exports, not the file's (see `Visibility.blockExports`).
             let reExportItems =
                 ModuleLinking.reExportsOf desugared |> List.filter (fun item -> (NyxCompiler.InferState.blockAround moduleBlocks item.Span).IsNone)
@@ -921,7 +922,16 @@ module Compiler =
                           InlinedTypeDefs = Map.empty
                           ScriptEntryValues = state.ScriptEntryValues
                           Units = state.Units
-                          Declared = state.Declared }
+                          Declared = state.Declared
+                          WrittenNames =
+                            own
+                            |> List.fold (fun acc item ->
+                                match item.Kind with
+                                | Def (ValueDef(_, name, _, _)) ->
+                                    let backend = ownRenames |> Map.tryFind name |> Option.defaultValue name
+                                    let written = ModuleLinking.nameAsWritten (FileImports.declaredName moduleBlocks desugared) name
+                                    if backend = written then acc else acc |> Map.add backend written
+                                | _ -> acc) merged.WrittenNames }
                      Errors = moduleErrors
                      Undeferred = undeferred
                      ImportedErrors = merged.DeferredImportErrors |> List.distinctBy Diagnostics.inItsModule

@@ -118,6 +118,7 @@
     <Compile Include="Features\Errors\RunErrorTests.fs" />
     <Compile Include="Features\Errors\ArithmeticErrorTests.fs" />
     <Compile Include="Features\Errors\CrashStackTests.fs" />
+    <Compile Include="Features\Errors\WrittenFrameNameTests.fs" />
     <Compile Include="Features\Errors\ImportedDeferredErrorTests.fs" />
     <Compile Include="Features\Examples\RunExampleTests.fs" />
     <Compile Include="Features\Except\RunExceptTests.fs" />

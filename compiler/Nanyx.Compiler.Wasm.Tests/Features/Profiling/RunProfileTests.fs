@@ -55,6 +55,20 @@ let ``run --profile gives each function the file and line of its def`` () =
     Assert.Equal((None, None), placeOf "__nanyx_start")
 
 [<Fact>]
+let ``run --profile names a function as it is written, though the backend names a def that shadows the library's otherwise`` () =
+    use directory = new TempDirectory()
+    // The prelude exports an `ignore` too, so the backend names this one `main_ignore` (#3223).
+    directory.Write "main.nyx" "def ignore: int -> int = { n -> if n < 2 then n else ignore(n - 1) + ignore(n - 2) }\n\nprintln(ignore(35))\n"
+    let profile = Path.Combine(directory.Path, "main.json")
+    let outcome = nanyxProcess [ "run"; "--profile"; profile; Path.Combine(directory.Path, "main.nyx") ]
+    Assert.Equal(0, outcome.ExitCode)
+    let thread = JsonNode.Parse(File.ReadAllText profile).["threads"].[0]
+    let strings = thread.["stringArray"].AsArray() |> Seq.map (fun text -> text.GetValue<string>()) |> Array.ofSeq
+    let names = thread.["funcTable"].["name"].AsArray() |> Seq.map (fun name -> strings.[name.GetValue<int>()]) |> List.ofSeq
+    Assert.Contains("ignore", names)
+    Assert.DoesNotContain("main_ignore", names)
+
+[<Fact>]
 let ``run --profile with a memory check is a usage error`` () =
     use directory = new TempDirectory()
     directory.Write "main.nyx" "println(1)\n"

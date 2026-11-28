@@ -30,6 +30,9 @@ type SExpr =
     /// A file of the standard library's, `;;@lib prelude.nyx`, among the module's fields: the places in it are the
     /// library's, not the program's (see `CoreIrEmit.libraryMarker`). To WebAssembly it is a comment.
     | Library of file: string
+    /// The name a function is written by, `;;@name shapes_perimeter perimeter`, among the module's fields: a stack names
+    /// the function the module names so by it (see `CoreIrEmit.nameMarker`). To WebAssembly it is a comment.
+    | Named of functionName: string * written: string
 
 /// WebAssembly text that is not well formed: what is wrong, and the offset into the text where it was found.
 exception WatSyntaxError of message: string * offset: int
@@ -127,6 +130,11 @@ let read (text: string) : SExpr list =
                 // A function's name, after `entry`, may hold spaces, as one in backticks does.
                 match written.Split(' ', 4) with
                 | _ when written.StartsWith "lib " -> items.Add(Library(written.Substring("lib ".Length).Trim()))
+                // The name as written may hold spaces, as one in backticks does.
+                | _ when written.StartsWith "name " ->
+                    match written.Substring("name ".Length).Split(' ', 2) with
+                    | [| functionName; name |] -> items.Add(Named(functionName, name.Trim()))
+                    | _ -> raise (WatSyntaxError("a name marker that is not ;;@name function written", start))
                 | _ when written.StartsWith "def " ->
                     let file, line, _ = place (written.Substring "def ".Length)
                     items.Add(Defined(file, line))

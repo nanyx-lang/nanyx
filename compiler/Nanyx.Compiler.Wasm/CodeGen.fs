@@ -679,8 +679,13 @@ let private lowerTypedModule (options: WasmOptions) (typed: TypedModule) : Lower
                     |> Seq.filter (fun symbol -> symbol.Kind = TopLevelValue)
                     |> Seq.map (fun symbol -> (symbol.Name, symbol.Declaration.File), symbol.Declaration)
                     |> Map.ofSeq
+                // A def the backend names otherwise is declared by the name it is written by (see `TypedModule.WrittenNames`).
+                let writtenOf (name: string) = typed.WrittenNames |> Map.tryFind name |> Option.defaultValue name
                 defs
-                |> List.choose (fun (name, _, expr) -> declared |> Map.tryFind (name, expr.Span.File) |> Option.map (fun span -> name, span))
+                |> List.choose (fun (name, _, expr) ->
+                    declared |> Map.tryFind (name, expr.Span.File)
+                    |> Option.orElse (declared |> Map.tryFind (writtenOf name, expr.Span.File))
+                    |> Option.map (fun span -> name, span))
                 |> Map.ofList
               Externs = externs
               ExprTypes =
@@ -936,6 +941,18 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
             | None -> CoreIr.internalError $"no function for the component's export '{func.Export.Definition}'")
         |> Map.ofList
 
+    // The name each function of a definition is written by, where a stack would show another (see `CoreIrEmit.nameMarker`):
+    // of those inlining leaves out too, which the places of the code inlined from them name.
+    let nameMarkers =
+        if options.Places then
+            definitionFunctions
+            |> List.filter (fun func -> not (func.Name.StartsWith "__"))
+            // By the function's name, which a frame has, and by its definition's, which a probe's entry has.
+            |> List.collect (fun func ->
+                let written = typed.WrittenNames |> Map.tryFind func.Source |> Option.defaultValue func.Source
+                [ func.Name; func.Source ] |> List.filter ((<>) written) |> List.map (fun name -> CoreIrEmit.nameMarker name written))
+            |> List.distinct
+        else []
     let definitionFunctions, startFunction, owningEntries, ownership =
         optimised options cachedNames (exportTargets |> Map.values |> List.ofSeq) definitionFunctions startFunction
 
@@ -979,6 +996,7 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
 
     // The files of the standard library's that the markers name, as they name them (see `CoreIrEmit.libraryMarker`).
     let libraryFiles = System.Collections.Generic.SortedSet<string>()
+
 
     // How many probes the module has numbered (see `EmitContext.ProbeId`).
     let probes = ref 0
@@ -1359,7 +1377,8 @@ let transpileTypedModuleWithOptions (options: WasmOptions) (typed: TypedModule) 
               if not (String.IsNullOrWhiteSpace support.Arrays) then support.Arrays
               if not (String.IsNullOrWhiteSpace renderedStartFunction) then renderedStartFunction
               if not (String.IsNullOrWhiteSpace startDirective) then startDirective
-              if libraryFiles.Count > 0 then libraryFiles |> Seq.map CoreIrEmit.libraryMarker |> String.concat "\n" ]
+              if libraryFiles.Count > 0 then libraryFiles |> Seq.map CoreIrEmit.libraryMarker |> String.concat "\n"
+              if not nameMarkers.IsEmpty then String.concat "\n" nameMarkers ]
         let body = String.concat "\n\n" parts
         $"(module\n{body}\n)", report
 
