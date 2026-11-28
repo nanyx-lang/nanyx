@@ -138,6 +138,10 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
     let beginDef () = state <- { state with TypeVars = initialState.TypeVars }
     let mutable currentModule: string option = None
     let mutable types = Map.empty
+    // The top-level values whose types other defs read with their made-up variables `undefined`, each with its type
+    // and that closing, which is applied to its type as hover and `nanyx check` write it once the module is inferred
+    // (see `EmptyLists.closeValue`).
+    let mutable closedValues: (Identifier * SymbolId option * SourceSpan * Ty * Subst) list = []
     // Each typed item with the index of the item it was checked from, which may be out of order (see `DefinitionOrder`),
     // the last emitted first.
     let mutable items: (int * TypedTopLevelItem) list = []
@@ -473,13 +477,19 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
                                 match contextVariables with
                                 | [] -> resolvedState
                                 | names -> { resolvedState with ContextRequirements = resolvedState.ContextRequirements |> Map.add name (written @ (names |> List.map (TypeVar >> TypeExpr.synthetic))) }
-                            let scheme =
-                                if expectedDeclaredOpt.IsSome then scheme
+                            let scheme, valueClosing =
+                                if expectedDeclaredOpt.IsSome then scheme, Map.empty
                                 else
                                     let scheme, closed = NeverReturns.close state name expr.Span scheme
+                                    let requiresParameterised =
+                                        closed.ContextRequirements
+                                        |> Map.tryFind name
+                                        |> Option.exists (List.exists (fun context -> match context.Kind with TypeApply(_, _ :: _) -> true | _ -> false))
+                                    let scheme, closed = EmptyLists.close closed scheme
                                     state <- closed
-                                    scheme
+                                    EmptyLists.closeValue requiresParameterised closed scheme
                             env <- declareTopLevel name symbol scheme env
+                            if not valueClosing.IsEmpty then closedValues <- (name, symbol, expr.Span, declaredTy, valueClosing) :: closedValues
                             types <- types |> Map.add name declaredTy
                             state <- { state with AssociatedVariables = state.AssociatedVariables @ associatedVariables state contextOpt }
                             emit (TypedDef (TypedValueDef(isExport, name, annotation, typedExpr)))
@@ -661,6 +671,16 @@ let inferModuleWithEnv (initialEnv: TypeEnv) (initialState: InferState) (module'
 
     // Each call that leaves out a type argument, now that the types say which one to pass (see `TypeArguments`).
     state <- TypeArguments.report state
+
+    // A closed value's type is written closed once every error is known, but for a value with an error in it, whose
+    // type says nothing of what it gives: a call's argument is checked after the def is generalised.
+    let failures = lazy (snd (Solving.solve state.Constraints) |> List.map snd)
+    let failedSpans = lazy (failures.Value @ (errors @ (state.FailedExprs |> List.collect snd) |> List.choose _.Span))
+    for name, symbol, span, declaredTy, closing in closedValues do
+        if not (failedSpans.Value |> List.exists (SourceSpan.contains span)) then
+            let valueTy = Unifier.apply closing (resolveSoFar state declaredTy)
+            state <- recordSymbolType symbol valueTy state
+            types <- types |> Map.add name valueTy
 
     // The defs that failed and the expressions that failed inside the others, in the order they are in the source. An
     // expression inferred more than once (a lambda checked again against its expected type) is reported once.

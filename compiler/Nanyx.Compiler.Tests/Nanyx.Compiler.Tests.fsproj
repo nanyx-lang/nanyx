@@ -276,6 +276,7 @@
     <Compile Include="Features\Types\BottomTypeTests.fs" />
     <Compile Include="Features\Types\UndefinedUseTests.fs" />
     <Compile Include="Features\Types\UndefinedJoinTests.fs" />
+    <Compile Include="Features\Types\EmptyListTests.fs" />
     <Compile Include="Features\Types\GenericNominalsTests.fs" />
     <Compile Include="Features\Types\NominalsTests.fs" />
     <Compile Include="Features\Types\NominalUpdatesTests.fs" />

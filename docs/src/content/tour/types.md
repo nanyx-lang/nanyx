@@ -152,12 +152,26 @@ only call itself, or something else that never returns:
 ```nanyx
 def loop = { x -> loop(x) } -- a -> undefined
 def first = { (xs: list(int)) -> list.head(xs) } -- list(int) -> #some(int) | #emptyList
-def empty = { [] } -- () -> list(a)
 ```
 
-`first`'s result comes from its input, and `empty`'s variable is inside a `list`, so both stay as they are. A type that
-writes a variable for the result, `def loop: a -> b`, keeps it, and so does a function that requires a context with a
-type parameter, which can make a value of it, as `[Decode(a)] string -> a` can.
+`first`'s result comes from its input, so it stays as it is. A type that writes a variable for the result,
+`def loop: a -> b`, keeps it, and so does a function that requires a context with a type parameter, which can make a
+value of it, as `[Decode(a)] string -> a` can.
+
+`[]` where nothing says what its elements are is a `list(undefined)`, a list that can hold nothing, and so is a value
+nothing could make a value of a variable of. Since `undefined` in a list joins with any other type, such a list can
+still be given where a list of any type is expected:
+
+```nanyx
+def items = [] -- list(undefined)
+def first = list.head(items) -- #emptyList
+def empty = { [] } -- () -> list(undefined)
+def numbers: list(int) = items
+def words: list(string) = items
+```
+
+A list in a function's input is left generic, as `{ ys -> ys ++ [] }` takes a list of any type, and so is one that
+something later says the elements of, as a `[]` that a loop then adds to.
 
 # Tuple types
 

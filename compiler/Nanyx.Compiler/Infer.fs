@@ -424,7 +424,7 @@ and private inferExprKind (env: TypeEnv) (state: InferState) (expr: Expression) 
             match typedItems with
             | [] ->
                 let elementTy, nextState = freshVar current
-                mkTypedExpr expr (listType elementTy) None None None, nextState
+                mkTypedExpr expr (listType elementTy) None None None, EmptyLists.record elementTy nextState
             // Checked against a `list(a)` whose `a` is known, each element is given where an `a` is expected, as an
             // argument is: two lambdas that give back different tags of the union `a`'s result is fit it, though they
             // don't join. Where `a` is still a variable, as `list.length`'s is, the elements say what it is, joined, and
@@ -1046,6 +1046,7 @@ and inferBlock (env: TypeEnv) (state: InferState) (block: Expression) (statement
                                 elif (match expr.Kind with MutSyntax.Call _ -> true | _ -> false) then TypeEnv.mono declaredTy, MemoryCells.declareCell env' symbol (NumericLiterals.settleWithin [ declaredTy ] (MemoryCells.typeMut expr declaredTy current))
                                 else
                                     let scheme, generalized = ArithmeticInference.generalize (fun state -> generalizeDef env' state declaredTy) ArithmeticInference.LocalDef current
+                                    let scheme, generalized = if expectedDeclaredOpt.IsNone then EmptyLists.close generalized scheme else scheme, generalized
                                     // The parameterised contexts a local def that writes no type requires are part of
                                     // its type, as if written.
                                     if expectedDeclaredOpt.IsNone && contextOpt.IsNone then

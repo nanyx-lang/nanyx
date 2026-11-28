@@ -29,7 +29,7 @@ def n = ["a" => 1]
     Assert.Equal("set(int)", typeOf "s")
     Assert.Equal("map(string, int)", typeOf "m")
     Assert.Equal("list(int)", typeOf "l")
-    Assert.Equal("list(a)", typeOf "e")
+    Assert.Equal("list(undefined)", typeOf "e")
     Assert.Equal("map(string, int)", typeOf "n")
 
 [<Fact>]

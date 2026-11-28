@@ -122,6 +122,7 @@
     <Compile Include="InferMatch.fs" />
     <Compile Include="ParameterTypes.fs" />
     <Compile Include="InferCalls.fs" />
+    <Compile Include="EmptyLists.fs" />
     <Compile Include="Infer.fs" />
     <Compile Include="NeverReturns.fs" />
     <Compile Include="InferModule.fs" />

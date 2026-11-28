@@ -30,7 +30,7 @@ println(next(2))
 [<Fact>]
 let ``A generic top-level value is built once for each type it is read at`` () =
     let source =
-        """def nothing = dbg([])
+        """def nothing: list(a) = dbg([])
 
 def ints: list(int) = nothing
 def moreInts: list(int) = nothing
@@ -45,7 +45,7 @@ println(strings == [])
 [<Fact>]
 let ``A generic record value read again and again at one type is allocated once`` () =
     let source =
-        """def box = (items = [], size = 0)
+        """def box: (items: list(a), size: int) = (items = [], size = 0)
 
 def sizes = { n: int ->
   def b: (items: list(int), size: int) = box
