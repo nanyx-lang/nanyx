@@ -18,7 +18,11 @@ type ApiExport =
     { Kind: ApiKind
       Name: string
       /// A def's type, `[Eq(a)] list(a), a -> bool`, or a type's definition, `type Point = (x: int, y: int)`.
-      Signature: string }
+      Signature: string
+      /// A nominal type's parameters' variances, as its definition decides them (see `Variances`): what may be given
+      /// for what, which can change with no change to how the definition is written, when a type it is made from
+      /// changes. None for any other export, and in an `api.json` written before they were recorded.
+      Variances: Variance list option }
 
 /// A package's public API, as `api.json` records it: what each module it exports with `export module` exports.
 type PackageApi =
@@ -78,18 +82,37 @@ module PackageApi =
                     let symbol = export.Symbol
                     match Definition.typeDefinitionOf typed symbol with
                     | Some info when symbol.Kind = TypeDefinition ->
-                        { Kind = (if info.IsContext then ApiContext else ApiType); Name = symbol.Name; Signature = export.Written }
+                        { Kind = (if info.IsContext then ApiContext else ApiType)
+                          Name = symbol.Name
+                          Signature = export.Written
+                          Variances = if info.IsNominal && not info.IsContext then Some info.Variances else None }
                     | _ ->
                         // `def name: type`, of which the type is what matters.
                         let written = export.Written
                         let signature = match written.IndexOf ": " with -1 -> "" | at -> written.Substring(at + 2)
-                        { Kind = ApiDef; Name = symbol.Name; Signature = signature })
+                        { Kind = ApiDef; Name = symbol.Name; Signature = signature; Variances = None })
                 |> Seq.sortBy (fun export -> export.Name, kindName export.Kind)
                 |> List.ofSeq
             Result.Ok
                 { Package = package.Manifest.Name
                   Version = package.Manifest.Version
                   Modules = compiled |> List.map (fun (moduleName, files, result) -> moduleName, exportsOf files result.Typed.Value) }
+
+    /// How `variance` is written in an `api.json`.
+    let private varianceName (variance: Variance) =
+        match variance with
+        | Unused -> "unused"
+        | Covariant -> "covariant"
+        | Contravariant -> "contravariant"
+        | Invariant -> "invariant"
+
+    /// The variance `name` writes in an `api.json`.
+    let private varianceOf (name: string) =
+        match name with
+        | "unused" -> Unused
+        | "covariant" -> Covariant
+        | "contravariant" -> Contravariant
+        | _ -> Invariant
 
     /// `api` as `api.json` holds it.
     let toJson (api: PackageApi) : string =
@@ -110,6 +133,13 @@ module PackageApi =
                     writer.WriteString("kind", kindName export.Kind)
                     writer.WriteString("name", export.Name)
                     writer.WriteString((if export.Kind = ApiDef then "type" else "definition"), export.Signature)
+                    match export.Variances with
+                    | Some variances ->
+                        writer.WriteStartArray "variances"
+                        for variance in variances do
+                            writer.WriteStringValue(varianceName variance)
+                        writer.WriteEndArray()
+                    | None -> ()
                     writer.WriteEndObject()
                 writer.WriteEndArray()
                 writer.WriteEndObject()
@@ -137,7 +167,14 @@ module PackageApi =
                           text moduleElement "name",
                           [ for export in moduleElement.GetProperty("exports").EnumerateArray() ->
                                 let kind = kindOf (text export "kind")
-                                { Kind = kind; Name = text export "name"; Signature = text export (if kind = ApiDef then "type" else "definition") } ] ] }
+                                let variances =
+                                    match export.TryGetProperty "variances" with
+                                    | true, written -> Some [ for variance in written.EnumerateArray() -> varianceOf (variance.GetString()) ]
+                                    | false, _ -> None
+                                { Kind = kind
+                                  Name = text export "name"
+                                  Signature = text export (if kind = ApiDef then "type" else "definition")
+                                  Variances = variances } ] ] }
         with
         | :? JsonException
         | :? Collections.Generic.KeyNotFoundException
@@ -318,8 +355,36 @@ module PackageApi =
         | _ when oldDefinition = newDefinition -> []
         | _ -> [ changed ]
 
+    /// Whether a parameter that was of variance `before` and is of `after` takes everything it took: one that is unused
+    /// takes any argument, an invariant one takes only the same, and a covariant and a contravariant one each take what
+    /// the other doesn't.
+    let private takesAll (before: Variance) (after: Variance) =
+        before = after || after = Unused || before = Invariant
+
+    /// How the variances of the type `name`'s parameters changed from `before` to `after`, as both `api.json`s record
+    /// them, its parameters named as its new definition, `definition`, writes them: a parameter that takes less than it
+    /// did needs a major bump, since a value given for one at another argument may no longer be, and one that takes more
+    /// a minor bump. Nothing when either doesn't record them.
+    let private varianceChanges (name: string) (definition: string) (before: Variance list option) (after: Variance list option) : ApiChange list =
+        match before, after with
+        | Some before, Some after when before.Length = after.Length && before <> after ->
+            let parameters =
+                match parseTypeDefinition definition with
+                | Some (_, parameters, _) when parameters.Length = after.Length -> parameters
+                | _ -> List.init after.Length (fun index -> $"#{index + 1}")
+            List.zip3 parameters before after
+            |> List.filter (fun (_, old, current) -> old <> current)
+            |> List.map (fun (parameter, old, current) ->
+                let was = $"the parameter {parameter} of {name} was {varianceName old} and is {varianceName current}"
+                if takesAll old current then
+                    { Bump = MinorBump; Description = $"{was}, so a value of it is given where it wasn't" }
+                else
+                    { Bump = MajorBump; Description = $"{was}, so a value of it at one argument may no longer be given where one at another is expected" })
+        | _ -> []
+
     /// The changes from the API `before` to the API `after`, each with the bump it needs: a module or an export removed
-    /// needs a major bump, one added a minor bump, and a changed one what `defChanges` or `typeChanges` says.
+    /// needs a major bump, one added a minor bump, and a changed one what `defChanges` or `typeChanges` says, and for a
+    /// nominal type what `varianceChanges` says of its parameters.
     let compare (before: PackageApi) (after: PackageApi) : ApiChange list =
         let oldModules, newModules = Map.ofList before.Modules, Map.ofList after.Modules
         let removedModules =
@@ -348,10 +413,13 @@ module PackageApi =
                     oldExports
                     |> List.collect (fun oldExport ->
                         match newExports |> List.tryFind (fun other -> key other = key oldExport) with
-                        | Some newExport when newExport.Signature <> oldExport.Signature || newExport.Kind <> oldExport.Kind ->
-                            if oldExport.Kind = ApiDef then defChanges (shown oldExport) oldExport.Signature newExport.Signature
-                            else typeChanges (shown oldExport) oldExport.Signature newExport.Signature
-                        | _ -> [])
+                        | Some newExport ->
+                            let written =
+                                if newExport.Signature = oldExport.Signature && newExport.Kind = oldExport.Kind then []
+                                elif oldExport.Kind = ApiDef then defChanges (shown oldExport) oldExport.Signature newExport.Signature
+                                else typeChanges (shown oldExport) oldExport.Signature newExport.Signature
+                            written @ varianceChanges (shown oldExport) newExport.Signature oldExport.Variances newExport.Variances
+                        | None -> [])
                 removed @ changed @ added)
         removedModules @ inBoth @ addedModules
 

@@ -11,8 +11,9 @@ open Nanyx.Compiler.Tests.TestSupport
 
 let private version text = (SemanticVersion.tryParse text).Value
 
-let private def name signature = { Kind = ApiDef; Name = name; Signature = signature }
-let private typeNamed name definition = { Kind = ApiType; Name = name; Signature = definition }
+let private def name signature = { Kind = ApiDef; Name = name; Signature = signature; Variances = None }
+let private typeNamed name definition = { Kind = ApiType; Name = name; Signature = definition; Variances = None }
+let private nominal name definition variances = { Kind = ApiType; Name = name; Signature = definition; Variances = Some variances }
 
 let private api (modules: (string * ApiExport list) list) = { Package = "acme.util"; Version = "1.0.0"; Modules = modules }
 
@@ -129,6 +130,26 @@ let ``Publishing a bump too small for the changes is refused, with the changes l
     Assert.Empty(PackageApi.versionErrors before (version "2.0.0", after))
     Assert.Equal<string list>([ "acme.util 1.1.0 is not after 1.2.0, the newest version published" ], PackageApi.versionErrors before (version "1.1.0", after))
 
+[<Fact>]
+let ``A nominal type's parameter that takes less than it did needs a major bump, and one that takes more a minor one`` () =
+    let stack variances = [ nominal "Stack" "type Stack(a) = private (items: Inner(a))" variances ]
+    Assert.Equal(
+        (MajorBump,
+         "strings's type Stack: the parameter a of strings's type Stack was covariant and is invariant, so a value of it at one argument may no longer be given where one at another is expected"),
+        onlyChange (stack [ Covariant ]) (stack [ Invariant ]) |> fun (bump, description) -> bump, $"strings's type Stack: {description}")
+    Assert.Equal(MajorBump, fst (onlyChange (stack [ Covariant ]) (stack [ Contravariant ])))
+    Assert.Equal(MajorBump, fst (onlyChange (stack [ Unused ]) (stack [ Covariant ])))
+    Assert.Equal(
+        (MinorBump, "the parameter a of strings's type Stack was invariant and is covariant, so a value of it is given where it wasn't"),
+        onlyChange (stack [ Invariant ]) (stack [ Covariant ]))
+    Assert.Equal(MinorBump, fst (onlyChange (stack [ Contravariant ]) (stack [ Unused ])))
+
+[<Fact>]
+let ``An api.json that records no variances is compared by its definitions alone`` () =
+    let written = typeNamed "Stack" "type Stack(a) = private (items: Inner(a))"
+    let recorded = nominal "Stack" "type Stack(a) = private (items: Inner(a))" [ Invariant ]
+    Assert.Empty(changes [ written ] [ recorded ])
+
 // A package, end to end: its API made from its public modules, packed in its `.nyxpkg`, and `bump` against the version
 // published in an index on disk.
 
@@ -146,6 +167,8 @@ let ``The API holds every export of each public module, with its type`` () =
             library "1.0.0" """export module strings
 
 export type Point = (x: int, y: int)
+export type Stack(a) = private list(a)
+export type Sink(a) = private (put: a -> ())
 
 export def shout = { s: string -> s ++ "!" }
 
@@ -153,11 +176,16 @@ def helper = 1"""
         )
     let made = okOf (PackageApi.ofPackage (found package))
     Assert.Equal<(string * ApiExport list) list>(
-        [ "strings", [ typeNamed "Point" "type Point = (x: int, y: int)"; def "shout" "string -> string" ] ],
+        [ "strings",
+          [ typeNamed "Point" "type Point = (x: int, y: int)"
+            nominal "Sink" "type Sink(a) = private (put: (a -> ()))" [ Contravariant ]
+            nominal "Stack" "type Stack(a) = private list(a)" [ Covariant ]
+            def "shout" "string -> string" ] ],
         made.Modules
     )
     Assert.Equal(made, okOf (PackageApi.ofJson (PackageApi.toJson made)))
     Assert.Contains("\"type\": \"string -> string\"", PackageApi.toJson made)
+    Assert.Contains("\"variances\": [\n            \"covariant\"\n          ]", PackageApi.toJson made)
 
 [<Fact>]
 let ``A packed package holds its api.json`` () =
