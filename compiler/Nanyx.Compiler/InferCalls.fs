@@ -357,7 +357,9 @@ let rec internal inferCall
                                 | Some paramTy, Some (typedItems, itemTys) ->
                                     let reported = lazy (LambdaArguments.reportedSpan next arg.Span typedItems itemTys ty.Type paramTy)
                                     let items = match arg.Kind with TupleExpr items -> items | _ -> []
-                                    { next with ArgumentSpans = next.ArgumentSpans |> Map.add arg.Span reported }
+                                    { next with
+                                        ArgumentSpans = next.ArgumentSpans |> Map.add arg.Span reported
+                                        ArgumentCallees = items |> List.fold (fun callees item -> callees |> Map.add item.Span (name, items)) next.ArgumentCallees }
                                     |> ParameterTypes.noteItems scheme.Symbol name items
                                 | _ -> next
                             current <-

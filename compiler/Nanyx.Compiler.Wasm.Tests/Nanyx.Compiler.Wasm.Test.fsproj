@@ -317,6 +317,7 @@
     <Compile Include="Features\Units\RunMeasuredDisplayTests.fs" />
     <Compile Include="Features\Units\RunStorageAndDisplayUnitTests.fs" />
     <Compile Include="Features\Units\RunDerivedDimensionTests.fs" />
+    <Compile Include="Features\Units\RunDimensionDivisionTests.fs" />
     <Compile Include="Features\Units\RunDerivedUnitTests.fs" />
     <Compile Include="Features\Units\RunAttachedMeasuredOperatorTests.fs" />
     <Compile Include="Features\Workflows\RunWorkflowTests.fs" />
