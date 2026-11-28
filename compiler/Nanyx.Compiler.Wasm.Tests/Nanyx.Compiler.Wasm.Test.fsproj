@@ -20,6 +20,8 @@
   <ItemGroup>
     <!-- Timing, shared by the test projects that time anything (see TestTiming.fs). -->
     <Compile Include="..\TestTiming.fs" Link="TestTiming.fs" />
+    <!-- The test run's own package cache (see TestPackageCache.fs). -->
+    <Compile Include="..\TestPackageCache.fs" Link="TestPackageCache.fs" />
     <!-- The format specs the compiler's FormatSpecs and the prelude are both tested against. -->
     <Compile Include="..\FormatSpecTable.fs" Link="FormatSpecTable.fs" />
     <Compile Include="TestHelpers.fs" />
@@ -98,6 +100,9 @@
     <Compile Include="Features\Dbg\RunDbgChannelTests.fs" />
     <Compile Include="Features\Dbg\ShowValuesTests.fs" />
     <Compile Include="Features\Debugging\ProbeTests.fs" />
+    <Compile Include="Features\Debugging\ValueTreeTests.fs" />
+    <Compile Include="Features\Debugging\DebugSessionTests.fs" />
+    <Compile Include="Features\Debugging\DebugAdapterTests.fs" />
     <Compile Include="Features\Components\ComponentTests.fs" />
     <Compile Include="Features\Components\ComponentBuildTests.fs" />
     <Compile Include="Features\Components\LibraryComponentTests.fs" />

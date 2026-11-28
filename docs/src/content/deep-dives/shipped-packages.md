@@ -54,8 +54,11 @@ packages too ([#2770](https://github.com/nanyx-lang/nanyx/issues/2770)).
   made without one. `SeededPackages.user` is the user's store, which the CLI, the language server and the tests use, and
   `SeededPackages.store` one at a cache and an index of the caller's. `PackageIndex.listing` seeds the store before it
   lists anything, and a build before it reads a package from the index; a store that can't be seeded reads no package
-  from the index, and the build stops with `NYX0309` and seeding's message (`Package.locked`). A process seeds each store once, and packs the
-  shipped packages once for every store it seeds; a cache seeded already for this compiler isn't packed again.
+  from the index, and the build stops with `NYX0309` and seeding's message (`Package.locked`). A process seeds each
+  store once, and packs the shipped packages once for every store it seeds; a cache seeded already for this compiler
+  isn't packed again. The test projects run with a cache of their own, made empty for each run (`TestPackageCache.fs`,
+  and `TestPackageCache.cs` in the language server's), so a test run seeds this build's shipped packages and never meets
+  a copy an earlier build left in the user's cache.
 - **They are resolved as packages from the index.** A dependency or a host the compiler ships is named at a version,
   resolved by `Resolution` with the index's packages, and locked with its SHA-256. Seeding is the one place that knows
   which packages the compiler ships (`PackageStore.seededCopy`): a locked version that is the one the compiler seeded

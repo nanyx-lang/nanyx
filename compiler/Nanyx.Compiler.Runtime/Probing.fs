@@ -10,6 +10,11 @@ type IProbeListener =
     abstract Probe: probe: Probe -> bool
     /// A local of the frame of the last probe, by its name, written as `dbg` writes values.
     abstract Local: name: string * text: string -> unit
+    /// The locals the last probe was asked for are all written, and the statement it is at hasn't run: where a debugger
+    /// stops.
+    abstract Written: unit -> unit
+    /// The program crashed with `message` and is about to trap, its frames still on the stack (see `CrashImport`).
+    abstract Crashed: message: string -> unit
 
 /// A `dbg` a debug build reached: where it is written, its line and column counted from 1, the value's text, as
 /// `dbg`'s printer wrote it, and whether it is a value `nanyx run --show-values` shows rather than a `dbg` the program
@@ -33,6 +38,9 @@ type ShadowStack() =
 
     /// The frames, innermost first.
     member _.Frames = frames |> Seq.rev |> List.ofSeq
+
+    /// How many frames there are.
+    member _.Depth = frames.Count
 
     /// Takes the program on past `probe`.
     member _.Pass(probe: Probe) =
@@ -59,8 +67,9 @@ module Probing =
         Text.Encoding.UTF8.GetString(memory.GetSpan(int64 address, length))
 
     /// Defines what a debug build's probes import in `linker`: `enabled`, whether anything listens, which the program
-    /// reads when it starts; `probe`, which passes the probe of a number in `table` to `listener`; and `local`, which
-    /// passes it a local the program writes. Without a listener, the program never calls the last two.
+    /// reads when it starts; `probe`, which passes the probe of a number in `table` to `listener`; `local`, which
+    /// passes it a local the program writes; and `written`, which tells it they are all written. Without a listener,
+    /// the program never calls the last three.
     let define (linker: Linker) (table: SpanTable option) (listener: IProbeListener option) =
         linker.DefineFunction(moduleName, "enabled", Func<int>(fun () -> if listener.IsSome then 1 else 0))
         linker.DefineFunction(
@@ -79,6 +88,7 @@ module Probing =
                     let memory = caller.GetMemory "memory"
                     listener.Local(stringAt memory name, stringAt memory text)
                 | None -> ()))
+        linker.DefineFunction(moduleName, "written", Action(fun () -> listener |> Option.iter _.Written()))
 
     /// What a runner that leaves each `dbg` to the program gives `defineDbg`: it deals with none, so the program writes
     /// each to its own stderr.

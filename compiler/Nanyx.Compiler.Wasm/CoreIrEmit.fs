@@ -456,7 +456,8 @@ type private FunctionEmitter(context: EmitContext) =
         pieces.Add(join "\n    " parts)
 
     /// The code of the probe `probe` (see `CoreIrProbes`): when the runtime is probing (see `ProbingCopy`), a call with the probe's number,
-    /// and, if the runtime asks, each of its locals `alive` has, written by its printer, passed with its name. Before it
+    /// and, if the runtime asks, each of its locals `alive` has, written by its printer, passed with its name, and then
+    /// that they are written (`CoreIrEmitImports.probeWritten`). Before it
     /// go the marker of its place and its own, `;;@probe 3 statement` (with the function's name after `entry`), from which `WasmBinary` tells the runtime where
     /// each probe is.
     member this.Probe (probe: Expr) (kind: ProbeKind) (locals: ProbeLocal list) (isAlive: Var -> bool) : string =
@@ -493,6 +494,7 @@ type private FunctionEmitter(context: EmitContext) =
             $"call ${probeCall}"
             "if"
             yield! writes
+            $"call ${probeWritten}"
             "end"
             "end" ]
 
