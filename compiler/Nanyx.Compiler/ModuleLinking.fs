@@ -44,12 +44,13 @@ module internal ModuleLinking =
 
     /// The module's own top-level definitions, of `own`, that are named like one of the library's inlined into it
     /// (`library`), each with the name the backend knows it by: after the module, `moduleName`, as an importer names a
-    /// private definition of it (see `CheckedModule.OwnRenames`).
+    /// private definition of it (see `CheckedModule.OwnRenames`). A definition attached to a type, or one of a block,
+    /// whose name is dotted, keeps it, and wins over the library's of its name (see `Library`).
     let internal ownRenames (moduleName: string) (library: Set<string>) (own: Module) : Map<string, string> =
         let qualifier = IdentifierNames.sanitizeIdentifier moduleName
         own
         |> List.choose (function
-            | Kind (Def (ValueDef(_, name, _, _))) when library.Contains name -> Some (name, $"{qualifier}.{name}")
+            | Kind (Def (ValueDef(_, name, _, _))) when library.Contains name && not (name.Contains '.') -> Some (name, $"{qualifier}.{name}")
             | _ -> None)
         |> Map.ofList
 
@@ -297,10 +298,11 @@ module internal ModuleLinking =
     /// name so they cannot collide with anything in the importer.
     /// An import that selects names without an alias, `as (a, b)`, brings in only the exports it selects (see
     /// `selectedExports`) unqualified; the others are inlined as private definitions are. In a module that isn't the
-    /// program's own, as a host's or a library's, `qualified`, an export an import brings in unqualified is inlined as
-    /// a private definition is, under its module's name, too, so that it can't collide with a definition of the
-    /// program's, or with another module's of the same name; the module's references to it are written as that name
-    /// (see `writeBlockAliases`).
+    /// standard library's, `qualified`, an export an import brings in unqualified is inlined as a private definition
+    /// is, under its module's name, too, so that it can't collide with a definition of the importer's, of the library's,
+    /// or of another module's of the same name; the module's references to it are written as that name (see
+    /// `writeBlockAliases`). A definition attached to a type (`Regex.toString`) keeps its name: an instance finds it by
+    /// its type's, which every module shares.
     let private inlinedRenames (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Map<string, string> =
         let qualifier = importQualifier item
         let moduleName =
@@ -314,7 +316,7 @@ module internal ModuleLinking =
                 match qualifier, selected with
                 | Some q, _ -> Some (name, $"{q}.{name}")
                 | None, Some selected when not (selected.Contains name) -> Some (name, $"{moduleName}.{name}")
-                | None, _ when qualified -> Some (name, $"{moduleName}.{name}")
+                | None, _ when qualified && not (name.Contains '.') -> Some (name, $"{moduleName}.{name}")
                 | None, _ -> None
             | Kind (Def (ValueDef(false, name, _, _))) -> Some (name, $"{moduleName}.{name}")
             | _ -> None)

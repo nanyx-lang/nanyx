@@ -817,15 +817,16 @@ module Compiler =
                     | InMemory -> ModuleLinking.ownRenames moduleName libraryNames own
                 let backendOwn = ModuleLinking.renameOwn state ownRenames own
                 // In a module of the standard library, its own definitions win over imported ones of the same name, a
-                // script's values that run in its entry point among them; anywhere else, none has the name of one inlined.
+                // script's values that run in its entry point among them; anywhere else, only those whose names are dotted,
+                // attached to a type or of a block, which keep their names (see `ModuleLinking.ownRenames`).
                 let ownNames =
-                    match origin with
-                    | StandardLibraryModule _ ->
+                    let written =
                         exported
                         |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
-                        |> Set.union state.ScriptEntryValues
+                    match origin with
+                    | StandardLibraryModule _ -> written |> Set.union state.ScriptEntryValues
                     | SourceFile _
-                    | InMemory -> Set.empty
+                    | InMemory -> written |> Set.filter (fun name -> name.Contains '.')
                 let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =
                     merged.Inlined @ merged.PreludeInlined

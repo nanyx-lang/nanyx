@@ -72,7 +72,8 @@ let ``A module the host's prelude brings in is resolved without a file`` () =
         // The module is compiled together with the program: the backend sees its definitions, not the import.
         let hasImport = result.Typed.Value.Module |> List.exists (function Kind (Import _) -> true | _ -> false)
         Assert.False(hasImport)
-        let hasPrintln = result.Typed.Value.Module |> List.exists (function Kind (Def (ValueDef(_, "println", _, _))) -> true | _ -> false)
+        // Under its module's name, as every import that isn't the standard library's is inlined (#3221).
+        let hasPrintln = result.Typed.Value.Module |> List.exists (function Kind (Def (ValueDef(_, "console.println", _, _))) -> true | _ -> false)
         Assert.True(hasPrintln))
 
 [<Fact>]
