@@ -41,3 +41,13 @@ let ``An empty list in a function's input is left generic`` () =
 let ``A value the module has an error in keeps its variables, which its message names`` () =
     let _, message, _ = onlyDiagnostic "def f = { x -> x.name }\ndef y = f(5)\n"
     Assert.Equal("'int' vs '(name: α, …)'", message)
+
+[<Fact>]
+let ``A list of undefined value is still given to a list(int) parameter, joined with lists of two types, and read as two list types from a pair`` () =
+    let source =
+        "def nothing = []\ndef f: list(int) -> int = { xs -> list.length(xs) }\ndef a = f(nothing)\n"
+        + "def b = nothing ++ [\"a\"]\ndef c = [1] ++ nothing\ndef pair = (nothing, nothing)\n"
+        + "def ints: list(int) = pair.0\ndef strings: list(string) = pair.1\ndef typed: (list(int), list(string)) = pair\n"
+    Assert.Equal<string list>(
+        [ "int"; "list(string)"; "list(int)"; "list(int)"; "list(string)"; "(list(int), list(string))" ],
+        typesIn source [ "a"; "b"; "c"; "ints"; "strings"; "typed" ])
