@@ -36,6 +36,8 @@ type SourceText(source: string) =
     /// Whether the text at `span` starts with `s`.
     member _.StartsWith (span: SourceSpan) (s: string) = startsWith span s
 
+    /// The character at `offset`, or `'\000'` outside the source.
+    member _.CharAt offset = if offset >= 0 && offset < source.Length then source[offset] else '\000'
     /// The offsets between `start` and `finish` where `word` is written as a word of its own, in order.
     member _.WordOffsets (word: string) (start: int) (finish: int) =
         let isWordChar i = i >= 0 && i < source.Length && (Char.IsLetterOrDigit source[i] || source[i] = '_')

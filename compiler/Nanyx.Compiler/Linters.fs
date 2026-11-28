@@ -1312,7 +1312,7 @@ module Linters =
                     allow.Rules
                     |> List.filter (fun rule -> not (diagnostics |> List.exists (Allows.suppresses allow rule)))
                     |> List.choose (fun ((_, _, span) as rule) ->
-                        diagnostic options official Allows.rule (Some span) (Allows.message all rule) [] (Allows.fixes model allow)))
+                        diagnostic options official Allows.rule (Some span) (Allows.message (options.Linters @ all |> List.distinctBy _.Name) rule) [] (Allows.fixes model allow)))
         (diagnostics |> List.filter (suppressed >> not)) @ unused
 
     /// The diagnostics of every linter `options` names over `model`, at their configured severities, in the order

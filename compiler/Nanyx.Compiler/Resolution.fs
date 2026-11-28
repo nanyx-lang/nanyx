@@ -28,7 +28,7 @@ type Pulled =
 /// the lockfile that records them.
 module Resolution =
     /// The dependencies a resolution for the package `manifest` describes has to satisfy: those it names by their
-    /// version, its host's, if it names one by its version, and those of each package it finds on disk or on GitHub,
+    /// version, its host's and its linters', where it names them by their version, and those of each package it finds on disk or on GitHub,
     /// which share its lockfile. A package found that way that can't be read is left out, for the build to report.
     let requirements (store: PackageStore) (manifest: Manifest) : RootRequirement list =
         let visited = HashSet<string>()
@@ -44,7 +44,19 @@ module Resolution =
                         | Some found -> from found
                         | None -> []
                     | _ -> []
+                // Its linter packages are locked as its dependencies are, though they aren't part of its program.
+                let linters =
+                    manifest.LinterPackages
+                    |> List.collect (fun linter ->
+                        match linter.Version, linter.Path with
+                        | Some requirement, _ -> [ { From = manifest.Name; Package = linter.Package; Requirement = requirement } ]
+                        | None, Some directory ->
+                            match Manifest.tryReadIn directory with
+                            | Some found -> from found
+                            | None -> []
+                        | None, None -> [])
                 host
+                @ linters
                 @ (manifest.Dependencies
                 |> List.collect (fun dependency ->
                     let onDisk (directory: string) =

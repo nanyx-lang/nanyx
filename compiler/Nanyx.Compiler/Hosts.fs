@@ -112,6 +112,10 @@ module Hosts =
     /// `Package.testBuild`).
     let testPackage = "nanyx.test.host"
 
+    /// The package of the linter host the compiler ships, which a lint build runs a linter's `lint` under (see
+    /// `LintBuilds`).
+    let lintPackage = "nanyx.analysis.host"
+
     /// The contexts the test host provides a test, by name: what its `run` passes a test build's entry point. A test
     /// may require only these (see `TestChecks`). `Async` is the host's own, so a test waits as a program does, and can
     /// call code that reads files through a `FileSystem` it loads itself.

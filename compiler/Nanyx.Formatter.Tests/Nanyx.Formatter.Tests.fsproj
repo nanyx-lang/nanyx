@@ -18,6 +18,7 @@
     <Compile Include="Features\Comments\TrailingCommentTests.fs" />
     <Compile Include="Features\Comments\MatchArmCommentTests.fs" />
     <Compile Include="Features\Comments\ElseCommentTests.fs" />
+    <Compile Include="Features\Comments\UnionCaseCommentTests.fs" />
     <Compile Include="Features\CustomPatterns\CustomPatternTests.fs" />
     <Compile Include="Features\Doc\DocTests.fs" />
     <Compile Include="Features\Except\ExceptTests.fs" />

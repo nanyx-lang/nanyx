@@ -149,7 +149,7 @@ let ``An unknown field is an error at its name`` () =
     Assert.Equal<string list>([ DiagnosticCodes.UnknownManifestField.Code; DiagnosticCodes.UnknownManifestField.Code ], errors |> List.map _.Code)
     Assert.Equal<string list>(
         [ "The manifest has no field 'extras': its fields are 'package', 'dependencies', 'linters', 'host', 'formatter'"
-          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'tests', 'repository', 'nanyx', 'host', 'hostLibrary'" ],
+          "Package has no field 'colour': its fields are 'name', 'version', 'sources', 'tests', 'repository', 'nanyx', 'host', 'hostLibrary', 'linter'" ],
         errors |> List.map _.Message
     )
     let extras = errors.[0].Span.Value
@@ -196,10 +196,9 @@ let ``A value of the wrong kind is an error saying what it must be`` () =
     )
 
 [<Fact>]
-let ``An unknown linter, rule or severity is an error`` () =
+let ``An unknown rule or severity of the official linter is an error`` () =
     Assert.Equal<(string * string) list>(
-        [ DiagnosticCodes.InvalidManifestValue.Code, "There is no linter 'acme.lint': the linters are 'nanyx.lint'"
-          DiagnosticCodes.UnknownManifestField.Code,
+        [ DiagnosticCodes.UnknownManifestField.Code,
           "The rules of 'nanyx.lint' has no field 'noSuchRule': its fields are 'unusedBindings', 'nonTailRecursion', 'unreachableArms', 'unusedImports', 'noTagInCommon', 'unusedPrivateDefinitions', 'unreachableCode', 'useInBraces', 'strayDocComments', 'unannotatedExports', 'resultOnlyTypeVariable', 'unusedResults', 'uselessExpressions', 'unawaitedTask', 'shadowedPreludeNames', 'semicolons', 'unconstructibleType', 'unusedContexts', 'repeatedPulls', 'redundantTypeName', 'undefinedPayloadArm', 'unusedAllows', 'linterFailed'"
           DiagnosticCodes.InvalidManifestValue.Code, "The rule unusedBindings must be #error, #warning, #info, #hint, #off, not the string \"error\"" ],
         errorsOf
@@ -207,7 +206,6 @@ let ``An unknown linter, rule or severity is an error`` () =
 (
   package = (name = "demo", version = "0.1.0")
   linters = [
-    (package = "acme.lint", version = "1.0.0")
     (package = "nanyx.lint", version = "{Toolchain.version}", settings = (rules = (noSuchRule = #error, unusedBindings = "error")))
   ]
 )
