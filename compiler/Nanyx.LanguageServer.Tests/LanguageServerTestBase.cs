@@ -57,7 +57,7 @@ public abstract class LanguageServerTestBase : IAsyncLifetime
         new(() => Task.Run(() =>
         {
             NyxCompiler.Compiler.compile("def warmUp = 1");
-            TestSettings.LinterOptionsFor(null, Script.readFrom(TestSettings.PackageStore(), "", "::linter nanyx.lint\n"));
+            TestSettings.LinterOptionsFor(null, NyxCompiler.Script.readFrom(TestSettings.PackageStore(), "", "::linter nanyx.lint\n"));
         }));
 
     /// <summary>Cancels the test's requests; its timeout starts when the server does (see <see cref="StartAsync"/>).</summary>
