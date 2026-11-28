@@ -175,6 +175,7 @@
     <Compile Include="LookAlikes.fs" />
     <Compile Include="CheckedModule.fs" />
     <Compile Include="BinaryData.fs" />
+    <Compile Include="TypedHoles.fs" />
     <Compile Include="DimensionDivisions.fs" />
     <Compile Include="CheckedLibrary.fs" />
     <Compile Include="CheckedPackages.fs" />

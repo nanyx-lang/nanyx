@@ -295,7 +295,10 @@ println("never")
     let outcome = runSource source
     Assert.Equal(1, outcome.ExitCode)
     Assert.Equal("start\n", outcome.StandardOutput)
-    Assert.Contains(":1:78: error NYX0111: Not implemented: `???` stands for code not written yet (deferred from compile time)", outcome.StandardError)
+    Assert.Contains(
+        ":1:78: error NYX0111: Not implemented: `???` stands for code not written yet: a `string` goes here, such as `replacement`, `pattern` or `s` (deferred from compile time)",
+        outcome.StandardError
+    )
 
 [<Fact>]
 let ``Run - a use of ??? stops the program at the ???`` () =

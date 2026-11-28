@@ -116,6 +116,19 @@ pass is `DeferredErrors.deferErrors`, and the backend lowers what it leaves to a
   annotation. An expression with a part that never gives a value, and only names or literals worked out before it, as
   in `x.name`, `x + 1` or `x(1)` after `def x = ???` or `def x = crash("no")`, reports nothing more and is read as
   that part (`Unreached`); if the part is a `???`, its error moves to the whole, which the deferral pass replaces.
+- **A `???` says what goes in its place.** Since the hole is `undefined`, its own type says nothing, so once the
+  module is inferred and solved, `TypedHoles` reads the type from what the hole is in, with the substitution applied:
+  the callee's parameter at a call or a pipe (`CalleeTypes`), the type a def writes, of its value or its lambda's
+  result, the other branches of an `if` or the other arms of a `match`, the other elements of a list or the element of
+  the list expected, the other operand of an operator, and the field of the record type, or the payload of the tag, a
+  literal is expected to be. A record, a tuple or a tag takes what is expected of it before its own type, which has
+  `undefined` where the hole is. A hole whose type is still a variable, or `undefined`, is left as it was. Then the
+  names in scope at the hole whose types fit it are offered, at most five: the locals, nearest first, then the module's
+  defs and then its imports, by name, then calls of the module's functions that give the type, `f(???, ???)`. A top-level
+  def's type variables stand for any type; a local's are the ones it was given. The def the hole is in isn't offered.
+  NYX0111 gains the type and the names, each as a fix, in `state.FailedExprs` too, so the deferral pass, which finds
+  the diagnostics it places there, defers the message that was reported. Hover reads the same from the typed module
+  (`Hover.holeAt`).
 - **Conflicts among constraints.** Once the module is checked, its constraints are solved past each failure: the
   constraints from where it failed are set aside and the rest solved again, until they agree. The variables of a
   failed constraint's expected side that nothing else fixes are bound to the error type, solved after everything else

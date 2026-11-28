@@ -315,3 +315,14 @@ def myFunction = { () -> ??? } -- error NYX0111: Not implemented
 ```
 
 `???` fits wherever a value is expected, whatever its type: it has the type [`undefined`](../tour/types), as a call to `crash` has, since it never gives a value. `myFunction` is a `() -> undefined`, and nothing that uses `???` is another error. The compiler reports it as an error (`Not implemented`), but like a type error it does not stop a debug build ([Deferred errors](../tour/error-handling#deferred-errors)): `nanyx run` runs the program, and if it reaches the `???`, the program stops there and says so. A release build (`--release`) refuses it, so unfinished code is not shipped by accident.
+
+The error says what goes in the hole's place, when the code around it says: the type of the parameter it is passed for, the type its def writes, the type of the other branch of an `if`, or of the other elements of a list. It names up to five names in scope that would fit, nearest first, and calls of your functions that give that type, with a `???` for each argument:
+
+```nanyx
+def describe: int -> string = { n -> "{n} items" }
+
+def report: string, int -> string = { name, count -> ??? }
+-- error NYX0111: `???` stands for code not written yet: a `string` goes here, such as `name` or `describe(???)`
+```
+
+In the editor, hovering over the `???` shows the same, and each name is a quick fix that writes it in.

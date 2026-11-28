@@ -286,6 +286,7 @@
     <Compile Include="Features\Types\AnnotationsTests.fs" />
     <Compile Include="Features\Types\BottomTypeTests.fs" />
     <Compile Include="Features\Types\UndefinedUseTests.fs" />
+    <Compile Include="Features\Types\TypedHoleTests.fs" />
     <Compile Include="Features\Types\UndefinedJoinTests.fs" />
     <Compile Include="Features\Types\VarianceTests.fs" />
     <Compile Include="Features\Types\EmptyListTests.fs" />

@@ -64,9 +64,10 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
   editor to see its values, and replay it through the code after an edit. A run is determined by what its contexts
   returned, so a replay is exact and has no effects, whatever contexts the function needs
   ([#3199](https://github.com/nanyx-lang/nanyx/issues/3199), after #2042).
-- **Typed holes,** as in Agda, Idris and Hazel: an expression left as a hole is reported with the type expected there
-  and the names in scope that fit, and in a debug build it is a deferred error, so the program still runs up to it
-  ([#3200](https://github.com/nanyx-lang/nanyx/issues/3200)).
+- **Named holes,** `???name`, as in Agda and Idris: a hole with a name, so that the errors and the editor can tell two
+  holes apart. Typed holes are built
+  ([Unimplemented code](../getting-started/basics#unimplemented-code)); this is what is left of
+  [#3200](https://github.com/nanyx-lang/nanyx/issues/3200).
 - **Watch expressions,** as in Unison: a line marked to be evaluated on save, its result shown beside it and cached by
   the code it depends on. It would be the editor's way to evaluate an expression, before the debugger has one.
 - **Views of a value of one's own,** as in Glamorous Toolkit: a context through which a type says how the debugger and
@@ -88,4 +89,4 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 | Live mode: re-run on save when the entry needs only `Console`, `Async` and `FileSystem`: built ([Live mode](../standard-tools/vs-code-extension#live-mode)) | [#2055](https://github.com/nanyx-lang/nanyx/issues/2055) | #2054 |
 | Live mode: a switch between `dbg` values only and every value: built ([Live mode](../standard-tools/vs-code-extension#live-mode)) | [#3201](https://github.com/nanyx-lang/nanyx/issues/3201), [#3198](https://github.com/nanyx-lang/nanyx/issues/3198) | #2055 |
 | Traces of a function's calls, shown and replayed in the editor (Planning) | [#3199](https://github.com/nanyx-lang/nanyx/issues/3199) | #2042 |
-| Typed holes (Planning) | [#3200](https://github.com/nanyx-lang/nanyx/issues/3200) | |
+| Typed holes: a `???` says the type that goes there and what would fill it, in its error, on hover and as quick fixes: built ([Unimplemented code](../getting-started/basics#unimplemented-code)) | [#3200](https://github.com/nanyx-lang/nanyx/issues/3200) | |
