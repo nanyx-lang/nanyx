@@ -44,10 +44,28 @@ type BranchPrinter(indentSize: int, sourceText: SourceText, placement: CommentPl
                 match alternatives with
                 | (first :: _) :: _ when sourceText.Valid first.Span -> first.Span.Start
                 | _ -> body.Span.Start
+            // Where the last pattern ends, before the arm's `->`.
+            let patternsEnd =
+                alternatives |> List.concat |> List.filter (fun p -> sourceText.Valid p.Span) |> List.tryLast |> Option.map _.Span.End
             armStart, body.Span.End, fun () ->
                 let patterns = alternatives |> List.map (fun ps -> commaJoin (List.map pattern ps)) |> Doc.join (text " | ")
-                cat [ text "| "; patterns; armBody (index = count - 1) body ])
+                cat [ text "| "; patterns; armBodyAfter patternsEnd (index = count - 1) body ])
         |> sequence false start finish
+
+    /// `-> body` after patterns that end at `patternsEnd`, as `armBody` writes it, but for a comment between the `->` and
+    /// the body, which stays there, as a lambda's does (`LambdaPrinter`): one at the end of the `->`'s line stays at its
+    /// end, and one on a line of its own stays on it, at the body's indent; the body goes on the line after them (#3247).
+    and armBodyAfter (patternsEnd: int option) (isLast: bool) (body: Expression) : Doc =
+        let bodyStart =
+            match body.Kind with
+            | Block (first :: _) when sourceText.Valid first.Span -> first.Span.Start
+            | _ -> body.Span.Start
+        match patternsEnd with
+        | Some after when sourceText.Valid body.Span && after < bodyStart && placement.HasCommentsIn(after, bodyStart) ->
+            let comments = placement.PlaceAfter after bodyStart
+            let bodyDoc = if isWrittenBlock body then block body else expr { statementPosition with Tail = isLast } body
+            cat [ text " ->"; nest (cat (comments @ [ hard; bodyDoc ])) ]
+        | _ -> armBody isLast body
 
     /// `-> body`: an indented block on the lines after it, or an expression on the same line. Statements separated by
     /// `;` stay on the same line if they fit there, and are otherwise a block.

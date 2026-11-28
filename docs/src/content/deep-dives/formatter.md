@@ -33,7 +33,9 @@ attaches each comment to a node:
 - A comment on the same line after code is a *trailing* comment of the last node that ends on that line before it,
   and stays on that line. A construct written on one line that the layout breaks keeps its comment on its first line:
   the comment is put before it, and ends the first line the construct is laid out on (`CommentPlacement.Sequence`).
-  A comment after a lambda's `{` or `->`, before its body, stays there (`LambdaPrinter.lambdaDoc`).
+  A comment after a lambda's `{` or `->`, before its body, stays there (`LambdaPrinter.lambdaDoc`), and so does one
+  after a match arm's `->`, before its result: at the end of the `->`'s line, or on a line of its own at the result's
+  indent, with the result on the line after it (`BranchPrinter.armBodyAfter`).
 - A comment on a line of its own before an `if`'s `else` stays on its own line before the `else`, at its indent, and
   one after the `else` on its line stays there (`BranchPrinter.commentsAroundElse`).
 - A comment on a line of its own is a *leading* comment of the next node that starts after it, and is printed on its
