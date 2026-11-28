@@ -262,9 +262,10 @@ let private command (arguments: string list) : Shell -> int =
         let value name = given |> Map.tryFind name |> Option.toObj
         let list, rest = takeFlag "--list" rest
         let filesInMemory, rest = takeFlag "--files-in-memory" rest
+        let showOutput, rest = takeFlag "--show-output" rest
         let _, release, timings, _, path = options (null, false, false, null, []) rest
         fun shell ->
-            CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings, value "--format", list, value "--test", value "--module", filesInMemory)
+            CliCommands.TestIn(shell, path, value "--filter", value "--seed", value "--timeout", release, timings, value "--format", list, value "--test", value "--module", filesInMemory, showOutput)
     | "pull" :: path -> fun shell -> CliCommands.PullIn(shell, Array.ofList path)
     | "bump" :: path -> fun shell -> CliCommands.BumpIn(shell, Array.ofList path)
     | [ "api-check"; older; newer ] -> fun shell -> CliCommands.ApiCheckIn(shell, older, newer)

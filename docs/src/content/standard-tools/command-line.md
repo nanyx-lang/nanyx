@@ -187,7 +187,7 @@ FAIL geometry.`scales points`  src/geometry.nyx:18:1
   src/geometry.nyx:20:3: assert(scale(p, 2) == Point(x = 2, y = 4))
     scale(p, 2) = (x = 2, y = 5)
     p = (x = 1, y = 2)
-    geometry_scales-20-points (src/geometry.nyx:20)
+    scales points (src/geometry.nyx:20)
   Output:
     scaling (x = 1, y = 2)
 PASS geometry.`reads the sample config` (io)
@@ -197,7 +197,8 @@ Seed 4812: run them again with the same random numbers with --seed 4812
 ```
 
 A test passes if it finishes, and fails if it crashes, as an `assert` that doesn't hold does, or runs for longer than
-its time limit. A failure shows why, with the stack, and what the test printed, which a test that passes doesn't show.
+its time limit. A failure shows why, with the stack, and what the test printed, each [`dbg`](../stdlib/console#dbg) it
+reached among it, in order. A test that passes doesn't show what it printed, unless `--show-output` asks for it.
 A test's `Random` is seeded, so a test that draws random numbers draws the same ones when it is run with the same seed.
 A test may require only `Async`, `Console` and `Random`, which the test host provides (`NYX0312`), but one marked
 [`@test(#io)`](../tour/attributes#test), which runs with the console host's real `Console`, `Env` and `FileSystem`,
@@ -216,6 +217,7 @@ can't be deferred, such as a syntax error, stops the build, and no test runs.
 | `--filter <text>` | Runs only the tests whose full name, as `` geometry.`adds points` ``, contains the text. |
 | `--test <name>` | Runs only the test of that full name, exactly, as the report writes it or without its backticks. Several names go one on each line, a form mainly for tools such as an editor: in a shell, ``--test $'geometry.adds\nshapes.squares'``. A name that names no test is an error, which exits with 2. |
 | `--module <name>` | Runs only the tests of that module. A module with no tests is an error, which exits with 2. |
+| `--show-output` | Shows what each test printed, each `dbg` it reached among it, under its line, a passing test's too. Without it, only a failing test's is shown. |
 | `--files-in-memory` | Runs each `@test(#io)` test with its files in memory, over the real ones, as [`nanyx run --files-in-memory`](#nanyx-run) runs a program: it reads the real files, and nothing it writes, appends, makes or deletes reaches the disk. Its `Console` and `Env` are still the real ones. The tests are built from the test host's root for this, `test.host.memory`, and a test build without the flag is built as before. The editor's live mode runs tests so. |
 | `--list` | Lists the tests that would run, each with where it is written, and runs none. |
 | `--seed <number>` | Seeds each test's `Random` with the number. Without it, the seed is chosen at random, and printed when a test fails. |

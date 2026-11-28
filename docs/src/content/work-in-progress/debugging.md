@@ -24,8 +24,10 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
   provides, so a run is fully determined by what those context members returned. Recording them, and replaying a run
   by answering each call from the recording, gives deterministic repros; with probes marking steps, the debugger can
   step backwards by replaying to the step before. Immutable values shared by reference counts make snapshots cheap.
-- **The test runner keeps `dbg` output with the test that printed it,** once there is one
-  ([#2103](https://github.com/nanyx-lang/nanyx/issues/2103)).
+- **The test runner keeps `dbg` output with the test that printed it**
+  ([#2103](https://github.com/nanyx-lang/nanyx/issues/2103)): a failing test's report shows it under the failure, a
+  passing test's is dropped unless `nanyx test --show-output` asks for it, and `--format json` carries each test's hits
+  ([`nanyx test`](../standard-tools/command-line#nanyx-test)).
 - **`dbg` values show in the editor, not the terminal,** for runs the editor starts: the runtime writes each `dbg` hit
   to a channel (`nanyx run --dbg-to`), and the extension shows the value at the end of its line, with a count and a
   list of every hit for one hit several times. A `nanyx run` in a terminal prints to stderr.
@@ -81,7 +83,7 @@ plan for the rest, agreed with the maintainer on 2026-11-17 and filed in stages 
 | The crashing frame's locals, from a probe before each call that never returns | [#3257](https://github.com/nanyx-lang/nanyx/issues/3257) | #2041 |
 | Recording a run's effects and replaying it (Planning) | [#2042](https://github.com/nanyx-lang/nanyx/issues/2042) | |
 | Stepping backwards (Planning) | [#2043](https://github.com/nanyx-lang/nanyx/issues/2043) | #2041, #2042 |
-| `dbg` output kept with each test by the test runner (Planning) | [#2103](https://github.com/nanyx-lang/nanyx/issues/2103) | `nanyx test` |
+| `dbg` output kept with each test by the test runner: built ([`nanyx test`](../standard-tools/command-line#nanyx-test)) | [#2103](https://github.com/nanyx-lang/nanyx/issues/2103) | `nanyx test` |
 | `dbg` values inline in the editor: built ([dbg values](../standard-tools/vs-code-extension#dbg-values)) | [#2054](https://github.com/nanyx-lang/nanyx/issues/2054) | |
 | Live mode: re-run on save when the entry needs only `Console`, `Async` and `FileSystem`: built ([Live mode](../standard-tools/vs-code-extension#live-mode)) | [#2055](https://github.com/nanyx-lang/nanyx/issues/2055) | #2054 |
 | Live mode: a switch between `dbg` values only and every value: built ([Live mode](../standard-tools/vs-code-extension#live-mode)) | [#3201](https://github.com/nanyx-lang/nanyx/issues/3201), [#3198](https://github.com/nanyx-lang/nanyx/issues/3198) | #2055 |
