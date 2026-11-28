@@ -797,14 +797,7 @@ module Compiler =
                 // An error is deferred when the diagnostic itself was placed, its place included.
                 let placed = Set.ofList placed
                 let undeferred = moduleErrors |> List.filter (placed.Contains >> not)
-                // The module's own definitions win over imported ones of the same name, a script's values that run in
-                // its entry point among them.
                 let exported = SyntaxTree.exportedValueNames own
-                let ownNames =
-                    exported
-                    |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
-                    |> Set.union state.ScriptEntryValues
-                let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 // The module's name, which its component exports' interface and its tests are named by: the name its file
                 // declares, or else its file's, or `main` when it has none.
                 let moduleName =
@@ -812,13 +805,35 @@ module Compiler =
                     |> Option.orElse (Some (System.IO.Path.GetFileNameWithoutExtension(checkedModules.FileName origin)))
                     |> Option.filter (fun name -> ComponentInterface.witName name <> "")
                     |> Option.defaultValue "main"
+                // A definition of the module's own named like one of the library's inlined into it is named after the
+                // module in the backend, so that the library's code, and the host's, keep calling the library's (#3221).
+                // The standard library's modules share one set of names, so one of theirs wins over an import's instead.
+                let libraryNames =
+                    merged.Inlined @ merged.PreludeInlined |> List.choose (function Kind (Def (ValueDef(_, name, _, _))) -> Some name | _ -> None) |> Set.ofList
+                let ownRenames =
+                    match origin with
+                    | StandardLibraryModule _ -> Map.empty
+                    | SourceFile _
+                    | InMemory -> ModuleLinking.ownRenames moduleName libraryNames own
+                let backendOwn = ModuleLinking.renameOwn state ownRenames own
+                // In a module of the standard library, its own definitions win over imported ones of the same name, a
+                // script's values that run in its entry point among them; anywhere else, none has the name of one inlined.
+                let ownNames =
+                    match origin with
+                    | StandardLibraryModule _ ->
+                        exported
+                        |> Set.union (own |> List.choose (function Kind (Def (ValueDef(false, name, _, _))) -> Some name | _ -> None) |> Set.ofList)
+                        |> Set.union state.ScriptEntryValues
+                    | SourceFile _
+                    | InMemory -> Set.empty
+                let instances = merged.InlinedInstances |> Map.fold (fun acc id found -> acc |> Map.add id found) state.ContextInstances
                 let inlined =
                     merged.Inlined @ merged.PreludeInlined
                     |> List.filter (function
                         | Kind (Def (ValueDef(_, name, _, _))) -> not (ownNames.Contains name)
                         | _ -> true)
                     |> ModuleLinking.distinctDefinitions
-                    |> ModuleLinking.reachedItems instances own (merged.ComponentExports |> List.map _.Definition)
+                    |> ModuleLinking.reachedItems instances backendOwn (merged.ComponentExports |> List.map _.Definition)
                 // The names the imports and the prelude bring in, as written (`foo`, or `m.foo` under an
                 // alias), each meaning the definition the environment settled on (an explicit import's over
                 // the prelude's), less the names the module declares at the top level itself.
@@ -844,9 +859,12 @@ module Compiler =
                     |> List.filter (keptToItsBlock >> not)
                     |> List.fold (fun acc symbol -> acc |> Map.add symbol.Name symbol.Id) (imported |> List.map (fun (name, id, _) -> name, id) |> Map.ofList)
                 Ok { Typed =
-                        { Module = inlined @ own
-                          // The types of the imported definitions inlined for the backend, then the module's own.
-                          Types = resolvedTypes |> Map.fold (fun acc name ty -> acc |> Map.add name ty) merged.InlinedTypes
+                        { Module = inlined @ backendOwn
+                          // The types of the imported definitions inlined for the backend, then the module's own, by the
+                          // names the backend knows them by.
+                          Types =
+                            resolvedTypes
+                            |> Map.fold (fun acc name ty -> acc |> Map.add (ownRenames |> Map.tryFind name |> Option.defaultValue name) ty) merged.InlinedTypes
                           TypeDefs = withDocs origin docComments resolvedTypeDefs
                           Items = lazy resolvedItems
                           // Filled in for the root module only, by `compileChecked`.
@@ -880,7 +898,9 @@ module Compiler =
                                 |> List.map (fun (name, _) ->
                                     { Module = moduleName
                                       Name = name
-                                      Definition = if calledThroughProvide.Contains name then Hosts.providedExportName name else name
+                                      Definition =
+                                        if calledThroughProvide.Contains name then Hosts.providedExportName name
+                                        else ownRenames |> Map.tryFind name |> Option.defaultValue name
                                       Waits =
                                         calledThroughProvide.Contains name
                                         && ownTopLevel
@@ -889,7 +909,15 @@ module Compiler =
                                            |> Option.exists ComponentInterface.requiresAsync })
                             own @ merged.ComponentExports |> List.distinctBy (fun export -> export.Module, export.Name)
                           Tests =
-                            let own = components.Tests |> List.map (fun test -> { Module = moduleName; Name = test.Name; Definition = test.Name; Span = test.Span; Io = test.Io; Crashes = test.Crashes })
+                            let own =
+                                components.Tests
+                                |> List.map (fun test ->
+                                    { Module = moduleName
+                                      Name = test.Name
+                                      Definition = ownRenames |> Map.tryFind test.Name |> Option.defaultValue test.Name
+                                      Span = test.Span
+                                      Io = test.Io
+                                      Crashes = test.Crashes })
                             own @ merged.Tests |> List.distinctBy (fun test -> test.Module, test.Name)
                           ImportedFiles = merged.ImportedFiles
                           // Filled in for the root module only, by `compileChecked`.
@@ -905,6 +933,7 @@ module Compiler =
                      Warnings = moduleWarnings
                      Own = own
                      Inlined = inlined
+                     OwnRenames = ownRenames
                      Name = FileImports.declaredName moduleBlocks desugared
                      Syntax = ast
                      DocComments = docComments

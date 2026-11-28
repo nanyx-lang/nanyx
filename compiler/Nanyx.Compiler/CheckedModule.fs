@@ -54,6 +54,10 @@ type internal CheckedModule =
       Own: Module
       /// Items inlined from the modules it imports, already renamed and ready for the backend.
       Inlined: TopLevelItem list
+      /// The module's own top-level definitions named like a definition of the library inlined into it, each with the
+      /// name the backend knows it by in `Typed` (`main.ignore`), so that the library's code keeps calling the library's
+      /// (#3221). `Own`, `Exports` and the module's requirements keep the names it writes, which its importers read.
+      OwnRenames: Map<string, string>
       /// The declared module name, if any.
       Name: string option
       /// The module as parsed, before desugaring.

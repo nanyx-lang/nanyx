@@ -25,9 +25,9 @@ module internal ModuleLinking =
     /// inlined into its importer, so that its definitions keep pointing at each other under their new names.
     /// A name that inference resolved to a parameter, a local definition or a pattern variable of the module
     /// (`typed`) shadows the top-level definition, so it keeps its name.
-    let private renameReferencesInExpr (typed: TypedModule) (renames: Map<string, string>) (expr: Expression) : Expression =
+    let private renameReferences (references: Map<NodeId, SymbolId>) (symbols: Map<SymbolId, Symbol>) (renames: Map<string, string>) (expr: Expression) : Expression =
         let isShadowed (node: Expression) =
-            typed.References |> Map.tryFind node.Id |> Option.bind (fun id -> typed.Symbols |> Map.tryFind id)
+            references |> Map.tryFind node.Id |> Option.bind (fun id -> symbols |> Map.tryFind id)
             |> Option.exists (fun symbol -> symbol.Kind = Parameter || symbol.Kind = LocalValue || symbol.Kind = PatternVariable)
         let rename (node: Expression) (name: string) =
             if isShadowed node then name else renames |> Map.tryFind name |> Option.defaultValue name
@@ -38,6 +38,48 @@ module internal ModuleLinking =
             | FunctionCall(name, rangeOpt, args) -> FunctionCall(rename current name, rangeOpt, args)
             | Pipe(value, name, rangeOpt, args) -> Pipe(value, rename current name, rangeOpt, args)
             | other -> other)
+
+    let private renameReferencesInExpr (typed: TypedModule) (renames: Map<string, string>) (expr: Expression) : Expression =
+        renameReferences typed.References typed.Symbols renames expr
+
+    /// The module's own top-level definitions, of `own`, that are named like one of the library's inlined into it
+    /// (`library`), each with the name the backend knows it by: after the module, `moduleName`, as an importer names a
+    /// private definition of it (see `CheckedModule.OwnRenames`).
+    let internal ownRenames (moduleName: string) (library: Set<string>) (own: Module) : Map<string, string> =
+        let qualifier = IdentifierNames.sanitizeIdentifier moduleName
+        own
+        |> List.choose (function
+            | Kind (Def (ValueDef(_, name, _, _))) when library.Contains name -> Some (name, $"{qualifier}.{name}")
+            | _ -> None)
+        |> Map.ofList
+
+    /// `own` with each definition `renames` names under its new name, and each reference to it, that inference resolved
+    /// to it rather than to a local of the same name (`state`), written so.
+    let internal renameOwn (state: NyxCompiler.Infer.InferState) (renames: Map<string, string>) (own: Module) : Module =
+        if renames.IsEmpty then
+            own
+        else
+            let rename = renameReferences state.References state.Symbols renames
+            own
+            |> List.map (fun item ->
+                match item.Kind with
+                | Def (ValueDef(isExport, name, typeOpt, value)) ->
+                    { item with Kind = Def (ValueDef(isExport, renames |> Map.tryFind name |> Option.defaultValue name, typeOpt, rename value)) }
+                | Expr value -> { item with Kind = Expr (rename value) }
+                | _ -> item)
+
+    /// The types of `checkedModule`'s definitions by the names it writes: its own under their own names, though `Typed`
+    /// knows those it renames by their new ones (see `CheckedModule.OwnRenames`).
+    let internal ownTypes (checkedModule: CheckedModule) : Map<string, Ty> =
+        checkedModule.OwnRenames
+        |> Map.fold (fun acc own renamed ->
+            match checkedModule.Typed.Types |> Map.tryFind renamed with
+            | Some ty -> acc |> Map.add own ty
+            | None -> acc) checkedModule.Typed.Types
+
+    /// `name`, a definition `Typed` names (see `CheckedModule.OwnRenames`), by the name the module writes.
+    let private writtenName (checkedModule: CheckedModule) (name: string) =
+        checkedModule.OwnRenames |> Map.tryFindKey (fun _ renamed -> renamed = name) |> Option.defaultValue name
 
     /// `module'` with each name a block import brought in (`zero`, `Money.new`, `m.zero`), or a block's name without its
     /// file's module in front (`money.zero` in `module shop`), written as the definition it stands for (`money.zero`, or
@@ -397,13 +439,17 @@ module internal ModuleLinking =
     let internal componentExportsForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : ComponentExport list =
         let renames = inlinedRenames qualified item checkedModule
         checkedModule.Typed.ComponentExports
-        |> List.map (fun export -> { export with Definition = renames |> Map.tryFind export.Definition |> Option.defaultValue export.Definition })
+        |> List.map (fun export ->
+            let definition = writtenName checkedModule export.Definition
+            { export with Definition = renames |> Map.tryFind definition |> Option.defaultValue definition })
 
     /// The tests of `checkedModule`, by the names `item` inlines them under.
     let internal testsForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Test list =
         let renames = inlinedRenames qualified item checkedModule
         checkedModule.Typed.Tests
-        |> List.map (fun test -> { test with Definition = renames |> Map.tryFind test.Definition |> Option.defaultValue test.Definition })
+        |> List.map (fun test ->
+            let definition = writtenName checkedModule test.Definition
+            { test with Definition = renames |> Map.tryFind definition |> Option.defaultValue definition })
 
     let internal inlinedItemsForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : TopLevelItem list =
         let renames = inlinedRenames qualified item checkedModule
@@ -418,11 +464,18 @@ module internal ModuleLinking =
         checkedModule.Inlined @ ownItems
 
     /// The types of the definitions `inlinedItemsForImport` inlines, by the names they are inlined under, so that
-    /// the backend knows them as it knows the importer's own (the layout of an imported record, say).
+    /// the backend knows them as it knows the importer's own (the layout of an imported record, say). The library's
+    /// definition a definition of the module's own shadows keeps its name (see `CheckedModule.OwnRenames`).
     let internal inlinedTypesForImport (qualified: bool) (item: ImportItem) (checkedModule: CheckedModule) : Map<string, Ty> =
         let renames = inlinedRenames qualified item checkedModule
+        let rename (name: string) = renames |> Map.tryFind name |> Option.defaultValue name
+        let written = checkedModule.OwnRenames |> Map.toSeq |> Seq.map (fun (own, renamed) -> renamed, own) |> Map.ofSeq
         checkedModule.Typed.Types
-        |> Seq.map (fun (KeyValue(name, ty)) -> (renames |> Map.tryFind name |> Option.defaultValue name), ty)
+        |> Seq.map (fun (KeyValue(name, ty)) ->
+            match written |> Map.tryFind name with
+            | Some own -> rename own, ty
+            | None when checkedModule.OwnRenames.ContainsKey name -> name, ty
+            | None -> rename name, ty)
         |> Map.ofSeq
 
     /// The instances the calls in the definitions `inlinedItemsForImport` inlines find, with the definitions they name

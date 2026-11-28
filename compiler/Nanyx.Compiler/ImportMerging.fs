@@ -110,11 +110,10 @@ module internal ImportMerging =
         // place of one of its functions (#2995). If it ever selects a function by name, that import has to be
         // qualified like the rest.
         let qualifies =
-            merged.QualifiesImports
-            && (match importedOrigin with
-                | StandardLibraryModule _ -> false
-                | SourceFile _
-                | InMemory -> true)
+            match importedOrigin with
+            | StandardLibraryModule _ -> false
+            | SourceFile _
+            | InMemory -> true
         // The members of each context a host provides, `Console`, are brought in as the module's
         // exports would be, each a name of its own, so that the context is an ambient one (see `InferModule`): code at a
         // script's top level, or in a def that infers the context, calls `readLine()`. The host supplies the instance.
@@ -163,7 +162,7 @@ module internal ImportMerging =
         let exportedTypes = ModuleLinking.exportedTypes imported
         let exportedValueTypes =
             hostMembers
-            |> List.fold (fun acc (name, ty, _) -> acc |> Map.add name ty) (ModuleLinking.withBlockReExports imported imported.Typed.Types |> Map.filter (fun name _ -> exportedValues.Contains name))
+            |> List.fold (fun acc (name, ty, _) -> acc |> Map.add name ty) (ModuleLinking.withBlockReExports imported (ModuleLinking.ownTypes imported) |> Map.filter (fun name _ -> exportedValues.Contains name))
         let exportedTypeDefs =
             ModuleLinking.withBlockReExports imported imported.Typed.TypeDefs |> Map.filter (fun name _ -> exportedTypes.Contains name)
         let exports = hostMembers |> List.fold (fun acc (name, _, symbol) -> acc |> Map.add name symbol) (ModuleLinking.withBlockReExports imported imported.Exports)
