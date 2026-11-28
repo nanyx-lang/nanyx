@@ -34,6 +34,8 @@ attaches each comment to a node:
   and stays on that line. A construct written on one line that the layout breaks keeps its comment on its first line:
   the comment is put before it, and ends the first line the construct is laid out on (`CommentPlacement.Sequence`).
   A comment after a lambda's `{` or `->`, before its body, stays there (`LambdaPrinter.lambdaDoc`).
+  A comment after the `=` of a union written over lines stays at the end of that line, and those among its cases stay
+  beside or above the case they were written with (`Formatter.unionPerLine`).
 - A comment on a line of its own is a *leading* comment of the next node that starts after it, and is printed on its
   own line, at that node's indent, before it.
 - A comment with no following node in its block (the end of a file, a match or a lambda body) is printed at the end
