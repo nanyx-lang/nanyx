@@ -331,13 +331,15 @@ module Dimension =
     let ofBase (id: NominalId) : Dimension = [ id, 1 ]
 
     /// The base dimensions of `parts`, each once, with the sum of its exponents, but for those that sum to none, in
-    /// order: so a dimension is one list however it is written, and `Length * Time / Time` is `Length`.
+    /// order of their names, and of their home modules only between two of one name: so a dimension is one list however
+    /// it is written, `Length * Time / Time` is `Length`, and it is written the same however its program is compiled,
+    /// from files or from memory (#3240).
     let private normalized (parts: (NominalId * int) list) : Dimension =
         parts
         |> List.groupBy fst
         |> List.map (fun (id, each) -> id, each |> List.sumBy snd)
         |> List.filter (fun (_, exponent) -> exponent <> 0)
-        |> List.sortBy fst
+        |> List.sortBy (fun (id, _) -> id.Name, id.Home)
 
     /// The dimension of a product of a value of `left` and one of `right`: their exponents added.
     let multiply (left: Dimension) (right: Dimension) : Dimension = normalized (left @ right)
