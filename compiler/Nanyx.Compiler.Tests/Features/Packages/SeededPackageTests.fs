@@ -81,17 +81,89 @@ let ``Where the package index records the shipped version with another SHA-256, 
         warning.Message
     )
 
+/// The shipped version of a package the compiler ships.
+let private shippedVersion = SemanticVersion.tryParse Toolchain.version |> Option.get
+
+/// A package that runs under the console host the compiler ships.
+let private demoUnderHost () =
+    new TempPackage(
+        [ "demo/demo.nyxp", $"""(package = (name = "demo", version = "0.1.0"), {consoleHostEntry})"""
+          "demo/src/main.nyx", "module main\n\n@entry\ndef main = {\n  println(\"Hello, World!\")\n}\n" ])
+
+/// Makes the copy of the console host in the cache of `store` another than the compiler ships, as a compiler of the
+/// same version built from other sources leaves it, and has the next seed read the cache as a new process does.
+let private staleHost (store: PackageStore) =
+    (okOf (SeededPackages.seed store)).Index |> ignore
+    let cached = PackageStore.directoryOf store Hosts.consolePackage shippedVersion
+    let file = Directory.GetFiles(Path.Combine(cached, "src"), "*.nyx") |> Array.sort |> Array.head
+    File.AppendAllText(file, "\n-- stale\n")
+    SeededPackages.forgetSeeding ()
+    file
+
 [<Fact>]
-let ``Seeding refuses a cache that holds another copy of a shipped package's version, which it never changes`` () =
+let ``Seeding replaces a cache's other copy of a shipped package's version with the compiler's own, with a warning`` () =
     use package = new TempPackage([])
     let store = storeOf package
-    let version = SemanticVersion.tryParse Toolchain.version |> Option.get
-    let cached = PackageStore.directoryOf store "nanyx.cli" version
+    let cached = PackageStore.directoryOf store "nanyx.cli" shippedVersion
+    let manifest = Path.Combine(cached, "nanyx.cli" + Manifest.extension)
     Directory.CreateDirectory cached |> ignore
-    File.WriteAllText(Path.Combine(cached, "nanyx.cli" + Manifest.extension), "(package = (name = \"nanyx.cli\", version = \"0.0.0\"))\n")
-    let error = List.exactlyOne (errorsOf (SeededPackages.seed store))
-    Assert.StartsWith($"The package cache holds a 'nanyx.cli' {Toolchain.version}, in '{cached}', that isn't the one this compiler ships: its ", error)
-    Assert.EndsWith("delete that directory, and the next build puts this compiler's copy there", error)
+    File.WriteAllText(manifest, "(package = (name = \"nanyx.cli\", version = \"0.0.0\"))\n")
+    let seeded = okOf (SeededPackages.seed store)
+    Assert.Equal<string list>([ "nanyx.cli" ], seeded.Replaced |> List.map _.Name)
+    Assert.Equal(Toolchain.version, (Manifest.tryReadIn cached).Value.Version)
+    let warning = List.exactlyOne (PackageIndex.shippedReplaced store)
+    Assert.Equal(DiagnosticCodes.ShippedPackageReplaced.Code, warning.Code)
+    Assert.Equal(Severity.Warning, warning.Severity)
+    Assert.StartsWith(
+        $"The package cache held a copy of nanyx.cli {Toolchain.version}, in '{cached}', that wasn't the one this compiler ships, so the compiler replaced that stale copy with its own.",
+        warning.Message
+    )
+    // The next process finds the compiler's copy there, and replaces nothing.
+    SeededPackages.forgetSeeding ()
+    Assert.Empty((okOf (SeededPackages.seed store)).Replaced)
+    Assert.Empty(PackageIndex.shippedReplaced store)
+
+[<Fact>]
+let ``A package under a shipped host builds when the cache holds a stale copy of the host`` () =
+    use package = demoUnderHost ()
+    let store = storeOf package
+    let stale = staleHost store
+    let found = okOf (Package.findIn store (package.Path "demo"))
+    Assert.Equal(Some(ShippedPackages.directoryOf Hosts.consolePackage), found.HostPackage |> Option.map _.Manifest.Root)
+    Assert.Empty((Package.build found).Diagnostics)
+    Assert.DoesNotContain("-- stale", File.ReadAllText stale)
+
+[<Fact>]
+let ``A lockfile that locks a shipped package with a stale copy's SHA-256 builds with the compiler's own copy`` () =
+    use package = demoUnderHost ()
+    let store = storeOf package
+    let resolved =
+        match Resolution.resolve store (Manifest.tryReadIn (package.Path "demo")).Value Lockfile.empty with
+        | Result.Ok resolved -> resolved.Lockfile
+        | Result.Error error -> failwith $"%A{error}"
+    // As a compiler of the same version built from other sources locks it.
+    let stale =
+        { resolved with
+            Packages =
+                resolved.Packages
+                |> List.map (fun locked -> if locked.Name = Hosts.consolePackage then { locked with Sha256 = String.replicate 64 "1" } else locked) }
+    File.WriteAllText(Lockfile.pathIn (package.Path "demo"), Lockfile.write stale)
+    staleHost store |> ignore
+    let found = okOf (Package.findIn store (package.Path "demo"))
+    Assert.Equal(Some(ShippedPackages.directoryOf Hosts.consolePackage), found.HostPackage |> Option.map _.Manifest.Root)
+    Assert.Empty((Package.build found).Diagnostics)
+
+[<Fact>]
+let ``A store that can't be seeded stops a build that reads a package from the index, with seeding's message`` () =
+    use package = demoUnderHost ()
+    let store = { storeOf package with Seed = fun _ -> Result.Error [ "the cache is read-only" ] }
+    let path = package.Path "demo/demo.nyxp"
+    let diagnostic = List.exactlyOne (Package.compileManifestFrom store path (File.ReadAllText path)).Diagnostics
+    Assert.Equal(DiagnosticCodes.ShippedPackagesNotSeeded.Code, diagnostic.Code)
+    Assert.Equal(
+        $"'{Hosts.consolePackage}' can't be read, since the packages the compiler ships can't be seeded into the package cache, '{store.Cache}': the cache is read-only",
+        diagnostic.Message
+    )
 
 [<Fact>]
 let ``Listing a package seeds the store first, as the store it was made with says`` () =

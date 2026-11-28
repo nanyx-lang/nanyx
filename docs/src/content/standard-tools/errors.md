@@ -945,6 +945,33 @@ The compiler builds with its own copy, which a lockfile it writes locks, so anot
 from the index gets other bytes. A compiler built from source whose `packages/` have changed since its release does this.
 A released compiler doesn't, since its copies are the ones its release published: report it if yours does.
 
+# NYX0308: Stale copy of a shipped package replaced
+
+A warning, not an error: the build goes on. The package cache held a copy of a package the compiler ships, at the
+compiler's version, that wasn't this compiler's, and the compiler replaced it with its own:
+
+```text
+warning NYX0308: Stale copy of a shipped package replaced 'nanyx.cli.host 0.54.0'
+  = The package cache held a copy of nanyx.cli.host 0.54.0, in '…/.nanyx/packages/nanyx.cli.host/0.54.0', that wasn't the one this compiler ships, so the compiler replaced that stale copy with its own. …
+```
+
+A compiler of the same version built from other sources leaves such a copy behind: one built from source whose
+`packages/` have changed since, or the release, when the copy came from a compiler built from source. There is nothing to
+fix. The next build finds the compiler's copy, and doesn't warn.
+
+# NYX0309: Shipped packages that can't be seeded
+
+The compiler seeds the packages it ships into the package cache before a build reads any package from the package index,
+and it couldn't. The message says why, as that the cache can't be written to:
+
+```text
+error NYX0309: Shipped packages that can't be seeded 'nanyx.cli.host'
+  = 'nanyx.cli.host' can't be read, since the packages the compiler ships can't be seeded into the package cache, '…/.nanyx/packages': …
+```
+
+To fix it, make the cache, `.nanyx/packages` in your home directory or the directory `NANYX_PACKAGES` names, one you can
+write to.
+
 # NYX0052: Package that needs another compiler
 
 The package's manifest says, with `nanyx` in its `package`, that it builds with a compiler newer than the one running,

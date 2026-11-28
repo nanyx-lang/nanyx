@@ -52,7 +52,7 @@ module SeededPackages =
     /// downloaded, as while they are packed, and in the compiler built for the browser, which would otherwise pack them
     /// on a page (see `inMemory`).
     let private listedUnpacked (store: PackageStore) : Result<Seeded, string list> =
-        Result.Ok { Index = PackageStore.shippedIndex store; Copies = ownCopies () }
+        Result.Ok { Index = PackageStore.shippedIndex store; Copies = ownCopies (); Replaced = [] }
 
     /// Each package the compiler ships, packed, with its manifest; or why one can't be. They depend only on the packages
     /// the compiler ships, which are read from the compiler's own copies (see `ownCopies`), so they pack the same whatever
@@ -123,19 +123,33 @@ module SeededPackages =
                   entry.FullName ]
 
     /// Unpacks the packed package `bytes`, `name` at `version`, into the cache of `store`, if the cache doesn't hold it
-    /// yet; or, if it holds another package of that name and version, says so: a package in the cache is never changed.
-    let private unpacked (store: PackageStore) (name: string) (version: SemanticVersion) (bytes: byte array) : Result<unit, string> =
+    /// yet; and replaces the copy it holds, if that isn't this one. A package in the cache is never changed, but the
+    /// version of a package the compiler ships is the compiler's own, and a compiler built from other sources ships other
+    /// bytes at it: the copy one left is stale. Gives whether it replaced one, or why it couldn't unpack the package.
+    let private unpacked (store: PackageStore) (name: string) (version: SemanticVersion) (bytes: byte array) : Result<bool, string> =
         let directory = PackageStore.directoryOf store name version
+        let cantUnpack message = $"The copy of '{name}' {version} the compiler ships can't be unpacked into the package cache: {message}"
         if not (Directory.Exists directory) then
-            PackageArchive.unpack bytes directory
-            |> Result.mapError (fun message -> $"The copy of '{name}' {version} the compiler ships can't be unpacked into the package cache: {message}")
+            PackageArchive.unpack bytes directory |> Result.map (fun () -> false) |> Result.mapError cantUnpack
+        elif List.isEmpty (differing bytes directory) then
+            Result.Ok false
         else
-            match differing bytes directory with
-            | [] -> Result.Ok()
-            | files ->
-                let named = files |> List.map (fun file -> $"'{file}'") |> Diagnostics.listed
-                Result.Error
-                    $"The package cache holds a '{name}' {version}, in '{directory}', that isn't the one this compiler ships: its {named} differ. A package in the cache is never changed, so delete that directory, and the next build puts this compiler's copy there"
+            // Unpacked beside it and swapped in, so that a reader sees one copy or the other, whole.
+            let staging = $"{directory}.{Guid.NewGuid():N}"
+            let stale = $"{directory}.stale.{Guid.NewGuid():N}"
+            PackageArchive.unpack bytes staging
+            |> Result.mapError cantUnpack
+            |> Result.bind (fun () ->
+                try
+                    Directory.Move(directory, stale)
+                    Directory.Move(staging, directory)
+                    Directory.Delete(stale, true)
+                    Result.Ok true
+                with :? IOException | :? UnauthorizedAccessException as e ->
+                    if Directory.Exists staging then Directory.Delete(staging, true)
+                    // Another process seeding at the same time may have put this copy there first.
+                    if Directory.Exists directory && List.isEmpty (differing bytes directory) then Result.Ok true
+                    else Result.Error(cantUnpack $"its stale copy, in '{directory}', can't be replaced: {e.Message}"))
 
     /// `seed`, done now: the index written, if it isn't, and each package unpacked into the cache, if it isn't.
     let private seedOnce (store: PackageStore) : Result<Seeded, string list> =
@@ -167,15 +181,21 @@ module SeededPackages =
                     | Result.Ok(file, [ version ]) ->
                         let archive = Path.GetFullPath(Path.Combine(Path.GetDirectoryName file, version.Url))
                         unpacked store name version.Version (File.ReadAllBytes archive)
-                        |> Result.map (fun () ->
+                        |> Result.map (fun replaced ->
                             { Name = name
                               Version = version.Version
                               Sha256 = version.Sha256
-                              Source = ShippedPackages.directoryOf name })
+                              Source = ShippedPackages.directoryOf name },
+                            replaced)
                     | Result.Ok(_, listed) -> Result.Error $"The index of the packages the compiler ships, '{target}', lists {listed.Length} versions of '{name}', not one"
                     | Result.Error message -> Result.Error message)
             match copies |> List.choose (function Result.Error message -> Some message | Result.Ok _ -> None) with
-            | [] -> Result.Ok { Index = target; Copies = copies |> List.choose Result.toOption }
+            | [] ->
+                let copies = copies |> List.choose Result.toOption
+                Result.Ok
+                    { Index = target
+                      Copies = copies |> List.map fst
+                      Replaced = copies |> List.filter snd |> List.map fst }
             | errors -> Result.Error errors)
 
     /// The stores this process has seeded, by the index each was seeded into.
@@ -184,8 +204,8 @@ module SeededPackages =
     /// Seeds the packages the compiler ships into `store`, if it hasn't yet: packs each into the index of its own in the
     /// store's cache (`PackageStore.shippedIndex`), which another process seeding at the same time can't see half made,
     /// and unpacks into the cache each that it doesn't hold. Gives the index's directory and each package, which a build
-    /// reads from the compiler's own copy (see `SeededCopy`); or why a package can't be
-    /// seeded: it doesn't pack, or the cache holds another copy of its version. A store is seeded once a process, and
+    /// reads from the compiler's own copy (see `SeededCopy`), and those whose stale copy in the cache it replaced; or why
+    /// a package can't be seeded: it doesn't pack, or it can't be unpacked. A store is seeded once a process, and
     /// one that couldn't be is tried again the next time.
     let seed (store: PackageStore) : Result<Seeded, string list> =
         let key = PackageStore.shippedIndex store
