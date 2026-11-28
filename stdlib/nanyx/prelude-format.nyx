@@ -1,0 +1,864 @@
+@partial module prelude
+
+-- Part of the prelude, which is prelude.nyx and each file beside it marked @partial.
+
+-- Formatting ------------------------------------------------------------------------------------
+--
+-- A format spec is read by `fmtSpec`, after Python's format-spec mini-language. Library code calls
+-- the `fmt` functions and the instances' `tryFormat`, never `format`, which a module may replace
+-- with its own.
+
+--| Why `spec` is no format spec for a value of the type `of`: the byte of `spec` at which it stops
+  being one, counting from 0, and what it could have there.
+export type BadFormat = (
+  spec: string
+  at: int
+  expected: string
+  of: string
+)
+
+--| How a value of type `a` is written by a format spec, a string that says how: `format(3.14159,
+  ".2f")` is `"3.14"`, and `format(Instant.epoch, "%Y-%m-%d")` is `"1970-01-01"`. Its one member
+  gives `#badFormat` for a spec the type doesn't take; [`format`] writes the value, or stops the
+  program with the reason.
+
+  The prelude has an instance for `int`, `float`, the sized numbers, `string`, `char`, `bool` and
+  `Instant`. The numbers, strings, chars and bools take Python's format-spec mini-language: `[[fill]
+  align][sign][z][#][0][width][grouping][.precision][type]`, where
+
+  - `align` is `<` (left), `>` (right), `^` (centred) or `=` (padded after the sign), with the
+    `fill` before it, any one character, a space when none is written;
+  - `sign` is `+` (a sign on every number), `-` (on a negative one, as without it) or a space (a
+    space before a number that isn't negative);
+  - `z` writes a negative zero, or a negative number rounded to zero, without its sign;
+  - `#` writes the base of a binary, octal or hexadecimal number, `0b`, `0o` and `0x`, and always
+    writes a float's point;
+  - `0` pads a number with zeros after its sign, as `0=` does;
+  - `width` is the fewest characters the text has, padded to it;
+  - `grouping` is `,` or `_`, written between each three digits of a number's whole part, or `_`
+    between each four of a binary, octal or hexadecimal one;
+  - `precision` is a float's digits after its point (`f`, `e`, `%`) or its significant digits
+    (`g`), or the most characters of a string, which is cut to them;
+  - `type` is how a number is written: `d` in decimal, `b` in binary, `o` in octal, `x` and `X` in
+    hexadecimal, `e` and `E` with an exponent, `f` and `F` with a fixed point, `g` and `G` the
+    shorter of those two, `%` as a percentage. An integer takes them all, and is written as a float
+    by `e`, `f`, `g` and `%`. A float takes `e` to `%`. A string, a char and a bool take `s`.
+
+  A number is right-aligned and text left-aligned unless `align` says otherwise. A float is
+  written to about 15 significant digits, as it is held, with the digits after those zeros, and is
+  rounded with halves away from zero. Not a number is `nan`, and the infinities `inf` and `-inf`
+  (`NAN` and `INF` for `E`, `F` and `G`). The empty spec writes a value as interpolation does.
+
+  An `Instant` takes `strftime`'s directives, in UTC, with English names (see [`Instant.tryFormat`]).
+export context Format(a) = (tryFormat: (a, string) -> #some(string) | #badFormat(BadFormat))
+
+--| `value` written by `spec` (see [`Format`]): `format(1234.5, ",.1f")` is `"1,234.5"`, and
+  `format(255, "#x")` is `"0xff"`. A spec the value's type doesn't take stops the program, with a
+  message that names the spec, the type and where the spec goes wrong. The type's `tryFormat`, as
+  `x \tryFormat(spec)` calls it, gives that as `#badFormat` instead.
+export def format: [Format(a)] a, string -> string = { value, spec ->
+  match tryFormat(value, spec)
+    | #some(text) -> text
+    | #badFormat(bad) ->
+      crash(
+        "'{bad.spec}' is no format spec for a '{bad.of}': at {bad.at}, it could have {bad.expected}"
+      )
+}
+
+-- Reading a spec
+
+--| A format spec as `fmtSpec` reads it. `align`, `sign`, `grouping` and `kind` are as they are
+  written, or empty; `width` and `precision` are -1 when not written. Each `...At` is where that
+  part is written, or -1, for the type that doesn't take it to say so.
+type FormatSpec = (
+  fill: string
+  align: string
+  alignAt: int
+  sign: string
+  signAt: int
+  noNegativeZero: bool
+  zAt: int
+  alternate: bool
+  alternateAt: int
+  zero: bool
+  zeroAt: int
+  width: int
+  grouping: string
+  groupingAt: int
+  precision: int
+  precisionAt: int
+  kind: string
+  kindAt: int
+)
+
+--| The byte of `s` at `at`, or -1 past its end.
+def fmtByte: string, int -> int = { s, at ->
+  if at < __nanyx_string_length(s) then __nanyx_string_byte_at(s, at) else -1
+}
+
+--| How many bytes the UTF-8 character that starts with `byte` has.
+def fmtCharLength: int -> int = { byte ->
+  if byte < 128 then 1 else if byte < 224 then 2 else if byte < 240 then 3 else 4
+}
+
+--| Whether `byte` is `<`, `>`, `^` or `=`.
+def fmtIsAlign: int -> bool = { byte ->
+  byte == 60 or byte == 62 or byte == 94 or byte == 61
+}
+
+--| Whether `byte` is a decimal digit.
+def fmtIsDigit: int -> bool = { byte ->
+  byte >= 48 and byte <= 57
+}
+
+--| Where the run of digits of `s` from `at` ends.
+def fmtDigitsEnd: string, int -> int = { s, at ->
+  if fmtIsDigit(fmtByte(s, at)) then fmtDigitsEnd(s, at + 1) else at
+}
+
+--| The number the digits of `s` from `at` to `end` write, after `sum`.
+def fmtDigitsValue: string, int, int, int -> int = { s, at, end, sum ->
+  if at >= end then sum else fmtDigitsValue(s, at + 1, end, sum * 10 + fmtByte(s, at) - 48)
+}
+
+--| `#badFormat` for `spec`, a spec for a value of the type `of`, at `at`, which could have
+  `expected` there.
+def fmtBad
+  : string, string, int, string -> #some(a) | #badFormat(BadFormat)
+  = { spec, of, at, expected ->
+    #badFormat(BadFormat(spec = spec, at = at, expected = expected, of = of))
+  }
+
+--| `spec`, a spec for a value of the type `of`, read as Python's format-spec mini-language: `[[fill]
+  align][sign][z][#][0][width][grouping][.precision][type]`. Which of its parts a type takes is
+  for the type to say. The compiler reads a literal spec with its own reader of the same language
+  (`FormatSpecs` in the compiler), and one table of specs tests both.
+def fmtSpec: string, string -> #some(FormatSpec) | #badFormat(BadFormat) = { spec, of ->
+  def length = __nanyx_string_length(spec)
+  def firstLength = fmtCharLength(fmtByte(spec, 0))
+  def fillGiven = length > firstLength and fmtIsAlign(fmtByte(spec, firstLength))
+  def alignAt = if fillGiven then firstLength else if fmtIsAlign(fmtByte(spec, 0)) then 0 else -1
+  def afterAlign = if alignAt >= 0 then alignAt + 1 else 0
+  def signByte = fmtByte(spec, afterAlign)
+  def signAt = if signByte == 43 or signByte == 45 or signByte == 32 then afterAlign else -1
+  def afterSign = if signAt >= 0 then afterAlign + 1 else afterAlign
+  def zAt = if fmtByte(spec, afterSign) == 122 then afterSign else -1
+  def afterZ = if zAt >= 0 then afterSign + 1 else afterSign
+  def alternateAt = if fmtByte(spec, afterZ) == 35 then afterZ else -1
+  def afterAlternate = if alternateAt >= 0 then afterZ + 1 else afterZ
+  def zeroAt = if fmtByte(spec, afterAlternate) == 48 then afterAlternate else -1
+  def afterZero = if zeroAt >= 0 then afterAlternate + 1 else afterAlternate
+  def widthEnd = fmtDigitsEnd(spec, afterZero)
+  def groupingByte = fmtByte(spec, widthEnd)
+  def groupingAt = if groupingByte == 44 or groupingByte == 95 then widthEnd else -1
+  def afterGrouping = if groupingAt >= 0 then widthEnd + 1 else widthEnd
+  def dotAt = if fmtByte(spec, afterGrouping) == 46 then afterGrouping else -1
+  def precisionEnd = if dotAt >= 0 then fmtDigitsEnd(spec, dotAt + 1) else afterGrouping
+  def kindByte = fmtByte(spec, precisionEnd)
+
+  def isKind = kindByte >= 65 and kindByte <= 90 or kindByte >= 97 and kindByte <= 122 or
+    kindByte == 37
+
+  def kindAt = if isKind then precisionEnd else -1
+  def end = if isKind then precisionEnd + 1 else precisionEnd
+
+  if widthEnd - afterZero > 9
+    then fmtBad(spec, of, afterZero + 9, "a width of at most 9 digits")
+    else if dotAt >= 0 and precisionEnd == dotAt + 1
+      then fmtBad(spec, of, dotAt + 1, "a digit after the `.`")
+      else if precisionEnd - dotAt > 10
+        then fmtBad(spec, of, dotAt + 10, "a precision of at most 9 digits")
+        else if end < length
+          then fmtBad(
+            spec
+            of
+            end
+            if isKind
+              then "the end of the spec"
+              else "a type such as `d`, `f` or `s`, or the end of the spec"
+          )
+          else #some(
+            FormatSpec(
+              fill = (if fillGiven then __nanyx_string_slice(spec, 0, firstLength) else "")
+              align = (if alignAt >= 0 then __nanyx_string_slice(spec, alignAt, 1) else "")
+              alignAt = alignAt
+              sign = (if signAt >= 0 then __nanyx_string_slice(spec, signAt, 1) else "")
+              signAt = signAt
+              noNegativeZero = zAt >= 0
+              zAt = zAt
+              alternate = alternateAt >= 0
+              alternateAt = alternateAt
+              zero = zeroAt >= 0
+              zeroAt = zeroAt
+              width = (if widthEnd > afterZero
+                then fmtDigitsValue(spec, afterZero, widthEnd, 0)
+                else -1)
+              grouping = (if groupingAt >= 0 then __nanyx_string_slice(spec, groupingAt, 1) else "")
+              groupingAt = groupingAt
+              precision = (if dotAt >= 0
+                then fmtDigitsValue(spec, dotAt + 1, precisionEnd, 0)
+                else -1)
+              precisionAt = dotAt
+              kind = (if isKind then __nanyx_string_slice(spec, kindAt, 1) else "")
+              kindAt = kindAt
+            )
+          )
+}
+
+-- Padding
+
+--| How many characters `s` has: its bytes that aren't the second or later of one.
+def fmtCharCount: string, int, int -> int = { s, at, count ->
+  if at >= __nanyx_string_length(s) then count else
+    def byte = __nanyx_string_byte_at(s, at)
+    fmtCharCount(s, at + 1, if byte < 128 or byte >= 192 then count + 1 else count)
+}
+
+--| `s` `times` times.
+def fmtRepeat: string, int, string -> string = { s, times, acc ->
+  if times <= 0 then acc else fmtRepeat(s, times - 1, acc ++ s)
+}
+
+--| `prefix`, a number's sign and base, then `body`, padded to `spec`'s width with its fill as its
+  align says, or as `defaultAlign` does when it says nothing: after the prefix for `=`.
+def fmtPad: string, string, FormatSpec, string -> string = { prefix, body, spec, defaultAlign ->
+  def length = fmtCharCount(prefix, 0, 0) + fmtCharCount(body, 0, 0)
+  def missing = spec.width - length
+  def fill = if spec.fill != "" then spec.fill else if spec.zero then "0" else " "
+  def align = if spec.align != "" then spec.align else if spec.zero then "=" else defaultAlign
+
+  if missing <= 0
+    then prefix ++ body
+    else if align == "<"
+      then prefix ++ body ++ fmtRepeat(fill, missing, "")
+      else if align == ">"
+        then fmtRepeat(fill, missing, "") ++ prefix ++ body
+        else if align == "^"
+          then fmtRepeat(fill, missing // 2, "") ++ prefix ++ body ++
+            fmtRepeat(fill, missing - missing // 2, "")
+          else prefix ++ fmtRepeat(fill, missing, "") ++ body
+}
+
+--| The digits of `digits` with `separator` between each `every` of them, counting from the right.
+def fmtGroup: string, string, int -> string = { digits, separator, every ->
+  def length = __nanyx_string_length(digits)
+
+  if separator == "" or length <= every then digits else
+    def before = fmtGroup(__nanyx_string_slice(digits, 0, length - every), separator, every)
+    before ++ separator ++ __nanyx_string_slice(digits, length - every, every)
+}
+
+--| The sign `spec` writes before a number, `negative` or not.
+def fmtSign: bool, FormatSpec -> string = { negative, spec ->
+  if negative then "-" else if spec.sign == "+" then "+" else if spec.sign == " " then " " else ""
+}
+
+-- Integers
+
+--| The digits of `-m`, where `m` is 0 or less, in `base`, after `acc`. A negative `m` holds the
+  magnitude of the most negative `int`, which a positive one can't.
+def fmtNegativeDigits: int, int, bool, string -> string = { m, base, upper, acc ->
+  if m == 0 then acc else
+    def digit = (base - m % base) % base
+    def table = if upper then "0123456789ABCDEF" else "0123456789abcdef"
+
+    fmtNegativeDigits(
+      (m + digit) // base
+      base
+      upper
+      __nanyx_string_slice(table, digit, 1) ++ acc
+    )
+}
+
+--| The digits of the magnitude of `n` in `base`, in upper case if `upper` says so.
+def fmtIntDigits: int, int, bool -> string = { n, base, upper ->
+  if n == 0 then "0" else fmtNegativeDigits((if n > 0 then 0 - n else n), base, upper, "")
+}
+
+--| The digits of the `U64` whose bits are `bits`, an `int`, in `base`, a power of 2: its bits
+  `shift` at a time, after `acc`.
+def fmtUnsignedDigits: int, int, int, bool, string -> string = { bits, base, shift, upper, acc ->
+  if bits == 0 then acc else
+    def digit = int.bitAnd(bits, base - 1)
+    def table = if upper then "0123456789ABCDEF" else "0123456789abcdef"
+
+    fmtUnsignedDigits(
+      int.shiftRightUnsigned(bits, shift)
+      base
+      shift
+      upper
+      __nanyx_string_slice(table, digit, 1) ++ acc
+    )
+}
+
+--| What an integer type says of a spec's type: the `e` to `%` it writes as a float, `#asFloat`, or
+  the base it writes its digits in, or `#badFormat`.
+def fmtIntegerKind
+  : string, string, FormatSpec -> #asFloat | #base(int, bool) | #badFormat(BadFormat)
+  = { spec, of, parsed ->
+    def kind = parsed.kind
+
+    if kind == "e" or kind == "E" or kind == "f" or kind == "F" or kind == "g" or kind == "G" or
+      kind == "%"
+      then #asFloat
+      else if kind == "" or kind == "d"
+        then #base(10, false)
+        else if kind == "b"
+          then #base(2, false)
+          else if kind == "o"
+            then #base(8, false)
+            else if kind == "x"
+              then #base(16, false)
+              else if kind == "X" then #base(16, true) else
+                #badFormat(
+                  BadFormat(
+                    spec = spec
+                    at = parsed.kindAt
+                    expected = "one of `b`, `d`, `e`, `E`, `f`, `F`, `g`, `G`, `o`, `x`, `X` or `%`"
+                    of = of
+                  )
+                )
+  }
+
+--| An integer, `negative` or not, whose digits in a base `digitsIn` gives, written by `spec` for a
+  value of the type `of`, or as a float, `asFloat`, by a float's type.
+def fmtInteger
+  : bool,
+    (int, bool -> string),
+    (() -> float),
+    string,
+    string
+    -> #some(string) | #badFormat(BadFormat)
+  = { negative, digitsIn, asFloat, spec, of ->
+    match fmtSpec(spec, of)
+      | #badFormat(bad) -> #badFormat(bad)
+      | #some(parsed) ->
+        match fmtIntegerKind(spec, of, parsed)
+          | #badFormat(bad) -> #badFormat(bad)
+          | #asFloat -> fmtFloatParsed(asFloat(), spec, of, parsed)
+          | #base(base, upper) ->
+            if parsed.precisionAt >= 0
+              then fmtBad(
+                spec
+                of
+                parsed.precisionAt
+                "no precision: an integer has no digits after a point"
+              )
+              else if parsed.zAt >= 0
+                then fmtBad(spec, of, parsed.zAt, "no `z`: an integer has no negative zero")
+                else if parsed.grouping == "," and base != 10 then fmtBad(
+                  spec
+                  of
+                  parsed.groupingAt
+                  "`_` between the digits of a number not in decimal"
+                ) else
+                  def digits = fmtGroup(
+                    digitsIn(base, upper)
+                    parsed.grouping
+                    if base == 10 then 3 else 4
+                  )
+
+                  def prefix =
+                    if not parsed.alternate or base == 10
+                      then ""
+                      else if base == 2
+                        then "0b"
+                        else if base == 8 then "0o" else if upper then "0X" else "0x"
+
+                  #some(fmtPad(fmtSign(negative, parsed) ++ prefix, digits, parsed, ">"))
+  }
+
+--| `n` written by `spec` (see [`Format`]): `format(42, "05d")` is `"00042"`, `format(255, "#x")`
+  is `"0xff"`, `format(1234567, ",")` is `"1,234,567"`, and `format(7, ".2f")` is `"7.00"`.
+export def int.tryFormat: int, string -> #some(string) | #badFormat(BadFormat) = { n, spec ->
+  if spec == ""
+    then #some("{n}")
+    else fmtInteger(
+      n < 0
+      { base, upper -> fmtIntDigits(n, base, upper) }
+      { int.toFloat(n) }
+      spec
+      "int"
+    )
+}
+
+--| `n` written by `spec`, as an `int` is (see [`int.tryFormat`]).
+export def I8.tryFormat: I8, string -> #some(string) | #badFormat(BadFormat) = { n, spec ->
+  fmtSized(I8.toInt(n), spec, "I8")
+}
+
+--| `n` written by `spec`, as an `int` is (see [`int.tryFormat`]).
+export def I16.tryFormat: I16, string -> #some(string) | #badFormat(BadFormat) = { n, spec ->
+  fmtSized(I16.toInt(n), spec, "I16")
+}
+
+--| `n` written by `spec`, as an `int` is (see [`int.tryFormat`]).
+export def I32.tryFormat: I32, string -> #some(string) | #badFormat(BadFormat) = { n, spec ->
+  fmtSized(I32.toInt(n), spec, "I32")
+}
+
+--| `n` written by `spec`, as an `int` is (see [`int.tryFormat`]).
+export def U8.tryFormat: U8, string -> #some(string) | #badFormat(BadFormat) = { n, spec ->
+  fmtSized(U8.toInt(n), spec, "U8")
+}
+
+--| `n` written by `spec`, as an `int` is (see [`int.tryFormat`]).
+export def U16.tryFormat: U16, string -> #some(string) | #badFormat(BadFormat) = { n, spec ->
+  fmtSized(U16.toInt(n), spec, "U16")
+}
+
+--| `n` written by `spec`, as an `int` is (see [`int.tryFormat`]).
+export def U32.tryFormat: U32, string -> #some(string) | #badFormat(BadFormat) = { n, spec ->
+  fmtSized(U32.toInt(n), spec, "U32")
+}
+
+--| `n` written by `spec`, as an `int` is (see [`int.tryFormat`]), and past the largest `int` too:
+  `format(U64.maxValue, "x")` is `"ffffffffffffffff"`.
+export def U64.tryFormat: U64, string -> #some(string) | #badFormat(BadFormat) = { n, spec ->
+  match U64.toInt(n)
+    | #some(small) -> fmtSized(small, spec, "U64")
+    | #outOfRange ->
+      def bits: int = __nanyx_int_cast(n)
+
+      def digitsIn = { base, upper ->
+        if base == 2
+          then fmtUnsignedDigits(bits, 2, 1, upper, "")
+          else if base == 8
+            then fmtOctal(bits)
+            else if base == 16 then fmtUnsignedDigits(bits, 16, 4, upper, "") else "{n}"
+      }
+
+      if spec == ""
+        then #some("{n}")
+        else fmtInteger(false, digitsIn, { U64.toFloat(n) }, spec, "U64")
+}
+
+--| The octal digits of the `U64` whose bits are `bits`: its top bit, then each three below it.
+def fmtOctal: int -> string = { bits ->
+  "1" ++ fmtUnsignedDigits(int.bitAnd(bits, 9_223_372_036_854_775_807), 8, 3, false, "")
+}
+
+--| The sized integer `n`, as an `int`, written by `spec` for a value of the type `of`.
+def fmtSized: int, string, string -> #some(string) | #badFormat(BadFormat) = { n, spec, of ->
+  if spec == ""
+    then #some("{n}")
+    else fmtInteger(
+      n < 0
+      { base, upper -> fmtIntDigits(n, base, upper) }
+      { int.toFloat(n) }
+      spec
+      of
+    )
+}
+
+-- Floats
+
+--| 10 to the power `k`, as a float.
+def fmtPowerOfTen: int -> float = { k ->
+  if k >= 0 then float.pow(10.0, float.fromInt(k)) else 1.0 / float.pow(10.0, float.fromInt(0 - k))
+}
+
+--| `m` times 10 to the power `k`, in steps that keep each power of 10 within a float.
+def fmtScale: float, int -> float = { m, k ->
+  if k > 300
+    then fmtScale(m * 1.0e300, k - 300)
+    else if k < -300
+      then fmtScale(m / 1.0e300, k + 300)
+      else if k >= 0 then m * fmtPowerOfTen(k) else m / fmtPowerOfTen(0 - k)
+}
+
+--| The power of 10 at or below `m`, which is above 0: the `e` of 10^e <= m < 10^(e + 1), found
+  from `low` to `high`.
+def fmtExponent: float, int, int -> int = { m, low, high ->
+  if low >= high then low else
+    def middle = (low + high + 1) // 2
+
+    if fmtScale(1.0, middle) <= m
+      then fmtExponent(m, middle, high)
+      else fmtExponent(m, low, middle - 1)
+}
+
+--| The `count` significant digits of `m`, which is above 0, rounded with halves away from zero, as
+  an integer of that many digits, and the power of 10 of the first: 1234.5 to 3 digits is 123 and
+  3.
+def fmtSignificant: float, int -> (digits: int, exponent: int) = { m, count ->
+  def e = fmtExponent(m, -330, 310)
+  def n = float.toInt(fmtScale(m, count - 1 - e), #round)
+
+  if n >= tenToThe(count, 1)
+    then (digits = n // 10, exponent = e + 1)
+    else (digits = n, exponent = e)
+}
+
+--| `m`, which is 0 or more and finite, with `places` digits after its point, as digits with no
+  point and the count of them before it: (`12345`, 3) for 123.45 with 2 places.
+def fmtFixedDigits: float, int -> (digits: string, whole: int) = { m, places ->
+  if m == 0.0 then (digits = zeroDigits(places + 1), whole = 1) else
+    def e = fmtExponent(m, -330, 310)
+    def total = e + 1 + places
+
+    if total <= 0 then
+      def n = float.toInt(fmtScale(m, places), #round)
+      (digits = zeroPadded(n, places + 1), whole = 1)
+    else
+      def count = if total > 17 then 17 else total
+      def significant = fmtSignificant(m, count)
+      def written = "{significant.digits}{zeroDigits(significant.exponent + 1 + places - count)}"
+      def length = __nanyx_string_length(written)
+
+      if length <= places
+        then (digits = zeroDigits(places + 1 - length) ++ written, whole = 1)
+        else (digits = written, whole = length - places)
+}
+
+--| `m`, which is 0 or more and finite, with `places` digits after its point: its whole part, and
+  its fraction, without the point.
+def fmtFixed: float, int -> (whole: string, fraction: string) = { m, places ->
+  def fixed = fmtFixedDigits(m, places)
+
+  (
+    whole = __nanyx_string_slice(fixed.digits, 0, fixed.whole)
+    fraction = __nanyx_string_slice(fixed.digits, fixed.whole, places)
+  )
+}
+
+--| `m`, which is 0 or more and finite, with one digit before its point and `places` after it, and
+  its power of 10.
+def fmtExponential: float, int -> (whole: string, fraction: string, exponent: int) = { m, places ->
+  if m == 0.0 then (whole = "0", fraction = zeroDigits(places), exponent = 0) else
+    def count = if places + 1 > 17 then 17 else places + 1
+    def significant = fmtSignificant(m, count)
+    def written = "{significant.digits}{zeroDigits(places + 1 - count)}"
+
+    (
+      whole = __nanyx_string_slice(written, 0, 1)
+      fraction = __nanyx_string_slice(written, 1, places)
+      exponent = significant.exponent
+    )
+}
+
+--| `exponent` as an exponent is written after `e`: its sign, and at least two digits.
+def fmtExponentText: int -> string = { exponent ->
+  def magnitude = if exponent < 0 then 0 - exponent else exponent
+  def sign = if exponent < 0 then "-" else "+"
+  def digits = if magnitude < 10 then 2 else decimalDigits(magnitude, 1)
+  "{sign}{zeroPadded(magnitude, digits)}"
+}
+
+--| `fraction` without the zeros at its end.
+def fmtTrimZeros: string -> string = { fraction ->
+  def length = __nanyx_string_length(fraction)
+
+  if length > 0 and __nanyx_string_byte_at(fraction, length - 1) == 48
+    then fmtTrimZeros(__nanyx_string_slice(fraction, 0, length - 1))
+    else fraction
+}
+
+--| Whether `text` has a digit that isn't 0.
+def fmtHasNonZero: string, int -> bool = { text, at ->
+  if at >= __nanyx_string_length(text) then false else
+    def byte = __nanyx_string_byte_at(text, at)
+    if byte >= 49 and byte <= 57 then true else fmtHasNonZero(text, at + 1)
+}
+
+--| The whole part, the point and fraction, and the exponent `m`, which is 0 or more and finite, is
+  written with by the float type `kind` of `parsed`.
+def fmtFloatBody: float, FormatSpec -> (whole: string, rest: string) = { m, parsed ->
+  def kind = parsed.kind
+  def precision = if parsed.precision >= 0 then parsed.precision else 6
+  def point = { fraction -> if fraction != "" or parsed.alternate then "." ++ fraction else "" }
+
+  -- `g`, `G` and no type with a precision: the fixed point where the exponent is from -4 to
+  -- below the precision, else the exponent, without the zeros at the fraction's end.
+  if kind == "f" or kind == "F" then
+    def fixed = fmtFixed(m, precision)
+    (whole = fixed.whole, rest = point(fixed.fraction))
+  else if kind == "%" then
+    def fixed = fmtFixed(m * 100.0, precision)
+    (whole = fixed.whole, rest = point(fixed.fraction) ++ "%")
+  else if kind == "e" or kind == "E" then
+    def exponential = fmtExponential(m, precision)
+
+    (
+      whole = exponential.whole
+      rest = point(exponential.fraction) ++ (if kind == "E" then "E" else "e") ++
+        fmtExponentText(exponential.exponent)
+    )
+  else
+    def significant = if precision == 0 then 1 else precision
+
+    def exponent = if m == 0.0
+      then 0
+      else fmtSignificant(m, if significant > 17 then 17 else significant).exponent
+
+    def trimmed = { fraction -> if parsed.alternate then fraction else fmtTrimZeros(fraction) }
+
+    if exponent >= -4 and exponent < significant then
+      def fixed = fmtFixed(m, significant - 1 - exponent)
+      (whole = fixed.whole, rest = point(trimmed(fixed.fraction)))
+    else
+      def exponential = fmtExponential(m, significant - 1)
+
+      (
+        whole = exponential.whole
+        rest = point(trimmed(exponential.fraction)) ++ (if kind == "G" then "E" else "e") ++
+          fmtExponentText(exponential.exponent)
+      )
+}
+
+--| `x` written by the spec `parsed`, read from `spec`, for a value of the type `of`.
+def fmtFloatParsed
+  : float, string, string, FormatSpec -> #some(string) | #badFormat(BadFormat)
+  = { x, spec, of, parsed ->
+    def kind = parsed.kind
+
+    def floatKind = kind == "" or kind == "e" or kind == "E" or kind == "f" or kind == "F" or
+      kind == "g" or kind == "G" or kind == "%"
+
+    def upper = kind == "E" or kind == "F" or kind == "G"
+    -- `x - x` is NaN for NaN and the infinities, and 0 for every other float.
+    def finite = x - x == 0.0
+    def negative = x < 0.0 or x == 0.0 and 1.0 / x < 0.0
+    def m = if negative then 0.0 - x else x
+
+    if not floatKind
+      then fmtBad(spec, of, parsed.kindAt, "one of `e`, `E`, `f`, `F`, `g`, `G` or `%`")
+      else if not finite then
+        def shown = if x != x
+          then (if upper then "NAN" else "nan")
+          else if upper then "INF" else "inf"
+
+        #some(fmtPad(fmtSign(x == x and x < 0.0, parsed), shown, parsed, ">"))
+      else if kind == "" and parsed.precision < 0 then
+        #some(
+          fmtPad(
+            fmtSign(negative and not (parsed.noNegativeZero and m == 0.0), parsed)
+            float.toString(m)
+            parsed
+            ">"
+          )
+        )
+      else
+        def body = fmtFloatBody(m, parsed)
+
+        def shownNegative = negative and
+          not (parsed.noNegativeZero and not fmtHasNonZero(body.whole ++ body.rest, 0))
+
+        def whole = fmtGroup(body.whole, parsed.grouping, 3)
+        #some(fmtPad(fmtSign(shownNegative, parsed), whole ++ body.rest, parsed, ">"))
+  }
+
+--| `x` written by `spec` (see [`Format`]): `format(3.14159, ".2f")` is `"3.14"`, `format(1234.5,
+  ",.1f")` is `"1,234.5"`, `format(0.25, ".0%")` is `"25%"`, `format(12345.678, ".3e")` is
+  `"1.235e+04"`, and `format(-0.0, "z.1f")` is `"0.0"`.
+export def float.tryFormat: float, string -> #some(string) | #badFormat(BadFormat) = { x, spec ->
+  if spec == "" then #some(float.toString(x)) else
+    match fmtSpec(spec, "float")
+      | #some(parsed) -> fmtFloatParsed(x, spec, "float", parsed)
+      | #badFormat(bad) -> #badFormat(bad)
+}
+
+--| `x` written by `spec`, as a `float` is (see [`float.tryFormat`]).
+export def F32.tryFormat: F32, string -> #some(string) | #badFormat(BadFormat) = { x, spec ->
+  if spec == "" then #some(F32.toString(x)) else
+    match fmtSpec(spec, "F32")
+      | #some(parsed) -> fmtFloatParsed(F32.toFloat(x), spec, "F32", parsed)
+      | #badFormat(bad) -> #badFormat(bad)
+}
+
+-- Text
+
+--| The first `count` characters of `s`, from the byte `at`.
+def fmtTakeChars: string, int, int -> string = { s, at, count ->
+  if count <= 0 or at >= __nanyx_string_length(s)
+    then __nanyx_string_slice(s, 0, at)
+    else fmtTakeChars(s, at + fmtCharLength(__nanyx_string_byte_at(s, at)), count - 1)
+}
+
+--| `text` written by `spec` for a value of the type `of`, which takes a string's spec.
+def fmtText: string, string, string -> #some(string) | #badFormat(BadFormat) = { text, spec, of ->
+  match fmtSpec(spec, of)
+    | #badFormat(bad) -> #badFormat(bad)
+    | #some(parsed) ->
+      if parsed.kind != "" and parsed.kind != "s"
+        then fmtBad(spec, of, parsed.kindAt, "`s`, or no type")
+        else if parsed.align == "="
+          then fmtBad(spec, of, parsed.alignAt, "`<`, `>` or `^`: text has no sign to pad after")
+          else if parsed.signAt >= 0
+            then fmtBad(spec, of, parsed.signAt, "no sign: text isn't a number")
+            else if parsed.zAt >= 0
+              then fmtBad(spec, of, parsed.zAt, "no `z`: text isn't a number")
+              else if parsed.alternateAt >= 0
+                then fmtBad(spec, of, parsed.alternateAt, "no `#`: text isn't a number")
+                else if parsed.zeroAt >= 0 and parsed.fill == ""
+                  then fmtBad(
+                    spec
+                    of
+                    parsed.zeroAt
+                    "a width that doesn't start with `0`, or a fill and an align before it"
+                  )
+                  else if parsed.groupingAt >= 0 then fmtBad(
+                    spec
+                    of
+                    parsed.groupingAt
+                    "no grouping: text isn't a number"
+                  ) else
+                    def cut = if parsed.precision >= 0
+                      then fmtTakeChars(text, 0, parsed.precision)
+                      else text
+
+                    #some(fmtPad("", cut, parsed, "<"))
+}
+
+--| `s` written by `spec` (see [`Format`]): `format("ab", ">5")` is `"   ab"`, `format("ab", "*^6")`
+  is `"**ab**"`, and `format("abcdef", ".3")` is `"abc"`. Width and precision count characters.
+export def string.tryFormat: string, string -> #some(string) | #badFormat(BadFormat) = { s, spec ->
+  if spec == "" then #some(s) else fmtText(s, spec, "string")
+}
+
+--| `c` written by `spec`, as a string of it is (see [`string.tryFormat`]).
+export def char.tryFormat: char, string -> #some(string) | #badFormat(BadFormat) = { c, spec ->
+  if spec == "" then #some(char.toString(c)) else fmtText(char.toString(c), spec, "char")
+}
+
+--| `b` written by `spec`, as `"true"` or `"false"` is (see [`string.tryFormat`]): `format(true,
+  ">6")` is `"  true"`.
+export def bool.tryFormat: bool, string -> #some(string) | #badFormat(BadFormat) = { b, spec ->
+  def text = if b then "true" else "false"
+  if spec == "" then #some(text) else fmtText(text, spec, "bool")
+}
+
+-- Instants
+
+--| The English names of the days of the week, from Monday, and of the months.
+def fmtDayNames: list(string) = [
+  "Monday"
+  "Tuesday"
+  "Wednesday"
+  "Thursday"
+  "Friday"
+  "Saturday"
+  "Sunday"
+]
+
+def fmtMonthNames: list(string) = [
+  "January"
+  "February"
+  "March"
+  "April"
+  "May"
+  "June"
+  "July"
+  "August"
+  "September"
+  "October"
+  "November"
+  "December"
+]
+
+--| The name at `index` of `names`, counting from 0.
+def fmtName: list(string), int -> string = {
+  | [name, ...names], index -> (if index == 0 then name else fmtName(names, index - 1))
+  | [], _ -> ""
+}
+
+--| The parts of the time `nanos` nanoseconds after 1970 in UTC.
+def fmtTimeParts
+  : int
+    -> (year: int, month: int, day: int, ofYear: int, weekday: int, hour: int, minute: int, second: int, nanos: int)
+  = { nanos ->
+    def seconds = nanos // isoSecond
+    def days = seconds // isoDay
+    def ofDay = seconds % isoDay
+    def date = isoCivil(days)
+
+    (
+      year = date.year
+      month = date.month
+      day = date.day
+      ofYear = days - isoDaysOf(date.year, 1, 1) + 1
+      weekday = (days + 3) % 7
+      hour = ofDay // 3_600
+      minute = ofDay % 3_600 // 60
+      second = ofDay % 60
+      nanos = nanos % isoSecond
+    )
+  }
+
+--| The year `year` as `%Y` writes it: at least four digits, with a `-` before a year before year 0.
+def fmtYear: int -> string = { year ->
+  if year < 0 then "-{isoPadded(0 - year, 4)}" else isoPadded(year, 4)
+}
+
+--| What the directive `directive` writes for the time `parts`, or `#unknown`.
+def fmtDirective
+  : int,
+    (year: int, month: int, day: int, ofYear: int, weekday: int, hour: int, minute: int, second: int, nanos: int)
+    -> #some(string) | #unknown
+  = { directive, parts ->
+    def hour12 = if parts.hour % 12 == 0 then 12 else parts.hour % 12
+    def day = fmtName(fmtDayNames, parts.weekday)
+    def month = fmtName(fmtMonthNames, parts.month - 1)
+
+    match directive
+      | 89 -> #some(fmtYear(parts.year))
+      | 121 -> #some(isoPadded(parts.year % 100, 2))
+      | 109 -> #some(isoPadded(parts.month, 2))
+      | 100 -> #some(isoPadded(parts.day, 2))
+      | 106 -> #some(isoPadded(parts.ofYear, 3))
+      | 72 -> #some(isoPadded(parts.hour, 2))
+      | 73 -> #some(isoPadded(hour12, 2))
+      | 77 -> #some(isoPadded(parts.minute, 2))
+      | 83 -> #some(isoPadded(parts.second, 2))
+      | 102 -> #some(isoPadded(parts.nanos // 1_000, 6))
+      | 112 -> #some(if parts.hour < 12 then "AM" else "PM")
+      | 97 -> #some(__nanyx_string_slice(day, 0, 3))
+      | 65 -> #some(day)
+      | 98 -> #some(__nanyx_string_slice(month, 0, 3))
+      | 66 -> #some(month)
+      | 122 -> #some("+0000")
+      | 37 -> #some("%")
+      | 70 -> #some("{fmtYear(parts.year)}-{isoPadded(parts.month, 2)}-{isoPadded(parts.day, 2)}")
+      | 84 -> #some(
+        "{isoPadded(parts.hour, 2)}:{isoPadded(parts.minute, 2)}:{isoPadded(parts.second, 2)}"
+      )
+      | _ -> #unknown
+  }
+
+--| `spec` from the byte `at`, its directives written for the time `parts`, after `acc`.
+def fmtStrftime
+  : string,
+    int,
+    (year: int, month: int, day: int, ofYear: int, weekday: int, hour: int, minute: int, second: int, nanos: int),
+    string
+    -> #some(string) | #badFormat(BadFormat)
+  = { spec, at, parts, acc ->
+    def length = __nanyx_string_length(spec)
+    def expected = "a directive such as `%Y`, `%m` or `%d`, or `%%` for a `%`"
+
+    if at >= length
+      then #some(acc)
+      else if __nanyx_string_byte_at(spec, at) != 37
+        then fmtStrftime(spec, at + 1, parts, acc ++ __nanyx_string_slice(spec, at, 1))
+        else if at + 1 >= length then fmtBad(spec, "Instant", at + 1, expected) else
+          match fmtDirective(__nanyx_string_byte_at(spec, at + 1), parts)
+            | #some(text) -> fmtStrftime(spec, at + 2, parts, acc ++ text)
+            | #unknown -> fmtBad(spec, "Instant", at + 1, expected)
+  }
+
+--| `i` written by `spec`, in UTC: `iso` writes it as [`Instant.toIsoString`] does, and any other
+  spec is text with `strftime`'s directives in it, each a `%` and a letter: `%Y` the year, at least
+  four digits; `%y` its last two; `%m` the month, `01` to `12`; `%d` the day, `01` to `31`; `%j` the
+  day of the year, `001` to `366`; `%H` the hour, `00` to `23`; `%I` the hour on a 12-hour clock,
+  `01` to `12`, and `%p` `AM` or `PM`; `%M` the minute; `%S` the second; `%f` the microseconds,
+  six digits; `%a` and `%A` the day of the week, `Mon` and `Monday`; `%b` and `%B` the month, `Jan`
+  and `January`; `%z` the offset from UTC, always `+0000`; `%F` the date, `%Y-%m-%d`; `%T` the
+  time, `%H:%M:%S`; and `%%` a `%`. The names are English. `format(Instant.epoch, "%A %d %B %Y")`
+  is `"Thursday 01 January 1970"`.
+export def Instant.tryFormat
+  : Instant, string -> #some(string) | #badFormat(BadFormat)
+  = { Instant(nanos), spec ->
+    if spec == "" or spec == "iso"
+      then #some(Instant.toIsoString(Instant(nanos)))
+      else fmtStrftime(spec, 0, fmtTimeParts(nanos), "")
+  }
