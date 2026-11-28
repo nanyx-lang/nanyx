@@ -283,6 +283,7 @@
     <Compile Include="Features\StdLib\RunQueueTests.fs" />
     <Compile Include="Features\StdLib\RunClockTests.fs" />
     <Compile Include="Features\StdLib\RunInstantTests.fs" />
+    <Compile Include="Features\StdLib\RunFormatTests.fs" />
     <Compile Include="Features\StdLib\RunRandomTests.fs" />
     <Compile Include="Features\StdLib\RunReduceTests.fs" />
     <Compile Include="Features\StdLib\RunFromSeqBuildTests.fs" />

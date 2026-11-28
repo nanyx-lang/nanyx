@@ -494,14 +494,15 @@ def float.format: (float, decimals: int) -> string
 
 `x` in decimal with `decimals` digits after the point, rounded to the nearest such decimal with
 halves away from zero, as [`float.toInt`](#floattoint) rounds with `#round`: `float.format(2.5, decimals = 0)`
-is `"3"` and `float.format(-1.875, decimals = 2)` is `"-1.88"`. It is how an interpolation hole
-writes a float to a given precision: `"{price \float.format(decimals = 2)}"`.
+is `"3"` and `float.format(-1.875, decimals = 2)` is `"-1.88"`. It is a shorthand for
+[`format`](prelude-format#format-1) with the spec `"z.{decimals}f"`, and how an interpolation hole writes a float to a given
+precision: `"{price \float.format(decimals = 2)}"`.
 
 It rounds `x` as it is held, which is often a little above or below the decimal it was written
 as: `1.005` is held as 1.00499999…, so with 2 decimals it is `"1.00"`. Digits past the 15th or so
 significant one are written as zeros. A value that rounds to zero has no sign: `-0.001` with 2
-decimals is `"0.00"`. With `decimals` of 0 or less there is no point. NaN, the infinities and a
-number past the range of `int` are written as [`float.toString`](prelude-contexts#floattostring) writes them.
+decimals is `"0.00"`. With `decimals` of 0 or less there is no point. NaN and the infinities are
+written as [`float.toString`](prelude-contexts#floattostring) writes them.
 
 ## `I8.fromString`
 

@@ -13,6 +13,7 @@ The prelude, `nanyx/prelude`, is imported into every module, so what it defines 
 - [chars](prelude-chars): a `char`'s code point, its text, and whether it is a digit, a letter or whitespace
 - [time](prelude-time): the `Time` dimension and its units, `ns` to `d`
 - [instant](prelude-instant): `Instant`, a point in time, and ISO 8601
+- [format](prelude-format): writing a value by a format spec, `format(3.14159, ".2f")`
 - [conversions](prelude-conversions): between `int`, `float` and the sized number types
 - [lists](prelude-lists): functions on `list(a)`
 - [sequences](prelude-sequences): lazy sequences, `seq(a)`, and ranges

@@ -350,42 +350,24 @@ export def F32.tryToInt
 
 --| `x` in decimal with `decimals` digits after the point, rounded to the nearest such decimal with
   halves away from zero, as [`float.toInt`] rounds with `#round`: `float.format(2.5, decimals = 0)`
-  is `"3"` and `float.format(-1.875, decimals = 2)` is `"-1.88"`. It is how an interpolation hole
-  writes a float to a given precision: `"{price \float.format(decimals = 2)}"`.
+  is `"3"` and `float.format(-1.875, decimals = 2)` is `"-1.88"`. It is a shorthand for
+  [`format`] with the spec `"z.{decimals}f"`, and how an interpolation hole writes a float to a given
+  precision: `"{price \float.format(decimals = 2)}"`.
 
   It rounds `x` as it is held, which is often a little above or below the decimal it was written
   as: `1.005` is held as 1.00499999…, so with 2 decimals it is `"1.00"`. Digits past the 15th or so
   significant one are written as zeros. A value that rounds to zero has no sign: `-0.001` with 2
-  decimals is `"0.00"`. With `decimals` of 0 or less there is no point. NaN, the infinities and a
-  number past the range of `int` are written as [`float.toString`] writes them.
+  decimals is `"0.00"`. With `decimals` of 0 or less there is no point. NaN and the infinities are
+  written as [`float.toString`] writes them.
 export def float.format: (float, decimals: int) -> string = { x, decimals ->
   def places = if decimals < 0 then 0 else decimals
-  def magnitude = if x < 0.0 then 0.0 - x else x
 
   -- `x - x` is NaN for NaN and the infinities, and 0 for every other float.
-  if not (x - x == 0.0) or magnitude >= 9_223_372_036_854_775_808.0
-    then float.toString(x)
-    else formatDecimals(x < 0.0, magnitude, places, heldDecimals(magnitude, places))
-}
-
---| How many of `places` decimals of `magnitude` a float holds: the most, up to `places`, that keep
-  `magnitude` scaled by them below 2^53, from which on a float holds no fraction.
-def heldDecimals: float, int -> int = { magnitude, places ->
-  if places > 0 and magnitude * float.pow(10.0, float.fromInt(places)) >= 9_007_199_254_740_992.0
-    then heldDecimals(magnitude, places - 1)
-    else places
-}
-
---| `magnitude`, negative if `negative` says so, written with `held` decimals rounded from it, then
-  zeros up to `places` decimals.
-def formatDecimals: bool, float, int, int -> string = { negative, magnitude, places, held ->
-  def digits = float.toInt(magnitude * float.pow(10.0, float.fromInt(held)), #round)
-  def scale = tenToThe(held, 1)
-  def sign = if negative and digits > 0 then "-" else ""
-
-  if places == 0
-    then "{sign}{digits}"
-    else "{sign}{digits // scale}.{zeroPadded(digits % scale, held)}{zeroDigits(places - held)}"
+  -- Through `float.tryFormat`, whose name no program's def can take, rather than `format`.
+  if not (x - x == 0.0) then float.toString(x) else
+    match float.tryFormat(x, "z.{places}f")
+      | #some(text) -> text
+      | #badFormat(_) -> float.toString(x)
 }
 
 --| 10 to the power `n`, times `acc`.
