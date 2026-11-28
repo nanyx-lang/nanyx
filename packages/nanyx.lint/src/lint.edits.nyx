@@ -1,0 +1,49 @@
+--| The edits the official linter's fixes make.
+module lint.edits
+
+import (
+  nanyx.analysis/analysis as (TextEdit)
+  nanyx.analysis/syntax as (Span)
+)
+
+--| The span from `start` to `end` of `source`, with the line and column of `start`.
+export def spanBetween: string, int, int -> Span = { source, start, end ->
+  def before = string.take(source, start)
+
+  def column =
+    match string.lastIndexOf(before, "\n")
+      | #some(newline) -> start - newline - 1
+      | #notFound -> start
+
+  (start = start, end = end, line = string.count(before, "\n"), column = column)
+}
+
+--| An edit that removes what `span` covers with its lines: from the start of its first line to
+  the end of its last, with a comment after it, when nothing else is written on them. Otherwise it
+  removes the span alone.
+export def removal: string, Span -> TextEdit = { source, span ->
+  def lineStart = span.start - span.column
+
+  def lineEnd =
+    match string.indexOf(string.skip(source, span.end), "\n")
+      | #some(newline) -> span.end + newline + 1
+      | #notFound -> string.length(source)
+
+  def after = string.trim(string.substring(source, start = span.end, length = lineEnd - span.end))
+
+  if string.isBlank(string.substring(source, start = lineStart, length = span.column)) and
+    (after == "" or string.startsWith(after, "--")) then
+    (span = (start = lineStart, end = lineEnd, line = span.line, column = 0), newText = "")
+  else
+    (span = span, newText = "")
+}
+
+--| The offset `at` moved back over the spaces and tabs before it in `source`.
+export def backOverSpaces: string, int -> int = { source, at ->
+  if at > 0 and
+    (string.substring(source, start = at - 1, length = 1) == " " or
+      string.substring(source, start = at - 1, length = 1) == "\t") then
+    backOverSpaces(source, at - 1)
+  else
+    at
+}

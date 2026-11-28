@@ -7,11 +7,14 @@
 export module lint
 
 import (
+  lint.unused as (unusedBindings, unusedContexts, unusedImports, unusedPrivateDefinitions)
   nanyx.analysis/analysis as (Analysis, Report)
   nanyx.analysis/syntax as (Module)
 )
 
 --| The reports of every rule implemented here about a module.
-export def lint: [Analysis] Module -> list(Report) = { _ ->
-  []
+export def lint: [Analysis] Module -> list(Report) = { m ->
+  list.flatten(
+    [unusedBindings(m), unusedImports(m), unusedPrivateDefinitions(m), unusedContexts(m)]
+  )
 }

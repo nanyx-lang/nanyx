@@ -3,9 +3,7 @@ namespace NyxCompiler
 open System
 open Parser.Program
 
-/// The official linter's `unusedBindings` rule: a local def, a lambda's argument or a variable a pattern binds that
-/// nothing refers to. Top-level defs are left to `unusedPrivateDefinitions`, and names starting with `_`, which say
-/// they are unused on purpose, are left alone.
+/// The official linter's `unusedBindings` rule, which its package, `nanyx.lint`, implements (`lint.unused`).
 module UnusedBindings =
     let rule =
         { Id = "unusedBindings"
@@ -14,71 +12,6 @@ module UnusedBindings =
           Unnecessary = true
           Description =
             "A local def, a lambda's argument or a variable a pattern binds that is never used. Names starting with `_` are not reported." }
-
-    /// The fix for an unused `symbol`. A def is removed, unless it is one of the defs a destructuring def stands for
-    /// (they share its span), where removing it would remove the others too. Those, and any other name, become `_`.
-    let private fixFor (model: SemanticModel) (removableDefs: Map<SourceSpan, Statement list>) (symbol: Symbol) : Fix =
-        let declaration = symbol.Declaration
-        let rename = { Title = $"Rename `{symbol.Name}` to `_`"; Edits = [ { Span = declaration; NewText = "_" } ] }
-        match symbol.Kind with
-        | LocalValue ->
-            let defs = removableDefs |> Map.toSeq |> Seq.tryFind (fun (span, _) -> SourceSpan.contains span declaration)
-            match defs with
-            | Some (_, [ def ]) -> { Title = $"Remove `{symbol.Name}`"; Edits = [ SourceEdits.removal model.Source def.Span ] }
-            | _ -> rename
-        | Parameter
-        | PatternVariable
-        | TopLevelValue
-        | ImportedModule
-        | TypeDefinition
-        | ContextMember
-        | UnitOfMeasure -> rename
-
-    let private messageFor (symbol: Symbol) =
-        match symbol.Kind with
-        | Parameter -> "The parameter is never used"
-        | PatternVariable -> "A pattern introduces it, but it is never used"
-        | LocalValue
-        | TopLevelValue
-        | ImportedModule
-        | TypeDefinition
-        | ContextMember
-        | UnitOfMeasure -> "It is never used"
-
-    let lint (model: SemanticModel) : Report list =
-        let referenced = model.References |> Map.values |> Set.ofSeq
-        // The local defs, by span: several share one when a destructuring def stands for them. None ends its block,
-        // since a block that ends with a def is an error (NYX0220) and linters only run on a module without errors.
-        let removableDefs =
-            model.Syntax
-            |> List.collect SyntaxTree.ofItem
-            |> List.collect SyntaxTree.blocksWithin
-            |> List.concat
-            |> List.filter (function Kind (DefStatement _) -> true | _ -> false)
-            |> List.groupBy (fun statement -> statement.Span)
-            |> Map.ofList
-        model.Symbols
-        |> Map.values
-        |> Seq.filter (fun symbol ->
-            match symbol.Kind with
-            | LocalValue
-            | Parameter
-            | PatternVariable -> true
-            | TopLevelValue
-            | ImportedModule
-            | TypeDefinition
-            | ContextMember
-            | UnitOfMeasure -> false)
-        |> Seq.filter (fun symbol -> not (symbol.Name.StartsWith "_") && not (referenced.Contains symbol.Id))
-        |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
-        |> Seq.map (fun symbol ->
-            { Rule = rule.Id
-              Subject = Some symbol.Name
-              Span = symbol.Declaration
-              Message = messageFor symbol
-              Related = []
-              Fixes = [ fixFor model removableDefs symbol ] })
-        |> List.ofSeq
 
 /// The official linter's `nonTailRecursion` rule: a function that calls itself other than in tail position, where
 /// each call keeps a stack frame until it returns. A tail call uses no stack (`TailPosition`), so a function that
@@ -326,9 +259,7 @@ module UndefinedPayloadArms =
             | _ -> [])
         |> List.sortBy (fun report -> report.Span.Start)
 
-/// The official linter's `unusedImports` rule: an import that nothing in the module refers to. A name it brings
-/// in, unqualified or through its alias, and a type it brings in named in a type, are uses (`ImportReferences`).
-/// Only the imports the module writes are symbols, so the prelude and the import `@entry` adds are never reported.
+/// The official linter's `unusedImports` rule, which its package, `nanyx.lint`, implements (`lint.unused`).
 module UnusedImports =
     let rule =
         { Id = "unusedImports"
@@ -338,56 +269,7 @@ module UnusedImports =
           Description =
             "An import that nothing in the module uses: no value, type or context it brings in is referred to, under its alias or unqualified. An alias starting with `_` is not reported." }
 
-    /// Each import statement of the module, a `module name =` block's among them, with its items.
-    let rec private importsOf (items: TopLevelItem list) : (TopLevelItem * ImportItem list) list =
-        items
-        |> List.collect (fun item ->
-            match item.Kind with
-            | Import imports -> [ item, imports ]
-            | ModuleBlock(_, items) -> importsOf items
-            | _ -> [])
-
-    /// An edit that removes the import `item`: the whole statement when it is the statement's only import, and
-    /// otherwise the item, with its line when it has one to itself, or with the space before it.
-    let private removal (source: string) (statement: TopLevelItem) (siblings: ImportItem list) (item: ImportItem) : TextEdit =
-        match siblings with
-        | [ _ ] -> SourceEdits.removal source statement.Span
-        | _ ->
-            let edit = SourceEdits.removal source item.Span
-            if edit.Span <> item.Span then
-                edit
-            else
-                let mutable start = item.Span.Start
-                while start > 0 && (source.[start - 1] = ' ' || source.[start - 1] = '\t') do
-                    start <- start - 1
-                { edit with Span = { item.Span with Start = start; StartColumn = item.Span.StartColumn - (item.Span.Start - start) } }
-
-    let lint (model: SemanticModel) : Report list =
-        let used = model.ImportReferences |> Map.values |> Set.ofSeq
-        let statements = importsOf model.Syntax
-        model.Symbols
-        |> Map.values
-        |> Seq.filter (fun symbol -> symbol.Kind = ImportedModule && not (symbol.Name.StartsWith "_") && not (used.Contains symbol.Id))
-        |> Seq.sortBy (fun symbol -> symbol.Declaration.Start)
-        |> Seq.choose (fun symbol ->
-            statements
-            |> List.tryPick (fun (statement, items) ->
-                items |> List.tryFind (fun item -> item.Span = symbol.Declaration) |> Option.map (fun item -> statement, items, item))
-            |> Option.map (fun (statement, items, item) ->
-                { Rule = rule.Id
-                  Subject = Some symbol.Name
-                  Span = item.Span
-                  Message = "It is imported but never used"
-                  Related = []
-                  Fixes = [ { Title = $"Remove the import of `{symbol.Name}`"; Edits = [ removal model.Source statement items item ] } ] }))
-        |> List.ofSeq
-
-/// The official linter's `unusedPrivateDefinitions` rule: a top-level def, type or context the module does not export,
-/// or a member of such a context, that nothing refers to. Only the module can name what it does not export, so with no
-/// references it is dead. A reference from within the definition itself (a function calling itself, a type naming
-/// itself) is not a use. Left alone: `@entry`'s def, which the runtime calls; a `@test`, which a test build runs; a def an instance built from attached
-/// definitions picks up (`InstanceSynthesized`); and names starting with `_`. A `module name =` block's defs that it
-/// does not export are private to the block, and are reported the same way.
+/// The official linter's `unusedPrivateDefinitions` rule, which its package, `nanyx.lint`, implements (`lint.unused`).
 module UnusedPrivateDefinitions =
     let rule =
         { Id = "unusedPrivateDefinitions"
@@ -396,128 +278,6 @@ module UnusedPrivateDefinitions =
           Unnecessary = true
           Description =
             "A top-level def, type or context that the module does not export, or a member of such a context, that nothing in the module uses. `@entry`'s def, a `@test`, defs an instance picks up from a type's attached definitions, and names starting with `_` are not reported." }
-
-    /// The definitions the module writes, each the item that writes it, a `module name =` block's among them.
-    let rec private definitionsOf (items: TopLevelItem list) : TopLevelItem list =
-        items
-        |> List.collect (fun item ->
-            match item.Kind with
-            | Def _ -> [ item ]
-            | ModuleBlock(_, items) -> definitionsOf items
-            | ModuleDecl _
-            | Import _
-            | ReExport _
-            | Attribute _
-            | DimensionDecl _
-            | UnitDecl _
-            | Expr _ -> [])
-
-    /// The names of the definitions that an instance built from attached definitions picks up somewhere in the module.
-    let private synthesizedMembers (model: SemanticModel) : Set<string> =
-        model.ContextInstances
-        |> Map.values
-        |> Seq.collect id
-        |> Seq.collect (function
-            | Some (InstanceSynthesized members) -> members |> List.map snd
-            | Some (InstanceDerived(_, definition, _)) -> [ definition ]
-            | Some (InstanceInScope _)
-            | Some InstanceBuiltIn
-            | None -> [])
-        |> Set.ofSeq
-
-    let private messageFor (symbol: Symbol) =
-        match symbol.Kind with
-        | TypeDefinition -> "The type is never used"
-        | ContextMember -> "The context's member is never used"
-        | UnitOfMeasure -> "The unit is never used"
-        | TopLevelValue
-        | LocalValue
-        | Parameter
-        | PatternVariable
-        | ImportedModule -> "It is never used"
-
-    /// The names of the defs marked `@test` or `@entry` in `items`, a `module name =` block's among them: a test build
-    /// runs the one, and the host calls the other. A test build makes `@entry`'s def an ordinary one, which nothing
-    /// calls (#3094).
-    let rec private runIn (items: TopLevelItem list) : Set<string> =
-        items
-        |> List.pairwise
-        |> List.choose (fun (first, second) ->
-            match first.Kind, second.Kind with
-            | Attribute(name, _), Def (ValueDef(_, defName, _, _)) when name = Attributes.testAttribute || name = Attributes.entryAttribute ->
-                Some defName
-            | _ -> None)
-        |> Set.ofList
-        |> Set.union (items |> List.choose (fun item -> match item.Kind with ModuleBlock(_, inner) -> Some (runIn inner) | _ -> None) |> Set.unionMany)
-
-    let lint (model: SemanticModel) : Report list =
-        let definitions = definitionsOf model.Syntax
-        let picked = synthesizedMembers model
-        let run = runIn model.Syntax
-        // The span of each expression and type as written, so that a reference from within a definition to itself is
-        // told apart: a def that calls itself, a type that names itself. Nodes desugaring made are not among them, and
-        // their references count as uses: the call to `@entry`'s def that `applyAttributes` adds is one.
-        let expressions = model.Syntax |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
-        let types =
-            (model.Syntax |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
-            |> List.collect TypeExpr.within
-        let spans =
-            (expressions |> List.map (fun expr -> expr.Id, expr.Span)) @ (types |> List.map (fun typeExpr -> typeExpr.Id, typeExpr.Span))
-            |> Map.ofList
-        // A def that starts tasks calls, from a node desugaring made, the def the compiler made to run its body in its
-        // caller's scope, which is written as itself (see `WrittenReferences`): that call is no use of it (#3035).
-        let callsOwnScopeDef (node: NodeId) =
-            not (spans.ContainsKey node)
-            && model.CalledReferences
-               |> Map.tryFind node
-               |> Option.bind model.Symbols.TryFind
-               |> Option.exists (fun called -> match Names.ownPart called.Name with TaskScopeSyntax.InCallersScope _ -> true | _ -> false)
-        let usesBySymbol =
-            model.References
-            |> Map.filter (fun node _ -> not (callsOwnScopeDef node))
-            |> Map.toList
-            |> List.groupBy snd
-            |> List.map (fun (symbol, references) -> symbol, references |> List.map (fun (node, _) -> spans |> Map.tryFind node))
-            |> Map.ofList
-        let definitionOf (symbol: Symbol) =
-            definitions |> List.tryFind (fun item -> SourceSpan.contains item.Span symbol.Declaration)
-        let isUsed (symbol: Symbol) (definition: TopLevelItem) =
-            usesBySymbol
-            |> Map.tryFind symbol.Id
-            |> Option.defaultValue []
-            |> List.exists (function
-                | Some span -> not (SourceSpan.contains definition.Span span)
-                | None -> true)
-        model.Symbols
-        |> Map.values
-        |> Seq.filter (fun symbol ->
-            match symbol.Kind with
-            | TopLevelValue
-            | TypeDefinition
-            | ContextMember -> not symbol.IsExported && not (symbol.Name.StartsWith "_")
-            | LocalValue
-            | Parameter
-            | PatternVariable
-            | ImportedModule
-            // A unit's `unit` line is no definition this rule removes (see `definitionsOf`).
-            | UnitOfMeasure -> false)
-        |> Seq.choose (fun symbol -> definitionOf symbol |> Option.map (fun definition -> symbol, definition))
-        |> Seq.filter (fun (symbol, definition) ->
-            not (isUsed symbol definition)
-            && not (symbol.Kind = TopLevelValue && (picked.Contains symbol.Name || run.Contains symbol.Name)))
-        |> Seq.sortBy (fun (symbol, _) -> symbol.Declaration.Start)
-        |> Seq.map (fun (symbol, definition) ->
-            { Rule = rule.Id
-              Subject = Some symbol.Name
-              Span = symbol.Declaration
-              Message = messageFor symbol
-              Related = []
-              // A member is one field of its context, which has no span of its own to remove.
-              Fixes =
-                match symbol.Kind with
-                | ContextMember -> []
-                | _ -> [ { Title = $"Remove `{symbol.Name}`"; Edits = [ SourceEdits.removal model.Source definition.Span ] } ] })
-        |> List.ofSeq
 
 /// The official linter's `noTagInCommon` rule: `==` or `!=` on two values of closed tag types that share no tag, such
 /// as `#red == #some(1)`. The operands are joined, not made equal (see "Eq(a)" in the docs' Contexts page), so this type-checks, and is always false (or always true).
@@ -1037,12 +797,7 @@ module UnconstructibleTypes =
                 | _ -> None))
         |> List.sortBy (fun report -> report.Span.Start)
 
-/// The official linter's `unusedContexts` rule: a context a def's signature requires that nothing in its body uses, so
-/// that every caller must supply it for nothing (#2099). A context is used when the body names one of its members, an
-/// operator among them, or calls or names what requires it: a def that requires it (`ContextTypes`), or a callee whose
-/// type at the call does (`CalleeTypes`). Only a def whose value is a lambda is looked at, a local one too, and not an
-/// exported one: what it requires is part of what its module offers, and may be there to leave room for a later use. A
-/// context variable, `[c]`, is not a context.
+/// The official linter's `unusedContexts` rule, which its package, `nanyx.lint`, implements (`lint.unused`).
 module UnusedContexts =
     let rule =
         { Id = "unusedContexts"
@@ -1051,99 +806,6 @@ module UnusedContexts =
           Unnecessary = true
           Description =
             "A context a def's signature requires that nothing in its body uses: no member of it is read, and nothing the body calls requires it. Every caller must supply it for nothing. Exported defs are not reported." }
-
-    /// The names of the contexts the expressions within `value`, a def's value, use: those each call or pipe in it, or
-    /// one desugaring made for it, requires of its callee, those the defs it names require, and those whose members it
-    /// names, an operator among them.
-    let private usedIn (model: SemanticModel) (value: Expression) : Set<string> =
-        let contextOfMember =
-            model.TypeDefs
-            |> Map.toSeq
-            |> Seq.filter (fun (_, info) -> info.IsContext)
-            |> Seq.collect (fun (name, info) -> info.Members |> Map.values |> Seq.map (fun symbol -> symbol, name))
-            |> Map.ofSeq
-        let nodes =
-            SyntaxTree.expressionsWithin value
-            |> List.collect (fun expr -> expr.Id :: (model.Lowered |> Map.tryFind expr.Id |> Option.defaultValue []))
-        let names (contexts: Ty list) = contexts |> List.choose FunctionContexts.contextName
-        let ofCallee =
-            nodes
-            |> List.collect (fun node ->
-                match model.CalleeTypes |> Map.tryFind node |> Option.map Unifier.unalias with
-                | Some (TyFunc(_, _, contexts)) -> names contexts
-                | _ -> [])
-        let referenced = nodes |> List.choose (fun node -> model.References |> Map.tryFind node)
-        let ofDefs =
-            referenced
-            |> List.collect (fun symbol ->
-                match model.ContextTypes |> Map.tryFind symbol, model.ImportedContextTypes |> Map.tryFind symbol with
-                | Some contexts, _
-                | None, Some (_, contexts) -> names contexts
-                | None, None -> [])
-        let members = referenced |> List.choose contextOfMember.TryFind
-        Set.ofList (ofCallee @ ofDefs @ members)
-
-    /// The name of the context `context` names, if it names one the module knows: not a context variable.
-    let private contextName (model: SemanticModel) (context: TypeExpr) =
-        match context.Kind with
-        | TypeName name
-        | TypeApply(name, _) when model.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext -> Some name
-        | _ -> None
-
-    /// Each def that isn't exported, a local one too, whose value is a lambda, with its name, its signature and its value.
-    let private defs (model: SemanticModel) : (string * TypeExpr * Expression) list =
-        let rec topLevel (items: TopLevelItem list) =
-            items
-            |> List.collect (fun item ->
-                match item.Kind with
-                | Def(ValueDef(false, name, Some annotation, ({ Kind = Lambda _ } as value))) -> [ name, annotation, value ]
-                | ModuleBlock(_, items) -> topLevel items
-                | _ -> [])
-        let local =
-            model.Syntax
-            |> List.collect SyntaxTree.ofItem
-            |> List.collect SyntaxTree.expressionsWithin
-            |> List.collect (fun expr ->
-                match expr.Kind with
-                | Block statements ->
-                    statements
-                    |> List.choose (fun statement ->
-                        match statement.Kind with
-                        | DefStatement(false, name, Some annotation, ({ Kind = Lambda _ } as value)) -> Some (name, annotation, value)
-                        | _ -> None)
-                | _ -> [])
-        topLevel model.Syntax @ local
-
-    /// The edit that removes `context`, one of `contexts`, the contexts of `annotation`, whose type after them is
-    /// `inner`: with the `, ` after it, or before it if it is the last; the whole `[...] ` if it is the only one.
-    let private removal (source: string) (annotation: TypeExpr) (contexts: TypeExpr list) (inner: TypeExpr) (context: TypeExpr) : TextEdit =
-        let between start end' = TextEdit.spanBetween source annotation.Span start end'
-        match contexts |> List.tryFindIndex (fun other -> other.Span = context.Span) with
-        | Some _ when contexts.Length = 1 -> { Span = between annotation.Span.Start inner.Span.Start; NewText = "" }
-        | Some index when index < contexts.Length - 1 -> { Span = between context.Span.Start contexts.[index + 1].Span.Start; NewText = "" }
-        | Some index -> { Span = between contexts.[index - 1].Span.End context.Span.End; NewText = "" }
-        | None -> { Span = context.Span; NewText = "" }
-
-    let lint (model: SemanticModel) : Report list =
-        defs model
-        |> List.collect (fun (name, annotation, value) ->
-            match annotation.Kind with
-            | TypeWithContext(contexts, inner) ->
-                let used = usedIn model value
-                contexts
-                |> List.choose (fun context ->
-                    match contextName model context with
-                    | Some contextName when not (SourceSpan.isNone context.Span) && not (used.Contains contextName) ->
-                        Some
-                            { Rule = rule.Id
-                              Subject = Some contextName
-                              Span = context.Span
-                              Message = $"'{contextName}' is required but not used by '{name}'"
-                              Related = []
-                              Fixes = [ { Title = $"Remove `{contextName}`"; Edits = [ removal model.Source annotation contexts inner context ] } ] }
-                    | _ -> None)
-            | _ -> [])
-        |> List.sortBy (fun report -> report.Span.Start)
 
 /// Where `@allow` suppresses linter rules: before a def, a local one too, or a top-level type, it suppresses the
 /// diagnostics of the rules it names within the def (see `Attributes.allowAttribute`). The host applies it to every linter's diagnostics, and the
@@ -1218,7 +880,8 @@ module Allows =
         | _ -> []
 
 module Linters =
-    /// The official linter, which the docs call `default`. Its rules are added one by one.
+    /// The official linter, which the docs call `default`: every rule it has, and the compiler's own implementation of
+    /// those its package, `nanyx.lint`, doesn't implement yet (see `packageRules`), which run where the package can't.
     let official =
         { Name = "default"
           Package = "nanyx.lint"
@@ -1229,11 +892,11 @@ module Linters =
               UnconstructibleTypes.rule; UnusedContexts.rule; RepeatedPulls.rule; RedundantTypeNames.rule; UndefinedPayloadArms.rule; Allows.rule ]
           Lint =
             fun model ->
-                UnusedBindings.lint model @ NonTailRecursion.lint model @ UnreachableArms.lint model @ UnusedImports.lint model
-                @ NoTagInCommon.lint model @ UnusedPrivateDefinitions.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
+                NonTailRecursion.lint model @ UnreachableArms.lint model
+                @ NoTagInCommon.lint model @ UnreachableCode.lint model @ UseInBraces.lint model
                 @ StrayDocComments.lint model @ UnannotatedExports.lint model @ ResultOnlyTypeVariables.lint model
                 @ UnusedResults.lint model @ UselessExpressions.lint model @ UnawaitedTasks.lint model @ ShadowedPreludeNames.lint model @ Semicolons.lint model
-                @ UnconstructibleTypes.lint model @ UnusedContexts.lint model @ RepeatedPulls.lint model @ RedundantTypeNames.lint model
+                @ UnconstructibleTypes.lint model @ RepeatedPulls.lint model @ RedundantTypeNames.lint model
                 @ UndefinedPayloadArms.lint model }
 
     /// The linters the compiler has, which a manifest's `linters` or a script's `::linter` directives can turn on.
@@ -1241,12 +904,20 @@ module Linters =
 
     /// The ids of the official linter's rules that its package, `nanyx.lint`, implements, which the compiler's own rules
     /// leave to it. The rules move to the package a group at a time; the compiler runs the rest beside it.
-    let packageRules : Set<string> = Set.empty
+    let packageRules : Set<string> =
+        set [ UnusedBindings.rule.Id; UnusedImports.rule.Id; UnusedPrivateDefinitions.rule.Id; UnusedContexts.rule.Id ]
 
     /// The linter `builtIn`, one of `all`, run as its package's linter `made` runs it: the package's reports, and the
-    /// compiler's own for each rule the package doesn't implement yet (see `packageRules`).
+    /// compiler's own for each rule the package doesn't implement yet (see `packageRules`), rule by rule in the order
+    /// it declares its rules, and each rule's in the order it reported them.
     let withPackage (made: Linter) (builtIn: Linter) : Linter =
-        { builtIn with Lint = fun model -> (builtIn.Lint model |> List.filter (fun report -> not (packageRules.Contains report.Rule))) @ made.Lint model }
+        let order = builtIn.Rules |> List.mapi (fun index rule -> rule.Id, index) |> Map.ofList
+        let position (report: Report) = order |> Map.tryFind report.Rule |> Option.defaultValue order.Count
+        { builtIn with
+            Lint =
+                fun model ->
+                    (builtIn.Lint model |> List.filter (fun report -> not (packageRules.Contains report.Rule))) @ made.Lint model
+                    |> List.sortBy position }
 
     /// No linters: what runs where nothing turns any on. Linters are opt-in, like a package's dependencies.
     let none = { Linters = []; Severities = Map.empty }

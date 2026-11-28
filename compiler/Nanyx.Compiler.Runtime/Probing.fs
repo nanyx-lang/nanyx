@@ -3,11 +3,18 @@ namespace Nanyx.Runtime
 open System
 open Wasmtime
 
+/// What a listener asks a probe for: none of the frame's locals, each written up to a budget of characters, after which
+/// it ends in `…`, so that a large value costs no more to write than a small one, or each in full.
+type LocalsWanted =
+    | NoLocals
+    | WithinBudget
+    | InFull
+
 /// What answers a debug build's probes (see `Transpiler.Wasm.CoreIrProbes`): the debugger, or a test.
 type IProbeListener =
-    /// The program is at `probe`. True asks it for the locals of the frame it is in that are still alive there, which
-    /// it passes to `Local`, one at a time, before it goes on.
-    abstract Probe: probe: Probe -> bool
+    /// The program is at `probe`. Asks it for the locals of the frame it is in that are still alive there, if any,
+    /// which it passes to `Local`, one at a time, before it goes on.
+    abstract Probe: probe: Probe -> LocalsWanted
     /// A local of the frame of the last probe, by its name, written as `dbg` writes values.
     abstract Local: name: string * text: string -> unit
     /// The locals the last probe was asked for are all written, and the statement it is at hasn't run: where a debugger
@@ -79,7 +86,11 @@ module Probing =
             "probe",
             Func<int, int>(fun id ->
                 match listener, table |> Option.bind (fun table -> SpanTable.probe table id) with
-                | Some listener, Some probe -> if listener.Probe probe then 1 else 0
+                | Some listener, Some probe ->
+                    match listener.Probe probe with
+                    | NoLocals -> 0
+                    | WithinBudget -> 1
+                    | InFull -> 2
                 | _ -> 0))
         linker.DefineFunction(
             moduleName,

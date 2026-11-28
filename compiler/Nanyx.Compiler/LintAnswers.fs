@@ -101,8 +101,51 @@ let answerer (model: SemanticModel) : LintData -> Result<LintData, string> =
     let symbolAt (table: Map<NodeId, SymbolId>) (node: NodeId) =
         table |> Map.tryFind node |> Option.bind (fun id -> model.Symbols |> Map.tryFind id) |> Option.map symbolData |> option "none"
     let tyAt (table: Map<'k, Ty>) (key: 'k) = table |> Map.tryFind key |> Option.map tyData |> option "unknown"
+    // The references to each symbol: the nodes written to refer to it, and to an import the names that came in through it.
+    // A def that starts tasks calls, from a node desugaring made, the def the compiler made to run its body in its
+    // caller's scope, which is written as itself (see `WrittenReferences`): that call is no reference to it (#3035).
     let references =
-        lazy (model.References |> Map.toList |> List.groupBy snd |> List.map (fun (symbol, nodes) -> symbol, nodes |> List.map fst) |> Map.ofList)
+        lazy
+            (let expressions = model.Syntax |> List.collect SyntaxTree.ofItem |> List.collect SyntaxTree.expressionsWithin
+             let written =
+                 (expressions |> List.map _.Id)
+                 @ ((model.Syntax |> List.collect SyntaxTree.topLevelTypes) @ (expressions |> List.collect SyntaxTree.expressionTypes)
+                    |> List.collect TypeExpr.within
+                    |> List.map _.Id)
+                 |> Set.ofList
+             let callsOwnScopeDef (node: NodeId) =
+                 not (written.Contains node)
+                 && model.CalledReferences
+                    |> Map.tryFind node
+                    |> Option.bind model.Symbols.TryFind
+                    |> Option.exists (fun called -> match Names.ownPart called.Name with TaskScopeSyntax.InCallersScope _ -> true | _ -> false)
+             (model.References |> Map.filter (fun node _ -> not (callsOwnScopeDef node)) |> Map.toList)
+             @ (model.ImportReferences |> Map.toList)
+             |> List.groupBy snd
+             |> List.map (fun (symbol, nodes) -> symbol, nodes |> List.map fst |> List.distinct)
+             |> Map.ofList)
+    // The context each member of a context the module can name belongs to, by the member's symbol.
+    let contextOfMember =
+        lazy
+            (model.TypeDefs
+             |> Map.toSeq
+             |> Seq.filter (fun (_, info) -> info.IsContext)
+             |> Seq.collect (fun (name, info) -> info.Members |> Map.values |> Seq.map (fun symbol -> symbol, name))
+             |> Map.ofSeq)
+    // The names of the defs an instance built from attached definitions picks up somewhere in the module.
+    let instanceDefinitions =
+        lazy
+            (model.ContextInstances
+             |> Map.values
+             |> Seq.collect id
+             |> Seq.collect (function
+                 | Some (InstanceSynthesized members) -> members |> List.map snd
+                 | Some (InstanceDerived(_, definition, _)) -> [ definition ]
+                 | Some (InstanceInScope _)
+                 | Some InstanceBuiltIn
+                 | None -> [])
+             |> Seq.distinct
+             |> List.ofSeq)
     let matches =
         lazy
             (model.Syntax
@@ -130,18 +173,18 @@ let answerer (model: SemanticModel) : LintData -> Result<LintData, string> =
         | DTag("calleeTypeOf", DInt node) -> Ok (tyAt model.CalleeTypes node)
         | DTag("symbolOf", DInt node) -> Ok (symbolAt model.References node)
         | DTag("importOf", DInt node) -> Ok (symbolAt model.ImportReferences node)
-        | DTag("symbol", DInt id) -> Ok (model.Symbols |> Map.tryFind (int id) |> Option.map symbolData |> option "none")
+        | DTag("symbol", DInt id) -> Ok (model.Symbols |> Map.tryFind id |> Option.map symbolData |> option "none")
         | DTag("symbols", _) ->
             let own = model.Symbols |> Map.toList |> List.map snd |> List.filter (fun symbol -> symbol.Declaration.File = model.File && not (SourceSpan.isNone symbol.Declaration))
             Ok (DList(own |> List.sortBy (fun symbol -> symbol.Declaration.Start) |> List.map symbolData))
-        | DTag("typeOfSymbol", DInt id) -> Ok (tyAt model.SymbolTypes (int id))
+        | DTag("typeOfSymbol", DInt id) -> Ok (tyAt model.SymbolTypes id)
         | DTag("contextsOf", DInt id) ->
             let contexts =
-                match model.ContextTypes |> Map.tryFind (int id) with
+                match model.ContextTypes |> Map.tryFind id with
                 | Some contexts -> contexts
-                | None -> model.ImportedContextTypes |> Map.tryFind (int id) |> Option.map snd |> Option.defaultValue []
+                | None -> model.ImportedContextTypes |> Map.tryFind id |> Option.map snd |> Option.defaultValue []
             Ok (DList(List.map tyData contexts))
-        | DTag("referencesTo", DInt id) -> Ok (ints (references.Value |> Map.tryFind (int id) |> Option.defaultValue []))
+        | DTag("referencesTo", DInt id) -> Ok (ints (references.Value |> Map.tryFind id |> Option.defaultValue []))
         | DTag("lowered", DInt node) -> Ok (ints (model.Lowered |> Map.tryFind node |> Option.defaultValue []))
         | DTag("describe", ty) ->
             match ofTyData ty with
@@ -157,6 +200,10 @@ let answerer (model: SemanticModel) : LintData -> Result<LintData, string> =
             | _ -> Error "It asked which arms cover an arm without saying of which match and which arm"
         | DTag("redundantTypeName", DInt node) -> Ok (DBool(model.RedundantTypeNames.Contains node))
         | DTag("docComments", _) -> Ok (DList(model.DocComments.Value |> List.map docComment))
+        | DTag("isContext", DText name) -> Ok (DBool(model.TypeDefs |> Map.tryFind name |> Option.exists _.IsContext))
+        | DTag("contextOfMember", DInt node) ->
+            Ok (model.References |> Map.tryFind node |> Option.bind contextOfMember.Value.TryFind |> Option.map DText |> option "none")
+        | DTag("instanceDefinitions", _) -> Ok (DList(instanceDefinitions.Value |> List.map DText))
         | DTag(name, _) -> Error $"It asked '{name}', which isn't a question a linter can ask"
         | _ -> Error "It asked something that isn't a question"
 

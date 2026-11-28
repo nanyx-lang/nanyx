@@ -74,12 +74,53 @@ let rec private recursiveReference (ty: Ty) : (Ty * Ty list) option =
     | TyAlias(_, _, underlying) -> recursiveReference underlying
     | _ -> None
 
-/// What says which group of recursive types the closed definition `body` is of: the group's members, for a type of a
-/// group of types that name each other (see `TyGroup`), or the definition itself, for a type that names only itself.
-let private groupKey (body: Ty) : Ty =
-    match body with
-    | TyGroup(_, members) -> TyGroup(0, members)
-    | _ -> body
+/// What `sameGroup` did, where `countingGroupWalks` asks for it: how many times it compared two groups' members
+/// structurally, and the copies of groups' members it was given.
+type private GroupWalks = { mutable Walks: int; Copies: System.Collections.Generic.HashSet<GroupMember list> }
+
+let private groupWalks = System.Threading.AsyncLocal<GroupWalks option>()
+
+/// Runs `action`, giving what it gives, how many times it compared the members of two groups of recursive types
+/// structurally rather than by reference (see `sameGroup`), and how many copies of groups' members it compared, on its
+/// own thread and those it starts: for the tests that check each copy is walked once at most.
+let countingGroupWalks (action: unit -> 'T) : 'T * int * int =
+    let counts = { Walks = 0; Copies = System.Collections.Generic.HashSet(HashIdentity.Reference) }
+    groupWalks.Value <- Some counts
+    try
+        let result = action ()
+        result, counts.Walks, counts.Copies.Count
+    finally
+        groupWalks.Value <- None
+
+/// Copies of groups' members that `sameGroup` found equal to another, each kept with that other: a copy it was found
+/// equal to, or the copy that one was.
+let private groupCopies = System.Runtime.CompilerServices.ConditionalWeakTable<GroupMember list, GroupMember list>()
+
+/// The copy of a group's members that `members` was found equal to first, through those that copy was found equal to.
+let rec private firstCopy (members: GroupMember list) : GroupMember list =
+    match groupCopies.TryGetValue members with
+    | true, first -> firstCopy first
+    | _ -> members
+
+/// Whether the closed definitions `body` and `body'` are of one group of recursive types (see `TyGroup`), or are the
+/// same definition of a type that names only itself. Comparing a group's members structurally walks every type of the
+/// group, which made lowering code over a large group take minutes (#3260), so they are compared by reference first.
+/// They are one list wherever the group's types are reached from, but for the copies that type checking makes in mapping
+/// over types, and two copies found equal are kept as one, so that each copy is walked once.
+let private sameGroup (body: Ty) (body': Ty) : bool =
+    match body, body' with
+    | TyGroup(_, members), TyGroup(_, members') ->
+        groupWalks.Value |> Option.iter (fun counts -> lock counts (fun () -> counts.Copies.Add members |> ignore; counts.Copies.Add members' |> ignore))
+        let first, first' = firstCopy members, firstCopy members'
+        LanguagePrimitives.PhysicalEquality first first'
+        || (groupWalks.Value |> Option.iter (fun counts -> lock counts (fun () -> counts.Walks <- counts.Walks + 1))
+            let same = first = first'
+            if same then
+                lock groupCopies (fun () ->
+                    let first, first' = firstCopy first, firstCopy first'
+                    if not (LanguagePrimitives.PhysicalEquality first first') then groupCopies.AddOrUpdate(first', first))
+            same)
+    | _ -> body = body'
 
 /// Which of its group's types the closed definition `body` is: its position for a member of a group, and 0 for a type
 /// that names only itself.
@@ -88,11 +129,19 @@ let private selectedIn (body: Ty) : int =
     | TyGroup(selected, _) -> selected
     | _ -> 0
 
-/// The references `ty` holds to a type of the group `key` (see `groupKey`), but for those inside such a reference: in the
-/// arguments of a reference to another recursive type, and anywhere else in the types it is made of.
+/// Whether the closed definitions `body` and `body'` are of the same type (see `sameGroup`).
+let private sameBody (body: Ty) (body': Ty) : bool = selectedIn body = selectedIn body' && sameGroup body body'
+
+/// Whether two references to recursive types, each by its definition and arguments (see `recursiveReference`), are to
+/// the same type at the same arguments.
+let private sameReference ((body, args): Ty * Ty list) ((body', args'): Ty * Ty list) : bool = sameBody body body' && args = args'
+
+/// The references `ty` holds to a type of the group of the closed definition `key` (see `sameGroup`), but for those
+/// inside such a reference: in the arguments of a reference to another recursive type, and anywhere else in the types it
+/// is made of.
 let rec private referencesIn (key: Ty) (ty: Ty) : Ty list =
     match recursiveReference ty with
-    | Some(body, _) when groupKey body = key -> [ ty ]
+    | Some(body, _) when sameGroup body key -> [ ty ]
     | Some(_, args) -> args |> List.collect (referencesIn key)
     | None -> Ty.children ty |> List.collect (referencesIn key)
 
@@ -102,13 +151,13 @@ let rec private referencesIn (key: Ty) (ty: Ty) : Ty list =
 /// same IR type whichever of its types it is reached from (see `IrRecursive`). A type that names only itself, at the
 /// arguments it has, is a group of one.
 let private recursiveGroup (ty: Ty) : ((Ty * Ty list) * Ty) list =
-    let key = groupKey (fst (recursiveReference ty).Value)
+    let key = fst (recursiveReference ty).Value
     let rec grow (found: ((Ty * Ty list) * Ty) list) (pending: Ty list) =
         match pending with
         | [] -> found
         | next :: rest ->
             let reference = (recursiveReference next).Value
-            if found |> List.exists (fst >> (=) reference) then
+            if found |> List.exists (fst >> sameReference reference) then
                 grow found rest
             elif found.Length >= 64 then
                 cannot "a recursive type that holds itself at other type arguments"
@@ -186,7 +235,7 @@ and private bindSchemeWith (rests: bool) (bindings: Map<int, Ty>) (scheme: Ty) (
     // Unfolded, two references to one recursive alias would hold the same two references again: their arguments are
     // what differs. One with no type variables binds none.
     match recursiveReference scheme, recursiveReference instance with
-    | Some (body, args), Some (body', args') when body = body' -> List.fold2 bindScheme bindings args args'
+    | Some (body, args), Some (body', args') when sameBody body body' -> List.fold2 bindScheme bindings args args'
     | Some _, _ when (freeVars scheme).IsEmpty -> bindings
     | _ ->
     match Unifier.unalias scheme, Unifier.unalias instance with
@@ -322,11 +371,11 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
     let toIrType = toIrTypeExpanding layouts expanding recursing
     match recursiveReference ty with
     // A recursive type it is inside, the innermost group's at depth 0.
-    | Some reference when recursing |> List.exists (List.contains reference) ->
-        let depth = recursing |> List.findIndex (List.contains reference)
-        IrSelf(depth, recursing.[depth] |> List.findIndex ((=) reference))
+    | Some reference when recursing |> List.exists (List.exists (sameReference reference)) ->
+        let depth = recursing |> List.findIndex (List.exists (sameReference reference))
+        IrSelf(depth, recursing.[depth] |> List.findIndex (sameReference reference))
     // A type that holds itself at other arguments, such as `#node(T(list(a)))` in `T(a)`, holds ever more types.
-    | Some(body, _) when (recursing |> List.filter (List.exists (fst >> groupKey >> (=) (groupKey body))) |> List.length) > 8 ->
+    | Some(body, _) when (recursing |> List.filter (List.exists (fst >> sameGroup body)) |> List.length) > 8 ->
         cannot "a recursive type that holds itself at other type arguments"
     | Some reference ->
         let group =
@@ -337,7 +386,7 @@ and private toIrTypeExpanding (layouts: ContextLayouts) (expanding: Set<string>)
         let types =
             if keepingConverted.Value && recursing.IsEmpty then (convertedIn layouts).GroupTypes.GetOrAdd((frame, expanding), fun _ -> groupTypes ())
             else groupTypes ()
-        IrRecursive(frame |> List.findIndex ((=) reference), types)
+        IrRecursive(frame |> List.findIndex (sameReference reference), types)
     | None ->
     match Unifier.unalias ty with
     | TyPrimitive "int" -> IrInt
