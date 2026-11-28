@@ -95,3 +95,22 @@ println(limit)
 """
     let wat = transpileWat source
     Assert.DoesNotContain("$limit__built", wat)
+
+[<Fact>]
+let ``Run - an empty list value, a list of undefined, is read as lists of different types`` () =
+    let source =
+        """def nothing = []
+
+def f: list(int) -> int = { xs -> list.length(xs) }
+
+def pair = (nothing, nothing)
+
+def typed: (list(int), list(string)) = pair
+
+println(f(nothing))
+println(nothing ++ ["a"])
+println([1] ++ nothing)
+println(typed.0 ++ [2])
+println(typed.1 ++ ["z"])
+"""
+    runSource source |> assertRan "0\n[a]\n[1]\n[2]\n[z]\n"
