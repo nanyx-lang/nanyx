@@ -90,6 +90,15 @@ module DebugServer =
         let mutable stopOnEntry = false
         let mutable terminating = false
         let mutable resumed: (Resume option) = None
+        // A pause the client asked for, which the program's thread takes into the session at its next probe. It is set
+        // without `gate`, which a program running a tight loop takes and releases at every probe: a lock isn't fair, so
+        // the client's thread could wait on it for as long as the loop runs.
+        let pauseAsked = ref false
+        // Under `gate`: the session with the pause the client asked for since the last probe, if it asked.
+        let takePause () =
+            if Volatile.Read(&pauseAsked.contents) then
+                Volatile.Write(&pauseAsked.contents, false)
+                session <- DebugSession.pause session
         let stack = ShadowStack()
         // Each frame's locals as of its last statement, by its depth, with the line it was at: written within a budget
         // where the program went on, and in full where it stopped (see `LocalsWanted`).
@@ -139,7 +148,11 @@ module DebugServer =
                     resumed)
             if terminating then raise Terminated
             match resume, at with
-            | Some resume, Some at -> lock gate (fun () -> session <- DebugSession.resume resume at session)
+            | Some resume, Some at ->
+                lock gate (fun () ->
+                    // A pause asked for while the program was stopped is undone by resuming it, as the session's is.
+                    Volatile.Write(&pauseAsked.contents, false)
+                    session <- DebugSession.resume resume at session)
             | _ -> ()
 
         let locationOf (probe: Probe) =
@@ -160,7 +173,12 @@ module DebugServer =
                         match locationOf probe with
                         | None -> NoLocals
                         | Some at ->
-                            let reason = lock gate (fun () -> let reason, next = DebugSession.onEntry at session in session <- next; reason)
+                            let reason =
+                                lock gate (fun () ->
+                                    takePause ()
+                                    let reason, next = DebugSession.onEntry at session
+                                    session <- next
+                                    reason)
                             match reason with
                             | Some reason ->
                                 written.Clear()
@@ -184,9 +202,10 @@ module DebugServer =
                         match locationOf probe with
                         | None -> NoLocals
                         | Some at ->
-                            // Read and written at once, so that a pause the client asks for meanwhile isn't lost.
+                            // The pause asked for taken, and the session read and written, at once, so that none is lost.
                             let reason =
                                 lock gate (fun () ->
+                                    takePause ()
                                     let reason, next =
                                         if stopOnEntry then
                                             stopOnEntry <- false
@@ -379,7 +398,7 @@ module DebugServer =
                 | "stepIn" -> resumeWith request StepIn
                 | "stepOut" -> resumeWith request StepOut
                 | "pause" ->
-                    lock gate (fun () -> session <- DebugSession.pause session)
+                    Volatile.Write(&pauseAsked.contents, true)
                     respond request []
                 | "disconnect"
                 | "terminate" ->
